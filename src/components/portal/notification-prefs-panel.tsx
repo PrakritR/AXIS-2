@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -21,6 +23,64 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
 };
 
 type ChannelId = keyof ChannelPreference;
+
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </svg>
+  );
+}
+
+/**
+ * Inbox toolbar button that opens the notification-preferences matrix in a modal
+ * popup — placed next to "New message" so managers/residents/vendors can tune
+ * channels without leaving their message list. Same data as the Notifications
+ * inbox tab; edits are optimistic and demo-safe (see NotificationPrefsPanel).
+ */
+export function NotificationPrefsButton({
+  hasVerifiedPhone = true,
+  className,
+}: {
+  hasVerifiedPhone?: boolean;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className={className}
+        data-attr="inbox-notification-settings"
+        onClick={() => setOpen(true)}
+      >
+        <BellIcon className="mr-1.5 inline-block align-[-2px]" />
+        Notifications
+      </Button>
+      <Modal
+        open={open}
+        title="Notification settings"
+        onClose={() => setOpen(false)}
+        panelClassName="max-w-2xl"
+      >
+        <NotificationPrefsPanel hasVerifiedPhone={hasVerifiedPhone} />
+      </Modal>
+    </>
+  );
+}
 
 const CHANNELS: { id: ChannelId; label: string }[] = [
   { id: "inbox", label: "Axis inbox" },

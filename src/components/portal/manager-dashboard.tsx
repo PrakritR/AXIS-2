@@ -52,6 +52,11 @@ import {
   syncServiceRequestsFromServer,
 } from "@/lib/service-requests-storage";
 import {
+  MANAGER_OUTGOING_PAYMENTS_EVENT,
+  readManagerOutgoingExpenses,
+  syncManagerOutgoingExpensesFromServer,
+} from "@/lib/manager-outgoing-payments";
+import {
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -257,6 +262,145 @@ function formatUsd(amount: number): string {
   });
 }
 
+type MonthPoint = { key: string; label: string; value: number };
+
+/** The last 6 calendar months (oldest → current), keyed `YYYY-MM` with a short label. */
+function lastSixMonths(nowMs: number): { key: string; label: string }[] {
+  const base = new Date(nowMs);
+  const out: { key: string; label: string }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const m = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    out.push({
+      key: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`,
+      label: m.toLocaleString("en-US", { month: "short" }),
+    });
+  }
+  return out;
+}
+
+/** `YYYY-MM` bucket key for an ISO date, or null when unparseable. */
+function monthKeyOf(iso: string | undefined | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Sum a list into the 6 month buckets by an ISO-date accessor. */
+function bucketByMonth<T>(
+  items: T[],
+  months: { key: string; label: string }[],
+  dateOf: (item: T) => string | undefined | null,
+  amountOf: (item: T) => number,
+): MonthPoint[] {
+  const sums = new Map(months.map((m) => [m.key, 0]));
+  for (const item of items) {
+    const key = monthKeyOf(dateOf(item));
+    if (key && sums.has(key)) sums.set(key, sums.get(key)! + (amountOf(item) || 0));
+  }
+  return months.map((m) => ({ key: m.key, label: m.label, value: sums.get(m.key) ?? 0 }));
+}
+
+function formatUsdShort(amount: number): string {
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(amount >= 10000 ? 0 : 1)}k`;
+  return `$${Math.round(amount)}`;
+}
+
+/**
+ * Cash-flow trend card: payments collected vs. expenses over the last 6 months,
+ * as a theme-aware grouped bar chart (CSS heights, no chart lib). Bars scale to
+ * the tallest value across both series; totals + net summarize the window.
+ */
+function DashboardTrends({ payments, expenses }: { payments: MonthPoint[]; expenses: MonthPoint[] }) {
+  const totalIn = payments.reduce((s, p) => s + p.value, 0);
+  const totalOut = expenses.reduce((s, e) => s + e.value, 0);
+  const net = totalIn - totalOut;
+  const max = Math.max(1, ...payments.map((p) => p.value), ...expenses.map((e) => e.value));
+  const hasAny = totalIn > 0 || totalOut > 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5 [html[data-native]_&]:p-3.5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Cash flow</h2>
+          <p className="mt-0.5 text-[11px] uppercase tracking-[0.07em] text-muted/70">Last 6 months</p>
+        </div>
+        <div className="flex items-center gap-4 text-right">
+          <div>
+            <div className="text-sm font-semibold tabular-nums text-[var(--status-confirmed-fg)]">
+              {formatUsd(totalIn)}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Collected</div>
+          </div>
+          <div>
+            <div className="text-sm font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+              {formatUsd(totalOut)}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Expenses</div>
+          </div>
+          <div>
+            <div
+              className={`text-sm font-semibold tabular-nums ${net >= 0 ? "text-foreground" : "text-[var(--status-overdue-fg)]"}`}
+            >
+              {net >= 0 ? "" : "−"}
+              {formatUsd(Math.abs(net))}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Net</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="mt-3 flex items-center gap-4 text-[11px] text-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-[3px]" style={{ background: "var(--status-confirmed-fg)" }} />
+          Payments
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-[3px]" style={{ background: "var(--status-overdue-fg)" }} />
+          Expenses
+        </span>
+      </div>
+
+      {hasAny ? (
+        <div className="mt-4 flex h-40 items-end gap-2 sm:gap-4 [html[data-native]_&]:h-32">
+          {payments.map((p, i) => {
+            const e = expenses[i];
+            const inPct = Math.round((p.value / max) * 100);
+            const outPct = Math.round(((e?.value ?? 0) / max) * 100);
+            return (
+              <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                <div className="flex h-full w-full items-end justify-center gap-1">
+                  <div
+                    className="group relative w-full max-w-[1.6rem] rounded-t-[3px] bg-[var(--status-confirmed-fg)] transition-[height] duration-500"
+                    style={{ height: `${Math.max(p.value > 0 ? 3 : 0, inPct)}%` }}
+                    title={`Payments · ${p.label}: ${formatUsd(p.value)}`}
+                  />
+                  <div
+                    className="group relative w-full max-w-[1.6rem] rounded-t-[3px] bg-[var(--status-overdue-fg)] transition-[height] duration-500"
+                    style={{ height: `${Math.max((e?.value ?? 0) > 0 ? 3 : 0, outPct)}%` }}
+                    title={`Expenses · ${e?.label ?? p.label}: ${formatUsd(e?.value ?? 0)}`}
+                  />
+                </div>
+                <span className="text-[10px] font-medium text-muted [html[data-native]_&]:text-[9px]">
+                  {p.label}
+                </span>
+                <span className="text-[9px] tabular-nums text-muted/60 [html[data-native]_&]:hidden">
+                  {formatUsdShort(p.value)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-muted [html[data-native]_&]:text-xs">
+          No payments or expenses recorded yet — collected rent and logged expenses will chart here.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ManagerDashboard({ displayName = "there" }: { displayName?: string }) {
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
@@ -290,6 +434,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       syncScheduleRecordsFromServer(),
       syncManagerWorkOrdersFromServer(),
       syncServiceRequestsFromServer(),
+      syncManagerOutgoingExpensesFromServer(),
     ]).then(bump);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
@@ -299,6 +444,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
     window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
+    window.addEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
@@ -309,6 +455,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
       window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
+      window.removeEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
   }, [userId, authReady]);
@@ -400,6 +547,30 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       .filter((l) => l.status === "Fully Signed")
       .sort((a, b) => new Date(b.updatedAtIso).getTime() - new Date(a.updatedAtIso).getTime());
 
+    // Cash-flow trend series (last 6 months), computed from real local stores:
+    // payments = PAID charges bucketed by paid/created date; expenses = logged
+    // outgoing expenses bucketed by expense date.
+    const months = lastSixMonths(nowMs);
+    const paymentsByMonth = bucketByMonth(
+      charges.filter((c) => c.status === "paid"),
+      months,
+      (c) => c.paidAt ?? c.createdAt,
+      (c) => parseMoneyLabel(c.amountLabel || c.balanceLabel),
+    );
+    const expensesByMonth = bucketByMonth(
+      readManagerOutgoingExpenses(),
+      months,
+      (e) => e.expenseDate,
+      (e) => e.amountCents / 100,
+    );
+
+    // Leases specifically awaiting the MANAGER's signature (their action).
+    const managerSignatureLeaseCount = pendingLeaseRows.filter(
+      (l) => l.status === "Manager Signature Pending",
+    ).length;
+    // Vacant = units actively listed for rent (a live listing is a unit to fill).
+    const roomsVacant = livePropertyCount;
+
     return {
       pendingApps,
       pendingLeaseRows,
@@ -411,6 +582,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       pendingProperties,
       livePropertyCount,
       activeResidents,
+      paymentsByMonth,
+      expensesByMonth,
+      managerSignatureLeaseCount,
+      roomsVacant,
     };
   }, [tick, userId, nowMs]);
 
@@ -427,6 +602,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     pendingProperties,
     livePropertyCount,
     activeResidents,
+    paymentsByMonth,
+    expensesByMonth,
+    managerSignatureLeaseCount,
+    roomsVacant,
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
@@ -485,14 +664,31 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
             <KpiTile
-              label="Live properties"
-              value={livePropertyCount}
+              label="Rooms vacant"
+              value={roomsVacant}
+              sub={roomsVacant > 0 ? "listed & available" : "fully occupied"}
+              accent={roomsVacant > 0}
               href={`${BASE}/properties`}
-              dataAttr="dashboard-kpi-properties"
+              dataAttr="dashboard-kpi-vacant"
             />
             <KpiTile
-              label="Open applications"
+              label="Leases to sign"
+              value={pendingLeaseRows.length}
+              sub={
+                managerSignatureLeaseCount > 0
+                  ? `${managerSignatureLeaseCount} need your signature`
+                  : pendingLeaseRows.length > 0
+                    ? "awaiting resident"
+                    : "none pending"
+              }
+              accent={managerSignatureLeaseCount > 0}
+              href={`${BASE}/leases`}
+              dataAttr="dashboard-kpi-leases"
+            />
+            <KpiTile
+              label="Applicants to review"
               value={pendingApps.length}
+              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
               href={`${BASE}/applications`}
               dataAttr="dashboard-kpi-applications"
             />
@@ -522,6 +718,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             />
           </div>
         </div>
+
+        {/* Financial trend graphs — payments collected vs. expenses, last 6 months. */}
+        <DashboardTrends payments={paymentsByMonth} expenses={expensesByMonth} />
 
         {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">
