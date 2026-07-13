@@ -36,6 +36,8 @@ export type ManagerVendorRow = {
   acceptedPaymentMethods?: ("zelle" | "venmo" | "ach")[];
   /** Auth user id after the vendor accepts an invite and signs up. */
   vendorUserId?: string | null;
+  /** Preferred language ("en" | "es") — pre-signup fallback; profiles.preferred_language is canonical once linked. */
+  preferredLanguage?: string;
   /** Synthetic settings row only — default vendor id per trade category. */
   categoryDefaults?: Record<string, string>;
   createdAt?: string;

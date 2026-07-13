@@ -40,12 +40,16 @@ type VendorProfileDraft = {
   name: string;
   phone: string;
   email: string;
+  preferredLanguage: string;
+  smsConsent: boolean;
 };
 
 const EMPTY_PROFILE: VendorProfileDraft = {
   name: "",
   phone: "",
   email: "",
+  preferredLanguage: "",
+  smsConsent: false,
 };
 
 type VendorProfileApiRow = {
@@ -54,12 +58,15 @@ type VendorProfileApiRow = {
   email?: string;
   trades?: string[];
   trade?: string;
+  preferredLanguage?: string;
 };
 
 const DEMO_VENDOR_PROFILE: VendorProfileDraft = {
   name: DEMO_VENDOR_NAME,
   phone: "(206) 555-0142",
   email: DEMO_VENDOR_EMAIL,
+  preferredLanguage: "en",
+  smsConsent: true,
 };
 const DEMO_VENDOR_TRADES = ["HVAC", "Appliance repair"];
 
@@ -872,17 +879,25 @@ export function VendorSettingsPanel() {
     if (demo) return;
     void fetch("/api/vendor/profile", { credentials: "include" })
       .then((r) => r.json())
-      .then((data: { profile?: VendorProfileApiRow | null; linked?: boolean }) => {
-        setUnlinked(data.linked === false);
-        const p = data.profile;
-        if (!p) return;
-        setProfileDraft({
-          name: p.name ?? "",
-          phone: p.phone ?? "",
-          email: p.email ?? "",
-        });
-        setTrades(p.trades && p.trades.length > 0 ? p.trades : p.trade ? [p.trade] : []);
-      })
+      .then(
+        (data: {
+          profile?: VendorProfileApiRow | null;
+          linked?: boolean;
+          contact?: { phone?: string; preferredLanguage?: string; smsConsent?: boolean };
+        }) => {
+          setUnlinked(data.linked === false);
+          const p = data.profile;
+          const contact = data.contact;
+          setProfileDraft({
+            name: p?.name ?? "",
+            phone: p?.phone ?? "",
+            email: p?.email ?? "",
+            preferredLanguage: contact?.preferredLanguage || p?.preferredLanguage || "",
+            smsConsent: contact?.smsConsent ?? false,
+          });
+          if (p) setTrades(p.trades && p.trades.length > 0 ? p.trades : p.trade ? [p.trade] : []);
+        },
+      )
       .finally(() => setProfileLoading(false));
   }, [demo]);
 
@@ -901,6 +916,8 @@ export function VendorSettingsPanel() {
           name: profileDraft.name,
           phone: profileDraft.phone,
           email: profileDraft.email,
+          preferredLanguage: profileDraft.preferredLanguage,
+          smsConsent: profileDraft.smsConsent,
         }),
       });
       const data = await res.json();
@@ -989,6 +1006,30 @@ export function VendorSettingsPanel() {
                   onChange={(e) => setProfileDraft({ ...profileDraft, email: e.target.value })}
                   data-attr="vendor-settings-email"
                 />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                Preferred language / Idioma
+                <Select
+                  value={profileDraft.preferredLanguage}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, preferredLanguage: e.target.value })}
+                  data-attr="vendor-language-select"
+                >
+                  <option value="">Select…</option>
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                </Select>
+              </label>
+              <label className="flex items-start gap-2 text-xs font-medium text-muted sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+                  checked={profileDraft.smsConsent}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, smsConsent: e.target.checked })}
+                  data-attr="vendor-sms-consent"
+                />
+                <span>
+                  Text me about jobs at this number. Message and data rates may apply; reply STOP to opt out.
+                </span>
               </label>
             </div>
           )}

@@ -286,4 +286,39 @@ describe("/api/portal-work-orders security", () => {
     expect((await parseJsonResponse(res)).status).toBe(200);
     expect(upserts).toHaveLength(0);
   });
+
+  it("round-trips entryPermission, entryNotes, propertyAddress, and Emergency priority through POST replace + GET", async () => {
+    asUser("mgr-a", "a@test.com");
+    const { client } = mockDb([], { email: "a@test.com", role: "manager" });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const post = await POST(
+      jsonRequest("http://t", {
+        method: "POST",
+        body: {
+          action: "replace",
+          rows: [
+            {
+              id: "WO-entry",
+              managerUserId: "mgr-a",
+              title: "Leaky faucet",
+              priority: "Emergency",
+              entryPermission: "resident_present",
+              entryNotes: "Gate code 4821",
+              propertyAddress: "123 Main St, Seattle, WA",
+            },
+          ],
+        },
+      }),
+    );
+    expect((await parseJsonResponse(post)).status).toBe(200);
+
+    const res = await GET();
+    const { data } = await parseJsonResponse<{ rows: { id: string; priority: string; entryPermission: string; entryNotes: string; propertyAddress: string }[] }>(res);
+    const saved = data.rows.find((r) => r.id === "WO-entry");
+    expect(saved?.priority).toBe("Emergency");
+    expect(saved?.entryPermission).toBe("resident_present");
+    expect(saved?.entryNotes).toBe("Gate code 4821");
+    expect(saved?.propertyAddress).toBe("123 Main St, Seattle, WA");
+  });
 });

@@ -40,13 +40,18 @@ import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-docu
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
+import type { WorkOrderRowWithDispatch } from "@/lib/work-order-dispatch";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { acceptDemoWorkOrderBid, approveDemoWorkOrderPay } from "@/lib/demo/demo-work-order-actions";
 import { isWorkOrderCostLockedByVendor } from "@/lib/work-order-cost-lock";
+import { entryPermissionLabel } from "@/lib/work-order-entry";
+import { notifyResidentOfWorkOrderUpdate } from "@/lib/work-order-resident-notifications";
+import { track } from "@/lib/analytics/track-client";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
-  if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (x === "high" || x === "emergency")
+    return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
@@ -138,6 +143,7 @@ export function ManagerWorkOrdersPanel({
   });
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid[]>>({});
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [dispatchBusyId, setDispatchBusyId] = useState<string | null>(null);
   const [autoSchedulingId, setAutoSchedulingId] = useState<string | null>(null);
   const [approvePayRow, setApprovePayRow] = useState<DemoManagerWorkOrderRow | null>(null);
   const [approvePayBusy, setApprovePayBusy] = useState(false);
@@ -272,13 +278,14 @@ export function ManagerWorkOrdersPanel({
       const costTrimmed = draft.cost.trim();
       const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
       const residentEmail = (row.residentEmail ?? "").trim();
+      const scheduledLabel = formatScheduledLabel(iso);
 
       updateManagerWorkOrder(row.id, (r) => ({
         ...r,
         bucket: "scheduled",
         status: "Scheduled",
         scheduledAtIso: iso,
-        scheduled: formatScheduledLabel(iso),
+        scheduled: scheduledLabel,
         ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
       }));
 
@@ -299,6 +306,10 @@ export function ManagerWorkOrdersPanel({
       }
       if (created) setHcTick((n) => n + 1);
       const vendorEmailed = await sendVendorVisitEmail(row, iso);
+      if (!isDemoModeActive() && iso !== row.scheduledAtIso) {
+        void notifyResidentOfWorkOrderUpdate("visit_scheduled", row, { scheduledLabel });
+        track("work_order_resident_notified", { stage: "visit_scheduled", work_order_id: row.id });
+      }
       const billingPart = created
         ? created.status === "paid"
           ? " Payment recorded as paid."
@@ -588,14 +599,26 @@ export function ManagerWorkOrdersPanel({
       showToast("Vendor not found.");
       return;
     }
+    const assignedAt = new Date().toISOString();
     updateManagerWorkOrder(row.id, (r) => ({
       ...r,
       vendorId: vendor.id,
       vendorName: vendor.name,
-      vendorAssignedAt: new Date().toISOString(),
+      vendorAssignedAt: assignedAt,
       selfAssigned: false,
     }));
     showToast(`Assigned ${vendor.name}.`);
+    // ponytail: client fire-and-forget; move into a server assign route if/when one exists
+    if (!isDemoModeActive() && row.residentEmail && choice !== row.vendorId) {
+      void notifyResidentOfWorkOrderUpdate("vendor_assigned", {
+        ...row,
+        vendorId: vendor.id,
+        vendorName: vendor.name,
+        vendorAssignedAt: assignedAt,
+        selfAssigned: false,
+      });
+      track("work_order_resident_notified", { stage: "vendor_assigned", work_order_id: row.id });
+    }
   };
 
   const acceptBidHandler = async (bid: WorkOrderBid) => {
@@ -626,6 +649,39 @@ export function ManagerWorkOrdersPanel({
     }
   };
 
+  const handleDispatchDecision = async (row: DemoManagerWorkOrderRow, action: "approve" | "decline") => {
+    // /demo: never fetch the authed dispatch route from the sandbox.
+    if (isDemoModeActive()) {
+      showToast("Demo mode: dispatch actions are disabled.");
+      return;
+    }
+    setDispatchBusyId(row.id);
+    try {
+      const res = await fetch("/api/portal/dispatch-proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrderId: row.id, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not update dispatch.");
+      if (action === "approve") {
+        showToast(
+          data.scheduledIso
+            ? `Dispatched ${data.vendorName}. Visit booked for ${formatScheduledLabel(data.scheduledIso)}.`
+            : `Dispatched ${data.vendorName}. Pick a visit time below.`,
+        );
+      } else {
+        showToast("Dispatch proposal declined.");
+      }
+      await syncManagerWorkOrdersFromServer({ force: true });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not update dispatch.");
+    } finally {
+      setDispatchBusyId(null);
+    }
+  };
+
   const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
     const draft = billDraftById[row.id] ?? defaultBillDraft(row);
     const linkedCharge = chargeByWoId.get(row.id);
@@ -635,6 +691,7 @@ export function ManagerWorkOrdersPanel({
         ? activeVendors.find((v) => v.id === row.vendorId) ?? null
         : null;
     const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
+    const dispatch = (row as WorkOrderRowWithDispatch).dispatch;
 
     return (
       <>
@@ -643,6 +700,12 @@ export function ManagerWorkOrdersPanel({
                           Resident preferred arrival:{" "}
                           <span className="font-medium text-muted">{row.preferredArrival?.trim() || "Anytime"}</span>
                         </p>
+                        {row.entryPermission || row.entryNotes ? (
+                          <p className="mt-1.5 text-xs text-muted">
+                            Entry: <span className="font-medium text-muted">{entryPermissionLabel(row.entryPermission)}</span>
+                            {row.entryNotes ? <span className="font-medium text-muted"> ({row.entryNotes})</span> : null}
+                          </p>
+                        ) : null}
                         {row.bucket !== "open" && row.scheduled && row.scheduled !== "—" ? (
                           <p className="mt-1.5 text-xs text-muted">
                             Visit scheduled for <span className="font-medium text-foreground">{row.scheduled}</span>
@@ -683,6 +746,47 @@ export function ManagerWorkOrdersPanel({
                               })}
                             </div>
                           </div>
+                        ) : null}
+
+                        {row.bucket === "open" && dispatch ? (
+                          dispatch.status === "proposed" ? (
+                            <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                              <p className="text-sm font-semibold text-foreground">Axis suggests {dispatch.vendorName}</p>
+                              <p className="mt-1 text-xs text-muted">{dispatch.reasoning}</p>
+                              {dispatch.candidates.slice(0, 2).map((c) => (
+                                <p key={c.vendorId} className="mt-0.5 text-[11px] text-muted">
+                                  {c.vendorName} · {c.reason}
+                                </p>
+                              ))}
+                              <div className="mt-2.5 flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  data-attr="dispatch-approve"
+                                  className="h-7 rounded-full px-3 text-xs"
+                                  disabled={dispatchBusyId === row.id}
+                                  onClick={() => void handleDispatchDecision(row, "approve")}
+                                >
+                                  {dispatchBusyId === row.id ? "Dispatching…" : "Approve & dispatch"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  data-attr="dispatch-decline"
+                                  className="h-7 rounded-full px-3 text-xs"
+                                  disabled={dispatchBusyId === row.id}
+                                  onClick={() => void handleDispatchDecision(row, "decline")}
+                                >
+                                  Decline
+                                </Button>
+                              </div>
+                            </div>
+                          ) : dispatch.status === "approved" || dispatch.status === "auto_dispatched" ? (
+                            <p className="mt-4 text-xs text-muted">
+                              Dispatched by Axis to <span className="font-medium text-foreground">{dispatch.vendorName}</span>
+                              {dispatch.decidedAtIso ? ` · ${formatScheduledLabel(dispatch.decidedAtIso)}` : ""}
+                            </p>
+                          ) : null
                         ) : null}
 
                         <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-2">
@@ -940,6 +1044,7 @@ export function ManagerWorkOrdersPanel({
         {rows.map((row) => {
           const linkedCharge = chargeByWoId.get(row.id);
           const isExpanded = expandedId === row.id;
+          const dispatch = (row as WorkOrderRowWithDispatch).dispatch;
           return (
             <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
               <button
@@ -959,6 +1064,11 @@ export function ManagerWorkOrdersPanel({
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
                       {row.priority}
                     </span>
+                    {dispatch?.status === "proposed" ? (
+                      <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-info">
+                        Axis pick
+                      </span>
+                    ) : null}
                     <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
                     {linkedCharge?.status === "paid" ? (
                       <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
@@ -995,6 +1105,7 @@ export function ManagerWorkOrdersPanel({
               {rows.map((row) => {
                 const linkedCharge = chargeByWoId.get(row.id);
                 const isExpanded = expandedId === row.id;
+                const dispatch = (row as WorkOrderRowWithDispatch).dispatch;
 
                 return (
                   <Fragment key={row.id}>
@@ -1007,7 +1118,14 @@ export function ManagerWorkOrdersPanel({
                       aria-expanded={isExpanded}
                     >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <PortalTableInlineExpand expanded={isExpanded}>{row.title}</PortalTableInlineExpand>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <PortalTableInlineExpand expanded={isExpanded}>{row.title}</PortalTableInlineExpand>
+                          {dispatch?.status === "proposed" ? (
+                            <span className="inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-info">
+                              Axis pick
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
                       </td>
                       <td className={PORTAL_TABLE_TD}>

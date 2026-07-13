@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { vendorInviteSubject } from "@/lib/vendor-invite-email";
@@ -23,11 +23,15 @@ export function ManagerVendorInviteModal({
   showToast: (message: string) => void;
 }) {
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [preferredLanguage, setPreferredLanguage] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open || !vendor) return;
     setEmail(vendor.email.trim());
+    setPhone(vendor.phone?.trim() ?? "");
+    setPreferredLanguage(vendor.preferredLanguage ?? "");
     setBusy(false);
   }, [open, vendor]);
 
@@ -48,6 +52,8 @@ export function ManagerVendorInviteModal({
           vendorId: vendor.id,
           vendorName: vendor.name,
           vendorEmail,
+          phone: phone.trim(),
+          preferredLanguage,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -98,6 +104,37 @@ export function ManagerVendorInviteModal({
               autoComplete="email"
               data-attr="vendor-invite-email"
             />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted" htmlFor="vendor-invite-phone">
+              Phone (for job texts)
+            </label>
+            <Input
+              id="vendor-invite-phone"
+              type="tel"
+              className="mt-1"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(206) 555-0100"
+              autoComplete="tel"
+              data-attr="vendor-invite-phone"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted" htmlFor="vendor-invite-language">
+              Preferred language
+            </label>
+            <Select
+              id="vendor-invite-language"
+              className="mt-1"
+              value={preferredLanguage}
+              onChange={(e) => setPreferredLanguage(e.target.value)}
+              data-attr="vendor-invite-language"
+            >
+              <option value="">Select…</option>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+            </Select>
           </div>
           <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-xs text-muted">
             <p className="font-semibold text-foreground">{vendorInviteSubject(managerName)}</p>
