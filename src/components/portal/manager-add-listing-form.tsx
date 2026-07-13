@@ -2272,7 +2272,11 @@ export function ManagerAddListingForm({
       setBusy(false);
     }
   };
-  submitListingRef.current = submitListing;
+  // Keep the ref pointing at the latest submitListing without touching it during
+  // render (react-hooks/refs) — the demo-autofill effect below reads it.
+  useEffect(() => {
+    submitListingRef.current = submitListing;
+  });
 
   useEffect(() => {
     if (!demoAutofillSubmitPending || !isDemoModeActive()) return;

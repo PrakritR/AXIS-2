@@ -32,6 +32,9 @@ export function waitForSelector(
 
 export function waitForEvent(eventName: string, timeoutMs = 15000): Promise<boolean> {
   return new Promise((resolve) => {
+    // `let` is required: `onEvent` (defined below) reads `timer`, and it's
+    // assigned only after — a mutual reference that can't be a `const`.
+    // eslint-disable-next-line prefer-const
     let timer: number | undefined;
     const onEvent = () => {
       window.removeEventListener(eventName, onEvent);

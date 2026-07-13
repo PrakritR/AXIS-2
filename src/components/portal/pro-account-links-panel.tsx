@@ -320,6 +320,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const [loadError, setLoadError] = useState(false);
   const loadInFlightRef = useRef(false);
   const loadRetriedRef = useRef(false);
+  // Latest loadRemoteInvites, so the soft-retry can re-invoke it without a
+  // forward self-reference during declaration (react-hooks). Kept current by the
+  // effect below; the callback is stable (memoized on [showToast]).
+  const loadRemoteInvitesRef = useRef<() => void>(() => {});
   const [inviteDrafts, setInviteDrafts] = useState<Record<string, InviteDraft>>({});
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
@@ -346,7 +350,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       setUseRemote(true);
       if (!loadRetriedRef.current) {
         loadRetriedRef.current = true;
-        window.setTimeout(() => void loadRemoteInvites(), 1200);
+        window.setTimeout(() => void loadRemoteInvitesRef.current(), 1200);
         return true; // retry scheduled
       }
       setLoadError(true);
@@ -400,6 +404,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       loadInFlightRef.current = false;
     }
   }, [showToast]);
+
+  useEffect(() => {
+    loadRemoteInvitesRef.current = loadRemoteInvites;
+  }, [loadRemoteInvites]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void loadRemoteInvites(), 0);
