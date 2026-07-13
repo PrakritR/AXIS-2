@@ -119,7 +119,14 @@ export async function POST(req: Request) {
     (await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle()).data?.sms_from_number ??
     process.env.TWILIO_DEFAULT_FROM ??
     "";
-  const sent = await sendSms(phone, `Your PropLane verification code is ${code}. It expires in 10 minutes.`, String(fromNumber));
+  // Verification OTP is a compliance/re-opt-in message — it must send even if a
+  // prior STOP recorded an opt-out (the user is actively opting back in here).
+  const sent = await sendSms(
+    phone,
+    `Your PropLane verification code is ${code}. It expires in 10 minutes.`,
+    String(fromNumber),
+    { skipOptOutCheck: true },
+  );
   if (!sent.sent) {
     return NextResponse.json(
       { error: sent.error ? `Could not send SMS: ${sent.error}` : "SMS is not configured yet — add Twilio credentials." },

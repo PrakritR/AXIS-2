@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function DemoPage() {
   return (
-    <div className="pb-16">
+    <div className="min-h-screen bg-background pb-16 text-foreground">
       <DemoPortalExperience />
     </div>
   );

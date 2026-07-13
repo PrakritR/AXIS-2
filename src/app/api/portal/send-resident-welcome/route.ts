@@ -19,7 +19,7 @@ function normalizeEmail(value: unknown): string {
 }
 
 function canSendResidentWelcome(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+  return role === "admin" || role === "manager" || role === "pro";
 }
 
 // Domain is matched as dot-separated labels (no char class overlaps the "." delimiter)

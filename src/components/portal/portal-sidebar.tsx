@@ -62,6 +62,8 @@ function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: strin
       return { subtitle: "Admin", ariaLabel: "PropLane Admin Portal home" };
     case "vendor":
       return { subtitle: "Vendor", ariaLabel: "PropLane Vendor Portal home" };
+    case "owner":
+      return { subtitle: "Owner", ariaLabel: "PropLane Owner Portal home" };
     default:
       return { subtitle: "Manager", ariaLabel: "PropLane Manager Portal home" };
   }
@@ -69,12 +71,12 @@ function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: strin
 
 function navLinkClass(active: boolean, locked?: boolean) {
   return [
-    "relative flex min-h-9 items-center justify-between gap-2 rounded-[12px] px-2.5 py-[7px] text-[13px] font-medium transition duration-200",
+    "group relative flex min-h-8 items-center justify-between gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-colors duration-150",
     active
-      ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
+      ? "bg-[var(--secondary)] text-foreground"
       : locked
-        ? "text-muted/80 hover:bg-accent/50 hover:text-muted [html[data-theme=dark]_&]:text-white/55"
-        : "text-muted hover:bg-accent/70 hover:text-foreground [html[data-theme=dark]_&]:text-white/78",
+        ? "text-muted/70 hover:bg-[var(--secondary)]/60 hover:text-muted"
+        : "text-muted hover:bg-[var(--secondary)]/60 hover:text-foreground",
   ].join(" ");
 }
 
@@ -165,7 +167,8 @@ export function PortalSidebar({
     definition.kind === "pro" ||
     definition.kind === "resident" ||
     definition.kind === "manager" ||
-    definition.kind === "vendor";
+    definition.kind === "vendor" ||
+    definition.kind === "owner";
 
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
@@ -464,12 +467,12 @@ export function PortalSidebar({
         aria-label={lockAriaLabel(s.label, locked)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "relative grid h-9 w-9 place-items-center rounded-[12px] transition",
+          "relative grid h-9 w-9 place-items-center rounded-[8px] transition-colors duration-150",
           active
-            ? "bg-[var(--glass-fill)] text-primary ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
+            ? "bg-[var(--secondary)] text-primary"
             : locked
-              ? "text-muted/60 hover:bg-accent/50"
-              : "text-muted hover:bg-accent/70 hover:text-foreground",
+              ? "text-muted/60 hover:bg-[var(--secondary)]/60"
+              : "text-muted hover:bg-[var(--secondary)]/60 hover:text-foreground",
         )}
       >
         <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" />
@@ -500,7 +503,7 @@ export function PortalSidebar({
             onClick={toggleCollapsed}
             aria-label="Expand sidebar"
             aria-expanded={false}
-            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-accent/70 hover:text-foreground"
+            className="grid h-8 w-8 place-items-center rounded-[8px] text-muted transition-colors duration-150 hover:bg-[var(--secondary)]/60 hover:text-foreground"
           >
             <ChevronsRight className="h-4 w-4" aria-hidden />
           </button>
@@ -515,8 +518,9 @@ export function PortalSidebar({
           >
             <AxisLogoMark size="compact" />
             <span className="min-w-0 leading-tight">
-              <span className="block text-[14px] font-semibold text-foreground">PropLane</span>
-              <span className="mt-0.5 inline-block rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
+              <span className="block text-[14px] font-semibold tracking-[-0.02em] text-foreground">PropLane</span>
+              <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-1.5 py-[2px] text-[9.5px] font-semibold uppercase tracking-[0.11em] text-muted">
+                <span className="h-1 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
                 {headerSubtitle}
               </span>
             </span>
@@ -526,7 +530,7 @@ export function PortalSidebar({
             onClick={toggleCollapsed}
             aria-label="Collapse sidebar"
             aria-expanded
-            className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:bg-accent/70 hover:text-foreground"
+            className="ml-auto grid h-7 w-7 place-items-center rounded-[8px] text-muted transition-colors duration-150 hover:bg-[var(--secondary)]/60 hover:text-foreground"
           >
             <ChevronsLeft className="h-4 w-4" aria-hidden />
           </button>
@@ -546,14 +550,17 @@ export function PortalSidebar({
           ))}
         </nav>
       ) : (
-        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Portal sections">
+        <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2 py-2.5" aria-label="Portal sections">
           {navGroups.map((group, i) => (
             <div
               key={group.id}
-              className={cn("flex flex-col gap-0.5", i === firstTrailingGroupIdx && "mt-auto pt-2")}
+              className={cn(
+                "flex flex-col gap-px",
+                i === firstTrailingGroupIdx && "mt-auto border-t border-border pt-2",
+              )}
             >
               {group.label ? (
-                <p className="px-2.5 pb-1 pt-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted/70">
+                <p className="px-2.5 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted/60">
                   {group.label}
                 </p>
               ) : null}

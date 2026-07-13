@@ -17,7 +17,13 @@ const NATIVE_WEB_PATH_MAP: Record<string, string> = {
 };
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
+  return (
+    value === "resident" ||
+    value === "manager" ||
+    value === "admin" ||
+    value === "vendor" ||
+    value === "owner"
+  );
 }
 
 /** Default post-auth path for Google sign-in — matches website sign-in intent. */
@@ -79,6 +85,7 @@ function roleMatchesPath(role: AuthRole, path: string): boolean {
   if (role === "resident") return path.startsWith("/resident");
   if (role === "admin") return path.startsWith("/admin");
   if (role === "vendor") return path.startsWith("/vendor");
+  if (role === "owner") return path.startsWith("/owner");
   return false;
 }
 

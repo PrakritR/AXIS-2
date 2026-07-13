@@ -2,9 +2,20 @@ import { NextResponse } from "next/server";
 import twilio from "twilio";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { sendSms } from "@/lib/twilio";
+import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
+
+/**
+ * Standard carrier/Twilio SMS control keywords. Twilio's Advanced Opt-Out sends
+ * the compliance auto-replies; Axis records the resulting consent state so it
+ * never texts an opted-out number again, and never leaks a control message into
+ * anyone's inbox. Matched case-insensitively against the entire trimmed body.
+ */
+const SMS_STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
+const SMS_START_KEYWORDS = new Set(["START", "YES", "UNSTOP"]);
+const SMS_HELP_KEYWORDS = new Set(["HELP", "INFO"]);
 
 function digitsOf(raw: string): string {
   const digits = raw.replace(/\D/g, "");
@@ -71,6 +82,23 @@ export async function POST(req: Request) {
   if (!fromPhone || !toPhone) return twimlOk();
 
   const db = createSupabaseServiceRoleClient();
+
+  // Compliance: handle STOP/START/HELP control keywords before any routing.
+  // Twilio Advanced Opt-Out already sends the required auto-reply; we only
+  // record the consent change and stop — these messages must never be delivered
+  // to an inbox or emailed/forwarded to the manager.
+  const keyword = body.toUpperCase();
+  if (SMS_STOP_KEYWORDS.has(keyword)) {
+    await recordOptOut(db, fromPhone);
+    return twimlOk();
+  }
+  if (SMS_START_KEYWORDS.has(keyword)) {
+    await recordOptIn(db, fromPhone);
+    return twimlOk();
+  }
+  if (SMS_HELP_KEYWORDS.has(keyword)) {
+    return twimlOk();
+  }
 
   // 0. Idempotency: Twilio retries on any non-2xx/timeout. Skip a MessageSid
   // we've already processed so retries don't duplicate inbox threads / emails /

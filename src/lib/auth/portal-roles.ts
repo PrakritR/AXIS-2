@@ -1,22 +1,27 @@
-export type AuthRole = "resident" | "manager" | "admin" | "vendor";
+export type AuthRole = "resident" | "manager" | "admin" | "vendor" | "owner";
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
+  return (
+    value === "resident" ||
+    value === "manager" ||
+    value === "admin" ||
+    value === "vendor" ||
+    value === "owner"
+  );
 }
 
 function mapLegacyPortalRole(role: string | null | undefined): AuthRole | null {
   const value = String(role ?? "").toLowerCase();
-  if (value === "owner") return "manager";
   return isAuthRole(value) ? value : null;
 }
 
-/** Merge profile_roles with legacy profiles.role (owner → manager). Client-safe. */
+/** Merge profile_roles with legacy profiles.role. Client-safe. */
 export function normalizePortalRoles(
   rows: { role: string }[] | null | undefined,
   fallbackRole: string | null | undefined,
 ): AuthRole[] {
   const fromTable = (rows ?? [])
-    .map((r) => (r.role === "owner" ? "manager" : r.role))
+    .map((r) => r.role)
     .filter((r): r is AuthRole => isAuthRole(r));
   const unique = [...new Set(fromTable)];
   if (unique.length > 0) return unique;
@@ -30,10 +35,18 @@ export function portalDashboardPath(role: AuthRole): string {
   if (role === "resident") return "/resident";
   if (role === "manager") return "/portal/dashboard";
   if (role === "vendor") return "/vendor/dashboard";
+  if (role === "owner") return "/owner/dashboard";
   return "/admin/dashboard";
 }
 
 export function parseAuthRole(value: string | null): AuthRole {
-  if (value === "resident" || value === "manager" || value === "admin" || value === "vendor") return value;
+  if (
+    value === "resident" ||
+    value === "manager" ||
+    value === "admin" ||
+    value === "vendor" ||
+    value === "owner"
+  )
+    return value;
   return "resident";
 }

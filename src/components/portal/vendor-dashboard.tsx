@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import {
   ManagerPortalPageShell,
   portalDashboardWelcomeSubtitle,
-  PortalDashboardCompactRow,
-  PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
-  PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
 } from "@/components/portal/portal-metrics";
-import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
+import {
+  PortalPreviewOverflowLink,
+  usePortalPreviewSlice,
+} from "@/components/portal/portal-data-table";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -28,6 +30,169 @@ import {
 
 const BASE = "/vendor";
 
+/** Semantic status foreground tokens for the leading issue-row dots. */
+const DOT_PENDING = "var(--status-pending-fg)";
+const DOT_CONFIRMED = "var(--status-confirmed-fg)";
+const DOT_INFO = "var(--status-approved-fg)";
+
+type PillTone = "pending" | "success" | "danger" | "info";
+
+/** Small theme-aware status pill (light/dark flip via `.portal-badge-*`). */
+function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-${tone} [html[data-native]_&]:text-[9px]`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Restrained KPI tile: big tabular number + small uppercase muted label. */
+function KpiTile({
+  label,
+  value,
+  href,
+  accent,
+  dataAttr,
+}: {
+  label: string;
+  value: string | number;
+  href: string;
+  accent?: boolean;
+  dataAttr?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className="flex min-w-[8.75rem] flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 [html[data-native]_&]:min-w-[7.25rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
+    >
+      <span
+        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
+          accent ? "text-[var(--status-pending-fg)]" : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
+/** Dense Linear "issue" row: status dot · label + subtitle · meta · status pill · chevron. */
+function IssueRow({
+  href,
+  dot,
+  title,
+  subtitle,
+  meta,
+  pill,
+  dataAttr,
+}: {
+  href: string;
+  dot?: string;
+  title: string;
+  subtitle?: string;
+  meta?: string | null;
+  pill?: ReactNode;
+  dataAttr?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+    >
+      {dot ? (
+        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
+      ) : null}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">
+          {title}
+        </span>
+        {subtitle ? (
+          <span className="mt-0.5 block truncate text-xs text-muted [html[data-native]_&]:text-[11px]">
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+      {meta ? (
+        <span className="hidden shrink-0 whitespace-nowrap text-xs tabular-nums text-muted sm:block">
+          {meta}
+        </span>
+      ) : null}
+      {pill ? <span className="shrink-0">{pill}</span> : null}
+      <span
+        aria-hidden
+        className="shrink-0 text-sm text-muted/40 transition-colors group-hover:text-muted [html[data-native]_&]:hidden"
+      >
+        ›
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * One "Needs attention" group: tiny uppercase label + section link, then a
+ * hairline-bordered stack of dense issue rows (preview-sliced so native/mobile
+ * row limits + overflow link are preserved).
+ */
+function AttentionGroup<T>({
+  title,
+  href,
+  linkLabel,
+  badge,
+  dataAttr,
+  items,
+  emptyMessage,
+  keyForItem,
+  renderRow,
+}: {
+  title: string;
+  href: string;
+  linkLabel: string;
+  badge?: ReactNode;
+  dataAttr?: string;
+  items: T[];
+  emptyMessage: string;
+  keyForItem: (item: T) => string;
+  renderRow: (item: T) => ReactNode;
+}) {
+  const { visible, overflow } = usePortalPreviewSlice(items);
+  const { isNative } = useIsNativeApp();
+
+  return (
+    <div className="space-y-2 [html[data-native]_&]:space-y-1.5">
+      <PortalDashboardSectionHeader
+        title={title}
+        href={href}
+        linkLabel={linkLabel}
+        badge={badge}
+        dataAttr={dataAttr}
+      />
+      {items.length === 0 ? (
+        <p className="text-sm text-muted [html[data-native]_&]:text-xs">{emptyMessage}</p>
+      ) : (
+        <>
+          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+            {visible.map((item) => (
+              <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
+            ))}
+          </div>
+          <PortalPreviewOverflowLink
+            overflow={overflow}
+            href={href}
+            label={isNative ? `View all (${items.length}) →` : undefined}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
@@ -39,7 +204,7 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
   return unit && unit !== "—" ? `${row.propertyName} · ${unit}` : row.propertyName;
 }
 
-/** Vendor Home — section previews in nav order: Services, Calendar, Messages, Payments. */
+/** Vendor Home — Linear KPI stat row + a "Needs attention" block across Services, Calendar, Payments, and Inbox. */
 export function VendorDashboard({ displayName }: { displayName: string }) {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
@@ -77,6 +242,8 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
     void tick;
     const rows = readVendorWorkOrderRows();
 
+    const openWorkOrders = rows.filter((r) => r.bucket === "open");
+
     const upcomingVisits = rows
       .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
       .sort((a, b) => (a.scheduledAtIso ?? "").localeCompare(b.scheduledAtIso ?? ""));
@@ -93,10 +260,18 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       .filter((t) => t.folder === "inbox" && t.unread)
       .slice(0, 5);
 
-    return { upcomingVisits, quotesPending, pendingPayouts, inboxThreads };
+    return { openWorkOrders, upcomingVisits, quotesPending, pendingPayouts, inboxThreads };
   }, [tick]);
 
-  const { upcomingVisits, quotesPending, pendingPayouts, inboxThreads } = data;
+  const { openWorkOrders, upcomingVisits, quotesPending, pendingPayouts, inboxThreads } = data;
+
+  const payoutItems = paymentsConnected ? pendingPayouts : [];
+  const payoutsEmptyMessage = paymentsConnected
+    ? "No payouts pending."
+    : "Link your bank under Payments to receive payouts for completed work.";
+
+  const openCount =
+    quotesPending.length + upcomingVisits.length + payoutItems.length + inboxThreads.length;
 
   return (
     <ManagerPortalPageShell
@@ -105,118 +280,162 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Services"
+        {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
+            <KpiTile
+              label="Open work orders"
+              value={openWorkOrders.length}
               href={`${BASE}/work-orders`}
-              linkLabel="Services →"
-              dataAttr="vendor-dashboard-services-link"
-              badge={
-                quotesPending.length > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {quotesPending.length} pending
-                  </span>
-                ) : null
-              }
+              dataAttr="vendor-dashboard-kpi-work-orders"
             />
-            <PortalDashboardPreviewList
-              items={quotesPending}
+            <KpiTile
+              label="Awaiting quote"
+              value={quotesPending.length}
+              accent={quotesPending.length > 0}
               href={`${BASE}/work-orders`}
-              emptyMessage="No offers awaiting your quote."
-              keyForItem={(row) => row.id}
-              renderRow={(row) => (
-                <PortalDashboardCompactRow
-                  title={row.title}
-                  subtitle={propertyLabel(row)}
-                  badge={
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      Awaiting quote
-                    </span>
-                  }
-                />
-              )}
+              dataAttr="vendor-dashboard-kpi-quotes"
             />
-          </div>
-
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Calendar"
+            <KpiTile
+              label="Scheduled visits"
+              value={upcomingVisits.length}
               href={`${BASE}/calendar`}
-              linkLabel="Calendar →"
-              dataAttr="vendor-dashboard-calendar-link"
+              dataAttr="vendor-dashboard-kpi-visits"
             />
-            <PortalDashboardPreviewList
-              items={upcomingVisits}
-              href={`${BASE}/calendar`}
-              emptyMessage="No upcoming visits yet."
-              keyForItem={(row) => row.id}
-              renderRow={(row) => (
-                <PortalDashboardCompactRow
-                  title={row.title}
-                  subtitle={[propertyLabel(row), fmt(row.scheduledAtIso ?? "")].filter(Boolean).join(" · ")}
-                  badge={<WorkOrderStatusBadge bucket={row.bucket} />}
-                />
-              )}
-            />
-          </div>
-
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Messages"
-              href={`${BASE}/inbox/unopened`}
-              linkLabel="Inbox →"
-              dataAttr="vendor-dashboard-messages-inbox-link"
-            />
-            <PortalDashboardPreviewList
-              items={inboxThreads}
-              href={`${BASE}/inbox/unopened`}
-              emptyMessage="No unread messages — inbox is clear."
-              keyForItem={(thread) => thread.id}
-              renderRow={(thread) => (
-                <PortalDashboardCompactRow
-                  title={thread.from || "Unknown sender"}
-                  subtitle={thread.subject || thread.preview || "—"}
-                  badge={
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                      Unread
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
-
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Payments"
+            <KpiTile
+              label="Pending payouts"
+              value={payoutItems.length}
               href={`${BASE}/payments`}
-              linkLabel="Payments →"
-              dataAttr="vendor-dashboard-payments-link"
+              dataAttr="vendor-dashboard-kpi-payouts"
             />
-            {!paymentsConnected ? (
-              <p className="mt-4 text-sm text-muted">Link your bank under Payments to receive payouts for completed work.</p>
-            ) : (
-              <PortalDashboardPreviewList
-                items={pendingPayouts}
-                href={`${BASE}/payments`}
-                emptyMessage="No payouts pending."
-                keyForItem={(row) => row.id}
-                renderRow={(row) => (
-                  <PortalDashboardCompactRow
-                    title={row.title}
-                    subtitle={propertyLabel(row)}
-                    badge={
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                        Awaiting payout
-                      </span>
-                    }
-                  />
-                )}
+            <KpiTile
+              label="Unread messages"
+              value={inboxThreads.length}
+              href={`${BASE}/inbox/unopened`}
+              dataAttr="vendor-dashboard-kpi-inbox"
+            />
+          </div>
+        </div>
+
+        {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
+        <div className="space-y-4 [html[data-native]_&]:space-y-3">
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="text-primary">
+              ✦
+            </span>
+            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
+            {openCount > 0 ? (
+              <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
+                <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
+                {openCount} open
+              </span>
+            ) : null}
+          </div>
+
+          <AttentionGroup
+            title="Services"
+            href={`${BASE}/work-orders`}
+            linkLabel="Services →"
+            dataAttr="vendor-dashboard-services-link"
+            badge={
+              quotesPending.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                  {quotesPending.length} pending
+                </span>
+              ) : null
+            }
+            items={quotesPending}
+            emptyMessage="No offers awaiting your quote."
+            keyForItem={(row) => row.id}
+            renderRow={(row: DemoManagerWorkOrderRow) => (
+              <IssueRow
+                href={`${BASE}/work-orders`}
+                dot={DOT_PENDING}
+                title={row.title}
+                subtitle={propertyLabel(row)}
+                pill={<StatusPill tone="pending">Awaiting quote</StatusPill>}
+                dataAttr="vendor-dashboard-attention-quote"
               />
             )}
-          </div>
+          />
+
+          <AttentionGroup
+            title="Upcoming visits"
+            href={`${BASE}/calendar`}
+            linkLabel="Calendar →"
+            dataAttr="vendor-dashboard-calendar-link"
+            items={upcomingVisits}
+            emptyMessage="No upcoming visits yet."
+            keyForItem={(row) => row.id}
+            renderRow={(row: DemoManagerWorkOrderRow) => {
+              const scheduled = row.bucket === "scheduled";
+              return (
+                <IssueRow
+                  href={`${BASE}/calendar`}
+                  dot={scheduled ? DOT_CONFIRMED : DOT_PENDING}
+                  title={row.title}
+                  subtitle={propertyLabel(row)}
+                  meta={fmt(row.scheduledAtIso ?? "")}
+                  pill={
+                    <StatusPill tone={scheduled ? "info" : "pending"}>
+                      {scheduled ? "Scheduled" : "Pending"}
+                    </StatusPill>
+                  }
+                  dataAttr="vendor-dashboard-attention-visit"
+                />
+              );
+            }}
+          />
+
+          <AttentionGroup
+            title="Payouts"
+            href={`${BASE}/payments`}
+            linkLabel="Payments →"
+            dataAttr="vendor-dashboard-payments-link"
+            badge={
+              payoutItems.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                  {payoutItems.length} pending
+                </span>
+              ) : null
+            }
+            items={payoutItems}
+            emptyMessage={payoutsEmptyMessage}
+            keyForItem={(row) => row.id}
+            renderRow={(row: DemoManagerWorkOrderRow) => (
+              <IssueRow
+                href={`${BASE}/payments`}
+                dot={DOT_PENDING}
+                title={row.title}
+                subtitle={propertyLabel(row)}
+                meta={row.cost || undefined}
+                pill={<StatusPill tone="pending">Awaiting payout</StatusPill>}
+                dataAttr="vendor-dashboard-attention-payout"
+              />
+            )}
+          />
+
+          <AttentionGroup
+            title="Inbox"
+            href={`${BASE}/inbox/unopened`}
+            linkLabel="Inbox →"
+            dataAttr="vendor-dashboard-messages-inbox-link"
+            items={inboxThreads}
+            emptyMessage="No unread messages — inbox is clear."
+            keyForItem={(thread) => thread.id}
+            renderRow={(thread) => (
+              <IssueRow
+                href={`${BASE}/inbox/unopened`}
+                dot={DOT_INFO}
+                title={thread.from || "Unknown sender"}
+                subtitle={thread.subject || thread.preview || "—"}
+                pill={<StatusPill tone="info">Unread</StatusPill>}
+                dataAttr="vendor-dashboard-attention-inbox"
+              />
+            )}
+          />
         </div>
       </div>
     </ManagerPortalPageShell>

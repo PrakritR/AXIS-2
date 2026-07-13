@@ -1,15 +1,18 @@
 "use client";
 
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import {
   ManagerPortalPageShell,
   portalDashboardWelcomeSubtitle,
-  PortalDashboardCompactRow,
-  PortalDashboardPreviewList,
-  PORTAL_DASHBOARD_SECTION_CARD,
+  PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
 } from "@/components/portal/portal-metrics";
+import {
+  PortalPreviewOverflowLink,
+  usePortalPreviewSlice,
+} from "@/components/portal/portal-data-table";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { readInboxMessages, syncInboxMessagesFromServer } from "@/lib/demo-admin-partner-inbox";
 import { adminKpiCounts, readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
@@ -24,23 +27,170 @@ import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT, syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { readBugFeedbackRows, syncBugFeedbackFromServer } from "@/lib/portal-bug-feedback";
 
+/** Semantic status foreground tokens for the leading issue-row dots. */
+const DOT_PENDING = "var(--status-pending-fg)";
+const DOT_CONFIRMED = "var(--status-confirmed-fg)";
+const DOT_INFO = "var(--status-approved-fg)";
+
+type PillTone = "pending" | "success" | "danger" | "info";
+
+/** Small theme-aware status pill (light/dark flip via `.portal-badge-*`). */
+function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-${tone} [html[data-native]_&]:text-[9px]`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Restrained KPI tile: big tabular number + small uppercase muted label. */
+function KpiTile({
+  label,
+  value,
+  sub,
+  href,
+  accent,
+  dataAttr,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  href: string;
+  accent?: boolean;
+  dataAttr?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className="flex min-w-[8.75rem] flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 [html[data-native]_&]:min-w-[7.25rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
+    >
+      <span
+        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
+          accent ? "text-[var(--status-overdue-fg)]" : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
+        {label}
+      </span>
+      {sub ? (
+        <span className="mt-0.5 text-[11px] text-muted/80 [html[data-native]_&]:text-[10px]">{sub}</span>
+      ) : null}
+    </Link>
+  );
+}
+
+/** Dense Linear "issue" row: status dot · label + subtitle · meta · status pill · chevron. */
+function IssueRow({
+  href,
+  dot,
+  title,
+  subtitle,
+  meta,
+  pill,
+  dataAttr,
+}: {
+  href: string;
+  dot?: string;
+  title: string;
+  subtitle?: string;
+  meta?: string | null;
+  pill?: ReactNode;
+  dataAttr?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+    >
+      {dot ? (
+        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
+      ) : null}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">
+          {title}
+        </span>
+        {subtitle ? (
+          <span className="mt-0.5 block truncate text-xs text-muted [html[data-native]_&]:text-[11px]">
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+      {meta ? (
+        <span className="hidden shrink-0 whitespace-nowrap text-xs tabular-nums text-muted sm:block">
+          {meta}
+        </span>
+      ) : null}
+      {pill ? <span className="shrink-0">{pill}</span> : null}
+      <span
+        aria-hidden
+        className="shrink-0 text-sm text-muted/40 transition-colors group-hover:text-muted [html[data-native]_&]:hidden"
+      >
+        ›
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * One "Needs attention" group: tiny uppercase label + section link, then a
+ * hairline-bordered stack of dense issue rows (preview-sliced so native/mobile
+ * row limits + the overflow link are preserved).
+ */
+function AttentionGroup<T>({
+  title,
+  href,
+  linkLabel,
+  badge,
+  items,
+  emptyMessage,
+  keyForItem,
+  renderRow,
+}: {
+  title: string;
+  href: string;
+  linkLabel: string;
+  badge?: ReactNode;
+  items: T[];
+  emptyMessage: string;
+  keyForItem: (item: T) => string;
+  renderRow: (item: T) => ReactNode;
+}) {
+  const { visible, overflow } = usePortalPreviewSlice(items);
+  const { isNative } = useIsNativeApp();
+
+  return (
+    <div className="space-y-2 [html[data-native]_&]:space-y-1.5">
+      <PortalDashboardSectionHeader title={title} href={href} linkLabel={linkLabel} badge={badge} />
+      {items.length === 0 ? (
+        <p className="text-sm text-muted [html[data-native]_&]:text-xs">{emptyMessage}</p>
+      ) : (
+        <>
+          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+            {visible.map((item) => (
+              <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
+            ))}
+          </div>
+          <PortalPreviewOverflowLink
+            overflow={overflow}
+            href={href}
+            label={isNative ? `View all (${items.length}) →` : undefined}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
   return formatPacificDateTime(d);
-}
-
-function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
-      {href && linkLabel ? (
-        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-          {linkLabel}
-        </Link>
-      ) : null}
-    </div>
-  );
 }
 
 export function AdminDashboard({ displayName = "there" }: { displayName?: string }) {
@@ -121,6 +271,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
 
     return {
       pendingProps,
+      listedProps,
       totalProps,
       pendingPropertyRows,
       inboxUnread,
@@ -135,14 +286,28 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
   }, [tick, cutoffMs]);
 
   const {
+    pendingProps,
+    listedProps,
+    totalProps,
     pendingPropertyRows,
+    inboxUnread,
     inboxPreview,
     feedbackTotal,
     openFeedback,
+    openFeedbackTotal,
     upcomingMeetings,
     pendingMeetingCount,
     totalMeetings,
   } = data;
+
+  const meetingsEmptyMessage =
+    pendingMeetingCount > 0
+      ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"} — no upcoming times on the calendar.`
+      : totalMeetings > 0
+        ? "No upcoming meetings on the calendar."
+        : "No meeting requests yet.";
+
+  const openCount = pendingProps + pendingMeetingCount + inboxUnread + openFeedbackTotal;
 
   return (
     <ManagerPortalPageShell
@@ -151,96 +316,161 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Properties pending review" href="/admin/properties?tab=pending" linkLabel="Properties →" />
-          <PortalDashboardPreviewList
-            items={pendingPropertyRows}
+        {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
+            <KpiTile
+              label="Pending review"
+              value={pendingProps}
+              sub={pendingProps > 0 ? "Awaiting admin action" : "All caught up"}
+              accent={pendingProps > 0}
+              href="/admin/properties?tab=pending"
+              dataAttr="admin-dashboard-kpi-pending"
+            />
+            <KpiTile
+              label="Live properties"
+              value={listedProps}
+              sub={`${totalProps} total`}
+              href="/admin/properties"
+              dataAttr="admin-dashboard-kpi-properties"
+            />
+            <KpiTile
+              label="Meetings"
+              value={totalMeetings}
+              sub={
+                pendingMeetingCount > 0
+                  ? `${pendingMeetingCount} pending`
+                  : "None pending"
+              }
+              href="/admin/events"
+              dataAttr="admin-dashboard-kpi-meetings"
+            />
+            <KpiTile
+              label="Unread inbox"
+              value={inboxUnread}
+              href="/admin/inbox/unopened"
+              dataAttr="admin-dashboard-kpi-inbox"
+            />
+            <KpiTile
+              label="Open feedback"
+              value={openFeedbackTotal}
+              sub={`${feedbackTotal} on file`}
+              href="/admin/bugs-feedback"
+              dataAttr="admin-dashboard-kpi-feedback"
+            />
+          </div>
+        </div>
+
+        {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
+        <div className="space-y-4 [html[data-native]_&]:space-y-3">
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="text-primary">
+              ✦
+            </span>
+            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
+            {openCount > 0 ? (
+              <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
+                <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
+                {openCount} open
+              </span>
+            ) : null}
+          </div>
+
+          <AttentionGroup
+            title="Properties pending review"
             href="/admin/properties?tab=pending"
+            linkLabel="Properties →"
+            items={pendingPropertyRows}
             emptyMessage="No properties waiting for admin review."
             keyForItem={(row) => row.adminRefId}
             renderRow={(row) => (
-              <PortalDashboardCompactRow
+              <IssueRow
+                href="/admin/properties?tab=pending"
+                dot={DOT_PENDING}
                 title={row.buildingName || row.unitLabel || "Listing"}
                 subtitle={row.address || row.neighborhood || "Pending submission"}
-                badge={
-                  <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">Review</span>
+                meta={
+                  row.rentRangeLabel ||
+                  (row.monthlyRent ? `$${row.monthlyRent.toLocaleString()}/mo` : undefined)
                 }
+                pill={<StatusPill tone="pending">Review</StatusPill>}
+                dataAttr="admin-dashboard-attention-property"
               />
             )}
           />
-        </div>
 
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Meetings" href="/admin/events" linkLabel="Meetings →" />
-          <PortalDashboardPreviewList
-            items={upcomingMeetings}
+          <AttentionGroup
+            title="Meetings"
             href="/admin/events"
-            emptyMessage={
-              pendingMeetingCount > 0
-                ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"} — no upcoming times on the calendar.`
-                : totalMeetings > 0
-                  ? "No upcoming meetings on the calendar."
-                  : "No meeting requests yet."
+            linkLabel="Meetings →"
+            badge={
+              pendingMeetingCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                  {pendingMeetingCount} pending
+                </span>
+              ) : null
             }
+            items={upcomingMeetings}
+            emptyMessage={meetingsEmptyMessage}
             keyForItem={(m) => m.id}
             renderRow={(m) => (
-              <PortalDashboardCompactRow
+              <IssueRow
+                href="/admin/events"
+                dot={m.kind === "pending" ? DOT_PENDING : DOT_CONFIRMED}
                 title={m.label}
                 subtitle={fmt(m.start)}
-                badge={
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      m.kind === "pending" ? "portal-badge-pending" : "portal-badge-success"
-                    }`}
-                  >
+                pill={
+                  <StatusPill tone={m.kind === "pending" ? "pending" : "success"}>
                     {m.kind === "pending" ? "Pending" : "Confirmed"}
-                  </span>
+                  </StatusPill>
                 }
+                dataAttr="admin-dashboard-attention-meeting"
               />
             )}
           />
-        </div>
 
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Inbox" href="/admin/inbox/unopened" linkLabel="Inbox →" />
-          <PortalDashboardPreviewList
-            items={inboxPreview}
+          <AttentionGroup
+            title="Inbox"
             href="/admin/inbox/unopened"
+            linkLabel="Inbox →"
+            items={inboxPreview}
             emptyMessage="No unread messages — inbox is clear."
             keyForItem={(message) => message.id}
             renderRow={(message) => (
-              <PortalDashboardCompactRow
+              <IssueRow
+                href="/admin/inbox/unopened"
+                dot={DOT_INFO}
                 title={message.name || message.email}
                 subtitle={message.topic || message.body.slice(0, 80)}
-                badge={
-                  <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Unread</span>
-                }
+                pill={<StatusPill tone="info">Unread</StatusPill>}
+                dataAttr="admin-dashboard-attention-inbox"
               />
             )}
           />
-        </div>
 
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Feedback" href="/admin/bugs-feedback" linkLabel="Feedback →" />
-          <PortalDashboardPreviewList
-            items={openFeedback}
+          <AttentionGroup
+            title="Feedback"
             href="/admin/bugs-feedback"
+            linkLabel="Feedback →"
+            items={openFeedback}
             emptyMessage={`No open feedback — ${feedbackTotal} submission${feedbackTotal === 1 ? "" : "s"} on file.`}
             keyForItem={(row) => row.id}
             renderRow={(row) => (
-              <PortalDashboardCompactRow
+              <IssueRow
+                href="/admin/bugs-feedback"
+                dot={DOT_PENDING}
                 title={row.title || "Untitled report"}
                 subtitle={`${row.reporterName || row.reporterEmail} · ${row.type === "bug" ? "Bug" : "Feedback"}`}
-                badge={
-                  <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">
+                pill={
+                  <StatusPill tone="pending">
                     {row.status === "in_progress" ? "In progress" : "Open"}
-                  </span>
+                  </StatusPill>
                 }
+                dataAttr="admin-dashboard-attention-feedback"
               />
             )}
           />
-        </div>
         </div>
       </div>
     </ManagerPortalPageShell>

@@ -34,7 +34,7 @@ function appOrigin(): string {
 }
 
 function canSendApplicationReminder(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+  return role === "admin" || role === "manager" || role === "pro";
 }
 
 export async function POST(req: Request) {

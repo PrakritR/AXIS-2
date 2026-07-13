@@ -77,10 +77,10 @@ export function Navbar1({
 }: Navbar1Props) {
   return (
     <div className="mx-auto flex min-h-[56px] w-full max-w-6xl items-center px-4 sm:px-5">
-      {/* Desktop */}
-      <nav className="hidden w-full items-center justify-between lg:flex">
-        <div className="flex items-center gap-6">
-          {logoSlot}
+      {/* Desktop — logo left, links centered, actions right (3-col grid). */}
+      <nav className="hidden w-full grid-cols-[1fr_auto_1fr] items-center lg:grid">
+        <div className="justify-self-start">{logoSlot}</div>
+        <div className="justify-self-center">
           <NavigationMenu>
             <NavigationMenuList>
               {menu.map((item) => (
@@ -89,7 +89,7 @@ export function Navbar1({
             </NavigationMenuList>
           </NavigationMenu>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-self-end">
           {actionsSlot && <div className="hidden items-center lg:flex">{actionsSlot}</div>}
           {portalLink ? (
             <Button

@@ -83,12 +83,15 @@ export function PublicNavbar() {
     [pathname],
   );
   const contactActive = useMemo(() => pathname === "/contact", [pathname]);
+  const pricingActive = useMemo(() => pathname === "/pricing", [pathname]);
+  const docsActive = useMemo(() => pathname.startsWith("/docs"), [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
     () => {
-      // Slim marketing nav: Browse homes + Contact. Manager/vendor entry points
-      // live in the hero CTAs and footer; no "Demo" item — the landing page
-      // embeds the demo above the fold. /partner, /vendors, /demo stay routable.
+      // Slim marketing nav: Browse homes · Pricing · Docs · Contact. Manager/
+      // vendor entry points live in the hero CTAs and footer; no "Demo" item —
+      // the landing page embeds the demo above the fold. /partner, /vendors,
+      // /demo stay routable.
       const items: NavbarMenuItem[] = [
         {
           title: "Browse homes",
@@ -96,11 +99,13 @@ export function PublicNavbar() {
           active: residentActive,
           dataAttr: "nav-resident",
         },
+        { title: "Pricing", url: "/pricing", active: pricingActive, dataAttr: "nav-pricing" },
+        { title: "Docs", url: "/docs", active: docsActive, dataAttr: "nav-docs" },
         { title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" },
       ];
       return items;
     },
-    [residentActive, contactActive],
+    [residentActive, pricingActive, docsActive, contactActive],
   );
 
   const portalLink = useMemo(() => {

@@ -4,29 +4,31 @@ import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 
 const FOOTER_COLUMNS: { heading: string; links: { href: string; label: string }[] }[] = [
   {
-    heading: "PropLane",
+    heading: "Product",
     links: [
-      { href: "/about", label: "About us" },
       { href: "/why-proplane", label: "Why PropLane" },
+      { href: "/pricing", label: "Pricing" },
+      { href: "/docs", label: "Docs" },
       { href: "/reviews", label: "Reviews" },
+      { href: "/about", label: "About us" },
+    ],
+  },
+  {
+    heading: "Who it's for",
+    links: [
+      { href: RESIDENT_BROWSE_PATH, label: "Residents" },
+      { href: "/pricing", label: "Property managers" },
+      { href: "/owners", label: "Owners" },
+      { href: "/vendors", label: "Vendors" },
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
       { href: "/contact", label: "Contact us" },
       { href: "/support", label: "Support" },
-    ],
-  },
-  {
-    heading: "Resident",
-    links: [{ href: RESIDENT_BROWSE_PATH, label: "Browse homes" }],
-  },
-  {
-    heading: "Manager",
-    links: [
-      { href: "/partner/pricing", label: "Software & pricing" },
       { href: "/partner/contact", label: "Partner inquiries" },
     ],
-  },
-  {
-    heading: "Vendor",
-    links: [{ href: "/vendors", label: "Work as a vendor" }],
   },
 ];
 

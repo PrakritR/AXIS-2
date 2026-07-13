@@ -20,8 +20,8 @@ export default function ContactPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen px-4 py-16 sm:py-20">
-          <div className="glass-card mx-auto max-w-2xl rounded-3xl p-8">
+        <div className="min-h-screen bg-background px-4 py-16 sm:py-20">
+          <div className="mx-auto max-w-2xl rounded-xl border border-border bg-card p-8">
             <p className="text-center text-sm text-muted">Loading…</p>
           </div>
         </div>
@@ -47,10 +47,14 @@ function ContactInner() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen px-4 py-16 sm:py-20">
+    <div className="min-h-screen bg-background px-4 py-16 sm:py-20">
       <div className="mx-auto max-w-2xl">
-        <div className="glass-card rounded-3xl p-8">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Connect with PropLane Team</h1>
+        <div className="rounded-xl border border-border bg-card p-8 shadow-[var(--shadow-card)]">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-[var(--secondary)] px-3 py-1 text-[12px] font-medium tracking-[0.06em] text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)] shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_50%,transparent)]" />
+            CONTACT
+          </span>
+          <h1 className="mt-6 text-2xl font-semibold tracking-[-0.02em] text-foreground">Connect with PropLane Team</h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
             Schedule a meeting with our team or send us a message — whatever works best for you.
           </p>
@@ -160,7 +164,7 @@ function ContactMessageForm({ showToast }: { showToast: (m: string) => void }) {
         data-attr="contact-us-submit"
         onClick={submit}
         disabled={submitting}
-        className="btn-cobalt mt-2 w-full rounded-2xl py-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-2 inline-flex w-full items-center justify-center rounded-[7px] border border-border bg-primary py-3.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Sending…" : "Send message"}
       </button>
@@ -171,11 +175,11 @@ function ContactMessageForm({ showToast }: { showToast: (m: string) => void }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold text-muted">{label}</p>
+      <p className="mb-1.5 text-[12px] font-medium uppercase tracking-[0.06em] text-muted">{label}</p>
       {children}
     </div>
   );
 }
 
 const inputCls =
-  "w-full rounded-xl border border-border/60 bg-auth-input-bg px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/25 hover:border-primary/25";
+  "w-full rounded-[7px] border border-border bg-[var(--secondary)] px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/25 hover:border-foreground/20";

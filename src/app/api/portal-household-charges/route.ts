@@ -43,8 +43,9 @@ async function getUserContext() {
   const roleRows = (rolesResult.data ?? []).map((r) => String(r.role).toLowerCase());
   const legacyRole = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
   const allRoles = roleRows.length > 0 ? roleRows : (legacyRole ? [legacyRole] : []);
-  const isManagerOrOwner = allRoles.some((r) => r === "manager" || r === "owner");
-  const resolvedRole = admin ? "admin" : isManagerOrOwner ? "manager" : "resident";
+  // `owner` is a read-only role and cannot create/manage rent charges.
+  const isManager = allRoles.some((r) => r === "manager");
+  const resolvedRole = admin ? "admin" : isManager ? "manager" : "resident";
   return {
     db,
     user: {

@@ -122,13 +122,30 @@ export function AuthIconVendor({ className = "h-5 w-5" }: IconProps) {
   );
 }
 
-export type AuthRoleIconName = "resident" | "manager" | "admin" | "vendor" | "sign-in" | "apply" | "spark";
+/** Owner — key (holds the property, hires a manager) */
+export function AuthIconOwner({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1.65" />
+      <path
+        d="m11 11 8 8M16 16l2-2M14 14l1.5 1.5"
+        stroke="currentColor"
+        strokeWidth="1.65"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export type AuthRoleIconName = "resident" | "manager" | "admin" | "vendor" | "owner" | "sign-in" | "apply" | "spark";
 
 const ICONS: Record<AuthRoleIconName, FC<IconProps>> = {
   resident: AuthIconResident,
   manager: AuthIconManager,
   admin: AuthIconAdmin,
   vendor: AuthIconVendor,
+  owner: AuthIconOwner,
   "sign-in": AuthIconSignIn,
   apply: AuthIconApply,
   spark: AuthIconSpark,

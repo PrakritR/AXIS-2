@@ -10,7 +10,7 @@ function normalizeEmail(value: unknown): string {
 }
 
 function canManageResidentApproval(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+  return role === "admin" || role === "manager" || role === "pro";
 }
 
 export async function PATCH(req: Request) {

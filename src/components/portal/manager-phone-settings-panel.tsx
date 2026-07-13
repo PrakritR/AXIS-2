@@ -41,6 +41,7 @@ export function ManagerPhoneSettingsPanel() {
   const [codeInput, setCodeInput] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -109,6 +110,33 @@ export function ManagerPhoneSettingsPanel() {
     }
   };
 
+  const provisionNumber = async () => {
+    setProvisioning(true);
+    try {
+      const res = await fetch("/api/manager/phone/provision", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        showToast(await readApiError(res, "Could not get a work number."));
+        return;
+      }
+      const body = (await res.json()) as { number?: string };
+      if (body.number) {
+        setSettings((s) => ({ ...(s ?? SAFE_DEFAULTS), workNumber: body.number ?? null }));
+        showToast(`Work number ready: ${body.number}`);
+      } else {
+        showToast("Work number provisioned.");
+      }
+    } catch {
+      showToast("Network error.");
+    } finally {
+      setProvisioning(false);
+    }
+  };
+
   const toggleForward = async (next: boolean) => {
     const prev = settings;
     if (!prev) return;
@@ -145,12 +173,24 @@ export function ManagerPhoneSettingsPanel() {
         <p className="text-sm text-muted">Loading…</p>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-foreground">Work number</p>
             {settings.workNumber ? (
               <p className="font-mono text-sm text-foreground">{settings.workNumber}</p>
             ) : (
-              <p className="text-sm text-muted">Not provisioned yet</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-muted">Not provisioned yet</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 min-h-0 shrink-0 rounded-full px-3 text-xs"
+                  data-attr="manager-phone-provision"
+                  disabled={provisioning || !smsConfigured}
+                  onClick={() => void provisionNumber()}
+                >
+                  {provisioning ? "Getting a number…" : "Get a work number"}
+                </Button>
+              </div>
             )}
           </div>
 

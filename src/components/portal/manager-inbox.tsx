@@ -32,6 +32,7 @@ import {
   useInboxRowSelection,
 } from "@/components/portal/portal-inbox-selection";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
+import { NotificationPrefsPanel } from "@/components/portal/notification-prefs-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
@@ -168,7 +169,10 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const counts = useMemo(() => countThreads(local, scheduleCount), [local, scheduleCount]);
   const tabs = useMemo(
-    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
+    () => [
+      ...INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
+      { id: "notifications", label: "Notifications", count: 0 },
+    ],
     [counts],
   );
 
@@ -490,7 +494,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         liveContacts={liveContacts}
       />
 
-      {tabId === "schedule" ? (
+      {tabId === "notifications" ? (
+        <NotificationPrefsPanel />
+      ) : tabId === "schedule" ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />

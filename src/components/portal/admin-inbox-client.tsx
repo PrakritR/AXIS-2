@@ -9,6 +9,7 @@ import {
   type PortalInboxTableRow,
 } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { NotificationPrefsPanel } from "@/components/portal/notification-prefs-panel";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -410,7 +411,10 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   }, [all]);
 
   const inboxTabs = useMemo(
-    () => ADMIN_INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
+    () => [
+      ...ADMIN_INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
+      { id: "notifications", label: "Notifications", count: 0 },
+    ],
     [folderCounts],
   );
 
@@ -499,7 +503,9 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           recipients={recipients}
         />
 
-        {rows.length === 0 ? (
+        {tabId === "notifications" ? (
+          <NotificationPrefsPanel />
+        ) : rows.length === 0 ? (
           <PortalInboxEmptyState title={emptyCopy} />
         ) : (
           <PortalInboxMessageTable

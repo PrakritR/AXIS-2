@@ -2,6 +2,7 @@
 
 import { ChevronDown, User } from "lucide-react";
 import Link from "next/link";
+import { startTransition, useEffect } from "react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
@@ -12,7 +13,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { track } from "@/lib/analytics/track-client";
+import { openAxisAssistant } from "@/lib/axis-assistant/open-store";
 import type { PortalKind } from "@/lib/portal-types";
+
+/**
+ * Opens the in-portal PropLane Assistant — the same module-level open-store the
+ * assistant FAB drives ({@link openAxisAssistant}), so the two triggers stay in
+ * lockstep. Mirrors the FAB's `assistant_opened` analytics + transition so the
+ * panel mount stays off the interaction's critical path (INP budget).
+ */
+function openAskProPlane() {
+  track("assistant_opened");
+  startTransition(() => {
+    openAxisAssistant();
+  });
+}
 
 function initials(name: string | null, email: string | null): string {
   const src = (name ?? "").trim() || (email ?? "").trim();
@@ -40,8 +56,38 @@ export function PortalTopBar({
 }) {
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
 
+  // ⌘K / Ctrl+K opens the assistant, matching the visible keyboard chip. Only
+  // this shortcut is claimed; nothing else in the app binds ⌘K.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && (event.key === "k" || event.key === "K")) {
+        event.preventDefault();
+        openAskProPlane();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
-    <header className="hidden h-14 shrink-0 items-center justify-end border-b border-border bg-background px-5 md:flex">
+    <header className="hidden h-14 shrink-0 items-center justify-end gap-3 border-b border-border bg-background px-5 md:flex">
+      <button
+        type="button"
+        onClick={openAskProPlane}
+        data-attr="portal-ask-proplane"
+        aria-label="Ask PropLane"
+        aria-keyshortcuts="Meta+K Control+K"
+        className="group flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-2.5 pr-2 text-[13px] font-medium text-muted outline-none transition hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <span aria-hidden className="text-[13px] leading-none text-primary">
+          ✦
+        </span>
+        <span className="tracking-[-0.01em]">Ask PropLane</span>
+        <kbd className="ml-0.5 hidden items-center rounded-md border border-border bg-[var(--secondary)] px-1.5 py-0.5 text-[10.5px] font-medium leading-none text-muted lg:inline-flex">
+          ⌘K
+        </kbd>
+      </button>
+
       <DropdownMenu>
         <DropdownMenuTrigger
           className="flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-2.5 text-foreground outline-none transition hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-primary/40"

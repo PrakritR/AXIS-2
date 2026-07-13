@@ -84,7 +84,7 @@ async function resolvePortalRole(
 }
 
 function isManagerPortalRole(role: string): boolean {
-  return role === "manager" || role === "owner" || role === "pro";
+  return role === "manager" || role === "pro";
 }
 
 async function assertManagerOrAdminWriteAccess(
@@ -248,7 +248,7 @@ async function assertCanDeleteApplicationRecords(
     return null;
   }
 
-  if (role === "manager" || role === "owner" || role === "pro") {
+  if (role === "manager" || role === "pro") {
     for (const record of records) {
       const row = normalizeRow(record.row_data as DemoApplicantRow);
       const managerUserId = record.manager_user_id ?? row.managerUserId ?? null;
@@ -290,7 +290,7 @@ export async function GET() {
         .limit(500);
       data = result.data;
       error = result.error;
-    } else if (!admin && (role === "manager" || role === "owner" || role === "pro")) {
+    } else if (!admin && (role === "manager" || role === "pro")) {
       try {
         data = await fetchApplicationsForManagerUser(db, user.id);
         error = null;

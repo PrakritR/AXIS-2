@@ -60,6 +60,18 @@ export const NATIVE_BOTTOM_NAV_VENDOR_ORDER = [
 ] as const;
 
 /**
+ * Owner footer order — mirrors `ownerPortal.sections` (Settings/profile omitted; pinned last).
+ * Keep in sync with `src/lib/portals/owner.ts`.
+ */
+export const NATIVE_BOTTOM_NAV_OWNER_ORDER = [
+  "dashboard",
+  "properties",
+  "statements",
+  "documents",
+  "inbox",
+] as const;
+
+/**
  * Native bottom bar order — preserves portal registry order (web sidebar = native bar).
  * Settings is always appended last when present.
  */
@@ -105,6 +117,8 @@ export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis
 
 export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "inbox", "payments"] as const;
 
+export const NATIVE_BOTTOM_NAV_OWNER_PRIMARY = ["properties", "statements", "inbox"] as const;
+
 /**
  * Every role gets the fixed native bottom bar — Dashboard and Settings are
  * reached via the shared `PortalMobileNavBar` (back arrow + profile menu)
@@ -129,7 +143,7 @@ export function nativeBottomNavShowMoreTab(
     const navSections = items.filter((item) => item.section !== "profile").map((item) => item.section);
     if (navSections.length === 1 && navSections[0] === "applications") return false;
   }
-  return kind === "pro" || kind === "manager" || kind === "resident" || kind === "vendor";
+  return kind === "pro" || kind === "manager" || kind === "resident" || kind === "vendor" || kind === "owner";
 }
 
 function primaryOrderFor(
@@ -152,6 +166,8 @@ function primaryOrderFor(
       return NATIVE_BOTTOM_NAV_ADMIN_PRIMARY;
     case "vendor":
       return NATIVE_BOTTOM_NAV_VENDOR_PRIMARY;
+    case "owner":
+      return NATIVE_BOTTOM_NAV_OWNER_PRIMARY;
     default:
       return [];
   }

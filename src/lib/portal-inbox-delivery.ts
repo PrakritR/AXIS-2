@@ -2,6 +2,12 @@ import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendSms } from "@/lib/twilio";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  resolveChannels,
+  type NotificationCategory,
+  type ResolvedChannels,
+} from "@/lib/notification-preferences";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
@@ -78,13 +84,22 @@ export async function deliverPortalInboxMessage(
     /** When set, SMS uses this body instead of `text` (keeps inbox/email on the full message). */
     smsText?: string;
     senderRole?: string;
+    /**
+     * When provided, email/SMS are gated PER RECIPIENT by each recipient's saved
+     * notification preferences for this category (via `resolveChannels`) instead
+     * of the single global `deliverViaEmail` / `deliverViaSms` booleans. Inbox is
+     * always written. When omitted, delivery keeps the exact legacy behavior:
+     * the two global booleans apply uniformly to every recipient.
+     */
+    eventCategory?: NotificationCategory;
   },
 ): Promise<{ ok: true; recipientCount: number } | { ok: false; error: string }> {
   const senderEmail = opts.senderEmail.trim().toLowerCase();
   const subject = opts.subject.trim();
   const text = opts.text.trim();
   const fromName = opts.fromName.trim() || "PropLane Portal";
-  const deliverToPortalInbox = opts.deliverToPortalInbox !== false;
+  // Inbox is always written for category-driven sends (non-suppressible record).
+  const deliverToPortalInbox = opts.eventCategory ? true : opts.deliverToPortalInbox !== false;
   const deliverViaEmail = opts.deliverViaEmail !== false;
   const deliverViaSms = opts.deliverViaSms === true;
 
@@ -142,7 +157,59 @@ export async function deliverPortalInboxMessage(
     recipients = allowed;
   }
 
-  const toEmails = recipients.map((r) => r.email).filter((email) => !shouldSkipOutboundEmail(email));
+  // Per-recipient channel resolution. With an eventCategory, each recipient's
+  // saved notification preferences decide email/SMS (default matrix when they
+  // have no row); without one, the legacy global booleans apply to everyone.
+  const eventCategory = opts.eventCategory;
+  let channelByEmail: Map<string, ResolvedChannels> | null = null;
+  if (eventCategory) {
+    channelByEmail = new Map();
+    // One batched fetch of recipient phone + verification for resolveChannels
+    // (which gates SMS on a verified, non-opted-out phone).
+    const recipientUserIds = recipients
+      .map((r) => r.userId)
+      .filter((id): id is string => Boolean(id));
+    const profileById = new Map<string, { phone: string | null; phone_verified_at: string | null }>();
+    if (recipientUserIds.length) {
+      const { data: recProfiles } = await db
+        .from("profiles")
+        .select("id, phone, phone_verified_at")
+        .in("id", recipientUserIds);
+      for (const p of recProfiles ?? []) {
+        profileById.set(String(p.id), {
+          phone: (p.phone as string | null) ?? null,
+          phone_verified_at: (p.phone_verified_at as string | null) ?? null,
+        });
+      }
+    }
+    for (const recipient of recipients) {
+      if (recipient.userId) {
+        channelByEmail.set(
+          recipient.email,
+          await resolveChannels(db, recipient.userId, eventCategory, profileById.get(recipient.userId) ?? null),
+        );
+      } else {
+        // Email-only recipient (no account row): no stored prefs and no verified
+        // phone, so fall back to the category's default email flag and never SMS.
+        channelByEmail.set(recipient.email, {
+          inbox: true,
+          email: DEFAULT_NOTIFICATION_PREFERENCES[eventCategory].email,
+          sms: false,
+        });
+      }
+    }
+  }
+
+  const emailWanted = (recipient: InboxDeliveryRecipient): boolean =>
+    channelByEmail ? channelByEmail.get(recipient.email)?.email === true : deliverViaEmail;
+
+  // Recipients that will actually receive email (channel on + not a sandbox skip).
+  // In legacy mode this collapses to "all non-skip recipients when deliverViaEmail",
+  // preserving the previous meaning of `toEmails`.
+  const willEmail = new Set<string>(
+    recipients.filter((r) => emailWanted(r) && !shouldSkipOutboundEmail(r.email)).map((r) => r.email),
+  );
+  const toEmails = [...willEmail];
 
   if (deliverToPortalInbox) {
     const senderScope = scopeForRole(senderRole);
@@ -208,7 +275,7 @@ export async function deliverPortalInboxMessage(
     }
   }
 
-  if (deliverViaEmail && toEmails.length > 0) {
+  if (toEmails.length > 0) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) return { ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." };
     const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
@@ -230,27 +297,33 @@ export async function deliverPortalInboxMessage(
         id: logId,
         recipient_email: recipient.email,
         subject,
-        channel: deliverViaEmail && toEmails.includes(recipient.email) ? "email" : "portal",
+        channel: willEmail.has(recipient.email) ? "email" : "portal",
         row_data: {
           id: logId,
           to: recipient.email,
           subject,
           body: text,
           sentAt,
-          emailSent: deliverViaEmail && toEmails.includes(recipient.email),
+          emailSent: willEmail.has(recipient.email),
         },
       },
       { onConflict: "id" },
     );
   }
 
-  if (deliverViaSms) {
+  // SMS: legacy mode applies the single global deliverViaSms to every recipient;
+  // category mode gates per recipient via resolved channels (verified,
+  // non-opted-out phone already enforced by resolveChannels).
+  const smsRecipients = recipients.filter((r) =>
+    channelByEmail ? channelByEmail.get(r.email)?.sms === true : deliverViaSms,
+  );
+  if (smsRecipients.length > 0) {
     const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
     if (smsFromNumber) {
-      const recipientEmails = recipients.map((r) => r.email);
+      const recipientEmails = smsRecipients.map((r) => r.email);
       const { data: phones } = await db.from("profiles").select("email, phone").in("email", recipientEmails);
       const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
-      for (const recipient of recipients) {
+      for (const recipient of smsRecipients) {
         const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
         if (!recipientPhone) continue;
         const smsBody = (opts.smsText ?? text).trim();

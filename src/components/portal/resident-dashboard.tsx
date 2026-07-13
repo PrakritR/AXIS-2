@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   ManagerPortalPageShell,
   portalDashboardWelcomeSubtitle,
-  PortalDashboardCompactRow,
-  PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
-  PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
   formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
+import {
+  PortalPreviewOverflowLink,
+  usePortalPreviewSlice,
+} from "@/components/portal/portal-data-table";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -56,7 +59,189 @@ import {
 
 const BASE = "/resident";
 
+/** Semantic status foreground tokens for the leading issue-row dots. */
+const DOT_OVERDUE = "var(--status-overdue-fg)";
+const DOT_PENDING = "var(--status-pending-fg)";
+const DOT_CONFIRMED = "var(--status-confirmed-fg)";
+const DOT_INFO = "var(--status-approved-fg)";
+
 type AppStatus = "pending" | "approved" | "rejected";
+
+type PillTone = "pending" | "success" | "danger" | "info" | "neutral";
+
+/** Small theme-aware status pill (light/dark flip via `.portal-badge-*`). */
+function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
+  if (tone === "neutral") {
+    return (
+      <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-[var(--secondary)] px-2 py-0.5 text-[10px] font-semibold text-muted [html[data-native]_&]:text-[9px]">
+        {children}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-${tone} [html[data-native]_&]:text-[9px]`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Restrained KPI tile: big tabular number + small uppercase muted label. */
+function KpiTile({
+  label,
+  value,
+  sub,
+  href,
+  accent,
+  dataAttr,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  href: string;
+  accent?: boolean;
+  dataAttr?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className="flex min-w-[8.75rem] flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 [html[data-native]_&]:min-w-[7.25rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
+    >
+      <span
+        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
+          accent ? "text-[var(--status-overdue-fg)]" : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
+        {label}
+      </span>
+      {sub ? (
+        <span className="mt-0.5 text-[11px] text-muted/80 [html[data-native]_&]:text-[10px]">{sub}</span>
+      ) : null}
+    </Link>
+  );
+}
+
+/** Dense Linear "issue" row: status dot · label + subtitle · meta · status pill · chevron. */
+function IssueRow({
+  href,
+  dot,
+  title,
+  subtitle,
+  meta,
+  pill,
+  dataAttr,
+}: {
+  href: string;
+  dot?: string;
+  title: string;
+  subtitle?: string;
+  meta?: string | null;
+  pill?: ReactNode;
+  dataAttr?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+    >
+      {dot ? (
+        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
+      ) : null}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">
+          {title}
+        </span>
+        {subtitle ? (
+          <span className="mt-0.5 block truncate text-xs text-muted [html[data-native]_&]:text-[11px]">
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+      {meta ? (
+        <span className="hidden shrink-0 whitespace-nowrap text-xs tabular-nums text-muted sm:block">
+          {meta}
+        </span>
+      ) : null}
+      {pill ? <span className="shrink-0">{pill}</span> : null}
+      <span
+        aria-hidden
+        className="shrink-0 text-sm text-muted/40 transition-colors group-hover:text-muted [html[data-native]_&]:hidden"
+      >
+        ›
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * One "Needs attention" group: tiny uppercase label + section link, then a
+ * hairline-bordered stack of dense issue rows (preview-sliced like the old
+ * section cards, so native/mobile row limits + overflow link are preserved).
+ */
+function AttentionGroup<T>({
+  title,
+  href,
+  linkLabel,
+  badge,
+  items,
+  emptyMessage,
+  keyForItem,
+  renderRow,
+}: {
+  title: string;
+  href: string;
+  linkLabel: string;
+  badge?: ReactNode;
+  items: T[];
+  emptyMessage: string;
+  keyForItem: (item: T) => string;
+  renderRow: (item: T) => ReactNode;
+}) {
+  const { visible, overflow } = usePortalPreviewSlice(items);
+  const { isNative } = useIsNativeApp();
+
+  return (
+    <div className="space-y-2 [html[data-native]_&]:space-y-1.5">
+      <PortalDashboardSectionHeader title={title} href={href} linkLabel={linkLabel} badge={badge} />
+      {items.length === 0 ? (
+        <p className="text-sm text-muted [html[data-native]_&]:text-xs">{emptyMessage}</p>
+      ) : (
+        <>
+          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+            {visible.map((item) => (
+              <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
+            ))}
+          </div>
+          <PortalPreviewOverflowLink
+            overflow={overflow}
+            href={href}
+            label={isNative ? `View all (${items.length}) →` : undefined}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Parse a "$1,200.00" balance label into a numeric dollar amount for KPI sums. */
+function parseMoneyLabel(label: string): number {
+  const n = Number(String(label).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatUsd(amount: number): string {
+  return amount.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
 
 function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   label: string;
@@ -76,20 +261,38 @@ function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   }
 }
 
-function StatusBadge({ label, tone }: { label: string; tone: string }) {
-  const cls: Record<string, string> = {
-    emerald: "portal-badge-success",
-    amber: "portal-badge-pending",
-    sky: "portal-badge-info",
-    blue: "portal-badge-info",
-    slate: "bg-accent/30 text-muted",
-    rose: "portal-badge-danger",
-  };
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${cls[tone] ?? cls.slate}`}>
-      {label}
-    </span>
-  );
+/** Map the legacy badge tone palette onto the shared status-pill tones. */
+function pillToneForBadgeTone(tone: string): PillTone {
+  switch (tone) {
+    case "emerald": return "success";
+    case "rose": return "danger";
+    case "sky":
+    case "blue": return "info";
+    case "slate": return "neutral";
+    default: return "pending";
+  }
+}
+
+/** Map the legacy badge tone palette onto a leading status dot. */
+function dotForBadgeTone(tone: string): string {
+  switch (tone) {
+    case "emerald": return DOT_CONFIRMED;
+    case "rose": return DOT_OVERDUE;
+    case "sky":
+    case "blue": return DOT_INFO;
+    default: return DOT_PENDING;
+  }
+}
+
+/** Compact KPI-tile value for the resident's lease state. */
+function leaseKpiValue(tone: string): { value: string; accent: boolean } {
+  switch (tone) {
+    case "emerald": return { value: "Active", accent: false };
+    case "blue": return { value: "Sign", accent: true };
+    case "sky":
+    case "amber": return { value: "Pending", accent: false };
+    default: return { value: "—", accent: false };
+  }
 }
 
 function applicationStatusBadge(row: DemoApplicantRow): { label: string; tone: "emerald" | "amber" | "rose" | "slate" } {
@@ -325,6 +528,39 @@ export function ResidentDashboard({
     displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
 
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
+  const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
+  const balanceSub =
+    overdueChargeCount > 0
+      ? `${overdueChargeCount} overdue ${overdueChargeCount === 1 ? "charge" : "charges"}`
+      : pendingCharges.length > 0
+        ? `${pendingCharges.length} pending`
+        : "All paid";
+
+  const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`;
+  const leaseKpi = leaseKpiValue(lease.tone);
+
+  const leaseUnlocked = appStatus === "approved";
+  const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
+  const leaseDateRange = leaseRow?.application?.leaseStart
+    ? `${leaseRow.application.leaseStart}${leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}`
+    : null;
+  const leaseSubtitle =
+    leaseDateRange ||
+    leaseRow?.unit ||
+    (appProperty ? `${appProperty}${appRoom ? ` · ${appRoom}` : ""}` : undefined);
+  const leaseEmptyMessage = !leaseUnlocked
+    ? "Available after your application is approved."
+    : appProperty
+      ? `${appProperty}${appRoom ? ` · ${appRoom}` : ""} — lease not started yet.`
+      : "No lease on file yet.";
+
+  const openServiceCount = canUseFullPortal ? serviceItems.length : 0;
+  const openCount =
+    pendingCharges.length +
+    openServiceCount +
+    inboxThreads.length +
+    pendingApplicationCount +
+    (lease.cta ? 1 : 0);
 
   return (
     <ManagerPortalPageShell
@@ -333,241 +569,251 @@ export function ResidentDashboard({
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-            <PortalDashboardSectionHeader
-              title="Applications"
-              href={`${BASE}/applications`}
-              linkLabel="Applications →"
-              badge={
-                pendingApplicationCount > 0 || approvedApplicationCount > 0 ? (
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {pendingApplicationCount > 0 ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                        {pendingApplicationCount} pending
-                      </span>
-                    ) : null}
-                    {approvedApplicationCount > 0 ? (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                        {approvedApplicationCount} approved
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null
-              }
+        {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
+            <KpiTile
+              label="Balance due"
+              value={formatUsd(totalBalanceDue)}
+              sub={balanceSub}
+              accent={overdueChargeCount > 0}
+              href={`${BASE}/payments`}
+              dataAttr="resident-dashboard-kpi-balance"
             />
-            <PortalDashboardPreviewList
-              items={applicationRows}
+            <KpiTile
+              label="Open requests"
+              value={openServiceCount}
+              href={servicesHref}
+              dataAttr="resident-dashboard-kpi-services"
+            />
+            <KpiTile
+              label="Lease"
+              value={leaseKpi.value}
+              sub={lease.label}
+              accent={leaseKpi.accent}
+              href={`${BASE}/lease`}
+              dataAttr="resident-dashboard-kpi-lease"
+            />
+            <KpiTile
+              label="Applications"
+              value={pendingApplicationCount}
+              sub={approvedApplicationCount > 0 ? `${approvedApplicationCount} approved` : undefined}
               href={`${BASE}/applications`}
-              emptyMessage="No applications yet. Start your first application."
-              keyForItem={(row) => row.id}
-              renderRow={(row) => {
-                const badge = applicationStatusBadge(row);
-                return (
-                  <PortalDashboardCompactRow
-                    title={row.name?.trim() || "Application"}
-                    subtitle={applicationSubtitle(row)}
-                    badge={
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          badge.tone === "emerald"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : badge.tone === "rose"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {badge.label}
-                      </span>
-                    }
-                    stackBadge
-                  />
-                );
-              }}
+              dataAttr="resident-dashboard-kpi-applications"
+            />
+            <KpiTile
+              label="Unread messages"
+              value={inbox}
+              href={`${BASE}/inbox/unopened`}
+              dataAttr="resident-dashboard-kpi-inbox"
             />
           </div>
+        </div>
 
-          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-            <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
-            <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-              <StatusBadge label={lease.label} tone={lease.tone} />
-              {leaseRow?.application?.leaseStart ? (
-                <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
-                  {leaseRow.application.leaseStart}
-                  {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
+        {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
+        <div className="space-y-4 [html[data-native]_&]:space-y-3">
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="text-primary">
+              ✦
+            </span>
+            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
+            {openCount > 0 ? (
+              <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
+                <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
+                {openCount} open
+              </span>
+            ) : null}
+          </div>
+
+          <AttentionGroup
+            title="Pending & overdue payments"
+            href={`${BASE}/payments`}
+            linkLabel="Payments →"
+            badge={
+              overdueChargeCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                  {overdueChargeCount} overdue
                 </span>
-              ) : appProperty ? (
-                <span className="text-sm text-muted">{appProperty}{appRoom ? ` · ${appRoom}` : ""}</span>
-              ) : (
-                <span className="text-sm text-muted">No lease on file yet.</span>
-              )}
-            </div>
-          </div>
-        </div>
+              ) : null
+            }
+            items={pendingCharges}
+            emptyMessage="No outstanding charges."
+            keyForItem={(charge) => charge.id}
+            renderRow={(charge) => {
+              const overdue = isHouseholdChargeOverdue(charge);
+              return (
+                <IssueRow
+                  href={`${BASE}/payments`}
+                  dot={overdue ? DOT_OVERDUE : DOT_PENDING}
+                  title={charge.title || "Charge"}
+                  subtitle={formatCompactChargeLine(
+                    charge.title || "Charge",
+                    charge.balanceLabel,
+                    chargeDueLabel(charge),
+                    { omitBalance: true },
+                  )}
+                  meta={charge.balanceLabel}
+                  pill={
+                    <StatusPill tone={overdue ? "danger" : "pending"}>
+                      {overdue ? "Overdue" : "Pending"}
+                    </StatusPill>
+                  }
+                  dataAttr="resident-dashboard-attention-payment"
+                />
+              );
+            }}
+          />
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-            <PortalDashboardSectionHeader
-              title="Payments"
-              href={`${BASE}/payments`}
-              linkLabel="Payments →"
-              badge={
-                overdueChargeCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {overdueChargeCount} overdue
-                  </span>
-                ) : pendingCharges.length > 0 ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                    {pendingCharges.length} pending
-                  </span>
-                ) : null
-              }
-            />
-            <PortalDashboardPreviewList
-              items={pendingCharges}
-              href={`${BASE}/payments`}
-              emptyMessage="No outstanding charges."
-              keyForItem={(charge) => charge.id}
-              renderRow={(charge) => {
-                const overdue = isHouseholdChargeOverdue(charge);
+          <AttentionGroup
+            title="Lease"
+            href={`${BASE}/lease`}
+            linkLabel="Lease →"
+            items={leaseItems}
+            emptyMessage={leaseEmptyMessage}
+            keyForItem={(row) => row.id}
+            renderRow={() => (
+              <IssueRow
+                href={`${BASE}/lease`}
+                dot={lease.cta ? DOT_INFO : dotForBadgeTone(lease.tone)}
+                title={lease.cta ? "Signature needed" : lease.tone === "emerald" ? "Lease active" : "Lease status"}
+                subtitle={leaseSubtitle}
+                meta={leaseRow?.signedRentLabel}
+                pill={<StatusPill tone={pillToneForBadgeTone(lease.tone)}>{lease.label}</StatusPill>}
+                dataAttr="resident-dashboard-attention-lease"
+              />
+            )}
+          />
+
+          <AttentionGroup
+            title="Applications"
+            href={`${BASE}/applications`}
+            linkLabel="Applications →"
+            badge={
+              pendingApplicationCount > 0 || approvedApplicationCount > 0 ? (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {pendingApplicationCount > 0 ? (
+                    <StatusPill tone="pending">{pendingApplicationCount} pending</StatusPill>
+                  ) : null}
+                  {approvedApplicationCount > 0 ? (
+                    <StatusPill tone="success">{approvedApplicationCount} approved</StatusPill>
+                  ) : null}
+                </span>
+              ) : null
+            }
+            items={applicationRows}
+            emptyMessage="No applications yet. Start your first application."
+            keyForItem={(row) => row.id}
+            renderRow={(row) => {
+              const badge = applicationStatusBadge(row);
+              return (
+                <IssueRow
+                  href={`${BASE}/applications`}
+                  dot={dotForBadgeTone(badge.tone)}
+                  title={row.name?.trim() || "Application"}
+                  subtitle={applicationSubtitle(row)}
+                  pill={<StatusPill tone={pillToneForBadgeTone(badge.tone)}>{badge.label}</StatusPill>}
+                  dataAttr="resident-dashboard-attention-application"
+                />
+              );
+            }}
+          />
+
+          <AttentionGroup
+            title="Services"
+            href={servicesHref}
+            linkLabel="Services →"
+            badge={
+              canUseFullPortal &&
+              (openWorkOrderCount > 0 ||
+                scheduledWorkOrderCount > 0 ||
+                pendingRequestCount > 0 ||
+                approvedRequestCount > 0) ? (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {openWorkOrderCount > 0 ? (
+                    <StatusPill tone="pending">{openWorkOrderCount} open</StatusPill>
+                  ) : null}
+                  {scheduledWorkOrderCount > 0 ? (
+                    <StatusPill tone="info">{scheduledWorkOrderCount} scheduled</StatusPill>
+                  ) : null}
+                  {pendingRequestCount > 0 ? (
+                    <StatusPill tone="pending">
+                      {pendingRequestCount} request{pendingRequestCount === 1 ? "" : "s"}
+                    </StatusPill>
+                  ) : null}
+                </span>
+              ) : null
+            }
+            items={canUseFullPortal ? serviceItems : []}
+            emptyMessage={
+              canUseFullPortal
+                ? "No open work orders or pending requests."
+                : "Available after your application is approved."
+            }
+            keyForItem={(item) => item.id}
+            renderRow={(item) => {
+              if (item.kind === "request") {
+                const approved = item.row.status === "approved";
+                const propertyName = getPropertyById(item.row.propertyId)?.buildingName?.trim() || "";
                 return (
-                  <PortalDashboardCompactRow
-                    title={charge.title || "Charge"}
-                    subtitle={formatCompactChargeLine(
-                      charge.title || "Charge",
-                      charge.balanceLabel,
-                      chargeDueLabel(charge),
-                      { omitBalance: true },
-                    )}
-                    badge={
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
-                          overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
-                      </span>
+                  <IssueRow
+                    href={servicesHref}
+                    dot={approved ? DOT_CONFIRMED : DOT_PENDING}
+                    title={item.row.offerName?.trim() || "Service request"}
+                    subtitle={propertyName || "Request"}
+                    pill={
+                      <StatusPill tone={approved ? "success" : "pending"}>
+                        {approved ? "Approved" : "Pending"}
+                      </StatusPill>
                     }
-                    stackBadge
+                    dataAttr="resident-dashboard-attention-service"
                   />
                 );
-              }}
-            />
-          </div>
-
-          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-            <PortalDashboardSectionHeader
-              title="Services"
-              href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
-              linkLabel="Services →"
-              badge={
-                canUseFullPortal &&
-                (openWorkOrderCount > 0 ||
-                  scheduledWorkOrderCount > 0 ||
-                  pendingRequestCount > 0 ||
-                  approvedRequestCount > 0) ? (
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {openWorkOrderCount > 0 ? (
-                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
-                        {openWorkOrderCount} open
-                      </span>
-                    ) : null}
-                    {scheduledWorkOrderCount > 0 ? (
-                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
-                        {scheduledWorkOrderCount} scheduled
-                      </span>
-                    ) : null}
-                    {pendingRequestCount > 0 ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                        {pendingRequestCount} request{pendingRequestCount === 1 ? "" : "s"}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null
               }
-            />
-            {canUseFullPortal ? (
-              <PortalDashboardPreviewList
-                items={serviceItems}
-                href={`${BASE}/services/work-orders`}
-                emptyMessage="No open work orders or pending requests."
-                keyForItem={(item) => item.id}
-                renderRow={(item) => {
-                  if (item.kind === "request") {
-                    const status = item.row.status;
-                    const label = status === "approved" ? "Approved" : "Pending";
-                    const tone =
-                      status === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800";
-                    const propertyName = getPropertyById(item.row.propertyId)?.buildingName?.trim() || "";
-                    return (
-                      <PortalDashboardCompactRow
-                        title={item.row.offerName?.trim() || "Service request"}
-                        subtitle={propertyName || "Request"}
-                        badge={
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone}`}>{label}</span>
-                        }
-                        stackBadge
-                      />
-                    );
+              const scheduled = item.row.bucket === "scheduled";
+              return (
+                <IssueRow
+                  href={`${BASE}/services/work-orders`}
+                  dot={scheduled ? DOT_INFO : DOT_PENDING}
+                  title={item.row.title?.trim() || "Work order"}
+                  subtitle={[item.row.propertyName, item.row.unit].filter(Boolean).join(" · ") || "Maintenance"}
+                  pill={
+                    <StatusPill tone={scheduled ? "info" : "pending"}>
+                      {scheduled ? "Scheduled" : "Open"}
+                    </StatusPill>
                   }
-                  const bucketLabel = item.row.bucket === "scheduled" ? "Scheduled" : "Open";
-                  const bucketTone =
-                    item.row.bucket === "scheduled"
-                      ? "bg-sky-100 text-sky-800"
-                      : "bg-rose-100 text-rose-800";
-                  return (
-                    <PortalDashboardCompactRow
-                      title={item.row.title?.trim() || "Work order"}
-                      subtitle={[item.row.propertyName, item.row.unit].filter(Boolean).join(" · ") || "Maintenance"}
-                      badge={
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${bucketTone}`}>
-                          {bucketLabel}
-                        </span>
-                      }
-                      stackBadge
-                    />
-                  );
-                }}
-              />
-            ) : (
-              <p className="mt-4 text-sm text-muted">Available after your application is approved.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0 lg:col-span-2`}>
-            <PortalDashboardSectionHeader
-              title="Inbox"
-              href={`${BASE}/inbox/unopened`}
-              linkLabel="Inbox →"
-              badge={
-                inbox > 0 ? (
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                    {inbox} unread
-                  </span>
-                ) : null
-              }
-            />
-            <PortalDashboardPreviewList
-              items={inboxThreads}
-              href={`${BASE}/inbox/unopened`}
-              emptyMessage="No unread messages — inbox is clear."
-              keyForItem={(thread) => thread.id}
-              renderRow={(thread) => (
-                <PortalDashboardCompactRow
-                  title={thread.from || "Unknown sender"}
-                  subtitle={thread.subject || thread.preview || "—"}
-                  badge={
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                      Unread
-                    </span>
-                  }
+                  dataAttr="resident-dashboard-attention-service"
                 />
-              )}
-            />
-          </div>
+              );
+            }}
+          />
+
+          <AttentionGroup
+            title="Inbox"
+            href={`${BASE}/inbox/unopened`}
+            linkLabel="Inbox →"
+            badge={
+              inbox > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-approved-fg)]">
+                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                  {inbox} unread
+                </span>
+              ) : null
+            }
+            items={inboxThreads}
+            emptyMessage="No unread messages — inbox is clear."
+            keyForItem={(thread) => thread.id}
+            renderRow={(thread) => (
+              <IssueRow
+                href={`${BASE}/inbox/unopened`}
+                dot={DOT_INFO}
+                title={thread.from || "Unknown sender"}
+                subtitle={thread.subject || thread.preview || "—"}
+                pill={<StatusPill tone="info">Unread</StatusPill>}
+                dataAttr="resident-dashboard-attention-inbox"
+              />
+            )}
+          />
         </div>
       </div>
     </ManagerPortalPageShell>

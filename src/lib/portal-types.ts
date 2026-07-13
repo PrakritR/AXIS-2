@@ -1,4 +1,4 @@
-export type PortalKind = "pro" | "manager" | "resident" | "admin" | "vendor";
+export type PortalKind = "pro" | "manager" | "resident" | "admin" | "vendor" | "owner";
 
 export type PortalTab = { id: string; label: string };
 

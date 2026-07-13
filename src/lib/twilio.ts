@@ -1,4 +1,6 @@
 import twilio from "twilio";
+import { isPhoneOptedOut } from "@/lib/sms-consent";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 function normalizeE164(phone: string): string | null {
   const digits = phone.replace(/\D/g, "");
@@ -10,8 +12,18 @@ function normalizeE164(phone: string): string | null {
 /**
  * Send an SMS via Twilio. Silently skips if env vars aren't configured
  * or if either phone number can't be normalized to E.164.
+ *
+ * When TWILIO_MESSAGING_SERVICE_SID is set, the message still sends FROM the
+ * manager's work number but is attributed to the A2P 10DLC campaign behind that
+ * Messaging Service (both `from` and `messagingServiceSid` are passed). When
+ * TWILIO_STATUS_CALLBACK_URL is set, Twilio POSTs delivery status there.
  */
-export async function sendSms(to: string, body: string, fromNumber: string): Promise<{ sent: boolean; error?: string }> {
+export async function sendSms(
+  to: string,
+  body: string,
+  fromNumber: string,
+  opts?: { skipOptOutCheck?: boolean },
+): Promise<{ sent: boolean; sid?: string; error?: string }> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   if (!accountSid || !authToken) return { sent: false };
@@ -20,10 +32,34 @@ export async function sendSms(to: string, body: string, fromNumber: string): Pro
   const fromNorm = normalizeE164(fromNumber);
   if (!toNorm || !fromNorm) return { sent: false, error: `Cannot normalize phone: to=${to} from=${fromNumber}` };
 
+  // Consent gate (single choke point): never text a number that has opted out
+  // via STOP. Only compliance/verification messages (`skipOptOutCheck`) bypass —
+  // e.g. the phone-verification OTP, where the user is actively re-opting in.
+  // Fails open on infra error so a transient DB blip can't drop all messaging.
+  if (!opts?.skipOptOutCheck) {
+    try {
+      const db = createSupabaseServiceRoleClient();
+      if (await isPhoneOptedOut(db, toNorm)) {
+        return { sent: false, error: "recipient_opted_out" };
+      }
+    } catch {
+      // ignore — proceed to send
+    }
+  }
+
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  const statusCallback = process.env.TWILIO_STATUS_CALLBACK_URL?.trim();
+
   try {
     const client = twilio(accountSid, authToken);
-    await client.messages.create({ to: toNorm, from: fromNorm, body });
-    return { sent: true };
+    const message = await client.messages.create({
+      to: toNorm,
+      from: fromNorm,
+      body,
+      ...(messagingServiceSid ? { messagingServiceSid } : {}),
+      ...(statusCallback ? { statusCallback } : {}),
+    });
+    return { sent: true, sid: message.sid };
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : String(e) };
   }

@@ -14,6 +14,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
+import { PortalTextNotificationsBlock } from "@/components/portal/portal-text-notifications-block";
 import { Button } from "@/components/ui/button";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -203,6 +204,8 @@ export function ResidentProfilePanel() {
           </div>
           </div>
         </PortalCollapsibleSection>
+
+        <PortalTextNotificationsBlock dataAttrPrefix="resident" demo={isDemoModeActive()} />
 
         <NotificationsToggle />
 

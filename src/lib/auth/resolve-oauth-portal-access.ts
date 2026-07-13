@@ -26,7 +26,13 @@ import { loadResidentPortalAccessState, residentPortalHomePath } from "@/lib/res
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
+  return (
+    value === "resident" ||
+    value === "manager" ||
+    value === "admin" ||
+    value === "vendor" ||
+    value === "owner"
+  );
 }
 
 function isBypassOAuthGatePath(path: string): boolean {
@@ -34,6 +40,7 @@ function isBypassOAuthGatePath(path: string): boolean {
     path.startsWith("/auth/manager-") ||
     path.startsWith("/auth/resident-") ||
     path.startsWith("/auth/vendor-") ||
+    path.startsWith("/auth/owner-") ||
     path.startsWith("/partner/pricing") ||
     path.startsWith(MANAGER_PRICING_ENTRY_PATH) ||
     path.startsWith("/auth/create-account") ||
@@ -116,7 +123,7 @@ export async function resolveOAuthPortalRedirect(
     }
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
-  if (soleRole === "admin" || soleRole === "vendor") {
+  if (soleRole === "admin" || soleRole === "vendor" || soleRole === "owner") {
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
   if (soleRole === "manager") {

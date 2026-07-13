@@ -25,7 +25,7 @@ export const runtime = "nodejs";
 const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 function canSendLeadInvite(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+  return role === "admin" || role === "manager" || role === "pro";
 }
 
 // Emails link to the canonical domain only — never a *.vercel.app deploy URL.

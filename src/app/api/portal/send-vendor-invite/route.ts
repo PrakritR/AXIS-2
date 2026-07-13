@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 function canSendVendorInvite(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+  return role === "admin" || role === "manager" || role === "pro";
 }
 
 export async function POST(req: Request) {

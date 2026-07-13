@@ -21,6 +21,7 @@ export const IN_APP_PATH_PREFIXES = [
   "/partner/",
   "/billing/",
   "/vendor/",
+  "/owner/",
 ] as const;
 
 /** Exact paths (no trailing segment) that are also in-app. */
@@ -38,6 +39,7 @@ export const REGISTERED_PUSH_DEEP_LINKS = [
   "/portal/inbox/unopened",
   "/admin/inbox/unopened",
   "/vendor/inbox/unopened",
+  "/owner/inbox/unopened",
 ] as const;
 
 export type PlatformSurface = "web" | "native-webview";

@@ -7,7 +7,7 @@ import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal
 /**
  * Ensures only the correct role (or admin with matching preview cookie) can load a portal layout.
  */
-export async function assertPortalLayoutRole(portal: PreviewPortal, role: "manager" | "resident" | "vendor") {
+export async function assertPortalLayoutRole(portal: PreviewPortal, role: "manager" | "resident" | "vendor" | "owner") {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) redirect("/auth/sign-in");
 

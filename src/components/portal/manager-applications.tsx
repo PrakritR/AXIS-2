@@ -1,15 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
-  MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
@@ -17,19 +17,11 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
-  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
   PortalTableDetailActions,
   PortalTableInlineExpand,
-  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
@@ -93,6 +85,34 @@ function countByBucket(rows: DemoApplicantRow[]) {
     c[r.bucket] += 1;
   }
   return c;
+}
+
+type ApplicationStatusPill = {
+  label: string;
+  tone: "neutral" | "info" | "pending" | "confirmed" | "overdue";
+};
+
+/**
+ * Presentation-only status pill for the Linear row — derived purely from the row's
+ * existing bucket + screening signals (no new state, no writes).
+ */
+function applicationStatusPill(row: DemoApplicantRow): ApplicationStatusPill {
+  if (row.bucket === "approved") return { label: "Approved", tone: "confirmed" };
+  if (row.bucket === "rejected") return { label: "Rejected", tone: "overdue" };
+  if (isInProgressApplicationRow(row)) return { label: "In progress", tone: "neutral" };
+  const bg = row.backgroundCheckStatus;
+  if (bg === "flagged") return { label: "Flagged", tone: "overdue" };
+  if (bg === "passed") return { label: "Screened", tone: "info" };
+  if (bg === "pending_review" || row.screening) return { label: "Screening", tone: "pending" };
+  return { label: "New", tone: "info" };
+}
+
+/** Up-to-two-letter initials for the Linear-style circular row avatar. */
+function applicantInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase();
 }
 
 /** Client-resolved room label used by both the PDF download and the inline document view. */
@@ -677,77 +697,51 @@ export function ManagerApplications() {
           }
         />
       ) : (
-      <>
-      <div className="space-y-2 lg:hidden">
-        {rowsForBucket.map((row) => {
-          const expanded = expandedId === row.id;
-          return (
-            <div key={row.id} id={`portal-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-2 text-left"
-                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                aria-expanded={expanded}
-              >
-                <div className="min-w-0 flex-1">
-                  <PortalTableInlineExpand expanded={expanded} className="truncate font-semibold text-foreground">
-                    {row.name}
-                  </PortalTableInlineExpand>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-              </button>
-              {expanded ? (
-                <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rowsForBucket.map((row) => (
-                  <Fragment key={row.id}>
-                    <tr
-                      id={`portal-application-${row.id}`}
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                      )}
-                      aria-expanded={expandedId === row.id}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <PortalTableInlineExpand expanded={expandedId === row.id} className="font-medium leading-snug text-foreground">
-                          {row.name}
-                        </PortalTableInlineExpand>
-                      </td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                    </tr>
-                    {expandedId === row.id ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                          {renderApplicationDetail(row)}
-                        </td>
-                      </tr>
+      <div className={PORTAL_DATA_TABLE_WRAP}>
+        <ul className="divide-y divide-[var(--border)]">
+          {rowsForBucket.map((row) => {
+            const expanded = expandedId === row.id;
+            const status = applicationStatusPill(row);
+            const room = displayRoomForRow(row);
+            const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
+              .filter((part) => part && part !== "—")
+              .join(" · ");
+            return (
+              <li key={row.id} id={`portal-application-${row.id}`}>
+                <button
+                  type="button"
+                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40 sm:gap-3.5 sm:px-5 sm:py-3.5"
+                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                  aria-expanded={expanded}
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-[var(--secondary)] text-[11px] font-semibold uppercase tracking-[0.02em] text-muted"
+                  >
+                    {applicantInitials(row.name)}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
+                      <span className="truncate">{row.name}</span>
+                    </PortalTableInlineExpand>
+                    {subtitle ? (
+                      <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
                     ) : null}
-                  </Fragment>
-                ))}
-            </tbody>
-          </table>
-        </div>
+                  </span>
+                  <span className="ml-auto flex shrink-0 items-center">
+                    <Badge tone={status.tone}>{status.label}</Badge>
+                  </span>
+                </button>
+                {expanded ? (
+                  <div className="border-t border-border px-4 py-4 sm:px-5 sm:py-5">
+                    {renderApplicationDetail(row)}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       </div>
-      </>
       )}
     </ManagerPortalPageShell>
       <PortalNotificationPreviewModal

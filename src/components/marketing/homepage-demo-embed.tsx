@@ -24,7 +24,7 @@ export function HomepageDemoEmbed() {
   if (signedIn) {
     return (
       <div className="relative mx-auto max-w-3xl px-4 sm:px-5">
-        <div className="glass-card rounded-2xl px-8 py-10 text-center">
+        <div className="rounded-2xl border border-border bg-card px-8 py-10 text-center shadow-[var(--shadow-card)]">
           <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             Welcome back
           </h2>
@@ -36,7 +36,7 @@ export function HomepageDemoEmbed() {
             <Link
               href="/portal"
               data-attr="home-signed-in-open-portal"
-              className="btn-metallic hero-cta-metallic inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:brightness-105 active:translate-y-px active:scale-[0.99]"
+              className="inline-flex min-h-[44px] cursor-pointer items-center justify-center rounded-full bg-primary px-8 py-3 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:brightness-105 active:translate-y-px active:scale-[0.99]"
             >
               Open your portal
             </Link>
