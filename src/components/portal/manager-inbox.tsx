@@ -32,7 +32,6 @@ import {
   useInboxRowSelection,
 } from "@/components/portal/portal-inbox-selection";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
-import { NotificationPrefsButton } from "@/components/portal/notification-prefs-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
@@ -468,7 +467,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
               Delete all trash
             </Button>
           ) : null}
-          <NotificationPrefsButton className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} />
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="inbox-new-message" onClick={() => setComposeOpen(true)}>
             New message
           </Button>

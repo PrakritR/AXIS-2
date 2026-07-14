@@ -9,7 +9,6 @@ import {
   type PortalInboxTableRow,
 } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
-import { NotificationPrefsButton } from "@/components/portal/notification-prefs-panel";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -459,7 +458,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
       title="Inbox"
       titleAside={
         <>
-          <NotificationPrefsButton className="shrink-0 rounded-full" />
           <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
             New message
           </Button>

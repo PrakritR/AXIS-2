@@ -1,3 +1,4 @@
+import { normalizeE164 } from "@/lib/twilio";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import {
@@ -18,6 +19,7 @@ type Body = {
   email?: string;
   password?: string;
   fullName?: string;
+  phone?: string;
   tier?: string;
 };
 
@@ -31,6 +33,7 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const phone = normalizeE164(typeof body.phone === "string" ? body.phone : "");
     const tierRaw = typeof body.tier === "string" ? body.tier.toLowerCase().trim() : "";
 
     if (!email.includes("@")) {
@@ -38,6 +41,9 @@ export async function POST(req: Request) {
     }
     if (!fullName) {
       return NextResponse.json({ error: "Enter your full name." }, { status: 400 });
+    }
+    if (!phone) {
+      return NextResponse.json({ error: "Enter a valid phone number." }, { status: 400 });
     }
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
@@ -95,6 +101,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: linkProfileErr.message }, { status: 500 });
       }
       await ensureProfileRoleRow(supabase, userId, "manager");
+      await supabase.from("profiles").update({ phone }).eq("id", userId);
       if (!existingPurchase.user_id) {
         await supabase
           .from("manager_purchases")
@@ -114,6 +121,8 @@ export async function POST(req: Request) {
       email,
       fullName,
     });
+    // Notifications text this number automatically (STOP always honored).
+    await supabase.from("profiles").update({ phone }).eq("id", userId);
 
     if (isManagerSignupTrialTier(tierRaw)) {
       await completeManagerSignupTrial(supabase, { userId, email, fullName, tier: tierRaw });

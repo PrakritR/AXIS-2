@@ -74,6 +74,7 @@ export default function CreateAccountClient() {
   const [role, setRole] = useState<CreateAccountRole>(urlDerivedRole);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [axisId, setAxisId] = useState(axisIdFromUrl);
@@ -300,6 +301,10 @@ export default function CreateAccountClient() {
         showToast("Enter your full name and email.");
         return;
       }
+      if (phone.replace(/\D/g, "").length < 10) {
+        showToast("Enter a valid phone number.");
+        return;
+      }
       if (password.length < 8) {
         showToast("Password must be at least 8 characters.");
         return;
@@ -313,7 +318,7 @@ export default function CreateAccountClient() {
         const res = await fetch("/api/auth/manager-register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
+          body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim(), phone: phone.trim() }),
         });
         const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
         if (!res.ok) {
@@ -351,6 +356,10 @@ export default function CreateAccountClient() {
       showToast("Enter a valid email and password (8+ characters).");
       return;
     }
+    if (role === "resident" && phone.replace(/\D/g, "").length < 10) {
+      showToast("Enter a valid phone number.");
+      return;
+    }
 
     if (role !== "resident") {
       showToast("Manager signup starts from Partner pricing.");
@@ -368,6 +377,7 @@ export default function CreateAccountClient() {
           email: email.trim(),
           password,
           fullName: fullName.trim() || undefined,
+          phone: phone.trim(),
         }),
       });
       const body = (await res.json()) as {
@@ -617,6 +627,22 @@ export default function CreateAccountClient() {
               />
             </div>
             <div>
+              <label className={FIELD_LABEL_CLASS} htmlFor="mgr-phone-input">
+                Phone number <Req />
+              </label>
+              <Input
+                id="mgr-phone-input"
+                className="mt-1.5"
+                type="tel"
+                inputMode="tel"
+                placeholder="(555) 555-0100"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+              />
+              <p className="mt-1 text-xs text-muted/70">Used for account and tenancy text updates. Reply STOP anytime.</p>
+            </div>
+            <div>
               <label className={FIELD_LABEL_CLASS} htmlFor="mgr-pw-activate">
                 {passwordLabel} <Req />
               </label>
@@ -691,6 +717,23 @@ export default function CreateAccountClient() {
               {lockResidentEmail ? (
                 <p className="mt-1 text-xs text-muted/70">Must match the email on your rental application.</p>
               ) : null}
+            </div>
+            <div>
+              <label className={FIELD_LABEL_CLASS} htmlFor="signup-phone">
+                Phone number
+                <Req />
+              </label>
+              <Input
+                id="signup-phone"
+                className="mt-1.5"
+                type="tel"
+                inputMode="tel"
+                placeholder="(555) 555-0100"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+              />
+              <p className="mt-1 text-xs text-muted/70">Used for account and tenancy text updates. Reply STOP anytime.</p>
             </div>
             <div>
               <label className={FIELD_LABEL_CLASS} htmlFor="pw">

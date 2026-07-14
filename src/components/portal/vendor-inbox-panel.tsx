@@ -7,7 +7,6 @@ import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/componen
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
-import { NotificationPrefsButton } from "@/components/portal/notification-prefs-panel";
 import {
   PortalInboxSelectionToolbar,
   useInboxRowSelection,
@@ -480,7 +479,6 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
       title="Inbox"
       titleAside={
         <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-          <NotificationPrefsButton className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} />
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             New message
           </Button>

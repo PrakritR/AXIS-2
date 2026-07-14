@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
+  NOTIFICATION_CATEGORIES,
   normalizeNotificationPreferences,
   resolveChannels,
 } from "@/lib/notification-preferences";
@@ -9,7 +10,7 @@ import {
 /**
  * Minimal chainable Supabase mock: every `.from(table).select().eq().maybeSingle()`
  * resolves to the row configured for that table. resolveChannels touches
- * `notification_preferences` (saved prefs) and `sms_consent` (opt-out).
+ * `sms_consent` (opt-out) and `profiles` (phone fallback).
  */
 function mockDb(rows: {
   notification_preferences?: unknown;
@@ -30,76 +31,66 @@ function mockDb(rows: {
   } as unknown as SupabaseClient;
 }
 
-const VERIFIED = { phone: "5551234567", phone_verified_at: "2026-01-01T00:00:00Z" };
-const UNVERIFIED = { phone: "5551234567", phone_verified_at: null };
+const WITH_PHONE = { phone: "5551234567", phone_verified_at: null };
+const NO_PHONE = { phone: "", phone_verified_at: null };
 
-describe("resolveChannels — per-category channel gating", () => {
-  it("inbox is always on; email defaults on with no saved prefs", async () => {
+describe("resolveChannels — always-on delivery (not user-tunable)", () => {
+  it("inbox + email + SMS are all on for every category when a phone is on file", async () => {
     const db = mockDb({});
-    for (const category of ["messages", "leases", "payments", "maintenance", "applications"] as const) {
-      const ch = await resolveChannels(db, "u1", category, VERIFIED);
+    for (const category of NOTIFICATION_CATEGORIES) {
+      const ch = await resolveChannels(db, "u1", category, WITH_PHONE);
       expect(ch.inbox).toBe(true);
-      expect(ch.email).toBe(true); // default matrix email:true
-      expect(ch.sms).toBe(false); // default matrix sms:false for non-account
+      expect(ch.email).toBe(true);
+      expect(ch.sms).toBe(true);
     }
   });
 
-  it("SMS off (default) suppresses SMS even with a verified phone", async () => {
-    const db = mockDb({}); // no saved prefs → payments sms default false
-    const ch = await resolveChannels(db, "u1", "payments", VERIFIED);
-    expect(ch.sms).toBe(false);
+  it("saved 'off' preferences are ignored — delivery is not tunable", async () => {
+    const db = mockDb({
+      notification_preferences: { row_data: { payments: { email: false, sms: false } } },
+    });
+    const ch = await resolveChannels(db, "u1", "payments", WITH_PHONE);
     expect(ch.email).toBe(true);
-  });
-
-  it("SMS on + verified + not opted out → SMS sends", async () => {
-    const db = mockDb({ notification_preferences: { row_data: { payments: { sms: true } } } });
-    const ch = await resolveChannels(db, "u1", "payments", VERIFIED);
     expect(ch.sms).toBe(true);
   });
 
-  it("SMS on but phone NOT verified → no SMS", async () => {
-    const db = mockDb({ notification_preferences: { row_data: { payments: { sms: true } } } });
-    const ch = await resolveChannels(db, "u1", "payments", UNVERIFIED);
+  it("no phone on the profile → no SMS (email + inbox still deliver)", async () => {
+    const db = mockDb({});
+    const ch = await resolveChannels(db, "u1", "messages", NO_PHONE);
     expect(ch.sms).toBe(false);
-  });
-
-  it("SMS on + verified but STOP-opted-out → no SMS", async () => {
-    const db = mockDb({
-      notification_preferences: { row_data: { payments: { sms: true } } },
-      sms_consent: { opted_out_at: "2026-02-01T00:00:00Z", opted_in_at: null },
-    });
-    const ch = await resolveChannels(db, "u1", "payments", VERIFIED);
-    expect(ch.sms).toBe(false);
-  });
-
-  it("email off (saved) suppresses email; inbox stays on", async () => {
-    const db = mockDb({ notification_preferences: { row_data: { messages: { email: false } } } });
-    const ch = await resolveChannels(db, "u1", "messages", VERIFIED);
-    expect(ch.email).toBe(false);
+    expect(ch.email).toBe(true);
     expect(ch.inbox).toBe(true);
   });
 
-  it("account category force-sends SMS even when the pref is off (cannot be silenced)", async () => {
-    const db = mockDb({ notification_preferences: { row_data: { account: { sms: false } } } });
-    const ch = await resolveChannels(db, "u1", "account", VERIFIED);
-    expect(ch.sms).toBe(true); // account ignores the stored sms pref
+  it("an unverified phone still receives SMS (signup-collected numbers text automatically)", async () => {
+    const db = mockDb({});
+    const ch = await resolveChannels(db, "u1", "payments", WITH_PHONE);
+    expect(ch.sms).toBe(true);
   });
 
-  it("account still respects a hard STOP opt-out", async () => {
+  it("a STOP opt-out is a hard gate — no SMS for any category", async () => {
     const db = mockDb({
       sms_consent: { opted_out_at: "2026-02-01T00:00:00Z", opted_in_at: null },
     });
-    const ch = await resolveChannels(db, "u1", "account", VERIFIED);
-    expect(ch.sms).toBe(false);
+    for (const category of NOTIFICATION_CATEGORIES) {
+      const ch = await resolveChannels(db, "u1", category, WITH_PHONE);
+      expect(ch.sms).toBe(false);
+    }
+  });
+
+  it("falls back to the profiles table when no recipient profile is passed", async () => {
+    const db = mockDb({ profiles: { phone: "5551234567", phone_verified_at: null } });
+    const ch = await resolveChannels(db, "u1", "leases");
+    expect(ch.sms).toBe(true);
   });
 });
 
 describe("DEFAULT_NOTIFICATION_PREFERENCES + normalize", () => {
-  it("every category defaults email on / sms off, except account sms on", () => {
-    for (const [category, ch] of Object.entries(DEFAULT_NOTIFICATION_PREFERENCES)) {
+  it("every category defaults inbox + email + sms on", () => {
+    for (const ch of Object.values(DEFAULT_NOTIFICATION_PREFERENCES)) {
       expect(ch.inbox).toBe(true);
       expect(ch.email).toBe(true);
-      expect(ch.sms).toBe(category === "account");
+      expect(ch.sms).toBe(true);
     }
   });
 

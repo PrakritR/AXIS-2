@@ -2,6 +2,7 @@ import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { migratePortalUserId } from "@/lib/auth/migrate-portal-user-id";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
+import { normalizeE164 } from "@/lib/twilio";
 import { generateAxisId } from "@/lib/manager-id";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -17,6 +18,19 @@ function applicationApproved(row: ApplicationRow): boolean {
       ? (row.row_data as Record<string, unknown>)
       : null;
   return String(rowData?.bucket ?? "").toLowerCase() === "approved";
+}
+
+function applicationPhone(row: ApplicationRow): string | null {
+  const rowData =
+    row.row_data && typeof row.row_data === "object" && !Array.isArray(row.row_data)
+      ? (row.row_data as Record<string, unknown>)
+      : null;
+  const application =
+    rowData?.application && typeof rowData.application === "object" && !Array.isArray(rowData.application)
+      ? (rowData.application as Record<string, unknown>)
+      : null;
+  const raw = application?.phone ?? rowData?.phone;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
 function applicationName(row: ApplicationRow): string | null {
@@ -95,6 +109,12 @@ export async function provisionResidentAccountByEmail(
         existingProfile?.full_name ||
         (matchingApplication ? applicationName(matchingApplication) : null),
       manager_id: existingProfile?.manager_id?.trim() || axisId,
+      // Notifications text this number automatically — carry the phone the
+      // resident gave on their rental application onto the profile.
+      phone:
+        (existingProfile?.phone as string | null)?.trim() ||
+        (matchingApplication ? normalizeE164(applicationPhone(matchingApplication) ?? "") : null) ||
+        null,
       application_approved: approved,
     },
     { onConflict: "id" },

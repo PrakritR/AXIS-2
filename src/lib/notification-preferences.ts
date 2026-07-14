@@ -39,16 +39,16 @@ export type ResolvedChannels = {
 };
 
 /**
- * Default channel matrix. Every category delivers to the in-app inbox and email;
- * SMS is opt-in per category and defaults off — except `account`, whose SMS
- * cannot be disabled (see `resolveChannels`).
+ * Channel matrix: every category delivers to inbox, email, and SMS. Delivery
+ * is not user-tunable — `resolveChannels` gates SMS only on having a phone on
+ * file and STOP opt-out.
  */
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
-  messages: { inbox: true, email: true, sms: false },
-  leases: { inbox: true, email: true, sms: false },
-  payments: { inbox: true, email: true, sms: false },
-  maintenance: { inbox: true, email: true, sms: false },
-  applications: { inbox: true, email: true, sms: false },
+  messages: { inbox: true, email: true, sms: true },
+  leases: { inbox: true, email: true, sms: true },
+  payments: { inbox: true, email: true, sms: true },
+  maintenance: { inbox: true, email: true, sms: true },
+  applications: { inbox: true, email: true, sms: true },
   account: { inbox: true, email: true, sms: true },
 };
 
@@ -126,8 +126,12 @@ export async function resolveChannels(
   category: NotificationCategory,
   recipientProfile?: RecipientProfile | null,
 ): Promise<ResolvedChannels> {
-  const prefs = await loadNotificationPreferences(db, userId);
-  const channel = prefs[category] ?? DEFAULT_NOTIFICATION_PREFERENCES[category];
+  // Product decision: notifications are NOT user-tunable — every category
+  // always delivers to inbox + email + SMS. The only gates on SMS are hard
+  // constraints: the recipient must have a phone on their profile (collected
+  // at signup) and must not have texted STOP (sms-consent). The category
+  // param stays so future carve-outs need no call-site changes.
+  void category;
 
   let profile = recipientProfile ?? null;
   if (!profile) {
@@ -140,18 +144,14 @@ export async function resolveChannels(
   }
 
   const phone = String(profile?.phone ?? "").trim();
-  const phoneVerified = Boolean(profile?.phone_verified_at);
-  // `account` cannot silence SMS; everything else honors the stored preference.
-  const smsWanted = category === "account" ? true : channel.sms;
-
   let sms = false;
-  if (smsWanted && phone && phoneVerified) {
+  if (phone) {
     sms = !(await isPhoneOptedOut(db, phone));
   }
 
   return {
     inbox: true,
-    email: channel.email,
+    email: true,
     sms,
   };
 }

@@ -574,7 +574,7 @@ export function ScopedInboxComposeModal({
             </label>
           </div>
           {deliverViaSms && (
-            <p className="mt-2 text-xs text-muted">SMS sends from your Twilio number. Recipients must have a phone number on their profile.</p>
+            <p className="mt-2 text-xs text-muted">Texts send from your PropLane work number. Recipients must have a phone number on their profile.</p>
           )}
         </div>
 
