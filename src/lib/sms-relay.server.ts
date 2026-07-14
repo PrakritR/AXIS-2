@@ -93,15 +93,20 @@ export async function buyAndEnrollRelayNumber(
  * just-in-time buying risks the first message being filtered), capped at
  * RELAY_POOL_MAX. Returns what it did so the cron can report.
  */
-export async function topUpRelayPool(
-  db: SupabaseClient,
-): Promise<{ total: number; free: number; bought: number; errors: string[] }> {
-  // Flip expired cooldowns back to available first.
-  await db
+export async function releaseExpiredRelayCooldowns(db: SupabaseClient): Promise<number> {
+  const { data } = await db
     .from("sms_relay_numbers")
     .update({ status: "available", cooldown_until: null })
     .eq("status", "cooldown")
-    .lte("cooldown_until", new Date().toISOString());
+    .lte("cooldown_until", new Date().toISOString())
+    .select("id");
+  return (data ?? []).length;
+}
+
+export async function topUpRelayPool(
+  db: SupabaseClient,
+): Promise<{ total: number; free: number; bought: number; errors: string[] }> {
+  await releaseExpiredRelayCooldowns(db);
 
   const { count: total } = await db
     .from("sms_relay_numbers")
@@ -311,9 +316,29 @@ export async function closeRelayThreadsForUser(db: SupabaseClient, userId: strin
     .from("sms_relay_threads")
     .select("id")
     .eq("manager_user_id", userId);
+
+  // Bindings provisioned before the counterparty had an account carry
+  // user_id: null — they can only be matched by phone. Match against the
+  // profile phone ONLY when it is OTP-verified: an unverified (possibly
+  // typo'd) number must never close a stranger's thread.
+  const { data: profile } = await db
+    .from("profiles")
+    .select("phone, phone_verified_at")
+    .eq("id", userId)
+    .maybeSingle();
+  const verifiedPhone = profile?.phone_verified_at ? normalizeE164(String(profile.phone ?? "")) : null;
+  const { data: phoneBindingRows } = verifiedPhone
+    ? await db
+        .from("sms_relay_bindings")
+        .select("thread_id")
+        .eq("participant_phone", verifiedPhone)
+        .eq("active", true)
+    : { data: null };
+
   const threadIds = [
     ...new Set([
       ...(bindingRows ?? []).map((r) => String(r.thread_id)),
+      ...(phoneBindingRows ?? []).map((r) => String(r.thread_id)),
       ...(managerThreads ?? []).map((r) => String(r.id)),
     ]),
   ];
