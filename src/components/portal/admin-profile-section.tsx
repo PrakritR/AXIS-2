@@ -11,7 +11,7 @@ function adminAxisIdFrom(value: unknown): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "—";
   const compact = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  return `AXIS-A-${compact.slice(0, 8)}`;
+  return `PROPLANE-A-${compact.slice(0, 8)}`;
 }
 
 /**

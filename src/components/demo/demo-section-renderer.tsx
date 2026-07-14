@@ -175,7 +175,7 @@ export function DemoSectionRenderer({
             initialEmail={managerEmail}
             initialPhone="(206) 555-0101"
             idLabel="PropLane ID"
-            idValue="AXIS-DEMO4821"
+            idValue="PROPLANE-DEMO4821"
           />
         );
       default:

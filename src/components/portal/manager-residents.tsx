@@ -1368,7 +1368,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
     const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
     const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
-    const axisId = `AXIS-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+    const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
     const propLabel = arPropertyId
       ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
       : "—";

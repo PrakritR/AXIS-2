@@ -446,7 +446,7 @@ export function CosignerApplyFlow({
                     patchField(setF, "signerAppId", e.target.value);
                     clearError("signerAppId");
                   }}
-                  placeholder="AXIS-XXXXXXXX"
+                  placeholder="PROPLANE-XXXXXXXX"
                   className={err("signerAppId")}
                 />
               </Field>

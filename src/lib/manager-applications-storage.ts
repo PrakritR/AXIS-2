@@ -32,9 +32,11 @@ let publicApprovedApplicationsSyncPromise: Promise<DemoApplicantRow[]> | null = 
 export function normalizeApplicationAxisId(id: string): string {
   const raw = id.trim();
   if (!raw) return raw;
-  if (raw.toUpperCase().startsWith("AXIS-")) return raw;
+  // Pre-rebrand applications keep their AXIS- ids; new ones are PROPLANE-.
+  const upper = raw.toUpperCase();
+  if (upper.startsWith("AXIS-") || upper.startsWith("PROPLANE-")) return raw;
   const suffix = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
-  return `AXIS-${suffix || Date.now().toString(36).toUpperCase()}`;
+  return `PROPLANE-${suffix || Date.now().toString(36).toUpperCase()}`;
 }
 
 /** Opens Property Portal → Applications with this primary application expanded. */

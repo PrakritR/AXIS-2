@@ -128,7 +128,10 @@ const loadResidentPortalAccessStateCached = cache(
         .maybeSingle();
 
       const profileAxisId = typeof profile?.manager_id === "string" ? profile.manager_id.trim() : "";
-      if (profileAxisId && profileAxisId.toUpperCase().startsWith("AXIS-")) {
+      if (
+        profileAxisId &&
+        (profileAxisId.toUpperCase().startsWith("AXIS-") || profileAxisId.toUpperCase().startsWith("PROPLANE-"))
+      ) {
         const { data: axisRecord } = await db
           .from("manager_application_records")
           .select("row_data, updated_at")

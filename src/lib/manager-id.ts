@@ -1,8 +1,12 @@
 import { randomBytes } from "crypto";
 
-/** Public Axis ID (stored in the legacy `profiles.manager_id` column for all portal accounts). */
+/**
+ * Public PropLane ID (stored in the legacy `profiles.manager_id` column for all
+ * portal accounts). Accounts created before the rebrand keep their `AXIS-` ids —
+ * every lookup accepts both prefixes; only NEW ids use `PROPLANE-`.
+ */
 export function generateAxisId(): string {
-  return `AXIS-${randomBytes(4).toString("hex").toUpperCase()}`;
+  return `PROPLANE-${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
 /** Backward-compatible name for existing manager signup code paths. */

@@ -95,9 +95,9 @@ export type RentalApplicationWizardProps = {
 
 function makeNewApplicationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+    return `PROPLANE-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   }
-  return `AXIS-${Date.now().toString(36).toUpperCase()}`;
+  return `PROPLANE-${Date.now().toString(36).toUpperCase()}`;
 }
 
 function ensureRentalWizardAxisId(): string {
