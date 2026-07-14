@@ -29,7 +29,7 @@ export async function sendSms(
   to: string,
   body: string,
   fromNumber: string,
-  opts?: { skipOptOutCheck?: boolean },
+  opts?: { skipOptOutCheck?: boolean; mediaUrls?: string[] },
 ): Promise<{ sent: boolean; sid?: string; error?: string }> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
@@ -63,6 +63,7 @@ export async function sendSms(
       to: toNorm,
       from: fromNorm,
       body,
+      ...(opts?.mediaUrls?.length ? { mediaUrl: opts.mediaUrls.slice(0, 10) } : {}),
       ...(messagingServiceSid ? { messagingServiceSid } : {}),
       ...(statusCallback ? { statusCallback } : {}),
     });

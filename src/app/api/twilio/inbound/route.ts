@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import twilio from "twilio";
-import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { sendPushToUser } from "@/lib/push-notifications.server";
+import { storeInboundMedia, twilioMediaUrls } from "@/lib/sms-media.server";
+import { relayInboundSms } from "@/lib/sms-relay.server";
 import { sendSms } from "@/lib/twilio";
 import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -37,12 +39,18 @@ function phoneVariants(raw: string): string[] {
   ].filter(Boolean);
 }
 
-/** TwiML no-op response so Twilio doesn't retry or error. */
-function twimlOk(): NextResponse {
-  return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
-    status: 200,
-    headers: { "Content-Type": "text/xml" },
-  });
+/** TwiML response; an optional message becomes an auto-reply to the sender. */
+function twimlOk(reply?: string): NextResponse {
+  const escaped = reply
+    ? reply.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    : "";
+  return new NextResponse(
+    `<?xml version="1.0" encoding="UTF-8"?><Response>${escaped ? `<Message>${escaped}</Message>` : ""}</Response>`,
+    {
+      status: 200,
+      headers: { "Content-Type": "text/xml" },
+    },
+  );
 }
 
 type PhoneProfile = {
@@ -79,6 +87,7 @@ export async function POST(req: Request) {
   const toPhone = String(params.To ?? "").trim();
   const body = String(params.Body ?? "").trim();
   const messageSid = String(params.MessageSid ?? "").trim() || null;
+  const mediaUrls = twilioMediaUrls(params);
   if (!fromPhone || !toPhone) return twimlOk();
 
   const db = createSupabaseServiceRoleClient();
@@ -112,7 +121,21 @@ export async function POST(req: Request) {
     if ((seen ?? []).length > 0) return twimlOk();
   }
 
-  // 1. The manager is whoever owns the work number that was texted.
+  // 1a. Proxy-pair relay: if (From, To) matches an active relay binding, the
+  // message is relayed to the other participant(s) and mirrored in-app; if To
+  // is a pool number with no binding, the sender gets a "not linked" reply.
+  // Only when To is outside the relay pool do we fall through to the
+  // work-number → Axis-inbox path below.
+  const relay = await relayInboundSms(db, { fromPhone, toPhone, body, messageSid, mediaUrls });
+  if (relay.handled) {
+    await db
+      .from("inbound_sms_log")
+      .insert({ from_phone: fromPhone, to_phone: toPhone, body, message_sid: messageSid })
+      .then(() => undefined, () => undefined);
+    return twimlOk(relay.reply);
+  }
+
+  // 1b. The manager is whoever owns the work number that was texted.
   const { data: managerRows } = await db
     .from("profiles")
     .select("id, email, full_name, phone, phone_verified_at, sms_forward_inbound")
@@ -149,31 +172,84 @@ export async function POST(req: Request) {
     })
     .then(() => undefined, () => undefined);
 
-  // 3. Axis inbox thread + email to the manager.
+  // 2b. Capture any MMS attachments into the private sms-media bucket; the
+  // signed URLs go into the inbox/email bodies.
+  const storedMedia = mediaUrls.length
+    ? await storeInboundMedia(db, {
+        managerUserId: manager.id,
+        messageSid: messageSid ?? `unknown_${Date.now()}`,
+        mediaUrls,
+      })
+    : [];
+
+  // 3. Axis inbox thread + email + push to the manager.
   // Security: SMS `From` is spoofable and profiles.phone is generally
   // unverified, so we DO NOT attribute the thread to the matched sender's
   // account identity (that would let a spoofed text impersonate a resident).
-  // The message is authored by the manager's own workspace (senderUserId =
-  // manager) and the phone-matched label is surfaced only as display text,
-  // clearly marked as an unverified inbound text.
+  // The phone-matched label is surfaced only as display text, clearly marked
+  // as an unverified inbound text.
+  // Direct thread-row write (the notifyManagerFromAgent pattern) because
+  // deliverPortalInboxMessage drops recipients whose email equals the
+  // sender's — a self-addressed notice would silently deliver to no one.
   const displayLabel = sender ? `${senderLabel} (${fromPhone})` : fromPhone;
-  await deliverPortalInboxMessage(db, {
-    senderUserId: manager.id,
-    senderEmail: manager.email ?? "",
-    fromName: `Text from ${displayLabel}`,
-    subject: `Text message from ${displayLabel}`,
-    text: `${body || "(empty message)"}\n\n— Inbound text to your PropLane number (sender not identity-verified).`,
-    toUserIds: [manager.id],
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
+  const subject = `Text message from ${displayLabel}`;
+  const mediaNote = storedMedia.length ? `\n\nAttachments:\n${storedMedia.join("\n")}` : "";
+  const noticeText = `${body || "(empty message)"}${mediaNote}\n\n— Inbound text to your PropLane number (sender not identity-verified).`;
+  const threadId = `sms_inbound_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  await db
+    .from("portal_inbox_thread_records")
+    .upsert(
+      {
+        id: threadId,
+        scope: "axis_portal_inbox_manager_v1",
+        owner_user_id: manager.id,
+        participant_email: null,
+        thread_type: "inbound_sms",
+        row_data: {
+          id: threadId,
+          folder: "inbox",
+          from: `Text from ${displayLabel}`,
+          email: "",
+          subject,
+          preview: (body || "(empty message)").slice(0, 100).replace(/\n/g, " "),
+          body: noticeText,
+          time: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+          unread: true,
+          scope: "axis_portal_inbox_manager_v1",
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    )
+    .then(() => undefined, () => undefined);
+
+  const managerEmail = String(manager.email ?? "").trim().toLowerCase();
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  if (resendKey && managerEmail.includes("@") && !managerEmail.endsWith("@axis.local")) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>",
+        to: [managerEmail],
+        subject,
+        text: noticeText,
+      }),
+    }).catch(() => undefined);
+  }
+
+  await sendPushToUser(manager.id, {
+    title: subject,
+    body: (body || "(empty message)").slice(0, 120).replace(/\n/g, " "),
+    url: "/portal/inbox/unopened",
   }).catch(() => undefined);
 
-  // 4. Optional forward to the manager's verified personal phone.
+  // 4. Optional forward to the manager's personal phone (set on their profile;
+  // no OTP verification required — the settings UI no longer offers one).
   const personalPhone = String(manager.phone ?? "").trim();
   if (
     manager.sms_forward_inbound !== false &&
     personalPhone &&
-    manager.phone_verified_at &&
     digitsOf(personalPhone) !== digitsOf(fromPhone)
   ) {
     await sendSms(personalPhone, `${senderLabel}: ${body}`.slice(0, 320), toPhone).catch(() => undefined);

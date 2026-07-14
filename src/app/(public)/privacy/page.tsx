@@ -88,6 +88,29 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
+            <h2 className="text-lg font-semibold text-foreground">SMS / text messaging</h2>
+            <p className="mt-2">
+              When you provide your mobile number and opt in to text messages, we use it to send account and
+              tenancy-related messages (for example, rent reminders, maintenance updates, and messages relayed between
+              you and your property manager or resident). Message frequency varies. Message and data rates may apply.
+              Reply STOP to unsubscribe at any time, or HELP for help.
+            </p>
+            <p className="mt-2 font-medium text-foreground">
+              Mobile opt-in information and consent will not be shared with third parties or affiliates for marketing
+              purposes.
+            </p>
+            <p className="mt-2">
+              We retain records of your SMS consent (the wording you agreed to, and when) for as long as required to
+              demonstrate compliance. To have your number removed, reply STOP or contact us using the details below.
+              See our{" "}
+              <Link href="/sms-terms" className="font-medium text-primary hover:opacity-90">
+                SMS Terms of Service
+              </Link>{" "}
+              for full program details.
+            </p>
+          </section>
+
+          <section>
             <h2 className="text-lg font-semibold text-foreground">Your choices</h2>
             <ul className="mt-3 list-disc space-y-2 ps-5">
               <li>Update profile information in the manager or resident portal.</li>
