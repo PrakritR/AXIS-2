@@ -919,7 +919,8 @@ can never land in a new tenant's thread; in-app account deletion
 `closeRelayThreadsForUser` (bindings hold real cells with no auth-users FK).
 Relayed messages are stored idempotently (`sms_relay_messages.twilio_sid`
 unique — Twilio retries webhooks) and mirrored into the manager's Axis inbox.
-Pool maintenance: hourly cron `/api/cron/sms-pool-topup` always releases
+Pool maintenance: daily cron `/api/cron/sms-pool-topup` (Vercel Hobby crons
+must be once-per-day; an hourly schedule fails the whole deploy) always releases
 expired cooldowns, but the auto-buy loop (target 5 free, hard cap 100) stays
 dark unless `SMS_RELAY_POOL_AUTOBUY=1` — the current Sole Proprietor A2P brand
 allows exactly ONE local number, so extra buys would be carrier-filtered.
