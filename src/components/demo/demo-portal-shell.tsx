@@ -27,7 +27,6 @@ import {
   exitGuidedDemoTour,
   getDemoGuidedServerSnapshot,
   getDemoGuidedState,
-  getGuidedDemoStep,
   getGuidedStepDef,
   hydrateDemoGuidedState,
   startGuidedDemoTour,
@@ -35,7 +34,7 @@ import {
 } from "@/lib/demo/demo-guided";
 import type { DemoSegment } from "@/lib/demo/demo-segments";
 import { DEMO_SEGMENT_LABELS } from "@/lib/demo/demo-segments";
-import { seedDemoBlankData, seedDemoIdleData, seedDemoPortalIdleData } from "@/lib/demo/demo-seed";
+import { seedDemoIdleData, seedDemoPortalIdleData } from "@/lib/demo/demo-seed";
 import { isDemoSignedIn, purgeDemoSeededSessionStorage } from "@/lib/demo/demo-client-teardown";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";

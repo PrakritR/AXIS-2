@@ -52,31 +52,6 @@ function clampStep(step: number, segment: DemoSegment): GuidedDemoStep {
   return Math.max(0, Math.min(max, Math.floor(step)));
 }
 
-function readPersisted(): DemoGuidedPersisted {
-  if (typeof window === "undefined" || !isDemoModeActive()) return { ...DEFAULT_STATE };
-  try {
-    const raw = window.localStorage.getItem(DEMO_GUIDED_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_STATE };
-    const parsed = JSON.parse(raw) as Partial<DemoGuidedPersisted & { paused?: boolean }>;
-    const segment: DemoSegment =
-      parsed.segment === "applications" ||
-      parsed.segment === "leasing" ||
-      parsed.segment === "inbox" ||
-      parsed.segment === "promotion" ||
-      parsed.segment === "payments" ||
-      parsed.segment === "work_orders"
-        ? parsed.segment
-        : "overall";
-    return {
-      mode: parsed.mode === "guided" ? "guided" : "idle",
-      step: clampStep(parsed.step ?? 0, segment),
-      segment,
-    };
-  } catch {
-    return { ...DEFAULT_STATE };
-  }
-}
-
 function writePersisted(state: DemoGuidedPersisted) {
   memoryState = state;
   if (typeof window === "undefined" || !isDemoModeActive()) return;

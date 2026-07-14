@@ -116,8 +116,11 @@ export default function PrivacyPolicyPage() {
               <li>Update profile information in the manager or resident portal.</li>
               <li>Disable push notifications in your device Settings.</li>
               <li>
-                Residents: contact your property manager for questions about tenancy data or to request account closure.
+                Delete your account at any time from your portal&rsquo;s profile or settings page. This permanently
+                removes your profile and personal data; business records other users rely on (such as lease and payment
+                history) may be retained as described under Data retention.
               </li>
+              <li>Residents: contact your property manager for questions about tenancy data.</li>
             </ul>
           </section>
 
