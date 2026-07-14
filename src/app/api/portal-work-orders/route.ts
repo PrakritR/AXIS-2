@@ -351,18 +351,9 @@ export async function POST(req: Request) {
       const rows = Array.isArray(body.rows) ? body.rows : [];
       // The manager client mirrors its FULL local list through this replace
       // sync on every change — creating a work order arrives here too, never
-      // as a single-row insert. "Newly created" is therefore detected by
-      // selecting which incoming ids already exist BEFORE the blind upsert;
-      // re-synced existing rows never notify.
-      const incomingIds = rows.map((row) => row?.id).filter((id): id is string => Boolean(id));
-      const preExistingIds = new Set<string>();
-      if (incomingIds.length > 0) {
-        const { data: existingIdRows } = await db
-          .from("portal_work_order_records")
-          .select("id")
-          .in("id", incomingIds);
-        for (const record of existingIdRows ?? []) preExistingIds.add(String(record.id));
-      }
+      // as a single-row insert. "Newly created" is detected per row by the
+      // `findExisting` lookup below (fetched before that row's upsert), so a
+      // re-synced existing row never notifies.
       for (const row of rows) {
         if (!row?.id) continue;
         const existing = await findExisting(row.id);
@@ -381,7 +372,7 @@ export async function POST(req: Request) {
           .from("portal_work_order_records")
           .upsert(persisted, { onConflict: "id" });
         if (!upsertError) {
-          if (!preExistingIds.has(row.id)) await notifyResidentOfCreatedWorkOrder(db, actor, row);
+          if (!existing) await notifyResidentOfCreatedWorkOrder(db, actor, row);
           maybePrepareDispatch(existing, row.id);
         }
       }
