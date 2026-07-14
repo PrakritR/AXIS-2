@@ -34,6 +34,71 @@ describe("manager portfolio access", () => {
     expect([...collectLinkedPropertyIds("co-user")]).toEqual(["mgr-house-a", "pend-house-b"]);
   });
 
+  it("prefers invite assigned ids over stale relationship mirrors after unlink", () => {
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([
+      {
+        id: "rel-1",
+        linkedAxisId: "AXIS-PRIMARY",
+        linkDirection: "incoming",
+        perspective: "manager_tab",
+        payoutPercentForManager: 15,
+        assignedPropertyIds: ["still-linked", "unlinked-brooklyn"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([
+      {
+        id: "rel-1",
+        tabKind: "manager",
+        status: "accepted",
+        direction: "incoming",
+        inviterAxisId: "axis-owner",
+        inviteeAxisId: "axis-co",
+        inviterDisplayName: "Owner",
+        inviteeDisplayName: "Co",
+        linkedAxisId: "axis-owner",
+        linkedDisplayName: "Owner",
+        linkedUserId: "owner-user",
+        assignedPropertyIds: ["still-linked"],
+        payoutPercentForManager: 15,
+        coManagerPermissions: { residents: true },
+        propertyCoManagerPermissions: { "still-linked": { residents: true } },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        respondedAt: "2026-01-02T00:00:00.000Z",
+      } satisfies AccountLinkInviteDto,
+    ]);
+
+    expect([...collectLinkedPropertyIds("co-user")]).toEqual(["still-linked"]);
+  });
+
+  it("hides attributed application rows once the property leaves the portfolio", async () => {
+    const { applicationVisibleToPortalUser } = await import("@/lib/manager-portfolio-access");
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([]);
+
+    expect(
+      applicationVisibleToPortalUser(
+        {
+          id: "app-1",
+          name: "Former Brooklyn Resident",
+          property: "5259 Brooklyn Ave NE",
+          stage: "Approved",
+          bucket: "approved",
+          detail: "",
+          propertyId: "brooklyn-id",
+          assignedPropertyId: "brooklyn-id",
+          managerUserId: "co-user",
+        },
+        "co-user",
+        "residents",
+      ),
+    ).toBe(false);
+  });
+
   it("falls back to incoming accepted invites when relationship rows are empty", () => {
     vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([]);
     vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);

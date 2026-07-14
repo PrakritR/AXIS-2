@@ -69,6 +69,13 @@ import {
   resolveAssignedPropertyId,
   type CoManagerPropertyLink,
 } from "@/lib/co-manager-property-links";
+import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import {
+  invalidateAccountLinksCache,
+  seedAccountLinksCache,
+} from "@/lib/portal-data-store";
+import { syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
+import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
 
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -386,6 +393,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       loadRetriedRef.current = false;
       const invites = Array.isArray(data.invites) ? data.invites : [];
       setRemoteInvites(invites);
+      seedAccountLinksCache(invites, data.migrationRequired);
       setInviteDrafts((prev) => {
         const next = { ...prev };
         for (const inv of invites.filter((i) => i.status === "accepted")) {
@@ -395,6 +403,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         }
         return next;
       });
+      const active = invites.filter((inv) => inv.status === "accepted");
+      writeProRelationships(userId, proRelationshipRowsFromInvites(active));
     } catch {
       // Network error — keep remote mode so saves fail loudly instead of
       // silently writing localStorage that never reaches the account.
@@ -403,7 +413,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       setRemoteLoaded(true);
       loadInFlightRef.current = false;
     }
-  }, [showToast]);
+  }, [showToast, userId]);
 
   useEffect(() => {
     loadRemoteInvitesRef.current = loadRemoteInvites;
@@ -439,7 +449,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshLocal]);
+  }, [refreshLocal, userId]);
 
   useEffect(() => {
     const on = () => refreshLocal();
@@ -763,17 +773,35 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       const data = (await res.json()) as { error?: string; invite?: AccountLinkInviteDto };
       if (!res.ok) {
         showToast(data.error ?? "Request failed.");
+        invalidateAccountLinksCache();
         await loadRemoteInvites();
         return false;
       }
       if (data.invite) {
         setInviteDrafts((prev) => ({ ...prev, [id]: inviteDraftFromRemote(data.invite!) }));
       }
+      invalidateAccountLinksCache();
       await loadRemoteInvites();
+      const scopeChanged =
+        payload.action === "revoke" ||
+        payload.action === "accept" ||
+        payload.assignedPropertyIds !== undefined;
+      if (scopeChanged) {
+        // Dropping a property from a link (or revoking) must immediately refresh
+        // portfolio-scoped residents / leases / charges for this workspace.
+        await syncManagerPortfolioFromServer(userId, { force: true });
+        await Promise.allSettled([
+          syncManagerApplicationsFromServer({ managerUserId: userId, force: true }),
+          syncLeasePipelineFromServer(userId),
+          syncHouseholdChargesFromServer(),
+        ]);
+        refreshLocal();
+      }
       if (okToast) showToast(okToast);
       return true;
     } catch {
       showToast("Network error.");
+      invalidateAccountLinksCache();
       await loadRemoteInvites();
       return false;
     }
@@ -915,6 +943,26 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     const nextAssigned = draft.assignedPropertyIds.filter((id) => id !== assignedId);
     const nextPerms = normalizePropertyCoManagerPermissions(draft.propertyCoManagerPermissions, nextAssigned);
     if (useRemote && remoteLoaded) {
+      // Optimistically shrink local invite + relationship scope so Residents
+      // drops the unlinked property before the PATCH round-trip finishes.
+      setRemoteInvites((prev) =>
+        prev.map((row) =>
+          row.id === inv.id
+            ? { ...row, assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms }
+            : row,
+        ),
+      );
+      setInviteDrafts((d) => ({
+        ...d,
+        [inv.id]: { assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms },
+      }));
+      const nextInvites = remoteInvites.map((row) =>
+        row.id === inv.id
+          ? { ...row, assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms }
+          : row,
+      );
+      seedAccountLinksCache(nextInvites);
+      writeProRelationships(userId, proRelationshipRowsFromInvites(nextInvites.filter((i) => i.status === "accepted")));
       scheduleInviteSave(inv.id, { assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms });
       showToast("Property removed from this co-manager.");
       return;

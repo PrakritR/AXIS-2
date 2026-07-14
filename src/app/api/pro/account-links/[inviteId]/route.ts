@@ -164,6 +164,62 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       if (upErr) {
         return NextResponse.json({ error: upErr.message }, { status: 500 });
       }
+
+      // Keep relationship mirrors in lockstep with the invite so unlink shrinks
+      // stick for both workspaces (residents / leases / charges scope).
+      if (patchProps || patchPerms) {
+        const updatedInvite = updated as InviteRow;
+        const { data: mirrors } = await svc
+          .from("portal_pro_relationship_records")
+          .select("id, row_data")
+          .eq("id", id);
+        for (const mirror of mirrors ?? []) {
+          const rowData =
+            mirror.row_data && typeof mirror.row_data === "object"
+              ? { ...(mirror.row_data as Record<string, unknown>) }
+              : {};
+          await svc
+            .from("portal_pro_relationship_records")
+            .update({
+              row_data: {
+                ...rowData,
+                assignedPropertyIds: nextAssigned,
+                propertyCoManagerPermissions: nextPropertyPerms,
+                payoutPercentForManager: nextPayout,
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", String((mirror as { id?: unknown }).id ?? id));
+        }
+        for (const scope of scopedRelationshipDeletesForRevokedInvite(updatedInvite)) {
+          const { data: scopedRows } = await svc
+            .from("portal_pro_relationship_records")
+            .select("id, row_data")
+            .eq("manager_user_id", scope.managerUserId)
+            .filter("row_data->>linkedAxisId", "eq", scope.linkedAxisId);
+          for (const scoped of scopedRows ?? []) {
+            const scopedId = String((scoped as { id?: unknown }).id ?? "").trim();
+            if (!scopedId || scopedId === id) continue;
+            const rowData =
+              scoped.row_data && typeof scoped.row_data === "object"
+                ? { ...(scoped.row_data as Record<string, unknown>) }
+                : {};
+            await svc
+              .from("portal_pro_relationship_records")
+              .update({
+                row_data: {
+                  ...rowData,
+                  assignedPropertyIds: nextAssigned,
+                  propertyCoManagerPermissions: nextPropertyPerms,
+                  payoutPercentForManager: nextPayout,
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", scopedId);
+          }
+        }
+      }
+
       return NextResponse.json({ ok: true, invite: serializeInvite(updated as InviteRow, user.id) });
     }
 

@@ -43,12 +43,19 @@ const RELATIONSHIPS_SYNC_TTL_MS = 15_000;
 const relationshipsLastSyncedAt = new Map<string, number>();
 const relationshipsSyncPromises = new Map<string, Promise<ProRelationshipRecord[]>>();
 
-function mergeRelationshipRows(previous: ProRelationshipRecord[], incoming: ProRelationshipRecord[]): ProRelationshipRecord[] {
+/** Merge server/local relationship rows. Exported for unit tests. */
+export function mergeRelationshipRows(
+  previous: ProRelationshipRecord[],
+  incoming: ProRelationshipRecord[],
+): ProRelationshipRecord[] {
   const merged = incoming.map((row) => {
     const prev = previous.find((item) => item.id === row.id);
     if (!prev) return row;
     const prevIds = prev.assignedPropertyIds;
     const nextIds = row.assignedPropertyIds;
+    // Only preserve previous ids when the incoming payload omitted the list
+    // entirely (empty). A shorter non-empty list must win — otherwise removing
+    // a property from a co-manager link never sticks on the client.
     const keepPrevIds = prevIds.length > 0 && nextIds.length === 0;
     const keepPrevPerms =
       Object.keys(prev.propertyCoManagerPermissions ?? {}).length > 0 &&
@@ -57,7 +64,7 @@ function mergeRelationshipRows(previous: ProRelationshipRecord[], incoming: ProR
     if (!keepPrevIds && !keepPrevPerms && prev.linkDirection) return row;
     return {
       ...row,
-      assignedPropertyIds: keepPrevIds ? prevIds : nextIds.length >= prevIds.length ? nextIds : prevIds,
+      assignedPropertyIds: keepPrevIds ? prevIds : nextIds,
       propertyCoManagerPermissions: keepPrevPerms
         ? prev.propertyCoManagerPermissions
         : row.propertyCoManagerPermissions ?? prev.propertyCoManagerPermissions,

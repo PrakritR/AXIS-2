@@ -40,6 +40,18 @@ export function readCachedAccountLinkInvites(): AccountLinkInviteDto[] {
   return cachedAccountLinksResponse.invites;
 }
 
+/** Drop the TTL so the next fetchAccountLinksCached round-trip hits the network. */
+export function invalidateAccountLinksCache(): void {
+  accountLinksAt = 0;
+  accountLinksPromise = null;
+}
+
+/** Replace the invite cache immediately after a local accept/unlink (before the next fetch). */
+export function seedAccountLinksCache(invites: AccountLinkInviteDto[], migrationRequired?: boolean): void {
+  cachedAccountLinksResponse = { invites, migrationRequired };
+  accountLinksAt = Date.now();
+}
+
 /** Deduped fetch for co-manager nav + account link sync. */
 export async function fetchAccountLinksCached(): Promise<AccountLinksResponse> {
   const now = Date.now();
@@ -107,13 +119,6 @@ export function prefetchPortalData(kind: PortalKind, userId?: string | null): Pr
   }
 
   return Promise.resolve();
-}
-
-/** Invalidate account-links cache after co-manager mutations. */
-export function invalidateAccountLinksCache(): void {
-  accountLinksAt = 0;
-  accountLinksPromise = null;
-  cachedAccountLinksResponse = { invites: [] };
 }
 
 /** Bump application storage listeners after prefetch. */

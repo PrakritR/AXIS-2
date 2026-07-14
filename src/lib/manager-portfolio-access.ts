@@ -47,16 +47,23 @@ export function ownedPropertyIdsForUser(userId: string): Set<string> {
 
 function addIncomingAssignedPropertyIds(userId: string, target: Set<string>): void {
   const owned = ownedPropertyIdsForUser(userId);
+  const invites = readCachedAccountLinkInvites().filter(
+    (inv) => inv.status === "accepted" && inv.direction === "incoming",
+  );
+  // Accepted invites are authoritative when present — do not union with stale
+  // relationship mirrors that may still list properties removed from the link.
+  if (invites.length > 0) {
+    for (const inv of invites) {
+      for (const id of inv.assignedPropertyIds) {
+        const pid = id.trim();
+        if (pid && !owned.has(pid)) target.add(pid);
+      }
+    }
+    return;
+  }
   for (const rel of readProRelationships(userId)) {
     if (rel.linkDirection === "outgoing") continue;
     for (const id of rel.assignedPropertyIds) {
-      const pid = id.trim();
-      if (pid && !owned.has(pid)) target.add(pid);
-    }
-  }
-  for (const inv of readCachedAccountLinkInvites()) {
-    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
-    for (const id of inv.assignedPropertyIds) {
       const pid = id.trim();
       if (pid && !owned.has(pid)) target.add(pid);
     }
@@ -90,20 +97,25 @@ function modulePermsAllow(
 export function collectLinkedPropertyIdsForModule(userId: string, module: CoManagerPermissionId): Set<string> {
   const owned = ownedPropertyIdsForUser(userId);
   const out = new Set<string>();
+  const invites = readCachedAccountLinkInvites().filter(
+    (inv) => inv.status === "accepted" && inv.direction === "incoming",
+  );
+  if (invites.length > 0) {
+    for (const inv of invites) {
+      for (const id of inv.assignedPropertyIds) {
+        const pid = id.trim();
+        if (!pid || owned.has(pid)) continue;
+        if (modulePermsAllow(inv.propertyCoManagerPermissions, pid, module)) out.add(pid);
+      }
+    }
+    return out;
+  }
   for (const rel of readProRelationships(userId)) {
     if (rel.linkDirection === "outgoing") continue;
     for (const id of rel.assignedPropertyIds) {
       const pid = id.trim();
       if (!pid || owned.has(pid)) continue;
       if (modulePermsAllow(rel.propertyCoManagerPermissions, pid, module)) out.add(pid);
-    }
-  }
-  for (const inv of readCachedAccountLinkInvites()) {
-    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
-    for (const id of inv.assignedPropertyIds) {
-      const pid = id.trim();
-      if (!pid || owned.has(pid)) continue;
-      if (modulePermsAllow(inv.propertyCoManagerPermissions, pid, module)) out.add(pid);
     }
   }
   return out;
@@ -193,11 +205,13 @@ export function moduleRowVisibleToPortalUser(
   module: CoManagerPermissionId,
 ): boolean {
   if (!userId) return false;
-  if (!row.managerUserId || row.managerUserId === userId) return true;
-  const linked = collectLinkedPropertyIdsForModule(userId, module);
-  const pid = row.propertyId?.trim();
-  const apid = row.assignedPropertyId?.trim();
-  return Boolean((pid && linked.has(pid)) || (apid && linked.has(apid)));
+  const pid = row.propertyId?.trim() || row.assignedPropertyId?.trim() || "";
+  if (pid) {
+    if (ownedPropertyIdsForUser(userId).has(pid)) return true;
+    return collectLinkedPropertyIdsForModule(userId, module).has(pid);
+  }
+  // Rows without a property stay visible only to the attributed manager (or unscoped rows).
+  return !row.managerUserId || row.managerUserId === userId;
 }
 
 /** Refresh co-manager relationships and property pipeline (includes linked owner listings). */
@@ -232,12 +246,16 @@ export function applicationVisibleToPortalUser(
   module?: CoManagerPermissionId,
 ): boolean {
   if (!userId) return false;
-  if (row.managerUserId && row.managerUserId === userId) return true;
-  const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
-  if (!pid) return false;
-  if (ownedPropertyIdsForUser(userId).has(pid)) return true;
-  const linked = module ? collectLinkedPropertyIdsForModule(userId, module) : collectLinkedPropertyIds(userId);
-  return linked.has(pid);
+  const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (pid) {
+    // Property-scoped rows must still belong to the live portfolio (owned or
+    // currently linked). Otherwise residents/housing stick after unlink/delete.
+    if (ownedPropertyIdsForUser(userId).has(pid)) return true;
+    const linked = module ? collectLinkedPropertyIdsForModule(userId, module) : collectLinkedPropertyIds(userId);
+    return linked.has(pid);
+  }
+  // Manual / unplaced rows are only visible to the attributed manager.
+  return Boolean(row.managerUserId && row.managerUserId === userId);
 }
 
 /** Minimal lease shape for portfolio visibility checks (avoids circular imports). */
@@ -250,12 +268,12 @@ export type LeaseVisibilityRow = {
 /** Whether a lease row should appear for this portal user (direct owner or linked property). */
 export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string | null): boolean {
   if (!userId) return false;
-  if (row.managerUserId && row.managerUserId === userId) return true;
-  const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
-  if (!pid) return false;
-  if (ownedPropertyIdsForUser(userId).has(pid)) return true;
-  // Gate a linked owner's leases by the `leases` module grant (empty perms = full).
-  return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
+  const pid = row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (pid) {
+    if (ownedPropertyIdsForUser(userId).has(pid)) return true;
+    return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
+  }
+  return Boolean(row.managerUserId && row.managerUserId === userId);
 }
 
 export type ManagerPropertyFilterOption = { id: string; label: string };

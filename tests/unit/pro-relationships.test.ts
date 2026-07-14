@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  mergeRelationshipRows,
   normalizeProRelationshipRecord,
   writeProRelationships,
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
 
-function makeRow(id: string): ProRelationshipRecord {
+function makeRow(id: string, assignedPropertyIds: string[] = []): ProRelationshipRecord {
   return {
     id,
     linkedAxisId: `${id}@example.com`,
     perspective: "manager_tab",
     payoutPercentForManager: 15,
-    assignedPropertyIds: [],
+    assignedPropertyIds,
     createdAt: "2026-01-01T00:00:00.000Z",
   };
 }
@@ -53,6 +54,20 @@ describe("pro-relationships", () => {
   it("rejects invalid records", () => {
     expect(normalizeProRelationshipRecord(null)).toBeNull();
     expect(normalizeProRelationshipRecord({ id: "only-id" })).toBeNull();
+  });
+
+  it("allows assigned property lists to shrink on merge", () => {
+    const previous = [makeRow("rel-1", ["prop-a", "prop-b", "prop-c"])];
+    const incoming = [makeRow("rel-1", ["prop-a"])];
+    const merged = mergeRelationshipRows(previous, incoming);
+    expect(merged[0]?.assignedPropertyIds).toEqual(["prop-a"]);
+  });
+
+  it("keeps previous assigned ids only when incoming omits the list", () => {
+    const previous = [makeRow("rel-1", ["prop-a", "prop-b"])];
+    const incoming = [makeRow("rel-1", [])];
+    const merged = mergeRelationshipRows(previous, incoming);
+    expect(merged[0]?.assignedPropertyIds).toEqual(["prop-a", "prop-b"]);
   });
 });
 

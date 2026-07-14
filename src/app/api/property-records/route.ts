@@ -1,3 +1,4 @@
+import { clearHousingAccessForDeletedProperty } from "@/lib/auth/clear-property-housing-access";
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
@@ -164,6 +165,12 @@ export async function POST(req: Request) {
     if (isDelete) {
       const { error } = await db.from("manager_property_records").delete().eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      try {
+        await clearHousingAccessForDeletedProperty(db, id);
+      } catch (cleanupErr) {
+        const message = cleanupErr instanceof Error ? cleanupErr.message : "Housing cleanup failed.";
+        return NextResponse.json({ error: message }, { status: 500 });
+      }
       track("property_deleted", user.id, { property_id: id });
       return NextResponse.json({ ok: true });
     }
