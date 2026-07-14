@@ -8,7 +8,6 @@ import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } fro
 import { ManagerPhoneSettingsPanel } from "@/components/portal/manager-phone-settings-panel";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
-import { PortalDeleteAccountPanel } from "@/components/portal/portal-delete-account-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
@@ -255,7 +254,6 @@ export function PortalProfileClient({
           <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
           <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
           <PortalSettingsExtras currentKind={portalKind} />
-          <PortalDeleteAccountPanel />
         </div>
       </ManagerPortalPageShell>
     );
@@ -289,9 +287,6 @@ export function PortalProfileClient({
       </div>
       <div className="mt-6">
         <PortalSettingsExtras currentKind={portalKind} />
-      </div>
-      <div className="mt-6">
-        <PortalDeleteAccountPanel />
       </div>
     </div>
   );

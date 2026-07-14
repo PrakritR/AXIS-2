@@ -36,6 +36,12 @@ export async function POST(req: Request) {
     );
   }
 
+  // The canonical sandbox accounts back /demo and the guided tour in every
+  // environment — deleting one would brick those surfaces.
+  if (String(user.email ?? "").trim().toLowerCase().endsWith("@test.axis.local")) {
+    return NextResponse.json({ error: "Sandbox accounts cannot be deleted." }, { status: 403 });
+  }
+
   const svc = createSupabaseServiceRoleClient();
   try {
     await deleteOwnAccount(svc, user.id);

@@ -1,5 +1,6 @@
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { purgeManagerPortalData, purgeResidentPortalData } from "@/lib/auth/purge-portal-account-data";
+import { closeRelayThreadsForUser } from "@/lib/sms-relay.server";
 import { removePortalAccess, type PortalRole } from "@/lib/auth/remove-portal-access";
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
 import { getStripe } from "@/lib/stripe";
@@ -200,6 +201,14 @@ export async function deleteOwnAccount(db: ServiceDb, userId: string) {
   await db.from("work_order_bids").delete().eq("vendor_user_id", trimmedId);
   await db.from("vendor_invoices").delete().eq("vendor_user_id", trimmedId);
   await db.from("vendor_payouts").delete().eq("vendor_user_id", trimmedId);
+
+  // SMS relay participation holds the user's real cell in active bindings
+  // (no FK cascade covers counterparty rows) — close those threads so a
+  // deleted user's number stops routing. Personal verification/push rows are
+  // likewise not covered by the manager/resident purges.
+  await closeRelayThreadsForUser(db, trimmedId).catch(() => undefined);
+  await db.from("phone_verifications").delete().eq("user_id", trimmedId);
+  await db.from("device_push_tokens").delete().eq("user_id", trimmedId);
 
   return purgeAndDeletePortalAccount(db, trimmedId);
 }
