@@ -209,6 +209,38 @@ async function syncApplicationLeaseDates(
     .eq("id", id);
 }
 
+async function regenerateLeaseHtmlForApplication(
+  db: SupabaseClient,
+  leaseRecord: { property_id?: string | null },
+  leaseRow: LeasePipelineRow,
+  updatedApplication: NonNullable<LeasePipelineRow["application"]>,
+): Promise<string | null> {
+  try {
+    const propertyId = leaseRecord.property_id ?? leaseRow.propertyId ?? "";
+    const propertyRecord = propertyId
+      ? (await db.from("manager_property_records").select("id, property_data, row_data").eq("id", propertyId).maybeSingle()).data
+      : null;
+    if (!propertyRecord) return null;
+    const prop = propertyFromRecord(propertyRecord as { id: string; property_data: unknown; row_data: unknown });
+    if (!prop) return null;
+    const ctx = leaseContextFromApplication({ ...updatedApplication, propertyId });
+    const finalCtx = ctx.submission
+      ? ctx
+      : {
+          ...ctx,
+          leasedRoom: prop,
+          listingProperty: prop,
+          submission:
+            prop.listingSubmission?.v === 1
+              ? normalizeManagerListingSubmissionV1(prop.listingSubmission as ManagerListingSubmissionV1)
+              : ctx.submission,
+        };
+    return buildAiGeneratedLeaseHtml(finalCtx);
+  } catch {
+    return null; /* best-effort */
+  }
+}
+
 export async function amendLeaseMoveOutDate(
   db: SupabaseClient,
   leaseRecord: {
@@ -240,34 +272,7 @@ export async function amendLeaseMoveOutDate(
 
   const updatedApplication = { ...(leaseRow.application ?? {}), leaseEnd: newLeaseEnd };
   const iso = new Date().toISOString();
-  let newHtml: string | null = null;
-
-  try {
-    const propertyId = leaseRecord.property_id ?? leaseRow.propertyId ?? "";
-    const propertyRecord = propertyId
-      ? (await db.from("manager_property_records").select("id, property_data, row_data").eq("id", propertyId).maybeSingle()).data
-      : null;
-    if (propertyRecord) {
-      const prop = propertyFromRecord(propertyRecord as { id: string; property_data: unknown; row_data: unknown });
-      if (prop) {
-        const ctx = leaseContextFromApplication({ ...updatedApplication, propertyId });
-        const finalCtx = ctx.submission
-          ? ctx
-          : {
-              ...ctx,
-              leasedRoom: prop,
-              listingProperty: prop,
-              submission:
-                prop.listingSubmission?.v === 1
-                  ? normalizeManagerListingSubmissionV1(prop.listingSubmission as ManagerListingSubmissionV1)
-                  : ctx.submission,
-            };
-        newHtml = buildAiGeneratedLeaseHtml(finalCtx);
-      }
-    }
-  } catch {
-    /* best-effort */
-  }
+  const newHtml = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
 
   const updatedRow: Partial<LeasePipelineRow> = {
     ...leaseRow,
@@ -335,4 +340,100 @@ export async function amendLeaseMoveOutDate(
 
   const direction = newLeaseEnd < currentEnd ? "decrease" : "extend";
   return { ok: true, direction, newLeaseEnd };
+}
+
+export type LeaseRenewalTerms = {
+  leaseTerm: string;
+  leaseStart: string;
+  /** Empty string means Month-to-Month (no end date). */
+  leaseEnd: string;
+  monthlyRent: number | null;
+};
+
+/**
+ * Full renewal: new term (fixed length or Month-to-Month), start date, and
+ * optionally a new rent. Like the move-out amendment, the lease re-enters the
+ * pipeline at Manager Review with signatures cleared and its document
+ * regenerated — but the application record and payment schedule are NOT
+ * touched here. The renewal terms are stashed on the row (`pendingRenewal`)
+ * and applied to the application + rent profile + charges only when both
+ * parties have signed the renewed lease (see applySignedLeaseRenewal on the
+ * client), so payments always reflect the SIGNED lease, never a draft.
+ */
+export async function renewLease(
+  db: SupabaseClient,
+  leaseRecord: {
+    id: string;
+    manager_user_id?: string | null;
+    property_id?: string | null;
+    row_data: unknown;
+  },
+  terms: LeaseRenewalTerms,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const leaseRow = leaseRecord.row_data as LeasePipelineRow;
+  if (!hasBothLeaseSignatures(leaseRow) || leaseRow.status === "Voided") {
+    return { ok: false, error: "Only fully signed leases can be renewed." };
+  }
+
+  const isMonthToMonth = terms.leaseTerm === "Month-to-Month";
+  if (!terms.leaseStart) return { ok: false, error: "Renewal start date is required." };
+  if (!isMonthToMonth && !terms.leaseEnd) return { ok: false, error: "Renewal end date is required." };
+  if (terms.leaseEnd && terms.leaseEnd < terms.leaseStart) {
+    return { ok: false, error: "Renewal end date cannot be before the start date." };
+  }
+  if (terms.monthlyRent != null && (!Number.isFinite(terms.monthlyRent) || terms.monthlyRent <= 0)) {
+    return { ok: false, error: "Monthly rent must be a positive amount." };
+  }
+
+  // Room must stay free through the renewal period (open-ended for M2M).
+  const effectiveEnd = terms.leaseEnd || "9999-12-31";
+  const availability = await checkMoveOutAvailabilityForLease(db, leaseRow, leaseRecord, effectiveEnd);
+  if (!availability.ok) return { ok: false, error: availability.reason };
+
+  const iso = new Date().toISOString();
+  const rentLabel = terms.monthlyRent != null ? `$${terms.monthlyRent.toFixed(2)} / month` : null;
+  const updatedApplication: NonNullable<LeasePipelineRow["application"]> = {
+    ...(leaseRow.application ?? {}),
+    leaseTerm: terms.leaseTerm,
+    leaseStart: terms.leaseStart,
+    leaseEnd: terms.leaseEnd,
+    ...(terms.monthlyRent != null ? { managerRentOverride: String(terms.monthlyRent) } : {}),
+  };
+  if (rentLabel) {
+    // The generated document reads rent from this snapshot (rentSummaryFromApplication).
+    (updatedApplication as Record<string, unknown>).__signedRentLabel = rentLabel;
+  }
+
+  const newHtml = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
+
+  const updatedRow: Partial<LeasePipelineRow> = {
+    ...leaseRow,
+    application: updatedApplication,
+    ...(rentLabel ? { signedRentLabel: rentLabel } : {}),
+    pendingRenewal: { ...terms, requestedAtIso: iso },
+    managerSignature: null,
+    residentSignature: null,
+    signatureName: null,
+    signedAtIso: null,
+    bucket: "manager",
+    status: "Manager Review",
+    currentActorRole: "manager",
+    updatedAtIso: iso,
+    updated: "just now",
+    ...(newHtml ? { generatedHtml: newHtml, generatedAtIso: iso } : {}),
+  };
+
+  const { error: upsertError } = await db.from("portal_lease_pipeline_records").upsert({
+    id: leaseRecord.id,
+    manager_user_id: leaseRecord.manager_user_id,
+    resident_user_id: leaseRow.residentUserId ?? null,
+    resident_email: leaseRow.residentEmail.trim().toLowerCase(),
+    property_id: leaseRecord.property_id ?? null,
+    status: "manager",
+    row_data: updatedRow,
+    updated_at: iso,
+  });
+  if (upsertError) return { ok: false, error: upsertError.message };
+
+  return { ok: true };
 }

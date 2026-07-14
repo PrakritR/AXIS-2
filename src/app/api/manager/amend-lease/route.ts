@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease, hasBothLeaseSignatures } from "@/lib/lease-amendment.server";
+import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease, hasBothLeaseSignatures, renewLease } from "@/lib/lease-amendment.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
@@ -24,11 +24,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Managers only." }, { status: 403 });
     }
 
-    const body = (await req.json()) as { leaseId?: string; newLeaseEnd?: string };
+    const body = (await req.json()) as {
+      leaseId?: string;
+      newLeaseEnd?: string;
+      mode?: string;
+      leaseTerm?: string;
+      leaseStart?: string;
+      leaseEnd?: string;
+      monthlyRent?: number | string | null;
+    };
     const leaseId = (body.leaseId ?? "").trim();
-    const newLeaseEnd = (body.newLeaseEnd ?? "").trim();
     if (!leaseId) return NextResponse.json({ error: "leaseId is required." }, { status: 400 });
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(newLeaseEnd)) {
+    const isRenew = body.mode === "renew";
+    const newLeaseEnd = (body.newLeaseEnd ?? "").trim();
+    if (!isRenew && !/^\d{4}-\d{2}-\d{2}$/.test(newLeaseEnd)) {
       return NextResponse.json({ error: "Provide a valid newLeaseEnd (YYYY-MM-DD)." }, { status: 400 });
     }
 
@@ -41,6 +50,27 @@ export async function POST(req: NextRequest) {
 
     if (role === "manager" && leaseRecord.manager_user_id && leaseRecord.manager_user_id !== user.id) {
       return NextResponse.json({ error: "You do not have access to this lease." }, { status: 403 });
+    }
+
+    if (isRenew) {
+      const leaseTerm = (body.leaseTerm ?? "").trim();
+      const leaseStart = (body.leaseStart ?? "").trim();
+      const leaseEnd = (body.leaseEnd ?? "").trim();
+      const rentRaw = body.monthlyRent;
+      const monthlyRent =
+        rentRaw == null || rentRaw === ""
+          ? null
+          : Number(typeof rentRaw === "string" ? rentRaw.replace(/[^\d.]/g, "") : rentRaw);
+      if (!leaseTerm) return NextResponse.json({ error: "leaseTerm is required for a renewal." }, { status: 400 });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(leaseStart)) {
+        return NextResponse.json({ error: "Provide a valid leaseStart (YYYY-MM-DD)." }, { status: 400 });
+      }
+      if (leaseEnd && !/^\d{4}-\d{2}-\d{2}$/.test(leaseEnd)) {
+        return NextResponse.json({ error: "Provide a valid leaseEnd (YYYY-MM-DD) or omit it for month-to-month." }, { status: 400 });
+      }
+      const result = await renewLease(db, leaseRecord, { leaseTerm, leaseStart, leaseEnd, monthlyRent });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ ok: true, direction: "renew" });
     }
 
     const result = await amendLeaseMoveOutDate(db, leaseRecord, newLeaseEnd);

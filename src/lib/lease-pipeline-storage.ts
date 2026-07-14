@@ -199,6 +199,19 @@ export type LeasePipelineRow = {
   versionNumber?: number;
   /** Set when manager deletes the saved document — suppresses application draft preview until regenerate/upload. */
   leaseDocumentRemovedAt?: string | null;
+  /**
+   * Renewal terms awaiting signatures. Set by the renew flow; consumed (and
+   * cleared) after BOTH parties sign, when the terms are applied to the
+   * application record and the payment schedule — payments always follow the
+   * signed lease, never a draft renewal.
+   */
+  pendingRenewal?: {
+    leaseTerm: string;
+    leaseStart: string;
+    leaseEnd: string;
+    monthlyRent: number | null;
+    requestedAtIso: string;
+  } | null;
 };
 
 function workflowStatusForRow(

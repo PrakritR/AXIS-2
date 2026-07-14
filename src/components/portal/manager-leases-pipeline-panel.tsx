@@ -20,7 +20,8 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
-import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
+import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
+import { applySignedLeaseRenewal } from "@/lib/lease-renewal-payments";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import {
@@ -80,6 +81,7 @@ export function ManagerLeasesPipelinePanel({
     body: string;
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [renewLeaseRow, setRenewLeaseRow] = useState<LeasePipelineRow | null>(null);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -331,13 +333,22 @@ export function ManagerLeasesPipelinePanel({
     if (!signingRow) return false;
     const ok = await managerSignLease(signingRow.id, signatureName.trim(), managerUserId);
     if (ok) {
+      const fullySigned = hasBothLeaseSignatures({
+        ...signingRow,
+        managerSignature: { role: "manager", name: signatureName.trim(), signedAtIso: new Date().toISOString() },
+      });
+      // A renewal's new term/rent applies to the payment schedule only once
+      // BOTH parties have signed — the manager countersigns last, so this is
+      // the moment the renewed lease becomes the billing source of truth.
+      const renewalApplied = fullySigned && signingRow.pendingRenewal
+        ? applySignedLeaseRenewal(signingRow.id, managerUserId ?? null)
+        : false;
       showToast(
-        hasBothLeaseSignatures({
-          ...signingRow,
-          managerSignature: { role: "manager", name: signatureName.trim(), signedAtIso: new Date().toISOString() },
-        })
-          ? "Lease fully signed."
-          : "Manager signature saved.",
+        renewalApplied
+          ? "Lease fully signed — rent and payment schedule updated to the renewed terms."
+          : fullySigned
+            ? "Lease fully signed."
+            : "Manager signature saved.",
       );
       setExpandedId(null);
       setSigningRow(null);
@@ -387,14 +398,25 @@ export function ManagerLeasesPipelinePanel({
             </Button>
             ) : null}
             {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => setAmendLeaseRow(row)}
-              >
-                Renew or extend lease
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  data-attr="lease-renew"
+                  onClick={() => setRenewLeaseRow(row)}
+                >
+                  Renew lease
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => setAmendLeaseRow(row)}
+                >
+                  Extend move-out date
+                </Button>
+              </>
             ) : null}
             {!row.managerSignature && residentHasSignedLease(row) ? (
               <Button
@@ -651,6 +673,18 @@ export function ManagerLeasesPipelinePanel({
           checkUrl="/api/manager/amend-lease"
           amendUrl="/api/manager/amend-lease"
           amendBody={{ leaseId: amendLeaseRow.id }}
+          onSuccess={() => void handleAmendLeaseSuccess()}
+        />
+      ) : null}
+
+      {renewLeaseRow ? (
+        <LeaseRenewModal
+          open
+          onClose={() => setRenewLeaseRow(null)}
+          currentEnd={renewLeaseRow.application?.leaseEnd ?? ""}
+          currentTerm={renewLeaseRow.application?.leaseTerm ?? ""}
+          currentRentLabel={renewLeaseRow.signedRentLabel ?? renewLeaseRow.application?.managerRentOverride ?? ""}
+          leaseId={renewLeaseRow.id}
           onSuccess={() => void handleAmendLeaseSuccess()}
         />
       ) : null}
