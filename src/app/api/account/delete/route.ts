@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import { closeRelayThreadsForUser } from "@/lib/sms-relay.server";
 import { getStripe } from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -11,7 +12,10 @@ export const runtime = "nodejs";
  * on (leases, charges, work orders a resident submitted, ledger/GL rows) are
  * deliberately NOT deleted — they belong to the counterparty's books too.
  * Tables with an auth.users FK (notification_preferences, sms_relay_threads)
- * cascade when the auth user row is removed.
+ * cascade when the auth user row is removed; the cascade only covers threads
+ * the user OWNS as manager, so SMS relay participation (bindings hold the
+ * user's real cell with no FK) is swept explicitly via
+ * closeRelayThreadsForUser before the auth row goes.
  */
 const PERSONAL_DATA_SWEEP: Array<{ table: string; column: string }> = [
   { table: "phone_verifications", column: "user_id" },
@@ -72,6 +76,8 @@ export async function POST(req: Request) {
   } catch {
     // Stripe not configured or lookup failed — proceed with deletion.
   }
+
+  await closeRelayThreadsForUser(db, user.id).catch(() => undefined);
 
   for (const { table, column } of PERSONAL_DATA_SWEEP) {
     await db

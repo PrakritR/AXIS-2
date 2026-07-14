@@ -11,15 +11,18 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import twilio from "twilio";
-import { storeInboundMedia } from "@/lib/sms-media.server";
+import { smsMediaAppUrl, storeInboundMedia } from "@/lib/sms-media.server";
+import { upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
 import { normalizeE164, sendSms } from "@/lib/twilio";
 
 const RELAY_AREA_CODES = [206, 425, 253, 415, 510];
 export const RELAY_POOL_TARGET_FREE = 5;
 // Hard cost cap — a runaway auto-buy loop is ~$1.15 per iteration.
 export const RELAY_POOL_MAX = 100;
-
-const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
+// Abuse containment: each provision sends an unsolicited intro SMS to an
+// arbitrary number and holds a pooled number, so both are per-manager bounded.
+export const RELAY_MAX_ACTIVE_THREADS_PER_MANAGER = 5;
+export const RELAY_PROVISION_MIN_INTERVAL_MS = 60_000;
 
 function twilioClient() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
@@ -156,6 +159,30 @@ export async function provisionRelayThread(
     return { ok: false, error: "Manager and resident phone are the same number.", status: 400 };
   }
 
+  const { count: activeThreads } = await db
+    .from("sms_relay_threads")
+    .select("*", { count: "exact", head: true })
+    .eq("manager_user_id", input.managerUserId)
+    .eq("state", "active");
+  if ((activeThreads ?? 0) >= RELAY_MAX_ACTIVE_THREADS_PER_MANAGER) {
+    return {
+      ok: false,
+      error: `You can have at most ${RELAY_MAX_ACTIVE_THREADS_PER_MANAGER} open text relays. Close one before opening another.`,
+      status: 409,
+    };
+  }
+  const { data: lastThread } = await db
+    .from("sms_relay_threads")
+    .select("created_at")
+    .eq("manager_user_id", input.managerUserId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const lastCreatedAt = lastThread?.created_at ? new Date(String(lastThread.created_at)).getTime() : 0;
+  if (lastCreatedAt && Date.now() - lastCreatedAt < RELAY_PROVISION_MIN_INTERVAL_MS) {
+    return { ok: false, error: "Please wait a minute between opening text relays.", status: 429 };
+  }
+
   const { data: numberId, error: allocError } = await db.rpc("allocate_sms_proxy_number", {
     p_manager_id: input.managerUserId,
   });
@@ -205,7 +232,11 @@ export async function provisionRelayThread(
     // Most likely the pair-uniqueness index: this participant already has an
     // active thread on this proxy. Roll the thread back so the number frees up.
     await db.from("sms_relay_threads").delete().eq("id", thread.id);
-    return { ok: false, error: bindingError.message, status: 409 };
+    const message =
+      bindingError.code === "23505"
+        ? "An active text relay already exists for one of these phone numbers on this proxy number."
+        : bindingError.message;
+    return { ok: false, error: message, status: 409 };
   }
 
   const where = input.label ? ` for ${input.label}` : "";
@@ -242,6 +273,14 @@ export async function closeRelayThread(
   if (!thread) return { ok: false, error: "Thread not found." };
   if (thread.state === "closed") return { ok: true };
 
+  await closeThreadRow(db, { id: String(thread.id), proxyNumberId: String(thread.proxy_number_id) });
+  return { ok: true };
+}
+
+async function closeThreadRow(
+  db: SupabaseClient,
+  thread: { id: string; proxyNumberId: string },
+): Promise<void> {
   await db.from("sms_relay_bindings").update({ active: false }).eq("thread_id", thread.id);
   await db
     .from("sms_relay_threads")
@@ -253,13 +292,45 @@ export async function closeRelayThread(
       status: "cooldown",
       cooldown_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     })
-    .eq("id", thread.proxy_number_id);
-  return { ok: true };
+    .eq("id", thread.proxyNumberId);
+}
+
+/**
+ * Account-deletion sweep: a deleted user's real cell must stop routing.
+ * sms_relay_bindings.user_id and counterparty_user_id have no auth.users FK
+ * (only manager-owned threads cascade), so this deactivates every binding the
+ * user participates in and closes the affected threads, cooling down their
+ * numbers exactly like a manual close.
+ */
+export async function closeRelayThreadsForUser(db: SupabaseClient, userId: string): Promise<void> {
+  const { data: bindingRows } = await db
+    .from("sms_relay_bindings")
+    .select("thread_id")
+    .eq("user_id", userId);
+  const { data: managerThreads } = await db
+    .from("sms_relay_threads")
+    .select("id")
+    .eq("manager_user_id", userId);
+  const threadIds = [
+    ...new Set([
+      ...(bindingRows ?? []).map((r) => String(r.thread_id)),
+      ...(managerThreads ?? []).map((r) => String(r.id)),
+    ]),
+  ];
+  for (const threadId of threadIds) {
+    const { data: thread } = await db
+      .from("sms_relay_threads")
+      .select("id, proxy_number_id, state")
+      .eq("id", threadId)
+      .maybeSingle();
+    if (!thread || thread.state === "closed") continue;
+    await closeThreadRow(db, { id: String(thread.id), proxyNumberId: String(thread.proxy_number_id) });
+  }
 }
 
 export type RelayInboundResult =
   | { handled: false }
-  | { handled: true; reply?: string };
+  | { handled: true; reply?: string; managerUserId?: string; senderUserId?: string };
 
 /**
  * Webhook-time routing: look up (From, To) among active bindings. A hit relays
@@ -305,12 +376,16 @@ export async function relayInboundSms(
     .maybeSingle();
   if (!thread) return { handled: true };
 
-  // Copy MMS attachments out of Twilio into our bucket; the signed URLs are
-  // used for the outbound relay legs and the inbox mirror. (Re-running on a
-  // webhook retry just re-upserts the same objects.)
+  const managerUserId = String(thread.manager_user_id);
+  const senderUserId = sender.user_id ? String(sender.user_id) : undefined;
+
+  // Copy MMS attachments out of Twilio into our bucket. The durable bucket
+  // PATHS are what gets persisted; the signed URLs only feed the immediate
+  // outbound relay legs. (Re-running on a webhook retry just re-upserts the
+  // same objects.)
   const storedMedia = args.mediaUrls?.length
     ? await storeInboundMedia(db, {
-        managerUserId: String(thread.manager_user_id),
+        managerUserId,
         messageSid: args.messageSid ?? `unknown_${Date.now()}`,
         mediaUrls: args.mediaUrls,
       })
@@ -325,9 +400,9 @@ export async function relayInboundSms(
     sender_role: sender.role,
     channel_in: "sms",
     body: args.body,
-    media_urls: storedMedia.length ? storedMedia : null,
+    media_urls: storedMedia.length ? storedMedia.map((m) => m.path) : null,
   });
-  if (insertError?.code === "23505") return { handled: true };
+  if (insertError?.code === "23505") return { handled: true, managerUserId, senderUserId };
 
   const { data: recipients } = await db
     .from("sms_relay_bindings")
@@ -342,45 +417,27 @@ export async function relayInboundSms(
   const outBody = `${prefix}${args.body}`.slice(0, 1500);
   for (const recipient of recipients ?? []) {
     await sendSms(String(recipient.participant_phone), outBody, to, {
-      mediaUrls: storedMedia,
+      mediaUrls: storedMedia.map((m) => m.signedUrl),
     }).catch(() => undefined);
   }
 
   // Mirror into the manager's Axis inbox so the conversation exists in-app.
   const counterpartyLabel = String(thread.counterparty_name ?? "").trim() || "Resident";
   const threadLabel = String(thread.label ?? "").trim();
-  const fromLabel = sender.role === "manager" ? "You (via text)" : counterpartyLabel;
-  const mediaNote = storedMedia.length ? `\n\nAttachments:\n${storedMedia.join("\n")}` : "";
-  const inboxId = `sms_relay_${sender.thread_id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  await db
-    .from("portal_inbox_thread_records")
-    .upsert(
-      {
-        id: inboxId,
-        scope: MANAGER_INBOX_SCOPE,
-        owner_user_id: thread.manager_user_id,
-        participant_email: null,
-        thread_type: "sms_relay",
-        row_data: {
-          id: inboxId,
-          folder: sender.role === "manager" ? "sent" : "inbox",
-          from: fromLabel,
-          email: "",
-          subject: `Text relay — ${counterpartyLabel}${threadLabel ? ` (${threadLabel})` : ""}`,
-          preview: args.body.slice(0, 100).replace(/\n/g, " "),
-          body: `${args.body}${mediaNote}`,
-          time: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
-          unread: sender.role !== "manager",
-          scope: MANAGER_INBOX_SCOPE,
-        },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    )
-    .then(
-      () => undefined,
-      () => undefined,
-    );
+  const mediaNote = storedMedia.length
+    ? `\n\nAttachments:\n${storedMedia.map((m) => smsMediaAppUrl(m.path)).join("\n")}`
+    : "";
+  await upsertManagerInboxNotice(db, {
+    managerUserId,
+    idPrefix: `sms_relay_${sender.thread_id}`,
+    threadType: "sms_relay",
+    folder: sender.role === "manager" ? "sent" : "inbox",
+    from: sender.role === "manager" ? "You (via text)" : counterpartyLabel,
+    subject: `Text relay — ${counterpartyLabel}${threadLabel ? ` (${threadLabel})` : ""}`,
+    preview: args.body,
+    body: `${args.body}${mediaNote}`,
+    unread: sender.role !== "manager",
+  });
 
-  return { handled: true };
+  return { handled: true, managerUserId, senderUserId };
 }

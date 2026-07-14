@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import twilio from "twilio";
 import { sendPushToUser } from "@/lib/push-notifications.server";
-import { storeInboundMedia, twilioMediaUrls } from "@/lib/sms-media.server";
+import { sendManagerNoticeEmail, upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
+import { smsMediaAppUrl, storeInboundMedia, twilioMediaUrls } from "@/lib/sms-media.server";
 import { relayInboundSms } from "@/lib/sms-relay.server";
 import { sendSms } from "@/lib/twilio";
 import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
@@ -130,7 +131,14 @@ export async function POST(req: Request) {
   if (relay.handled) {
     await db
       .from("inbound_sms_log")
-      .insert({ from_phone: fromPhone, to_phone: toPhone, body, message_sid: messageSid })
+      .insert({
+        manager_user_id: relay.managerUserId ?? null,
+        from_phone: fromPhone,
+        to_phone: toPhone,
+        matched_sender_user_id: relay.senderUserId ?? null,
+        body,
+        message_sid: messageSid,
+      })
       .then(() => undefined, () => undefined);
     return twimlOk(relay.reply);
   }
@@ -172,8 +180,9 @@ export async function POST(req: Request) {
     })
     .then(() => undefined, () => undefined);
 
-  // 2b. Capture any MMS attachments into the private sms-media bucket; the
-  // signed URLs go into the inbox/email bodies.
+  // 2b. Capture any MMS attachments into the private sms-media bucket. The
+  // inbox body gets durable /api/sms-media links (signed at read time); only
+  // the email body gets the immediate signed URLs (email clients aren't authed).
   const storedMedia = mediaUrls.length
     ? await storeInboundMedia(db, {
         managerUserId: manager.id,
@@ -188,55 +197,30 @@ export async function POST(req: Request) {
   // account identity (that would let a spoofed text impersonate a resident).
   // The phone-matched label is surfaced only as display text, clearly marked
   // as an unverified inbound text.
-  // Direct thread-row write (the notifyManagerFromAgent pattern) because
-  // deliverPortalInboxMessage drops recipients whose email equals the
-  // sender's — a self-addressed notice would silently deliver to no one.
   const displayLabel = sender ? `${senderLabel} (${fromPhone})` : fromPhone;
   const subject = `Text message from ${displayLabel}`;
-  const mediaNote = storedMedia.length ? `\n\nAttachments:\n${storedMedia.join("\n")}` : "";
-  const noticeText = `${body || "(empty message)"}${mediaNote}\n\n— Inbound text to your PropLane number (sender not identity-verified).`;
-  const threadId = `sms_inbound_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  await db
-    .from("portal_inbox_thread_records")
-    .upsert(
-      {
-        id: threadId,
-        scope: "axis_portal_inbox_manager_v1",
-        owner_user_id: manager.id,
-        participant_email: null,
-        thread_type: "inbound_sms",
-        row_data: {
-          id: threadId,
-          folder: "inbox",
-          from: `Text from ${displayLabel}`,
-          email: "",
-          subject,
-          preview: (body || "(empty message)").slice(0, 100).replace(/\n/g, " "),
-          body: noticeText,
-          time: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
-          unread: true,
-          scope: "axis_portal_inbox_manager_v1",
-        },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    )
-    .then(() => undefined, () => undefined);
+  const inboxMediaNote = storedMedia.length
+    ? `\n\nAttachments:\n${storedMedia.map((m) => smsMediaAppUrl(m.path)).join("\n")}`
+    : "";
+  const emailMediaNote = storedMedia.length
+    ? `\n\nAttachments:\n${storedMedia.map((m) => m.signedUrl).join("\n")}`
+    : "";
+  const noticeFooter = "\n\n— Inbound text to your PropLane number (sender not identity-verified).";
+  await upsertManagerInboxNotice(db, {
+    managerUserId: manager.id,
+    idPrefix: "sms_inbound",
+    threadType: "inbound_sms",
+    from: `Text from ${displayLabel}`,
+    subject,
+    preview: body || "(empty message)",
+    body: `${body || "(empty message)"}${inboxMediaNote}${noticeFooter}`,
+  });
 
-  const managerEmail = String(manager.email ?? "").trim().toLowerCase();
-  const resendKey = process.env.RESEND_API_KEY?.trim();
-  if (resendKey && managerEmail.includes("@") && !managerEmail.endsWith("@axis.local")) {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>",
-        to: [managerEmail],
-        subject,
-        text: noticeText,
-      }),
-    }).catch(() => undefined);
-  }
+  await sendManagerNoticeEmail({
+    toEmail: manager.email,
+    subject,
+    text: `${body || "(empty message)"}${emailMediaNote}${noticeFooter}`,
+  });
 
   await sendPushToUser(manager.id, {
     title: subject,
@@ -244,11 +228,14 @@ export async function POST(req: Request) {
     url: "/portal/inbox/unopened",
   }).catch(() => undefined);
 
-  // 4. Optional forward to the manager's personal phone (set on their profile;
-  // no OTP verification required — the settings UI no longer offers one).
+  // 4. Optional forward to the manager's personal phone — only when that
+  // number was OTP-verified in Settings. An unverified profile phone must
+  // never receive forwarded message bodies (typos leak tenant PII; a
+  // malicious profile edit would turn the work number into a spam cannon).
   const personalPhone = String(manager.phone ?? "").trim();
   if (
     manager.sms_forward_inbound !== false &&
+    Boolean(manager.phone_verified_at) &&
     personalPhone &&
     digitsOf(personalPhone) !== digitsOf(fromPhone)
   ) {
