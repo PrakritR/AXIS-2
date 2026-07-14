@@ -87,9 +87,16 @@ describe("/api/portal-vendors", () => {
       eq: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({ data: { role: "manager" } }),
     };
+    // The route decides ownership from the STORED row (select ... .in("id", ids)),
+    // never from the client-supplied managerUserId.
+    const ownerLookup = {
+      select: vi.fn().mockReturnThis(),
+      in: vi.fn().mockResolvedValue({ data: [{ id: "v-other", manager_user_id: "mgr-b" }], error: null }),
+    };
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "profiles") return profileChain;
+        if (table === "manager_vendor_records") return ownerLookup;
         throw new Error(`Unexpected table ${table}`);
       }),
     } as never);
@@ -126,7 +133,13 @@ describe("/api/portal-vendors", () => {
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "profiles") return profileChain;
-        if (table === "manager_vendor_records") return { upsert };
+        if (table === "manager_vendor_records")
+          return {
+            // Ownership pre-read: no stored row → the caller becomes the owner.
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockResolvedValue({ data: [], error: null }),
+            upsert,
+          };
         throw new Error(`Unexpected table ${table}`);
       }),
     } as never);

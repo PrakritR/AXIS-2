@@ -30,10 +30,10 @@ type DocRow = {
 const DOC_ID = "11111111-1111-4111-8111-111111111111";
 
 /**
- * A minimal Supabase-shaped mock. `manager_documents` queries chain
- * .eq("manager_user_id", ...) — the mock records which owner was requested and
- * only returns rows whose manager_user_id matches, mirroring how the real
- * WHERE clause scopes ownership.
+ * A minimal Supabase-shaped mock. The [id] routes fetch the row by id only and
+ * enforce ownership in code (owner short-circuit in
+ * assertManagerDocumentsCoManagerAccess), so single-row lookups match on id +
+ * live status; the list query still scopes by manager_user_id.
  */
 function mockDb(rows: DocRow[]) {
   const removed: string[][] = [];
@@ -81,9 +81,7 @@ function mockDb(rows: DocRow[]) {
           },
           select: () => ({
             maybeSingle: async () => {
-              const match = rows.find(
-                (r) => r.id === upd.id && r.manager_user_id === upd.manager_user_id && r.deleted_at === null,
-              );
+              const match = rows.find((r) => r.id === upd.id && r.deleted_at === null);
               if (!match) return { data: null, error: null };
               Object.assign(match, patch);
               return {
@@ -95,11 +93,9 @@ function mockDb(rows: DocRow[]) {
         };
         return updBuilder;
       },
-      // Terminal for the signed-url SELECT: .eq().eq().is().maybeSingle()
+      // Terminal for the [id] routes' SELECT: .eq("id").is("deleted_at").maybeSingle()
       maybeSingle: async () => {
-        const match = rows.find(
-          (r) => r.id === filters.id && r.manager_user_id === filters.manager_user_id && r.deleted_at === null,
-        );
+        const match = rows.find((r) => r.id === filters.id && r.deleted_at === null);
         return { data: match ?? null, error: null };
       },
       // Terminal for the list SELECT (awaited directly)
