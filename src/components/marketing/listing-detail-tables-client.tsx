@@ -743,7 +743,7 @@ function ListingDetailModal({
             <ListingModalActions
               newTabProps={newTabProps}
               primary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                href: buildRentalApplyHref({ propertyId: listingPropertyId, bundleId: state.row.id }),
                 label: "Apply for this bundle",
                 dataAttr: "listing-apply-bundle",
               }}

@@ -19,12 +19,12 @@ describe("checkr package catalog", () => {
     clearEnv();
   });
 
-  it("computes order totals from package + add-ons", async () => {
+  it("computes order totals from package + add-ons (no platform surcharge)", async () => {
     const { checkrOrderCostCents, formatCheckrPrice } = await import("@/lib/checkr/packages");
-    expect(checkrOrderCostCents("starter")).toBe(2999);
-    expect(checkrOrderCostCents("essential")).toBe(3999);
-    expect(checkrOrderCostCents("complete", ["identity_verification"])).toBe(5294);
-    expect(formatCheckrPrice(5294)).toBe("$52.94");
+    expect(checkrOrderCostCents("starter")).toBe(2499);
+    expect(checkrOrderCostCents("essential")).toBe(3499);
+    expect(checkrOrderCostCents("complete", ["identity_verification"])).toBe(4794);
+    expect(formatCheckrPrice(4794)).toBe("$47.94");
   });
 
   it("honors env price overrides", async () => {
@@ -32,6 +32,6 @@ describe("checkr package catalog", () => {
     process.env.CHECKR_IDENTITY_ADDON_PRICE_CENTS = "495";
     const { checkrOrderCostCents, checkrPackageCatalog } = await import("@/lib/checkr/packages");
     expect(checkrPackageCatalog()[0]?.priceCents).toBe(1999);
-    expect(checkrOrderCostCents("starter", ["identity_verification"])).toBe(2994);
+    expect(checkrOrderCostCents("starter", ["identity_verification"])).toBe(2494);
   });
 });

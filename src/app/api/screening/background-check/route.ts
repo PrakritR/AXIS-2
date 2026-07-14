@@ -11,6 +11,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { track } from "@/lib/analytics/posthog";
 import { runBackgroundCheck, refreshBackgroundCheck } from "@/lib/checkr/background-check";
+import { checkrSkipsManagerCardCharge } from "@/lib/checkr/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -35,6 +36,16 @@ export async function POST(req: Request) {
     const applicationId = body.applicationId?.trim();
     const action = body.action === "refresh" ? "refresh" : "run";
     if (!applicationId) return NextResponse.json({ error: "applicationId is required." }, { status: 400 });
+
+    // Live screening orders are prepaid via Stripe Checkout
+    // (`/api/screening/checkout` → webhook). Direct "run" stays available only
+    // in pure simulate mode so payment can never be skipped.
+    if (action === "run" && !checkrSkipsManagerCardCharge()) {
+      return NextResponse.json(
+        { error: "Screening orders must be paid via Stripe Checkout first.", code: "payment_required" },
+        { status: 402 },
+      );
+    }
 
     const db = createSupabaseServiceRoleClient();
     const admin = await isAdminUser(user.id);

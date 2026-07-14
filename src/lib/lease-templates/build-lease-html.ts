@@ -1,7 +1,13 @@
 import type { MockProperty } from "@/data/types";
 import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
-import { activeCustomLeaseTerms, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  activeCustomLeaseTerms,
+  entireHomeMonthlyRentAmount,
+  isEntireHomeListing,
+  normalizeManagerListingSubmissionV1,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import { formatUtilitiesListingLine, resolveListingUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -254,22 +260,51 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       return subNorm.rooms.find((r) => r.name.trim().toLowerCase() === label) ??
         subNorm.rooms.find((r) => r.name.trim().toLowerCase().includes(label) || label.includes(r.name.trim().toLowerCase()));
     })();
+
+  // Bundle application: the leased premises are the bundle's rooms, not one room.
+  const leasedBundle = a.bundleId?.trim()
+    ? subNorm?.bundles.find((b) => b.id === a.bundleId!.trim())
+    : undefined;
+  const bundleRooms = leasedBundle
+    ? ((leasedBundle.includedRoomIds?.length ?? 0) > 0
+        ? (subNorm?.rooms ?? []).filter((r) => leasedBundle.includedRoomIds?.includes(r.id))
+        : (subNorm?.rooms ?? []).filter((r) => r.name.trim()))
+    : [];
+  const bundleRoomNames = bundleRooms.map((r) => r.name.trim()).filter(Boolean);
+  const bundlePremisesLabel = leasedBundle
+    ? [leasedBundle.label.trim() || "Lease bundle", bundleRoomNames.length ? bundleRoomNames.join(", ") : leasedBundle.roomsLine.trim()]
+        .filter(Boolean)
+        .join(" — ")
+    : "";
+
+  // Whole-home application: the premises are the entire unit (no specific room).
+  const wholeHome = !leasedBundle && !specificRoom && Boolean(subNorm) && (isEntireHomeListing(subNorm!) || !subNorm!.rooms.some((r) => r.name.trim()));
+
   const roomLabel = escapeHtml(
+    bundlePremisesLabel ||
     specificRoom?.name?.trim() ||
+    (wholeHome ? "Entire home" : "") ||
     room?.unitLabel?.trim() ||
     "[ROOM NUMBER]"
   );
   const fullPremises = escapeHtml(
-    [sub?.buildingName ?? list?.buildingName ?? room?.buildingName, specificRoom?.name ?? room?.unitLabel]
+    [
+      sub?.buildingName ?? list?.buildingName ?? room?.buildingName,
+      bundlePremisesLabel || specificRoom?.name || (wholeHome ? "entire home" : room?.unitLabel),
+    ]
       .filter(Boolean)
       .join(" — ") || "the Premises described herein"
   );
 
   // ── Rent & financials ─────────────────────────────────────────────────────
+  const bundleRentLabel = leasedBundle?.price.trim() || "";
+  const entireHomeRent = wholeHome && subNorm ? entireHomeMonthlyRentAmount(subNorm) : 0;
   const monthlyRentBaseStr =
     overrideFeeLabel(a.managerRentOverride, "") ||
     signedRentLabel ||
+    bundleRentLabel ||
     submissionRoomRentFromChoice(sub, a.roomChoice1) ||
+    (entireHomeRent > 0 ? `$${entireHomeRent.toFixed(2)} / month` : "") ||
     (room && findSubmissionRoomRent(sub, room.unitLabel)) ||
     room?.rentLabel ||
     list?.rentLabel ||

@@ -55,6 +55,8 @@ export type ApplicationBackgroundCheck = {
   /** Flat fee charged to the manager for this run, and the resulting Stripe PaymentIntent. */
   costCents?: number;
   stripePaymentIntentId?: string;
+  /** Stripe Checkout session that prepaid this run (webhook idempotency key). */
+  stripeCheckoutSessionId?: string;
 };
 
 /** Options when placing a Checkr Tenant order. */

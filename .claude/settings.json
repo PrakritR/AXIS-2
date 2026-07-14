@@ -6,7 +6,20 @@
       "Bash(npx eslint *)",
       "Bash(npx next *)",
       "Skill(run)",
-      "Skill(run:*)"
+      "Skill(run:*)",
+      "Bash(sips -g pixelWidth -g pixelHeight resume.pdf.png)",
+      "Bash(npx -y sharp-cli -i resume.pdf.png -o portfolio-site/assets/img/resume-page-1-1600.webp resize 1600 -f webp -q 88)",
+      "Bash(npx -y sharp-cli -i resume.pdf.png -o portfolio-site/assets/img/resume-page-1-800.webp resize 800 -f webp -q 85)",
+      "Bash(npx -y sharp-cli -i resume.pdf.png -o portfolio-site/assets/img/resume-page-1-1600.jpg resize 1600 -f jpeg -q 88)",
+      "Bash(git -c 'user.name=Prakrit Ramachandran' -c user.email=prakritramachandran@gmail.com commit -q -m 'Tabbed navigation, new resume, new profile photo *)",
+      "Bash(ls -lat ~/Downloads/*Master* ~/Desktop/*Master* 2>/dev/null | head -5)",
+      "Read(//Users/prakrit/Desktop/**)",
+      "Bash(find ~/Downloads ~/Desktop ~/Documents -maxdepth 3 -iname \"*resume*master*\" -o -maxdepth 3 -iname \"*master*resume*\" 2>/dev/null | head -5; ls -lat ~/Downloads/*.pdf 2>/dev/null | head -5)",
+      "Bash(cp \"/Users/prakrit/Downloads/Prakrit_Ramachandran_Resume_Master.pdf\" portfolio-site/assets/resume.pdf)",
+      "Bash(rm -f resume.pdf.png)",
+      "Bash(qlmanage -t -s 2400 -o . portfolio-site/assets/resume.pdf)",
+      "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)",
+      "Bash(node -e 'require\\(\"dotenv\"\\).config\\({path:\".env\"}\\); const e=process.env; console.log\\(JSON.stringify\\({stripeSet: Boolean\\(e.STRIPE_SECRET_KEY\\), stripeTestMode: \\(e.STRIPE_SECRET_KEY||\"\"\\).startsWith\\(\"sk_test\"\\), webhookSecretSet: Boolean\\(e.STRIPE_WEBHOOK_SECRET\\), checkrKeySet: Boolean\\(e.CHECKR_API_KEY||e.BACKGROUND_CHECK_API_KEY\\), checkrTestKey: \\(\\(e.CHECKR_API_KEY||e.BACKGROUND_CHECK_API_KEY\\)||\"\"\\).includes\\(\"test\"\\), checkrSimulate: e.CHECKR_SIMULATE||null}\\)\\)')"
     ]
   }
 }

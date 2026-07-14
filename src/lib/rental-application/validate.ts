@@ -15,7 +15,7 @@ import {
   resolveAllowedLeaseTerms,
 } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
-import { propertyAllowsShortTermRental, listingAllowedLeaseTerms, getPropertyById } from "./data";
+import { propertyAllowsShortTermRental, listingAllowedLeaseTerms, getPropertyById, isEntireHomeProperty } from "./data";
 import { LEASE_TERM_OPTIONS } from "./lease-terms";
 import { listingApplicationFeeAmount } from "@/lib/household-charges";
 import {
@@ -145,7 +145,17 @@ export function validateStandardWizardStep(
 
   if (step === 3) {
     if (fieldEnabled("propertyId") && !f.propertyId.trim()) e.propertyId = "Property is required.";
-    if (fieldEnabled("roomChoice1") && !f.roomChoice1.trim()) e.roomChoice1 = "First choice room is required.";
+    // A bundle application replaces ranked room choices — no first-choice room
+    // needed. Entire-home listings apply for the whole place (roomChoice1 is
+    // auto-filled with the property id; older drafts may predate the autofill).
+    if (
+      fieldEnabled("roomChoice1") &&
+      !f.bundleId.trim() &&
+      !f.roomChoice1.trim() &&
+      !isEntireHomeProperty(f.propertyId)
+    ) {
+      e.roomChoice1 = "First choice room is required.";
+    }
     const r1 = f.roomChoice1.trim();
     const r2 = f.roomChoice2.trim();
     const r3 = f.roomChoice3.trim();

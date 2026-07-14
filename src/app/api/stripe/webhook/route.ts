@@ -13,6 +13,7 @@ import { stripeInvoiceSubscriptionId } from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
 import { markHouseholdChargePaidFromStripeSession } from "@/lib/stripe-household-charge";
+import { runScreeningFromStripeSession, SCREENING_CHECKOUT_PURPOSE } from "@/lib/stripe-screening";
 import { enrichLedgerFromCheckoutSession } from "@/lib/stripe-ledger-fees";
 import {
   handleConnectPayoutEvent,
@@ -98,6 +99,10 @@ export async function POST(req: Request) {
         } catch (e) {
           console.error("[stripe webhook] rental_application_fee checkout", e);
         }
+      } else if (session.metadata?.purpose === SCREENING_CHECKOUT_PURPOSE) {
+        // No catch: an unexpected throw returns 500 so Stripe retries; the
+        // order placement is idempotent on the session id.
+        await runScreeningFromStripeSession(db, session);
       } else if (session.metadata?.purpose === "household_charge") {
         try {
           await markHouseholdChargePaidFromStripeSession(db, session);

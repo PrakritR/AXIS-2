@@ -138,14 +138,17 @@ function applyBackgroundCheck(row: DemoApplicantRow, bc: ApplicationBackgroundCh
   return { ...row, backgroundCheck: bc, backgroundCheckStatus: backgroundCheckStatusFromCheckr(bc) };
 }
 
-/** Kick off a new Checkr background check for an applicant. Charges manager card on live orders. */
-export async function runBackgroundCheck(opts: {
+/**
+ * Validate that a screening order MAY be placed for this application (config,
+ * plan tier, ownership, applicant consent, no in-flight check). Shared by the
+ * pre-payment checkout route and the order execution so we never take payment
+ * for an order that would be rejected.
+ */
+export async function precheckBackgroundCheckOrder(opts: {
   db: SupabaseClient;
   applicationId: string;
   managerUserId: string;
-  packageSlug?: string;
-  addOnProducts?: string[];
-}): Promise<BackgroundCheckResult> {
+}): Promise<{ ok: true; row: DemoApplicantRow } | Extract<BackgroundCheckResult, { ok: false }>> {
   if (!backgroundCheckConfigured()) {
     return {
       ok: false,
@@ -184,6 +187,42 @@ export async function runBackgroundCheck(opts: {
       code: "in_progress",
     };
   }
+  return { ok: true, row };
+}
+
+/**
+ * Kick off a new Checkr background check for an applicant.
+ *
+ * Payment: live orders are prepaid via Stripe Checkout — the webhook passes
+ * `prepaid` (session + payment intent) and no additional charge happens here.
+ * Without `prepaid`, the manager's saved card is charged off-session (legacy
+ * path, still used by the agent tool layer). Pure simulate mode never charges.
+ */
+export async function runBackgroundCheck(opts: {
+  db: SupabaseClient;
+  applicationId: string;
+  managerUserId: string;
+  packageSlug?: string;
+  addOnProducts?: string[];
+  prepaid?: { checkoutSessionId: string; paymentIntentId?: string };
+}): Promise<BackgroundCheckResult> {
+  // Webhook retries and duplicate deliveries re-send the same Checkout
+  // session — if we already placed this order, return it instead of
+  // double-ordering.
+  if (opts.prepaid) {
+    const existing = await loadApplicationRow(opts.db, opts.applicationId);
+    if (existing?.backgroundCheck?.stripeCheckoutSessionId === opts.prepaid.checkoutSessionId) {
+      return { ok: true, row: existing, backgroundCheck: existing.backgroundCheck };
+    }
+  }
+
+  const precheck = await precheckBackgroundCheckOrder(opts);
+  if (!precheck.ok) return precheck;
+  const row = precheck.row;
+  const application = row.application;
+  if (!application) {
+    return { ok: false, status: 400, error: "This record has no rental application to check." };
+  }
 
   const rawPackageSlug = opts.packageSlug ?? "";
   const packageSlug: CheckrPackage = isCheckrPackage(rawPackageSlug) ? rawPackageSlug : "essential";
@@ -191,7 +230,9 @@ export async function runBackgroundCheck(opts: {
   const costCents = checkrOrderCostCents(packageSlug, addOnProducts);
 
   let stripePaymentIntentId: string | undefined;
-  if (!checkrSkipsManagerCardCharge()) {
+  if (opts.prepaid) {
+    stripePaymentIntentId = opts.prepaid.paymentIntentId;
+  } else if (!checkrSkipsManagerCardCharge()) {
     const charge = await chargeManagerForScreening({
       managerUserId: opts.managerUserId,
       applicationId: row.id,
@@ -203,11 +244,11 @@ export async function runBackgroundCheck(opts: {
     stripePaymentIntentId = charge.paymentIntentId;
   }
 
-  const property = await loadCheckrProperty(opts.db, row.assignedPropertyId || row.propertyId || row.application.propertyId);
+  const property = await loadCheckrProperty(opts.db, row.assignedPropertyId || row.propertyId || application.propertyId);
 
   let created;
   try {
-    created = await createBackgroundCheck(applicantInputFromApplication(row.application), property, {
+    created = await createBackgroundCheck(applicantInputFromApplication(application), property, {
       packageSlug,
       addOnProducts,
     });
@@ -251,6 +292,7 @@ export async function runBackgroundCheck(opts: {
     simulated: created.simulated || undefined,
     costCents,
     stripePaymentIntentId,
+    stripeCheckoutSessionId: opts.prepaid?.checkoutSessionId,
   };
 
   const nextRow = applyBackgroundCheck(row, bc);

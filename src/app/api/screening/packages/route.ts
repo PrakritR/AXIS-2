@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { backgroundCheckConfigured } from "@/lib/checkr/config";
-import { checkrAddOnCatalog, checkrAxisSurchargeCents, checkrPackageCatalog } from "@/lib/checkr/packages";
+import { checkrAddOnCatalog, checkrPackageCatalog } from "@/lib/checkr/packages";
 import { managerScreeningAllowedForTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -21,7 +21,6 @@ export async function GET() {
     return NextResponse.json({
       configured: backgroundCheckConfigured(),
       screeningAllowed: managerScreeningAllowedForTier(tier),
-      axisSurchargeCents: checkrAxisSurchargeCents(),
       packages: checkrPackageCatalog(),
       addOns: checkrAddOnCatalog(),
     });

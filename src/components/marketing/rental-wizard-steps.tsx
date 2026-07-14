@@ -8,8 +8,11 @@ import { axisAchFeeDisplayLabel } from "@/lib/payment-policy";
 import {
   LEASE_TERM_OPTIONS,
   SHORT_TERM_LEASE_TERM,
+  getBundleChoiceLabel,
+  getBundleOptionsForProperty,
   getPropertyById,
   getRoomChoiceLabel,
+  isEntireHomeProperty,
   isPropertyRentedByRoom,
   isRoomApprovedConflict,
   isRoomPendingConflict,
@@ -448,6 +451,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     // Whole-unit listings (leased as one place, not room-by-room) don't ask for
     // ranked 1st/2nd/3rd room choices — see the property step below.
     const isByRoom = isPropertyRentedByRoom(form.propertyId);
+    // Entire-home pricing: itemized rooms are bedrooms on display, not units —
+    // there is nothing to choose (the application is for the whole home).
+    const entireHome = Boolean(form.propertyId) && isEntireHomeProperty(form.propertyId);
+    const bundleOptions = form.propertyId ? getBundleOptionsForProperty(form.propertyId) : [];
+    const bundleSelected = Boolean(form.bundleId.trim());
     const propertySearchOptions = propertyOptions.map((o) => {
       const prop = getPropertyById(o.value);
       return {
@@ -495,12 +503,15 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               const pid = id ?? "";
               // Whole-unit listings aren't chosen by room: auto-select the sole
               // unit (or the property itself) so no ranked room choice is asked.
+              // Entire-home listings always apply for the whole place — their
+              // itemized rooms are bedrooms, never selectable units.
               const wholeUnit = Boolean(pid) && !isPropertyRentedByRoom(pid);
-              const unitOpts = wholeUnit
+              const isEntire = Boolean(pid) && isEntireHomeProperty(pid);
+              const unitOpts = wholeUnit && !isEntire
                 ? roomSelectOptionsWithNone(pid, { includeUnavailable: true }).filter((o) => o.value !== "")
                 : [];
-              const autoRoom = wholeUnit && unitOpts.length <= 1 ? (unitOpts[0]?.value ?? pid) : "";
-              patch({ propertyId: pid, roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", rentalType: "standard" });
+              const autoRoom = isEntire ? pid : wholeUnit && unitOpts.length <= 1 ? (unitOpts[0]?.value ?? pid) : "";
+              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", rentalType: "standard" });
             }}
             placeholder="Search by address, neighborhood, or property name…"
             emptyMessage="No properties match your search."
@@ -513,8 +524,39 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
         </WizardFieldGate>
 
+        {bundleOptions.length > 0 ? (
+          <div className="space-y-2" data-wizard-field="bundleId">
+            <Label htmlFor="bundleId">Lease bundle</Label>
+            <p className="text-xs text-muted">
+              This listing offers bundle pricing. Choose a bundle to apply for it
+              {isByRoom ? " instead of individual rooms" : ""}, or leave as none.
+            </p>
+            <Select
+              id="bundleId"
+              value={form.bundleId}
+              disabled={!form.propertyId}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next && isByRoom) {
+                  // A bundle application replaces ranked room choices.
+                  patch({ bundleId: next, roomChoice1: "", roomChoice2: "", roomChoice3: "" });
+                } else {
+                  patch({ bundleId: next });
+                }
+              }}
+            >
+              <option value="">None — {isByRoom ? "apply for individual rooms" : "standard lease"}</option>
+              {bundleOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+
         <WizardFieldGate fieldKey="roomChoice1" enabled={showWizardField}>
-        {isByRoom ? (
+        {isByRoom && !bundleSelected ? (
         <div className="space-y-2">
           <Label required>Room preferences</Label>
           <p className="text-xs text-muted">
@@ -574,7 +616,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
-        ) : rooms.length > 1 ? (
+        ) : !isByRoom && !entireHome && rooms.length > 1 ? (
         // Whole-unit listing with multiple units: pick one unit, no ranked choices.
         <div className="space-y-2">
           <Label required>Unit</Label>
@@ -599,8 +641,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         </div>
         ) : (
-          // Whole-unit listing with a single unit: the property IS the choice —
-          // roomChoice1 is auto-filled on property select, so nothing to ask.
+          // Whole-unit listing with a single unit (roomChoice1 auto-filled on
+          // property select) or a bundle application: nothing to ask.
           <div data-wizard-field="roomChoice1" className="hidden" aria-hidden />
         )}
         </WizardFieldGate>
@@ -1598,6 +1640,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 11) {
     const prop = getPropertyById(form.propertyId);
     const roomLabel = (id: string) => getRoomChoiceLabel(id);
+    const reviewByRoom = isPropertyRentedByRoom(form.propertyId);
+    const reviewBundleLabel = form.bundleId.trim()
+      ? getBundleChoiceLabel(form.propertyId, form.bundleId)
+      : "";
     return (
       <div className="space-y-8">
         <div>
@@ -1619,9 +1665,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </ReviewSection>
           <ReviewSection title="Property information" stepTarget={3} onEdit={editFromReview}>
             <ReviewRow k="Property" v={displayOrDash(prop?.title)} />
-            <ReviewRow k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
-            <ReviewRow k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
-            <ReviewRow k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
+            {reviewBundleLabel ? (
+              <ReviewRow k="Lease bundle" v={reviewBundleLabel} />
+            ) : reviewByRoom ? (
+              <>
+                <ReviewRow k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
+                <ReviewRow k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
+                <ReviewRow k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
+              </>
+            ) : (
+              <ReviewRow k="Unit" v={displayOrDash(roomLabel(form.roomChoice1))} />
+            )}
             <ReviewRow k="Application type" v={form.rentalType === "short_term" ? "Short-term stay" : "Standard lease"} />
             <ReviewRow k="Lease term" v={displayOrDash(form.leaseTerm)} />
             <ReviewRow k={form.rentalType === "short_term" ? "Check-in date" : "Lease start"} v={displayOrDash(form.leaseStart)} />

@@ -80,12 +80,6 @@ function readPriceOverride(envKey: string, fallback: number): number {
   return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : fallback;
 }
 
-/** Axis platform fee added to every Checkr screening order (default $5). */
-export function checkrAxisSurchargeCents(): number {
-  const raw = Number(process.env.CHECKR_AXIS_SURCHARGE_CENTS ?? "500");
-  return Number.isFinite(raw) && raw >= 0 ? Math.round(raw) : 500;
-}
-
 export function isCheckrPackage(value: string): value is CheckrPackage {
   return value === "starter" || value === "essential" || value === "complete";
 }
@@ -104,7 +98,7 @@ export function checkrOrderCostCents(
     const addOn = checkrAddOnCatalog().find((a) => a.slug === slug);
     return sum + (addOn?.priceCents ?? 0);
   }, 0);
-  return base + addOnTotal + checkrAxisSurchargeCents();
+  return base + addOnTotal;
 }
 
 export function formatCheckrPrice(cents: number): string {

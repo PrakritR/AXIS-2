@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { getBundleChoiceLabel, getPropertyById, getRoomChoiceLabel, isPropertyRentedByRoom } from "@/lib/rental-application/data";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -80,9 +80,17 @@ export function ManagerApplicationReadonlyReview({
       </ReviewSection>
       <ReviewSection title="Property information">
         <Row k="Property" v={displayOrDash(prop?.title)} />
-        <Row k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
-        <Row k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
-        <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
+        {form.bundleId.trim() ? (
+          <Row k="Lease bundle" v={displayOrDash(getBundleChoiceLabel(form.propertyId, form.bundleId))} />
+        ) : isPropertyRentedByRoom(form.propertyId) ? (
+          <>
+            <Row k="1st choice room" v={displayOrDash(roomLabel(form.roomChoice1))} />
+            <Row k="2nd choice room" v={displayOrDash(roomLabel(form.roomChoice2))} />
+            <Row k="3rd choice room" v={displayOrDash(roomLabel(form.roomChoice3))} />
+          </>
+        ) : (
+          <Row k="Unit (whole-home lease)" v={displayOrDash(roomLabel(form.roomChoice1))} />
+        )}
         <Row k="Lease term" v={displayOrDash(form.leaseTerm)} />
         <Row k="Lease start" v={displayOrDash(formatLeaseDateLabel(form.leaseStart) || form.leaseStart)} />
         {form.leaseTerm !== "Month-to-Month" ? (

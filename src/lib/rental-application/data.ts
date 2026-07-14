@@ -10,7 +10,7 @@ import {
   readExtraListings,
 } from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
-import { normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
+import { isEntireHomeListing, normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
 import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption } from "@/lib/rental-application/lease-terms";
 
 export { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption };
@@ -393,16 +393,61 @@ export function roomSelectOptionsWithNone(propertyId: string, options: RoomAvail
 }
 
 /**
- * True when the listing is rented room-by-room (its v1 submission has at least
- * one named room), vs. leased as a whole unit. Drives the application form:
- * by-room listings ask for ranked 1st/2nd/3rd room choices; whole-unit listings
- * don't (there's no room to choose — the whole place is one lease).
+ * True when the listing is rented room-by-room, vs. leased as a whole unit.
+ * Drives the application form: by-room listings ask for ranked 1st/2nd/3rd
+ * room choices; whole-unit listings don't (there's no room to choose — the
+ * whole place is one lease).
+ *
+ * The listing's pricing model is authoritative: an entire-home listing may
+ * still itemize rooms for display ("you can still itemize rooms inside
+ * PropLane"), so room presence alone must not flip the application to
+ * ranked room choices.
  */
 export function isPropertyRentedByRoom(propertyId: string): boolean {
   const selected = getPropertyById(propertyId);
   if (!selected?.listingSubmission || selected.listingSubmission.v !== 1) return false;
   const sub = normalizeManagerListingSubmissionV1(selected.listingSubmission);
+  if (isEntireHomeListing(sub)) return false;
   return sub.rooms.some((r) => r.name.trim());
+}
+
+/**
+ * True when the listing's pricing model is "entire place — one lease for the
+ * home". Its itemized rooms (if any) are interior bedrooms shown on the
+ * listing, NOT selectable units — the application applies for the whole home
+ * (roomChoice1 = the property id, labeled building · unit).
+ */
+export function isEntireHomeProperty(propertyId: string): boolean {
+  const selected = getPropertyById(propertyId);
+  if (!selected?.listingSubmission || selected.listingSubmission.v !== 1) return false;
+  return isEntireHomeListing(normalizeManagerListingSubmissionV1(selected.listingSubmission));
+}
+
+/** Manager-defined lease bundles on the listing (empty for listings without bundles). */
+export function getBundlesForProperty(propertyId: string) {
+  const selected = getPropertyById(propertyId);
+  if (!selected?.listingSubmission || selected.listingSubmission.v !== 1) return [];
+  const sub = normalizeManagerListingSubmissionV1(selected.listingSubmission);
+  return sub.bundles.filter((b) => b.label.trim() || b.price.trim());
+}
+
+/** Dropdown options for the application form's bundle picker. */
+export function getBundleOptionsForProperty(propertyId: string): { value: string; label: string }[] {
+  return getBundlesForProperty(propertyId).map((b) => {
+    const label = [b.label.trim() || "Package", b.price.trim()].filter(Boolean).join(" · ");
+    return { value: b.id, label };
+  });
+}
+
+/** Human-readable label for an application's selected bundle (manager views + lease). */
+export function getBundleChoiceLabel(propertyId: string, bundleId: string): string {
+  const id = bundleId.trim();
+  if (!id) return "";
+  const bundle = getBundlesForProperty(propertyId).find((b) => b.id === id);
+  if (!bundle) return "";
+  const parts = [bundle.label.trim() || "Package", bundle.price.trim()].filter(Boolean);
+  const scope = bundle.roomsLine.trim();
+  return scope ? `${parts.join(" · ")} (${scope})` : parts.join(" · ");
 }
 
 export function getDemoRoomAvailabilityMessage(

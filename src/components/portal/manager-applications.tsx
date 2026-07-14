@@ -50,7 +50,7 @@ import {
   fetchCosignerSubmissionsForSignerAppId,
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
-import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   inProgressApplicationResumeUrl,
   isInProgressApplicationRow,
@@ -118,7 +118,12 @@ function applicantInitials(name: string): string {
 /** Client-resolved room label used by both the PDF download and the inline document view. */
 function applicationRoomLabel(row: DemoApplicantRow): string {
   const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  return getRoomChoiceLabel(roomChoice);
+  const roomLabel = getRoomChoiceLabel(roomChoice);
+  if (roomLabel) return roomLabel;
+  // Bundle applications carry no ranked room choice — label by the bundle.
+  const bundleId = row.application?.bundleId?.trim() || "";
+  const propertyId = row.application?.propertyId?.trim() || row.propertyId?.trim() || "";
+  return bundleId && propertyId ? getBundleChoiceLabel(propertyId, bundleId) : "";
 }
 
 /** Server PDF endpoint for an application, with the client-resolved room label as a display hint. */
@@ -245,7 +250,13 @@ function roomSortKey(row: DemoApplicantRow): string {
 
 function displayRoomForRow(row: DemoApplicantRow): string {
   const raw = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  if (!raw) return "—";
+  if (!raw) {
+    // Bundle applications carry no ranked room choice — show the bundle name.
+    const bundleId = row.application?.bundleId?.trim() || "";
+    const propertyId = row.application?.propertyId?.trim() || row.propertyId?.trim() || "";
+    const bundle = bundleId && propertyId ? getBundleChoiceLabel(propertyId, bundleId) : "";
+    return bundle.split(" · ")[0]?.trim() || "—";
+  }
   // Return just the room name (first segment before " · ")
   const full = getRoomChoiceLabel(raw);
   return full.split(" · ")[0]?.trim() || full || "—";
@@ -302,6 +313,22 @@ export function ManagerApplications() {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     };
   }, [authReady, userId]);
+
+  // Returning from the Stripe screening checkout (?screening=paid|cancelled).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const screening = params.get("screening");
+    if (!screening) return;
+    if (screening === "paid") {
+      showToast("Payment received — the background check is starting now.");
+    } else if (screening === "cancelled") {
+      showToast("Payment cancelled — no screening was ordered.");
+    }
+    params.delete("screening");
+    params.delete("session_id");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, [showToast]);
 
   useEffect(() => {
     if (!authReady || !userId) return;

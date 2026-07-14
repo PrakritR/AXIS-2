@@ -15,6 +15,7 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     roomChoice1: "",
     roomChoice2: "",
     roomChoice3: "",
+    bundleId: "",
     rentalType: "standard",
     shortTermCheckInTime: "",
     shortTermCheckOutTime: "",

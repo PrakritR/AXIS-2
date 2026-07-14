@@ -8,6 +8,8 @@ export type RentalApplyFromListingParams = {
   listingRoomName?: string;
   floorLabel?: string;
   roomPrice?: string;
+  /** Manager-defined bundle id — pre-selects the bundle in the wizard. */
+  bundleId?: string;
 };
 
 export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
@@ -17,5 +19,6 @@ export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
   if (p.listingRoomName) q.set("roomName", p.listingRoomName);
   if (p.floorLabel) q.set("floor", p.floorLabel);
   if (p.roomPrice) q.set("roomPrice", p.roomPrice);
+  if (p.bundleId) q.set("bundle", p.bundleId);
   return `/rent/apply?${q.toString()}`;
 }

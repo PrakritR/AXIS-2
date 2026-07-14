@@ -2,7 +2,7 @@
 
 import { track } from "@/lib/analytics/track-client";
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
@@ -24,9 +24,12 @@ import {
 } from "@/lib/household-charges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
+  getBundleOptionsForProperty,
   getPropertyById,
   getPropertyForPublicLink,
   getRoomOptionsForProperty,
+  isEntireHomeProperty,
+  isPropertyRentedByRoom,
   isRoomApprovedConflict,
   isRoomPendingConflict,
   LISTING_ROOM_CHOICE_SEP,
@@ -229,11 +232,15 @@ function RentalApplicationWizardInner({
       searchParams.get("floor") ?? "",
       searchParams.get("roomPrice") ?? "",
       searchParams.get("listingRoomId") ?? "",
+      searchParams.get("bundle") ?? "",
     ].join("|");
   }, [searchParams]);
 
   const linkedPropertyId =
     linkedPropertyIdProp?.trim() || searchParams.get("propertyId")?.trim() || "";
+
+  /** listingPrefillKey already applied to the form — prevents re-clobbering user edits when catalogs refresh. */
+  const listingPrefillAppliedRef = useRef("");
 
   useEffect(() => {
     void syncPublicApprovedApplicationsFromServer().then(() => setOccupancySyncEpoch((n) => n + 1));
@@ -391,24 +398,44 @@ function RentalApplicationWizardInner({
     if (!draftReady) return;
     const pid = searchParams.get("propertyId")?.trim();
     if (!pid) return;
+    if (listingPrefillAppliedRef.current === listingPrefillKey) return;
+    // Public listings load async on a cold browser — hold the prefill until the
+    // property resolves so room/bundle auto-select doesn't silently miss
+    // (extrasTick re-runs this effect as catalogs arrive).
+    void extrasTick;
+    if (!getPropertyById(pid)) return;
+    listingPrefillAppliedRef.current = listingPrefillKey;
 
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
+    const bundleParam = (searchParams.get("bundle") ?? "").trim();
 
     queueMicrotask(() => {
       setForm((prev) => {
         const opts = getRoomOptionsForProperty(pid, { includeUnavailable: true }).filter((o) => o.value);
-        let room1 = opts[0]?.value ?? "";
+        // Entire-home listings apply for the whole place — never pre-select a
+        // bedroom, even when the listing page passed a room id for display.
+        const entireHome = isEntireHomeProperty(pid);
+        let room1 = entireHome ? pid : opts[0]?.value ?? "";
         const lr = listingRoomId.trim();
-        if (lr) {
+        if (lr && !entireHome) {
           const composite = `${pid}${LISTING_ROOM_CHOICE_SEP}${lr}`;
           const hit = opts.find((o) => o.value === composite);
           if (hit) room1 = hit.value;
         }
 
+        // "Apply for this bundle" — pre-select the bundle when it matches a
+        // manager-defined bundle on this listing. A bundle application on a
+        // by-room listing carries no ranked room choices.
+        const bundleId = bundleParam && getBundleOptionsForProperty(pid).some((o) => o.value === bundleParam)
+          ? bundleParam
+          : "";
+        const bundleReplacesRooms = Boolean(bundleId) && isPropertyRentedByRoom(pid);
+
         return {
           ...prev,
           propertyId: pid,
-          roomChoice1: room1 || prev.roomChoice1,
+          bundleId,
+          roomChoice1: bundleReplacesRooms ? "" : room1 || prev.roomChoice1,
           roomChoice2: "",
           roomChoice3: "",
           // A restored draft may hold answers for a different listing's questions.
@@ -416,7 +443,7 @@ function RentalApplicationWizardInner({
         };
       });
     });
-  }, [draftReady, listingPrefillKey, searchParams]);
+  }, [draftReady, extrasTick, listingPrefillKey, searchParams]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => {
@@ -439,7 +466,7 @@ function RentalApplicationWizardInner({
       }
       return merged;
     });
-    if (Object.keys(p).some((k) => ["propertyId", "roomChoice1", "roomChoice2", "roomChoice3", "rentalType", "leaseTerm", "leaseStart", "leaseEnd"].includes(k))) {
+    if (Object.keys(p).some((k) => ["propertyId", "roomChoice1", "roomChoice2", "roomChoice3", "bundleId", "rentalType", "leaseTerm", "leaseStart", "leaseEnd"].includes(k))) {
       setShowAvailabilityWarnings(false);
     }
     setErrors((e) => {

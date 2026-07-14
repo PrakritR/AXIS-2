@@ -28,6 +28,8 @@ export type RentalWizardFormState = {
   roomChoice1: string;
   roomChoice2: string;
   roomChoice3: string;
+  /** Manager-defined lease bundle (ManagerBundleRow.id) the applicant is applying for; replaces ranked room choices when set. */
+  bundleId: string;
   rentalType: "standard" | "short_term";
   shortTermCheckInTime: string;
   shortTermCheckOutTime: string;

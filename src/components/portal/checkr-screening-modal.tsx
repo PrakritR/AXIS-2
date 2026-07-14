@@ -197,13 +197,12 @@ export function CheckrScreeningModal({
     }
 
     try {
-      const res = await fetch("/api/screening/background-check", {
+      const res = await fetch("/api/screening/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           applicationId: row.id,
-          action: "run",
           packageSlug: selectedPackage,
           addOnProducts: selectedAddOns,
         }),
@@ -211,15 +210,28 @@ export function CheckrScreeningModal({
       const body = (await res.json()) as {
         error?: string;
         code?: string;
+        url?: string;
+        ran?: boolean;
         backgroundCheck?: ApplicationBackgroundCheck;
       };
       if (!res.ok) {
         setError(body.error ?? "Could not start screening.");
         return;
       }
-      if (body.backgroundCheck) setBg(body.backgroundCheck);
-      showToast("Screening started — your account card was charged.");
-      onUpdated?.();
+      // Simulate-only environments run immediately with no payment.
+      if (body.ran) {
+        if (body.backgroundCheck) setBg(body.backgroundCheck);
+        showToast("Screening started.");
+        onUpdated?.();
+        return;
+      }
+      if (!body.url) {
+        setError("Stripe did not return a payment page.");
+        return;
+      }
+      showToast("Opening Stripe — screening starts once payment completes.");
+      window.location.assign(body.url);
+      return;
     } catch {
       setError("Network error starting screening.");
     } finally {
@@ -373,7 +385,13 @@ export function CheckrScreeningModal({
               disabled={busy || !canRun}
               onClick={() => void confirm()}
             >
-              {busy ? "Starting…" : bg ? "Re-run screening" : `Confirm — ${formatCheckrPrice(isDemo ? 0 : totalCents)}`}
+              {busy
+                ? "Starting…"
+                : bg
+                  ? "Re-run screening"
+                  : isDemo
+                    ? "Confirm — $0.00"
+                    : `Pay & run — ${formatCheckrPrice(totalCents)}`}
             </Button>
           ) : null}
         </div>
