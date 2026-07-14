@@ -10,7 +10,7 @@ import {
   runDemoScreeningForApplication,
   runDemoSendLeaseToResident,
 } from "@/lib/demo/demo-guided-actions";
-import { finishGuidedDemoTour, getDemoSegment, setGuidedDemoStep } from "@/lib/demo/demo-guided";
+import { finishGuidedDemoTour, getDemoSegment, isGuidedDemoActive, setGuidedDemoStep } from "@/lib/demo/demo-guided";
 import { CANONICAL_DEMO_GUIDED_NAME } from "@/lib/demo/demo-canonical-accounts";
 import { buildDemoPropertyCreationSubmission } from "@/lib/demo/demo-listing-autofill";
 import {
@@ -44,7 +44,7 @@ import {
   setDemoPlaybackPendingId,
 } from "@/lib/demo/demo-playback";
 import type { DemoSegment } from "@/lib/demo/demo-segments";
-import { prepareDemoSegment } from "@/lib/demo/demo-segment-prep";
+import { prepareDemoListedProperty, prepareDemoSegment } from "@/lib/demo/demo-segment-prep";
 import {
   acceptDemoWorkOrderBid,
   approveDemoWorkOrderPay,
@@ -132,6 +132,7 @@ async function runResidentApplicationFlow(
   nav: DemoPlaybackNav,
   listedPropertyId: string | null,
 ): Promise<string | null> {
+  if (!isGuidedDemoActive()) return null;
   nav.setDemoRole("resident");
   nav.onNavigateResidentDashboard();
   await sleep(700);
@@ -149,6 +150,7 @@ async function runResidentApplicationFlow(
   }
   await submitPromise;
   await sleep(600);
+  if (!isGuidedDemoActive()) return null;
   return getDemoPlaybackApplicationAxisId();
 }
 
@@ -159,6 +161,7 @@ async function runScreeningAndApprove(
   screeningStep: number,
   approveStep: number,
 ): Promise<void> {
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(screeningStep);
   nav.setDemoRole("manager");
   nav.onNavigateManagerApplications();
@@ -170,11 +173,12 @@ async function runScreeningAndApprove(
     await clickIfPresent(frame, RUN_SCREENING);
     await clickIfPresent(frame, RUN_SCREENING_CONFIRM, { align: "end", timeoutMs: 8000 });
     await sleep(2000);
-  } else {
+  } else if (isGuidedDemoActive()) {
     runDemoScreeningForApplication(applicationAxisId);
     await sleep(400);
   }
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(approveStep);
   await sleep(400);
   await expandPortalRow(frame, applicationRowSelector(applicationAxisId));
@@ -186,7 +190,7 @@ async function runScreeningAndApprove(
       approved = true;
     }
   }
-  if (!approved) await approveDemoApplication(applicationAxisId);
+  if (!approved && isGuidedDemoActive()) await approveDemoApplication(applicationAxisId);
   await sleep(700);
 }
 
@@ -201,6 +205,7 @@ async function runLeaseFlow(
 ): Promise<void> {
   const signerName = CANONICAL_DEMO_GUIDED_NAME;
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(generateStep);
   nav.setDemoRole("manager");
   nav.onNavigateManagerLeases("manager");
@@ -211,21 +216,23 @@ async function runLeaseFlow(
   if (await waitForSelector(frame, LEASE_GENERATE, 6000)) {
     await clickIfPresent(frame, LEASE_GENERATE, { align: "end" });
     await sleep(1400);
-  } else {
+  } else if (isGuidedDemoActive()) {
     runDemoGenerateLease(applicationAxisId);
   }
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(sendStep);
   await clickIfPresent(frame, LEASES_TAB_RESIDENT);
   await expandPortalRow(frame, leaseRowSelector(applicationAxisId));
   if (await waitForSelector(frame, LEASE_SEND, 6000)) {
     await clickIfPresent(frame, LEASE_SEND, { align: "end" });
     await confirmNotificationModal(frame);
-  } else {
+  } else if (isGuidedDemoActive()) {
     await runDemoSendLeaseToResident(applicationAxisId);
   }
   await sleep(700);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(residentSignStep);
   nav.setDemoRole("resident");
   nav.onNavigateResidentLease();
@@ -234,11 +241,12 @@ async function runLeaseFlow(
   if (await waitForSelector(frame, RESIDENT_SIGN_LEASE, 8000)) {
     await clickIfPresent(frame, RESIDENT_SIGN_LEASE, { align: "end" });
     await prepareAndConfirmLeaseSign(frame, signerName);
-  } else {
+  } else if (isGuidedDemoActive()) {
     await runDemoResidentSignLease();
   }
   await sleep(700);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(managerSignStep);
   nav.setDemoRole("manager");
   nav.onNavigateManagerLeases("signed");
@@ -249,7 +257,7 @@ async function runLeaseFlow(
   if (await waitForSelector(frame, LEASE_MANAGER_SIGN, 6000)) {
     await clickIfPresent(frame, LEASE_MANAGER_SIGN, { align: "end" });
     await prepareAndConfirmLeaseSign(frame, signerName);
-  } else {
+  } else if (isGuidedDemoActive()) {
     await runDemoManagerSignLease(applicationAxisId, signerName);
   }
   await clickIfPresent(frame, LEASES_TAB_COMPLETED);
@@ -292,10 +300,16 @@ async function runOverallSegment(frame: HTMLElement, nav: DemoPlaybackNav): Prom
     listedPropertyId = listed?.id ?? null;
     window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
   }
+  if (!listedPropertyId && isGuidedDemoActive()) {
+    // Wizard id capture failed (slow submit / missed event) — list a property
+    // programmatically so the tour continues instead of dying after step 1.
+    listedPropertyId = await prepareDemoListedProperty();
+  }
   if (listedPropertyId) setDemoPlaybackListedPropertyId(listedPropertyId);
   dispatchDemoPropertiesStage("listed");
   await sleep(700);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(2);
   const applicationAxisId = await runResidentApplicationFlow(frame, nav, listedPropertyId);
   if (!applicationAxisId) return;
@@ -324,10 +338,12 @@ async function runPaymentsSegment(frame: HTMLElement, nav: DemoPlaybackNav): Pro
   await demoNavClick(frame, "payments");
   await sleep(600);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(2);
   await clickIfPresent(frame, PAYMENTS_SEND_REMINDER, { align: "end" });
   await sleep(800);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(3);
   nav.setDemoRole("resident");
   nav.onNavigateResidentPayments();
@@ -339,6 +355,7 @@ async function runPaymentsSegment(frame: HTMLElement, nav: DemoPlaybackNav): Pro
   }
   await sleep(1200);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(4);
   nav.setDemoRole("manager");
   nav.onNavigateManagerPayments();
@@ -368,6 +385,7 @@ async function runInboxSegment(frame: HTMLElement, nav: DemoPlaybackNav): Promis
   await expandPortalRow(frame, inboxThreadSelector(DEMO_MANAGER_INBOX_THREAD_ID));
   await clickIfPresent(frame, INBOX_MARK_READ);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(2);
   await clickIfPresent(frame, INBOX_NEW_MESSAGE);
   await sleep(400);
@@ -380,6 +398,7 @@ async function runInboxSegment(frame: HTMLElement, nav: DemoPlaybackNav): Promis
   await clickIfPresent(frame, INBOX_COMPOSE_SEND, { align: "end" });
   await sleep(700);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(3);
   nav.setDemoRole("resident");
   nav.onNavigateResidentInbox("unopened");
@@ -406,10 +425,12 @@ async function runPromotionSegment(frame: HTMLElement, nav: DemoPlaybackNav, pro
   await sleep(800);
   await demoNavClick(frame, "promotion");
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(2);
   await clickIfPresent(frame, PROMOTION_NEW);
   await clickIfPresent(frame, PROMOTION_NEW_FLYER);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(3);
   const generatedPromise = waitForEvent(DEMO_PROMOTION_GENERATED_EVENT, 20000);
   window.dispatchEvent(
@@ -422,6 +443,7 @@ async function runPromotionSegment(frame: HTMLElement, nav: DemoPlaybackNav, pro
   }
   await sleep(800);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(4);
   await clickIfPresent(frame, PROMOTION_ROW);
   await clickIfPresent(frame, PROMOTION_FLYER_DOWNLOAD, { align: "end" });
@@ -439,6 +461,7 @@ async function runWorkOrdersSegment(frame: HTMLElement, nav: DemoPlaybackNav, pr
   await clickIfPresent(frame, RESIDENT_MAINTENANCE_SUBMIT, { align: "end" });
   await sleep(600);
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(2);
   nav.setDemoRole("manager");
   nav.onNavigateManagerServices("work-orders");
@@ -447,6 +470,7 @@ async function runWorkOrdersSegment(frame: HTMLElement, nav: DemoPlaybackNav, pr
   await clickIfPresent(frame, SERVICES_TAB_WO);
   await expandPortalRow(frame, workOrderRowSelector(DEMO_GUIDED_WORK_ORDER_ID));
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(3);
   nav.setDemoRole("vendor");
   nav.onNavigateVendorWorkOrders();
@@ -454,10 +478,11 @@ async function runWorkOrdersSegment(frame: HTMLElement, nav: DemoPlaybackNav, pr
   await demoNavClick(frame, "work-orders");
   submitDemoVendorBid();
   await sleep(400);
-  if (!(await clickIfPresent(frame, VENDOR_SUBMIT_BID, { align: "end" }))) {
+  if (!(await clickIfPresent(frame, VENDOR_SUBMIT_BID, { align: "end" })) && isGuidedDemoActive()) {
     submitDemoVendorBid();
   }
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(4);
   nav.setDemoRole("manager");
   nav.onNavigateManagerServices("work-orders");
@@ -465,25 +490,28 @@ async function runWorkOrdersSegment(frame: HTMLElement, nav: DemoPlaybackNav, pr
   await demoNavClick(frame, "services");
   await clickIfPresent(frame, SERVICES_TAB_WO);
   await expandPortalRow(frame, workOrderRowSelector(DEMO_GUIDED_WORK_ORDER_ID));
-  if (!(await clickIfPresent(frame, WORK_ORDER_ACCEPT_BID, { align: "end" }))) {
+  if (!(await clickIfPresent(frame, WORK_ORDER_ACCEPT_BID, { align: "end" })) && isGuidedDemoActive()) {
     acceptDemoWorkOrderBid();
   }
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(5);
-  if (!(await clickIfPresent(frame, WORK_ORDER_AUTO_SCHEDULE, { align: "end" }))) {
+  if (!(await clickIfPresent(frame, WORK_ORDER_AUTO_SCHEDULE, { align: "end" })) && isGuidedDemoActive()) {
     scheduleDemoWorkOrder();
   }
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(6);
   nav.setDemoRole("vendor");
   nav.onNavigateVendorWorkOrders();
   await sleep(800);
   await demoNavClick(frame, "work-orders");
   await expandPortalRow(frame, workOrderRowSelector(DEMO_GUIDED_WORK_ORDER_ID));
-  if (!(await clickIfPresent(frame, VENDOR_MARK_DONE, { align: "end" }))) {
+  if (!(await clickIfPresent(frame, VENDOR_MARK_DONE, { align: "end" })) && isGuidedDemoActive()) {
     markDemoWorkOrderVendorDone();
   }
 
+  if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(7);
   nav.setDemoRole("manager");
   nav.onNavigateManagerServices("work-orders");
@@ -493,7 +521,7 @@ async function runWorkOrdersSegment(frame: HTMLElement, nav: DemoPlaybackNav, pr
   await expandPortalRow(frame, workOrderRowSelector(DEMO_GUIDED_WORK_ORDER_ID));
   if (await clickIfPresent(frame, WORK_ORDER_APPROVE_PAY, { align: "end" })) {
     await clickIfPresent(frame, WORK_ORDER_APPROVE_CONFIRM, { align: "end" });
-  } else {
+  } else if (isGuidedDemoActive()) {
     approveDemoWorkOrderPay();
   }
   await sleep(500);
@@ -537,6 +565,7 @@ async function runSegmentPlayback(
 export function DemoSegmentPlayback({
   frameEl,
   active,
+  onTourFinished,
   setDemoRole,
   onNavigateProperties,
   onNavigateResidentDashboard,
@@ -555,6 +584,8 @@ export function DemoSegmentPlayback({
 }: {
   frameEl: HTMLElement | null;
   active: boolean;
+  /** Runs after autoplay completes on its own (NOT on Exit-tour or unmount). */
+  onTourFinished?: () => void;
 } & DemoPlaybackNav) {
   const ranRef = useRef(false);
   const segmentRef = useRef<DemoSegment>("overall");
@@ -601,7 +632,13 @@ export function DemoSegmentPlayback({
     void runSegmentPlayback(segmentRef.current, frameEl, nav)
       .catch(() => undefined)
       .finally(() => {
-        if (!cancelled) finishGuidedDemoTour();
+        if (cancelled) return;
+        // Natural finish must land on the same state as the Exit button: the
+        // guided scope flips back to the idle demo scope here, so without the
+        // idle re-seed (onTourFinished) every panel would read stale/partial
+        // rows written under the guided scope — the post-tour "glitch".
+        finishGuidedDemoTour();
+        onTourFinished?.();
       });
 
     return () => {
@@ -612,6 +649,7 @@ export function DemoSegmentPlayback({
   }, [
     active,
     frameEl,
+    onTourFinished,
     setDemoRole,
     onNavigateProperties,
     onNavigateResidentDashboard,

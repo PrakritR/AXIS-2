@@ -317,13 +317,23 @@ export function DemoPortalShell() {
     selectedSegment,
   ]);
 
-  const exitTour = useCallback(() => {
+  // Shared landing state for BOTH tour endings (Exit button + natural
+  // autoplay finish): re-seed the idle portfolio (the tour wrote rows under
+  // the guided scope, unreadable once the scope flips back) and return to the
+  // manager dashboard.
+  const finishTourCleanup = useCallback(() => {
     closeAxisAssistant();
-    exitGuidedDemoTour();
     seedDemoIdleData();
     setDemoRole("manager");
     selectSection("dashboard", null);
   }, [selectSection]);
+
+  const exitTour = useCallback(() => {
+    // Flip guided state FIRST so the in-flight autoplay chain bails at its
+    // next checkpoint instead of racing the idle re-seed below.
+    exitGuidedDemoTour();
+    finishTourCleanup();
+  }, [finishTourCleanup]);
 
   const switchRole = useCallback(
     (next: DemoPortalRole) => {
@@ -424,6 +434,7 @@ export function DemoPortalShell() {
         <DemoSegmentPlayback
           frameEl={frameEl}
           active={guidedActive}
+          onTourFinished={finishTourCleanup}
           setDemoRole={setDemoRole}
           onNavigateProperties={navigateToProperties}
           onNavigateResidentDashboard={navigateToResidentDashboard}

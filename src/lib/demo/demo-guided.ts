@@ -155,12 +155,15 @@ export function advanceGuidedDemoStep(): boolean {
 }
 
 export function setGuidedDemoStep(step: GuidedDemoStep): void {
-  const segment = getDemoSegment();
+  const state = getDemoGuidedState();
   if (step === 0) {
     writePersisted({ ...DEFAULT_STATE });
     return;
   }
-  writePersisted({ mode: "guided", step: clampStep(step, segment), segment });
+  // Only an active tour may advance its step: an in-flight autoplay chain that
+  // outlives "Exit tour" must not resurrect guided mode by writing a step.
+  if (state.mode !== "guided") return;
+  writePersisted({ mode: "guided", step: clampStep(step, state.segment), segment: state.segment });
 }
 
 /** Vendor is always available in the simplified demo. */
