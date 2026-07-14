@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import twilio from "twilio";
-import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { sendPushToUser } from "@/lib/push-notifications.server";
+import { sendManagerNoticeEmail, upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
+import { smsMediaAppUrl, storeInboundMedia, twilioMediaUrls } from "@/lib/sms-media.server";
+import { relayInboundSms } from "@/lib/sms-relay.server";
 import { sendSms } from "@/lib/twilio";
 import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -37,12 +40,18 @@ function phoneVariants(raw: string): string[] {
   ].filter(Boolean);
 }
 
-/** TwiML no-op response so Twilio doesn't retry or error. */
-function twimlOk(): NextResponse {
-  return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
-    status: 200,
-    headers: { "Content-Type": "text/xml" },
-  });
+/** TwiML response; an optional message becomes an auto-reply to the sender. */
+function twimlOk(reply?: string): NextResponse {
+  const escaped = reply
+    ? reply.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    : "";
+  return new NextResponse(
+    `<?xml version="1.0" encoding="UTF-8"?><Response>${escaped ? `<Message>${escaped}</Message>` : ""}</Response>`,
+    {
+      status: 200,
+      headers: { "Content-Type": "text/xml" },
+    },
+  );
 }
 
 type PhoneProfile = {
@@ -79,6 +88,7 @@ export async function POST(req: Request) {
   const toPhone = String(params.To ?? "").trim();
   const body = String(params.Body ?? "").trim();
   const messageSid = String(params.MessageSid ?? "").trim() || null;
+  const mediaUrls = twilioMediaUrls(params);
   if (!fromPhone || !toPhone) return twimlOk();
 
   const db = createSupabaseServiceRoleClient();
@@ -112,7 +122,28 @@ export async function POST(req: Request) {
     if ((seen ?? []).length > 0) return twimlOk();
   }
 
-  // 1. The manager is whoever owns the work number that was texted.
+  // 1a. Proxy-pair relay: if (From, To) matches an active relay binding, the
+  // message is relayed to the other participant(s) and mirrored in-app; if To
+  // is a pool number with no binding, the sender gets a "not linked" reply.
+  // Only when To is outside the relay pool do we fall through to the
+  // work-number → Axis-inbox path below.
+  const relay = await relayInboundSms(db, { fromPhone, toPhone, body, messageSid, mediaUrls });
+  if (relay.handled) {
+    await db
+      .from("inbound_sms_log")
+      .insert({
+        manager_user_id: relay.managerUserId ?? null,
+        from_phone: fromPhone,
+        to_phone: toPhone,
+        matched_sender_user_id: relay.senderUserId ?? null,
+        body,
+        message_sid: messageSid,
+      })
+      .then(() => undefined, () => undefined);
+    return twimlOk(relay.reply);
+  }
+
+  // 1b. The manager is whoever owns the work number that was texted.
   const { data: managerRows } = await db
     .from("profiles")
     .select("id, email, full_name, phone, phone_verified_at, sms_forward_inbound")
@@ -149,31 +180,63 @@ export async function POST(req: Request) {
     })
     .then(() => undefined, () => undefined);
 
-  // 3. Axis inbox thread + email to the manager.
+  // 2b. Capture any MMS attachments into the private sms-media bucket. The
+  // inbox body gets durable /api/sms-media links (signed at read time); only
+  // the email body gets the immediate signed URLs (email clients aren't authed).
+  const storedMedia = mediaUrls.length
+    ? await storeInboundMedia(db, {
+        managerUserId: manager.id,
+        messageSid: messageSid ?? `unknown_${Date.now()}`,
+        mediaUrls,
+      })
+    : [];
+
+  // 3. Axis inbox thread + email + push to the manager.
   // Security: SMS `From` is spoofable and profiles.phone is generally
   // unverified, so we DO NOT attribute the thread to the matched sender's
   // account identity (that would let a spoofed text impersonate a resident).
-  // The message is authored by the manager's own workspace (senderUserId =
-  // manager) and the phone-matched label is surfaced only as display text,
-  // clearly marked as an unverified inbound text.
+  // The phone-matched label is surfaced only as display text, clearly marked
+  // as an unverified inbound text.
   const displayLabel = sender ? `${senderLabel} (${fromPhone})` : fromPhone;
-  await deliverPortalInboxMessage(db, {
-    senderUserId: manager.id,
-    senderEmail: manager.email ?? "",
-    fromName: `Text from ${displayLabel}`,
-    subject: `Text message from ${displayLabel}`,
-    text: `${body || "(empty message)"}\n\n— Inbound text to your PropLane number (sender not identity-verified).`,
-    toUserIds: [manager.id],
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
+  const subject = `Text message from ${displayLabel}`;
+  const inboxMediaNote = storedMedia.length
+    ? `\n\nAttachments:\n${storedMedia.map((m) => smsMediaAppUrl(m.path)).join("\n")}`
+    : "";
+  const emailMediaNote = storedMedia.length
+    ? `\n\nAttachments:\n${storedMedia.map((m) => m.signedUrl).join("\n")}`
+    : "";
+  const noticeFooter = "\n\n— Inbound text to your PropLane number (sender not identity-verified).";
+  await upsertManagerInboxNotice(db, {
+    managerUserId: manager.id,
+    idPrefix: "sms_inbound",
+    threadType: "inbound_sms",
+    from: `Text from ${displayLabel}`,
+    subject,
+    preview: body || "(empty message)",
+    body: `${body || "(empty message)"}${inboxMediaNote}${noticeFooter}`,
+  });
+
+  await sendManagerNoticeEmail({
+    toEmail: manager.email,
+    subject,
+    text: `${body || "(empty message)"}${emailMediaNote}${noticeFooter}`,
+  });
+
+  await sendPushToUser(manager.id, {
+    title: subject,
+    body: (body || "(empty message)").slice(0, 120).replace(/\n/g, " "),
+    url: "/portal/inbox/unopened",
   }).catch(() => undefined);
 
-  // 4. Optional forward to the manager's verified personal phone.
+  // 4. Optional forward to the manager's personal phone — only when that
+  // number was OTP-verified in Settings. An unverified profile phone must
+  // never receive forwarded message bodies (typos leak tenant PII; a
+  // malicious profile edit would turn the work number into a spam cannon).
   const personalPhone = String(manager.phone ?? "").trim();
   if (
     manager.sms_forward_inbound !== false &&
+    Boolean(manager.phone_verified_at) &&
     personalPhone &&
-    manager.phone_verified_at &&
     digitsOf(personalPhone) !== digitsOf(fromPhone)
   ) {
     await sendSms(personalPhone, `${senderLabel}: ${body}`.slice(0, 320), toPhone).catch(() => undefined);

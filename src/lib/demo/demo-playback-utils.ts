@@ -1,14 +1,24 @@
 import { demoCursorClick } from "@/components/demo/demo-cursor-playback";
+import { isGuidedDemoActive } from "@/lib/demo/demo-guided";
 import { DEMO_LEASE_SIGN_PREPARE_EVENT, sleep } from "@/lib/demo/demo-playback";
 
 export { sleep };
 
+/**
+ * Every wait and cursor helper here bails as soon as the guided tour is no
+ * longer active, so "Exit tour" stops an in-flight autoplay chain within one
+ * step instead of letting it keep clicking against the re-seeded idle data.
+ */
 export function waitForSelector(
   root: HTMLElement,
   selector: string,
   timeoutMs = 12000,
 ): Promise<Element | null> {
   return new Promise((resolve) => {
+    if (!isGuidedDemoActive()) {
+      resolve(null);
+      return;
+    }
     const existing = root.querySelector(selector);
     if (existing) {
       resolve(existing);
@@ -16,6 +26,11 @@ export function waitForSelector(
     }
     const started = Date.now();
     const timer = window.setInterval(() => {
+      if (!isGuidedDemoActive()) {
+        window.clearInterval(timer);
+        resolve(null);
+        return;
+      }
       const el = root.querySelector(selector);
       if (el) {
         window.clearInterval(timer);
@@ -32,19 +47,19 @@ export function waitForSelector(
 
 export function waitForEvent(eventName: string, timeoutMs = 15000): Promise<boolean> {
   return new Promise((resolve) => {
-    // `let` is required: `onEvent` (defined below) reads `timer`, and it's
-    // assigned only after — a mutual reference that can't be a `const`.
-    // eslint-disable-next-line prefer-const
-    let timer: number | undefined;
-    const onEvent = () => {
+    // `settle` closes over `timer`/`poll` declared below it — safe because it
+    // only ever runs from their callbacks, after both are initialized.
+    const settle = (value: boolean) => {
       window.removeEventListener(eventName, onEvent);
-      if (timer) window.clearTimeout(timer);
-      resolve(true);
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+      resolve(value);
     };
-    timer = window.setTimeout(() => {
-      window.removeEventListener(eventName, onEvent);
-      resolve(false);
-    }, timeoutMs);
+    const onEvent = () => settle(true);
+    const timer = window.setTimeout(() => settle(false), timeoutMs);
+    const poll = window.setInterval(() => {
+      if (!isGuidedDemoActive()) settle(false);
+    }, 250);
     window.addEventListener(eventName, onEvent);
   });
 }
@@ -53,6 +68,7 @@ export function waitForEvent(eventName: string, timeoutMs = 15000): Promise<bool
 export async function demoNavClick(frame: HTMLElement, section: string): Promise<boolean> {
   const selector = `[data-attr="demo-nav-${section}"]`;
   if (!(await waitForSelector(frame, selector, 8000))) return false;
+  if (!isGuidedDemoActive()) return false;
   await demoCursorClick(selector);
   await sleep(520);
   return true;
@@ -60,6 +76,7 @@ export async function demoNavClick(frame: HTMLElement, section: string): Promise
 
 export async function expandPortalRow(frame: HTMLElement, selector: string): Promise<void> {
   if (!(await waitForSelector(frame, selector, 10000))) return;
+  if (!isGuidedDemoActive()) return;
   await demoCursorClick(selector);
   await sleep(480);
 }
@@ -75,6 +92,7 @@ export async function expandCollapsible(frame: HTMLElement, toggleSelector: stri
 }
 
 export async function confirmNotificationModal(frame: HTMLElement): Promise<void> {
+  if (!isGuidedDemoActive()) return;
   const skip = frame.querySelector('[data-attr="portal-notification-skip-message"]');
   if (skip instanceof HTMLInputElement && !skip.checked) {
     await demoCursorClick('[data-attr="portal-notification-skip-message"]');
@@ -85,6 +103,7 @@ export async function confirmNotificationModal(frame: HTMLElement): Promise<void
 }
 
 export async function prepareAndConfirmLeaseSign(frame: HTMLElement, name: string): Promise<void> {
+  if (!isGuidedDemoActive()) return;
   window.dispatchEvent(new CustomEvent(DEMO_LEASE_SIGN_PREPARE_EVENT, { detail: { name } }));
   await sleep(320);
   if (await waitForSelector(frame, '[data-attr="lease-sign-agree"]', 4000)) {
@@ -101,6 +120,7 @@ export async function clickIfPresent(
   options?: { align?: "center" | "end"; timeoutMs?: number },
 ): Promise<boolean> {
   if (!(await waitForSelector(frame, selector, options?.timeoutMs ?? 5000))) return false;
+  if (!isGuidedDemoActive()) return false;
   await demoCursorClick(selector, { align: options?.align });
   await sleep(options?.align === "end" ? 520 : 420);
   return true;

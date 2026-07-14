@@ -23,20 +23,6 @@ function mockDb(
   const vendorDirs = new Map(vendorDirSeed.map((r) => [r.id, r]));
   const upserts: Rec[] = [];
   const deletes: string[] = [];
-  let lastOr: string | null = null;
-  let lastResidentEq: string | null = null;
-
-  const listResult = () => {
-    // Emulate the GET scoping the route applies via .or / .eq.
-    let rows = [...store.values()];
-    if (lastResidentEq != null) rows = rows.filter((r) => r.resident_email === lastResidentEq);
-    if (lastOr != null) {
-      const m = /manager_user_id\.eq\.([^,]+),manager_user_id\.is\.null/.exec(lastOr);
-      const owner = m?.[1];
-      rows = rows.filter((r) => r.manager_user_id === owner || r.manager_user_id == null);
-    }
-    return { data: rows.map((r) => ({ row_data: r.row_data, updated_at: "x" })), error: null };
-  };
 
   const client = {
     from(table: string) {
@@ -73,23 +59,51 @@ function mockDb(
           }),
         };
       }
-      // portal_work_order_records — GET uses select/order/limit/(or|eq); POST uses select/eq/maybeSingle, upsert, delete/eq.
+      if (table === "account_link_invites") {
+        // Co-manager link scan (linkedPropertyIdsForModule) — no links in these tests.
+        const links: Record<string, unknown> = {
+          select: () => links,
+          eq: () => links,
+          then: (resolve: (v: { data: never[]; error: null }) => void) => resolve({ data: [], error: null }),
+        };
+        return links;
+      }
+      // portal_work_order_records (and other row tables) — a filter-collecting
+      // builder. List queries (owned .eq, legacy .is, linked .in, resident .eq)
+      // await the builder itself or .limit(); POST ownership lookups terminate
+      // with .maybeSingle(); writes use upsert / delete().eq.
+      const filters: { op: "eq" | "is" | "in"; col: string; val: unknown }[] = [];
+      const matches = () =>
+        [...store.values()].filter((r) =>
+          filters.every((f) => {
+            const cell = (r as unknown as Record<string, unknown>)[f.col];
+            if (f.op === "eq") return cell === f.val;
+            if (f.op === "is") return cell == f.val;
+            return Array.isArray(f.val) && (f.val as unknown[]).includes(cell);
+          }),
+        );
       const chain: Record<string, unknown> = {
         select: () => chain,
         order: () => chain,
         limit: () => chain,
-        or: (expr: string) => {
-          lastOr = expr;
-          return listResult();
+        eq: (col: string, val: unknown) => {
+          filters.push({ op: "eq", col, val });
+          return chain;
         },
-        eq: (col: string, val: string) => {
-          if (col === "resident_email") {
-            lastResidentEq = val;
-            return listResult();
-          }
-          // POST ownership lookup: .select(...).eq("id", id).maybeSingle()
-          return { maybeSingle: async () => ({ data: store.get(val) ?? null, error: null }) };
+        is: (col: string, val: unknown) => {
+          filters.push({ op: "is", col, val });
+          return chain;
         },
+        in: (col: string, val: unknown) => {
+          filters.push({ op: "in", col, val });
+          return chain;
+        },
+        maybeSingle: async () => ({ data: matches()[0] ?? null, error: null }),
+        then: (resolve: (v: { data: unknown[]; error: null }) => void) =>
+          resolve({
+            data: matches().map((r) => ({ ...r, updated_at: "x" })),
+            error: null,
+          }),
         upsert: async (rec: Rec) => {
           upserts.push(rec);
           store.set(rec.id, rec);

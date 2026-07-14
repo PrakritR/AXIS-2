@@ -1,10 +1,29 @@
 import { createHash, randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
+import twilio from "twilio";
 import { sendSms } from "@/lib/twilio";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
+
+/**
+ * When TWILIO_VERIFY_SERVICE_SID is set, OTPs go through Twilio Verify instead
+ * of our hand-rolled sendSms code path. Verify traffic needs NO A2P 10DLC
+ * campaign and no owned phone number, so phone verification works even while
+ * the messaging campaign is still in carrier review. The custom path remains
+ * as the fallback when the env var is absent.
+ */
+function verifyServiceSid(): string | null {
+  return process.env.TWILIO_VERIFY_SERVICE_SID?.trim() || null;
+}
+
+function twilioRestClient() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+  if (!accountSid || !authToken) return null;
+  return twilio(accountSid, authToken);
+}
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -98,13 +117,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That number was just sent a code — try again shortly." }, { status: 429 });
   }
 
+  const usingVerify = Boolean(verifyServiceSid());
   const code = String(randomInt(100000, 999999));
   const nowIso = new Date().toISOString();
   const { error } = await db.from("phone_verifications").upsert(
     {
       user_id: user.id,
       phone,
-      code_hash: hashCode(code),
+      // With Verify, Twilio holds the code — this hash is an unmatched
+      // placeholder that keeps the row shape (throttles/attempts) identical.
+      code_hash: usingVerify ? hashCode(`verify:${phone}:${nowIso}`) : hashCode(code),
       expires_at: new Date(Date.now() + CODE_TTL_MS).toISOString(),
       attempts: 0,
       send_count: priorSends + 1,
@@ -114,6 +136,22 @@ export async function POST(req: Request) {
     { onConflict: "user_id" },
   );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (usingVerify) {
+    const client = twilioRestClient();
+    if (!client) {
+      return NextResponse.json({ error: "SMS is not configured yet — add Twilio credentials." }, { status: 502 });
+    }
+    try {
+      await client.verify.v2.services(verifyServiceSid()!).verifications.create({ to: phone, channel: "sms" });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return NextResponse.json(
+        { error: `Could not send verification: ${e instanceof Error ? e.message : String(e)}` },
+        { status: 502 },
+      );
+    }
+  }
 
   const fromNumber =
     (await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle()).data?.sms_from_number ??
@@ -155,7 +193,26 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Too many attempts — request a new code." }, { status: 429 });
   }
 
-  if (hashCode(code) !== String(row.code_hash)) {
+  if (verifyServiceSid()) {
+    const client = twilioRestClient();
+    if (!client) return NextResponse.json({ error: "SMS is not configured." }, { status: 502 });
+    let approved = false;
+    try {
+      const check = await client.verify.v2
+        .services(verifyServiceSid()!)
+        .verificationChecks.create({ to: String(row.phone), code });
+      approved = check.status === "approved";
+    } catch {
+      approved = false;
+    }
+    if (!approved) {
+      await db
+        .from("phone_verifications")
+        .update({ attempts: Number(row.attempts ?? 0) + 1 })
+        .eq("user_id", user.id);
+      return NextResponse.json({ error: "Incorrect code." }, { status: 400 });
+    }
+  } else if (hashCode(code) !== String(row.code_hash)) {
     await db
       .from("phone_verifications")
       .update({ attempts: Number(row.attempts ?? 0) + 1 })
