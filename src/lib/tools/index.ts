@@ -3,8 +3,14 @@
  * Add new site capabilities here as typed, permission-scoped ToolDefinitions.
  */
 import { buildRegistry } from "./registry";
-import { getOverdueChargesTool, listChargesTool } from "./domains/payments";
-import { listLeasesTool } from "./domains/leases";
+import {
+  getOverdueChargesTool,
+  listChargesTool,
+  sendRentRemindersTool,
+  createChargeTool,
+} from "./domains/payments";
+import { createLeaseDraftTool, listLeasesTool, updateLeaseDraftTool } from "./domains/leases";
+import { sendResidentMessageTool } from "./domains/messaging";
 import { listWorkOrdersTool, suggestVendorsForWorkOrderTool } from "./domains/work-orders";
 import { listVendorsTool } from "./domains/vendors";
 import { runFinancialReportTool } from "./domains/financials";
@@ -42,6 +48,13 @@ export const agentRegistry = buildRegistry([
   listCalendarEventsTool,
   listScheduledMessagesTool,
   listServiceRequestsTool,
+  // Write tools: previewed from the model loop, executed only via the gated
+  // confirm endpoint after explicit user confirmation.
+  sendRentRemindersTool,
+  sendResidentMessageTool,
+  createChargeTool,
+  createLeaseDraftTool,
+  updateLeaseDraftTool,
 ]);
 
 /**

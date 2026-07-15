@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { agentRegistry } from "@/lib/tools";
+import { buildRegistry } from "@/lib/tools/registry";
 import { runAgentTurn } from "@/lib/agent/loop";
 import { buildDemoAgentContext } from "@/lib/demo/demo-agent-context";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
@@ -10,6 +11,13 @@ export const runtime = "nodejs";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+// The shared registry now carries confirm-gated write tools; the public demo
+// stays read-only by construction, so the model never proposes an action this
+// route can't (and must never) execute.
+const demoReadOnlyRegistry = buildRegistry(
+  [...agentRegistry.values()].filter((t) => t.kind === "read"),
+);
+
 /**
  * PUBLIC, UNAUTHENTICATED demo chatbot for the marketing `/demo` page.
  *
@@ -17,9 +25,10 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
  * fixed, sandboxed context backed by fictional in-memory data — never a real
  * account or database (`buildDemoAgentContext`). This is safe by construction:
  *
- *  - The agent loop only ever exposes READ tools; write tools are never callable
- *    by the model, and this route deliberately omits the gated `confirmAction`
- *    write path entirely — so nothing can be sent, charged, or persisted.
+ *  - The model is given a READ-ONLY registry (write tools are filtered out
+ *    below, so it cannot even propose an action), and this route deliberately
+ *    omits the gated confirm write path entirely — so nothing can be sent,
+ *    charged, or persisted.
  *  - The stub DB has no real rows, so a prompt-injection attempt in the (fake)
  *    tenant text can neither read real data nor trigger an action. The system
  *    prompt additionally treats tool-result text as untrusted data.
@@ -42,7 +51,7 @@ export async function POST(req: Request) {
   }
 
   // The write/confirm path is intentionally unsupported in the demo.
-  if (body.confirmAction) {
+  if (body.confirmAction || body.confirmActionId || body.denyActionId) {
     return NextResponse.json({
       reply:
         "In this live demo, actions like sending a rent reminder are shown but not actually sent — sign up to enable real actions.",
@@ -76,7 +85,7 @@ export async function POST(req: Request) {
   try {
     const ctx = buildDemoAgentContext();
     const result = await traceAgentTurn(ctx, messages as ChatMessage[], (observer) =>
-      runAgentTurn({ ctx, registry: agentRegistry, messages, observer }),
+      runAgentTurn({ ctx, registry: demoReadOnlyRegistry, messages, observer }),
     );
     return NextResponse.json({ reply: result.reply, toolTrace: result.toolTrace });
   } catch (e) {
