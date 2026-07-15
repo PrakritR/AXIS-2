@@ -3,7 +3,7 @@ import {
   buildSmsDeepLink,
   classifyLeasingIntent,
   extractPropertyIdHint,
-} from "@/lib/claw-leasing-bot.server";
+} from "@/lib/claw-leasing-links";
 
 describe("claw leasing intent", () => {
   it("classifies tour / apply / lease / help", () => {

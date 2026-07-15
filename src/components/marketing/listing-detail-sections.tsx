@@ -25,6 +25,7 @@ import {
   useListingPreviewNewTab,
 } from "@/components/marketing/listing-preview-context";
 import { listingFallbackMapCenter } from "@/lib/listing-map";
+import { buildSmsDeepLink, isClawMessagingPubliclyEnabled } from "@/lib/claw-leasing-links";
 import { buildTourContactHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
@@ -170,6 +171,15 @@ function ListingPricingCtaCard({
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
   const tourHref = buildTourContactHref(property.id);
+  const applyHref = buildRentalApplyHref({ propertyId: property.id });
+  const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
+  const textEnabled = isClawMessagingPubliclyEnabled();
+  const textTourHref = textEnabled
+    ? buildSmsDeepLink({ intent: "tour", propertyId: property.id, propertyLabel })
+    : null;
+  const textApplyHref = textEnabled
+    ? buildSmsDeepLink({ intent: "apply", propertyId: property.id, propertyLabel })
+    : null;
 
   return (
     <Card className={`overflow-hidden border-border bg-card p-0 shadow-sm backdrop-blur-xl ${className}`}>
@@ -185,16 +195,26 @@ function ListingPricingCtaCard({
         </p>
       </div>
       <div className="px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+        {textTourHref ? (
+          <a href={textTourHref} data-attr="listing-text-tour" className={`${primaryCtaClass} min-h-[48px] mt-0`}>
+            Text to tour
+          </a>
+        ) : null}
         <Link
           href={tourHref}
           data-attr="listing-schedule-tour"
-          className={`${primaryCtaClass} min-h-[48px] mt-0`}
+          className={textTourHref ? secondaryCtaClass : `${primaryCtaClass} min-h-[48px] mt-0`}
           {...newTabProps}
         >
           Schedule a tour
         </Link>
+        {textApplyHref ? (
+          <a href={textApplyHref} data-attr="listing-text-apply" className={secondaryCtaClass}>
+            Text to apply
+          </a>
+        ) : null}
         <Link
-          href={buildRentalApplyHref({ propertyId: property.id })}
+          href={applyHref}
           data-attr="listing-apply-online"
           className={secondaryCtaClass}
           {...newTabProps}

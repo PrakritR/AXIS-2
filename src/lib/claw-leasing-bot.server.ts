@@ -38,7 +38,8 @@ export function clawMappedManagerEmails(): string[] {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   if (fromEnv.length > 0) return fromEnv;
-  return ["testeverything@test.axis.local"];
+  // Defaults: production manager + local all-portals sandbox.
+  return ["ogambik2@gmail.com", "testeverything@test.axis.local"];
 }
 
 export function publicAppOrigin(): string {
@@ -225,20 +226,33 @@ export async function handleClawLeasingInbound(args: {
 /**
  * Stamp the shared Claw leasing number onto a manager profile so outbound copy
  * and listing CTAs stay aligned. Does not buy a Twilio number.
+ *
+ * Only writes when Claw is configured (`CLAW_MESSENGER_API_KEY`) or
+ * `CLAW_MESSENGER_ASSIGN_SHARED_NUMBER=1`. Skips if a work number is already set
+ * unless `force` is true.
  */
-export async function assignSharedClawLeasingNumberToManager(userId: string): Promise<void> {
+export async function assignSharedClawLeasingNumberToManager(
+  userId: string,
+  opts?: { force?: boolean },
+): Promise<void> {
   const uid = userId.trim();
   if (!uid) return;
+  const assignFlag = process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim();
+  const configured = Boolean(process.env.CLAW_MESSENGER_API_KEY?.trim());
+  if (assignFlag === "0" || assignFlag === "false") return;
+  if (!configured && assignFlag !== "1" && assignFlag !== "true") return;
+
   const phone = clawLeasingAgentPhoneE164();
   const db = createSupabaseServiceRoleClient();
-  await db
+  let q = db
     .from("profiles")
     .update({
       sms_from_number: phone,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", uid)
-    .is("sms_from_number", null);
+    .eq("id", uid);
+  if (!opts?.force) q = q.is("sms_from_number", null);
+  await q;
 }
 
 export async function assignSharedClawLeasingNumberIfMapped(userId: string, email: string): Promise<void> {

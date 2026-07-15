@@ -1,6 +1,7 @@
 import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
+import { clawLeasingAgentPhoneE164, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
 
 export type EnsureManagerSmsNumberResult =
   | { ok: true; number: string }
@@ -51,6 +52,25 @@ export async function ensureManagerSmsNumber(
     if (current) return { ok: true, number: current };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not read the profile." };
+  }
+
+  // Shared Claw Messenger leasing line (trial / until per-manager numbers ship).
+  // Set CLAW_MESSENGER_ASSIGN_SHARED_NUMBER=0 to fall through to Twilio purchase.
+  const clawShared =
+    process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim() !== "0" &&
+    process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim() !== "false" &&
+    isClawMessengerConfigured();
+  if (clawShared) {
+    const number = clawLeasingAgentPhoneE164();
+    const { data: claimed, error } = await db
+      .from("profiles")
+      .update({ sms_from_number: number })
+      .eq("id", managerUserId)
+      .is("sms_from_number", null)
+      .select("sms_from_number");
+    if (error) return { ok: false, error: error.message };
+    const saved = String(claimed?.[0]?.sms_from_number ?? "").trim() || number;
+    return { ok: true, number: saved };
   }
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
