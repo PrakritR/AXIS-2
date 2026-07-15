@@ -1,7 +1,10 @@
-import { resolveShareableAppOrigin } from "@/lib/app-url";
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
+import {
+  ensureSmsIncludesPortalLink,
+  type ResidentSmsLinkKind,
+} from "@/lib/claw-resident-links";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -384,7 +387,7 @@ export async function deliverPortalInboxMessage(
   );
   if (smsRecipients.length > 0) {
     const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
-    if (canSendResidentOutboundSms(smsFromNumber, senderEmail)) {
+    if (canSendResidentOutboundSms(smsFromNumber)) {
       const recipientEmails = smsRecipients.map((r) => r.email);
       const { data: phones } = await db.from("profiles").select("email, phone").in("email", recipientEmails);
       const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
@@ -393,25 +396,50 @@ export async function deliverPortalInboxMessage(
         if (!recipientPhone) continue;
         const smsBody = (opts.smsText ?? text).trim();
         let body = smsBody.length <= 320 ? smsBody : `${subject}\n\n${smsBody}`.slice(0, 320);
-        // Every lifecycle text carries a link to the full details in the portal
-        // (callers with a more specific link pass it inside smsText already).
-        if (!/https?:\/\//.test(body)) {
-          const portalPath = recipient.scope?.includes("vendor")
-            ? "/vendor/inbox"
-            : eventCategory === "leases"
-              ? "/resident/lease"
-              : eventCategory === "payments"
-                ? "/resident/payments"
-                : eventCategory === "maintenance"
-                  ? "/resident/services"
-                  : "/resident/inbox";
-          body = `${body}\n\nView details: ${resolveShareableAppOrigin()}${portalPath}`;
+        const recipientIsManager =
+          recipient.scope === MANAGER_INBOX_SCOPE ||
+          ["manager", "pro", "admin"].includes(String(recipient.role ?? "").toLowerCase());
+        const recipientIsResident =
+          recipient.scope === RESIDENT_INBOX_SCOPE ||
+          String(recipient.role ?? "").toLowerCase() === "resident";
+        // Never append resident-portal deep links to manager texts; created-event
+        // SMS bodies already carry the manager Services URL when needed.
+        const linkKind: ResidentSmsLinkKind | null = recipient.scope?.includes("vendor") || recipientIsManager
+          ? null
+          : eventCategory === "leases"
+            ? "lease"
+            : eventCategory === "payments"
+              ? "payments"
+              : eventCategory === "maintenance"
+                ? "services"
+                : "inbox";
+        if (linkKind) {
+          body = ensureSmsIncludesPortalLink(body, linkKind);
         }
+        // Claw resident threads are resident↔manager only. Opening one when the
+        // SMS recipient is the manager (e.g. new work-order alert) inverts the
+        // roles and breaks manager reply routing.
+        const openThread =
+          recipientIsResident &&
+          (eventCategory === "payments" || eventCategory === "leases" || eventCategory === "maintenance")
+            ? {
+                managerUserId: opts.senderUserId,
+                residentUserId: recipient.userId,
+                residentEmail: recipient.email,
+                topic:
+                  eventCategory === "leases"
+                    ? ("lease" as const)
+                    : eventCategory === "payments"
+                      ? ("payment" as const)
+                      : ("general" as const),
+              }
+            : null;
         const result = await sendResidentOutboundSms({
           to: recipientPhone,
           text: body,
           fromNumber: smsFromNumber,
-          managerEmail: senderEmail,
+          linkKind: null, // already appended above
+          openThread,
         });
         if (result.sent) {
           const logId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

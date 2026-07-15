@@ -199,19 +199,11 @@ export async function notifyManagerTourRequest(
 }
 
 
-/** Text the tour guest via the resident SMS channel (Linq for allowlisted managers). */
-async function textTourGuest(
-  db: Db,
-  args: { managerUserId: string | null; guestPhone: string | null; text: string },
-): Promise<void> {
+/** Text the tour guest via the resident SMS channel (Claw shared line). */
+async function textTourGuest(args: { guestPhone: string | null; text: string }): Promise<void> {
   const phone = (args.guestPhone ?? "").trim();
   if (!phone) return;
-  let managerEmail: string | null = null;
-  if (args.managerUserId) {
-    const { data } = await db.from("profiles").select("email").eq("id", args.managerUserId).maybeSingle();
-    managerEmail = (data?.email as string | null) ?? null;
-  }
-  await sendResidentOutboundSms({ to: phone, text: args.text, managerEmail }).catch(() => undefined);
+  await sendResidentOutboundSms({ to: phone, text: args.text }).catch(() => undefined);
 }
 
 export async function notifyTenantTourRequestReceived(
@@ -250,10 +242,8 @@ export async function notifyTenantTourRequestReceived(
   const email = await deliverEmail([guestEmail], subject, text);
 
   const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
-  const managerUserId = textField(inquiry as Record<string, unknown>, "managerUserId") || null;
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
-  await textTourGuest(db, {
-    managerUserId,
+  await textTourGuest({
     guestPhone,
     text: `PropLane: we received your tour request for ${ctx.propertyTitle}${
       ctx.tourStartIso ? ` (${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)})` : ""
@@ -317,8 +307,7 @@ export async function notifyTenantTourConfirmed(
 
   const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
-  await textTourGuest(db, {
-    managerUserId: window.managerUserId || null,
+  await textTourGuest({
     guestPhone,
     text: `PropLane: your tour of ${ctx.propertyTitle} is confirmed${
       ctx.tourStartIso ? ` for ${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)}` : ""
