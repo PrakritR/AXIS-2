@@ -3,6 +3,7 @@
  */
 
 import { resolveAppOrigin } from "@/lib/app-url";
+import { sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
   resolveManagerRecipientProfiles,
   resolvePropertyLeadRecipientIds,
@@ -15,6 +16,7 @@ import {
   buildTourConfirmedTenantHtml,
   buildTourNotificationContext,
   buildTourRequestManagerBody,
+  formatTourTimeRange,
   buildTourRequestTenantBody,
 } from "@/lib/tour-notifications";
 
@@ -196,6 +198,22 @@ export async function notifyManagerTourRequest(
   return { ok: true, skipped: email.skipped };
 }
 
+
+/** Text the tour guest via the resident SMS channel (Linq for allowlisted managers). */
+async function textTourGuest(
+  db: Db,
+  args: { managerUserId: string | null; guestPhone: string | null; text: string },
+): Promise<void> {
+  const phone = (args.guestPhone ?? "").trim();
+  if (!phone) return;
+  let managerEmail: string | null = null;
+  if (args.managerUserId) {
+    const { data } = await db.from("profiles").select("email").eq("id", args.managerUserId).maybeSingle();
+    managerEmail = (data?.email as string | null) ?? null;
+  }
+  await sendResidentOutboundSms({ to: phone, text: args.text, managerEmail }).catch(() => undefined);
+}
+
 export async function notifyTenantTourRequestReceived(
   db: Db,
   req: Request,
@@ -230,6 +248,18 @@ export async function notifyTenantTourRequestReceived(
   const subject = TOUR_REQUEST_TENANT_SUBJECT;
   const text = buildTourRequestTenantBody(ctx);
   const email = await deliverEmail([guestEmail], subject, text);
+
+  const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
+  const managerUserId = textField(inquiry as Record<string, unknown>, "managerUserId") || null;
+  const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
+  await textTourGuest(db, {
+    managerUserId,
+    guestPhone,
+    text: `PropLane: we received your tour request for ${ctx.propertyTitle}${
+      ctx.tourStartIso ? ` (${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)})` : ""
+    }. We'll text you here once it's confirmed. Details: ${listingLink}`,
+  });
+
   if (email.error) return { ok: true, skipped: true, error: email.error };
   return { ok: true, skipped: email.skipped };
 }
@@ -284,6 +314,17 @@ export async function notifyTenantTourConfirmed(
   });
 
   const email = await deliverEmail([guestEmail], subject, text, html);
+
+  const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
+  const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
+  await textTourGuest(db, {
+    managerUserId: window.managerUserId || null,
+    guestPhone,
+    text: `PropLane: your tour of ${ctx.propertyTitle} is confirmed${
+      ctx.tourStartIso ? ` for ${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)}` : ""
+    }.${instructions ? ` ${instructions.trim()}` : ""} Reply here with any questions. Details: ${listingLink}`,
+  });
+
   if (email.error) return { ok: true, skipped: true, error: email.error };
   return { ok: true, skipped: email.skipped };
 }

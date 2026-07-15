@@ -1,7 +1,8 @@
+import { resolveShareableAppOrigin } from "@/lib/app-url";
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
-import { sendSms } from "@/lib/twilio";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   resolveChannels,
@@ -383,7 +384,7 @@ export async function deliverPortalInboxMessage(
   );
   if (smsRecipients.length > 0) {
     const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
-    if (smsFromNumber) {
+    if (canSendResidentOutboundSms(smsFromNumber, senderEmail)) {
       const recipientEmails = smsRecipients.map((r) => r.email);
       const { data: phones } = await db.from("profiles").select("email, phone").in("email", recipientEmails);
       const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
@@ -391,7 +392,27 @@ export async function deliverPortalInboxMessage(
         const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
         if (!recipientPhone) continue;
         const smsBody = (opts.smsText ?? text).trim();
-        const result = await sendSms(recipientPhone, smsBody.length <= 320 ? smsBody : `${subject}\n\n${smsBody}`.slice(0, 320), smsFromNumber);
+        let body = smsBody.length <= 320 ? smsBody : `${subject}\n\n${smsBody}`.slice(0, 320);
+        // Every lifecycle text carries a link to the full details in the portal
+        // (callers with a more specific link pass it inside smsText already).
+        if (!/https?:\/\//.test(body)) {
+          const portalPath = recipient.scope?.includes("vendor")
+            ? "/vendor/inbox"
+            : eventCategory === "leases"
+              ? "/resident/lease"
+              : eventCategory === "payments"
+                ? "/resident/payments"
+                : eventCategory === "maintenance"
+                  ? "/resident/services"
+                  : "/resident/inbox";
+          body = `${body}\n\nView details: ${resolveShareableAppOrigin()}${portalPath}`;
+        }
+        const result = await sendResidentOutboundSms({
+          to: recipientPhone,
+          text: body,
+          fromNumber: smsFromNumber,
+          managerEmail: senderEmail,
+        });
         if (result.sent) {
           const logId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           await db.from("portal_outbound_mail_records").upsert(
@@ -400,7 +421,15 @@ export async function deliverPortalInboxMessage(
               recipient_email: recipient.email,
               subject,
               channel: "sms",
-              row_data: { id: logId, to: recipientPhone, subject, body: text, sentAt, smsSent: true },
+              row_data: {
+                id: logId,
+                to: recipientPhone,
+                subject,
+                body: text,
+                sentAt,
+                smsSent: true,
+                smsChannel: result.channel ?? null,
+              },
             },
             { onConflict: "id" },
           );
