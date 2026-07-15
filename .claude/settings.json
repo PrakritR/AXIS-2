@@ -19,7 +19,13 @@
       "Bash(rm -f resume.pdf.png)",
       "Bash(qlmanage -t -s 2400 -o . portfolio-site/assets/resume.pdf)",
       "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)",
-      "Bash(node -e 'require\\(\"dotenv\"\\).config\\({path:\".env\"}\\); const e=process.env; console.log\\(JSON.stringify\\({stripeSet: Boolean\\(e.STRIPE_SECRET_KEY\\), stripeTestMode: \\(e.STRIPE_SECRET_KEY||\"\"\\).startsWith\\(\"sk_test\"\\), webhookSecretSet: Boolean\\(e.STRIPE_WEBHOOK_SECRET\\), checkrKeySet: Boolean\\(e.CHECKR_API_KEY||e.BACKGROUND_CHECK_API_KEY\\), checkrTestKey: \\(\\(e.CHECKR_API_KEY||e.BACKGROUND_CHECK_API_KEY\\)||\"\"\\).includes\\(\"test\"\\), checkrSimulate: e.CHECKR_SIMULATE||null}\\)\\)')"
+      "Bash(node -e 'require\\(\"dotenv\"\\).config\\({path:\".env\"}\\); const e=process.env; console.log\\(JSON.stringify\\({stripeSet: Boolean\\(e.STRIPE_SECRET_KEY\\), stripeTestMode: \\(e.STRIPE_SECRET_KEY||\"\"\\).startsWith\\(\"sk_test\"\\), webhookSecretSet: Boolean\\(e.STRIPE_WEBHOOK_SECRET\\), checkrKeySet: Boolean\\(e.CHECKR_API_KEY||e.BACKGROUND_CHECK_API_KEY\\), checkrTestKey: \\(\\(e.CHECKR_API_KEY||e.BACKGROUND_CHECK_API_KEY\\)||\"\"\\).includes\\(\"test\"\\), checkrSimulate: e.CHECKR_SIMULATE||null}\\)\\)')",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "Bash(curl -s -X POST \"https://qahnczmilgptcedaqype.supabase.co/auth/v1/recover\" -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhaG5jem1pbGdwdGNlZGFxeXBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTczMTksImV4cCI6MjA5MjAzMzMxOX0.4KHipS_Mdr5ZwAkFaSfQpD5404jqV1bR7Pzyx_59elM\" -H \"Content-Type: application/json\" -d '{\"email\":\"prakritramachandran@gmail.com\",\"gotrue_meta_security\":{},\"code_challenge\":null,\"code_challenge_method\":null}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "mcp__claude_ai_Supabase__get_logs",
+      "Bash(node -e ' *)",
+      "Bash(grep -iE \"\\\\\"[^\\\\\"]*axis[ -]id|'[^']*axis[ -]id|\\\\`[^\\\\`]*axis[ -]id|>[^<]*axis[ -]id\")",
+      "Bash(git rm *)"
     ]
   }
 }
