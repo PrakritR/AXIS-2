@@ -76,7 +76,8 @@ export type HouseholdCharge = {
   title: string;
   amountLabel: string;
   balanceLabel: string;
-  status: "pending" | "partially_paid" | "paid" | "cancelled" | "refunded" | "failed";
+  /** `processing` = ACH bank debit submitted, clearing (3–5 business days) — not payable, not overdue, no reminders/late fees. */
+  status: "pending" | "processing" | "partially_paid" | "paid" | "cancelled" | "refunded" | "failed";
   paidAmountCents?: number;
   paidAt?: string;
   /** Snapshot of Zelle / SMS contact from listing when charge was created */
@@ -2583,7 +2584,9 @@ export function residentLeaseBlockedReasons(email: string, userId: string | null
 }
 
 export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
-  const overdue = c.status !== "paid" && isHouseholdChargeOverdue(c, startOfTodayLocal());
+  // A clearing ACH payment ("processing") is never overdue — the resident has
+  // already paid; the bank is settling.
+  const overdue = c.status !== "paid" && c.status !== "processing" && isHouseholdChargeOverdue(c, startOfTodayLocal());
   const bucket: ManagerPaymentBucket = c.status === "paid" ? "paid" : overdue ? "overdue" : "pending";
   // If the stored label looks like a raw internal ID (pending property not yet resolved at charge-creation
   // time), try to resolve the human-readable title now via getPropertyById which now includes pending props.

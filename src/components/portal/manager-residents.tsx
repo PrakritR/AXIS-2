@@ -82,7 +82,7 @@ import {
   updateExtraListingFromSubmissionOnServer,
 } from "@/lib/demo-property-pipeline";
 import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-client";
-import { AXIS_ACH_FEE_PERCENT, acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
+import { acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import {
   appendLeaseThreadMessage,
@@ -2895,7 +2895,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     data-attr="resident-payment-axis-ach-toggle"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Bank (ACH) with Stripe — {AXIS_ACH_FEE_PERCENT}% processing fee
+                    Bank transfer — free for residents
                   </span>
                 </label>
                 {pmAxisPaymentsEnabled ? (

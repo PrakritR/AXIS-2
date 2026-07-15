@@ -12,7 +12,12 @@ import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-se
 import { stripeInvoiceSubscriptionId } from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
-import { markHouseholdChargePaidFromStripeSession } from "@/lib/stripe-household-charge";
+import {
+  householdChargeCheckoutProcessing,
+  markHouseholdChargePaidFromStripeSession,
+  markHouseholdChargeProcessingFromStripeSession,
+  revertHouseholdChargeProcessingFromStripeSession,
+} from "@/lib/stripe-household-charge";
 import { runScreeningFromStripeSession, SCREENING_CHECKOUT_PURPOSE } from "@/lib/stripe-screening";
 import { enrichLedgerFromCheckoutSession } from "@/lib/stripe-ledger-fees";
 import {
@@ -105,10 +110,16 @@ export async function POST(req: Request) {
         await runScreeningFromStripeSession(db, session);
       } else if (session.metadata?.purpose === "household_charge") {
         try {
-          await markHouseholdChargePaidFromStripeSession(db, session);
-          await enrichCheckoutLedgerFees(stripe, session);
-          const distinctId = session.client_reference_id ?? session.id;
-          track("household_charge_paid", distinctId, { session_id: session.id });
+          if (householdChargeCheckoutProcessing(session)) {
+            // ACH submitted, clearing for 3–5 business days: hold the charges
+            // in `processing` so late fees / reminders / re-pay stay quiet.
+            await markHouseholdChargeProcessingFromStripeSession(db, session);
+          } else {
+            await markHouseholdChargePaidFromStripeSession(db, session);
+            await enrichCheckoutLedgerFees(stripe, session);
+            const distinctId = session.client_reference_id ?? session.id;
+            track("household_charge_paid", distinctId, { session_id: session.id });
+          }
         } catch (e) {
           console.error("[stripe webhook] household_charge checkout", e);
         }
@@ -132,6 +143,16 @@ export async function POST(req: Request) {
           console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
         }
       }
+    }
+
+    if (event.type === "checkout.session.async_payment_failed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      // The bank debit bounced: release the clearing-window hold so the charge
+      // is payable again. NSF fee + `failed` status come from the
+      // payment_intent.payment_failed handler below, never from here.
+      await revertHouseholdChargeProcessingFromStripeSession(db, session).catch((e) => {
+        console.error("[stripe webhook] async_payment_failed household_charge", e);
+      });
     }
 
     if (event.type === "invoice.paid") {

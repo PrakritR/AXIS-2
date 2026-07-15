@@ -4,7 +4,6 @@ import { type ReactNode } from "react";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
-import { axisAchFeeDisplayLabel } from "@/lib/payment-policy";
 import {
   LEASE_TERM_OPTIONS,
   SHORT_TERM_LEASE_TERM,
@@ -1858,7 +1857,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <span>
                   <span className="text-sm font-semibold text-foreground">Bank transfer (ACH)</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Pay securely via bank account — {axisAchFeeDisplayLabel()}. Clears in 3–5 business days.
+                    Pay securely via bank account — free, no processing fee. Clears in 3–5 business days.
                   </span>
                 </span>
               </label>

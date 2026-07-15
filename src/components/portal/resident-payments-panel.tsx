@@ -368,13 +368,18 @@ export function ResidentPaymentsPanel({
     });
   }, [charges]);
 
-  const pendingRows = useMemo(() => rows.filter((c) => c.status === "pending"), [rows]);
+  // `processing` (ACH clearing, 3–5 business days) shows alongside pending so
+  // the charge doesn't vanish mid-payment — but it is never overdue or payable.
+  const pendingRows = useMemo(
+    () => rows.filter((c) => c.status === "pending" || c.status === "processing"),
+    [rows],
+  );
   const overdueRows = useMemo(
-    () => pendingRows.filter((c) => isHouseholdChargeOverdue(c)),
+    () => pendingRows.filter((c) => c.status !== "processing" && isHouseholdChargeOverdue(c)),
     [pendingRows],
   );
   const upcomingPendingRows = useMemo(
-    () => pendingRows.filter((c) => !isHouseholdChargeOverdue(c)),
+    () => pendingRows.filter((c) => c.status === "processing" || !isHouseholdChargeOverdue(c)),
     [pendingRows],
   );
   const paidRows = useMemo(() => rows.filter((c) => c.status === "paid"), [rows]);
@@ -679,6 +684,15 @@ export function ResidentPaymentsPanel({
         <p className="mb-3 text-sm text-muted">
           Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
         </p>
+        {row.status === "processing" ? (
+          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
+            <p className="text-xs font-semibold">Bank transfer in progress</p>
+            <p className="mt-1 text-sm leading-relaxed">
+              Your payment was submitted and is clearing — bank transfers take 3–5 business days. No late fees or
+              reminders apply while it clears, and you&apos;ll get a confirmation the moment it lands.
+            </p>
+          </div>
+        ) : null}
         {row.manualPaymentReportedAt && row.manualPaymentChannel ? (
           <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
             <p className="text-xs font-semibold">

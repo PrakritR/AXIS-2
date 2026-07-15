@@ -41,6 +41,111 @@ export function householdChargeCheckoutProcessing(session: Stripe.Checkout.Sessi
   return session.status === "complete" && session.payment_status === "unpaid";
 }
 
+function householdChargeIdsFromSession(session: Stripe.Checkout.Session): string[] {
+  const chargeIds =
+    session.metadata?.charge_ids
+      ?.split(",")
+      .map((id) => id.trim())
+      .filter(Boolean) ?? [];
+  const fallbackId = session.metadata?.charge_id?.trim();
+  return chargeIds.length > 0 ? chargeIds : fallbackId ? [fallbackId] : [];
+}
+
+/**
+ * ACH submitted but not settled (Checkout complete, payment_status unpaid):
+ * mark the charges `processing` so the clearing window can't double-charge,
+ * fire late fees, or send payment reminders (all of those key on `pending`).
+ * Resolved by async_payment_succeeded (→ paid) or async_payment_failed /
+ * payment_intent.payment_failed (→ back to pending / failed + NSF).
+ */
+export async function markHouseholdChargeProcessingFromStripeSession(
+  db: SupabaseClient,
+  session: Stripe.Checkout.Session,
+): Promise<{ ok: boolean; marked: number }> {
+  if (!isHouseholdChargeCheckoutSession(session) || !householdChargeCheckoutProcessing(session)) {
+    return { ok: false, marked: 0 };
+  }
+  const now = new Date().toISOString();
+  let marked = 0;
+  for (const chargeId of householdChargeIdsFromSession(session)) {
+    const { data: row } = await db
+      .from("portal_household_charge_records")
+      .select("id, row_data, status")
+      .eq("id", chargeId)
+      .maybeSingle();
+    const charge = row?.row_data as HouseholdCharge | null;
+    if (!charge?.id) continue;
+    if (charge.status !== "pending" && charge.status !== "failed" && charge.status !== "partially_paid") continue;
+    const nextCharge: HouseholdCharge = { ...charge, status: "processing" };
+    const { error } = await db.from("portal_household_charge_records").upsert(
+      {
+        id: chargeId,
+        manager_user_id: charge.managerUserId,
+        resident_user_id: charge.residentUserId,
+        resident_email: charge.residentEmail.trim().toLowerCase(),
+        property_id: charge.propertyId,
+        kind: charge.kind,
+        status: "processing",
+        row_data: {
+          ...nextCharge,
+          stripeCheckoutSessionId: session.id,
+          stripePaymentStatus: session.payment_status,
+        },
+        updated_at: now,
+      },
+      { onConflict: "id" },
+    );
+    if (!error) marked += 1;
+  }
+  return { ok: marked > 0, marked };
+}
+
+/**
+ * The async bank debit failed (checkout.session.async_payment_failed): put
+ * `processing` charges back to `pending` so they are payable/remindable again.
+ * NSF fee + `failed` status are owned by the payment_intent.payment_failed
+ * handler — this only clears the clearing-window hold, and it never downgrades
+ * a charge that handler already marked failed (or that was paid).
+ */
+export async function revertHouseholdChargeProcessingFromStripeSession(
+  db: SupabaseClient,
+  session: Stripe.Checkout.Session,
+): Promise<{ ok: boolean; reverted: number }> {
+  if (!isHouseholdChargeCheckoutSession(session)) return { ok: false, reverted: 0 };
+  const now = new Date().toISOString();
+  let reverted = 0;
+  for (const chargeId of householdChargeIdsFromSession(session)) {
+    const { data: row } = await db
+      .from("portal_household_charge_records")
+      .select("id, row_data, status")
+      .eq("id", chargeId)
+      .maybeSingle();
+    const charge = row?.row_data as HouseholdCharge | null;
+    if (!charge?.id || charge.status !== "processing") continue;
+    const nextCharge: HouseholdCharge = { ...charge, status: "pending" };
+    const { error } = await db.from("portal_household_charge_records").upsert(
+      {
+        id: chargeId,
+        manager_user_id: charge.managerUserId,
+        resident_user_id: charge.residentUserId,
+        resident_email: charge.residentEmail.trim().toLowerCase(),
+        property_id: charge.propertyId,
+        kind: charge.kind,
+        status: "pending",
+        row_data: {
+          ...nextCharge,
+          stripeCheckoutSessionId: session.id,
+          stripePaymentStatus: "failed",
+        },
+        updated_at: now,
+      },
+      { onConflict: "id" },
+    );
+    if (!error) reverted += 1;
+  }
+  return { ok: reverted > 0, reverted };
+}
+
 /**
  * Marks a pending household charge paid after Stripe confirms funds (sync or async ACH).
  */

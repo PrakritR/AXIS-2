@@ -7,6 +7,7 @@ import {
   householdChargeCheckoutProcessing,
   isHouseholdChargeCheckoutSession,
   markHouseholdChargePaidFromStripeSession,
+  markHouseholdChargeProcessingFromStripeSession,
 } from "@/lib/stripe-household-charge";
 
 export const runtime = "nodejs";
@@ -67,6 +68,11 @@ export async function GET(req: Request) {
       const result = await markHouseholdChargePaidFromStripeSession(db, session);
       chargeId = result.chargeId ?? chargeId;
       alreadyPaid = result.alreadyPaid ?? false;
+    } else if (processing) {
+      // Persist the clearing-window hold immediately on return from checkout —
+      // the webhook usually lands first, but this covers delayed delivery.
+      const db = createSupabaseServiceRoleClient();
+      await markHouseholdChargeProcessingFromStripeSession(db, session);
     }
 
     return NextResponse.json({
