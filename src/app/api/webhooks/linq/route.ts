@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifyLinqWebhook } from "@/lib/linq.server";
+import { sendLinqText, verifyLinqWebhook } from "@/lib/linq.server";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { sendManagerNoticeEmail, upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
@@ -125,8 +125,41 @@ export async function POST(req: Request) {
   }
   const { data: managers } = await db
     .from("profiles")
-    .select("id, email, full_name")
+    .select("id, email, full_name, phone")
     .in("email", allowEmails);
+
+  // ── Two-way relay: the Linq line is the glue between the manager's personal
+  // phone and resident phones. A text FROM a Linq manager's own phone is a
+  // reply — relay it out to the resident they're talking to instead of
+  // creating a "new inbound" notice for themselves.
+  const managerPhoneDigits = new Set(
+    (managers ?? [])
+      .map((m) => digitsOf(String(m.phone ?? "")))
+      .filter((d) => d.length === 10),
+  );
+  const fromDigits = digitsOf(fromPhone);
+  if (managerPhoneDigits.has(fromDigits)) {
+    // Counterpart = the most recent NON-manager phone that texted this line.
+    const linqLine = process.env.LINQ_FROM_NUMBER?.trim() ?? "linq";
+    const { data: recent } = await db
+      .from("inbound_sms_log")
+      .select("from_phone, created_at")
+      .eq("to_phone", linqLine)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    const counterpart = (recent ?? [])
+      .map((r) => String(r.from_phone ?? "").trim())
+      .find((p) => {
+        const d = digitsOf(p);
+        return d.length === 10 && !managerPhoneDigits.has(d);
+      });
+    if (!counterpart) {
+      return NextResponse.json({ ok: true, relayed: false, reason: "no_counterpart" });
+    }
+    const toE164 = counterpart.startsWith("+") ? counterpart : `+1${digitsOf(counterpart)}`;
+    const relay = await sendLinqText(toE164, text || "(empty message)");
+    return NextResponse.json({ ok: true, relayed: relay.sent, to: toE164, error: relay.error });
+  }
 
   // Label the sender when their phone matches a known profile (display only —
   // SMS sender numbers are spoofable, so never attribute account identity).
@@ -160,6 +193,15 @@ export async function POST(req: Request) {
       body: (text || "(empty message)").slice(0, 120).replace(/\n/g, " "),
       url: "/portal/inbox/unopened",
     }).catch(() => undefined);
+
+    // Relay to the manager's own phone via the same Linq line — they can reply
+    // right there and the manager-sender branch above routes it back out.
+    const managerPhone = String(manager.phone ?? "").trim();
+    const managerDigits = digitsOf(managerPhone);
+    if (managerDigits.length === 10 && managerDigits !== fromDigits) {
+      const toE164 = managerPhone.startsWith("+") ? managerPhone : `+1${managerDigits}`;
+      await sendLinqText(toE164, `${displayLabel}: ${text || "(empty message)"}`);
+    }
   }
 
   return NextResponse.json({ ok: true });
