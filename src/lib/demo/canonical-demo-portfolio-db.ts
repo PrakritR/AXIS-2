@@ -18,7 +18,7 @@ import {
   CANONICAL_DEMO_RESIDENT_NAME,
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
-import { buildDemoIdleSnapshot } from "@/lib/demo/demo-guided-data";
+import { buildDemoIdleSnapshot, type DemoDataSnapshot } from "@/lib/demo/demo-guided-data";
 import {
   remapDemoSnapshotForDb,
   type DemoPortfolioDbContext,
@@ -57,11 +57,29 @@ function demoStableUuid(namespace: string, demoId: string): string {
   return `00000000-0000-4000-800${ns}-${suffix}`;
 }
 
+export type SeedPortfolioOptions = {
+  /**
+   * Pre-built snapshot to write instead of the default remapped idle demo
+   * portfolio. Lets a caller (scripts/seed-dev-manager-portfolio.ts) namespace
+   * every row id so a second manager's portfolio never collides with the
+   * canonical sandbox accounts' rows.
+   */
+  snapshot?: DemoDataSnapshot;
+  /**
+   * Skip the two GLOBAL singleton schedule rows (axis_admin_planned_events_v1 /
+   * axis_admin_partner_inquiries_v1). Required when seeding any account other
+   * than the canonical sandbox manager — those ids are deployment-wide, and a
+   * second seed would steal them from the canonical account.
+   */
+  skipGlobalScheduleSingletons?: boolean;
+};
+
 export async function seedCanonicalDemoPortfolio(
   db: SupabaseClient,
   ctx: CanonicalPortfolioContext,
+  opts: SeedPortfolioOptions = {},
 ): Promise<void> {
-  const snapshot = remapDemoSnapshotForDb(buildDemoIdleSnapshot(), ctx);
+  const snapshot = opts.snapshot ?? remapDemoSnapshotForDb(buildDemoIdleSnapshot(), ctx);
 
   async function upsertProfiles() {
     await must(
@@ -267,31 +285,33 @@ export async function seedCanonicalDemoPortfolio(
     const now = new Date().toISOString();
     const records: Array<Record<string, unknown>> = [];
 
-    records.push({
-      id: "axis_admin_planned_events_v1",
-      manager_user_id: ctx.managerUserId,
-      record_type: "axis_admin_planned_events_v1",
-      row_data: {
+    if (!opts.skipGlobalScheduleSingletons) {
+      records.push({
         id: "axis_admin_planned_events_v1",
-        recordType: "axis_admin_planned_events_v1",
-        managerUserId: ctx.managerUserId,
-        payload: schedule.plannedEvents,
-      },
-      updated_at: now,
-    });
+        manager_user_id: ctx.managerUserId,
+        record_type: "axis_admin_planned_events_v1",
+        row_data: {
+          id: "axis_admin_planned_events_v1",
+          recordType: "axis_admin_planned_events_v1",
+          managerUserId: ctx.managerUserId,
+          payload: schedule.plannedEvents,
+        },
+        updated_at: now,
+      });
 
-    records.push({
-      id: "axis_admin_partner_inquiries_v1",
-      manager_user_id: ctx.managerUserId,
-      record_type: "axis_admin_partner_inquiries_v1",
-      row_data: {
+      records.push({
         id: "axis_admin_partner_inquiries_v1",
-        recordType: "axis_admin_partner_inquiries_v1",
-        managerUserId: ctx.managerUserId,
-        payload: schedule.partnerInquiries,
-      },
-      updated_at: now,
-    });
+        manager_user_id: ctx.managerUserId,
+        record_type: "axis_admin_partner_inquiries_v1",
+        row_data: {
+          id: "axis_admin_partner_inquiries_v1",
+          recordType: "axis_admin_partner_inquiries_v1",
+          managerUserId: ctx.managerUserId,
+          payload: schedule.partnerInquiries,
+        },
+        updated_at: now,
+      });
+    }
 
     for (const event of schedule.plannedEvents) {
       records.push({

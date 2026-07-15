@@ -8,6 +8,7 @@ import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notif
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
+import { appendInboxThreadReply } from "@/lib/portal-inbox-delivery";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -196,57 +197,31 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
 
     if (threadId) {
-      const { data: threadRow } = await db
-        .from("portal_inbox_thread_records")
-        .select("id, row_data, owner_user_id, participant_email, scope, thread_type")
-        .eq("id", threadId)
-        .maybeSingle();
-      if (threadRow && (threadRow.owner_user_id === user.id || String(threadRow.participant_email ?? "").toLowerCase() === senderEmail)) {
-        const rowData = (threadRow.row_data ?? {}) as Record<string, unknown>;
-        const messages = Array.isArray(rowData.messages) ? [...rowData.messages] : [];
-        const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-        messages.push({
-          id: `reply-${Date.now().toString(36)}`,
-          from: fromName,
-          body: text,
-          at: when,
-        });
-        const nextRowData = {
-          ...rowData,
-          messages,
-          preview: text.slice(0, 100).replace(/\n/g, " "),
-          unread: false,
-        };
-        await db.from("portal_inbox_thread_records").upsert(
-          {
-            id: threadId,
-            scope: String(threadRow.scope ?? rowData.scope ?? MANAGER_INBOX_SCOPE),
-            owner_user_id: threadRow.owner_user_id,
-            participant_email: threadRow.participant_email,
-            row_data: nextRowData,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        );
+      const appended = await appendInboxThreadReply(db, {
+        threadId,
+        senderUserId: user.id,
+        senderEmail,
+        fromName,
+        text,
+      });
 
-        // A vendor replying in their agent thread talks to the agent, not to a
-        // human recipient — run the turn after the response and skip the normal
-        // fan-out. Only the thread OWNER (the vendor) triggers it.
-        if (String(threadRow.thread_type ?? "") === "vendor_agent" && threadRow.owner_user_id === user.id) {
-          const session = await findVendorAgentSessionByThread(db, threadId);
-          if (session) {
-            const turnTask = () =>
-              runVendorAgentSessionTurn(db, session, text, "inbox").catch((e) =>
-                console.error("vendor-agent inbox turn failed", e),
-              );
-            try {
-              after(turnTask);
-            } catch {
-              void turnTask();
-            }
+      // A vendor replying in their agent thread talks to the agent, not to a
+      // human recipient — run the turn after the response and skip the normal
+      // fan-out. Only the thread OWNER (the vendor) triggers it.
+      if (appended.ok && appended.thread?.threadType === "vendor_agent" && appended.thread.ownerUserId === user.id) {
+        const session = await findVendorAgentSessionByThread(db, threadId);
+        if (session) {
+          const turnTask = () =>
+            runVendorAgentSessionTurn(db, session, text, "inbox").catch((e) =>
+              console.error("vendor-agent inbox turn failed", e),
+            );
+          try {
+            after(turnTask);
+          } catch {
+            void turnTask();
           }
-          return NextResponse.json({ ok: true, agentHandled: true });
         }
+        return NextResponse.json({ ok: true, agentHandled: true });
       }
     }
 

@@ -67,6 +67,70 @@ export async function resolveBroadcastRecipients(
   return out;
 }
 
+/**
+ * Append a reply to an existing inbox thread. Only the thread's owner or its
+ * participant (matched by email) may append; anything else is a silent no-op
+ * (`ok: false`), mirroring the send-inbox-message route's historic behavior.
+ */
+export async function appendInboxThreadReply(
+  db: SupabaseClient,
+  opts: {
+    threadId: string;
+    senderUserId: string;
+    senderEmail: string;
+    fromName: string;
+    text: string;
+  },
+): Promise<{ ok: boolean; thread?: { threadType: string; ownerUserId: string | null } }> {
+  const threadId = opts.threadId.trim();
+  if (!threadId) return { ok: false };
+  const senderEmail = opts.senderEmail.trim().toLowerCase();
+  const { data: threadRow } = await db
+    .from("portal_inbox_thread_records")
+    .select("id, row_data, owner_user_id, participant_email, scope, thread_type")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (
+    !threadRow ||
+    (threadRow.owner_user_id !== opts.senderUserId &&
+      String(threadRow.participant_email ?? "").toLowerCase() !== senderEmail)
+  ) {
+    return { ok: false };
+  }
+  const rowData = (threadRow.row_data ?? {}) as Record<string, unknown>;
+  const messages = Array.isArray(rowData.messages) ? [...rowData.messages] : [];
+  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  messages.push({
+    id: `reply-${Date.now().toString(36)}`,
+    from: opts.fromName,
+    body: opts.text,
+    at: when,
+  });
+  await db.from("portal_inbox_thread_records").upsert(
+    {
+      id: threadId,
+      scope: String(threadRow.scope ?? rowData.scope ?? MANAGER_INBOX_SCOPE),
+      owner_user_id: threadRow.owner_user_id,
+      participant_email: threadRow.participant_email,
+      row_data: {
+        ...rowData,
+        messages,
+        preview: opts.text.slice(0, 100).replace(/\n/g, " "),
+        unread: false,
+      },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  return {
+    ok: true,
+    thread: {
+      threadType: String(threadRow.thread_type ?? ""),
+      ownerUserId: (threadRow.owner_user_id as string | null) ?? null,
+    },
+  };
+}
+
 export async function deliverPortalInboxMessage(
   db: SupabaseClient,
   opts: {

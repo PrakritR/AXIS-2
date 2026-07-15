@@ -10,18 +10,45 @@ import type { AgentContext } from "./context";
 
 export type ToolKind = "read" | "write";
 
+/**
+ * The user-facing preview of a proposed write action. Fields must show EXACTLY
+ * what will happen (recipient, full message body, amount, date) — this is the
+ * prompt-injection catch point: the landlord can only veto what they can see.
+ */
+export type ActionPreview = {
+  kind: string;
+  title: string;
+  confirmLabel: string;
+  fields: { label: string; value: string }[];
+  warnings?: string[];
+};
+
 export type ToolDefinition<Input = unknown, Output = unknown> = {
   name: string;
   description: string;
   kind: ToolKind;
   inputSchema: z.ZodType<Input>;
   handler: (ctx: AgentContext, input: Input) => Promise<Output>;
+  /**
+   * Write tools only: build the user-facing preview from server data. Must be
+   * read-only — it runs from the model loop before any confirmation exists.
+   */
+  preview?: (ctx: AgentContext, input: Input) => Promise<ActionPreview>;
 };
 
 export function defineTool<Input, Output>(
   def: ToolDefinition<Input, Output>,
 ): ToolDefinition<Input, Output> {
   return def;
+}
+
+/** A write tool: preview is required, kind is pinned, handler is the gated execute. */
+export function defineWriteTool<Input, Output>(
+  def: Omit<ToolDefinition<Input, Output>, "kind" | "preview"> & {
+    preview: NonNullable<ToolDefinition<Input, Output>["preview"]>;
+  },
+): ToolDefinition<Input, Output> {
+  return { ...def, kind: "write" };
 }
 
 // Stored heterogeneously; per-tool generics are recovered at call time via Zod.
@@ -97,5 +124,37 @@ export async function runReadTool(
     return { ok: true, data };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Tool execution failed." };
+  }
+}
+
+export type PreviewWriteToolResult =
+  | { ok: true; input: unknown; preview: ActionPreview }
+  | { ok: false; error: string };
+
+/**
+ * Validate input for a WRITE tool and build its user-facing preview. This is
+ * the only write-tool entry point reachable from the model loop; the handler
+ * itself only runs later, from the confirm endpoint, with the stored input.
+ */
+export async function previewWriteTool(
+  registry: ToolRegistry,
+  ctx: AgentContext,
+  name: string,
+  rawInput: unknown,
+): Promise<PreviewWriteToolResult> {
+  const tool = registry.get(name);
+  if (!tool) return { ok: false, error: `Unknown tool: ${name}` };
+  if (tool.kind !== "write" || !tool.preview) {
+    return { ok: false, error: `Tool ${name} is not a previewable write tool.` };
+  }
+  const parsed = tool.inputSchema.safeParse(rawInput ?? {});
+  if (!parsed.success) {
+    return { ok: false, error: `Invalid input for ${name}: ${parsed.error.message}` };
+  }
+  try {
+    const preview = await tool.preview(ctx, parsed.data);
+    return { ok: true, input: parsed.data, preview };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not preview this action." };
   }
 }

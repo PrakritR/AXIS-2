@@ -115,3 +115,147 @@ export function managerRow(managerUserId: string, rowData: unknown, id?: string)
     row_data: rowData,
   };
 }
+
+type Row = Record<string, unknown>;
+
+/**
+ * Read/write fake for the gated write tools: supports the read chains the
+ * loaders use plus insert (with audit_log dedupe_key UNIQUE semantics),
+ * upsert (by id), and update(...).eq/gt(...).select(). Tables are plain
+ * arrays exposed on `store` so tests can assert exactly what was written.
+ */
+class FakeWriteQuery {
+  private filters: ((r: Row) => boolean)[] = [];
+  private mode: "select" | "insert" | "update" | "upsert" = "select";
+  private pendingInsert: Row | null = null;
+  private pendingUpdate: Row | null = null;
+  private wantSingle = false;
+
+  constructor(
+    private store: Record<string, Row[]>,
+    private table: string,
+  ) {
+    if (!store[table]) store[table] = [];
+  }
+
+  private rows(): Row[] {
+    return this.store[this.table]!;
+  }
+
+  select() {
+    return this;
+  }
+  order() {
+    return this;
+  }
+  limit() {
+    return this;
+  }
+  eq(col: string, val: unknown) {
+    this.filters.push((r) => r[col] === val);
+    return this;
+  }
+  gt(col: string, val: unknown) {
+    this.filters.push((r) => String(r[col] ?? "") > String(val ?? ""));
+    return this;
+  }
+  single() {
+    this.wantSingle = true;
+    return this;
+  }
+  maybeSingle() {
+    this.wantSingle = true;
+    return this;
+  }
+  range(from: number, to: number) {
+    const matched = this.rows().filter((r) => this.filters.every((f) => f(r)));
+    return Promise.resolve({ data: matched.slice(from, to + 1), error: null });
+  }
+
+  insert(row: Row) {
+    this.mode = "insert";
+    // Model the partial UNIQUE index on audit_log.dedupe_key (NULLs never collide).
+    if (
+      this.table === "audit_log" &&
+      row.dedupe_key != null &&
+      this.rows().some((r) => r.dedupe_key === row.dedupe_key)
+    ) {
+      this.pendingInsert = null;
+      return this;
+    }
+    // Column defaults from the agent_pending_actions migration, so the claim
+    // path (status/expiry filters) behaves like the real table.
+    const defaults =
+      this.table === "agent_pending_actions"
+        ? { status: "proposed", expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }
+        : {};
+    const withId = {
+      id: `id_${this.rows().length}_${Math.random().toString(36).slice(2, 8)}`,
+      ...defaults,
+      ...row,
+    };
+    this.rows().push(withId);
+    this.pendingInsert = withId;
+    return this;
+  }
+
+  upsert(row: Row) {
+    this.mode = "upsert";
+    const idx = this.rows().findIndex((r) => r.id === row.id);
+    if (idx >= 0) this.rows()[idx] = { ...this.rows()[idx], ...row };
+    else this.rows().push({ ...row });
+    return this;
+  }
+
+  update(vals: Row) {
+    this.mode = "update";
+    this.pendingUpdate = vals;
+    return this;
+  }
+
+  private resolve(): { data: unknown; error: { code: string; message: string } | null } {
+    if (this.mode === "insert") {
+      if (!this.pendingInsert) {
+        return { data: null, error: { code: "23505", message: "duplicate key value" } };
+      }
+      return { data: this.wantSingle ? this.pendingInsert : [this.pendingInsert], error: null };
+    }
+    if (this.mode === "upsert") return { data: null, error: null };
+    const matched = this.rows().filter((r) => this.filters.every((f) => f(r)));
+    if (this.mode === "update") {
+      for (const r of matched) Object.assign(r, this.pendingUpdate);
+      return { data: matched, error: null };
+    }
+    return { data: this.wantSingle ? (matched[0] ?? null) : matched, error: null };
+  }
+
+  then<T>(onFulfilled: (v: { data: unknown; error: { code: string; message: string } | null }) => T) {
+    return Promise.resolve(this.resolve()).then(onFulfilled);
+  }
+}
+
+/**
+ * Build an AgentContext over a writable in-memory store. Seeded tables are
+ * deep-referenced (not copied): mutate/inspect them directly in assertions.
+ */
+export function makeWritableCtx(
+  tables: Record<string, Row[]> = {},
+  overrides: Partial<AgentContext> = {},
+): { ctx: AgentContext; store: Record<string, Row[]> } {
+  const store: Record<string, Row[]> = tables;
+  const db = {
+    from(table: string) {
+      return new FakeWriteQuery(store, table);
+    },
+  };
+  const ctx = {
+    landlordId: "manager_a",
+    userId: "manager_a",
+    email: "manager@axis.test",
+    roles: ["manager"],
+    isAdmin: false,
+    db,
+    ...overrides,
+  } as unknown as AgentContext;
+  return { ctx, store };
+}

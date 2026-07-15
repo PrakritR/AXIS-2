@@ -248,3 +248,49 @@ export async function traceAgentTurn<T extends TracedResult>(
     }
   }
 }
+
+/**
+ * Wrap a confirmed write-action execution in its own trace. It shares the
+ * turn traces' sessionId (ctx.userId), so a confirm is linked to the turn
+ * that proposed it. Pass the tool input via metadata.toolInput — the trace
+ * must carry the full arguments so a failed confirm is reproducible (per
+ * AGENTS.md; Langfuse is the debug source of truth, same as tool spans).
+ * Tracing failures are swallowed, as always.
+ */
+export async function traceAgentAction<T extends { reply: string }>(
+  ctx: AgentContext,
+  toolName: string,
+  metadata: Record<string, unknown> & { toolInput?: unknown },
+  run: () => Promise<T>,
+): Promise<T> {
+  const lf = getClient();
+  if (!lf) return run();
+
+  let trace: ReturnType<Langfuse["trace"]> | null = null;
+  try {
+    trace = lf.trace({
+      name: "axis-agent-action",
+      userId: ctx.userId,
+      sessionId: ctx.userId,
+      metadata: { landlordId: ctx.landlordId, toolName, ...metadata },
+      input: { toolName, input: metadata.toolInput },
+    });
+  } catch {
+    trace = null;
+  }
+
+  try {
+    const result = await run();
+    safe(() => trace?.update({ output: result.reply }));
+    return result;
+  } catch (e) {
+    safe(() => trace?.update({ output: e instanceof Error ? e.message : "error" }));
+    throw e;
+  } finally {
+    try {
+      await lf.flushAsync();
+    } catch {
+      /* ignore */
+    }
+  }
+}

@@ -95,6 +95,13 @@ language and it performs actions the site can already do.
 - Any state-changing tool (send message, send rent reminder, create/update
   lease, etc.) goes behind an explicit user preview/confirmation step and
   writes to the audit log.
+- Mechanism: write tools use `defineWriteTool` (a required `preview` plus the
+  `handler` that executes). The model sees write tools, but the loop only ever
+  builds the preview and ends the turn as a pending action (an
+  `agent_pending_actions` row). The client confirms with ONLY the action id;
+  the server re-validates the stored input and the handler re-resolves current
+  state before writing. Add new agent write capabilities by following this
+  pattern — never execute a write from the model loop.
 - Treat ALL tenant- and applicant-submitted text (applications, maintenance
   notes, messages) as untrusted input that may contain prompt-injection
   attempts. It must never trigger an unconfirmed action or override

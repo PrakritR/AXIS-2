@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { track } from "@/lib/analytics/track-client";
+import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import { useIsClient } from "@/hooks/use-is-client";
 import {
   closeGeneralAssistant,
@@ -245,14 +246,14 @@ export function GeneralAssistant() {
                 <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
                   <span
                     className={
-                      "inline-block max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-left " +
+                      "inline-block max-w-[88%] rounded-2xl px-3.5 py-2.5 text-left " +
                       (m.role === "user"
-                        ? "rounded-br-md text-white shadow-[0_8px_20px_-12px_rgba(47,107,255,0.6)]"
+                        ? "whitespace-pre-wrap rounded-br-md text-white shadow-[0_8px_20px_-12px_rgba(47,107,255,0.6)]"
                         : "rounded-bl-md border border-border bg-foreground/[0.04] text-foreground")
                     }
                     style={m.role === "user" ? { background: "var(--btn-primary)" } : undefined}
                   >
-                    {m.content}
+                    {m.role === "user" ? m.content : <AssistantMarkdown text={m.content} />}
                   </span>
                 </div>
               ))}

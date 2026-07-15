@@ -7,9 +7,10 @@ import { loadAllManagerRows } from "./load-manager-rows";
 /**
  * Residents are approved applicants. They live in the same
  * `manager_application_records` table as applications, distinguished by
- * `bucket === "approved"`.
+ * `bucket === "approved"`. Shared with the write tools that must resolve a
+ * model-supplied resident email against the landlord's own residents.
  */
-async function loadManagerApplications(ctx: AgentContext): Promise<DemoApplicantRow[]> {
+export async function loadManagerApplications(ctx: AgentContext): Promise<DemoApplicantRow[]> {
   return loadAllManagerRows(
     ctx,
     "manager_application_records",
