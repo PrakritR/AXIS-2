@@ -14,6 +14,8 @@ import {
   buildManagerListingUrl,
   buildManagerTourUrl,
 } from "@/lib/manager-property-links";
+import { residentPortalUrl } from "@/lib/claw-resident-links";
+import { getPublicListings } from "@/lib/public-listings.server";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 export const LEASING_ESCALATE_TOOL_NAME = "escalate_to_manager";
@@ -29,7 +31,12 @@ function str(obj: Record<string, unknown> | null, key: string): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
-function publicOrigin(): string {
+/**
+ * Origin for links embedded in SMS. Phone-reachable only — never localhost.
+ * Prefers the explicit Claw/SMS override so the shared line always deep-links to
+ * the real production domain regardless of where the code runs.
+ */
+export function publicOrigin(): string {
   const explicit =
     process.env.PROPLANE_SMS_LINK_ORIGIN?.trim() ||
     process.env.CLAW_MESSENGER_LINK_ORIGIN?.trim();
@@ -41,7 +48,7 @@ function publicOrigin(): string {
   return "https://www.axis-seattle-housing.com";
 }
 
-type RawPropertyRecord = {
+export type RawPropertyRecord = {
   id: string;
   status: string | null;
   property_data: unknown;
@@ -102,7 +109,7 @@ function summarizeBundles(src: Record<string, unknown> | null) {
   }
 }
 
-async function loadLiveListings(ctx: AgentContext): Promise<RawPropertyRecord[]> {
+async function loadOwnedLiveListings(ctx: AgentContext): Promise<RawPropertyRecord[]> {
   const { data, error } = await ctx.db
     .from("manager_property_records")
     .select("id, status, property_data, row_data")
@@ -131,10 +138,138 @@ async function loadOwnedListing(
   return (data as RawPropertyRecord | null) ?? null;
 }
 
+/**
+ * A public-catalog listing (any owner) reshaped into the raw-row form the
+ * summarizers expect. `getPublicListings()` already returns the marketing
+ * `property_data` (title/address/rooms/bundles via `listingSubmission`), so no
+ * second query is needed — and it is exactly the admin-approved, non-sandbox,
+ * live set the public `/rent` pages render, never private/financial data.
+ */
+function mockPropertyToRecord(p: {
+  id: string;
+  [k: string]: unknown;
+}): RawPropertyRecord {
+  return {
+    id: p.id,
+    status: "live",
+    property_data: p as unknown as Record<string, unknown>,
+    row_data: null,
+  };
+}
+
+/* Short in-process memo so one agent turn (list → details → links = 3 tool
+ * calls) doesn't refetch the whole public catalog 3× — egress guard per
+ * AGENTS.md. Single in-flight promise coalesces concurrent calls. */
+const CATALOG_TTL_MS = 30_000;
+let catalogCache: { at: number; rows: RawPropertyRecord[] } | null = null;
+let catalogInflight: Promise<RawPropertyRecord[]> | null = null;
+
+async function loadPublicCatalogRows(): Promise<RawPropertyRecord[]> {
+  const now = Date.now();
+  if (catalogCache && now - catalogCache.at < CATALOG_TTL_MS) return catalogCache.rows;
+  if (catalogInflight) return catalogInflight;
+  catalogInflight = (async () => {
+    try {
+      const listings = await getPublicListings();
+      const rows = listings.map(mockPropertyToRecord);
+      catalogCache = { at: Date.now(), rows };
+      return rows;
+    } finally {
+      catalogInflight = null;
+    }
+  })();
+  return catalogInflight;
+}
+
+/** Test-only: drop the catalog memo so fixtures aren't shadowed across tests. */
+export function __resetLeasingCatalogCache(): void {
+  catalogCache = null;
+  catalogInflight = null;
+}
+
+function isCrossCatalog(ctx: AgentContext): boolean {
+  return ctx.leasingScope?.crossCatalog === true;
+}
+
+/**
+ * Listings the agent may browse this turn: the whole public catalog on the
+ * shared line (any owner), else only this manager's own live/listed listings.
+ */
+async function loadBrowsableListings(ctx: AgentContext): Promise<RawPropertyRecord[]> {
+  if (isCrossCatalog(ctx)) return loadPublicCatalogRows();
+  return loadOwnedLiveListings(ctx);
+}
+
+/**
+ * Resolve one listing by id. Always tries the manager's own listings first (so a
+ * per-manager line and a manager testing their own not-yet-fully-live listing
+ * keep working); on the shared line, falls back to any public-catalog listing.
+ */
+async function loadResolvableListing(
+  ctx: AgentContext,
+  propertyId: string,
+): Promise<RawPropertyRecord | null> {
+  const id = propertyId.trim();
+  if (!id) return null;
+  const owned = await loadOwnedListing(ctx, id);
+  if (owned) return owned;
+  if (!isCrossCatalog(ctx)) return null;
+  const rows = await loadPublicCatalogRows();
+  return rows.find((r) => r.id === id) ?? null;
+}
+
+/** Pure list-item shape for one listing — exported for tests. */
+export function summarizeListingRecord(rec: RawPropertyRecord) {
+  const src = propertySource(rec);
+  const rooms = summarizeRooms(src);
+  return {
+    propertyId: rec.id,
+    status: rec.status,
+    title: propertyLabel(src),
+    address: str(src, "address"),
+    neighborhood: str(src, "neighborhood"),
+    rentLabel: str(src, "rentLabel"),
+    available: str(src, "available"),
+    beds: typeof src?.beds === "number" ? src.beds : null,
+    baths: typeof src?.baths === "number" ? src.baths : null,
+    rooms: rooms.map((r) => ({
+      id: r.id,
+      name: r.name,
+      monthlyRent: r.monthlyRent,
+      availability: r.availability,
+    })),
+    bundles: summarizeBundles(src),
+  };
+}
+
+/** True when a listing summary matches a free-text needle (address/name/room). */
+export function listingSummaryMatches(
+  summary: ReturnType<typeof summarizeListingRecord>,
+  needle: string,
+): boolean {
+  const n = needle.trim().toLowerCase();
+  if (!n) return true;
+  const hay = [
+    summary.title,
+    summary.address,
+    summary.neighborhood,
+    ...summary.rooms.map((r) => r.name),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (hay.includes(n)) return true;
+  // Require every significant token (len > 2) so "8th Ave" does not also
+  // match every other "… Ave …" listing.
+  const words = n.split(/\s+/).filter((w) => w.length > 2);
+  if (words.length === 0) return false;
+  return words.every((w) => hay.includes(w));
+}
+
 export const listLiveListingsTool = defineTool({
   name: "list_live_listings",
   description:
-    "List this manager's live public listings with title, address, neighborhood, rent label, and room names/prices. Use first when matching a prospect's house or room question.",
+    "Search PropLane's live public listings — on the shared PropLane line this spans EVERY manager's listings (the same catalog as the public /rent site), so use it to find ANY house or room a prospect names. Returns title, address, neighborhood, rent label, and room names/prices. Use first when matching a prospect's house or room question.",
   kind: "read",
   inputSchema: z
     .object({
@@ -145,45 +280,13 @@ export const listLiveListingsTool = defineTool({
     })
     .strict(),
   handler: async (ctx, input) => {
-    const needle = (input.query ?? "").trim().toLowerCase();
-    const rows = await loadLiveListings(ctx);
+    const needle = (input.query ?? "").trim();
+    const rows = await loadBrowsableListings(ctx);
     const listings = rows
-      .map((rec) => {
-        const src = propertySource(rec);
-        const rooms = summarizeRooms(src);
-        const label = propertyLabel(src);
-        const address = str(src, "address");
-        const hay = [label, address, str(src, "neighborhood"), ...rooms.map((r) => r.name)]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (
-          needle &&
-          !hay.includes(needle) &&
-          !needle.split(/\s+/).some((w) => w.length > 2 && hay.includes(w))
-        ) {
-          return null;
-        }
-        return {
-          propertyId: rec.id,
-          status: rec.status,
-          title: label,
-          address,
-          neighborhood: str(src, "neighborhood"),
-          rentLabel: str(src, "rentLabel"),
-          available: str(src, "available"),
-          beds: typeof src?.beds === "number" ? src.beds : null,
-          baths: typeof src?.baths === "number" ? src.baths : null,
-          rooms: rooms.map((r) => ({
-            id: r.id,
-            name: r.name,
-            monthlyRent: r.monthlyRent,
-            availability: r.availability,
-          })),
-          bundles: summarizeBundles(src),
-        };
-      })
-      .filter(Boolean);
+      .map(summarizeListingRecord)
+      .filter((s) => listingSummaryMatches(s, needle))
+      // Cap the payload the model sees (large catalogs); a needle narrows first.
+      .slice(0, 40);
     return { count: listings.length, listings };
   },
 });
@@ -191,7 +294,7 @@ export const listLiveListingsTool = defineTool({
 export const getListingDetailsTool = defineTool({
   name: "get_listing_details",
   description:
-    "Full details for one live listing owned by this manager: address, rent, rooms (ids/names/prices/availability), bundles, and amenities. Call before answering specifics about a house or room.",
+    "Full details for one live listing: address, rent, rooms (ids/names/prices/availability), bundles, and amenities. On the shared PropLane line this resolves ANY live listing on the platform. Call before answering specifics about a house or room.",
   kind: "read",
   inputSchema: z
     .object({
@@ -203,7 +306,7 @@ export const getListingDetailsTool = defineTool({
     })
     .strict(),
   handler: async (ctx, input) => {
-    const rec = await loadOwnedListing(ctx, input.propertyId);
+    const rec = await loadResolvableListing(ctx, input.propertyId);
     if (!rec) return { found: false };
     const src = propertySource(rec);
     const rooms = summarizeRooms(src);
@@ -240,7 +343,7 @@ export const getListingDetailsTool = defineTool({
 export const buildProspectLinksTool = defineTool({
   name: "build_prospect_links",
   description:
-    "Build listing, tour, and apply URLs for a matched property. Apply links prefill the prospect's phone and optional room/bundle so the application form is already filled. Always use this before telling someone to apply or tour.",
+    "Build listing, tour, and apply URLs for a matched property (any live PropLane listing on the shared line). Apply links prefill the prospect's phone and optional room/bundle so the application form is already filled. Links always use the production domain, never localhost. Always use this before telling someone to apply or tour.",
   kind: "read",
   inputSchema: z
     .object({
@@ -251,7 +354,7 @@ export const buildProspectLinksTool = defineTool({
     })
     .strict(),
   handler: async (ctx, input) => {
-    const rec = await loadOwnedListing(ctx, input.propertyId);
+    const rec = await loadResolvableListing(ctx, input.propertyId);
     if (!rec) return { ok: false, error: "listing_not_found" };
     const src = propertySource(rec);
     const rooms = summarizeRooms(src);
@@ -294,6 +397,41 @@ export const buildProspectLinksTool = defineTool({
         bundleId: input.bundleId?.trim() || null,
       },
     };
+  },
+});
+
+/**
+ * Canonical, origin-correct PropLane links for the general handoffs a prospect
+ * asks about (browse all homes, start an application, book a tour, pricing,
+ * resident portal to sign a lease). Pure URL builder — no DB, no scope — so the
+ * agent never has to invent a URL (and never emits a localhost link). Use for
+ * "how do I apply / where do I see all listings / how do I sign my lease" when
+ * no specific property is matched yet.
+ */
+export function proplaneSiteLinks(origin: string) {
+  const base = origin.replace(/\/$/, "");
+  return {
+    origin: base,
+    browseHomes: `${base}/rent`,
+    startApplication: `${base}/rent/apply`,
+    pricing: `${base}/pricing`,
+    demo: `${base}/demo`,
+    docs: `${base}/docs`,
+    residentPortal: residentPortalUrl("login"),
+    residentSignup: residentPortalUrl("signup"),
+    signLease: residentPortalUrl("lease"),
+    payRent: residentPortalUrl("payments"),
+  };
+}
+
+export const getSiteLinksTool = defineTool({
+  name: "get_site_links",
+  description:
+    "Canonical PropLane site links (production domain, never localhost): browse all homes, start an application, book a tour, pricing, the live demo, and the resident portal for signing a lease or paying rent. Use when a prospect asks a general 'where do I …' question and no single property is matched. For a specific matched listing use build_prospect_links instead.",
+  kind: "read",
+  inputSchema: z.object({}).strict(),
+  handler: async () => {
+    return { links: proplaneSiteLinks(publicOrigin()) };
   },
 });
 

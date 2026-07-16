@@ -35,11 +35,19 @@ export type VendorAgentScope = {
   workOrderId: string;
 };
 
-/** Prospect texting one manager's Twilio work number. */
+/** Prospect texting a PropLane leasing line (per-manager Twilio or the shared Claw line). */
 export type LeasingSmsAgentScope = {
   sessionId: string;
   prospectPhoneE164: string;
   workNumber: string | null;
+  /**
+   * True on the shared Claw line (`+12053690702`), where a single number fronts
+   * EVERY manager. Listing tools then read the whole public catalog (any owner)
+   * instead of only `ctx.landlordId`'s listings, so the agent can find and link
+   * any live listing on PropLane — the same set the public `/rent` pages show.
+   * False/undefined on a per-manager work number (scoped to that manager only).
+   */
+  crossCatalog?: boolean;
 };
 
 /**
