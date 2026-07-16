@@ -64,4 +64,7 @@ The Finances panel could hang on **"Loading entries…"** because
 (SELECT + INSERT/UPDATE per charge) before returning. Under volume that N+1
 could exceed the request budget and never settle. `src/lib/reports/ledger-sync.ts`
 now bulk-fetches existing entries once and does batched insert/upsert
-(~3 round-trips regardless of charge count).
+(~3 round-trips regardless of charge count). (Since then the `?backfill=1`
+read-time pass was removed entirely — the ledger is write-through only, with the
+admin-gated `POST /api/admin/backfill-ledger` as the sole manual sweep; see
+AGENTS.md, "Financials Phase 0".)
