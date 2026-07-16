@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
-import type { AgentContext } from "@/lib/tools/context";
-import { buildTraceObserver, type TraceLike } from "@/lib/observability/langfuse";
+import { buildTraceObserver, type TraceLike, type TraceActor } from "@/lib/observability/langfuse";
 
-const ctx = { landlordId: "manager_a", userId: "manager_a" } as unknown as AgentContext;
+const ctx: TraceActor = {
+  userId: "manager_a",
+  metadata: { landlordId: "manager_a", role: "manager" },
+};
 
 function fakeTrace() {
   const calls = { update: [] as unknown[], generation: [] as unknown[], span: [] as unknown[] };

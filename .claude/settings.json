@@ -10,7 +10,9 @@
       "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies.next\\)\")",
       "mcp__claude_ai_Supabase__list_projects",
       "Bash(echo \"exit: $?\")",
-      "Bash(git commit -m 'feat\\(agent\\): write-action framework — confirm-gated tools, pending actions, sessions, multi-portal contexts *)"
+      "Bash(git commit -m 'feat\\(agent\\): write-action framework — confirm-gated tools, pending actions, sessions, multi-portal contexts *)",
+      "Bash(git commit -m 'docs\\(agent\\): ai-assistant architecture guide + confirm-endpoint integration tests *)",
+      "Bash(node -e \"console.log\\(process.version\\)\")"
     ]
   }
 }

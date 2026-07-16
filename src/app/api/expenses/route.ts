@@ -7,6 +7,7 @@ import {
   resolveExpenseTaxDeductible,
   SYSTEM_CHART_ACCOUNTS,
 } from "@/lib/reports/categories";
+import { recordManualExpense } from "@/lib/reports/manual-entries.server";
 
 export const runtime = "nodejs";
 
@@ -70,47 +71,9 @@ export async function POST(req: Request) {
       taxDeductible?: boolean;
     };
 
-    const amountCents = Number(body.amountCents);
-    if (!(amountCents > 0)) {
-      return NextResponse.json({ error: "amountCents must be positive." }, { status: 400 });
-    }
-    if (!body.expenseDate?.trim()) {
-      return NextResponse.json({ error: "expenseDate required." }, { status: 400 });
-    }
-    if (!body.categoryCode?.trim()) {
-      return NextResponse.json({ error: "categoryCode required." }, { status: 400 });
-    }
-
-    const categoryCode = body.categoryCode.trim();
-    // Auto-suggest the tax classification from the category; an explicit value
-    // from the form is a manager override and wins.
-    const taxDeductible =
-      typeof body.taxDeductible === "boolean" ? body.taxDeductible : isCategoryDeductible(categoryCode);
-
-    const now = new Date().toISOString();
-    const { data, error } = await auth.db
-      .from("manager_expense_entries")
-      .insert({
-        manager_user_id: auth.userId,
-        property_id: body.propertyId?.trim() || null,
-        category_code: categoryCode,
-        amount_cents: amountCents,
-        expense_date: body.expenseDate.trim(),
-        memo: body.memo?.trim() || null,
-        vendor_id: body.vendorId?.trim() || null,
-        tax_deductible: taxDeductible,
-        updated_at: now,
-      })
-      .select("*")
-      .single();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    track("expense_created", auth.userId, {
-      category_code: categoryCode,
-      tax_deductible: taxDeductible,
-      tax_overridden: typeof body.taxDeductible === "boolean" && body.taxDeductible !== isCategoryDeductible(categoryCode),
-    });
-    return NextResponse.json({ expense: data });
+    const result = await recordManualExpense(auth.db, auth.userId, body);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ expense: result.entry });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create expense.";
     return NextResponse.json({ error: message }, { status: 500 });

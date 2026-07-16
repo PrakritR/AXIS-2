@@ -3,18 +3,8 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { upsertManagerCharges } from "@/lib/household-charges.server";
 import { enrichHouseholdChargesFromPropertyRecords } from "@/lib/household-charge-payment-eligibility";
-import {
-  cancelFuturePaymentRemindersForCharge,
-  restoreFuturePaymentRemindersForCharge,
-} from "@/lib/payment-reminder-lifecycle.server";
-import {
-  DEFAULT_MANAGER_AUTOMATION_SETTINGS,
-  loadManagerAutomationSettings,
-} from "@/lib/payment-automation-settings";
-import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
-import { reconcileDuplicateHouseholdChargeRecords } from "@/lib/reports/ledger-sync";
-import { syncLedgerChargeEntry } from "@/lib/reports/ledger-sync";
 
 export const runtime = "nodejs";
 
@@ -132,64 +122,12 @@ export async function POST(req: Request) {
     const rentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
 
     if (charges.length > 0) {
-      const reminderSettings = await loadManagerAutomationSettings(db, user.id).catch(
-        () => DEFAULT_MANAGER_AUTOMATION_SETTINGS,
-      );
-      const normalizedCharges = charges.map((raw) => {
-        if (!raw.id || raw.status === "paid") return raw;
-        const charge = raw as HouseholdCharge;
-        const prepared = ensureChargeDueDateForReminders(charge, reminderSettings);
-        if (prepared.dueDateLabel === charge.dueDateLabel) return raw;
-        return { ...raw, dueDateLabel: prepared.dueDateLabel };
+      // Shared upsert core (due-date normalization, paid/pending reminder
+      // transitions, ledger write-through) — same implementation the agent
+      // tool layer uses. Admin saves may carry rows for other managers.
+      await upsertManagerCharges(db, user.id, charges, {
+        trustRowManagerUserId: user.role === "admin",
       });
-
-      const chargeIds = normalizedCharges.filter((c) => c.id).map((c) => String(c.id));
-      const previousStatusById = new Map<string, string | null>();
-      if (chargeIds.length > 0) {
-        const { data: existingRows } = await db
-          .from("portal_household_charge_records")
-          .select("id, status")
-          .in("id", chargeIds);
-        for (const row of existingRows ?? []) {
-          previousStatusById.set(String(row.id), typeof row.status === "string" ? row.status : null);
-        }
-      }
-
-      const rows = normalizedCharges
-        .filter((c) => c.id)
-        .map((c) => ({
-          id: String(c.id),
-          manager_user_id: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
-          resident_user_id: toUuid(c.residentUserId),
-          resident_email: typeof c.residentEmail === "string" ? c.residentEmail.trim().toLowerCase() : null,
-          property_id: typeof c.propertyId === "string" ? c.propertyId : null,
-          kind: typeof c.kind === "string" ? c.kind : null,
-          status: typeof c.status === "string" ? c.status : null,
-          row_data: c,
-          updated_at: now,
-        }));
-      if (rows.length > 0) {
-        const { error } = await db.from("portal_household_charge_records").upsert(rows, { onConflict: "id" });
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        await reconcileDuplicateHouseholdChargeRecords(
-          db,
-          user.role === "admin" ? undefined : user.id,
-        ).catch(() => undefined);
-        for (const c of normalizedCharges) {
-          if (!c.id) continue;
-          const chargeId = String(c.id);
-          const nextStatus = typeof c.status === "string" ? c.status : null;
-          if (!nextStatus) continue;
-          const managerId = user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id;
-          const prevStatus = previousStatusById.get(chargeId) ?? null;
-          if (nextStatus === "paid" && prevStatus !== "paid") {
-            await cancelFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
-          } else if (nextStatus === "pending" && prevStatus === "paid") {
-            await restoreFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
-          }
-          await syncLedgerChargeEntry(db, c as HouseholdCharge);
-        }
-      }
     }
 
     if (rentProfiles.length > 0) {

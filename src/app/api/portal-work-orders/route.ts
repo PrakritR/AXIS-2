@@ -4,6 +4,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
+import { resolveVendorUserId } from "@/lib/work-order-vendor.server";
 
 export const runtime = "nodejs";
 
@@ -132,32 +133,6 @@ function actorOwnsRecord(actor: Actor, rec: OwnerCols | null): boolean {
   // Legacy unassigned rows are claimable by a manager (never a resident).
   if (!rec.manager_user_id && actor.role !== "resident") return true;
   return false;
-}
-
-/** Resolve a vendor directory row's linked auth user, so the record can be scoped
- * for the vendor's own GET query and inbox notifications without a join at read time.
- * Rejects (returns `rejected: true`) a vendorId that doesn't belong to `ownerManagerUserId`
- * and isn't marked shared — the same ownership gate the sibling work-order-vendor-offers
- * route applies — so a client can't attach an uninvited/other-manager's vendor to a work
- * order via a crafted vendorId. */
-async function resolveVendorUserId(
-  db: ReturnType<typeof createSupabaseServiceRoleClient>,
-  vendorId: string | null | undefined,
-  ownerManagerUserId: string | null,
-): Promise<{ vendorUserId: string | null; rejected: boolean }> {
-  const id = vendorId?.trim();
-  if (!id) return { vendorUserId: null, rejected: false };
-  const { data } = await db
-    .from("manager_vendor_records")
-    .select("manager_user_id, vendor_user_id, row_data")
-    .eq("id", id)
-    .maybeSingle();
-  if (!data) return { vendorUserId: null, rejected: true };
-  const rowData = (data.row_data ?? {}) as Record<string, unknown>;
-  const shared = rowData.sharedWithManagers === true;
-  const owned = Boolean(ownerManagerUserId) && (data.manager_user_id === ownerManagerUserId || shared);
-  if (!owned) return { vendorUserId: null, rejected: true };
-  return { vendorUserId: (data.vendor_user_id as string | null) ?? null, rejected: false };
 }
 
 /** Which manager's vendor directory a vendorId must belong to (or be shared with) for

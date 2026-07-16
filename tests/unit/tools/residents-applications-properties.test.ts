@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { listResidentsTool } from "@/lib/tools/domains/residents";
-import { listApplicationsTool } from "@/lib/tools/domains/applications";
-import { listPropertiesTool } from "@/lib/tools/domains/properties";
+import { getApplicationDetailsTool, listApplicationsTool } from "@/lib/tools/domains/applications";
+import { getPropertyDetailsTool, listPropertiesTool } from "@/lib/tools/domains/properties";
 import { makeManagerRowsCtx, managerRow, type FakeRecord } from "./fake-agent-ctx";
 
 const SENSITIVE_APP = {
@@ -53,6 +53,69 @@ describe("list_applications", () => {
   });
 });
 
+describe("get_application_details", () => {
+  const ctx = makeManagerRowsCtx({
+    manager_application_records: [
+      managerRow("manager_a", {
+        id: "a1",
+        name: "Pat",
+        email: "Pat@X.com",
+        property: "12 Main",
+        stage: "Screening",
+        bucket: "pending",
+        assignedRoomChoice: "Room 2::room-2",
+        application: {
+          ...SENSITIVE_APP,
+          leaseStart: "2026-08-01",
+          leaseEnd: "2027-07-31",
+          leaseTerm: "12 months",
+          roomChoice1: "Room 1::room-1",
+        },
+        backgroundCheckStatus: "flagged",
+        screening: { report: "raw certn data" },
+        backgroundCheck: { status: "complete", result: "clear", reportSnapshot: { secret: "raw checkr report" } },
+      }),
+      managerRow("manager_b", { id: "a3", name: "Other", bucket: "pending" }),
+    ],
+  });
+
+  it("returns the safe projection with lease dates, room choice, and screening statuses", async () => {
+    const res = (await getApplicationDetailsTool.handler(ctx, { applicationId: "a1" })) as {
+      found: boolean;
+      application: Record<string, unknown>;
+    };
+    expect(res.found).toBe(true);
+    expect(res.application).toMatchObject({
+      id: "a1",
+      name: "Pat",
+      email: "pat@x.com",
+      desiredLeaseStart: "2026-08-01",
+      desiredLeaseEnd: "2027-07-31",
+      leaseTerm: "12 months",
+      roomChoice: "Room 2::room-2",
+      screeningStatus: "flagged",
+      checkr: { status: "complete", result: "clear" },
+    });
+  });
+
+  it("hard-excludes the raw form, screening bodies, and report snapshots", async () => {
+    const res = (await getApplicationDetailsTool.handler(ctx, { applicationId: "a1" })) as {
+      application: Record<string, unknown>;
+    };
+    const json = JSON.stringify(res);
+    expect(res.application).not.toHaveProperty("application");
+    expect(res.application).not.toHaveProperty("screening");
+    expect(json).not.toContain("123-45-6789");
+    expect(json).not.toContain("raw certn data");
+    expect(json).not.toContain("raw checkr report");
+  });
+
+  it("does not return another landlord's application", async () => {
+    const res = (await getApplicationDetailsTool.handler(ctx, { applicationId: "a3" })) as { found: boolean };
+    expect(res.found).toBe(false);
+  });
+});
+
 describe("list_residents", () => {
   const ctx = makeManagerRowsCtx({
     manager_application_records: [
@@ -100,5 +163,76 @@ describe("list_properties", () => {
     };
     expect(live.properties).toHaveLength(1);
     expect(live.properties[0]!).toMatchObject({ id: "p1", title: "Sunset Lofts", rent: "$2,000/mo" });
+  });
+});
+
+describe("get_property_details", () => {
+  const rec = (managerUserId: string, id: string, status: string, data: Record<string, unknown>, key: "row_data" | "property_data" = "property_data"): FakeRecord =>
+    ({ id, manager_user_id: managerUserId, status, row_data: key === "row_data" ? data : {}, property_data: key === "property_data" ? data : {} } as unknown as FakeRecord);
+
+  const ctx = makeManagerRowsCtx({
+    manager_property_records: [
+      rec("manager_a", "p1", "live", {
+        id: "p1",
+        title: "Sunset Lofts",
+        address: "1 A St",
+        zip: "98101",
+        neighborhood: "Fremont",
+        beds: 2,
+        baths: 1,
+        rentLabel: "$2,000/mo",
+        petFriendly: true,
+        listingSubmission: {
+          v: 1,
+          acceptedPaymentMethods: ["ach"],
+          zelleContact: "555-000-1111",
+          venmoContact: "@secret-venmo",
+          rooms: [
+            {
+              name: "Room 1",
+              monthlyRent: 1000,
+              availability: "Available now",
+              moveInAvailableDate: "2026-08-01",
+              photoDataUrls: ["data:image/png;base64,SECRETBLOB"],
+              moveInInstructions: "lockbox code 4321",
+            },
+          ],
+        },
+      }),
+      rec("manager_b", "p3", "live", { id: "p3", title: "Other" }),
+    ],
+  });
+
+  it("projects safe listing details including rooms and accepted payment methods", async () => {
+    const res = (await getPropertyDetailsTool.handler(ctx, { propertyId: "p1" })) as {
+      found: boolean;
+      property: { rooms: Record<string, unknown>[]; acceptedPaymentMethods: string[] };
+    };
+    expect(res.found).toBe(true);
+    expect(res.property).toMatchObject({
+      id: "p1",
+      title: "Sunset Lofts",
+      zip: "98101",
+      rentLabel: "$2,000/mo",
+      petFriendly: true,
+      acceptedPaymentMethods: ["ach"],
+    });
+    expect(res.property.rooms).toEqual([
+      { name: "Room 1", rent: 1000, availability: "Available now", moveInAvailableDate: "2026-08-01" },
+    ]);
+  });
+
+  it("never emits photo blobs, payment contacts, or move-in access instructions", async () => {
+    const res = await getPropertyDetailsTool.handler(ctx, { propertyId: "p1" });
+    const json = JSON.stringify(res);
+    expect(json).not.toContain("SECRETBLOB");
+    expect(json).not.toContain("555-000-1111");
+    expect(json).not.toContain("@secret-venmo");
+    expect(json).not.toContain("lockbox code");
+  });
+
+  it("does not return another landlord's property", async () => {
+    const res = (await getPropertyDetailsTool.handler(ctx, { propertyId: "p3" })) as { found: boolean };
+    expect(res.found).toBe(false);
   });
 });

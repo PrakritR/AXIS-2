@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
-import { track } from "@/lib/analytics/posthog";
 import { resolveAppOrigin } from "@/lib/app-url";
-import { generateVendorInviteToken } from "@/lib/auth/provision-vendor-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import {
-  buildVendorInviteEmailBody,
-  buildVendorInviteEmailHtml,
-  buildVendorInviteMailtoHref,
-  vendorInviteSubject,
-} from "@/lib/vendor-invite-email";
-
-const VENDOR_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+import { sendVendorInvite } from "@/lib/vendor-invite.server";
 
 export const runtime = "nodejs";
 
@@ -51,63 +42,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    // Only the owning manager may invite for their own vendor directory row.
-    const { data: vendorRow } = await db
-      .from("manager_vendor_records")
-      .select("id, manager_user_id")
-      .eq("id", vendorId)
-      .maybeSingle();
-    if (!vendorRow || vendorRow.manager_user_id !== user.id) {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    }
-
-    // One pending invite per vendor directory row — replace rather than pile up.
-    await db.from("vendor_invites").delete().eq("vendor_directory_id", vendorId).eq("status", "pending");
-    const inviteToken = generateVendorInviteToken();
-    const expiresAt = new Date(Date.now() + VENDOR_INVITE_TTL_MS).toISOString();
-    const { error: insertError } = await db.from("vendor_invites").insert({
-      manager_user_id: user.id,
-      vendor_directory_id: vendorId,
-      vendor_email: vendorEmail,
-      vendor_name: vendorName || null,
-      invite_token: inviteToken,
-      expires_at: expiresAt,
-    });
-    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
-
-    // The link carries only the opaque token, never the email — the register route
-    // resolves the invited email server-side from the token so a caller can't hijack
-    // another vendor's pending invite by supplying an arbitrary email/pattern.
-    const origin = resolveAppOrigin(req);
-    const linkUrl = `${origin}/auth/vendor-register?token=${encodeURIComponent(inviteToken)}`;
     const managerName = profile?.full_name?.trim() || profile?.email?.trim() || "Your property manager";
-
-    const subject = vendorInviteSubject(managerName);
-    const text = buildVendorInviteEmailBody({ vendorName, managerName, linkUrl });
-    const html = buildVendorInviteEmailHtml({ vendorName, managerName, linkUrl });
-    const mailtoHref = buildVendorInviteMailtoHref({ to: vendorEmail, vendorName, managerName, linkUrl });
-
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json(
-        { ok: false, error: "Email delivery is not configured (set RESEND_API_KEY).", mailtoHref, linkUrl },
-        { status: 503 },
-      );
-    }
-
-    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [vendorEmail], subject, text, html }),
+    const result = await sendVendorInvite(db, {
+      managerUserId: user.id,
+      managerName,
+      vendorId,
+      vendorEmail,
+      vendorName,
+      origin: resolveAppOrigin(req),
     });
-    const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
-    if (!res.ok) {
-      return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref, linkUrl }, { status: 502 });
+
+    if (!result.ok) {
+      if (result.status === 502 || result.status === 503) {
+        return NextResponse.json(
+          { ok: false, error: result.error, mailtoHref: result.mailtoHref, linkUrl: result.linkUrl },
+          { status: result.status },
+        );
+      }
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    track("vendor_invite_sent", user.id, { vendor_id: vendorId });
-    return NextResponse.json({ ok: true, id: payload.id ?? null, linkUrl });
+    return NextResponse.json({ ok: true, id: result.emailId, linkUrl: result.linkUrl });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send invite." }, { status: 500 });
   }

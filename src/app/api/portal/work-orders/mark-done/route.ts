@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { markWorkOrderDoneByVendor } from "@/lib/work-order-bids.server";
 
 export const runtime = "nodejs";
 
@@ -36,63 +34,12 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const actor = await sessionActor(db);
     if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    if (!actor.admin && actor.role !== "vendor") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    }
 
     const body = (await req.json().catch(() => ({}))) as { workOrderId?: string; note?: string };
-    const workOrderId = String(body.workOrderId ?? "").trim();
-    if (!workOrderId) return NextResponse.json({ error: "Work order id required." }, { status: 400 });
-    const note = String(body.note ?? "").trim().slice(0, 2000);
 
-    const { data: workOrder } = await db
-      .from("portal_work_order_records")
-      .select("manager_user_id, vendor_user_id, row_data")
-      .eq("id", workOrderId)
-      .maybeSingle();
-    if (!workOrder) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    if (!actor.admin && workOrder.vendor_user_id !== actor.userId) {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    }
-
-    const rowData = (workOrder.row_data ?? {}) as DemoManagerWorkOrderRow;
-    if (rowData.bucket !== "scheduled") {
-      return NextResponse.json({ error: "This work order isn't ready to be marked done." }, { status: 400 });
-    }
-    if (rowData.automationStatus) {
-      return NextResponse.json({ error: "This work order has already been marked done." }, { status: 400 });
-    }
-
-    const now = new Date().toISOString();
-    const nextRowData: DemoManagerWorkOrderRow = {
-      ...rowData,
-      automationStatus: "vendor_marked_done",
-      vendorMarkedDoneAt: now,
-      vendorMarkedDoneNote: note || undefined,
-    };
-
-    const { error } = await db
-      .from("portal_work_order_records")
-      .update({ row_data: nextRowData, updated_at: now })
-      .eq("id", workOrderId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    await deliverPortalInboxMessage(db, {
-      senderUserId: actor.userId,
-      senderEmail: actor.email,
-      fromName: actor.fullName || "Axis Portal",
-      subject: `${rowData.title || "Work order"} marked done — approval needed`,
-      text: `${actor.fullName || "Your vendor"} marked "${rowData.title || "the work order"}"${
-        rowData.propertyName ? ` at ${rowData.propertyName}` : ""
-      } as done.${note ? ` Note: ${note}` : ""} Review and approve payment in Work Orders.`,
-      toUserIds: [workOrder.manager_user_id],
-      deliverToPortalInbox: true,
-      deliverViaEmail: false,
-      deliverViaSms: false,
-    }).catch(() => undefined);
-
-    track("work_order_vendor_marked_done", actor.userId, { work_order_id: workOrderId });
-    return NextResponse.json({ ok: true, workOrder: nextRowData });
+    const result = await markWorkOrderDoneByVendor(db, actor, body);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ ok: true, workOrder: result.workOrder });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not mark done.";
     return NextResponse.json({ error: message }, { status: 500 });

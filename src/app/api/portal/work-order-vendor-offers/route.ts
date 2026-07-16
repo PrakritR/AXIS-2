@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { sendVendorNotification } from "@/lib/vendor-notification-delivery";
-import { buildVendorBidOfferEmail } from "@/lib/vendor-visit-email";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { sendWorkOrderVendorOffers, vendorDirectoryRowsById } from "@/lib/work-order-offers.server";
 
 export const runtime = "nodejs";
 
 type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
-
-const MAX_VENDORS_PER_SEND = 10;
 
 type OfferRecord = {
   id: string;
@@ -51,30 +46,6 @@ async function sessionActor(db: Db) {
     admin,
     role,
   };
-}
-
-async function vendorDirectoryRowsById(
-  db: Db,
-  ids: string[],
-): Promise<Map<string, { name: string; email: string; managerUserId: string | null; shared: boolean; vendorUserId: string | null }>> {
-  const out = new Map<string, { name: string; email: string; managerUserId: string | null; shared: boolean; vendorUserId: string | null }>();
-  const uniqueIds = [...new Set(ids.filter(Boolean))];
-  if (uniqueIds.length === 0) return out;
-  const { data } = await db
-    .from("manager_vendor_records")
-    .select("id, manager_user_id, vendor_user_id, row_data")
-    .in("id", uniqueIds);
-  for (const row of data ?? []) {
-    const rowData = (row.row_data ?? {}) as Record<string, unknown>;
-    out.set(row.id as string, {
-      name: String(rowData.name ?? ""),
-      email: String(rowData.email ?? ""),
-      managerUserId: (row.manager_user_id as string | null) ?? null,
-      shared: rowData.sharedWithManagers === true,
-      vendorUserId: (row.vendor_user_id as string | null) ?? null,
-    });
-  }
-  return out;
 }
 
 function toJson(offer: OfferRecord, vendors: Map<string, { name: string; email: string }>): OfferJson {
@@ -125,102 +96,21 @@ export async function GET(req: Request) {
 
 /**
  * The manager's confirm-send action: only this route ever offers a work order
- * to a vendor for consultation — nothing is sent automatically. Creates one
- * offer row per selected vendor and notifies each (email + inbox), reusing the
- * same bid-offer copy and delivery path as the single-vendor "Invite for bids"
- * flow, then opens bidding so responses can come back from any of them.
+ * to a vendor for consultation — nothing is sent automatically. Delegates to
+ * sendWorkOrderVendorOffers (work-order-offers.server.ts), the single shared
+ * offer + notify + open-bidding implementation.
  */
 export async function POST(req: Request) {
   try {
     const db = createSupabaseServiceRoleClient();
     const actor = await sessionActor(db);
     if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    if (!actor.admin && actor.role !== "manager" && actor.role !== "pro") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    }
 
     const body = (await req.json().catch(() => ({}))) as { workOrderId?: string; vendorIds?: string[] };
-    const workOrderId = String(body.workOrderId ?? "").trim();
-    const vendorIds = [...new Set((Array.isArray(body.vendorIds) ? body.vendorIds : []).map((v) => String(v).trim()).filter(Boolean))].slice(
-      0,
-      MAX_VENDORS_PER_SEND,
-    );
-    if (!workOrderId) return NextResponse.json({ error: "Work order id required." }, { status: 400 });
-    if (vendorIds.length === 0) return NextResponse.json({ error: "Select at least one vendor." }, { status: 400 });
 
-    const { data: workOrder } = await db
-      .from("portal_work_order_records")
-      .select("manager_user_id, row_data")
-      .eq("id", workOrderId)
-      .maybeSingle();
-    if (!workOrder || (!actor.admin && workOrder.manager_user_id !== actor.userId)) {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    }
-    const rowData = (workOrder.row_data ?? {}) as DemoManagerWorkOrderRow;
-
-    const vendors = await vendorDirectoryRowsById(db, vendorIds);
-    const sent: string[] = [];
-    const skipped: string[] = [];
-
-    for (const vendorId of vendorIds) {
-      const vendor = vendors.get(vendorId);
-      const owned = Boolean(vendor) && (actor.admin || vendor!.managerUserId === (workOrder.manager_user_id as string) || vendor!.shared);
-      if (!vendor || !owned) {
-        skipped.push(vendorId);
-        continue;
-      }
-
-      const now = new Date().toISOString();
-      const { error: offerError } = await db.from("work_order_vendor_offers").upsert(
-        {
-          work_order_id: workOrderId,
-          vendor_directory_id: vendorId,
-          vendor_user_id: vendor.vendorUserId,
-          manager_user_id: workOrder.manager_user_id,
-          status: "sent",
-          updated_at: now,
-        },
-        { onConflict: "work_order_id,vendor_directory_id" },
-      );
-      if (offerError) {
-        skipped.push(vendorId);
-        continue;
-      }
-      sent.push(vendorId);
-
-      if (vendor.email.includes("@")) {
-        const { subject, body: messageBody } = buildVendorBidOfferEmail({
-          vendorName: vendor.name,
-          workOrderTitle: rowData.title || "",
-          propertyLabel: rowData.propertyName || "",
-          unit: rowData.unit || "",
-          visitLabel: rowData.scheduled && rowData.scheduled !== "—" ? rowData.scheduled : "",
-          description: rowData.description,
-        });
-        await sendVendorNotification(db, actor, {
-          vendorEmail: vendor.email,
-          vendorDirectoryId: vendorId,
-          vendorUserId: vendor.vendorUserId,
-          subject,
-          body: messageBody,
-        }).catch(() => undefined);
-      }
-    }
-
-    if (sent.length > 0) {
-      const nextRowData: DemoManagerWorkOrderRow = {
-        ...rowData,
-        biddingOpen: true,
-        biddingOpenedAt: rowData.biddingOpenedAt ?? new Date().toISOString(),
-      };
-      await db
-        .from("portal_work_order_records")
-        .update({ row_data: nextRowData, updated_at: new Date().toISOString() })
-        .eq("id", workOrderId);
-    }
-
-    track("work_order_vendor_offer_sent", actor.userId, { work_order_id: workOrderId, vendor_count: sent.length });
-    return NextResponse.json({ ok: true, sent, skipped });
+    const result = await sendWorkOrderVendorOffers(db, actor, body);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ ok: true, sent: result.sent, skipped: result.skipped });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to send to vendors.";
     return NextResponse.json({ error: message }, { status: 500 });
