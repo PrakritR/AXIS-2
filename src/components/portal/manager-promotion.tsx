@@ -2,8 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  ManagerPortalFilterRow,
+  ManagerPortalStatusPills,
+  PORTAL_HEADER_ACTION_BTN,
+} from "@/components/portal/portal-metrics";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import {
+  buildManagerPropertyFilterOptions,
+  samePropertyId,
+} from "@/lib/manager-portfolio-access";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -105,6 +115,10 @@ export type PromotionDraft = {
 };
 
 export const CUSTOM_PROPERTY_KEY = "__custom__";
+
+/** Content-type sort/group pills at the top of the Promotion page. `image`
+ *  maps to flyer assets (`kind: "flyer"`), `text` to text assets. */
+export type PromotionContentFilter = "all" | "text" | "image";
 
 export const EMPTY_DRAFT: PromotionDraft = {
   propertyKey: CUSTOM_PROPERTY_KEY,
@@ -250,6 +264,8 @@ export function ManagerPromotion() {
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [deepLinkPropertyId, setDeepLinkPropertyId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
+  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("all");
+  const [propertyFilter, setPropertyFilter] = useState("");
 
   useEffect(() => {
     if (!authReady) return;
@@ -278,10 +294,55 @@ export function ManagerPromotion() {
     [promotions],
   );
 
+  // Property filter drives both the visible list and the content-type counts,
+  // mirroring the Services page (counts reflect the current property scope).
+  const propertyScopedAssets = useMemo(() => {
+    if (!propertyFilter) return assets;
+    return assets.filter((a) => samePropertyId(a.row.propertyId, propertyFilter));
+  }, [assets, propertyFilter]);
+
+  const contentCounts = useMemo(() => {
+    let text = 0;
+    let image = 0;
+    for (const a of propertyScopedAssets) {
+      if (a.kind === "text") text += 1;
+      else image += 1;
+    }
+    return { all: propertyScopedAssets.length, text, image };
+  }, [propertyScopedAssets]);
+
+  const contentTabs = useMemo(
+    () => [
+      { id: "all", label: "All", count: contentCounts.all, dataAttr: "promotion-filter-all" },
+      { id: "text", label: "Text", count: contentCounts.text, dataAttr: "promotion-filter-text" },
+      { id: "image", label: "Image", count: contentCounts.image, dataAttr: "promotion-filter-image" },
+    ],
+    [contentCounts],
+  );
+
+  const filteredAssets = useMemo(() => {
+    if (contentFilter === "all") return propertyScopedAssets;
+    const wantedKind: PromotionAssetKind = contentFilter === "image" ? "flyer" : "text";
+    return propertyScopedAssets.filter((a) => a.kind === wantedKind);
+  }, [propertyScopedAssets, contentFilter]);
+
   const listings = useMemo<ManagerPromotionPropertyOption[]>(() => {
     void propertyTick;
     return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
+
+  // "All your properties" filter options: portfolio properties merged with any
+  // property a promotion is already attached to (same pattern as Services).
+  const filterPropertyOptions = useMemo(() => {
+    void propertyTick;
+    const opts = buildManagerPropertyFilterOptions(userId ?? null);
+    for (const row of promotions) {
+      const pid = row.propertyId?.trim();
+      if (!pid || opts.some((p) => samePropertyId(p.id, pid))) continue;
+      opts.push({ id: pid, label: row.propertyLabel || pid });
+    }
+    return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [userId, propertyTick, promotions]);
 
   const autofillOpts = useMemo(
     () => ({
@@ -657,22 +718,49 @@ export function ManagerPromotion() {
   };
 
   return (
-    <ManagerPortalPageShell title="Promotion">
+    <ManagerPortalPageShell
+      title="Promotion"
+      titleAside={
+        <Button
+          type="button"
+          variant="primary"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={openChooser}
+          data-attr="promotion-new"
+        >
+          New promotion
+        </Button>
+      }
+      filterRow={
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills
+            tabs={contentTabs}
+            activeId={contentFilter}
+            onChange={(id) => setContentFilter(id as PromotionContentFilter)}
+          />
+          <PortalPropertyFilterPill
+            propertyOptions={filterPropertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
+        </ManagerPortalFilterRow>
+      }
+    >
       <PortalCollapsibleSection
         title="Your promotions"
         expanded={sectionExpanded}
         onExpandedChange={setSectionExpanded}
         collapsible={assets.length > 0}
         toggleDataAttr="promotion-section-toggle"
-        headerActions={
-          <Button type="button" onClick={openChooser} data-attr="promotion-new">
-            New promotion
-          </Button>
-        }
         contentClassName="px-4 py-3"
       >
         <PromotionAssetStack
-          assets={assets}
+          assets={filteredAssets}
+          emptyMessage={
+            assets.length === 0
+              ? "No promotions yet."
+              : "No promotions match these filters."
+          }
           expandedId={expandedId}
           onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
           onSaveTitle={saveAssetTitle}
