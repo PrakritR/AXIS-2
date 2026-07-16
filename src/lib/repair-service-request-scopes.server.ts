@@ -34,7 +34,7 @@ function propertyIdFromApp(row: AppRow): string {
 async function residentEmailsAndPropertyForManager(
   db: ServiceRoleDb,
   managerUserId: string,
-): Promise<Map<string, string>> {
+): Promise<{ byEmail: Map<string, string>; approvedEmails: Set<string> }> {
   const { data, error } = await db
     .from("manager_application_records")
     .select("resident_email, property_id, assigned_property_id, row_data")
@@ -59,51 +59,104 @@ async function residentEmailsAndPropertyForManager(
       byEmail.set(email, propertyId);
     }
   }
-  return byEmail;
+  return { byEmail, approvedEmails };
 }
 
-async function shouldReassignToManager(
-  db: ServiceRoleDb,
-  params: {
-    residentEmail: string;
-    existingManager: string;
-    targetManager: string;
-    existingProperty: string;
-    preferredProperty: string;
-  },
-): Promise<boolean> {
-  const { residentEmail, existingManager, targetManager, existingProperty, preferredProperty } =
-    params;
+function makeApprovedResidencyChecker(db: ServiceRoleDb) {
+  const cache = new Map<string, Promise<boolean>>();
+  return (residentEmail: string, managerUserId: string): Promise<boolean> => {
+    const key = `${residentEmail}|${managerUserId}`;
+    let pending = cache.get(key);
+    if (!pending) {
+      pending = residentHasApprovedResidency(db, { residentEmail, managerUserId }).catch(
+        () => false,
+      );
+      cache.set(key, pending);
+    }
+    return pending;
+  };
+}
+
+function makePropertyOwnershipChecker(db: ServiceRoleDb) {
+  const cache = new Map<string, Promise<boolean>>();
+  return (propertyId: string, managerUserId: string): Promise<boolean> => {
+    const key = `${propertyId}|${managerUserId}`;
+    let pending = cache.get(key);
+    if (!pending) {
+      pending = (async () => {
+        const { data, error } = await db
+          .from("manager_property_records")
+          .select("id")
+          .eq("id", propertyId)
+          .eq("manager_user_id", managerUserId)
+          .limit(1);
+        if (error) return false;
+        return Array.isArray(data) && data.length > 0;
+      })().catch(() => false);
+      cache.set(key, pending);
+    }
+    return pending;
+  };
+}
+
+/** Gate for hot read paths: run a scope repair at most once per TTL per key. */
+const SCOPE_REPAIR_TTL_MS = 10 * 60 * 1000;
+const scopeRepairLastRun = new Map<string, number>();
+
+export function shouldRunScopeRepair(key: string, ttlMs = SCOPE_REPAIR_TTL_MS): boolean {
+  const now = Date.now();
+  const last = scopeRepairLastRun.get(key) ?? 0;
+  if (now - last < ttlMs) return false;
+  scopeRepairLastRun.set(key, now);
+  return true;
+}
+
+async function shouldReassignToManager(params: {
+  residentEmail: string;
+  existingManager: string;
+  targetManager: string;
+  existingProperty: string;
+  preferredProperty: string;
+  weApproved: boolean;
+  checkApproved: (residentEmail: string, managerUserId: string) => Promise<boolean>;
+  ownsProperty: (propertyId: string, managerUserId: string) => Promise<boolean>;
+}): Promise<boolean> {
+  const {
+    residentEmail,
+    existingManager,
+    targetManager,
+    existingProperty,
+    preferredProperty,
+    weApproved,
+    checkApproved,
+    ownsProperty,
+  } = params;
   if (!existingManager || existingManager === targetManager) return true;
 
-  const weApproved = await residentHasApprovedResidency(db, {
-    residentEmail,
-    managerUserId: targetManager,
-  });
-  const theyApproved = await residentHasApprovedResidency(db, {
-    residentEmail,
-    managerUserId: existingManager,
-  });
+  // We only have pending; never steal from another landlord.
+  if (!weApproved) return false;
 
-  // Always reclaim for our approved residency when the other manager only has pending.
-  if (weApproved && !theyApproved) return true;
+  const theyApproved = await checkApproved(residentEmail, existingManager);
+  if (!theyApproved) {
+    // The other manager only has a pending relationship — but a row coherently
+    // stamped onto a property they actually own (e.g. one they created
+    // themselves) is theirs, not a mis-stamp. Only reclaim incoherent rows.
+    if (existingProperty && (await ownsProperty(existingProperty, existingManager))) {
+      return false;
+    }
+    return true;
+  }
   // When both are approved, reclaim if the row property matches ours (or is empty)
   // and doesn't clearly belong to their property — or when ours is the canonical
   // demo portfolio and theirs is a guided-tour mirror (sandbox dual residency).
-  if (weApproved && theyApproved) {
-    if (!existingProperty) return true;
-    if (preferredProperty && existingProperty === preferredProperty) return true;
-    if (
-      preferredProperty &&
-      filingPropertyPriority(preferredProperty) < filingPropertyPriority(existingProperty)
-    ) {
-      return true;
-    }
-    return false;
+  if (!existingProperty) return true;
+  if (preferredProperty && existingProperty === preferredProperty) return true;
+  if (
+    preferredProperty &&
+    filingPropertyPriority(preferredProperty) < filingPropertyPriority(existingProperty)
+  ) {
+    return true;
   }
-  // We only have pending; don't steal from an approved landlord.
-  if (!weApproved && theyApproved) return false;
-  // Neither approved — leave with whoever currently has it.
   return false;
 }
 
@@ -151,9 +204,12 @@ export async function repairServiceRequestScopesForManager(
   const mid = managerUserId.trim();
   if (!mid) return { repaired: 0 };
 
-  const residents = await residentEmailsAndPropertyForManager(db, mid);
+  const { byEmail: residents, approvedEmails } = await residentEmailsAndPropertyForManager(db, mid);
   const emails = [...residents.keys()];
   if (emails.length === 0) return { repaired: 0 };
+
+  const checkApproved = makeApprovedResidencyChecker(db);
+  const ownsProperty = makePropertyOwnershipChecker(db);
 
   const { data: rows, error } = await db
     .from("portal_service_request_records")
@@ -169,22 +225,22 @@ export async function repairServiceRequestScopesForManager(
     const existingManager = String(record.manager_user_id ?? "").trim();
     const preferredProperty = residents.get(email) || "";
     const existingProperty = String(record.property_id ?? "").trim();
+    const weApproved = approvedEmails.has(email);
 
-    const mayReassign = await shouldReassignToManager(db, {
+    const mayReassign = await shouldReassignToManager({
       residentEmail: email,
       existingManager,
       targetManager: mid,
       existingProperty,
       preferredProperty,
+      weApproved,
+      checkApproved,
+      ownsProperty,
     });
     if (!mayReassign) continue;
 
     // Prefer the approved residency property when reclaiming or filling blanks /
     // fixing property mis-stamps onto a non-approved property for us.
-    const weApproved = await residentHasApprovedResidency(db, {
-      residentEmail: email,
-      managerUserId: mid,
-    });
     let nextProperty = existingProperty;
     if (weApproved && preferredProperty) {
       if (!existingProperty || existingManager !== mid || existingProperty !== preferredProperty) {
@@ -232,9 +288,12 @@ export async function repairWorkOrderScopesForManager(
   const mid = managerUserId.trim();
   if (!mid) return { repaired: 0 };
 
-  const residents = await residentEmailsAndPropertyForManager(db, mid);
+  const { byEmail: residents, approvedEmails } = await residentEmailsAndPropertyForManager(db, mid);
   const emails = [...residents.keys()];
   if (emails.length === 0) return { repaired: 0 };
+
+  const checkApproved = makeApprovedResidencyChecker(db);
+  const ownsProperty = makePropertyOwnershipChecker(db);
 
   const { data: rows, error } = await db
     .from("portal_work_order_records")
@@ -252,20 +311,20 @@ export async function repairWorkOrderScopesForManager(
     const existingProperty =
       String(record.property_id ?? "").trim() ||
       String(record.assigned_property_id ?? "").trim();
+    const weApproved = approvedEmails.has(email);
 
-    const mayReassign = await shouldReassignToManager(db, {
+    const mayReassign = await shouldReassignToManager({
       residentEmail: email,
       existingManager,
       targetManager: mid,
       existingProperty,
       preferredProperty,
+      weApproved,
+      checkApproved,
+      ownsProperty,
     });
     if (!mayReassign) continue;
 
-    const weApproved = await residentHasApprovedResidency(db, {
-      residentEmail: email,
-      managerUserId: mid,
-    });
     let nextProperty = existingProperty;
     if (weApproved && preferredProperty && existingManager !== mid) {
       nextProperty = preferredProperty;

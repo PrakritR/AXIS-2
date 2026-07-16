@@ -34,14 +34,7 @@ const seen = new Set();
 
 async function forward(frame) {
   const messageId = typeof frame.messageId === "string" ? frame.messageId : "";
-  if (messageId) {
-    if (seen.has(messageId)) return;
-    seen.add(messageId);
-    if (seen.size > 2000) {
-      const first = seen.values().next().value;
-      seen.delete(first);
-    }
-  }
+  if (messageId && seen.has(messageId)) return true;
 
   const headers = {
     "Content-Type": "application/json",
@@ -61,6 +54,36 @@ async function forward(frame) {
   });
   const bodyText = await res.text();
   console.log(`[claw-gateway] forward ${res.status} from=${frame.from || "?"} replay=${Boolean(frame.replay)} ${bodyText.slice(0, 180)}`);
+  if (!res.ok) return false;
+
+  // Mark seen only once the webhook accepted it, so a failed POST can retry.
+  if (messageId) {
+    seen.add(messageId);
+    if (seen.size > 2000) {
+      const first = seen.values().next().value;
+      seen.delete(first);
+    }
+  }
+  return true;
+}
+
+async function deliverWithRetry(frame) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      if (await forward(frame)) {
+        // Advance the reconnect-sync cursor only after a successful delivery —
+        // a webhook outage must not permanently drop the inbound text.
+        sinceIso = new Date().toISOString();
+        return;
+      }
+    } catch (err) {
+      console.error("[claw-gateway] forward error", err);
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, 2000 * 2 ** attempt)));
+  }
+  console.error(
+    `[claw-gateway] giving up on message ${frame.messageId || "?"} — reconnect sync will replay it`,
+  );
 }
 
 function connect() {
@@ -93,8 +116,7 @@ function connect() {
       return;
     }
     if (frame.type === "message") {
-      sinceIso = new Date().toISOString();
-      void forward(frame).catch((err) => console.error("[claw-gateway] forward error", err));
+      void deliverWithRetry(frame);
     }
   });
 

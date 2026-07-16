@@ -13,6 +13,7 @@ import {
   registerClawMessengerRoute,
   sendClawMessengerText,
 } from "@/lib/claw-messenger.server";
+import { clawLeasingAgentPhoneE164 } from "@/lib/claw-leasing-links";
 import {
   ensureSmsIncludesPortalLink,
   smsLinkKindForThreadTopic,
@@ -47,7 +48,11 @@ function trimSmsBody(text: string, max = 480): string {
   return `${t.slice(0, max - 1)}…`;
 }
 
-async function maybeOpenThread(toNorm: string, thread?: ResidentOutboundThreadOpts | null): Promise<void> {
+async function maybeOpenThread(
+  toNorm: string,
+  thread?: ResidentOutboundThreadOpts | null,
+  bumpLastMessage?: boolean,
+): Promise<void> {
   if (!thread?.managerUserId) return;
   try {
     await openClawResidentThread({
@@ -56,6 +61,7 @@ async function maybeOpenThread(toNorm: string, thread?: ResidentOutboundThreadOp
       residentUserId: thread.residentUserId,
       residentEmail: thread.residentEmail,
       topic: thread.topic,
+      bumpLastMessage,
     });
   } catch {
     /* non-critical — SMS already sent */
@@ -115,7 +121,7 @@ export async function sendResidentOutboundSms(args: {
    */
   mirrorToManager?: boolean;
 }): Promise<ResidentOutboundSmsResult> {
-  let text = trimSmsBody(args.text);
+  let text = args.text.trim();
   if (!text) return { sent: false, error: "empty_body" };
 
   // `undefined` → infer from openThread; explicit `null` → skip (caller already linked).
@@ -125,8 +131,15 @@ export async function sendResidentOutboundSms(args: {
         ? smsLinkKindForThreadTopic(args.openThread.topic)
         : null
       : args.linkKind;
-  if (linkKind) {
-    text = trimSmsBody(ensureSmsIncludesPortalLink(text, linkKind));
+  const linked = linkKind ? ensureSmsIncludesPortalLink(text, linkKind) : text;
+  if (linked !== text) {
+    // Reserve room for the appended deep link so trimming a long body never
+    // cuts the URL mid-link.
+    const appended = linked.slice(text.length);
+    const budget = Math.max(1, 480 - appended.length);
+    text = `${trimSmsBody(text, budget)}${appended}`;
+  } else {
+    text = trimSmsBody(linked);
   }
 
   const toNorm = normalizeE164Us(args.to) ?? normalizeE164(args.to);
@@ -147,7 +160,10 @@ export async function sendResidentOutboundSms(args: {
     await registerClawMessengerRoute(toNorm);
     const result = await sendClawMessengerText({ to: toNorm, text });
     if (result.ok) {
-      await maybeOpenThread(toNorm, args.openThread);
+      // A manager's own compose (mirrorToManager === false) targets this
+      // resident on purpose — bump so their reply routes here. Automated
+      // category sends keep thread ordering stable.
+      await maybeOpenThread(toNorm, args.openThread, args.mirrorToManager === false);
       await maybeMirrorToManager(toNorm, text, args.openThread, args.mirrorToManager);
       return { sent: true, channel: "claw", sid: result.messageId };
     }
@@ -159,10 +175,15 @@ export async function sendResidentOutboundSms(args: {
 
   const from = args.fromNumber?.trim();
   if (!from) return { sent: false, error: "missing_from" };
+  // The shared Claw agent line is not a Twilio-owned number — a Twilio send
+  // From it can only fail. Treat it as "no Twilio From configured".
+  if (normalizeE164Us(from) === clawLeasingAgentPhoneE164()) {
+    return { sent: false, channel: "claw", error: "claw_send_failed" };
+  }
 
   const twilio = await sendSms(toNorm, text, from, { skipOptOutCheck: args.skipOptOutCheck });
   if (twilio.sent) {
-    await maybeOpenThread(toNorm, args.openThread);
+    await maybeOpenThread(toNorm, args.openThread, args.mirrorToManager === false);
     await maybeMirrorToManager(toNorm, text, args.openThread, args.mirrorToManager);
   }
   return {

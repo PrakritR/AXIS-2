@@ -142,31 +142,5 @@ export async function resolveResidentFilingScope(
   if (!chosen) return null;
   const managerUserId = chosen.managerUserId;
   const propertyId = chosen.propertyId || claimedProperty;
-  // #region agent log
-  fetch("http://127.0.0.1:7518/ingest/13325f45-ca08-4e41-b48c-2517464d2c52", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7a8007" },
-    body: JSON.stringify({
-      sessionId: "7a8007",
-      runId: "post-fix",
-      hypothesisId: "A",
-      location: "resident-manager-scope.ts:resolveResidentFilingScope",
-      message: "resolved filing scope",
-      data: {
-        claimedManager: claimedManager.slice(0, 8),
-        claimedProperty,
-        preferredCount: preferred.length,
-        preferredBuckets: preferred.slice(0, 6).map((r) => ({
-          mgr: String(r.manager_user_id ?? "").slice(0, 8),
-          prop: propertyIdFromApplication(r),
-          bucket: applicationBucket(r.row_data),
-        })),
-        chosenMgr: managerUserId.slice(0, 8),
-        chosenProp: propertyId,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   return { managerUserId, propertyId };
 }

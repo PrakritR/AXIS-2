@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import {
   consumeResidentSetupTokenOnApplication,
@@ -131,34 +131,36 @@ export async function POST(req: Request) {
     await supabase.from("profiles").update({ manager_id: lookup.axisId }).eq("id", userId);
     await consumeResidentSetupTokenOnApplication(supabase, lookup.row);
 
-    // First-account PropLane messaging assistant intro (Claw/Twilio) when phone is on file.
-    try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("phone, full_name")
-        .eq("id", userId)
-        .maybeSingle();
-      const phone = String(profile?.phone ?? "").trim();
-      if (phone) {
-        const name =
-          String(profile?.full_name ?? "").trim() ||
-          fullName ||
-          lookup.name ||
-          "Resident";
-        const managerUserId = String(lookup.row.managerUserId ?? "").trim() || null;
-        await sendResidentPropLaneAssistantIntro({
-          db: supabase,
-          toPhone: phone,
-          residentUserId: userId,
-          residentEmail: email,
-          managerUserId,
-          name,
-          axisId: lookup.axisId,
-        });
+    // First-account PropLane messaging assistant intro (Claw/Twilio) when phone
+    // is on file — deferred so a cold relay can't stall the signup response.
+    const introUserId = userId;
+    const introAxisId = lookup.axisId;
+    const introManagerUserId = String(lookup.row.managerUserId ?? "").trim() || null;
+    const introFallbackName = fullName || lookup.name || "Resident";
+    after(async () => {
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("phone, full_name")
+          .eq("id", introUserId)
+          .maybeSingle();
+        const phone = String(profile?.phone ?? "").trim();
+        if (phone) {
+          const name = String(profile?.full_name ?? "").trim() || introFallbackName;
+          await sendResidentPropLaneAssistantIntro({
+            db: supabase,
+            toPhone: phone,
+            residentUserId: introUserId,
+            residentEmail: email,
+            managerUserId: introManagerUserId,
+            name,
+            axisId: introAxisId,
+          });
+        }
+      } catch {
+        /* non-critical */
       }
-    } catch {
-      /* non-critical */
-    }
+    });
 
     const propertyId = lookup.propertyId;
     const redirectTo = propertyId

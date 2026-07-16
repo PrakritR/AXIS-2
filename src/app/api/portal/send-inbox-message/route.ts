@@ -539,10 +539,13 @@ export async function POST(req: Request) {
         const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
 
         const senderIsManager = ["manager", "pro", "admin"].includes(String(senderRole ?? "").toLowerCase());
-        for (const recipient of recipients) {
-          if (eventCategory && channelByEmail.get(recipient.email)?.sms !== true) continue;
+        // Parallel fan-out — a broadcast to N residents must not pay N serial
+        // Claw relay round-trips inside the request.
+        await Promise.all(
+          recipients.map(async (recipient) => {
+          if (eventCategory && channelByEmail.get(recipient.email)?.sms !== true) return;
           const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
-          if (!recipientPhone) continue;
+          if (!recipientPhone) return;
           let smsText = `(${subject})\n${text}`;
           const linkKind: ResidentSmsLinkKind | null =
             eventCategory === "leases"
@@ -618,7 +621,8 @@ export async function POST(req: Request) {
               { onConflict: "id" },
             );
           }
-        }
+          }),
+        );
       }
     }
 

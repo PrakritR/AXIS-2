@@ -47,7 +47,7 @@ const SERVICE_REQUEST_RE =
   /\b(parking|reserved parking|amenity|amenities|cleaning service|housekeeping|pet (fee|deposit)|storage (unit|space)|furniture|custom (service )?request|request (parking|cleaning|storage)|book (a )?(cleaning|parking))\b/i;
 
 const I_PAID_RE =
-  /\b(i (just )?paid|i('ve| have) paid|paid (via|with|through|using)|sent (it |the money |payment )?(via |with )?(zelle|venmo)|paid (zelle|venmo)|zelle('d|d)?|venmo('d|d)?)\b/i;
+  /\b(i (just )?paid|i('ve| have) paid|we (just )?paid|paid (via|with|through|using)|sent (it |the money |payment )?(via |with )?(zelle|venmo)|paid (zelle|venmo)|(i|we)('ve| have| just)? ?(zelle'?d|venmo'?d)|(zelle'?d|venmo'?d) (you|it|the rent))\b/i;
 
 const BALANCE_RE =
   /\b(how much|what do i owe|balance|owing|overdue|what('s| is) due|rent due|outstanding|what i owe)\b/i;
@@ -95,7 +95,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
     };
   }
 
-  if (/\b(help|menu|options)\b/.test(lower) || lower === "info") {
+  if (/^(help|menu|options)[\s!.?,]*$/i.test(t) || lower === "info") {
     return {
       intent: "help",
       domain: "Inbox",

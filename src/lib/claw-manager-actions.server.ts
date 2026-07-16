@@ -33,15 +33,22 @@ async function resolveManagerUserIdFromPhone(fromE164: string): Promise<string |
   const hit = managers.find((m) => m.personalPhone === fromE164);
   if (hit?.userId) return hit.userId;
 
+  // Outside the mapped trial scope, agent commands (including financial writes
+  // like mark-paid) only run for an OTP-VERIFIED personal phone — profiles.phone
+  // alone is user-editable and forgeable. Ambiguous matches never resolve.
   const db = createSupabaseServiceRoleClient();
   const { data } = await db
     .from("profiles")
-    .select("id")
+    .select("id, phone_verified_at")
     .eq("phone", fromE164)
     .in("role", ["manager", "pro", "admin", "owner"])
-    .limit(1)
-    .maybeSingle();
-  return data?.id ? String(data.id) : null;
+    .limit(5);
+  const verified = (data ?? []).filter((row) =>
+    Boolean((row as { phone_verified_at?: string | null }).phone_verified_at),
+  );
+  if (verified.length !== 1) return null;
+  const id = String((verified[0] as { id?: unknown }).id ?? "").trim();
+  return id || null;
 }
 
 type ResidentMatch = {
@@ -247,7 +254,9 @@ async function markChargesPaid(args: {
     );
     if (error) continue;
     marked.push(nextCharge);
-    await syncLedgerPaymentEntry(db, nextCharge, now).catch(() => undefined);
+    await syncLedgerPaymentEntry(db, nextCharge, now).catch((e) =>
+      console.error(`claw mark-paid: ledger sync failed for charge ${charge.id}`, e),
+    );
     await cancelFuturePaymentRemindersForCharge(db, args.managerUserId, charge.id).catch(() => undefined);
   }
   return marked;

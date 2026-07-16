@@ -21,6 +21,8 @@ import {
   buildSmsDeepLink,
   isClawMessagingPubliclyEnabled,
 } from "@/lib/claw-leasing-links";
+import { buildTourContactHref } from "@/lib/manager-property-links";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 
@@ -433,16 +435,22 @@ function ListingDetailModal({
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
   const textEnabled = isClawMessagingPubliclyEnabled();
   const label = propertyLabel?.trim() || null;
+  // Flag off (or no SMS handler on this device) → web apply / tour-contact
+  // flows instead of dead "#" anchors.
+  const webApplyHref = buildRentalApplyHref({ propertyId: listingPropertyId });
+  const webContactHref = buildTourContactHref(listingPropertyId);
   const textApplyHref = textEnabled
     ? buildSmsDeepLink({ intent: "apply", propertyId: listingPropertyId, propertyLabel: label })
-    : "#";
+    : webApplyHref;
   const textMessageHref = textEnabled
     ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label })
-    : "#";
+    : webContactHref;
   const textMessageAbout = (topic: string) =>
     textEnabled
       ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, topic })
-      : "#";
+      : webContactHref;
+  const applyLabel = textEnabled ? "Text to apply" : "Apply online";
+  const messageLabel = textEnabled ? "Text a message" : "Contact leasing";
 
   useEffect(() => {
     if (!state) return;
@@ -593,12 +601,12 @@ function ListingDetailModal({
                             roomName: state.room.name,
                           })
                         : textApplyHref,
-                      label: "Text to apply",
+                      label: applyLabel,
                       dataAttr: "listing-text-apply-room",
                     }}
                     secondary={{
                       href: textMessageHref,
-                      label: "Text a message",
+                      label: messageLabel,
                       dataAttr: "listing-text-message",
                     }}
                   />
@@ -638,12 +646,12 @@ function ListingDetailModal({
               newTabProps={newTabProps}
               primary={{
                 href: textMessageAbout("the floor plan / layout"),
-                label: "Text a message",
+                label: messageLabel,
                 dataAttr: "listing-text-message-layout",
               }}
               secondary={{
                 href: textApplyHref,
-                label: "Text to apply",
+                label: applyLabel,
                 dataAttr: "listing-text-apply",
               }}
             />
@@ -672,12 +680,12 @@ function ListingDetailModal({
               newTabProps={newTabProps}
               primary={{
                 href: textMessageAbout("this bathroom"),
-                label: "Text a message",
+                label: messageLabel,
                 dataAttr: "listing-text-message-bathroom",
               }}
               secondary={{
                 href: textApplyHref,
-                label: "Text to apply",
+                label: applyLabel,
                 dataAttr: "listing-text-apply",
               }}
             />
@@ -704,12 +712,12 @@ function ListingDetailModal({
               newTabProps={newTabProps}
               primary={{
                 href: textApplyHref,
-                label: "Text to apply",
+                label: applyLabel,
                 dataAttr: "listing-text-apply",
               }}
               secondary={{
                 href: textMessageHref,
-                label: "Text a message",
+                label: messageLabel,
                 dataAttr: "listing-text-message",
               }}
             />
@@ -737,12 +745,12 @@ function ListingDetailModal({
               newTabProps={newTabProps}
               primary={{
                 href: textApplyHref,
-                label: "Text to apply",
+                label: applyLabel,
                 dataAttr: "listing-text-apply",
               }}
               secondary={{
                 href: textMessageAbout("lease terms"),
-                label: "Text a message",
+                label: messageLabel,
                 dataAttr: "listing-text-message-lease",
               }}
             />
@@ -792,12 +800,12 @@ function ListingDetailModal({
                       bundleLabel: state.row.label,
                     })
                   : textApplyHref,
-                label: "Text for bundle",
+                label: textEnabled ? "Text for bundle" : "Apply online",
                 dataAttr: "listing-text-bundle",
               }}
               secondary={{
                 href: textMessageHref,
-                label: "Text a message",
+                label: messageLabel,
                 dataAttr: "listing-text-message",
               }}
             />
@@ -816,12 +824,12 @@ function ListingDetailModal({
               newTabProps={newTabProps}
               primary={{
                 href: textMessageHref,
-                label: "Text a message",
+                label: messageLabel,
                 dataAttr: "listing-text-message",
               }}
               secondary={{
                 href: textApplyHref,
-                label: "Text to apply",
+                label: applyLabel,
                 dataAttr: "listing-text-apply",
               }}
             />

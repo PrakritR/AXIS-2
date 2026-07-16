@@ -73,31 +73,59 @@ export async function PATCH(req: Request) {
     }
 
     // Manager deny → PropLane SMS. Approvals are covered by the welcome + assistant intro.
+    // Scoped to the ACTING manager's own application row (never another
+    // landlord's data) and deduped so approve/deny toggling can't re-text.
     if (requestor.role !== "resident" && !approved) {
       try {
         const { data: appRow } = await svc
           .from("manager_application_records")
           .select("id, row_data, manager_user_id")
           .eq("resident_email", email)
+          .eq("manager_user_id", user.id)
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        const rowData = (appRow?.row_data ?? {}) as {
-          name?: string;
-          propertyTitle?: string;
-          application?: { phone?: string; fullLegalName?: string };
-        };
-        const phone = String(rowData.application?.phone ?? "").trim() || null;
-        await notifyApplicantApplicationSms(svc, {
-          event: "rejected",
-          applicantEmail: email,
-          applicantPhone: phone,
-          applicantName: rowData.name || rowData.application?.fullLegalName || null,
-          propertyTitle: rowData.propertyTitle || null,
-          axisId: appRow?.id ? String(appRow.id) : null,
-          managerUserId: String(appRow?.manager_user_id ?? user.id).trim() || user.id,
-          fromNumber: String(requestor.sms_from_number ?? "").trim() || null,
-        });
+        if (appRow) {
+          const dedupId = `application_rejected_sms_${String(appRow.id)}`;
+          const { data: alreadySent } = await svc
+            .from("portal_outbound_mail_records")
+            .select("id")
+            .eq("id", dedupId)
+            .maybeSingle();
+          if (!alreadySent) {
+            await svc.from("portal_outbound_mail_records").upsert(
+              {
+                id: dedupId,
+                recipient_email: email,
+                subject: "Application decision (SMS)",
+                channel: "sms",
+                row_data: {
+                  id: dedupId,
+                  subject: "Application decision (SMS)",
+                  sentAt: new Date().toISOString(),
+                  applicationId: String(appRow.id),
+                },
+              },
+              { onConflict: "id" },
+            );
+            const rowData = (appRow.row_data ?? {}) as {
+              name?: string;
+              propertyTitle?: string;
+              application?: { phone?: string; fullLegalName?: string };
+            };
+            const phone = String(rowData.application?.phone ?? "").trim() || null;
+            await notifyApplicantApplicationSms(svc, {
+              event: "rejected",
+              applicantEmail: email,
+              applicantPhone: phone,
+              applicantName: rowData.name || rowData.application?.fullLegalName || null,
+              propertyTitle: rowData.propertyTitle || null,
+              axisId: String(appRow.id),
+              managerUserId: String(appRow.manager_user_id ?? user.id).trim() || user.id,
+              fromNumber: String(requestor.sms_from_number ?? "").trim() || null,
+            });
+          }
+        }
       } catch {
         /* non-critical */
       }

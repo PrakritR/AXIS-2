@@ -2,6 +2,7 @@ import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { clawLeasingAgentPhoneE164, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
+import { clawMappedManagerEmails } from "@/lib/claw-resident-messaging.server";
 
 export type EnsureManagerSmsNumberResult =
   | { ok: true; number: string }
@@ -55,11 +56,28 @@ export async function ensureManagerSmsNumber(
   }
 
   // Shared Claw Messenger leasing line (trial / until per-manager numbers ship).
+  // Scoped to the mapped trial managers only: sms_from_number doubles as the
+  // manager's OWNED Twilio work number (inbound routing resolves by it, and the
+  // Twilio fallback sends From it), so stamping the shared Claw phone on every
+  // manager would break both if Claw is ever disabled.
   // Set CLAW_MESSENGER_ASSIGN_SHARED_NUMBER=0 to fall through to Twilio purchase.
+  let managerEmail = "";
+  try {
+    const { data: profileRow } = await db
+      .from("profiles")
+      .select("email")
+      .eq("id", managerUserId)
+      .maybeSingle();
+    managerEmail = String(profileRow?.email ?? "").trim().toLowerCase();
+  } catch {
+    /* fall through to Twilio purchase */
+  }
   const clawShared =
     process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim() !== "0" &&
     process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim() !== "false" &&
-    isClawMessengerConfigured();
+    isClawMessengerConfigured() &&
+    Boolean(managerEmail) &&
+    clawMappedManagerEmails().includes(managerEmail);
   if (clawShared) {
     const number = clawLeasingAgentPhoneE164();
     const { data: claimed, error } = await db

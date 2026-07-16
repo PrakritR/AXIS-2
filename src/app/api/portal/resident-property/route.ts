@@ -99,19 +99,20 @@ export async function GET() {
 
     const { data: propRecord, error: propError } = await db
       .from("manager_property_records")
-      .select("id, property_data")
+      .select("id, property_data, status")
       .eq("id", propertyId)
       .maybeSingle();
     if (propError) return NextResponse.json({ error: propError.message }, { status: 500 });
 
     let property = propRecord ? asProperty(propRecord.property_data, propRecord.id) : null;
+    let propertyStatus = String(propRecord?.status ?? "").trim().toLowerCase();
 
     // Pending/draft listings sometimes live under a different id — soft-match by scanning
     // this manager's properties when the exact id miss fires (id formatting drift).
     if (!property && managerUserId) {
       const { data: managerProps } = await db
         .from("manager_property_records")
-        .select("id, property_data")
+        .select("id, property_data, status")
         .eq("manager_user_id", managerUserId)
         .limit(100);
       const token = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toLowerCase();
@@ -121,12 +122,28 @@ export async function GET() {
         if (!token) return false;
         return id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toLowerCase() === token;
       });
-      if (match) property = asProperty(match.property_data, match.id);
+      if (match) {
+        property = asProperty(match.property_data, match.id);
+        propertyStatus = String(match.status ?? "").trim().toLowerCase();
+      }
     }
 
     if (!property) return NextResponse.json({ error: "Property not found." }, { status: 404 });
 
     const serviceRequestOptions = serviceOffersFromProperty(property);
+
+    // Any-publish-status access is reserved for APPROVED residents. A pending /
+    // rejected self-service applicant only ever sees what the public catalog
+    // already shows: a live listing, without the manager's listingSubmission
+    // internals or draft data.
+    if (!primary.approved) {
+      if (propertyStatus !== "live" && propertyStatus !== "listed") {
+        return NextResponse.json({ error: "No property linked to this resident." }, { status: 404 });
+      }
+      const { listingSubmission: _internal, ...publicProperty } = property;
+      void _internal;
+      property = publicProperty as MockProperty;
+    }
 
     return NextResponse.json(
       { property, serviceRequestOptions, managerUserId, propertyId: property.id },

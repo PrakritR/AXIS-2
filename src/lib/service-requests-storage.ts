@@ -236,27 +236,31 @@ export async function createServiceRequest(
     servicePaid: false,
     depositPaid: false,
   };
-  const serviceChargeId = ensureServiceRequestPendingCharge(newReq);
-  if (serviceChargeId) newReq.serviceChargeId = serviceChargeId;
   writeAll([newReq, ...readAll()]);
   const mirrored = await mirrorServiceRequestToServer(newReq);
   if (mirrored.ok && mirrored.row.id === newReq.id) {
     // Prefer server-stamped manager/property so resident + manager lists agree.
+    // The pending charge is created only AFTER the server stamps the row, so it
+    // always carries the manager the request actually landed with.
+    const stamped = mirrored.row;
+    const serviceChargeId = ensureServiceRequestPendingCharge(stamped);
+    const finalRow =
+      serviceChargeId && serviceChargeId !== stamped.serviceChargeId
+        ? { ...stamped, serviceChargeId }
+        : stamped;
     const all = readAll();
     const idx = all.findIndex((r) => r.id === newReq.id);
     if (idx !== -1) {
-      all[idx] = mirrored.row;
+      all[idx] = finalRow;
       writeAll(all);
     }
-    return { request: mirrored.row, mirrored };
+    if (finalRow !== stamped) mirrorServiceRequestToServerBestEffort(finalRow);
+    return { request: finalRow, mirrored };
   }
   if (!mirrored.ok && !isDemoModeActive()) {
     // Roll back optimistic local row so resident UI doesn't show orphans the
-    // manager will never see.
+    // manager will never see. No charge exists yet — it's created post-mirror.
     writeAll(readAll().filter((r) => r.id !== newReq.id));
-    if (newReq.serviceChargeId) {
-      deleteHouseholdCharge(newReq.serviceChargeId, newReq.managerUserId ?? null);
-    }
   }
   return { request: newReq, mirrored };
 }

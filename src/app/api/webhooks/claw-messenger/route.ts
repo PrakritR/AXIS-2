@@ -5,27 +5,41 @@ import { clawMessengerApiKey } from "@/lib/claw-messenger.server";
 
 export const runtime = "nodejs";
 
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
+
 /**
  * Inbound messages forwarded by `scripts/claw-messenger-gateway.mjs`.
  *
- * Auth: Authorization Bearer CLAW_MESSENGER_API_KEY, or HMAC header
- * `x-claw-signature` = hex(hmac_sha256(rawBody, CLAW_MESSENGER_WEBHOOK_SECRET)).
+ * Auth: when CLAW_MESSENGER_WEBHOOK_SECRET is set, the HMAC header
+ * `x-claw-signature` = hex(hmac_sha256(rawBody, secret)) is REQUIRED — the
+ * relay-shared CLAW_MESSENGER_API_KEY can then no longer forge frames (it also
+ * travels in the relay WS URL where upstream logs can capture it). Without the
+ * secret, Bearer CLAW_MESSENGER_API_KEY is accepted (trial/dev).
  */
 function authorized(req: Request, rawBody: string): boolean {
-  const apiKey = clawMessengerApiKey();
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
-  if (apiKey && bearer && bearer === apiKey) return true;
-
   const secret = process.env.CLAW_MESSENGER_WEBHOOK_SECRET?.trim();
-  const signature = req.headers.get("x-claw-signature")?.trim();
-  if (secret && signature) {
+  if (secret) {
+    const signature = req.headers.get("x-claw-signature")?.trim();
+    if (!signature) return false;
     const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
     try {
-      const a = Buffer.from(expected, "utf8");
-      const b = Buffer.from(signature, "utf8");
-      if (a.length === b.length && timingSafeEqual(a, b)) return true;
+      return timingSafeEqualStr(expected, signature);
     } catch {
-      /* fall through */
+      return false;
+    }
+  }
+
+  const apiKey = clawMessengerApiKey();
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  if (apiKey && bearer) {
+    try {
+      return timingSafeEqualStr(bearer, apiKey);
+    } catch {
+      return false;
     }
   }
   return false;

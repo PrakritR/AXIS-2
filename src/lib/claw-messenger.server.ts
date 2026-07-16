@@ -113,6 +113,16 @@ function waitForSendResult(ws: WebSocket, correlationId: string, timeoutMs: numb
 let pooledWs: WebSocket | null = null;
 let pooledUrl = "";
 let pooledIdleTimer: ReturnType<typeof setTimeout> | null = null;
+let pooledOpen: { url: string; promise: Promise<WebSocket> } | null = null;
+
+function evictPooled(ws: WebSocket): void {
+  if (pooledWs === ws) pooledWs = null;
+  try {
+    ws.close();
+  } catch {
+    /* ignore */
+  }
+}
 
 function touchPooledIdle(): void {
   if (pooledIdleTimer) clearTimeout(pooledIdleTimer);
@@ -154,21 +164,38 @@ async function getPooledSocket(url: string, timeoutMs: number): Promise<WebSocke
     touchPooledIdle();
     return pooledWs;
   }
+  // Serialize concurrent opens: piggyback on an in-flight open for the same URL
+  // so two simultaneous sends don't each open (and leak) a socket.
+  if (pooledOpen && pooledOpen.url === url) {
+    const ws = await pooledOpen.promise;
+    if (ws.readyState === WebSocket.OPEN) {
+      touchPooledIdle();
+      return ws;
+    }
+  }
   try {
     pooledWs?.close();
   } catch {
     /* ignore */
   }
-  const ws = await openSocket(url, timeoutMs);
-  pooledWs = ws;
-  pooledUrl = url;
-  const evict = () => {
-    if (pooledWs === ws) pooledWs = null;
-  };
-  ws.on("close", evict);
-  ws.on("error", evict);
-  touchPooledIdle();
-  return ws;
+  pooledWs = null;
+  const promise = openSocket(url, timeoutMs).then((ws) => {
+    pooledWs = ws;
+    pooledUrl = url;
+    const evict = () => {
+      if (pooledWs === ws) pooledWs = null;
+    };
+    ws.on("close", evict);
+    ws.on("error", evict);
+    touchPooledIdle();
+    return ws;
+  });
+  pooledOpen = { url, promise };
+  try {
+    return await promise;
+  } finally {
+    if (pooledOpen?.promise === promise) pooledOpen = null;
+  }
 }
 
 /**
@@ -213,7 +240,7 @@ export async function sendClawMessengerText(args: {
     try {
       ws.send(JSON.stringify(payload));
     } catch (err) {
-      if (!fresh && pooledWs === ws) pooledWs = null;
+      if (!fresh) evictPooled(ws);
       return { ok: false, error: err instanceof Error ? err.message : "WebSocket send failed." };
     }
     const result = await wait;
@@ -223,6 +250,10 @@ export async function sendClawMessengerText(args: {
       } catch {
         /* ignore */
       }
+    } else if (!result.ok) {
+      // A pooled socket that timed out / closed mid-send is likely half-open;
+      // drop it so the retry (and later sends) start from a fresh handshake.
+      evictPooled(ws);
     }
     return result;
   };

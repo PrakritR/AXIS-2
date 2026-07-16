@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { completeFreeManagerTierForUser } from "@/lib/auth/manager-pricing-selection";
 import { finalizePendingManagerFreeTier } from "@/lib/auth/manager-onboarding";
 import { maybeSendManagerPropLaneAssistantIntro } from "@/lib/claw-onboarding-sms.server";
@@ -38,8 +39,16 @@ export async function completeManagerSignupTrial(
     }));
   }
 
-  // Best-effort PropLane assistant intro when a personal phone is already on file.
-  void maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId);
+  // Best-effort PropLane assistant intro when a personal phone is already on
+  // file. after() keeps the serverless runtime alive until the send finishes;
+  // outside a request scope (tests) fall back to fire-and-forget.
+  const sendIntro = () =>
+    maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId).catch(() => undefined);
+  try {
+    after(sendIntro);
+  } catch {
+    void sendIntro();
+  }
 
   return { managerId };
 }

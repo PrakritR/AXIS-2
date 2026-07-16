@@ -11,9 +11,19 @@ import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { track } from "@/lib/analytics/posthog";
 
+export type SkippedManualPaymentCharge = {
+  id: string;
+  reason: "not_found" | "already_paid" | "forbidden" | "channel_not_allowed";
+};
+
 export type ReportManualPaymentResult =
-  | { ok: true; charges: HouseholdCharge[]; channel: ResidentManualPaymentChannel }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      charges: HouseholdCharge[];
+      channel: ResidentManualPaymentChannel;
+      skipped: SkippedManualPaymentCharge[];
+    }
+  | { ok: false; error: string; skipped?: SkippedManualPaymentCharge[] };
 
 function chargeOwnedByResident(charge: HouseholdCharge, userId: string | null, email: string): boolean {
   const e = email.trim().toLowerCase();
@@ -73,6 +83,7 @@ export async function reportManualPaymentForResident(args: {
 
   const now = new Date().toISOString();
   const updated: HouseholdCharge[] = [];
+  const skipped: SkippedManualPaymentCharge[] = [];
   const managerIds = new Set<string>();
   const userId = args.residentUserId?.trim() || null;
 
@@ -82,13 +93,28 @@ export async function reportManualPaymentForResident(args: {
       .select("id, row_data, status, manager_user_id")
       .eq("id", id)
       .maybeSingle();
-    if (rowErr || !row) continue;
+    if (rowErr || !row) {
+      skipped.push({ id, reason: "not_found" });
+      continue;
+    }
 
     const charge = (row as { row_data?: HouseholdCharge }).row_data;
-    if (!charge?.id) continue;
-    if ((row as { status?: string }).status === "paid" || charge.status === "paid") continue;
-    if (!chargeOwnedByResident(charge, userId, email)) continue;
-    if (!canPayHouseholdChargeWithManualChannel(charge, channel)) continue;
+    if (!charge?.id) {
+      skipped.push({ id, reason: "not_found" });
+      continue;
+    }
+    if ((row as { status?: string }).status === "paid" || charge.status === "paid") {
+      skipped.push({ id, reason: "already_paid" });
+      continue;
+    }
+    if (!chargeOwnedByResident(charge, userId, email)) {
+      skipped.push({ id, reason: "forbidden" });
+      continue;
+    }
+    if (!canPayHouseholdChargeWithManualChannel(charge, channel)) {
+      skipped.push({ id, reason: "channel_not_allowed" });
+      continue;
+    }
 
     const managerUserId =
       String((row as { manager_user_id?: unknown }).manager_user_id ?? "").trim() ||
@@ -120,7 +146,7 @@ export async function reportManualPaymentForResident(args: {
   }
 
   if (updated.length === 0) {
-    return { ok: false, error: "no_charges_updated" };
+    return { ok: false, error: "no_charges_updated", skipped };
   }
 
   const channelLabel = channel === "venmo" ? "Venmo" : "Zelle";
@@ -140,5 +166,5 @@ export async function reportManualPaymentForResident(args: {
     track("manual_payment_reported", senderUserId, { channel, charge_count: updated.length });
   }
 
-  return { ok: true, charges: updated, channel };
+  return { ok: true, charges: updated, channel, skipped };
 }

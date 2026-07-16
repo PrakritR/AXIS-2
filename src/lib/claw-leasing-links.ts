@@ -50,6 +50,15 @@ export function classifyLeasingIntent(text: string): LeasingIntent {
   ) {
     return "bundle";
   }
+  // Question wins over topic keywords: the site's own question CTA drafts
+  // "Hi — I have a question about lease terms at X." — a prospect asking about
+  // a lease is a question, not a lease-signing request.
+  if (
+    /\b(question|have a question|ask about|message about|ask a question)\b/.test(t) ||
+    /^hi — i have a question\b/i.test(text.trim())
+  ) {
+    return "question";
+  }
   if (/\b(apply|application|rental app|submit (an )?app)\b/.test(t)) return "apply";
   if (/\b(lease|sign(ing)?|lease signing|e-?sign|contract)\b/.test(t)) return "lease";
   if (
@@ -58,12 +67,6 @@ export function classifyLeasingIntent(text: string): LeasingIntent {
     )
   ) {
     return "tour";
-  }
-  if (
-    /\b(question|have a question|ask about|message about|ask a question)\b/.test(t) ||
-    /^hi — i have a question\b/i.test(text.trim())
-  ) {
-    return "question";
   }
   if (/\b(help|menu|options)\b/.test(t) || t === "info") return "help";
 

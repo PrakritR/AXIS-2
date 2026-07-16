@@ -5,7 +5,10 @@ import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { resolveResidentFilingScope } from "@/lib/resident-manager-scope";
-import { repairWorkOrderScopesForManager } from "@/lib/repair-service-request-scopes.server";
+import {
+  repairWorkOrderScopesForManager,
+  shouldRunScopeRepair,
+} from "@/lib/repair-service-request-scopes.server";
 import {
   notifyManagerOfResidentFiledItem,
   notifyWorkOrderEvent,
@@ -101,8 +104,11 @@ export async function GET() {
     }
 
     if (!admin && role !== "resident") {
-      // Heal orphans for this manager's residents before listing.
-      await repairWorkOrderScopesForManager(db, user.id).catch(() => undefined);
+      // Heal orphans for this manager's residents before listing. TTL-gated so
+      // nav-count polls and repeat page loads don't re-run the sweep.
+      if (shouldRunScopeRepair(`work-orders:${user.id}`)) {
+        await repairWorkOrderScopesForManager(db, user.id).catch(() => undefined);
+      }
 
       // Managers see their own work orders (plus legacy unassigned rows), never
       // other landlords' — and additionally rows on properties they own or share

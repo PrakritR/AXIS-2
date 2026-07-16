@@ -101,27 +101,54 @@ export async function POST(req: Request) {
     const managerUserId = String(match.manager_user_id ?? "").trim() || null;
 
     // PropLane SMS (best-effort) — same moment as the confirmation email.
+    // Deduped per application: this route is unauthenticated (axisId + email
+    // pair), so without the guard anyone holding the pair could loop it to
+    // SMS-bomb the applicant at platform cost.
     try {
-      let fromNumber: string | null = null;
-      if (managerUserId) {
-        const { data: mgr } = await db
-          .from("profiles")
-          .select("sms_from_number")
-          .eq("id", managerUserId)
-          .maybeSingle();
-        fromNumber = String(mgr?.sms_from_number ?? "").trim() || null;
+      const smsDedupId = `application_submitted_sms_${ensured.axisId}`;
+      const { data: alreadySent } = await db
+        .from("portal_outbound_mail_records")
+        .select("id")
+        .eq("id", smsDedupId)
+        .maybeSingle();
+      if (!alreadySent) {
+        await db.from("portal_outbound_mail_records").upsert(
+          {
+            id: smsDedupId,
+            recipient_email: email,
+            subject: "Application submitted (SMS)",
+            channel: "sms",
+            row_data: {
+              id: smsDedupId,
+              to: applicantPhone,
+              subject: "Application submitted (SMS)",
+              sentAt: new Date().toISOString(),
+              axisId: ensured.axisId,
+            },
+          },
+          { onConflict: "id" },
+        );
+        let fromNumber: string | null = null;
+        if (managerUserId) {
+          const { data: mgr } = await db
+            .from("profiles")
+            .select("sms_from_number")
+            .eq("id", managerUserId)
+            .maybeSingle();
+          fromNumber = String(mgr?.sms_from_number ?? "").trim() || null;
+        }
+        await notifyApplicantApplicationSms(db, {
+          event: "submitted",
+          applicantEmail: email,
+          applicantPhone,
+          applicantName: applicantName || rowData.name || null,
+          propertyTitle: propertyTitle || null,
+          axisId: ensured.axisId,
+          signupUrl,
+          managerUserId,
+          fromNumber,
+        });
       }
-      await notifyApplicantApplicationSms(db, {
-        event: "submitted",
-        applicantEmail: email,
-        applicantPhone,
-        applicantName: applicantName || rowData.name || null,
-        propertyTitle: propertyTitle || null,
-        axisId: ensured.axisId,
-        signupUrl,
-        managerUserId,
-        fromNumber,
-      });
     } catch {
       /* non-critical */
     }

@@ -66,13 +66,23 @@ export async function GET(req: Request) {
     if (!residentEmail.includes("@")) continue;
 
     const leaseId = String(row.id ?? lease.id ?? "").trim();
-    const dedupId = `lease_signing_sms_${leaseId}_${todayKey}`;
-    const { data: already } = await db
+    if (!leaseId) continue;
+
+    // Cadence: at most one text every 3 days, capped at 5 reminders per lease —
+    // a lease parked in "sent for signing" must not text the resident forever.
+    const dedupPrefix = `lease_signing_sms_${leaseId}_`;
+    const { data: priorRows } = await db
       .from("portal_outbound_mail_records")
       .select("id")
-      .eq("id", dedupId)
-      .maybeSingle();
-    if (already) continue;
+      .like("id", `${dedupPrefix}%`)
+      .order("id", { ascending: false })
+      .limit(10);
+    const prior = priorRows ?? [];
+    if (prior.length >= 5) continue;
+    const lastDateKey = String(prior[0]?.id ?? "").slice(dedupPrefix.length);
+    const lastTs = Date.parse(lastDateKey);
+    if (Number.isFinite(lastTs) && Date.now() - lastTs < 3 * 24 * 60 * 60 * 1000) continue;
+    const dedupId = `${dedupPrefix}${todayKey}`;
 
     const { data: managerProfile } = await db
       .from("profiles")

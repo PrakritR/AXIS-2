@@ -33,6 +33,7 @@ import {
   tryRelayManagerReplyViaClaw,
 } from "@/lib/claw-relay.server";
 import {
+  clawMappedManagerEmails,
   findResidentProfileByPhone,
   findThreadByResidentPhone,
   forwardResidentMessageToManagers,
@@ -52,15 +53,7 @@ export {
   type LeasingIntent,
 } from "@/lib/claw-leasing-links";
 
-/** Emails whose leasing contact is the shared Claw agent line (prod + test). */
-export function clawMappedManagerEmails(): string[] {
-  const fromEnv = (process.env.CLAW_MESSENGER_MANAGER_EMAILS ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (fromEnv.length > 0) return fromEnv;
-  return ["ogambik2@gmail.com", "testeverything@test.axis.local"];
-}
+export { clawMappedManagerEmails } from "@/lib/claw-resident-messaging.server";
 
 export function publicAppOrigin(): string {
   // SMS links must be phone-reachable — never localhost.
@@ -102,7 +95,7 @@ async function resolveMappedManagers(): Promise<ManagerTarget[]> {
       .from("manager_property_records")
       .select("id, property_data, status")
       .eq("manager_user_id", userId)
-      .eq("status", "listed")
+      .in("status", ["live", "listed"])
       .order("updated_at", { ascending: false })
       .limit(1);
 
@@ -127,16 +120,26 @@ async function resolveMappedManagers(): Promise<ManagerTarget[]> {
   return out;
 }
 
-async function resolvePropertyHint(propertyId: string | null): Promise<PropertyHint | null> {
+async function resolvePropertyHint(
+  propertyId: string | null,
+  managers: ManagerTarget[],
+): Promise<PropertyHint | null> {
   const id = propertyId?.trim();
-  if (!id) return null;
+  if (!id || managers.length === 0) return null;
   const db = createSupabaseServiceRoleClient();
+  // Untrusted SMS token: only ever resolve to a mapped manager's LISTED
+  // property — never confirm or link other landlords' (or unlisted) records.
   const { data } = await db
     .from("manager_property_records")
     .select("id, property_data")
     .eq("id", id)
+    .in(
+      "manager_user_id",
+      managers.map((m) => m.userId),
+    )
+    .in("status", ["live", "listed"])
     .maybeSingle();
-  if (!data) return { propertyId: id, propertyLabel: null };
+  if (!data) return null;
   const pd = (data as { property_data?: { title?: string; address?: string; buildingName?: string } | null })
     .property_data;
   const label = pd?.buildingName?.trim() || pd?.title?.trim() || pd?.address?.trim() || null;
@@ -147,10 +150,12 @@ function propertyDisplayLabel(pd: { title?: string; address?: string; buildingNa
   return pd?.buildingName?.trim() || pd?.title?.trim() || pd?.address?.trim() || "";
 }
 
-async function resolvePropertyByLabelHint(labelHint: string | null): Promise<PropertyHint | null> {
+async function resolvePropertyByLabelHint(
+  labelHint: string | null,
+  managers: ManagerTarget[],
+): Promise<PropertyHint | null> {
   const needle = (labelHint ?? "").trim().toLowerCase();
   if (!needle) return null;
-  const managers = await resolveMappedManagers();
   if (managers.length === 0) return null;
   const db = createSupabaseServiceRoleClient();
   const { data } = await db
@@ -160,7 +165,7 @@ async function resolvePropertyByLabelHint(labelHint: string | null): Promise<Pro
       "manager_user_id",
       managers.map((m) => m.userId),
     )
-    .eq("status", "listed")
+    .in("status", ["live", "listed"])
     .limit(100);
 
   let best: PropertyHint | null = null;
@@ -279,6 +284,28 @@ export type HandleClawInboundResult = {
   error?: string;
 };
 
+/* In-memory idempotency for redelivered relay frames (gateway restarts, webhook
+ * retries): a messageId is processed at most once per warm process per TTL. */
+const SEEN_INBOUND_TTL_MS = 60 * 60 * 1000;
+const seenInboundMessageIds = new Map<string, number>();
+
+function markInboundMessageSeen(messageId: string): boolean {
+  const now = Date.now();
+  const prev = seenInboundMessageIds.get(messageId);
+  if (prev && now - prev < SEEN_INBOUND_TTL_MS) return false;
+  if (seenInboundMessageIds.size > 2000) {
+    for (const [key, ts] of seenInboundMessageIds) {
+      if (now - ts >= SEEN_INBOUND_TTL_MS || seenInboundMessageIds.size > 2000) {
+        seenInboundMessageIds.delete(key);
+      } else {
+        break;
+      }
+    }
+  }
+  seenInboundMessageIds.set(messageId, now);
+  return true;
+}
+
 /** Run manager forwards / inbox mirrors after the reply is out the door.
  * after() needs a live request scope — outside one (tests) run inline. */
 function runAfterReply(task: () => Promise<unknown>): void {
@@ -303,6 +330,17 @@ export async function handleClawLeasingInbound(args: {
 }): Promise<HandleClawInboundResult> {
   const from = normalizeE164Us(args.from);
   if (!from) return { ok: false, intent: "unknown", replied: false, error: "Invalid from phone." };
+
+  // Never react to frames from the agent's own line — replying would loop the
+  // bot against itself through the relay.
+  if (from === clawLeasingAgentPhoneE164()) {
+    return { ok: true, intent: "unknown", replied: false };
+  }
+
+  const messageId = args.messageId?.trim() || "";
+  if (messageId && !markInboundMessageSeen(messageId)) {
+    return { ok: true, intent: "unknown", replied: false };
+  }
 
   const text = (args.text ?? "").trim();
 
@@ -390,7 +428,6 @@ export async function handleClawLeasingInbound(args: {
             forwardResidentMessageToManagers({
               fromResident: from,
               text,
-              topicLabel: action.classification.domain,
               thread: threadRef,
               briefText: brief,
             }),
@@ -435,8 +472,8 @@ export async function handleClawLeasingInbound(args: {
   const hintId = extractPropertyIdHint(text);
   let bundleId = extractBundleIdHint(text);
   const hinted =
-    (await resolvePropertyHint(hintId)) ??
-    (await resolvePropertyByLabelHint(extractPropertyLabelHint(text)));
+    (await resolvePropertyHint(hintId, managers)) ??
+    (await resolvePropertyByLabelHint(extractPropertyLabelHint(text), managers));
   const propertyId = hinted?.propertyId || managers[0]?.defaultPropertyId || null;
   const propertyLabel =
     hinted?.propertyLabel || managers[0]?.defaultPropertyLabel || null;

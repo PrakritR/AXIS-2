@@ -69,7 +69,7 @@ async function resolveResidentContext(
     .from("manager_application_records")
     .select("row_data, property_id")
     .eq("manager_user_id", args.managerUserId)
-    .eq("email", email)
+    .eq("resident_email", email)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -185,7 +185,7 @@ export async function createWorkOrderFromResidentSms(args: {
     residentUserId: args.residentUserId,
   });
 
-  const id = `REQ-SMS-${Date.now()}`;
+  const id = `REQ-SMS-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const row: DemoManagerWorkOrderRow = {
     id,
     propertyName: ctx.propertyName,

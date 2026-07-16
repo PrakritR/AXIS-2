@@ -57,7 +57,6 @@ import type { ManagerListingServiceOption } from "@/lib/manager-listing-submissi
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { pickPrimaryFilingScope } from "@/lib/resident-filing-scope";
 import { getPropertyById } from "@/lib/rental-application/data";
-import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
 import { RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS } from "@/lib/resident-work-order-reminder-email";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { parseMoneyAmount } from "@/lib/household-charges";
@@ -969,26 +968,8 @@ export function ResidentServicesPanel({
     }
     setAllRows(readManagerWorkOrderRows());
     setExpandedId(row.id);
-    const stampedManagerId = mirrored.row.managerUserId || managerUserId;
-    const stampedPropertyId = mirrored.row.propertyId || propertyId;
-    const notifyResult = await notifyManagerOfResidentSubmission({
-      managerUserId: stampedManagerId,
-      residentName: application?.name || residentEmail,
-      residentEmail,
-      propertyName: propertyLabel,
-      propertyId: stampedPropertyId,
-      title: mirrored.row.title || row.title,
-      kind: "work-order",
-      details: [
-        `Request ID: ${mirrored.row.id}`,
-        `Category: ${mCategory}`,
-        `Priority: ${mPriority}`,
-        `Preferred arrival: ${row.preferredArrival ?? "Anytime"}`,
-        `Entry: ${entryPermissionLabel(row.entryPermission)}${row.entryNotes ? ` (${row.entryNotes})` : ""}`,
-        `Details: ${row.description}`,
-        mPhotos.length > 0 ? `Attached photos: ${mPhotos.length}` : "",
-      ],
-    });
+    // Manager notification (inbox + email + SMS) fires server-side on the
+    // mirror write — a second client-side send here would double-notify.
     showToast("Maintenance request submitted.");
     track("work_order_submitted", {
       category: row.category,
@@ -997,9 +978,6 @@ export function ResidentServicesPanel({
       photo_count: mPhotos.length,
       entry_permission: mEntryPermission,
     });
-    if (!notifyResult.ok) {
-      showToast("Request submitted, but manager notification could not be sent.");
-    }
     resetMaintenance();
     setModalMode("none");
     await syncManagerWorkOrdersFromServer({ force: true });
@@ -1042,26 +1020,6 @@ export function ResidentServicesPanel({
       return;
     }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
-
-    // #region agent log
-    fetch("http://127.0.0.1:7518/ingest/13325f45-ca08-4e41-b48c-2517464d2c52", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7a8007" },
-      body: JSON.stringify({
-        sessionId: "7a8007",
-        runId: "post-fix",
-        hypothesisId: "D",
-        location: "resident-services-panel.tsx:submitService",
-        message: "client claimed manager/property before create",
-        data: {
-          claimedMgr: managerUserId.slice(0, 8),
-          claimedProp: propertyId,
-          fromServerScope: Boolean(serverFilingScope),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     let offerId: string;
     let offerName: string;
@@ -1111,7 +1069,7 @@ export function ResidentServicesPanel({
       ];
     }
 
-    const { request: createdRequest, mirrored } = await createServiceRequest({
+    const { mirrored } = await createServiceRequest({
       offerId,
       offerName,
       offerDescription,
@@ -1129,26 +1087,10 @@ export function ResidentServicesPanel({
       showToast(mirrored.error || "Could not send request to your manager. Try again.");
       return;
     }
-    const stampedManagerId = createdRequest.managerUserId || managerUserId;
-    const stampedPropertyId = createdRequest.propertyId || propertyId;
-    const propertyLabel =
-      application?.property ||
-      getPropertyById(stampedPropertyId)?.address.split(",")[0]?.trim() ||
-      "Assigned house";
-    const notifyResult = await notifyManagerOfResidentSubmission({
-      managerUserId: stampedManagerId,
-      residentName: application?.name || residentEmail,
-      residentEmail,
-      propertyName: propertyLabel,
-      propertyId: stampedPropertyId,
-      title: notifyTitle,
-      kind: "service-request",
-      details: [`Request ID: ${createdRequest.id}`, ...notifyDetails.filter(Boolean)],
-    });
+    // Manager notification (inbox + email + SMS) fires server-side on the
+    // mirror write — a second client-side send here would double-notify.
+    void notifyDetails;
     showToast(`${notifyTitle} requested — awaiting manager approval.`);
-    if (!notifyResult.ok) {
-      showToast("Request submitted, but manager notification could not be sent.");
-    }
     resetService();
     setModalMode("none");
     await syncServiceRequestsFromServer({ force: true });

@@ -95,13 +95,21 @@ export function labelClawSmsFromResident(text: string, residentPhone?: string | 
   ].join("\n");
 }
 
-export async function resolveMappedManagerContacts(): Promise<
-  Array<{ userId: string; email: string; personalPhone: string | null }>
-> {
-  const emails = (process.env.CLAW_MESSENGER_MANAGER_EMAILS ?? "ogambik2@gmail.com,testeverything@test.axis.local,manager@test.axis.local")
+/** Emails whose messaging contact is the shared Claw agent line (prod + test).
+ * Single source of truth — the shared-line trial is scoped to exactly these. */
+export function clawMappedManagerEmails(): string[] {
+  const fromEnv = (process.env.CLAW_MESSENGER_MANAGER_EMAILS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
+  if (fromEnv.length > 0) return fromEnv;
+  return ["ogambik2@gmail.com", "testeverything@test.axis.local", "manager@test.axis.local"];
+}
+
+export async function resolveMappedManagerContacts(): Promise<
+  Array<{ userId: string; email: string; personalPhone: string | null }>
+> {
+  const emails = clawMappedManagerEmails();
   if (emails.length === 0) return [];
   const db = createSupabaseServiceRoleClient();
   const { data } = await db.from("profiles").select("id, email, phone").in("email", emails);
@@ -131,6 +139,10 @@ async function resolveManagerPersonalPhone(managerUserId: string): Promise<strin
   const mapped = await resolveMappedManagerContacts();
   const match = mapped.find((m) => m.userId === managerUserId || m.email === email);
   if (match?.personalPhone) return match.personalPhone;
+  // The env / hardcoded pairing is the trial default for MAPPED managers only.
+  // A manager outside the shared-line trial with no phone on file gets no SMS —
+  // never route another landlord's resident traffic to the default cell.
+  if (!match) return null;
   const env = clawManagerForwardPhonesFromEnv();
   return env[0] ?? DEFAULT_MANAGER_PHONE;
 }
@@ -171,6 +183,12 @@ export async function openClawResidentThread(args: {
   residentUserId?: string | null;
   residentEmail?: string | null;
   topic: ClawThreadTopic;
+  /**
+   * false → an existing thread keeps its last_message_at (automated/cron sends
+   * must not steal manager-reply routing from the resident who last actually
+   * talked). New threads always stamp now.
+   */
+  bumpLastMessage?: boolean;
 }): Promise<ClawMessagingThread | null> {
   const managerUserId = args.managerUserId.trim();
   const residentPhone = normalizeE164Us(args.residentPhone);
@@ -184,6 +202,21 @@ export async function openClawResidentThread(args: {
   const db = createSupabaseServiceRoleClient();
   const id = threadId(managerUserId, residentPhone);
   const now = new Date().toISOString();
+
+  if (args.bumpLastMessage === false) {
+    const { data: existing } = await db
+      .from("claw_messaging_threads")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (existing) {
+      const updates: Record<string, unknown> = { topic: args.topic };
+      if (args.residentUserId?.trim()) updates.resident_user_id = args.residentUserId.trim();
+      if (args.residentEmail?.trim()) updates.resident_email = args.residentEmail.trim().toLowerCase();
+      await db.from("claw_messaging_threads").update(updates).eq("id", id);
+      return rowToThread({ ...(existing as Record<string, unknown>), ...updates });
+    }
+  }
   const payload = {
     id,
     manager_user_id: managerUserId,
@@ -338,20 +371,23 @@ export async function findResidentProfileByPhone(phone: string): Promise<{
 export async function forwardResidentMessageToManagers(args: {
   fromResident: string;
   text: string;
-  topicLabel: string;
   thread: ClawMessagingThread;
   /** When set, sent instead of the default "From resident:" wrapper. */
   briefText?: string | null;
 }): Promise<{ forwardedTo: string[] }> {
-  void args.topicLabel;
   const targets = new Set<string>();
-  for (const p of clawManagerForwardPhonesFromEnv()) targets.add(p);
   if (args.thread.managerPhone) targets.add(args.thread.managerPhone);
   const managers = await resolveMappedManagerContacts();
+  const threadManagerMapped = managers.some((m) => m.userId === args.thread.managerUserId);
   for (const m of managers) {
     if (m.userId === args.thread.managerUserId && m.personalPhone) targets.add(m.personalPhone);
   }
-  targets.add(DEFAULT_MANAGER_PHONE);
+  // The env forward phones and the hardcoded trial cell only ever receive
+  // traffic for managers inside the shared-line trial scope.
+  if (threadManagerMapped) {
+    for (const p of clawManagerForwardPhonesFromEnv()) targets.add(p);
+    targets.add(DEFAULT_MANAGER_PHONE);
+  }
   targets.delete(args.fromResident);
   targets.delete(clawLeasingAgentPhoneE164());
 
@@ -432,6 +468,7 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
     residentUserId: args.residentUserId,
     residentEmail: args.residentEmail,
     topic: args.topic ?? "general",
+    bumpLastMessage: false,
   });
   const managerPhone = thread?.managerPhone || (await resolveManagerPersonalPhone(managerUserId));
   if (!managerPhone || managerPhone === residentPhone) return { mirrored: false };
@@ -500,7 +537,6 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
   const send = await sendClawMessengerText({ to: managerPhone, text: body });
   if (!send.ok) return { mirrored: false };
 
-  if (thread) await touchThread(thread, args.topic);
   return { mirrored: true, to: managerPhone };
 }
 

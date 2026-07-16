@@ -40,13 +40,31 @@ export async function resolvePropertyAddressForTour(
 ): Promise<string> {
   const id = textField({ id: propertyId ?? "" }, "id");
   if (!id) return "";
-  const { data } = await db.from("manager_property_records").select("id, property_data, row_data").limit(200);
-  for (const row of data ?? []) {
+  const { data } = await db
+    .from("manager_property_records")
+    .select("id, property_data, row_data")
+    .eq("id", id)
+    .maybeSingle();
+  if (data) {
+    const pd = asObject(data.property_data);
+    const rd = asObject(data.row_data);
+    const address =
+      textField(pd, "address") || textField(rd, "address") || textField(asObject(rd?.submission), "address");
+    if (address) return address;
+  }
+  // Legacy rows can carry the id only inside their JSON blobs — fall back to a
+  // filtered JSON-field match instead of a full-table scan.
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) return "";
+  const { data: byJson } = await db
+    .from("manager_property_records")
+    .select("id, property_data, row_data")
+    .or(`property_data->>id.eq.${id},row_data->>id.eq.${id}`)
+    .limit(5);
+  for (const row of byJson ?? []) {
     const pd = asObject(row.property_data);
     const rd = asObject(row.row_data);
-    const candidateId = textField(pd, "id") || textField(rd, "id") || textField(row as Record<string, unknown>, "id");
-    if (candidateId !== id) continue;
-    const address = textField(pd, "address") || textField(rd, "address") || textField(asObject(rd?.submission), "address");
+    const address =
+      textField(pd, "address") || textField(rd, "address") || textField(asObject(rd?.submission), "address");
     if (address) return address;
   }
   return "";

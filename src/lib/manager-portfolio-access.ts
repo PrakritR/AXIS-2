@@ -205,13 +205,17 @@ export function moduleRowVisibleToPortalUser(
   module: CoManagerPermissionId,
 ): boolean {
   if (!userId) return false;
+  // A row attributed to this manager is always theirs — even when its property
+  // is missing from the local owned/linked cache (deleted/archived property, or
+  // cache not hydrated yet on first paint). The server already scoped the list.
+  if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.propertyId?.trim() || row.assignedPropertyId?.trim() || "";
   if (pid) {
     if (ownedPropertyIdsForUser(userId).has(pid)) return true;
     return collectLinkedPropertyIdsForModule(userId, module).has(pid);
   }
-  // Rows without a property stay visible only to the attributed manager (or unscoped rows).
-  return !row.managerUserId || row.managerUserId === userId;
+  // Rows without a property stay visible only when unscoped.
+  return !row.managerUserId;
 }
 
 /** Refresh co-manager relationships and property pipeline (includes linked owner listings). */

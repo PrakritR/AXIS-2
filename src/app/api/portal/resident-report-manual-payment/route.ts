@@ -49,7 +49,25 @@ export async function POST(req: Request) {
       chargeIds: uniqueIds,
     });
 
+    const skippedStatus = (reason: string): { status: number; error: string } => {
+      switch (reason) {
+        case "not_found":
+          return { status: 404, error: "One or more selected charges were not found." };
+        case "already_paid":
+          return { status: 409, error: "One or more selected charges are already paid." };
+        case "forbidden":
+          return { status: 403, error: "One or more selected charges belong to another resident." };
+        default:
+          return { status: 422, error: "One or more selected charges cannot be reported for this channel." };
+      }
+    };
+
     if (!result.ok) {
+      const firstSkip = result.skipped?.[0];
+      if (firstSkip) {
+        const { status, error } = skippedStatus(firstSkip.reason);
+        return NextResponse.json({ error, skipped: result.skipped }, { status });
+      }
       const status =
         result.error === "no_payable_charges" || result.error === "no_charges_updated" ? 422 : 400;
       return NextResponse.json(
@@ -59,6 +77,16 @@ export async function POST(req: Request) {
               ? "One or more selected charges cannot be reported for this channel."
               : result.error,
         },
+        { status },
+      );
+    }
+
+    // Explicit selections are all-or-error: a success toast must not cover a
+    // charge that was silently skipped (already paid / missing / wrong channel).
+    if (result.skipped.length > 0) {
+      const { status, error } = skippedStatus(result.skipped[0]!.reason);
+      return NextResponse.json(
+        { error, charges: result.charges, skipped: result.skipped },
         { status },
       );
     }
