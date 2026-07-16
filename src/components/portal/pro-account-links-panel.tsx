@@ -1810,7 +1810,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   type="text"
                   value={axisInput}
                   onChange={(e) => setAxisInput(e.target.value)}
-                  placeholder="e.g. AXIS-1A2B3C4D"
+                  placeholder="e.g. PROPLANE-1A2B3C4D"
                   autoFocus
                   className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
                 />
