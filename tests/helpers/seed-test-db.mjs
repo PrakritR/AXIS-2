@@ -316,7 +316,8 @@ try {
   // Shared Claw agent line stays on sms_from_number for outbound.
   const TEST_MANAGER_PHONE = "+15103098345";
   const TEST_RESIDENT_PHONE = "+15105791976";
-  const CLAW_AGENT_PHONE = "+12053690702";
+  // Twilio-style work number for outbound (not the legacy Claw shared agent line).
+  const CLAW_AGENT_PHONE = "+12065550100";
   await must(
     supabase
       .from("profiles")

@@ -111,6 +111,8 @@ export async function provisionPendingManagerAccount(
     }
     const { assignSharedClawLeasingNumberToManager } = await import("@/lib/claw-leasing-bot.server");
     await assignSharedClawLeasingNumberToManager(opts.userId).catch(() => undefined);
+    const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+    scheduleManagerMessagingReady(opts.userId);
     return { managerId: existingPurchase.manager_id, created: false };
   }
 
@@ -153,9 +155,11 @@ export async function provisionPendingManagerAccount(
     if (insErr) throw insErr;
   }
 
-  // Shared Claw Messenger leasing line while per-manager numbers are rolled out.
+  // Auto-provision a Twilio work number (Claw shared-line assignment is a no-op).
   const { assignSharedClawLeasingNumberToManager } = await import("@/lib/claw-leasing-bot.server");
   await assignSharedClawLeasingNumberToManager(opts.userId).catch(() => undefined);
+  const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+  scheduleManagerMessagingReady(opts.userId);
 
   return { managerId, created: true };
 }

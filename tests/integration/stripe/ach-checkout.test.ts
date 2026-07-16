@@ -357,9 +357,17 @@ describe("ACH checkout routes", () => {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               maybeSingle: vi.fn().mockResolvedValue({
+<<<<<<< HEAD
                 // Owner matches the request, and the listing carries a $50 fee that
                 // the server derives the charge amount from.
                 data: { manager_user_id: "mgr_1", property_data: { listingSubmission: { v: 1, applicationFee: "50" } } },
+=======
+                data: {
+                  manager_user_id: "mgr_1",
+                  status: "live",
+                  property_data: { listingSubmission: { v: 1, applicationFee: "50", axisPaymentsEnabled: true } },
+                },
+>>>>>>> fm/captain-wip-ship-s1
                 error: null,
               }),
             }),

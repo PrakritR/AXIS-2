@@ -32,7 +32,7 @@ import {
   PortalTableDetailActions,
   PortalTableInlineExpand,
   PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -2714,13 +2714,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-2 text-left"
+              className="flex w-full gap-2 text-left"
               onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
               aria-expanded={selectedId === res.id}
             >
               <div className="min-w-0 flex-1">
+<<<<<<< HEAD
                 <PortalTableInlineExpand expanded={selectedId === res.id} className="truncate font-semibold text-foreground">
                   {res.name || "—"}
+=======
+                <PortalTableInlineExpand expanded={selectedId === res.id} className="font-semibold text-foreground">
+                  <span className="truncate">{res.name || "—"}</span>
+>>>>>>> fm/captain-wip-ship-s1
                 </PortalTableInlineExpand>
                 {housingLabel ? (
                   <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
@@ -2758,9 +2763,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       aria-expanded={selectedId === res.id}
                     >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+<<<<<<< HEAD
                         <PortalTableInlineExpand expanded={selectedId === res.id}>
                           {res.name || "—"}
                         </PortalTableInlineExpand>
+=======
+                        <PortalTableInlineExpand expanded={selectedId === res.id}>{res.name || "—"}</PortalTableInlineExpand>
+>>>>>>> fm/captain-wip-ship-s1
                       </td>
                       <td className={PORTAL_TABLE_TD}>{res.email}</td>
                       <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>

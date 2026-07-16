@@ -307,7 +307,7 @@ export async function runBackgroundCheck(opts: {
       expenseDate: now.slice(0, 10),
       memo: `Applicant background check (Checkr) — ${row.application.fullLegalName || row.id}`,
       propertyId: row.assignedPropertyId || row.propertyId || row.application.propertyId,
-      sourceStripePaymentId: charge.paymentIntentId,
+      sourceStripePaymentId: stripePaymentIntentId,
     });
   } catch (e) {
     // The manager was already charged; a bookkeeping failure here must not
@@ -315,7 +315,7 @@ export async function runBackgroundCheck(opts: {
     console.error("checkr background check: failed to record auto-expense", {
       applicationId: row.id,
       managerUserId: opts.managerUserId,
-      paymentIntentId: charge.paymentIntentId,
+      paymentIntentId: stripePaymentIntentId,
       error: e instanceof Error ? e.message : String(e),
     });
   }

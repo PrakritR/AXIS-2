@@ -20,6 +20,7 @@ import {
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 
 function trialSignupSubtitle(tier: PlanTierId): string {
   if (tier === "free") return "Free plan — no card required";
@@ -70,7 +71,7 @@ export function ManagerTrialSignupForm({
   const applyPricingResult = useCallback(
     (result: ContinuePartnerPricingResult) => {
       if (result.status === "portal") {
-        window.location.replace("/portal/dashboard");
+        void navigateAfterRoleSignup("/portal/dashboard");
         return;
       }
       if (result.status === "error") {
@@ -128,7 +129,7 @@ export function ManagerTrialSignupForm({
         showToast(body.error ?? "Could not create manager account.");
         return;
       }
-      window.location.replace("/portal/dashboard");
+      await navigateAfterRoleSignup("/portal/dashboard");
     } catch {
       showToast("Network error.");
     } finally {
@@ -170,9 +171,8 @@ export function ManagerTrialSignupForm({
         return;
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
-      window.location.replace(
-        body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard",
-      );
+      const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard";
+      await navigateAfterRoleSignup(fallback);
     } catch {
       showToast("Network error.");
     } finally {
@@ -198,7 +198,7 @@ export function ManagerTrialSignupForm({
           disabled={locked}
           onClick={() => void submitSignedIn()}
         >
-          {busy ? "Creating…" : "Create manager account"}
+          {busy ? "Creating…" : "Create property account"}
         </Button>
       ) : (
         <>
@@ -246,7 +246,7 @@ export function ManagerTrialSignupForm({
             disabled={locked}
             onClick={() => void submit()}
           >
-            {busy ? "Creating…" : "Create manager account"}
+            {busy ? "Creating…" : "Create property account"}
           </Button>
         </>
       )}

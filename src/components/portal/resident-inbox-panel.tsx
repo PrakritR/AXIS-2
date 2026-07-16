@@ -424,8 +424,6 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
                 sendAt: p.sendAt,
                 recipientEmail,
                 recipientName: contact?.name?.trim() || recipientEmail,
-                deliverViaEmail: p.deliverViaEmail !== false,
-                deliverViaSms: p.deliverViaSms,
                 senderPortal: "resident",
               }),
             });
@@ -453,8 +451,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
                 subject: p.subject.trim(),
                 text: p.body.trim(),
                 deliverToPortalInbox: true,
-                deliverViaEmail: p.deliverViaEmail !== false,
-                deliverViaSms: p.deliverViaSms,
+                eventCategory: "messages",
               }),
             });
             const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
@@ -466,7 +463,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
           const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
-          showToast("Message sent via inbox and email.");
+          showToast("Message sent via inbox, email, and text.");
           navigate("/resident/inbox/sent");
         } catch {
           showToast("Message could not be sent.");

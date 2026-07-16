@@ -30,8 +30,6 @@ export type ScopedInboxSendPayload = {
   includesDirectoryRecipients: boolean;
   /** Broadcast categories selected ("All management" / "All residents"), resolved to real recipients server-side. */
   broadcastCategories: ("management" | "resident")[];
-  deliverViaEmail: boolean;
-  deliverViaSms: boolean;
   scheduleLater?: boolean;
   sendAt?: string;
 };
@@ -112,8 +110,6 @@ export function ScopedInboxComposeModal({
   const [manualEmailDraft, setManualEmailDraft] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [deliverViaEmail, setDeliverViaEmail] = useState(true);
-  const [deliverViaSms, setDeliverViaSms] = useState(false);
   const [scheduleLater, setScheduleLater] = useState(false);
   const [sendAt, setSendAt] = useState(defaultScheduleSendAt);
   const managerOnlyCompose = portal === "resident";
@@ -146,8 +142,6 @@ export function ScopedInboxComposeModal({
       setManualEmailDraft("");
       setSubject("");
       setBody("");
-      setDeliverViaEmail(true);
-      setDeliverViaSms(false);
       setScheduleLater(false);
       setSendAt(defaultScheduleSendAt());
     });
@@ -358,8 +352,6 @@ export function ScopedInboxComposeModal({
       includesAxisAdmin,
       includesDirectoryRecipients,
       broadcastCategories,
-      deliverViaEmail,
-      deliverViaSms,
       scheduleLater,
       sendAt: scheduleLater ? new Date(sendAt).toISOString() : undefined,
     });
@@ -549,33 +541,6 @@ export function ScopedInboxComposeModal({
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your message…"
           />
-        </div>
-
-        <div className="rounded-2xl border border-border bg-accent/30/40 px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Deliver via</p>
-          <div className="mt-2 flex flex-wrap gap-4">
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border"
-                checked={deliverViaEmail}
-                onChange={(e) => setDeliverViaEmail(e.target.checked)}
-              />
-              <span className="text-sm font-medium text-foreground">Email</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border"
-                checked={deliverViaSms}
-                onChange={(e) => setDeliverViaSms(e.target.checked)}
-              />
-              <span className="text-sm font-medium text-foreground">SMS</span>
-            </label>
-          </div>
-          {deliverViaSms && (
-            <p className="mt-2 text-xs text-muted">Texts send from your PropLane work number. Recipients must have a phone number on their profile.</p>
-          )}
         </div>
 
         {managerOnlyCompose ? (

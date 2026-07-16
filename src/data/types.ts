@@ -24,6 +24,11 @@ export type MockProperty = {
   listingSubmission?: ManagerListingSubmissionV1;
   /** Supabase user id of the owning manager (demo localStorage scoping). */
   managerUserId?: string;
+  /**
+   * Manager Twilio work number (E.164) for public "Text to tour/apply" CTAs.
+   * Populated from `profiles.sms_from_number` on public listing APIs.
+   */
+  contactSmsPhone?: string;
   /** When true, listing is admin-approved for live rent display; property portal inventory only shows extras with this set. */
   adminPublishLive?: boolean;
 };

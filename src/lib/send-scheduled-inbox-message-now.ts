@@ -56,8 +56,7 @@ export async function sendScheduledInboxMessageNow(
         text: message.body,
         toEmails: [message.recipientEmail],
         toUserIds: message.recipientUserId ? [message.recipientUserId] : [],
-        deliverViaEmail: message.deliverViaEmail,
-        deliverViaSms: message.deliverViaSms,
+        eventCategory: "messages",
         senderRole: "resident",
       });
       if (!result.ok) return { ok: false, error: result.error };
@@ -83,8 +82,7 @@ export async function sendScheduledInboxMessageNow(
       toEmails: message.broadcastCategories?.length ? [] : [message.recipientEmail],
       toUserIds: message.recipientUserId ? [message.recipientUserId] : [],
       broadcastCategories: message.broadcastCategories,
-      deliverViaEmail: message.deliverViaEmail,
-      deliverViaSms: message.deliverViaSms,
+      eventCategory: "messages",
     });
     if (!result.ok) return { ok: false, error: result.error };
 

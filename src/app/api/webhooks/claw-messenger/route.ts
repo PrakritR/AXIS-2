@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { handleClawLeasingInbound } from "@/lib/claw-leasing-bot.server";
-import { clawMessengerApiKey } from "@/lib/claw-messenger.server";
+import { clawMessengerApiKey, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
 
 export const runtime = "nodejs";
 
@@ -46,8 +46,12 @@ function authorized(req: Request, rawBody: string): boolean {
 }
 
 export async function POST(req: Request) {
-  if (!clawMessengerApiKey()) {
-    return NextResponse.json({ error: "Claw Messenger is not configured." }, { status: 503 });
+  // Claw is opt-in legacy — production inbound is /api/twilio/inbound.
+  if (!isClawMessengerConfigured()) {
+    return NextResponse.json(
+      { error: "Claw Messenger is disabled. Use Twilio inbound at /api/twilio/inbound." },
+      { status: 503 },
+    );
   }
 
   const raw = await req.text();

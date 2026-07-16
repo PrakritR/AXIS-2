@@ -8,12 +8,11 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { buildBackgroundCheckReportHtml } from "@/lib/background-check-report-html";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import type { ManagerScreeningSettings } from "@/lib/screening/types";
 
-const DEMO_SCREENING_DEFAULTS = { mode: "manual" as const };
+const DEFAULT_SCREENING_DEFAULTS = { mode: "manual" as const };
 
 function backgroundCheckDocumentHref(applicationId: string, opts?: { attachment?: boolean }): string {
   const params = new URLSearchParams({ applicationId });
@@ -30,9 +29,9 @@ function downloadBackgroundCheckPdf(applicationId: string): void {
   anchor.remove();
 }
 
-function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo: boolean }) {
+function BackgroundCheckReportFrame({ row }: { row: DemoApplicantRow }) {
   const bg = row.backgroundCheck;
-  const useOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
+  const useOfficialPdf = bg?.status === "complete";
   const pdfSrc = useOfficialPdf
     ? `${backgroundCheckDocumentHref(row.id)}#toolbar=0&navpanes=0`
     : null;
@@ -41,9 +40,7 @@ function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo
   if (!pdfSrc && !reportHtml) {
     return (
       <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-        {demo
-          ? "No screening report yet. Click Test to run a demo background check."
-          : "No screening report yet."}
+        No screening report yet.
       </div>
     );
   }
@@ -96,12 +93,11 @@ export function ApplicationScreeningPanel({
   onOpenScreeningModal?: () => void;
 }) {
   const { showToast } = useAppUi();
-  const demo = isDemoModeActive();
-  const [settings, setSettings] = useState<ManagerScreeningSettings | null>(demo ? DEMO_SCREENING_DEFAULTS : null);
-  const [configured, setConfigured] = useState(demo);
+  const [settings, setSettings] = useState<ManagerScreeningSettings | null>(null);
+  const [configured, setConfigured] = useState(false);
   const [screeningAllowed, setScreeningAllowed] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [bgConfigured, setBgConfigured] = useState(demo);
+  const [bgConfigured, setBgConfigured] = useState(false);
   const [bgOverride, setBgOverride] = useState<ApplicationBackgroundCheck | undefined>();
   const [bgBusy, setBgBusy] = useState(false);
   const bg = bgOverride ?? row.backgroundCheck;
@@ -111,7 +107,6 @@ export function ApplicationScreeningPanel({
   }, [row.id, row.backgroundCheck?.status, row.backgroundCheck?.completedAt]);
 
   useEffect(() => {
-    if (demo) return;
     void fetch("/api/screening/settings", { credentials: "include" })
       .then(async (res) => {
         if (!res.ok) return;
@@ -127,11 +122,10 @@ export function ApplicationScreeningPanel({
         setScreeningAllowed(body.screeningAllowed !== false);
       })
       .catch(() => undefined);
-  }, [demo]);
+  }, []);
 
   const callBackgroundCheck = useCallback(
     async (action: "refresh") => {
-      if (demo) return;
       setBgBusy(true);
       try {
         const res = await fetch("/api/screening/background-check", {
@@ -148,11 +142,11 @@ export function ApplicationScreeningPanel({
         setBgBusy(false);
       }
     },
-    [demo, onUpdated, row.id],
+    [onUpdated, row.id],
   );
 
   useEffect(() => {
-    if (demo || bg?.status !== "pending") return;
+    if (bg?.status !== "pending") return;
     let cancelled = false;
     // Skip the poll for a hidden/background tab (egress on the free plan) and
     // widen the interval; the report only changes when Checkr finishes.
@@ -164,7 +158,7 @@ export function ApplicationScreeningPanel({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [bg?.status, bg?.reportId, callBackgroundCheck, demo]);
+  }, [bg?.status, bg?.reportId, callBackgroundCheck]);
 
   const runScreening = useCallback(async () => {
     setBusy(true);
@@ -190,20 +184,13 @@ export function ApplicationScreeningPanel({
   }, [onUpdated, row.id, showToast]);
 
   const handleDownload = useCallback(() => {
-    if (demo) {
-      void import("@/lib/demo/demo-document-files")
-        .then(({ downloadDemoBackgroundCheckPdf }) => downloadDemoBackgroundCheckPdf({ ...row, backgroundCheck: bg }))
-        .catch(() => showToast("Could not download screening report."));
-      return;
-    }
     downloadBackgroundCheckPdf(row.id);
-  }, [bg, demo, row, showToast]);
+  }, [row.id]);
 
   if (!applicationShowsBackgroundCheck(row)) return null;
 
   const screening = row.screening;
   const canOrder =
-    !demo &&
     screeningAllowed &&
     configured &&
     settings?.mode !== "off" &&
@@ -219,7 +206,7 @@ export function ApplicationScreeningPanel({
     bg?.status !== "pending" &&
     Boolean(onOpenScreeningModal);
 
-  const testButtonLabel = demo ? "Test" : bg ? "Re-run background check" : "Run background check";
+  const testButtonLabel = bg ? "Re-run background check" : "Run background check";
 
   const headerActions = (
     <>
@@ -267,6 +254,7 @@ export function ApplicationScreeningPanel({
       toggleDataAttr="application-screening-toggle"
       headerActions={headerActions}
     >
+<<<<<<< HEAD
       {!screeningAllowed && !demo ? (
         <>
           <p className="native-hide text-xs text-muted">
@@ -279,20 +267,27 @@ export function ApplicationScreeningPanel({
             Screening isn&apos;t included on your current plan.
           </p>
         </>
+=======
+      {!screeningAllowed ? (
+        <p className="text-xs text-muted">
+          Screening requires Pro or Business.{" "}
+          <Link href={MANAGER_PLAN_PORTAL_URL} className="font-semibold text-primary hover:underline">
+            Upgrade your plan
+          </Link>
+        </p>
+>>>>>>> fm/captain-wip-ship-s1
       ) : null}
       {bg?.status === "pending" ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span>{demo ? "Demo screening in progress…" : "Checkr is processing — status updates automatically."}</span>
-          {!demo ? (
-            <button
-              type="button"
-              className="font-semibold text-primary hover:underline disabled:opacity-50"
-              disabled={bgBusy}
-              onClick={() => void callBackgroundCheck("refresh")}
-            >
-              Refresh now
-            </button>
-          ) : null}
+          <span>Checkr is processing — status updates automatically.</span>
+          <button
+            type="button"
+            className="font-semibold text-primary hover:underline disabled:opacity-50"
+            disabled={bgBusy}
+            onClick={() => void callBackgroundCheck("refresh")}
+          >
+            Refresh now
+          </button>
         </div>
       ) : null}
       {screening?.reportUrl ? (
@@ -305,7 +300,7 @@ export function ApplicationScreeningPanel({
           View full vendor report
         </Link>
       ) : null}
-      {screeningAllowed && configured && settings?.mode === "off" && !demo ? (
+      {screeningAllowed && configured && settings?.mode === "off" ? (
         <p className="text-xs text-muted">Screening is off in Applications settings.</p>
       ) : null}
       {screeningAllowed && !row.application?.consentCredit ? (
@@ -313,7 +308,7 @@ export function ApplicationScreeningPanel({
       ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-        <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} />
+        <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} />
       </div>
 
       {screening?.adverseActionRequired ? (

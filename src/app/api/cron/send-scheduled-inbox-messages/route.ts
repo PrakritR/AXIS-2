@@ -34,8 +34,7 @@ export async function GET(req: Request) {
           text: message.body,
           toEmails: [message.recipientEmail],
           toUserIds: message.recipientUserId ? [message.recipientUserId] : [],
-          deliverViaEmail: message.deliverViaEmail,
-          deliverViaSms: message.deliverViaSms,
+          eventCategory: "messages",
           senderRole: "resident",
         });
 
@@ -75,8 +74,7 @@ export async function GET(req: Request) {
         toEmails: message.broadcastCategories?.length ? [] : [message.recipientEmail],
         toUserIds: message.recipientUserId ? [message.recipientUserId] : [],
         broadcastCategories: message.broadcastCategories,
-        deliverViaEmail: message.deliverViaEmail,
-        deliverViaSms: message.deliverViaSms,
+        eventCategory: "messages",
       });
 
       if (!result.ok) {

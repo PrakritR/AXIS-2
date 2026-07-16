@@ -1,6 +1,6 @@
 import {
-  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
   IOS_BUNDLE_ID,
+  mapNativeAppleOAuthErrorMessage,
   supabaseAppleOAuthRedirectUri,
 } from "@/lib/auth/apple-sign-in-config";
 import { sha256Hex } from "@/lib/crypto/sha256-hex";
@@ -123,12 +123,7 @@ export async function runNativeAppleSignIn(
     });
 
     if (error) {
-      const lower = error.message.toLowerCase();
-      const message =
-        lower.includes("not enabled") || lower.includes("unsupported provider")
-          ? APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE
-          : error.message;
-      return { ok: false, message };
+      return { ok: false, message: mapNativeAppleOAuthErrorMessage(error.message) };
     }
 
     const givenName = result.response?.givenName?.trim() ?? "";

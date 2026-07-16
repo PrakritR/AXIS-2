@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 
 /** Resident account creation — Google or email/password, then apply inside the portal. */
 export function ResidentSignupForm({
@@ -67,10 +68,10 @@ export function ResidentSignupForm({
         return;
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
-      const destination =
+      const fallback =
         resolvedNext ||
         (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications/apply");
-      window.location.replace(destination);
+      await navigateAfterRoleSignup(fallback);
     } catch {
       showToast("Network error.");
     } finally {

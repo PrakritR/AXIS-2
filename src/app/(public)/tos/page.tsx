@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PublicMobileBackBar } from "@/components/layout/public-mobile-back-bar";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -11,7 +12,8 @@ const LAST_UPDATED = "June 29, 2026";
 
 export default function TermsOfServicePage() {
   return (
-    <div className="min-h-screen px-4 py-16 sm:py-20">
+    <div className="min-h-screen px-4 py-16 sm:py-20 [html[data-native]_&]:py-4 [html[data-native]_&]:pt-[max(1rem,env(safe-area-inset-top))]">
+      <PublicMobileBackBar label="Back" />
       <article className="glass-card mx-auto max-w-3xl rounded-3xl px-6 py-10 sm:px-10 sm:py-12">
         <header className="border-b border-border pb-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/80">Legal</p>

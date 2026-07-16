@@ -8,6 +8,7 @@ import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope"
 import { checkrApiFetch } from "@/lib/checkr/client";
 import { backgroundCheckConfigured, checkrSkipsManagerCardCharge } from "@/lib/checkr/config";
 import { fetchCheckrReportPdfBytes } from "@/lib/checkr/report-document";
+import { loadCheckrSampleReportPdfBytes } from "@/lib/checkr/sample-report-pdf";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -72,16 +73,18 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Report is not ready yet." }, { status: 404 });
     }
 
-    if (bc.simulated && checkrSkipsManagerCardCharge()) {
-      return NextResponse.json({ error: "Official PDF is unavailable in offline demo mode." }, { status: 404 });
-    }
-
     const inline = url.searchParams.get("disposition") !== "attachment";
 
-    const pdf = await fetchCheckrReportPdfBytes(checkrApiFetch, {
-      orderId: bc.reportId,
-      reportResourceId: bc.reportResourceId,
-    });
+    let pdf: ArrayBuffer | null = null;
+    if (!(bc.simulated && checkrSkipsManagerCardCharge())) {
+      pdf = await fetchCheckrReportPdfBytes(checkrApiFetch, {
+        orderId: bc.reportId,
+        reportResourceId: bc.reportResourceId,
+      });
+    }
+    if (!pdf && bc.simulated) {
+      pdf = await loadCheckrSampleReportPdfBytes();
+    }
     if (!pdf) {
       return NextResponse.json({ error: "Could not retrieve the Checkr report PDF." }, { status: 502 });
     }

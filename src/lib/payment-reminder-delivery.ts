@@ -61,10 +61,10 @@ export async function deliverPaymentReminder(input: {
       emailSent = res.ok;
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as { message?: string };
-        return { sent: false, error: `${residentLower}/${slotLabel}: ${payload.message ?? res.statusText}` };
+        return { sent: false, error: `${charge.id}/${slotLabel}: ${payload.message ?? res.statusText}` };
       }
     } catch (e) {
-      return { sent: false, error: `${residentLower}/${slotLabel}: ${e instanceof Error ? e.message : String(e)}` };
+      return { sent: false, error: `${charge.id}/${slotLabel}: ${e instanceof Error ? e.message : String(e)}` };
     }
   }
 
@@ -208,6 +208,25 @@ export async function deliverPaymentReminder(input: {
   }
 
   try {
+    if (managerId) {
+      const { data: managerProfile } = await db
+        .from("profiles")
+        .select("phone, sms_forward_inbound")
+        .eq("id", managerId)
+        .maybeSingle();
+      const managerPhone = String(managerProfile?.phone ?? "").trim();
+      if (managerPhone && managerProfile?.sms_forward_inbound !== false) {
+        const { sendSms } = await import("@/lib/twilio");
+        await sendSms(managerPhone, `(${subject}) Reminder sent to ${residentLower}.`, managerSmsFromNumber).catch(
+          () => undefined,
+        );
+      }
+    }
+  } catch {
+    /* non-critical */
+  }
+
+  try {
     if (residentUserId) {
       const pushBody = text.replace(/\s+/g, " ").trim().slice(0, 180);
       await sendPushToUser(residentUserId, {
@@ -224,10 +243,14 @@ export async function deliverPaymentReminder(input: {
   return { sent: true };
 }
 
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export function reminderHtmlFromText(text: string): string {
   const htmlBody = text
     .split("\n")
-    .map((line) => (line.trim() ? `<p>${line.replace(/</g, "&lt;")}</p>` : ""))
+    .map((line) => (line.trim() ? `<p>${escapeHtmlText(line)}</p>` : ""))
     .join("\n");
   return `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">\n${htmlBody}\n</body></html>`;
 }

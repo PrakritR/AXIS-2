@@ -3,12 +3,12 @@
 import { OAUTH_APPLE_BUTTON_CLASS } from "@/components/auth/oauth-social-styles";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
+  appleWebOAuthRedirectUrl,
   isAppleSignInAvailable,
   logAppleSignInUnavailableDevHint,
   resolveAppleWebOAuthSignIn,
   shouldShowAppleSignInErrorToast,
 } from "@/lib/auth/apple-sign-in-config";
-import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { startAppleSignIn } from "@/lib/auth/start-apple-sign-in";
 import { canUseNativeAppleSignIn } from "@/lib/auth/native-apple-sign-in";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
@@ -43,32 +43,26 @@ export function AppleSignInButton({
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
-  const [available, setAvailable] = useState(isAppleSignInAvailable);
   const signInInFlight = useRef(false);
 
   useEffect(() => {
-    const envAvailable = isAppleSignInAvailable();
-    setAvailable(envAvailable);
     logAppleSignInUnavailableDevHint();
-    if (!envAvailable || canUseNativeAppleSignIn()) return;
+    if (!isAppleSignInAvailable() || canUseNativeAppleSignIn()) return;
 
     let cancelled = false;
     void (async () => {
       const supabase = createSupabaseBrowserClient();
       const origin = resolveOAuthBrowserOrigin();
-      const redirectTo = resolveOAuthCallbackRedirectUrl(origin);
+      const redirectTo = appleWebOAuthRedirectUrl(origin, fixedCallbackPath);
       const result = await resolveAppleWebOAuthSignIn(supabase, redirectTo);
-      if (!cancelled && !result.ok) {
-        setAvailable(false);
-        if (process.env.NODE_ENV !== "production") {
-          console.info(`[Apple Sign In] Hiding web button: ${result.message}`);
-        }
+      if (!cancelled && !result.ok && process.env.NODE_ENV !== "production") {
+        console.info(`[Apple Sign In] Web OAuth probe: ${result.message}`);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fixedCallbackPath]);
 
   useEffect(() => {
     if (!busy) return;
@@ -81,7 +75,7 @@ export function AppleSignInButton({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [busy]);
 
-  if (!available) return null;
+  if (!isAppleSignInAvailable()) return null;
 
   const signInWithApple = async () => {
     if (signInInFlight.current) return;

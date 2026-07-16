@@ -8,16 +8,18 @@ const ctaBase =
 export function PropertyDetailActions({
   propertyId,
   propertyLabel,
+  contactSmsPhone,
 }: {
   propertyId: string;
   propertyLabel?: string;
+  contactSmsPhone?: string | null;
 }) {
-  const textEnabled = isClawMessagingPubliclyEnabled();
+  const textEnabled = isClawMessagingPubliclyEnabled(contactSmsPhone);
   const textTourHref = textEnabled
-    ? buildSmsDeepLink({ intent: "tour", propertyId, propertyLabel })
+    ? buildSmsDeepLink({ intent: "tour", propertyId, propertyLabel, toPhone: contactSmsPhone })
     : null;
   const textApplyHref = textEnabled
-    ? buildSmsDeepLink({ intent: "apply", propertyId, propertyLabel })
+    ? buildSmsDeepLink({ intent: "apply", propertyId, propertyLabel, toPhone: contactSmsPhone })
     : null;
 
   if (!textTourHref && !textApplyHref) return null;

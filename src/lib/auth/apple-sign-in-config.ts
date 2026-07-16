@@ -1,3 +1,4 @@
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { nativeSupabaseRedirectUrls, httpsOAuthCallbackUrls } from "@/lib/auth/native-oauth-redirect-urls";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -5,14 +6,41 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** iOS bundle ID — must match capacitor.config.ts appId and Xcode PRODUCT_BUNDLE_IDENTIFIER. */
 export const IOS_BUNDLE_ID = "com.axisseattlehousing.app";
 
-export const APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE =
+/**
+ * Apple Services ID for web OAuth — must exist in Apple Developer (Identifiers → Services IDs).
+ * Not stored in the iOS project; create it manually. JWT `sub` and Supabase `external_apple_client_id`
+ * must both use this value. See docs/apple-sign-in-setup.md.
+ */
+export const APPLE_WEB_SERVICES_ID = "com.axisseattlehousing.app.web";
+
+/** Native iOS (`signInWithIdToken`) — bundle ID only, blank Supabase secret. */
+export const APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE =
   "Apple sign-in is not enabled in Supabase. Enable Authentication → Providers → Apple, set Client IDs to com.axisseattlehousing.app, and leave Secret Key blank for native iOS.";
+
+/** @deprecated Prefer APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE or APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE. */
+export const APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE = APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE;
+
+/** Web/laptop Supabase OAuth — Services ID + rotating secret; bundle ID alone is not enough. */
+export const APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE =
+  `Apple sign-in on laptop/web needs web OAuth in Supabase: add your Apple Services ID (${APPLE_WEB_SERVICES_ID}) to Client IDs (comma-separated with ${IOS_BUNDLE_ID}), generate a Secret Key from your Apple .p8 signing key, and allowlist http://localhost:3000/auth/callback under Redirect URLs. See docs/apple-sign-in-setup.md.`;
+
+export const APPLE_SIGN_IN_PROVIDER_DISABLED_MESSAGE =
+  "Apple sign-in is not enabled in this Supabase project. Enable Authentication → Providers → Apple on the project that matches NEXT_PUBLIC_SUPABASE_URL. See docs/apple-sign-in-setup.md.";
 
 export const APPLE_SIGN_IN_WEB_ENV_MESSAGE =
   "Apple sign-in is disabled on web (NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false). See docs/apple-sign-in-setup.md.";
 
 export const APPLE_SIGN_IN_REDIRECT_SETUP_MESSAGE =
-  "Apple sign-in redirect URL is not allowlisted in Supabase. Add your /auth/callback URLs under Authentication → URL configuration → Redirect URLs (see docs/apple-sign-in-setup.md).";
+  "Apple sign-in redirect URL is not allowlisted in Supabase. Add http://localhost:3000/auth/callback (and any /auth/callback/* paths you use) under Authentication → URL configuration → Redirect URLs. See docs/apple-sign-in-setup.md.";
+
+/** Apple `invalid_client` on appleid.apple.com — Services ID missing or misconfigured in Apple Developer. */
+export const APPLE_SIGN_IN_INVALID_CLIENT_MESSAGE =
+  `Apple rejected web sign-in (invalid_client). Create the Services ID ${APPLE_WEB_SERVICES_ID} in Apple Developer (or update Supabase + scripts/configure-apple-web-oauth.mjs to match your existing Services ID), enable Sign in with Apple on it, and register your Supabase callback domain/return URL. See docs/apple-sign-in-setup.md#invalid_client-invalid-client.`;
+
+/** Supabase OAuth `redirectTo` for web Apple sign-in (must match signInWithOAuth). */
+export function appleWebOAuthRedirectUrl(origin: string, fixedCallbackPath?: string): string {
+  return resolveOAuthCallbackRedirectUrl(origin, fixedCallbackPath);
+}
 
 export function supabaseAppleOAuthRedirectUri(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
@@ -53,14 +81,14 @@ export function appleSignInRedirectUrls(origin?: string): string[] {
 export type AppleOAuthProbeResult = { ok: true; url?: string } | { ok: false; message: string };
 
 const appleSignInErrorsShown = new Set<string>();
-let webAppleOAuthCache: AppleOAuthProbeResult | null = null;
-let webAppleOAuthPromise: Promise<AppleOAuthProbeResult> | null = null;
+const webAppleOAuthCache = new Map<string, AppleOAuthProbeResult>();
+const webAppleOAuthPromises = new Map<string, Promise<AppleOAuthProbeResult>>();
 
 /** Test-only reset for module-level Apple web OAuth probe + toast dedup state. */
 export function resetAppleSignInSessionStateForTests(): void {
   appleSignInErrorsShown.clear();
-  webAppleOAuthCache = null;
-  webAppleOAuthPromise = null;
+  webAppleOAuthCache.clear();
+  webAppleOAuthPromises.clear();
 }
 
 /** Show each Apple auth error toast at most once per browser tab session. */
@@ -70,22 +98,49 @@ export function shouldShowAppleSignInErrorToast(message: string): boolean {
   return true;
 }
 
-function parseAppleOAuthProbeFailure(body: { error_code?: string; msg?: string }): string | null {
-  const msg = (body.msg ?? "").toLowerCase();
+type AppleOAuthErrorSurface = "web" | "native";
+
+function resolveAppleOAuthErrorMessage(message: string, surface: AppleOAuthErrorSurface): string | null {
+  const lower = message.toLowerCase();
+
   if (
-    msg.includes("not enabled") ||
-    msg.includes("unsupported provider") ||
-    (msg.includes("provider") && msg.includes("disabled"))
+    lower.includes("missing oauth secret") ||
+    lower.includes("missing client secret") ||
+    (lower.includes("oauth secret") && lower.includes("missing"))
   ) {
-    return APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE;
+    return APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE;
   }
+
+  if (lower.includes("invalid_client") || (lower.includes("invalid") && lower.includes("client"))) {
+    return APPLE_SIGN_IN_INVALID_CLIENT_MESSAGE;
+  }
+
   if (
-    msg.includes("redirect") &&
-    (msg.includes("invalid") || msg.includes("not allowed") || msg.includes("mismatch"))
+    lower.includes("redirect") &&
+    (lower.includes("invalid") || lower.includes("not allowed") || lower.includes("mismatch"))
   ) {
     return APPLE_SIGN_IN_REDIRECT_SETUP_MESSAGE;
   }
+
+  if (
+    lower.includes("not enabled") ||
+    lower.includes("provider is not enabled") ||
+    (lower.includes("provider") && lower.includes("disabled"))
+  ) {
+    return surface === "native"
+      ? APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE
+      : APPLE_SIGN_IN_PROVIDER_DISABLED_MESSAGE;
+  }
+
+  if (lower.includes("unsupported provider")) {
+    return surface === "web" ? APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE : APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE;
+  }
+
   return null;
+}
+
+function parseAppleOAuthProbeFailure(body: { error_code?: string; msg?: string }): string | null {
+  return resolveAppleOAuthErrorMessage(body.msg ?? "", "web");
 }
 
 function isOAuthAuthorizeRedirect(response: Response): boolean {
@@ -128,11 +183,12 @@ export async function probeSupabaseAppleOAuthUrl(oauthUrl: string): Promise<Appl
 }
 
 function mapAppleOAuthClientError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("not enabled") || lower.includes("unsupported provider")) {
-    return APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE;
-  }
-  return message;
+  return resolveAppleOAuthErrorMessage(message, "web") ?? message;
+}
+
+/** Map native `signInWithIdToken` failures to actionable setup copy. */
+export function mapNativeAppleOAuthErrorMessage(message: string): string {
+  return resolveAppleOAuthErrorMessage(message, "native") ?? message;
 }
 
 /**
@@ -143,10 +199,13 @@ export async function resolveAppleWebOAuthSignIn(
   supabase: SupabaseClient,
   redirectTo: string,
 ): Promise<AppleOAuthProbeResult> {
-  if (webAppleOAuthCache) return webAppleOAuthCache;
-  if (webAppleOAuthPromise) return webAppleOAuthPromise;
+  const cached = webAppleOAuthCache.get(redirectTo);
+  if (cached) return cached;
 
-  webAppleOAuthPromise = (async () => {
+  const inFlight = webAppleOAuthPromises.get(redirectTo);
+  if (inFlight) return inFlight;
+
+  const promise: Promise<AppleOAuthProbeResult> = (async (): Promise<AppleOAuthProbeResult> => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "apple",
       options: {
@@ -167,11 +226,13 @@ export async function resolveAppleWebOAuthSignIn(
     return { ok: true, url: data.url };
   })();
 
+  webAppleOAuthPromises.set(redirectTo, promise);
+
   try {
-    const result = await webAppleOAuthPromise;
-    webAppleOAuthCache = result;
+    const result = await promise;
+    webAppleOAuthCache.set(redirectTo, result);
     return result;
   } finally {
-    webAppleOAuthPromise = null;
+    webAppleOAuthPromises.delete(redirectTo);
   }
 }

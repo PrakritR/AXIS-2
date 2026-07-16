@@ -1,10 +1,14 @@
 /**
- * Client-safe Claw leasing helpers (no Node/ws imports).
+ * Client-safe listing SMS helpers (no Node/ws imports).
  * Used by listing CTAs (`sms:` deep links) and server auto-replies.
+ *
+ * Production CTAs target the manager's Twilio work number (`contactSmsPhone`
+ * on the listing). Shared Claw agent line is opt-in legacy only.
  */
 
 export const CLAW_DEFAULT_AGENT_PHONE = "+12053690702";
 
+/** @deprecated Prefer per-listing `contactSmsPhone` (manager Twilio work number). */
 export function clawLeasingAgentPhoneE164(): string {
   const raw =
     (typeof process !== "undefined" &&
@@ -17,14 +21,18 @@ export function clawLeasingAgentPhoneE164(): string {
   return CLAW_DEFAULT_AGENT_PHONE;
 }
 
-export function isClawMessagingPubliclyEnabled(): boolean {
-  // Public listings only show Text CTAs when the shared agent line is configured.
-  if (typeof process === "undefined") return true;
+/**
+ * Whether public listings may show "Text to …" CTAs.
+ * Prefer a per-property Twilio work number; legacy shared Claw line only when
+ * NEXT_PUBLIC_CLAW_MESSENGER_ENABLED is explicitly on.
+ */
+export function isClawMessagingPubliclyEnabled(contactSmsPhone?: string | null): boolean {
+  if (contactSmsPhone?.trim()) return true;
+  if (typeof process === "undefined") return false;
   const flag = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED?.trim();
-  if (flag === "0" || flag === "false") return false;
-  if (flag === "1" || flag === "true") return true;
-  // Default on when an agent phone is present (including built-in trial number).
-  return Boolean(clawLeasingAgentPhoneE164());
+  if (flag === "1" || flag === "true") return Boolean(clawLeasingAgentPhoneE164());
+  // Default off — no shared Claw line on public listings.
+  return false;
 }
 
 export type LeasingIntent =
@@ -156,8 +164,11 @@ export function buildSmsDeepLink(args: {
   /** Optional context for question CTAs (layout, bathroom, lease terms, …). */
   topic?: string | null;
   roomName?: string | null;
+  /** Manager Twilio work number (E.164). Required for production CTAs. */
+  toPhone?: string | null;
 }): string {
-  const phoneDigits = clawLeasingAgentPhoneE164().replace(/\D/g, "");
+  const phoneRaw = (args.toPhone?.trim() || clawLeasingAgentPhoneE164()).replace(/\D/g, "");
+  const phoneDigits = phoneRaw.startsWith("1") && phoneRaw.length === 11 ? phoneRaw : phoneRaw.length === 10 ? `1${phoneRaw}` : phoneRaw;
   const label = (args.propertyLabel ?? "").trim();
   const bundleLabel = (args.bundleLabel ?? "").trim();
   const topic = (args.topic ?? "").trim();

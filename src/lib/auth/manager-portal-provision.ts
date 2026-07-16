@@ -62,6 +62,12 @@ export async function ensureFreeManagerPortalAccess(
   const purchase = await findManagerPurchaseForAccount(supabase, user.id, email);
 
   if (purchase && isManagerOnboardingComplete(purchase)) {
+    try {
+      const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+      scheduleManagerMessagingReady(user.id);
+    } catch {
+      /* non-critical */
+    }
     return { status: "portal_ready", managerId: purchase.manager_id, provisioned: false };
   }
 
@@ -144,6 +150,13 @@ export async function ensureFreeManagerPortalAccess(
       fullName,
     });
     provisioned = true;
+  }
+
+  try {
+    const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+    scheduleManagerMessagingReady(user.id);
+  } catch {
+    /* non-critical */
   }
 
   return { status: "portal_ready", managerId, provisioned };

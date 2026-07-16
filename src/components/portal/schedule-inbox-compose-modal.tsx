@@ -84,8 +84,9 @@ export function ScheduleInboxComposeForm({
     const match = contacts.find((c) => c.email.toLowerCase() === editMessage.recipientEmail.toLowerCase());
     return match ? `id:${match.id}` : "admin";
   });
-  const [deliverViaEmail, setDeliverViaEmail] = useState(editMessage?.deliverViaEmail ?? true);
   const [busy, setBusy] = useState(false);
+  const deliverViaEmail = true;
+  const deliverViaSms = true;
 
   const submit = async () => {
     const subjectTrim = subject.trim();
@@ -116,6 +117,7 @@ export function ScheduleInboxComposeForm({
             body: bodyTrim,
             sendAt: sendAt.toISOString(),
             deliverViaEmail,
+            deliverViaSms,
           }),
         });
         if (!res.ok) {
@@ -129,6 +131,7 @@ export function ScheduleInboxComposeForm({
           body: bodyTrim,
           sendAt: sendAt.toISOString(),
           deliverViaEmail,
+          deliverViaSms,
         };
 
         if (recipientKey === "admin") {
@@ -191,7 +194,7 @@ export function ScheduleInboxComposeForm({
           {editMessage ? "Edit scheduled message" : "Schedule inbox message"}
         </p>
         <p className="text-sm text-muted">
-          Compose a message to deliver later through the portal inbox{deliverViaEmail ? " and email" : ""}.
+          Compose a message to deliver later through the portal inbox, email, and text.
         </p>
 
         {!editMessage ? (
@@ -232,11 +235,6 @@ export function ScheduleInboxComposeForm({
           <label className="text-xs font-semibold text-muted">Message</label>
           <Textarea className="mt-1 min-h-[160px]" value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
         </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={deliverViaEmail} onChange={(e) => setDeliverViaEmail(e.target.checked)} disabled={busy} />
-          Also send by email
-        </label>
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void submit()}>

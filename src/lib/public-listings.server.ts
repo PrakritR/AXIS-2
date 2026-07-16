@@ -37,14 +37,17 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     ),
   ];
   const managerEmailByUserId = new Map<string, string | null>();
-  if (production && managerIds.length > 0) {
+  const managerSmsByUserId = new Map<string, string | null>();
+  if (managerIds.length > 0) {
     const { data: profiles, error: profileError } = await db
       .from("profiles")
-      .select("id, email")
+      .select("id, email, sms_from_number")
       .in("id", managerIds);
     if (profileError) throw new Error(profileError.message);
     for (const profile of profiles ?? []) {
       managerEmailByUserId.set(profile.id, profile.email ?? null);
+      const sms = String(profile.sms_from_number ?? "").trim() || null;
+      managerSmsByUserId.set(profile.id, sms);
     }
   }
 
@@ -55,10 +58,15 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     // `status = live` is the source of truth in Supabase; older rows may omit the flag in JSON.
     const live = property.adminPublishLive === true ? property : { ...property, adminPublishLive: true as const };
     if (!isPropertyActiveForLeads(live)) continue;
-    const withOwner =
-      row.manager_user_id && !live.managerUserId
-        ? { ...live, managerUserId: row.manager_user_id }
-        : live;
+    const contactSmsPhone =
+      (row.manager_user_id ? managerSmsByUserId.get(row.manager_user_id) : null) ||
+      live.contactSmsPhone ||
+      undefined;
+    const withOwner = {
+      ...live,
+      ...(row.manager_user_id && !live.managerUserId ? { managerUserId: row.manager_user_id } : {}),
+      ...(contactSmsPhone ? { contactSmsPhone } : {}),
+    };
     const dedupeKey = `${withOwner.buildingName}::${withOwner.address}`.trim().toLowerCase();
     byKey.set(dedupeKey, withOwner);
   }

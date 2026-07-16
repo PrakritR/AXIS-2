@@ -394,8 +394,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
               subject: p.subject.trim(),
               text: p.body.trim(),
               deliverToPortalInbox: true,
-              deliverViaEmail: p.deliverViaEmail !== false,
-              deliverViaSms: p.deliverViaSms,
+              eventCategory: "messages",
             }),
           });
           const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
@@ -409,7 +408,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           showToast(
             p.includesAxisAdmin && !p.includesDirectoryRecipients
               ? "Message sent to PropLane admin."
-              : "Message sent via inbox and email.",
+              : "Message sent via inbox, email, and text.",
           );
           navigate(`${portalBase}/inbox/sent`);
         } catch {

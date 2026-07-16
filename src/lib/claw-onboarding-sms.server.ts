@@ -6,18 +6,13 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  isClawMessengerConfigured,
-  normalizeE164Us,
-  registerClawMessengerRoute,
-  sendClawMessengerText,
-} from "@/lib/claw-messenger.server";
+import { normalizeE164Us } from "@/lib/claw-messenger.server";
 import {
   buildManagerPropLaneAssistantIntroSms,
   buildResidentPropLaneAssistantIntroSms,
 } from "@/lib/claw-onboarding-sms";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
-import { normalizeE164, sendSms } from "@/lib/twilio";
+import { normalizeE164 } from "@/lib/twilio";
 
 export {
   buildManagerPropLaneAssistantIntroSms,
@@ -129,22 +124,12 @@ export async function sendManagerPropLaneAssistantIntro(args: {
   const toNorm = normalizeE164Us(args.toPhone) ?? normalizeE164(args.toPhone);
   if (!toNorm) return { sent: false, error: "invalid_to" };
 
-  const text = buildManagerPropLaneAssistantIntroSms({ name: args.name });
-  let sent = false;
-  let error: string | undefined;
-
-  if (isClawMessengerConfigured()) {
-    await registerClawMessengerRoute(toNorm);
-    const result = await sendClawMessengerText({ to: toNorm, text });
-    sent = result.ok;
-    error = result.error;
-  } else {
-    const from = args.fromNumber?.trim();
-    if (!from) return { sent: false, error: "sms_not_configured" };
-    const twilio = await sendSms(toNorm, text, from);
-    sent = twilio.sent;
-    error = twilio.error;
-  }
+  const workNumber = args.fromNumber?.trim() || null;
+  const text = buildManagerPropLaneAssistantIntroSms({ name: args.name, workNumber });
+  const { sendPropLaneSms } = await import("@/lib/proplane-sms-transport.server");
+  const result = await sendPropLaneSms({ to: toNorm, text, fromNumber: workNumber });
+  const sent = result.ok;
+  const error = result.error;
 
   if (sent) {
     await markIntroSent(

@@ -39,15 +39,19 @@ export async function completeManagerSignupTrial(
     }));
   }
 
-  // Best-effort PropLane assistant intro when a personal phone is already on
-  // file. after() keeps the serverless runtime alive until the send finishes;
-  // outside a request scope (tests) fall back to fire-and-forget.
-  const sendIntro = () =>
-    maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId).catch(() => undefined);
+  // Best-effort: provision Twilio work number, then send PropLane intro when a
+  // personal phone is already on file. after() keeps the serverless runtime
+  // alive until the send finishes; outside a request scope (tests) fall back
+  // to fire-and-forget.
+  const run = async () => {
+    const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
+    await ensureManagerSmsNumber(supabase, opts.userId);
+    await maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId).catch(() => undefined);
+  };
   try {
-    after(sendIntro);
+    after(() => void run());
   } catch {
-    void sendIntro();
+    void run();
   }
 
   return { managerId };

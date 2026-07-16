@@ -1,19 +1,9 @@
 /**
- * Resident outbound SMS/iMessage — prefer Claw Messenger (shared agent line),
- * fall back to Twilio from the manager work number.
+ * Resident outbound SMS — Twilio from the manager work number.
  *
- * Use this for account welcome, lease signing, payment reminders, and other
- * resident lifecycle texts so they leave from the same number residents text
- * for tours/apply.
+ * Claw Messenger is opt-in legacy only (`CLAW_MESSENGER_ENABLED=1`).
  */
 
-import {
-  isClawMessengerConfigured,
-  normalizeE164Us,
-  registerClawMessengerRoute,
-  sendClawMessengerText,
-} from "@/lib/claw-messenger.server";
-import { clawLeasingAgentPhoneE164 } from "@/lib/claw-leasing-links";
 import {
   ensureSmsIncludesPortalLink,
   smsLinkKindForThreadTopic,
@@ -24,9 +14,11 @@ import {
   openClawResidentThread,
   type ClawThreadTopic,
 } from "@/lib/claw-resident-messaging.server";
+import { isClawTransportEnabled, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { isPhoneOptedOut } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { normalizeE164, sendSms } from "@/lib/twilio";
+import { normalizeE164 } from "@/lib/twilio";
+import { normalizeE164Us } from "@/lib/claw-messenger.server";
 
 export type ResidentOutboundSmsResult = {
   sent: boolean;
@@ -91,24 +83,20 @@ async function maybeMirrorToManager(
 }
 
 /**
- * Send a text to a resident phone.
- *
- * - When `CLAW_MESSENGER_API_KEY` is set: send via Claw (iMessage/RCS/SMS) and
- *   register the contact so replies reach the leasing bot / gateway.
- * - Else: Twilio `sendSms` using `fromNumber` (manager `sms_from_number`).
+ * Send a text to a resident phone via Twilio (manager `sms_from_number`).
  *
  * Pass `openThread` after payment/lease/move-in SMS so the manager can reply
- * from their personal phone on the same agent-line conversation.
+ * from their personal phone on the same conversation.
  *
  * Honors STOP opt-out unless `skipOptOutCheck`.
  */
 export async function sendResidentOutboundSms(args: {
   to: string;
   text: string;
-  /** Twilio fallback From; ignored when Claw is configured. */
+  /** Twilio From — manager `sms_from_number`. Required for production. */
   fromNumber?: string | null;
   skipOptOutCheck?: boolean;
-  /** Open/refresh durable manager↔resident Claw thread after a successful send. */
+  /** Open/refresh durable manager↔resident thread after a successful send. */
   openThread?: ResidentOutboundThreadOpts | null;
   /**
    * When set (or inferred from openThread.topic), appends a default portal deep
@@ -156,46 +144,27 @@ export async function sendResidentOutboundSms(args: {
     }
   }
 
-  if (isClawMessengerConfigured()) {
-    await registerClawMessengerRoute(toNorm);
-    const result = await sendClawMessengerText({ to: toNorm, text });
-    if (result.ok) {
-      // A manager's own compose (mirrorToManager === false) targets this
-      // resident on purpose — bump so their reply routes here. Automated
-      // category sends keep thread ordering stable.
-      await maybeOpenThread(toNorm, args.openThread, args.mirrorToManager === false);
-      await maybeMirrorToManager(toNorm, text, args.openThread, args.mirrorToManager);
-      return { sent: true, channel: "claw", sid: result.messageId };
-    }
-    // Fall through to Twilio if Claw fails and a from number exists.
-    if (!args.fromNumber?.trim()) {
-      return { sent: false, channel: "claw", error: result.error || "claw_send_failed" };
-    }
-  }
+  const result = await sendPropLaneSms({
+    to: toNorm,
+    text,
+    fromNumber: args.fromNumber,
+  });
 
-  const from = args.fromNumber?.trim();
-  if (!from) return { sent: false, error: "missing_from" };
-  // The shared Claw agent line is not a Twilio-owned number — a Twilio send
-  // From it can only fail. Treat it as "no Twilio From configured".
-  if (normalizeE164Us(from) === clawLeasingAgentPhoneE164()) {
-    return { sent: false, channel: "claw", error: "claw_send_failed" };
-  }
-
-  const twilio = await sendSms(toNorm, text, from, { skipOptOutCheck: args.skipOptOutCheck });
-  if (twilio.sent) {
+  if (result.ok) {
     await maybeOpenThread(toNorm, args.openThread, args.mirrorToManager === false);
     await maybeMirrorToManager(toNorm, text, args.openThread, args.mirrorToManager);
   }
+
   return {
-    sent: twilio.sent,
-    channel: twilio.sent ? "twilio" : undefined,
-    error: twilio.error,
-    sid: twilio.sid,
+    sent: result.ok,
+    channel: result.channel,
+    error: result.error,
+    sid: result.sid,
   };
 }
 
-/** True when outbound has a transport (Claw needs no Twilio number). */
+/** True when outbound has a transport (Twilio work number, or opt-in Claw). */
 export function canSendResidentOutboundSms(fromNumber?: string | null): boolean {
-  if (isClawMessengerConfigured()) return true;
-  return Boolean(fromNumber?.trim());
+  if (fromNumber?.trim()) return true;
+  return isClawTransportEnabled();
 }

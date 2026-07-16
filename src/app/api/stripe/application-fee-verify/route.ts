@@ -55,8 +55,6 @@ export async function GET(req: Request) {
       paymentStatus: session.payment_status,
       sessionId: session.id,
       propertyId: session.metadata?.property_id ?? null,
-      residentEmail: session.metadata?.resident_email ?? null,
-      managerUserId: session.metadata?.manager_user_id ?? null,
       chargeId,
       alreadyPaid,
     });

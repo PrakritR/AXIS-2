@@ -37,22 +37,27 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Property is not active for apply or tour links." }, { status: 404 });
     }
 
+    let contactSmsPhone = property.contactSmsPhone;
+    let managerEmail: string | null = null;
+    if (data.manager_user_id) {
+      const { data: profile } = await db
+        .from("profiles")
+        .select("email, sms_from_number")
+        .eq("id", data.manager_user_id)
+        .maybeSingle();
+      managerEmail = profile?.email ?? null;
+      const sms = String(profile?.sms_from_number ?? "").trim();
+      if (sms) contactSmsPhone = sms;
+    }
+
     const resolved: MockProperty = {
       ...property,
       id: property.id || propertyId,
       managerUserId: property.managerUserId ?? data.manager_user_id ?? undefined,
+      ...(contactSmsPhone ? { contactSmsPhone } : {}),
     };
 
     if (isProductionRuntime()) {
-      let managerEmail: string | null = null;
-      if (data.manager_user_id) {
-        const { data: profile } = await db
-          .from("profiles")
-          .select("email")
-          .eq("id", data.manager_user_id)
-          .maybeSingle();
-        managerEmail = profile?.email ?? null;
-      }
       if (isSandboxPublicListing({ property: resolved, managerEmail })) {
         return NextResponse.json({ error: "Property not found." }, { status: 404 });
       }

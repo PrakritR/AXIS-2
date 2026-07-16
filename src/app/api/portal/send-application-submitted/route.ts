@@ -8,6 +8,7 @@ import {
 import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
 import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -33,6 +34,10 @@ function appOrigin(): string {
 
 export async function POST(req: Request) {
   try {
+    if (!rateLimit(`send-application-submitted:${clientIpFrom(req)}`, 10, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
     let body: { email?: unknown; axisId?: unknown; applicantName?: unknown; propertyTitle?: unknown };
     try {
       body = (await req.json()) as typeof body;

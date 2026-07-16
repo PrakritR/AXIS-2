@@ -6,10 +6,9 @@
 import {
   clawLeasingAgentPhoneE164,
   normalizeE164Us,
-  registerClawMessengerRoute,
-  sendClawMessengerText,
 } from "@/lib/claw-messenger.server";
 import { residentPortalUrl } from "@/lib/claw-resident-links";
+import { sendFromManagerWorkNumber, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
 
@@ -266,19 +265,23 @@ export async function findThreadByResidentPhone(residentPhone: string): Promise<
   return data ? rowToThread(data as Record<string, unknown>) : null;
 }
 
-export async function findLatestThreadForManagerPhone(managerPhone: string): Promise<ClawMessagingThread | null> {
+export async function findLatestThreadForManagerPhone(
+  managerPhone: string,
+  managerUserId?: string | null,
+): Promise<ClawMessagingThread | null> {
   const phone = normalizeE164Us(managerPhone);
   if (!phone) return null;
   const db = createSupabaseServiceRoleClient();
   const cutoff = new Date(Date.now() - TTL_MS).toISOString();
-  const { data } = await db
+  let q = db
     .from("claw_messaging_threads")
     .select("*")
     .eq("manager_phone", phone)
-    .gte("last_message_at", cutoff)
-    .order("last_message_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .gte("last_message_at", cutoff);
+  if (managerUserId?.trim()) {
+    q = q.eq("manager_user_id", managerUserId.trim());
+  }
+  const { data } = await q.order("last_message_at", { ascending: false }).limit(1).maybeSingle();
   return data ? rowToThread(data as Record<string, unknown>) : null;
 }
 
@@ -374,6 +377,7 @@ export async function forwardResidentMessageToManagers(args: {
   thread: ClawMessagingThread;
   /** When set, sent instead of the default "From resident:" wrapper. */
   briefText?: string | null;
+  workNumber?: string | null;
 }): Promise<{ forwardedTo: string[] }> {
   const targets = new Set<string>();
   if (args.thread.managerPhone) targets.add(args.thread.managerPhone);
@@ -396,8 +400,12 @@ export async function forwardResidentMessageToManagers(args: {
   const [sent] = await Promise.all([
     Promise.all(
       [...targets].map(async (to) => {
-        await registerClawMessengerRoute(to);
-        const send = await sendClawMessengerText({ to, text: body });
+        const send = await sendFromManagerWorkNumber({
+          managerUserId: args.thread.managerUserId,
+          to,
+          text: body,
+          fromNumber: args.workNumber,
+        });
         return send.ok ? to : null;
       }),
     ),
@@ -409,17 +417,23 @@ export async function forwardResidentMessageToManagers(args: {
 export async function tryRelayManagerReplyViaClaw(args: {
   from: string;
   text: string;
+  managerUserId?: string | null;
+  workNumber?: string | null;
 }): Promise<{ relayed: boolean; to?: string; error?: string }> {
   const from = normalizeE164Us(args.from);
   if (!from) return { relayed: false, error: "invalid_from" };
-  if (!(await isMappedManagerPhone(from))) return { relayed: false };
+  if (!(await isMappedManagerPhone(from)) && !args.managerUserId) {
+    return { relayed: false };
+  }
 
-  const thread = await resolveOrCreateThreadForManagerPhone(from);
+  const thread = args.managerUserId
+    ? await findLatestThreadForManagerPhone(from, args.managerUserId)
+    : await resolveOrCreateThreadForManagerPhone(from);
   if (!thread) {
-    await registerClawMessengerRoute(from);
-    await sendClawMessengerText({
+    await sendPropLaneSms({
       to: from,
       text: "(Not delivered)\nNo resident thread is open on this line yet. Message a resident from the portal inbox first, or wait for a resident to text in.",
+      fromNumber: args.workNumber,
     });
     return { relayed: false, error: "no_open_thread" };
   }
@@ -428,13 +442,18 @@ export async function tryRelayManagerReplyViaClaw(args: {
   if (!text) return { relayed: false, error: "empty" };
 
   const outbound = labelClawSmsFromManager(text);
-  await registerClawMessengerRoute(thread.residentPhone);
-  const send = await sendClawMessengerText({ to: thread.residentPhone, text: outbound });
+  const send = await sendFromManagerWorkNumber({
+    managerUserId: thread.managerUserId,
+    to: thread.residentPhone,
+    text: outbound,
+    fromNumber: args.workNumber,
+  });
   if (!send.ok) {
     // Silent failures read as being ignored — tell the manager it didn't land.
-    await sendClawMessengerText({
+    await sendPropLaneSms({
       to: from,
       text: "(Not delivered)\nCouldn't reach the resident by text right now. Try again in a minute or use the portal inbox.",
+      fromNumber: args.workNumber,
     }).catch(() => undefined);
     return { relayed: false, error: send.error || "send_failed" };
   }
@@ -533,8 +552,11 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
     residentName,
     residentPhone,
   });
-  await registerClawMessengerRoute(managerPhone);
-  const send = await sendClawMessengerText({ to: managerPhone, text: body });
+  const send = await sendFromManagerWorkNumber({
+    managerUserId,
+    to: managerPhone,
+    text: body,
+  });
   if (!send.ok) return { mirrored: false };
 
   return { mirrored: true, to: managerPhone };

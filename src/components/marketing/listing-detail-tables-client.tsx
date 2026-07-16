@@ -424,30 +424,32 @@ function ListingDetailModal({
   onClose,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   state: ModalState;
   onClose: () => void;
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
   const isClient = useIsClient();
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
-  const textEnabled = isClawMessagingPubliclyEnabled();
+  const textEnabled = isClawMessagingPubliclyEnabled(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
   // Flag off (or no SMS handler on this device) → web apply / tour-contact
   // flows instead of dead "#" anchors.
   const webApplyHref = buildRentalApplyHref({ propertyId: listingPropertyId });
   const webContactHref = buildTourContactHref(listingPropertyId);
   const textApplyHref = textEnabled
-    ? buildSmsDeepLink({ intent: "apply", propertyId: listingPropertyId, propertyLabel: label })
+    ? buildSmsDeepLink({ intent: "apply", propertyId: listingPropertyId, propertyLabel: label, toPhone: contactSmsPhone })
     : webApplyHref;
   const textMessageHref = textEnabled
-    ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label })
+    ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, toPhone: contactSmsPhone })
     : webContactHref;
   const textMessageAbout = (topic: string) =>
     textEnabled
-      ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, topic })
+      ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, topic, toPhone: contactSmsPhone })
       : webContactHref;
   const applyLabel = textEnabled ? "Text to apply" : "Apply online";
   const messageLabel = textEnabled ? "Text a message" : "Contact leasing";
@@ -599,6 +601,7 @@ function ListingDetailModal({
                             propertyId: listingPropertyId,
                             propertyLabel: label,
                             roomName: state.room.name,
+                            toPhone: contactSmsPhone,
                           })
                         : textApplyHref,
                       label: applyLabel,
@@ -798,6 +801,7 @@ function ListingDetailModal({
                       propertyLabel: label,
                       bundleId: state.row.id,
                       bundleLabel: state.row.label,
+                      toPhone: contactSmsPhone,
                     })
                   : textApplyHref,
                 label: textEnabled ? "Text for bundle" : "Apply online",
@@ -876,10 +880,12 @@ export function InteractiveFloorPlanCard({
   floor,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   floor: ListingFloorCard;
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -898,6 +904,7 @@ export function InteractiveFloorPlanCard({
         onClose={() => setModal(null)}
         listingPropertyId={listingPropertyId}
         propertyLabel={propertyLabel}
+        contactSmsPhone={contactSmsPhone}
       />
     </>
   );
@@ -953,10 +960,12 @@ export function BathroomTableInteractive({
   rows,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   rows: ListingBathroomRow[];
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -1002,6 +1011,7 @@ export function BathroomTableInteractive({
         onClose={() => setModal(null)}
         listingPropertyId={listingPropertyId}
         propertyLabel={propertyLabel}
+        contactSmsPhone={contactSmsPhone}
       />
     </>
   );
@@ -1031,10 +1041,12 @@ export function SharedTableInteractive({
   rows,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   rows: ListingSharedRow[];
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -1077,6 +1089,7 @@ export function SharedTableInteractive({
         onClose={() => setModal(null)}
         listingPropertyId={listingPropertyId}
         propertyLabel={propertyLabel}
+        contactSmsPhone={contactSmsPhone}
       />
     </>
   );
@@ -1086,10 +1099,12 @@ export function LeaseBasicsTableInteractive({
   rows,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   rows: LeaseBasicRow[];
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -1144,6 +1159,7 @@ export function LeaseBasicsTableInteractive({
         onClose={() => setModal(null)}
         listingPropertyId={listingPropertyId}
         propertyLabel={propertyLabel}
+        contactSmsPhone={contactSmsPhone}
       />
     </>
   );
@@ -1179,10 +1195,12 @@ export function BundleTableInteractive({
   rows,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   rows: BundleCard[];
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -1235,6 +1253,7 @@ export function BundleTableInteractive({
         onClose={() => setModal(null)}
         listingPropertyId={listingPropertyId}
         propertyLabel={propertyLabel}
+        contactSmsPhone={contactSmsPhone}
       />
     </>
   );
@@ -1244,10 +1263,12 @@ export function AmenitiesTableInteractive({
   rows,
   listingPropertyId,
   propertyLabel = null,
+  contactSmsPhone = null,
 }: {
   rows: AmenityItem[];
   listingPropertyId: string;
   propertyLabel?: string | null;
+  contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -1296,6 +1317,7 @@ export function AmenitiesTableInteractive({
         onClose={() => setModal(null)}
         listingPropertyId={listingPropertyId}
         propertyLabel={propertyLabel}
+        contactSmsPhone={contactSmsPhone}
       />
     </>
   );

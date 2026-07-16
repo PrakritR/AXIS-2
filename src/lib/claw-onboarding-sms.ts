@@ -27,16 +27,19 @@ export function buildResidentPropLaneAssistantIntroSms(opts: {
 }
 
 /** Manager first-account / messaging-ready greeting (ops can stay a bit clearer). */
-export function buildManagerPropLaneAssistantIntroSms(opts: { name?: string | null } = {}): string {
+export function buildManagerPropLaneAssistantIntroSms(opts: {
+  name?: string | null;
+  workNumber?: string | null;
+} = {}): string {
   const name = (opts.name ?? "").trim();
   const greeting = name ? `Hi ${name}!` : "Hi!";
-  const agent = clawLeasingAgentPhoneE164();
+  const line = (opts.workNumber ?? "").trim() || clawLeasingAgentPhoneE164();
   return [
     greeting,
     "I'm your PropLane messaging assistant.",
     "I'll text your residents about applications, leases, payments, move-in, and work orders — and forward their replies here so you can respond from your phone.",
-    `Your PropLane line: ${agent}`,
-    "Text this number to reach a resident thread, or reply to any alert to message them.",
+    `Your PropLane line: ${line}`,
+    "Prospects and residents text this number directly — no registration needed.",
     "Commands: text AGENT help (e.g. AGENT mark payment for Jane paid, AGENT lease).",
     "Reply STOP anytime to opt out.",
   ].join("\n");

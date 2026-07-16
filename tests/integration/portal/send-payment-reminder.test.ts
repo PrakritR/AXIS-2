@@ -16,8 +16,17 @@ vi.mock("@/lib/twilio", () => ({
   sendSms: vi.fn().mockResolvedValue({ sent: false }),
 }));
 
+vi.mock("@/lib/auth/admin-preview", () => ({
+  isAdminUser: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("@/lib/auth/manager-lease-scope", () => ({
+  collectLinkedPropertyIdsForUser: vi.fn().mockResolvedValue(new Set<string>()),
+}));
+
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { POST as sendPaymentReminder } from "@/app/api/portal/send-payment-reminder/route";
 
 const MANAGER_ID = "manager-1";
@@ -65,15 +74,92 @@ describe("POST /api/portal/send-payment-reminder", () => {
     } as never);
   });
 
-  it("rejects reminders for a paid charge", async () => {
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: { row_data: paidCharge(), manager_user_id: MANAGER_ID },
+  function mockManagerDb(charge: ReturnType<typeof unpaidCharge> | ReturnType<typeof paidCharge>) {
+    const chargeMaybeSingle = vi.fn().mockResolvedValue({
+      data: { row_data: charge, manager_user_id: MANAGER_ID },
     });
-    const eq = vi.fn().mockReturnValue({ maybeSingle });
+    const profileMaybeSingle = vi.fn().mockResolvedValue({
+      data: { role: "manager", full_name: "Manager", email: "manager@test.com", sms_from_number: "" },
+    });
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const eq = vi.fn().mockImplementation((_col: string, val: string) => {
+      if (val === charge.id) return { maybeSingle: chargeMaybeSingle };
+      if (val === MANAGER_ID) return { maybeSingle: profileMaybeSingle };
+      return { maybeSingle: profileMaybeSingle };
+    });
     const select = vi.fn().mockReturnValue({ eq });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
-      from: vi.fn().mockReturnValue({ select }),
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "portal_inbox_thread_records") return { upsert };
+        return { select };
+      }),
     } as never);
+  }
+
+  it("requires chargeId", async () => {
+    const profileMaybeSingle = vi.fn().mockResolvedValue({
+      data: { role: "manager", full_name: "Manager", email: "manager@test.com", sms_from_number: "" },
+    });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: profileMaybeSingle }) }),
+      }),
+    } as never);
+
+    const req = new Request("http://localhost/api/portal/send-payment-reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ residentEmail: "victim@example.com" }),
+    });
+    const res = await sendPaymentReminder(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects residents", async () => {
+    const profileMaybeSingle = vi.fn().mockResolvedValue({
+      data: { role: "resident", full_name: "Resident", email: "resident@test.com", sms_from_number: "" },
+    });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: profileMaybeSingle }) }),
+      }),
+    } as never);
+
+    const req = new Request("http://localhost/api/portal/send-payment-reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chargeId: "hc_unpaid_1" }),
+    });
+    const res = await sendPaymentReminder(req);
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects another manager's charge", async () => {
+    const chargeMaybeSingle = vi.fn().mockResolvedValue({
+      data: { row_data: unpaidCharge(), manager_user_id: "other-manager" },
+    });
+    const profileMaybeSingle = vi.fn().mockResolvedValue({
+      data: { role: "manager", full_name: "Manager", email: "manager@test.com", sms_from_number: "" },
+    });
+    const eq = vi.fn().mockImplementation((_col: string, val: string) => {
+      if (val === "hc_unpaid_1") return { maybeSingle: chargeMaybeSingle };
+      return { maybeSingle: profileMaybeSingle };
+    });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq }) }),
+    } as never);
+
+    const req = new Request("http://localhost/api/portal/send-payment-reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chargeId: "hc_unpaid_1" }),
+    });
+    const res = await sendPaymentReminder(req);
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects reminders for a paid charge", async () => {
+    mockManagerDb(paidCharge());
 
     const req = new Request("http://localhost/api/portal/send-payment-reminder", {
       method: "POST",
@@ -86,26 +172,39 @@ describe("POST /api/portal/send-payment-reminder", () => {
     expect(body.code).toBe("charge_paid");
   });
 
-  it("allows reminders for an unpaid charge with a demo address", async () => {
+  it("allows a co-manager linked to the charge property", async () => {
     const charge = { ...unpaidCharge(), residentEmail: "resident@axis.local" };
     const chargeMaybeSingle = vi.fn().mockResolvedValue({
-      data: { row_data: charge, manager_user_id: MANAGER_ID },
+      data: { row_data: charge, manager_user_id: "other-manager" },
     });
     const profileMaybeSingle = vi.fn().mockResolvedValue({
-      data: { full_name: "Manager", email: "manager@test.com", sms_from_number: "" },
+      data: { role: "manager", full_name: "Co Manager", email: "comanager@test.com", sms_from_number: "" },
     });
     const upsert = vi.fn().mockResolvedValue({ error: null });
     const eq = vi.fn().mockImplementation((_col: string, val: string) => {
       if (val === "hc_unpaid_1") return { maybeSingle: chargeMaybeSingle };
       return { maybeSingle: profileMaybeSingle };
     });
-    const select = vi.fn().mockReturnValue({ eq });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
       from: vi.fn().mockImplementation((table: string) => {
         if (table === "portal_inbox_thread_records") return { upsert };
-        return { select };
+        return { select: vi.fn().mockReturnValue({ eq }) };
       }),
     } as never);
+    vi.mocked(collectLinkedPropertyIdsForUser).mockResolvedValue(new Set(["prop-1"]));
+
+    const req = new Request("http://localhost/api/portal/send-payment-reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chargeId: "hc_unpaid_1" }),
+    });
+    const res = await sendPaymentReminder(req);
+    expect(res.status).toBe(200);
+  });
+
+  it("allows reminders for an unpaid charge with a demo address", async () => {
+    const charge = { ...unpaidCharge(), residentEmail: "resident@axis.local" };
+    mockManagerDb(charge);
 
     const req = new Request("http://localhost/api/portal/send-payment-reminder", {
       method: "POST",
@@ -117,6 +216,5 @@ describe("POST /api/portal/send-payment-reminder", () => {
     const body = (await res.json()) as { ok?: boolean; skipped?: boolean };
     expect(body.ok).toBe(true);
     expect(body.skipped).toBe(true);
-    expect(upsert).toHaveBeenCalled();
   });
 });

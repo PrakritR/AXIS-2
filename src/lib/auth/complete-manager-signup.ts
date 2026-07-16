@@ -71,6 +71,13 @@ async function linkManagerPurchase(
     /* non-critical */
   }
 
+  try {
+    const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+    scheduleManagerMessagingReady(userId);
+  } catch {
+    /* non-critical */
+  }
+
   return { ok: true, managerId: purchase.manager_id };
 }
 

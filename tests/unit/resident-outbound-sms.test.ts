@@ -1,12 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
+const sendTwilio = vi.fn();
 const sendClaw = vi.fn();
 const registerRoute = vi.fn();
-const sendTwilio = vi.fn();
 const optedOut = vi.fn();
 
 vi.mock("@/lib/claw-messenger.server", () => ({
-  isClawMessengerConfigured: () => Boolean(process.env.CLAW_MESSENGER_API_KEY?.trim()),
+  isClawMessengerConfigured: () =>
+    process.env.CLAW_MESSENGER_ENABLED === "1" && Boolean(process.env.CLAW_MESSENGER_API_KEY?.trim()),
   normalizeE164Us: (raw: string) => {
     const digits = raw.replace(/\D/g, "");
     if (digits.length === 10) return `+1${digits}`;
@@ -41,31 +42,18 @@ describe("sendResidentOutboundSms", () => {
     registerRoute.mockReset();
     sendTwilio.mockReset();
     optedOut.mockResolvedValue(false);
-    process.env.CLAW_MESSENGER_API_KEY = "cm_test";
+    delete process.env.CLAW_MESSENGER_API_KEY;
+    delete process.env.CLAW_MESSENGER_ENABLED;
+    vi.resetModules();
   });
 
   afterEach(() => {
     delete process.env.CLAW_MESSENGER_API_KEY;
+    delete process.env.CLAW_MESSENGER_ENABLED;
   });
 
-  it("prefers Claw when configured", async () => {
-    sendClaw.mockResolvedValue({ ok: true, messageId: "m1" });
-    const { sendResidentOutboundSms } = await import("@/lib/resident-outbound-sms.server");
-    const result = await sendResidentOutboundSms({
-      to: "+15103098345",
-      text: "Payment reminder: rent is due.",
-      fromNumber: "+12065550100",
-    });
-    expect(result).toEqual({ sent: true, channel: "claw", sid: "m1" });
-    expect(registerRoute).toHaveBeenCalled();
-    expect(sendClaw).toHaveBeenCalled();
-    expect(sendTwilio).not.toHaveBeenCalled();
-  });
-
-  it("falls back to Twilio when Claw is not configured", async () => {
-    delete process.env.CLAW_MESSENGER_API_KEY;
+  it("sends via Twilio from the manager work number", async () => {
     sendTwilio.mockResolvedValue({ sent: true, sid: "SM1" });
-    vi.resetModules();
     const { sendResidentOutboundSms } = await import("@/lib/resident-outbound-sms.server");
     const result = await sendResidentOutboundSms({
       to: "5103098345",
@@ -75,5 +63,36 @@ describe("sendResidentOutboundSms", () => {
     expect(result.sent).toBe(true);
     expect(result.channel).toBe("twilio");
     expect(sendTwilio).toHaveBeenCalled();
+    expect(sendClaw).not.toHaveBeenCalled();
+  });
+
+  it("does not prefer Claw when Twilio from is available", async () => {
+    process.env.CLAW_MESSENGER_API_KEY = "cm_test";
+    process.env.CLAW_MESSENGER_ENABLED = "1";
+    sendTwilio.mockResolvedValue({ sent: true, sid: "SM2" });
+    sendClaw.mockResolvedValue({ ok: true, messageId: "m1" });
+    const { sendResidentOutboundSms } = await import("@/lib/resident-outbound-sms.server");
+    const result = await sendResidentOutboundSms({
+      to: "+15103098345",
+      text: "Payment reminder: rent is due.",
+      fromNumber: "+12065550100",
+    });
+    expect(result).toEqual({ sent: true, channel: "twilio", sid: "SM2" });
+    expect(sendTwilio).toHaveBeenCalled();
+    expect(sendClaw).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Claw only when enabled and Twilio from is missing", async () => {
+    process.env.CLAW_MESSENGER_API_KEY = "cm_test";
+    process.env.CLAW_MESSENGER_ENABLED = "1";
+    sendClaw.mockResolvedValue({ ok: true, messageId: "m1" });
+    const { sendResidentOutboundSms } = await import("@/lib/resident-outbound-sms.server");
+    const result = await sendResidentOutboundSms({
+      to: "+15103098345",
+      text: "Payment reminder: rent is due.",
+    });
+    expect(result.sent).toBe(true);
+    expect(result.channel).toBe("claw");
+    expect(sendClaw).toHaveBeenCalled();
   });
 });

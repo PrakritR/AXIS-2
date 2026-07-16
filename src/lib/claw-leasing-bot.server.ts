@@ -1,9 +1,9 @@
 /**
- * Leasing SMS/iMessage auto-replies for the shared Claw Messenger agent line.
+ * Leasing SMS auto-replies for a manager's Twilio work number.
  *
- * Residents text the agent number about tours / applications / leases; we reply
- * with deep links (apply) or intake questions (tour) and mirror the thread into
- * the mapped manager's Axis inbox.
+ * Prospects text the manager's `sms_from_number` about tours / applications;
+ * we reply with deep links (apply) or intake questions (tour) and mirror the
+ * thread into that manager's Axis inbox. Claw Messenger is opt-in legacy only.
  */
 
 import { after } from "next/server";
@@ -21,12 +21,7 @@ import {
   looksLikeProspectLeasingCta,
   type LeasingIntent,
 } from "@/lib/claw-leasing-links";
-import {
-  clawLeasingAgentPhoneE164,
-  normalizeE164Us,
-  registerClawMessengerRoute,
-  sendClawMessengerText,
-} from "@/lib/claw-messenger.server";
+import { normalizeE164Us } from "@/lib/claw-messenger.server";
 import {
   forwardClawInboundToManagers,
   isMappedManagerPhone,
@@ -41,8 +36,10 @@ import {
   openClawResidentThread,
 } from "@/lib/claw-resident-messaging.server";
 import { buildManagerResidentBrief, runResidentSmsAction } from "@/lib/claw-resident-actions.server";
+import { sendFromManagerWorkNumber, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { normalizeE164 } from "@/lib/twilio";
 
 export {
   buildSmsDeepLink,
@@ -57,7 +54,9 @@ export { clawMappedManagerEmails } from "@/lib/claw-resident-messaging.server";
 
 export function publicAppOrigin(): string {
   // SMS links must be phone-reachable — never localhost.
-  const explicit = process.env.CLAW_MESSENGER_LINK_ORIGIN?.trim();
+  const explicit =
+    process.env.PROPLANE_SMS_LINK_ORIGIN?.trim() ||
+    process.env.CLAW_MESSENGER_LINK_ORIGIN?.trim();
   if (explicit) return explicit.replace(/\/$/, "");
   const app = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (app && !/localhost|127\.0\.0\.1/i.test(app)) return app.replace(/\/$/, "");
@@ -118,6 +117,77 @@ async function resolveMappedManagers(): Promise<ManagerTarget[]> {
     });
   }
   return out;
+}
+
+/** Resolve a single manager (Twilio work-number inbound) into leasing targets. */
+async function resolveManagerTarget(managerUserId: string): Promise<ManagerTarget[]> {
+  const uid = managerUserId.trim();
+  if (!uid) return [];
+  const db = createSupabaseServiceRoleClient();
+  const { data: profile } = await db
+    .from("profiles")
+    .select("id, email, full_name")
+    .eq("id", uid)
+    .maybeSingle();
+  if (!profile) return [];
+
+  const { data: props } = await db
+    .from("manager_property_records")
+    .select("id, property_data, status")
+    .eq("manager_user_id", uid)
+    .in("status", ["live", "listed"])
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  const first = props?.[0] as
+    | { id?: string; property_data?: { title?: string; address?: string; buildingName?: string } | null }
+    | undefined;
+  const propertyId = first?.id?.trim() || null;
+  const label =
+    first?.property_data?.buildingName?.trim() ||
+    first?.property_data?.title?.trim() ||
+    first?.property_data?.address?.trim() ||
+    null;
+
+  return [
+    {
+      userId: uid,
+      email: String((profile as { email?: unknown }).email ?? "").trim().toLowerCase(),
+      fullName: String((profile as { full_name?: unknown }).full_name ?? "").trim() || null,
+      defaultPropertyId: propertyId,
+      defaultPropertyLabel: label,
+    },
+  ];
+}
+
+async function isManagerPersonalPhone(fromE164: string, managerUserId: string): Promise<boolean> {
+  if (await isMappedManagerPhone(fromE164)) return true;
+  const db = createSupabaseServiceRoleClient();
+  const { data } = await db
+    .from("profiles")
+    .select("phone, phone_verified_at")
+    .eq("id", managerUserId)
+    .maybeSingle();
+  const personal = normalizeE164Us(String((data as { phone?: unknown } | null)?.phone ?? ""));
+  const verified = Boolean((data as { phone_verified_at?: string | null } | null)?.phone_verified_at);
+  return Boolean(personal && personal === fromE164 && verified);
+}
+
+async function replySms(args: {
+  to: string;
+  text: string;
+  managerUserId?: string | null;
+  workNumber?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (args.managerUserId) {
+    return sendFromManagerWorkNumber({
+      managerUserId: args.managerUserId,
+      to: args.to,
+      text: args.text,
+      fromNumber: args.workNumber,
+    });
+  }
+  return sendPropLaneSms({ to: args.to, text: args.text, fromNumber: args.workNumber });
 }
 
 async function resolvePropertyHint(
@@ -318,8 +388,11 @@ function runAfterReply(task: () => Promise<unknown>): void {
 }
 
 /**
- * Process one inbound Claw Messenger text.
+ * Process one inbound PropLane text (Twilio work number or legacy Claw).
  * Order: manager relay → known resident messaging → leasing auto-reply.
+ *
+ * When `managerUserId` + `workNumber` are set (Twilio inbound), routing is
+ * scoped to that manager — any From phone is accepted (no Claw allowlist).
  */
 export async function handleClawLeasingInbound(args: {
   from: string;
@@ -327,13 +400,19 @@ export async function handleClawLeasingInbound(args: {
   messageId?: string | null;
   chatId?: string | null;
   service?: string | null;
+  /** Owning manager when inbound hit their Twilio `sms_from_number`. */
+  managerUserId?: string | null;
+  /** E.164 work number to send replies From. */
+  workNumber?: string | null;
 }): Promise<HandleClawInboundResult> {
-  const from = normalizeE164Us(args.from);
+  const from = normalizeE164Us(args.from) ?? normalizeE164(args.from);
   if (!from) return { ok: false, intent: "unknown", replied: false, error: "Invalid from phone." };
 
-  // Never react to frames from the agent's own line — replying would loop the
-  // bot against itself through the relay.
-  if (from === clawLeasingAgentPhoneE164()) {
+  const workNumber = args.workNumber?.trim()
+    ? normalizeE164Us(args.workNumber) ?? normalizeE164(args.workNumber) ?? args.workNumber.trim()
+    : null;
+  // Never react to frames from the work number itself — would loop.
+  if (workNumber && from === workNumber) {
     return { ok: true, intent: "unknown", replied: false };
   }
 
@@ -343,16 +422,24 @@ export async function handleClawLeasingInbound(args: {
   }
 
   const text = (args.text ?? "").trim();
+  const scopedManagerId = args.managerUserId?.trim() || null;
 
   // Manager typing from their personal phone.
   // "agent …" commands run locally (mark paid, lease link, …) and are NOT relayed.
   // Everything else relays to the open resident thread (unless it's a listing CTA).
-  if ((await isMappedManagerPhone(from)) && !looksLikeProspectLeasingCta(text)) {
+  const fromIsManager = scopedManagerId
+    ? await isManagerPersonalPhone(from, scopedManagerId)
+    : await isMappedManagerPhone(from);
+  if (fromIsManager && !looksLikeProspectLeasingCta(text)) {
     const { runManagerAgentCommand } = await import("@/lib/claw-manager-actions.server");
     const agent = await runManagerAgentCommand({ fromPhone: from, text });
     if (agent) {
-      await registerClawMessengerRoute(from);
-      const send = await sendClawMessengerText({ to: from, text: agent.reply });
+      const send = await replySms({
+        to: from,
+        text: agent.reply,
+        managerUserId: scopedManagerId,
+        workNumber,
+      });
       return {
         ok: send.ok,
         intent: "unknown",
@@ -360,7 +447,12 @@ export async function handleClawLeasingInbound(args: {
         error: send.ok ? undefined : send.error,
       };
     }
-    const relay = await tryRelayManagerReplyViaClaw({ from, text });
+    const relay = await tryRelayManagerReplyViaClaw({
+      from,
+      text,
+      managerUserId: scopedManagerId,
+      workNumber,
+    });
     return {
       ok: relay.relayed || relay.error === "no_open_thread",
       intent: "unknown",
@@ -372,24 +464,35 @@ export async function handleClawLeasingInbound(args: {
   // Existing resident (payment/lease thread or known profile) → two-way messaging,
   // not the leasing auto-reply menu.
   if (!looksLikeProspectLeasingCta(text)) {
-    const [profile, existingThread] = await Promise.all([
+    const [profileHit, existingThread] = await Promise.all([
       findResidentProfileByPhone(from),
       findThreadByResidentPhone(from),
     ]);
+    let residentProfile = profileHit;
     let thread = existingThread;
-    if (!thread && profile?.managerUserId) {
+    // When scoped to a work number, only continue a thread for THIS manager.
+    if (thread && scopedManagerId && thread.managerUserId !== scopedManagerId) {
+      thread = null;
+    }
+    // Resident tied to landlord A must not bind to landlord B's work number.
+    if (residentProfile?.managerUserId && scopedManagerId && residentProfile.managerUserId !== scopedManagerId) {
+      residentProfile = null;
+      thread = null;
+    }
+    const managerForThread =
+      residentProfile?.managerUserId || thread?.managerUserId || scopedManagerId || null;
+    if (!thread && managerForThread) {
       thread = await openClawResidentThread({
-        managerUserId: profile.managerUserId,
+        managerUserId: managerForThread,
         residentPhone: from,
-        residentUserId: profile.userId,
-        residentEmail: profile.email,
+        residentUserId: residentProfile?.userId,
+        residentEmail: residentProfile?.email,
         topic: "general",
       });
     }
     if (thread) {
-      const registerPromise = registerClawMessengerRoute(from);
-      const residentEmail = thread.residentEmail || profile?.email || "";
-      const residentUserId = thread.residentUserId || profile?.userId || null;
+      const residentEmail = thread.residentEmail || residentProfile?.email || "";
+      const residentUserId = thread.residentUserId || residentProfile?.userId || null;
 
       const action = await runResidentSmsAction({
         text,
@@ -402,8 +505,12 @@ export async function handleClawLeasingInbound(args: {
 
       // Resident reply goes out first; manager forward + inbox mirror follow
       // after the response so the resident isn't waiting on them.
-      await registerPromise;
-      const send = await sendClawMessengerText({ to: from, text: action.residentReply });
+      const send = await replySms({
+        to: from,
+        text: action.residentReply,
+        managerUserId: thread.managerUserId,
+        workNumber,
+      });
 
       const threadRef = thread;
       runAfterReply(async () => {
@@ -430,6 +537,7 @@ export async function handleClawLeasingInbound(args: {
               text,
               thread: threadRef,
               briefText: brief,
+              workNumber,
             }),
           );
           tasks.push(
@@ -468,7 +576,9 @@ export async function handleClawLeasingInbound(args: {
 
   const intent = classifyLeasingIntent(text);
   const origin = publicAppOrigin();
-  const managers = await resolveMappedManagers();
+  const managers = scopedManagerId
+    ? await resolveManagerTarget(scopedManagerId)
+    : await resolveMappedManagers();
   const hintId = extractPropertyIdHint(text);
   let bundleId = extractBundleIdHint(text);
   const hinted =
@@ -481,10 +591,13 @@ export async function handleClawLeasingInbound(args: {
     bundleId = await resolveBundleIdByLabel(propertyId, extractBundleLabelHint(text));
   }
 
-  await registerClawMessengerRoute(from);
-
   const reply = replyForIntent({ intent, origin, propertyId, propertyLabel, bundleId });
-  const send = await sendClawMessengerText({ to: from, text: reply });
+  const send = await replySms({
+    to: from,
+    text: reply,
+    managerUserId: managers[0]?.userId ?? scopedManagerId,
+    workNumber,
+  });
   if (!send.ok) {
     return { ok: false, intent, replied: false, error: send.error || "Send failed." };
   }
@@ -515,6 +628,7 @@ export async function handleClawLeasingInbound(args: {
         intentLabel,
         propertyLabel,
         managerUserId: managers[0]?.userId ?? null,
+        workNumber,
       }),
       ...managers.map((manager) =>
         upsertManagerInboxNotice(db, {
@@ -542,36 +656,18 @@ export async function handleClawLeasingInbound(args: {
 }
 
 /**
- * Stamp the shared Claw leasing number onto a manager profile so outbound copy
- * and listing CTAs stay aligned. Does not buy a Twilio number.
+ * @deprecated Shared Claw leasing numbers are no longer assigned.
+ * Managers get a Twilio work number via `scheduleManagerMessagingReady` /
+ * `ensureManagerSmsNumber`. Kept as a no-op for call-site compatibility.
  */
 export async function assignSharedClawLeasingNumberToManager(
-  userId: string,
-  opts?: { force?: boolean },
+  _userId: string,
+  _opts?: { force?: boolean },
 ): Promise<void> {
-  const uid = userId.trim();
-  if (!uid) return;
-  const assignFlag = process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim();
-  const configured = Boolean(process.env.CLAW_MESSENGER_API_KEY?.trim());
-  if (assignFlag === "0" || assignFlag === "false") return;
-  if (!configured && assignFlag !== "1" && assignFlag !== "true") return;
-
-  const phone = clawLeasingAgentPhoneE164();
-  const db = createSupabaseServiceRoleClient();
-  let q = db
-    .from("profiles")
-    .update({
-      sms_from_number: phone,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", uid);
-  if (!opts?.force) q = q.is("sms_from_number", null);
-  await q;
+  /* no-op — Twilio provisioning is the production path */
 }
 
-export async function assignSharedClawLeasingNumberIfMapped(userId: string, email: string): Promise<void> {
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) return;
-  if (!clawMappedManagerEmails().includes(normalized)) return;
-  await assignSharedClawLeasingNumberToManager(userId);
+export async function assignSharedClawLeasingNumberIfMapped(userId: string, _email: string): Promise<void> {
+  const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+  scheduleManagerMessagingReady(userId);
 }

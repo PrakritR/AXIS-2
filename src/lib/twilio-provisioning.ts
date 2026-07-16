@@ -1,8 +1,6 @@
 import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
-import { clawLeasingAgentPhoneE164, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
-import { clawMappedManagerEmails } from "@/lib/claw-resident-messaging.server";
 
 export type EnsureManagerSmsNumberResult =
   | { ok: true; number: string }
@@ -24,15 +22,9 @@ function resolveInboundWebhookUrl(): string {
 /**
  * Provision (or reuse) a per-manager Axis work number for two-way SMS.
  *
- * Idempotent: if `profiles.sms_from_number` is already set, it is returned
- * unchanged and no Twilio calls are made. Otherwise this searches for an
- * available SMS-capable US local number, purchases it with its inbound SMS
- * webhook pointed at `/api/twilio/inbound`, attaches it to the Messaging
- * Service (when `TWILIO_MESSAGING_SERVICE_SID` is configured, best-effort),
- * and persists it on the profile via the passed service-role client.
- *
- * Never throws — every failure path (no credentials, no numbers found, Twilio
- * error, DB error) resolves to `{ ok: false, error }`.
+ * Idempotent: if `profiles.sms_from_number` is already set to a real Twilio
+ * number, it is returned unchanged. Legacy shared Claw agent lines stamped on
+ * the profile are treated as unset so a real Twilio number is purchased.
  */
 export async function ensureManagerSmsNumber(
   db: SupabaseClient,
@@ -41,7 +33,19 @@ export async function ensureManagerSmsNumber(
 ): Promise<EnsureManagerSmsNumberResult> {
   if (!managerUserId) return { ok: false, error: "Missing manager id." };
 
-  // 1. Idempotent short-circuit — already provisioned.
+  // Legacy shared Claw agent line — not a Twilio-owned number. Treat as unset
+  // so we buy a real work number (inbound + outbound require Twilio ownership).
+  const legacyClawShared = new Set(
+    [
+      process.env.CLAW_MESSENGER_AGENT_PHONE,
+      process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE,
+      "+12053690702",
+    ]
+      .map((p) => String(p ?? "").replace(/\D/g, ""))
+      .filter((d) => d.length >= 10),
+  );
+
+  // 1. Idempotent short-circuit — already provisioned with a real number.
   try {
     const { data: existing, error } = await db
       .from("profiles")
@@ -50,45 +54,20 @@ export async function ensureManagerSmsNumber(
       .maybeSingle();
     if (error) return { ok: false, error: error.message };
     const current = String(existing?.sms_from_number ?? "").trim();
-    if (current) return { ok: true, number: current };
+    if (current) {
+      const digits = current.replace(/\D/g, "");
+      if (!legacyClawShared.has(digits)) {
+        return { ok: true, number: current };
+      }
+      // Clear the Claw stamp so the purchase path can claim the slot.
+      await db
+        .from("profiles")
+        .update({ sms_from_number: null })
+        .eq("id", managerUserId)
+        .eq("sms_from_number", current);
+    }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not read the profile." };
-  }
-
-  // Shared Claw Messenger leasing line (trial / until per-manager numbers ship).
-  // Scoped to the mapped trial managers only: sms_from_number doubles as the
-  // manager's OWNED Twilio work number (inbound routing resolves by it, and the
-  // Twilio fallback sends From it), so stamping the shared Claw phone on every
-  // manager would break both if Claw is ever disabled.
-  // Set CLAW_MESSENGER_ASSIGN_SHARED_NUMBER=0 to fall through to Twilio purchase.
-  let managerEmail = "";
-  try {
-    const { data: profileRow } = await db
-      .from("profiles")
-      .select("email")
-      .eq("id", managerUserId)
-      .maybeSingle();
-    managerEmail = String(profileRow?.email ?? "").trim().toLowerCase();
-  } catch {
-    /* fall through to Twilio purchase */
-  }
-  const clawShared =
-    process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim() !== "0" &&
-    process.env.CLAW_MESSENGER_ASSIGN_SHARED_NUMBER?.trim() !== "false" &&
-    isClawMessengerConfigured() &&
-    Boolean(managerEmail) &&
-    clawMappedManagerEmails().includes(managerEmail);
-  if (clawShared) {
-    const number = clawLeasingAgentPhoneE164();
-    const { data: claimed, error } = await db
-      .from("profiles")
-      .update({ sms_from_number: number })
-      .eq("id", managerUserId)
-      .is("sms_from_number", null)
-      .select("sms_from_number");
-    if (error) return { ok: false, error: error.message };
-    const saved = String(claimed?.[0]?.sms_from_number ?? "").trim() || number;
-    return { ok: true, number: saved };
   }
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();

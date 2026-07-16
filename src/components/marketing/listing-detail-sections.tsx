@@ -168,12 +168,22 @@ function ListingPricingCtaCard({
   const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
   const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
-  const textEnabled = isClawMessagingPubliclyEnabled();
+  const textEnabled = isClawMessagingPubliclyEnabled(property.contactSmsPhone);
   const textTourHref = textEnabled
-    ? buildSmsDeepLink({ intent: "tour", propertyId: property.id, propertyLabel })
+    ? buildSmsDeepLink({
+        intent: "tour",
+        propertyId: property.id,
+        propertyLabel,
+        toPhone: property.contactSmsPhone,
+      })
     : null;
   const textApplyHref = textEnabled
-    ? buildSmsDeepLink({ intent: "apply", propertyId: property.id, propertyLabel })
+    ? buildSmsDeepLink({
+        intent: "apply",
+        propertyId: property.id,
+        propertyLabel,
+        toPhone: property.contactSmsPhone,
+      })
     : null;
 
   return (
@@ -354,15 +364,15 @@ export function ListingDetailSections({
                       key={f.cardKey ?? f.floorLabel}
                       floor={f}
                       listingPropertyId={property.id}
-                      propertyLabel={propertyLabel}
+                      propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone}
                     />
                   ))}
                 </div>
                 <ListingSubsection title="Bathrooms">
-                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} propertyLabel={propertyLabel} />
+                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
                 </ListingSubsection>
                 <ListingSubsection title="Shared spaces" id="listing-shared">
-                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} propertyLabel={propertyLabel} />
+                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
                 </ListingSubsection>
               </ListingDetailCollapsibleSection>
 
@@ -371,7 +381,7 @@ export function ListingDetailSections({
                 title="Lease basics"
                 dataAttrToggle="listing-lease-basics-toggle"
               >
-                <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} propertyLabel={propertyLabel} />
+                <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
               </ListingDetailCollapsibleSection>
 
               <ListingDetailCollapsibleSection
@@ -380,7 +390,7 @@ export function ListingDetailSections({
                 eyebrow="Building & neighborhood"
                 dataAttrToggle="listing-amenities-toggle"
               >
-                <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} propertyLabel={propertyLabel} />
+                <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
               </ListingDetailCollapsibleSection>
 
               <ListingDetailCollapsibleSection
@@ -394,7 +404,7 @@ export function ListingDetailSections({
                   </span>
                 }
               >
-                <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} propertyLabel={propertyLabel} />
+                <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
                 <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 listing-detail-surface sm:p-5">
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Lease lengths</p>
                   <p className="mt-2 text-sm leading-relaxed text-muted">{formatBoldSegments(rich.bundlesText)}</p>

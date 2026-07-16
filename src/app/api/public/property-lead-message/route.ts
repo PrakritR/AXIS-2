@@ -21,15 +21,6 @@ async function resolveManagerForProperty(propertyId: string): Promise<{
     .maybeSingle();
 
   if (!data) {
-    const { data: rows } = await db.from("manager_property_records").select("id, manager_user_id, property_data, row_data, status").limit(500);
-    for (const row of rows ?? []) {
-      const pd = row.property_data as { id?: string; title?: string } | null;
-      const rd = row.row_data as { id?: string; title?: string } | null;
-      const candidateId = textField(pd?.id) || textField(rd?.id) || textField(row.id);
-      if (candidateId !== propertyId) continue;
-      const title = textField(pd?.title) || textField(rd?.title) || propertyId;
-      return { managerUserId: (row.manager_user_id as string | null) ?? null, propertyTitle: title };
-    }
     return { managerUserId: null, propertyTitle: propertyId };
   }
 
@@ -41,10 +32,15 @@ async function resolveManagerForProperty(propertyId: string): Promise<{
 
 export async function POST(req: Request) {
   try {
+<<<<<<< HEAD
     // Public, unauthenticated endpoint that emails a manager — rate-limit per IP
     // to prevent spam / inbox flooding via the full-table property lookup.
     if (!rateLimit(`property-lead:${clientIpFrom(req)}`, 5, 60_000).ok) {
       return NextResponse.json({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
+=======
+    if (!rateLimit(`property-lead-message:${clientIpFrom(req)}`, 15, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+>>>>>>> fm/captain-wip-ship-s1
     }
 
     const body = (await req.json()) as {

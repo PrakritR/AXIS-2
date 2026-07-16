@@ -180,7 +180,7 @@ export async function POST(req: Request) {
         recipientName: recipientName || recipientEmail,
         recipientUserId,
         deliverViaEmail: body.deliverViaEmail !== false,
-        deliverViaSms: body.deliverViaSms === true,
+        deliverViaSms: body.deliverViaSms !== false,
         senderPortal: "resident",
         senderUserId: ctx.userId,
         senderName: ctx.name,

@@ -65,11 +65,24 @@ describe("claw leasing intent", () => {
     ).toBe("bun-2");
   });
 
+  it("builds sms deep links to the manager work number when provided", () => {
+    const href = buildSmsDeepLink({
+      intent: "tour",
+      propertyId: "mgr-1",
+      propertyLabel: "4709B 8th Ave NE",
+      toPhone: "+12065550199",
+    });
+    expect(href.startsWith("sms:+12065550199")).toBe(true);
+    const decoded = decodeURIComponent(href.split("body=")[1] ?? "");
+    expect(decoded).toBe("Hi — I'd like to schedule a tour for 4709B 8th Ave NE.");
+  });
+
   it("builds sms deep links without propertyId= in the draft body", () => {
     const href = buildSmsDeepLink({
       intent: "tour",
       propertyId: "mgr-1",
       propertyLabel: "4709B 8th Ave NE",
+      toPhone: "+12065550100",
     });
     expect(href.startsWith("sms:")).toBe(true);
     const decoded = decodeURIComponent(href.split("body=")[1] ?? "");
@@ -79,6 +92,7 @@ describe("claw leasing intent", () => {
       intent: "apply",
       propertyId: "mgr-test-alder",
       propertyLabel: "Alder Row — 3 rooms",
+      toPhone: "+12065550100",
     });
     expect(decodeURIComponent(apply.split("body=")[1] ?? "")).toBe(
       "Hi — I'd like to apply for Alder Row — 3 rooms.",
@@ -90,6 +104,7 @@ describe("claw leasing intent", () => {
       propertyLabel: "Alder Row — 3 rooms",
       bundleId: "bun-2",
       bundleLabel: "Two or more rooms",
+      toPhone: "+12065550100",
     });
     expect(decodeURIComponent(bundle.split("body=")[1] ?? "")).toBe(
       'Hi — I\'d like to apply for the bundle "Two or more rooms" at Alder Row — 3 rooms.',

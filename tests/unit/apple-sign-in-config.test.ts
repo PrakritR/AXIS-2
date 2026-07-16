@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  APPLE_SIGN_IN_INVALID_CLIENT_MESSAGE,
+  APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE,
+  APPLE_SIGN_IN_PROVIDER_DISABLED_MESSAGE,
   APPLE_SIGN_IN_REDIRECT_SETUP_MESSAGE,
-  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
+  APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE,
   isAppleSignInAvailable,
   isAppleSignInDisabledOnWeb,
   isAppleSignInEnabledInEnv,
@@ -74,7 +77,49 @@ describe("apple-sign-in-config", () => {
     const result = await probeSupabaseAppleOAuthUrl(
       "https://example.supabase.co/auth/v1/authorize?provider=apple",
     );
-    expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE });
+    expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_PROVIDER_DISABLED_MESSAGE });
+  });
+
+  it("probeSupabaseAppleOAuthUrl maps missing OAuth secret to web setup guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        type: "basic",
+        status: 400,
+        headers: { get: () => "application/json" },
+        json: async () => ({
+          code: 400,
+          error_code: "validation_failed",
+          msg: "Unsupported provider: missing OAuth secret",
+        }),
+      })),
+    );
+
+    const result = await probeSupabaseAppleOAuthUrl(
+      "https://example.supabase.co/auth/v1/authorize?provider=apple",
+    );
+    expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE });
+  });
+
+  it("probeSupabaseAppleOAuthUrl maps invalid_client to Services ID guidance", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        type: "basic",
+        status: 400,
+        headers: { get: () => "application/json" },
+        json: async () => ({
+          code: 400,
+          error_code: "invalid_client",
+          msg: "invalid_client",
+        }),
+      })),
+    );
+
+    const result = await probeSupabaseAppleOAuthUrl(
+      "https://example.supabase.co/auth/v1/authorize?provider=apple",
+    );
+    expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_INVALID_CLIENT_MESSAGE });
   });
 
   it("probeSupabaseAppleOAuthUrl ignores unrelated validation_failed JSON", async () => {
@@ -136,7 +181,8 @@ describe("apple-sign-in-config", () => {
   });
 
   it("shouldShowAppleSignInErrorToast dedupes per session", () => {
-    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE)).toBe(true);
-    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE)).toBe(false);
+    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE)).toBe(true);
+    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE)).toBe(false);
+    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE)).toBe(true);
   });
 });

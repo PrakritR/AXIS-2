@@ -310,41 +310,46 @@ export async function GET(req: Request) {
           const residentLower = charge.residentEmail.trim().toLowerCase();
           const noticeDedupId = `late_fee_notice_${lateFeeId}`;
 
-          if (apiKey && settings.lateFeeNoticeEnabled && !sentDedupIds.has(noticeDedupId)) {
-            // Only email the notice if the resident is under their per-run cap;
-            // otherwise suppress the send but still write the dedup below so it is
-            // never retried (this is what prevents the late-fee-notice burst).
+          if (settings.lateFeeNoticeEnabled && !sentDedupIds.has(noticeDedupId)) {
             if (residentEmailBudgetLeft(charge.residentEmail)) {
-              try {
-                await fetch("https://api.resend.com/emails", {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ from, to: [residentLower], subject: noticeSubject, text: noticeText }),
-                });
-                noteResidentEmailed(charge.residentEmail);
-              } catch {
-                /* non-critical */
-              }
-            }
-
-            await db.from("portal_outbound_mail_records").upsert(
-              {
-                id: noticeDedupId,
-                recipient_email: residentLower,
+              const result = await deliverPaymentReminder({
+                db,
+                charge: lateFeeCharge,
+                managerId,
+                dedupId: noticeDedupId,
+                managerName,
+                managerSmsFromNumber,
+                apiKey: apiKey ?? "",
+                from,
                 subject: noticeSubject,
-                channel: "email",
-                row_data: {
+                text: noticeText,
+                html: reminderHtmlFromText(noticeText),
+                slotLabel: "late_fee_created",
+                eventCategory: "payments",
+              });
+              if (result.error) errors.push(result.error);
+              if (result.sent) noteResidentEmailed(charge.residentEmail);
+            } else {
+              await db.from("portal_outbound_mail_records").upsert(
+                {
                   id: noticeDedupId,
-                  to: residentLower,
+                  recipient_email: residentLower,
                   subject: noticeSubject,
-                  body: noticeText,
-                  sentAt: new Date().toISOString(),
-                  chargeId: lateFeeId,
-                  slot: "late_fee_created",
+                  channel: "email",
+                  row_data: {
+                    id: noticeDedupId,
+                    to: residentLower,
+                    subject: noticeSubject,
+                    body: noticeText,
+                    sentAt: new Date().toISOString(),
+                    chargeId: lateFeeId,
+                    slot: "late_fee_created",
+                    suppressedBurst: true,
+                  },
                 },
-              },
-              { onConflict: "id" },
-            );
+                { onConflict: "id" },
+              );
+            }
             sentDedupIds.add(noticeDedupId);
           }
         }

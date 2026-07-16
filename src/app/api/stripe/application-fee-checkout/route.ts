@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { applicationFeeCentsFromPropertyData } from "@/lib/application-fee-server";
 import { resolveAppOrigin } from "@/lib/app-url";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
@@ -49,6 +51,10 @@ function listingFromPropertyData(propertyData: unknown): ManagerListingSubmissio
  */
 export async function POST(req: Request) {
   try {
+    if (!rateLimit(`application-fee-checkout:${clientIpFrom(req)}`, 20, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
     const body = (await req.json()) as Body;
     const propertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
     const residentEmail = typeof body.residentEmail === "string" ? body.residentEmail.trim() : "";
@@ -62,6 +68,7 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const { data: propertyRow } = await db
       .from("manager_property_records")
+<<<<<<< HEAD
       .select("property_data, manager_user_id")
       .eq("id", propertyId)
       .maybeSingle();
@@ -76,6 +83,30 @@ export async function POST(req: Request) {
     }
 
     const listing = listingFromPropertyData(propertyRow?.property_data);
+=======
+      .select("manager_user_id, status, property_data")
+      .eq("id", propertyId)
+      .maybeSingle();
+
+    if (!propertyRow || propertyRow.status !== "live") {
+      return NextResponse.json({ error: "Property not found." }, { status: 404 });
+    }
+
+    const ownerManagerUserId = String(propertyRow.manager_user_id ?? "").trim();
+    if (!ownerManagerUserId || ownerManagerUserId !== managerUserId) {
+      return NextResponse.json({ error: "Invalid manager for this property." }, { status: 403 });
+    }
+
+    const expectedFeeCents = applicationFeeCentsFromPropertyData(propertyRow.property_data);
+    if (expectedFeeCents <= 0) {
+      return NextResponse.json({ error: "This listing does not require an application fee." }, { status: 422 });
+    }
+    if (amountCents !== expectedFeeCents) {
+      return NextResponse.json({ error: "Application fee amount does not match this listing." }, { status: 400 });
+    }
+
+    const listing = listingFromPropertyData(propertyRow.property_data);
+>>>>>>> fm/captain-wip-ship-s1
     if (!listingApplicationFeeChannels(listing ?? undefined).ach) {
       return NextResponse.json(
         {
