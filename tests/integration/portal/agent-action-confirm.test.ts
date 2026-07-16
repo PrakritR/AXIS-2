@@ -1,0 +1,293 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/service", () => ({
+  createSupabaseServiceRoleClient: vi.fn(),
+}));
+
+vi.mock("@/lib/analytics/posthog", () => ({
+  track: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/admin-preview", () => ({
+  isAdminUser: vi.fn().mockResolvedValue(false),
+}));
+
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { track } from "@/lib/analytics/posthog";
+import { POST as agentAction } from "@/app/api/agent/action/route";
+
+const MANAGER_ID = "11111111-1111-4111-8111-111111111111";
+const STRANGER_ID = "22222222-2222-4222-8222-222222222222";
+const ACTION_ID = "33333333-3333-4333-8333-333333333333";
+
+/**
+ * Full propose→claim→execute round trip against an in-memory stand-in for the
+ * service-role client: pending-action claim semantics, audit_log write, and
+ * the anti-enumeration / expiry / double-confirm error paths. Runs the REAL
+ * registry (send_rent_reminder) so the tool's ownership re-resolution is
+ * exercised, not mocked.
+ */
+
+type Row = Record<string, unknown>;
+
+function overdueCharge(id: string, managerUserId: string) {
+  return {
+    id,
+    createdAt: "2026-06-01T00:00:00.000Z",
+    residentEmail: "resident@axis.local", // demo address => portal_only delivery, no network
+    residentName: "Pat Resident",
+    residentUserId: null,
+    propertyId: "prop-1",
+    propertyLabel: "12 Main St",
+    managerUserId,
+    kind: "rent",
+    title: "Monthly rent",
+    amountLabel: "$1,500.00",
+    balanceLabel: "$1,500.00",
+    status: "pending",
+    blocksLeaseUntilPaid: false,
+    dueDateLabel: "Jan 1, 2020",
+  };
+}
+
+function makeFakeServiceDb(opts: {
+  pendingRows: Row[];
+  charges: ReturnType<typeof overdueCharge>[];
+}) {
+  const auditLog: Row[] = [];
+  const inboxThreads: Row[] = [];
+  const agentMessages: Row[] = [];
+
+  function matches(row: Row, filters: [string, string, unknown][]): boolean {
+    return filters.every(([op, col, val]) => {
+      if (op === "eq") return row[col] === val;
+      if (op === "gt") return String(row[col] ?? "") > String(val ?? "");
+      return true;
+    });
+  }
+
+  function chainFor(table: string) {
+    const filters: [string, string, unknown][] = [];
+    let pendingUpdate: Row | null = null;
+
+    const rowsFor = (): Row[] => {
+      if (table === "agent_pending_actions") return opts.pendingRows;
+      if (table === "audit_log") return auditLog;
+      return [];
+    };
+
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      order: () => chain,
+      limit: () => chain,
+      insert: (values: Row | Row[]) => {
+        if (table === "audit_log") {
+          const row = values as Row;
+          if (
+            row.dedupe_key != null &&
+            auditLog.some((r) => r.dedupe_key === row.dedupe_key)
+          ) {
+            return Promise.resolve({ error: { code: "23505", message: "duplicate" } });
+          }
+          auditLog.push({ ...row });
+          return Promise.resolve({ error: null });
+        }
+        if (table === "agent_messages") {
+          for (const row of Array.isArray(values) ? values : [values]) agentMessages.push({ ...row });
+          return Promise.resolve({ error: null });
+        }
+        return Promise.resolve({ error: null });
+      },
+      upsert: (row: Row) => {
+        if (table === "portal_inbox_thread_records") inboxThreads.push({ ...row });
+        return Promise.resolve({ error: null });
+      },
+      update: (values: Row) => {
+        pendingUpdate = values;
+        return chain;
+      },
+      eq: (col: string, val: unknown) => {
+        filters.push(["eq", col, val]);
+        return chain;
+      },
+      gt: (col: string, val: unknown) => {
+        filters.push(["gt", col, val]);
+        return chain;
+      },
+      maybeSingle: async () => {
+        if (table === "profiles") {
+          return { data: { email: "manager@axis.test", role: "manager" }, error: null };
+        }
+        const hit = rowsFor().find((r) => matches(r, filters));
+        if (!hit) return { data: null, error: null };
+        if (pendingUpdate) Object.assign(hit, pendingUpdate);
+        return { data: { ...hit }, error: null };
+      },
+      range: async (from: number, to: number) => {
+        if (table === "portal_household_charge_records") {
+          const page = opts.charges.slice(from, to + 1).map((c) => ({ row_data: c }));
+          return { data: page, error: null };
+        }
+        return { data: [], error: null };
+      },
+      // awaiting the chain directly (profile_roles select, audit update .eq)
+      then: (resolve: (v: { data: Row[]; error: null }) => unknown) => {
+        if (pendingUpdate) {
+          for (const r of rowsFor()) if (matches(r, filters)) Object.assign(r, pendingUpdate);
+          return Promise.resolve({ data: [], error: null }).then(resolve);
+        }
+        if (table === "profile_roles") {
+          return Promise.resolve({ data: [{ role: "manager" }] as Row[], error: null }).then(resolve);
+        }
+        return Promise.resolve({ data: rowsFor().filter((r) => matches(r, filters)), error: null }).then(resolve);
+      },
+    };
+    return chain;
+  }
+
+  const db = { from: (table: string) => chainFor(table) };
+  return { db, auditLog, inboxThreads, agentMessages };
+}
+
+function mockAuthUser(userId: string | null) {
+  vi.mocked(createSupabaseServerClient).mockResolvedValue({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: userId ? { id: userId, email: "manager@axis.test" } : null },
+      }),
+    },
+  } as never);
+}
+
+function pendingRow(overrides: Row = {}): Row {
+  return {
+    id: ACTION_ID,
+    actor_user_id: MANAGER_ID,
+    portal: "manager",
+    landlord_id: MANAGER_ID,
+    session_id: null,
+    tool_name: "send_rent_reminder",
+    input: { chargeIds: ["hc_1"] },
+    preview: { title: "Send rent reminder", summary: "…", lines: [] },
+    status: "pending",
+    created_at: new Date(Date.now() - 1000).toISOString(),
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    resolved_at: null,
+    ...overrides,
+  };
+}
+
+function actionRequest(body: Record<string, unknown>) {
+  return new Request("http://localhost/api/agent/action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /api/agent/action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.RESEND_API_KEY;
+  });
+
+  it("confirms a pending action: claims it, executes the tool, writes the audit row", async () => {
+    mockAuthUser(MANAGER_ID);
+    const rows = [pendingRow()];
+    const fake = makeFakeServiceDb({ pendingRows: rows, charges: [overdueCharge("hc_1", MANAGER_ID)] });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(fake.db as never);
+
+    const res = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; reply: string };
+    expect(body.status).toBe("executed");
+    expect(body.reply.toLowerCase()).toContain("portal");
+
+    expect(rows[0]!.status).toBe("confirmed");
+    expect(fake.auditLog).toHaveLength(1);
+    expect(String(fake.auditLog[0]!.dedupe_key)).toContain(`send_rent_reminder:${MANAGER_ID}:hc_1`);
+    expect(vi.mocked(track)).toHaveBeenCalledWith(
+      "assistant_action_confirmed",
+      MANAGER_ID,
+      expect.objectContaining({ tool: "send_rent_reminder", portal: "manager" }),
+    );
+  });
+
+  it("cancel records the decision without executing anything", async () => {
+    mockAuthUser(MANAGER_ID);
+    const rows = [pendingRow()];
+    const fake = makeFakeServiceDb({ pendingRows: rows, charges: [overdueCharge("hc_1", MANAGER_ID)] });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(fake.db as never);
+
+    const res = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "cancel" }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { status: string }).status).toBe("cancelled");
+    expect(rows[0]!.status).toBe("cancelled");
+    expect(fake.auditLog).toHaveLength(0);
+    expect(vi.mocked(track)).toHaveBeenCalledWith(
+      "assistant_action_cancelled",
+      MANAGER_ID,
+      expect.objectContaining({ tool: "send_rent_reminder" }),
+    );
+  });
+
+  it("a second confirm of the same action returns 409 and does not execute twice", async () => {
+    mockAuthUser(MANAGER_ID);
+    const rows = [pendingRow()];
+    const fake = makeFakeServiceDb({ pendingRows: rows, charges: [overdueCharge("hc_1", MANAGER_ID)] });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(fake.db as never);
+
+    const first = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(first.status).toBe(200);
+    const second = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(second.status).toBe(409);
+    expect(fake.auditLog).toHaveLength(1);
+  });
+
+  it("a foreign user's confirm reads as 404 (anti-enumeration) and executes nothing", async () => {
+    mockAuthUser(STRANGER_ID);
+    const rows = [pendingRow()];
+    const fake = makeFakeServiceDb({ pendingRows: rows, charges: [overdueCharge("hc_1", MANAGER_ID)] });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(fake.db as never);
+
+    const res = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(res.status).toBe(404);
+    expect(rows[0]!.status).toBe("pending");
+    expect(fake.auditLog).toHaveLength(0);
+  });
+
+  it("an expired action returns 410", async () => {
+    mockAuthUser(MANAGER_ID);
+    const rows = [pendingRow({ expires_at: new Date(Date.now() - 1000).toISOString() })];
+    const fake = makeFakeServiceDb({ pendingRows: rows, charges: [overdueCharge("hc_1", MANAGER_ID)] });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(fake.db as never);
+
+    const res = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(res.status).toBe(410);
+    expect(fake.auditLog).toHaveLength(0);
+  });
+
+  it("unauthenticated requests get 401", async () => {
+    mockAuthUser(null);
+    const res = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("execute re-resolves ownership: a stored input targeting a charge that is no longer overdue reports it", async () => {
+    mockAuthUser(MANAGER_ID);
+    const rows = [pendingRow({ input: { chargeIds: ["hc_gone"] } })];
+    const fake = makeFakeServiceDb({ pendingRows: rows, charges: [overdueCharge("hc_1", MANAGER_ID)] });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(fake.db as never);
+
+    const res = await agentAction(actionRequest({ actionId: ACTION_ID, decision: "confirm" }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { reply: string };
+    expect(body.reply.toLowerCase()).toContain("no longer overdue and skipped");
+    expect(fake.auditLog).toHaveLength(0);
+  });
+});

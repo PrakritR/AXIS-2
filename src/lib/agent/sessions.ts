@@ -63,7 +63,7 @@ export function appendAgentMessages(
   rows: { role: "user" | "assistant"; content: string; toolTrace?: unknown }[],
 ): void {
   if (!sessionId || rows.length === 0) return;
-  after(async () => {
+  const write = async () => {
     try {
       await actor.db.from("agent_messages").insert(
         rows.map((r) => ({
@@ -78,5 +78,11 @@ export function appendAgentMessages(
     } catch {
       /* best-effort */
     }
-  });
+  };
+  try {
+    after(write);
+  } catch {
+    // Outside a Next request scope (tests, scripts): run inline, still best-effort.
+    void write();
+  }
 }

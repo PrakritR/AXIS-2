@@ -69,10 +69,14 @@ broadcasts a tiny "changed" ping; the client refetches through the existing
 scoped route, so app-layer scoping and RLS are unchanged). Full design and code
 sketch: [`docs/realtime-schedule-invalidation.md`](docs/realtime-schedule-invalidation.md).
 
-## AI Agent & Tool Layer (in development)
+## AI Agent & Tool Layer
 
-We are building a native AI agent into the site: users ask in natural
-language and it performs actions the site can already do.
+A native AI agent is built into the site on all three portals (manager,
+resident, vendor): users ask in natural language and it performs actions the
+site can already do, behind explicit user confirmation. **Full architecture,
+tool catalog, write-action lifecycle, and the add-a-tool checklist:
+[`docs/ai-assistant.md`](docs/ai-assistant.md)** — read it before touching
+`src/lib/tools/` or `src/lib/agent/`.
 
 **The tool layer is the spine. The agent acts ONLY through it.**
 - All site capabilities (read and write) are exposed as typed,
