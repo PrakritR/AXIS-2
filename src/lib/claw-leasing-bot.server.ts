@@ -16,6 +16,7 @@ import {
 import { residentPortalUrl } from "@/lib/claw-resident-links";
 import {
   classifyLeasingIntent,
+  clawLeasingAgentPhoneE164,
   extractBundleIdHint,
   extractBundleLabelHint,
   extractPropertyIdHint,
@@ -75,7 +76,7 @@ type ManagerTarget = {
   defaultPropertyLabel: string | null;
 };
 
-type PropertyHint = { propertyId: string; propertyLabel: string | null };
+type PropertyHint = { propertyId: string; propertyLabel: string | null; managerUserId?: string | null };
 
 async function resolveMappedManagers(): Promise<ManagerTarget[]> {
   const emails = clawMappedManagerEmails();
@@ -86,8 +87,20 @@ async function resolveMappedManagers(): Promise<ManagerTarget[]> {
     .select("id, email, full_name")
     .in("email", emails);
 
+  // Order managers by the configured email list, not Postgres' arbitrary IN
+  // order — managers[0] is the primary the shared-line session/escalation binds
+  // to, so it must be deterministic (put the real listing owner first in
+  // CLAW_MESSENGER_MANAGER_EMAILS). Cross-catalog listing lookup no longer
+  // depends on this ordering, but notice/escalation routing still does.
+  const emailRank = new Map(emails.map((e, i) => [e.trim().toLowerCase(), i]));
+  const orderedProfiles = [...(profiles ?? [])].sort((a, b) => {
+    const ra = emailRank.get(String((a as { email?: unknown }).email ?? "").trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    const rb = emailRank.get(String((b as { email?: unknown }).email ?? "").trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    return ra - rb;
+  });
+
   const out: ManagerTarget[] = [];
-  for (const profile of profiles ?? []) {
+  for (const profile of orderedProfiles) {
     const userId = String((profile as { id?: unknown }).id ?? "").trim();
     const email = String((profile as { email?: unknown }).email ?? "").trim().toLowerCase();
     if (!userId || !email) continue;
@@ -203,7 +216,7 @@ async function resolvePropertyHint(
   // property — never confirm or link other landlords' (or unlisted) records.
   const { data } = await db
     .from("manager_property_records")
-    .select("id, property_data")
+    .select("id, property_data, manager_user_id")
     .eq("id", id)
     .in(
       "manager_user_id",
@@ -215,7 +228,11 @@ async function resolvePropertyHint(
   const pd = (data as { property_data?: { title?: string; address?: string; buildingName?: string } | null })
     .property_data;
   const label = pd?.buildingName?.trim() || pd?.title?.trim() || pd?.address?.trim() || null;
-  return { propertyId: id, propertyLabel: label };
+  return {
+    propertyId: id,
+    propertyLabel: label,
+    managerUserId: String((data as { manager_user_id?: unknown }).manager_user_id ?? "").trim() || null,
+  };
 }
 
 function propertyDisplayLabel(pd: { title?: string; address?: string; buildingName?: string } | null | undefined): string {
@@ -228,31 +245,70 @@ async function resolvePropertyByLabelHint(
 ): Promise<PropertyHint | null> {
   const needle = (labelHint ?? "").trim().toLowerCase();
   if (!needle) return null;
-  if (managers.length === 0) return null;
-  const db = createSupabaseServiceRoleClient();
-  const { data } = await db
-    .from("manager_property_records")
-    .select("id, property_data, manager_user_id, status")
-    .in(
-      "manager_user_id",
-      managers.map((m) => m.userId),
-    )
-    .in("status", ["live", "listed"])
-    .limit(100);
+
+  const score = (label: string): "exact" | "partial" | null => {
+    const lower = label.toLowerCase();
+    if (lower === needle) return "exact";
+    if (needle.includes(lower) || lower.includes(needle)) return "partial";
+    return null;
+  };
 
   let best: PropertyHint | null = null;
-  for (const row of data ?? []) {
-    const id = String((row as { id?: unknown }).id ?? "").trim();
-    const pd = (row as { property_data?: { title?: string; address?: string; buildingName?: string } | null })
-      .property_data;
-    const label = propertyDisplayLabel(pd);
-    if (!id || !label) continue;
-    const lower = label.toLowerCase();
-    if (lower === needle || needle.includes(lower) || lower.includes(needle)) {
-      best = { propertyId: id, propertyLabel: label };
-      if (lower === needle) return best;
+
+  if (managers.length > 0) {
+    const db = createSupabaseServiceRoleClient();
+    const { data } = await db
+      .from("manager_property_records")
+      .select("id, property_data, manager_user_id, status")
+      .in(
+        "manager_user_id",
+        managers.map((m) => m.userId),
+      )
+      .in("status", ["live", "listed"])
+      .limit(100);
+
+    for (const row of data ?? []) {
+      const id = String((row as { id?: unknown }).id ?? "").trim();
+      const pd = (row as { property_data?: { title?: string; address?: string; buildingName?: string } | null })
+        .property_data;
+      const label = propertyDisplayLabel(pd);
+      if (!id || !label) continue;
+      const hit = score(label);
+      if (!hit) continue;
+      best = {
+        propertyId: id,
+        propertyLabel: label,
+        managerUserId: String((row as { manager_user_id?: unknown }).manager_user_id ?? "").trim() || null,
+      };
+      if (hit === "exact") return best;
     }
   }
+
+  // Shared-line fallback: search the public catalog (any owner) so a prospect
+  // naming "4709A" is not stuck on managers[0]'s demo Ballard Commons listing.
+  try {
+    const { getPublicListings } = await import("@/lib/public-listings.server");
+    const listings = await getPublicListings();
+    for (const p of listings) {
+      const label =
+        String(p.buildingName ?? "").trim() ||
+        String(p.title ?? "").trim() ||
+        String(p.address ?? "").trim();
+      if (!label || !p.id) continue;
+      const hit = score(label);
+      if (!hit) continue;
+      const candidate: PropertyHint = {
+        propertyId: String(p.id).trim(),
+        propertyLabel: label,
+        managerUserId: p.managerUserId?.trim() || null,
+      };
+      if (hit === "exact") return candidate;
+      if (!best) best = candidate;
+    }
+  } catch (e) {
+    console.error("resolvePropertyByLabelHint public catalog failed", e);
+  }
+
   return best;
 }
 
@@ -631,7 +687,39 @@ export async function handleClawLeasingInbound(args: {
     bundleId = await resolveBundleIdByLabel(propertyId, extractBundleLabelHint(text));
   }
 
-  const landlordId = managers[0]?.userId ?? scopedManagerId;
+  const landlordId =
+    hinted?.managerUserId || managers[0]?.userId || scopedManagerId || null;
+
+  // Persist prospect inbound so Communication → SMS shows both sides of the
+  // Claw thread (outbound already logs via sendFromManagerWorkNumber).
+  if (landlordId) {
+    const dbForLog = createSupabaseServiceRoleClient();
+    const toLine = workNumber || clawLeasingAgentPhoneE164();
+    void (async () => {
+      try {
+        const { logManagerSmsMessage } = await import("@/lib/manager-sms-messages.server");
+        await logManagerSmsMessage(dbForLog, {
+          managerUserId: landlordId,
+          residentPhone: from,
+          direction: "inbound",
+          body: text,
+          fromPhone: from,
+          toPhone: toLine,
+          messageSid: messageId || null,
+          source: "automated",
+        });
+        await dbForLog.from("inbound_sms_log").insert({
+          manager_user_id: landlordId,
+          from_phone: from,
+          to_phone: toLine,
+          body: text,
+          message_sid: messageId || null,
+        });
+      } catch (e) {
+        console.error("claw leasing inbound log failed", e);
+      }
+    })();
+  }
 
   // Claude leasing agent on the manager's work number — grounds replies on live
   // listings, matches house/room, and mints apply links with phone/room prefills.
@@ -648,6 +736,10 @@ export async function handleClawLeasingInbound(args: {
         prospectPhoneE164: from,
         inboundText: text,
         workNumber,
+        // Shared Claw line (no single scoped manager) fronts every manager, so
+        // the agent must be able to look up ANY live listing on PropLane, not
+        // just landlordId's. A per-manager Twilio number stays scoped.
+        crossCatalog: !scopedManagerId,
       });
       if (agent?.reply) {
         const send = await deliverLeasingSmsReply({

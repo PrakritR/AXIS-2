@@ -35,6 +35,7 @@ import {
   buildProspectLinksTool,
   escalateLeasingToManagerTool,
   getListingDetailsTool,
+  getSiteLinksTool,
   listLiveListingsTool,
 } from "./domains/leasing-sms";
 import { managerFinancialsWriteTools } from "./domains/financials-write";
@@ -97,6 +98,7 @@ export const leasingSmsAgentRegistry = buildRegistry([
   listLiveListingsTool,
   getListingDetailsTool,
   buildProspectLinksTool,
+  getSiteLinksTool,
   escalateLeasingToManagerTool,
 ]);
 

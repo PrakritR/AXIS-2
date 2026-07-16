@@ -121,6 +121,8 @@ export async function runLeasingSmsAgentTurn(
     prospectPhoneE164: string;
     inboundText: string;
     workNumber?: string | null;
+    /** True on the shared Claw line — lets listing tools span the whole public catalog. */
+    crossCatalog?: boolean;
   },
 ): Promise<{ reply: string; sessionId: string } | null> {
   if (!process.env.ANTHROPIC_API_KEY?.trim()) return null;
@@ -177,6 +179,7 @@ export async function runLeasingSmsAgentTurn(
       sessionId: session.id,
       prospectPhoneE164: prospectPhone,
       workNumber: args.workNumber?.trim() || null,
+      crossCatalog: args.crossCatalog === true,
     },
   });
 
