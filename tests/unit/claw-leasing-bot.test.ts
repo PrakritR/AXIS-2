@@ -85,7 +85,9 @@ describe("claw leasing intent", () => {
 
   it("does not enable public CTAs for Claw/555 when the Claw bridge is off", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-    delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+    const prevAgent = process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
+    process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "0";
+    delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
     expect(isLegacyClawSharedSmsNumber("+12053690702")).toBe(true);
     expect(managerContactSmsPhoneForPublicCta("+12053690702")).toBeNull();
     expect(isClawMessagingPubliclyEnabled("+12053690702")).toBe(false);
@@ -93,15 +95,18 @@ describe("claw leasing intent", () => {
     expect(isClawMessagingPubliclyEnabled("+12065550199")).toBe(false);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
+    if (prevAgent === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
+    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE = prevAgent;
   });
 
-  it("allows the shared Claw line for CTAs while the bridge is on", () => {
+  it("always uses the shared Claw agent line for CTAs while Claw is primary", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
     expect(managerContactSmsPhoneForPublicCta("+12053690702")).toBe("+12053690702");
+    expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe("+12053690702");
     expect(isClawMessagingPubliclyEnabled("+12053690702")).toBe(true);
     expect(
-      buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+12053690702" }).startsWith(
+      buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+14258909021" }).startsWith(
         "sms:+12053690702",
       ),
     ).toBe(true);
@@ -109,27 +114,35 @@ describe("claw leasing intent", () => {
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });
 
-  it("returns # when no manager work number is provided", () => {
+  it("returns # when Claw is off and no Twilio work number is provided", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-    delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+    const prevAgent = process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
+    process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "0";
+    delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
     expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test" })).toBe("#");
     expect(
       buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+12053690702" }),
     ).toBe("#");
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
+    if (prevAgent === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
+    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE = prevAgent;
   });
 
-  it("builds sms deep links to the manager work number when provided", () => {
+  it("builds sms deep links to the Claw agent number (Claw-primary)", () => {
+    const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+    process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
     const href = buildSmsDeepLink({
       intent: "tour",
       propertyId: "mgr-1",
       propertyLabel: "4709B 8th Ave NE",
       toPhone: "+14258909021",
     });
-    expect(href.startsWith("sms:+14258909021")).toBe(true);
+    expect(href.startsWith("sms:+12053690702")).toBe(true);
     const decoded = decodeURIComponent(href.split("body=")[1] ?? "");
     expect(decoded).toBe("Hi — I'd like to schedule a tour for 4709B 8th Ave NE.");
+    if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });
 
   it("builds sms deep links without propertyId= in the draft body", () => {
@@ -209,7 +222,7 @@ describe("claw leasing intent", () => {
       propertyId: "mgr-test-magnolia",
       propertyLabel: "Magnolia House",
     });
-    expect(question.toLowerCase()).toMatch(/reply here|got your note/);
+    expect(question.toLowerCase()).toMatch(/thanks for the question|manager has been notified|got your note/);
     expect(question).toContain("/rent/tours-contact");
     expect(question).toContain("/rent/apply");
     expect(question).not.toMatch(/forwarded to the property manager/i);

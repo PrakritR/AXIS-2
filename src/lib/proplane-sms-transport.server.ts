@@ -1,9 +1,7 @@
 /**
- * PropLane SMS transport — Twilio is the production source of truth.
- *
- * Claw Messenger is opt-in legacy only (`CLAW_MESSENGER_ENABLED=1` + API key).
- * Prefer `sendFromManagerWorkNumber` / `sendPropLaneSms` for all leasing,
- * resident, and manager-brief texts.
+ * PropLane SMS transport — Claw Messenger is the production source of truth
+ * (one shared agent line). Twilio is a future per-manager endeavour and is
+ * only used when Claw is explicitly disabled.
  */
 
 import { after } from "next/server";
@@ -14,8 +12,8 @@ import {
   sendClawMessengerText,
 } from "@/lib/claw-messenger.server";
 import {
+  clawLeasingAgentPhoneE164,
   isClawSharedLineBridgeEnabled,
-  isLegacyClawSharedSmsNumber,
   managerContactSmsPhoneForPublicCta,
 } from "@/lib/claw-leasing-links";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -64,14 +62,14 @@ async function logOutboundIfNeeded(args: {
   }
 }
 
-/** True when the opt-in Claw relay may be used (never the production default). */
+/** True when Claw Messenger is configured for PropLane messaging. */
 export function isClawTransportEnabled(): boolean {
   return isClawMessengerConfigured();
 }
 
 /**
- * Send an SMS. Twilio wins whenever `fromNumber` is a real work number.
- * Claw is only attempted when explicitly enabled and Twilio cannot send.
+ * Send an SMS. Claw-primary: always send via the shared agent line.
+ * Twilio is only attempted when Claw is disabled (future per-manager numbers).
  */
 export async function sendPropLaneSms(args: {
   to: string;
@@ -93,9 +91,9 @@ export async function sendPropLaneSms(args: {
   const to = normalizeTo(args.to);
   if (!to) return { ok: false, error: "invalid_to" };
 
-  const from = managerContactSmsPhoneForPublicCta(args.fromNumber);
-  // Shared Claw agent line → Claw transport (not Twilio From).
-  if (from && isLegacyClawSharedSmsNumber(from) && isClawTransportEnabled()) {
+  // Claw-primary: one agent line runs the entire messaging system.
+  if (isClawTransportEnabled()) {
+    const from = clawLeasingAgentPhoneE164();
     await registerClawMessengerRoute(to);
     const claw = await sendClawMessengerText({ to, text });
     if (claw.ok) {
@@ -114,6 +112,9 @@ export async function sendPropLaneSms(args: {
       error: claw.ok ? undefined : claw.error,
     };
   }
+
+  // Future Twilio path (Claw disabled).
+  const from = managerContactSmsPhoneForPublicCta(args.fromNumber);
   if (from) {
     const twilio = await sendSms(to, text, from);
     if (twilio.sent) {
@@ -126,36 +127,16 @@ export async function sendPropLaneSms(args: {
       });
       return { ok: true, channel: "twilio", sid: twilio.sid };
     }
-    // Fall through to Claw only when explicitly enabled (dual-rail / trial).
-    if (!isClawTransportEnabled()) {
-      return { ok: false, channel: "twilio", error: twilio.error || "twilio_send_failed" };
-    }
+    return { ok: false, channel: "twilio", error: twilio.error || "twilio_send_failed" };
   }
 
-  if (!isClawTransportEnabled()) {
-    return { ok: false, error: from ? "twilio_send_failed" : "missing_from" };
-  }
-
-  await registerClawMessengerRoute(to);
-  const claw = await sendClawMessengerText({ to, text });
-  if (claw.ok) {
-    await logOutboundIfNeeded({
-      log: args.log,
-      to,
-      text,
-      fromPhone: from,
-      messageSid: claw.messageId,
-    });
-  }
-  return {
-    ok: claw.ok,
-    channel: claw.ok ? "claw" : undefined,
-    sid: claw.messageId,
-    error: claw.ok ? undefined : claw.error,
-  };
+  return { ok: false, error: "missing_from" };
 }
 
-/** Look up the manager's Twilio work number and send from it. */
+/**
+ * Send from the PropLane messaging number for this manager.
+ * Under Claw-primary that is always the shared agent line.
+ */
 export async function sendFromManagerWorkNumber(args: {
   managerUserId: string;
   to: string;
@@ -170,29 +151,29 @@ export async function sendFromManagerWorkNumber(args: {
   const managerUserId = args.managerUserId.trim();
   if (!managerUserId) return { ok: false, error: "missing_manager" };
 
-  let from = managerContactSmsPhoneForPublicCta(args.fromNumber);
-  if (!from) {
-    try {
-      const db = createSupabaseServiceRoleClient();
-      const { data } = await db
-        .from("profiles")
-        .select("sms_from_number")
-        .eq("id", managerUserId)
-        .maybeSingle();
-      const raw = String(data?.sms_from_number ?? "").trim();
-      from = managerContactSmsPhoneForPublicCta(raw);
-      // Do not auto-buy Twilio while the Claw bridge is covering opted-in
-      // managers. Once the bridge is off, ensureManagerSmsNumber handles every
-      // stale stamp itself (legacy Claw line, 555 placeholder, empty) — do not
-      // pre-filter here or legacy-stamped profiles get stranded with no
-      // transport at all.
-      if (!from && !isClawSharedLineBridgeEnabled()) {
-        const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
-        const provisioned = await ensureManagerSmsNumber(db, managerUserId);
-        if (provisioned.ok) from = managerContactSmsPhoneForPublicCta(provisioned.number);
+  let from: string | null = null;
+  if (isClawTransportEnabled() || isClawSharedLineBridgeEnabled()) {
+    from = clawLeasingAgentPhoneE164();
+  } else {
+    from = managerContactSmsPhoneForPublicCta(args.fromNumber);
+    if (!from) {
+      try {
+        const db = createSupabaseServiceRoleClient();
+        const { data } = await db
+          .from("profiles")
+          .select("sms_from_number")
+          .eq("id", managerUserId)
+          .maybeSingle();
+        const raw = String(data?.sms_from_number ?? "").trim();
+        from = managerContactSmsPhoneForPublicCta(raw);
+        if (!from) {
+          const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
+          const provisioned = await ensureManagerSmsNumber(db, managerUserId);
+          if (provisioned.ok) from = managerContactSmsPhoneForPublicCta(provisioned.number);
+        }
+      } catch {
+        from = null;
       }
-    } catch {
-      from = null;
     }
   }
 
@@ -212,19 +193,25 @@ export async function sendFromManagerWorkNumber(args: {
 }
 
 /**
- * Fire-and-forget: buy/assign a Twilio work number after manager signup.
- * No-op while the Claw shared-line bridge is on (A2P pending) — new accounts
- * get messaging setup later.
+ * Stamp the shared Claw agent line on the manager (Claw-primary), or buy a
+ * Twilio work number when Claw is off (future).
  */
 export function scheduleManagerMessagingReady(managerUserId: string): void {
   const uid = managerUserId.trim();
   if (!uid) return;
-  if (isClawSharedLineBridgeEnabled()) return;
 
   const run = async () => {
     try {
-      const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
       const db = createSupabaseServiceRoleClient();
+      if (isClawSharedLineBridgeEnabled() || isClawTransportEnabled()) {
+        const agent = clawLeasingAgentPhoneE164();
+        await db
+          .from("profiles")
+          .update({ sms_from_number: agent, updated_at: new Date().toISOString() })
+          .eq("id", uid);
+        return;
+      }
+      const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
       await ensureManagerSmsNumber(db, uid);
     } catch (e) {
       console.error("scheduleManagerMessagingReady failed", uid, e);

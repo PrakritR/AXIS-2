@@ -1,6 +1,7 @@
 import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  clawLeasingAgentPhoneE164,
   isClawSharedLineBridgeEnabled,
   isLegacyClawSharedSmsNumber,
   isPlaceholderManagerWorkNumber,
@@ -160,14 +161,16 @@ export async function resolveManagerWorkNumber(
   managerUserId: string,
 ): Promise<string | null> {
   if (!managerUserId) return null;
+  // Claw-primary: one shared agent line for every manager.
+  if (isClawSharedLineBridgeEnabled()) {
+    return clawLeasingAgentPhoneE164();
+  }
   const { data } = await db.from("profiles").select("sms_from_number").eq("id", managerUserId).maybeSingle();
   const current = String(data?.sms_from_number ?? "").trim();
   if (current && isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
     return current;
   }
   if (current && !isPlaceholderManagerWorkNumber(current)) return current;
-  // While Claw bridge is on, do not auto-buy Twilio for empty profiles.
-  if (isClawSharedLineBridgeEnabled()) return current || null;
   const provisioned = await ensureManagerSmsNumber(db, managerUserId);
   return provisioned.ok ? provisioned.number : null;
 }

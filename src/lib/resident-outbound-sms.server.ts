@@ -1,7 +1,6 @@
 /**
- * Resident outbound SMS — Twilio from the manager work number.
- *
- * Claw Messenger is opt-in legacy only (`CLAW_MESSENGER_ENABLED=1`).
+ * Resident outbound SMS — Claw Messenger shared agent line (production).
+ * Twilio is only used when Claw is disabled (future per-manager numbers).
  */
 
 import {

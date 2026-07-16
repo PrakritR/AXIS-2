@@ -1,5 +1,5 @@
 /**
- * Inbox + push (+ optional SMS) notice to the owning manager, sent as "Axis
+ * Inbox + push (+ optional SMS) notice to the owning manager, sent as "PropLane
  * Assistant". Direct thread-row write like executeSendRentReminder because
  * deliverPortalInboxMessage skips sender==recipient by design. Standalone
  * module so both the dispatch pipeline and the vendor agent's escalate tool
@@ -34,7 +34,7 @@ export async function notifyManagerFromAgent(
       row_data: {
         id: threadId,
         folder: "inbox",
-        from: "Axis Assistant",
+        from: "PropLane Assistant",
         email: "",
         subject: args.subject,
         preview: args.text.slice(0, 100).replace(/\n/g, " "),
@@ -68,7 +68,17 @@ export async function notifyManagerFromAgent(
     const phone = (profile?.phone as string | null)?.trim();
     const from = (profile?.sms_from_number as string | null)?.trim();
     if (phone && from) {
-      await sendSms(phone, `${args.subject}\nOpen Axis to respond.`, from);
+      try {
+        const { sendPropLaneSms } = await import("@/lib/proplane-sms-transport.server");
+        await sendPropLaneSms({
+          to: phone,
+          text: `${args.subject}\nOpen PropLane to respond.`,
+          fromNumber: from,
+          log: null,
+        });
+      } catch {
+        await sendSms(phone, `${args.subject}\nOpen PropLane to respond.`, from);
+      }
     }
   }
 }

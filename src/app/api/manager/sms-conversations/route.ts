@@ -82,7 +82,7 @@ export async function DELETE(req: Request) {
   return NextResponse.json({ ok: true, deleted: result.deleted });
 }
 
-/** Send a new SMS from the manager work number (Twilio or Claw bridge). */
+/** Send a new SMS from the PropLane messaging number (Claw agent line). */
 export async function POST(req: Request) {
   const auth = await requireManager();
   if ("error" in auth) return auth.error;
@@ -109,16 +109,10 @@ export async function POST(req: Request) {
     if (body.residentUserId && r.residentUserId === body.residentUserId) return true;
     return false;
   });
-  if (!match?.phone) {
-    return NextResponse.json(
-      { error: "Choose a resident with a phone number on file." },
-      { status: 400 },
-    );
-  }
 
-  const ownerManagerUserId = String(match.ownerManagerUserId ?? auth.user.id).trim() || auth.user.id;
-  // Sending from an owner's work number needs an edit-level inbox grant —
-  // read-level co-manager access only allows viewing conversations.
+  // Directory match is preferred for co-manager owner resolution; cold outreach
+  // to any E.164 (Other chip / new prospect) is allowed and logs a new thread.
+  const ownerManagerUserId = String(match?.ownerManagerUserId ?? auth.user.id).trim() || auth.user.id;
   if (ownerManagerUserId !== auth.user.id) {
     const editScope = await resolveSmsScopeManagerIds(auth.db, auth.user.id, "edit");
     if (!editScope.includes(ownerManagerUserId)) {
@@ -138,7 +132,7 @@ export async function POST(req: Request) {
     to: toPhone,
     text,
     fromNumber: workNumber,
-    residentUserId: match.residentUserId,
+    residentUserId: match?.residentUserId ?? body.residentUserId ?? null,
     source: "work_number",
   });
 

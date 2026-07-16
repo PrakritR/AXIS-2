@@ -1,12 +1,12 @@
 /**
  * Claw Messenger client (iMessage / RCS / SMS via Emotion Machine relay).
  *
- * LEGACY / OPT-IN ONLY. Production PropLane SMS uses Twilio
- * (`sendSms` / `sendFromManagerWorkNumber` / `/api/twilio/inbound`).
+ * PRODUCTION PropLane messaging transport (single shared agent line).
  * Enable with CLAW_MESSENGER_ENABLED=1 + CLAW_MESSENGER_API_KEY.
+ * Twilio per-manager numbers are a future endeavour.
  *
- * Outbound: open a short-lived WebSocket, send, wait for send.result, close.
- * Inbound: a persistent gateway (`scripts/claw-messenger-gateway.mjs`) keeps a
+ * Outbound: pooled WebSocket send via sendClawMessengerText.
+ * Inbound: persistent gateway (`scripts/claw-messenger-gateway.mjs`) keeps a
  * WebSocket open and POSTs messages to `/api/webhooks/claw-messenger`.
  */
 
@@ -36,8 +36,8 @@ export function clawLeasingAgentPhoneE164(): string {
 }
 
 /**
- * True only when Claw is explicitly enabled AND an API key is present.
- * Default is off — Twilio is the production transport.
+ * True when Claw is enabled AND an API key is present.
+ * Production PropLane messaging requires both.
  */
 export function isClawMessengerConfigured(): boolean {
   const flag = process.env.CLAW_MESSENGER_ENABLED?.trim();

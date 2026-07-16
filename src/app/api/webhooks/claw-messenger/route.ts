@@ -50,10 +50,13 @@ function authorized(req: Request, rawBody: string): boolean {
 }
 
 export async function POST(req: Request) {
-  // Claw is opt-in legacy — production inbound is /api/twilio/inbound.
+  // Claw is the production PropLane messaging rail (single shared agent line).
   if (!isClawMessengerConfigured()) {
     return NextResponse.json(
-      { error: "Claw Messenger is disabled. Use Twilio inbound at /api/twilio/inbound." },
+      {
+        error:
+          "Claw Messenger is not configured. Set CLAW_MESSENGER_ENABLED=1 and CLAW_MESSENGER_API_KEY.",
+      },
       { status: 503 },
     );
   }

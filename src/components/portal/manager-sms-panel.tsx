@@ -178,8 +178,8 @@ export const ManagerSmsPanel = forwardRef<
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/manager/sms-conversations", { credentials: "include", cache: "no-store" });
@@ -187,14 +187,31 @@ export const ManagerSmsPanel = forwardRef<
       if (!res.ok) throw new Error(body.error ?? "Could not load SMS.");
       setData(normalizeManagerSmsConversationsPayload(body));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load SMS.");
+      if (!opts?.quiet) setError(e instanceof Error ? e.message : "Could not load SMS.");
     } finally {
-      setLoading(false);
+      if (!opts?.quiet) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Keep inbound prospect replies visible without a hard refresh.
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void load({ quiet: true });
+    };
+    const id = window.setInterval(tick, 20_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [load]);
 
   useImperativeHandle(

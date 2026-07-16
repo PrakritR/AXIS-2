@@ -1,6 +1,6 @@
 import "server-only";
 import type { MockProperty } from "@/data/types";
-import { managerContactSmsPhoneForPublicCta } from "@/lib/claw-leasing-links";
+import { managerContactSmsPhoneForPublicCta, isClawSharedLineBridgeEnabled } from "@/lib/claw-leasing-links";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
 import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 import { isProductionRuntime } from "@/lib/server-env";
@@ -60,6 +60,9 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     const live = property.adminPublishLive === true ? property : { ...property, adminPublishLive: true as const };
     if (!isPropertyActiveForLeads(live)) continue;
     const contactSmsPhone =
+      (isClawSharedLineBridgeEnabled()
+        ? managerContactSmsPhoneForPublicCta(null)
+        : null) ||
       (row.manager_user_id ? managerSmsByUserId.get(row.manager_user_id) : null) ||
       managerContactSmsPhoneForPublicCta(live.contactSmsPhone) ||
       undefined;

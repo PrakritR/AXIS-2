@@ -352,7 +352,7 @@ export const escalateLeasingToManagerTool = defineTool({
       ].join("\n"),
       threadType: "leasing_sms_escalation",
       url: "/portal/communication/sms",
-      notify: { push: true, sms: false },
+      notify: { push: true, sms: true },
     });
     await ctx.db
       .from("agent_sessions")

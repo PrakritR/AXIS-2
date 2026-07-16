@@ -315,35 +315,35 @@ export function replyForIntent(args: {
   switch (intent) {
     case "tour":
       return [
-        `Nice — happy to set up a tour${where}.`,
-        `Book a time here: ${tour}`,
-        `Or reply with your name, email, a couple times that work, and which room you're looking at (or say you're not sure yet).`,
-        `Once we have that we'll lock in a time.`,
+        `Thanks for reaching out${where} — happy to help schedule a tour.`,
+        `Pick a time here: ${tour}`,
+        `Or reply with your name, email, 2–3 times that work, and which room (or “not sure yet”). We’ll confirm shortly.`,
       ].join("\n");
     case "tour_details":
       return [
-        `Perfect, got your tour details${where}.`,
-        `We'll confirm a time once the manager picks one.`,
+        `Got your tour details${where} — thanks!`,
+        `The property manager will confirm a time soon.`,
         `Tour page: ${tour}`,
-        `If you want to apply in the meantime: ${apply}`,
+        `Want to start an application while you wait? ${apply}`,
       ].join("\n");
     case "apply":
       return [
-        `Great — here's the application${where}:`,
+        `Great — you can apply${where} here:`,
         apply,
-        `Prefer to tour first? ${tour}`,
+        `Prefer to see it first? Book a tour: ${tour}`,
+        `Reply if you have any questions about the home.`,
       ].join("\n");
     case "bundle":
       return [
-        `Here's the bundle application${where}:`,
+        `Here’s the room-bundle application${where}:`,
         apply,
         `Want a tour of the home first? ${tour}`,
-        `Any questions, just text back.`,
+        `Text back anytime with questions.`,
       ].join("\n");
     case "question":
       return [
-        `Got your note${where} — someone will reply here.`,
-        message ? `Or leave more detail online: ${message}` : null,
+        `Thanks for the question${where}. I’m pulling the details and the manager has been notified.`,
+        message ? `You can also leave more detail here: ${message}` : null,
         `Tour: ${tour}`,
         `Apply: ${apply}`,
       ]
@@ -351,23 +351,23 @@ export function replyForIntent(args: {
         .join("\n");
     case "lease":
       return [
-        `Lease signing is here:`,
+        `You can review and sign your lease here:`,
         leasePortal,
-        `Need an account first? ${signup}`,
+        `Need a PropLane account first? ${signup}`,
       ].join("\n");
     case "greeting":
     case "help":
       return [
-        `Hey${where ? ` — ${propertyLabel}` : ""}.`,
+        `Hi${where ? ` — thanks for texting about ${propertyLabel}` : ""}! I’m the PropLane leasing assistant.`,
         `I can help with tours, applications, and lease signing.`,
         `Tour: ${tour}`,
         `Apply: ${apply}`,
-        propertyId ? `Listing: ${listing}` : `Browse: ${origin}/rent`,
+        propertyId ? `Listing: ${listing}` : `Browse homes: ${origin}/rent`,
       ].join("\n");
     default:
       return [
-        `Got it${where}. Someone will reply here.`,
-        `Or say tour / apply and I'll send the right link.`,
+        `Thanks for your message${where}. I’ve notified the property manager and can help right away.`,
+        `Reply with tour or apply and I’ll send the right link — or ask about rent, rooms, or availability.`,
         `Tour: ${tour}`,
         `Apply: ${apply}`,
       ].join("\n");
@@ -453,13 +453,13 @@ export async function handleClawLeasingInbound(args: {
 
   // Manager typing from their personal phone.
   // "agent …" commands run locally (mark paid, lease link, …) and are NOT relayed.
-  // Everything else relays to the open resident thread (unless it's a listing CTA).
-  // Identity first: a known manager's personal phone is never a prospect,
-  // even when their message mentions tours/visits/applying.
+  // Listing CTAs (tour/apply/more info) fall through to the leasing assistant so
+  // managers can test the same flow prospects see.
+  // Other freeform text relays to the open resident thread.
   const fromIsManager = scopedManagerId
     ? await isManagerPersonalPhone(from, scopedManagerId)
     : await isMappedManagerPhone(from);
-  if (fromIsManager) {
+  if (fromIsManager && !looksLikeProspectLeasingCta(text)) {
     const { runManagerAgentCommand } = await import("@/lib/claw-manager-actions.server");
     const agent = await runManagerAgentCommand({ fromPhone: from, text });
     if (agent) {
@@ -508,13 +508,16 @@ export async function handleClawLeasingInbound(args: {
       residentProfile = null;
       thread = null;
     }
-    // Identity first: a KNOWN resident's freeform text stays in their thread
-    // ("when will the plumber visit?" must not trigger the leasing menu).
-    // Only unknown senders are routed by prospect-CTA text matching.
-    const knownSender = Boolean(residentProfile || thread);
-    if (!knownSender && looksLikeProspectLeasingCta(text)) {
+    // Prospect listing CTAs always hit the leasing assistant.
+    // Leasing-topic threads stay on the leasing path for follow-ups (do not
+    // hand off to the resident payment/lease hub after the first auto-reply).
+    // Cold freeform on the shared line (no known resident) also stays leasing.
+    // Non-CTA freeform from known payment/lease residents stays in the resident hub.
+    const leasingThread = thread?.topic === "leasing";
+    const knownResidentSender = Boolean(residentProfile) || Boolean(thread && !leasingThread);
+    if (looksLikeProspectLeasingCta(text) || leasingThread || !knownResidentSender) {
       // fall through to the prospect leasing responder below
-    } else {
+    } else if (knownResidentSender) {
     const managerForThread =
       residentProfile?.managerUserId || thread?.managerUserId || scopedManagerId || null;
     if (!thread && managerForThread) {
@@ -679,6 +682,7 @@ export async function handleClawLeasingInbound(args: {
                 propertyLabel,
                 managerUserId: landlordId,
                 workNumber,
+                autoReply: agent.reply,
               }),
               ...recipientIds.map((managerUserId) =>
                 upsertManagerInboxNotice(db, {
@@ -771,6 +775,7 @@ export async function handleClawLeasingInbound(args: {
         propertyLabel,
         managerUserId: managers[0]?.userId ?? null,
         workNumber,
+        autoReply: reply,
       }),
       ...recipientIds.map((managerUserId) =>
         upsertManagerInboxNotice(db, {
@@ -798,18 +803,33 @@ export async function handleClawLeasingInbound(args: {
 }
 
 /**
- * @deprecated Shared Claw leasing numbers are no longer assigned.
- * Managers get a Twilio work number via `scheduleManagerMessagingReady` /
- * `ensureManagerSmsNumber`. Kept as a no-op for call-site compatibility.
+ * Stamp the shared Claw agent line onto the manager's profile so listings and
+ * Communication → SMS show the one PropLane messaging number.
  */
 export async function assignSharedClawLeasingNumberToManager(
-  _userId: string,
+  userId: string,
   _opts?: { force?: boolean },
 ): Promise<void> {
-  /* no-op — Twilio provisioning is the production path */
+  const uid = userId.trim();
+  if (!uid) return;
+  const { isClawSharedLineBridgeEnabled, clawLeasingAgentPhoneE164 } = await import(
+    "@/lib/claw-leasing-links"
+  );
+  if (!isClawSharedLineBridgeEnabled()) {
+    const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
+    scheduleManagerMessagingReady(uid);
+    return;
+  }
+  const db = createSupabaseServiceRoleClient();
+  await db
+    .from("profiles")
+    .update({
+      sms_from_number: clawLeasingAgentPhoneE164(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", uid);
 }
 
 export async function assignSharedClawLeasingNumberIfMapped(userId: string, _email: string): Promise<void> {
-  const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
-  scheduleManagerMessagingReady(userId);
+  await assignSharedClawLeasingNumberToManager(userId);
 }

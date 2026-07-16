@@ -52,7 +52,7 @@ describe("sendResidentOutboundSms", () => {
     delete process.env.CLAW_MESSENGER_ENABLED;
   });
 
-  it("sends via Twilio from the manager work number", async () => {
+  it("sends via Twilio when Claw is disabled", async () => {
     sendTwilio.mockResolvedValue({ sent: true, sid: "SM1" });
     const { sendResidentOutboundSms } = await import("@/lib/resident-outbound-sms.server");
     const result = await sendResidentOutboundSms({
@@ -66,7 +66,7 @@ describe("sendResidentOutboundSms", () => {
     expect(sendClaw).not.toHaveBeenCalled();
   });
 
-  it("does not prefer Claw when Twilio from is available", async () => {
+  it("prefers Claw when enabled even if a Twilio from is provided", async () => {
     process.env.CLAW_MESSENGER_API_KEY = "cm_test";
     process.env.CLAW_MESSENGER_ENABLED = "1";
     sendTwilio.mockResolvedValue({ sent: true, sid: "SM2" });
@@ -77,12 +77,12 @@ describe("sendResidentOutboundSms", () => {
       text: "Payment reminder: rent is due.",
       fromNumber: "+14258909021",
     });
-    expect(result).toEqual({ sent: true, channel: "twilio", sid: "SM2" });
-    expect(sendTwilio).toHaveBeenCalled();
-    expect(sendClaw).not.toHaveBeenCalled();
+    expect(result).toEqual({ sent: true, channel: "claw", sid: "m1", error: undefined });
+    expect(sendClaw).toHaveBeenCalled();
+    expect(sendTwilio).not.toHaveBeenCalled();
   });
 
-  it("falls back to Claw only when enabled and Twilio from is missing", async () => {
+  it("sends via Claw when enabled and no from number is provided", async () => {
     process.env.CLAW_MESSENGER_API_KEY = "cm_test";
     process.env.CLAW_MESSENGER_ENABLED = "1";
     sendClaw.mockResolvedValue({ ok: true, messageId: "m1" });

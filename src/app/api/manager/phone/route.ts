@@ -63,8 +63,16 @@ export async function GET() {
     .eq("id", user.id)
     .maybeSingle();
   const rawWorkNumber = data?.sms_from_number ?? null;
-  const workNumber = managerContactSmsPhoneForPublicCta(rawWorkNumber);
+  const { clawLeasingAgentPhoneE164, isClawSharedLineBridgeEnabled } = await import(
+    "@/lib/claw-leasing-links"
+  );
+  const { isClawMessengerConfigured } = await import("@/lib/claw-messenger.server");
+  const workNumber = isClawSharedLineBridgeEnabled()
+    ? clawLeasingAgentPhoneE164()
+    : managerContactSmsPhoneForPublicCta(rawWorkNumber);
   if (!workNumber && rawWorkNumber) {
+    scheduleManagerMessagingReady(user.id);
+  } else if (isClawSharedLineBridgeEnabled() && rawWorkNumber !== clawLeasingAgentPhoneE164()) {
     scheduleManagerMessagingReady(user.id);
   }
   return NextResponse.json({
@@ -72,7 +80,14 @@ export async function GET() {
     phoneVerifiedAt: data?.phone_verified_at ?? null,
     forwardInbound: data?.sms_forward_inbound !== false,
     workNumber,
-    smsConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+    smsConfigured:
+      isClawMessengerConfigured() ||
+      Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+    messagingChannel: isClawMessengerConfigured()
+      ? "claw"
+      : process.env.TWILIO_ACCOUNT_SID
+        ? "twilio"
+        : null,
   });
 }
 

@@ -39,16 +39,10 @@ export async function completeManagerSignupTrial(
     }));
   }
 
-  // Best-effort PropLane intro when a personal phone is already on file.
-  // Twilio work-number buy is deferred while A2P / Claw bridge is in use —
-  // opted-in managers (testeverything, ogambik2) are stamped with the shared
-  // Claw line separately; new signups get setup later.
+  // Best-effort PropLane intro + stamp the shared Claw messaging number.
   const run = async () => {
-    const { isClawSharedLineBridgeEnabled } = await import("@/lib/claw-leasing-links");
-    if (!isClawSharedLineBridgeEnabled()) {
-      const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
-      await ensureManagerSmsNumber(supabase, opts.userId);
-    }
+    const { assignSharedClawLeasingNumberToManager } = await import("@/lib/claw-leasing-bot.server");
+    await assignSharedClawLeasingNumberToManager(opts.userId).catch(() => undefined);
     await maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId).catch(() => undefined);
   };
   try {

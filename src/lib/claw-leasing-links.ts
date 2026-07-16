@@ -2,9 +2,10 @@
  * Client-safe listing SMS helpers (no Node/ws imports).
  * Used by listing CTAs (`sms:` deep links) and server auto-replies.
  *
- * Prefer per-manager Twilio work numbers. While A2P is pending, set
- * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so the shared Claw agent line may be
- * used for listing CTAs / work-number display on the few opted-in managers.
+ * PropLane messaging currently runs on ONE shared Claw Messenger agent line
+ * for production. Twilio per-manager numbers are a future endeavour — keep
+ * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so CTAs / work-number UI always use
+ * the Claw agent phone.
  */
 
 export const CLAW_DEFAULT_AGENT_PHONE = "+12053690702";
@@ -27,7 +28,7 @@ export function isLegacyClawSharedSmsNumber(phone: string | null | undefined): b
   return digits.length >= 10 && legacyClawSharedPhoneDigits().has(digits);
 }
 
-/** Reserved 555 exchange — seed placeholders, not real Twilio lines. */
+/** Reserved 555 exchange — seed placeholders, not real lines. */
 export function isFictionalUs555Number(phone: string | null | undefined): boolean {
   const digits = String(phone ?? "").replace(/\D/g, "");
   const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
@@ -36,35 +37,53 @@ export function isFictionalUs555Number(phone: string | null | undefined): boolea
 }
 
 /**
- * Temporary bridge: allow the shared Claw agent line for CTAs / display while
- * Twilio A2P is still in review. Client-safe (NEXT_PUBLIC_ only).
+ * Claw Messenger is the active PropLane messaging system (single shared agent
+ * line). Client-safe — driven by NEXT_PUBLIC_ so listing CTAs work in the browser.
+ * Set `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=0` only when flipping to Twilio later.
  */
 export function isClawSharedLineBridgeEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED === "1";
+  const flag = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED?.trim();
+  // Default ON for the Claw-primary era when unset in client bundles that
+  // still ship the public agent phone — but prefer an explicit "1".
+  if (flag === "0" || flag === "false") return false;
+  if (flag === "1" || flag === "true") return true;
+  // Fallback: if the public agent phone is configured, treat Claw as primary.
+  return Boolean(process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE?.trim());
 }
 
-/** Fictional 555 placeholders, or Claw when the bridge is off — replace with Twilio. */
+/** @deprecated Alias — Claw is primary, not a temporary bridge. */
+export function isClawMessagingPrimary(): boolean {
+  return isClawSharedLineBridgeEnabled();
+}
+
+/** Fictional 555 placeholders, or non-Claw numbers when Claw is primary. */
 export function isPlaceholderManagerWorkNumber(phone: string | null | undefined): boolean {
   if (isFictionalUs555Number(phone)) return true;
-  if (isLegacyClawSharedSmsNumber(phone)) return !isClawSharedLineBridgeEnabled();
+  if (isClawSharedLineBridgeEnabled()) {
+    // Under Claw-primary, only the shared agent line is a real work number.
+    return !isLegacyClawSharedSmsNumber(phone);
+  }
+  if (isLegacyClawSharedSmsNumber(phone)) return true;
   return false;
 }
 
 /**
- * Number safe for public "Text to tour/apply" CTAs and work-number display.
- * Real Twilio numbers always; Claw shared line only while the bridge is on.
+ * Shared PropLane messaging number for public "Text to tour/apply" CTAs and
+ * work-number display. When Claw is primary, ALWAYS the single agent line —
+ * one phone runs the entire messaging system.
  */
 export function managerContactSmsPhoneForPublicCta(phone: string | null | undefined): string | null {
+  if (isClawSharedLineBridgeEnabled()) {
+    return clawLeasingAgentPhoneE164();
+  }
   const trimmed = phone?.trim();
   if (!trimmed) return null;
   if (isFictionalUs555Number(trimmed)) return null;
-  if (isLegacyClawSharedSmsNumber(trimmed)) {
-    return isClawSharedLineBridgeEnabled() ? trimmed : null;
-  }
+  if (isLegacyClawSharedSmsNumber(trimmed)) return null;
   return trimmed;
 }
 
-/** @deprecated Prefer per-listing `contactSmsPhone` (manager Twilio work number). */
+/** Shared leasing/contact phone (Claw agent line). */
 export function clawLeasingAgentPhoneE164(): string {
   const raw =
     (typeof process !== "undefined" &&
@@ -77,8 +96,9 @@ export function clawLeasingAgentPhoneE164(): string {
   return CLAW_DEFAULT_AGENT_PHONE;
 }
 
-/** Whether public listings may show "Text to …" CTAs (manager Twilio work number only). */
+/** Whether public listings may show "Text to …" CTAs. */
 export function isClawMessagingPubliclyEnabled(contactSmsPhone?: string | null): boolean {
+  if (isClawSharedLineBridgeEnabled()) return true;
   return Boolean(managerContactSmsPhoneForPublicCta(contactSmsPhone));
 }
 
@@ -146,6 +166,52 @@ export function classifyLeasingIntent(text: string): LeasingIntent {
   return "unknown";
 }
 
+/**
+ * Freeform listing / availability interest that is not a sticky resident
+ * payment/lease message. Used so "more info about 4709a" hits leasing instead
+ * of manager→resident relay when the sender is a mapped manager phone.
+ */
+export function looksLikeListingInterest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return (
+    /\b(more info|info about|tell me about|interested in|learn more|details (on|about|for))\b/.test(
+      t,
+    ) ||
+    /\b(is|are)\b.{0,40}\b(available|open|vacant|still listed)\b/.test(t) ||
+    /\b(listing|listings|showing|open house|for rent|room bundle|bedroom|studio)\b/.test(t) ||
+    /\b(house|home|unit|apartment|property|building)\b/.test(t)
+  );
+}
+
+/**
+ * Prefixed listing CTA bodies / leasing intents — used so prospects (and a
+ * manager testing from their personal phone) hit the leasing bot instead of
+ * the resident payment/lease hub.
+ */
+export function looksLikeProspectLeasingCta(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/^Hi — /i.test(t) || /^Hi - /i.test(t)) return true;
+  if (/propertyId=/i.test(t) || /bundleId=/i.test(t)) return true;
+  if (/\/rent\/(listings|apply)\//i.test(t) || /\/rent\/apply\?/i.test(t)) return true;
+  if (/^(TOUR|APPLY|LEASE|HELP|BUNDLE)([\s!.?,]|$)/i.test(t)) return true;
+  const intent = classifyLeasingIntent(text);
+  if (
+    intent === "tour" ||
+    intent === "tour_details" ||
+    intent === "apply" ||
+    intent === "bundle"
+  ) {
+    return true;
+  }
+  // Freeform "more info about …" / availability questions → leasing, not resident hub.
+  if ((intent === "question" || intent === "help" || intent === "unknown") && looksLikeListingInterest(t)) {
+    return true;
+  }
+  return false;
+}
+
 export function extractPropertyIdHint(text: string): string | null {
   const m =
     text.match(/propertyId=([a-zA-Z0-9._-]+)/i) ||
@@ -191,53 +257,6 @@ export function extractBundleLabelHint(text: string): string | null {
   return m?.[1]?.trim() || null;
 }
 
-/**
- * Freeform listing / availability interest that is not a sticky resident
- * payment/lease message. Used so "more info about 4709a" hits leasing instead
- * of manager→resident relay when the sender is a mapped manager phone.
- */
-export function looksLikeListingInterest(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  if (!t) return false;
-  return (
-    /\b(more info|info about|tell me about|interested in|learn more|details (on|about|for))\b/.test(
-      t,
-    ) ||
-    /\b(is|are)\b.{0,40}\b(available|open|vacant|still listed)\b/.test(t) ||
-    /\b(listing|listings|showing|open house|for rent|room bundle|bedroom|studio)\b/.test(t) ||
-    /\b(house|home|unit|apartment|property|building)\b/.test(t)
-  );
-}
-
-/**
- * Prefixed listing CTA bodies / leasing intents — used so prospects (and a
- * manager testing from their personal phone) hit the leasing bot instead of
- * the resident payment/lease hub. Freeform "I want a tour" must qualify here
- * or sticky payment threads swallow the message with a payments ack.
- */
-export function looksLikeProspectLeasingCta(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  if (/^Hi — /i.test(t) || /^Hi - /i.test(t)) return true;
-  if (/propertyId=/i.test(t) || /bundleId=/i.test(t)) return true;
-  if (/\/rent\/(listings|apply)\//i.test(t) || /\/rent\/apply\?/i.test(t)) return true;
-  if (/^(TOUR|APPLY|LEASE|HELP|BUNDLE)([\s!.?,]|$)/i.test(t)) return true;
-  const intent = classifyLeasingIntent(text);
-  if (
-    intent === "tour" ||
-    intent === "tour_details" ||
-    intent === "apply" ||
-    intent === "bundle"
-  ) {
-    return true;
-  }
-  // Freeform "more info about …" / availability questions → leasing, not resident hub.
-  if ((intent === "question" || intent === "help" || intent === "unknown") && looksLikeListingInterest(t)) {
-    return true;
-  }
-  return false;
-}
-
 export type SmsDeepLinkIntent = "tour" | "apply" | "lease" | "bundle" | "question";
 
 export function buildSmsDeepLink(args: {
@@ -249,13 +268,18 @@ export function buildSmsDeepLink(args: {
   /** Optional context for question CTAs (layout, bathroom, lease terms, …). */
   topic?: string | null;
   roomName?: string | null;
-  /** Manager Twilio work number (E.164). Required for production CTAs. */
+  /** Messaging number (ignored when Claw-primary — always the agent line). */
   toPhone?: string | null;
 }): string {
-  const toPhone = managerContactSmsPhoneForPublicCta(args.toPhone);
+  const toPhone = managerContactSmsPhoneForPublicCta(args.toPhone ?? clawLeasingAgentPhoneE164());
   if (!toPhone) return "#";
   const phoneRaw = toPhone.replace(/\D/g, "");
-  const phoneDigits = phoneRaw.startsWith("1") && phoneRaw.length === 11 ? phoneRaw : phoneRaw.length === 10 ? `1${phoneRaw}` : phoneRaw;
+  const phoneDigits =
+    phoneRaw.startsWith("1") && phoneRaw.length === 11
+      ? phoneRaw
+      : phoneRaw.length === 10
+        ? `1${phoneRaw}`
+        : phoneRaw;
   const label = (args.propertyLabel ?? "").trim();
   const bundleLabel = (args.bundleLabel ?? "").trim();
   const topic = (args.topic ?? "").trim();
