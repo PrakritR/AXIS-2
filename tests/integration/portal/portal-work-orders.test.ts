@@ -37,15 +37,18 @@ function mockDb(
         const filters: Record<string, string> = {};
         const builder: Record<string, unknown> = {
           select: () => builder,
+          order: () => builder,
           eq: (col: string, val: string) => {
             filters[col] = val;
             return builder;
           },
           limit: async () => {
-            const rows = appSeed.filter(
-              (a) => a.manager_user_id === filters.manager_user_id && a.resident_email === filters.resident_email,
+            const rows = appSeed.filter((a) =>
+              Object.entries(filters).every(
+                ([col, val]) => (a as unknown as Record<string, unknown>)[col] === val,
+              ),
             );
-            return { data: rows.map((a) => ({ id: a.id })), error: null };
+            return { data: rows.map((a) => ({ ...a, updated_at: "x" })), error: null };
           },
         };
         return builder;
@@ -202,9 +205,12 @@ describe("/api/portal-work-orders security", () => {
         body: { row: { id: "WO-evil", managerUserId: "mgr-a", residentEmail: "res@b.com" } },
       }),
     );
+    // The route neutralizes the injection by stamping the resident's REAL
+    // manager (from their application records) over the claimed one.
     const { status } = await parseJsonResponse(res);
-    expect(status).toBe(403);
-    expect(upserts).toHaveLength(0);
+    expect(status).toBe(200);
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]!.manager_user_id).toBe("mgr-b");
   });
 
   it("lets a resident file a work order with their real manager", async () => {

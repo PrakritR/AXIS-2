@@ -5,6 +5,10 @@ vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers({ "stripe-signature": "sig_test" })),
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  createSupabaseServiceRoleClient: vi.fn(() => ({})),
+}));
+
 vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(),
 }));

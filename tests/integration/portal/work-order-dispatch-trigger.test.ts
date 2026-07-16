@@ -37,14 +37,19 @@ function mockDb(seed: Rec[], profile: { email: string; role: string } | null, ap
         const filters: Record<string, string> = {};
         const builder: Record<string, unknown> = {
           select: () => builder,
+          order: () => builder,
           eq: (col: string, val: string) => {
             filters[col] = val;
             return builder;
           },
           limit: async () => ({
             data: appSeed
-              .filter((a) => a.manager_user_id === filters.manager_user_id && a.resident_email === filters.resident_email)
-              .map((_, i) => ({ id: `APP-${i}` })),
+              .filter((a) =>
+                Object.entries(filters).every(
+                  ([col, val]) => (a as unknown as Record<string, unknown>)[col] === val,
+                ),
+              )
+              .map((a, i) => ({ ...a, id: `APP-${i}`, updated_at: "x" })),
             error: null,
           }),
         };

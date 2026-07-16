@@ -83,6 +83,9 @@ describe("POST /api/auth/manager-register", () => {
               }),
             }),
             upsert: vi.fn().mockResolvedValue({ error: null }),
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ error: null }),
+            }),
           };
         }
         if (table === "manager_purchases") {
@@ -105,6 +108,7 @@ describe("POST /api/auth/manager-register", () => {
         email: "manager@example.com",
         password: "password123",
         fullName: "Existing Manager",
+        phone: "+12065550123",
       },
     });
 
@@ -138,6 +142,9 @@ describe("POST /api/auth/manager-register", () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnThis(),
         upsert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockResolvedValue({ error: null }),
+        }),
       }),
     } as never);
 
@@ -147,6 +154,7 @@ describe("POST /api/auth/manager-register", () => {
         email: "trial@example.com",
         password: "password123",
         fullName: "Trial Manager",
+      phone: "+12065550123",
         tier: "pro",
       },
     });
