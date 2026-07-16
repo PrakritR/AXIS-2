@@ -121,7 +121,7 @@ export async function deliverVendorAgentReply(
   inboundChannel?: "sms" | "inbox",
 ): Promise<void> {
   if (session.inbox_thread_id) {
-    await appendToInboxThread(db, session.inbox_thread_id, { from: "Axis Assistant", body: text }, { unread: true });
+    await appendToInboxThread(db, session.inbox_thread_id, { from: "PropLane Assistant", body: text }, { unread: true });
   }
   const from = process.env.AXIS_AGENT_SMS_FROM?.trim();
   if (!session.vendor_phone_e164 || !from) return;
@@ -331,7 +331,7 @@ export async function ensureVendorAgentSession(
   if (args.vendorUserId && !session.inbox_thread_id) {
     const threadId = `vendor_agent_${args.workOrderId}_${args.vendorDirectoryId}`;
     const opening = [
-      `Axis Assistant here for the job "${args.workOrderTitle}" at ${args.propertyLabel}.`,
+      `PropLane Assistant here for the job "${args.workOrderTitle}" at ${args.propertyLabel}.`,
       "Ask me any time about the job: entry details, directions, what's wrong, or when the visit is.",
     ].join("\n");
     await db.from("portal_inbox_thread_records").upsert(
@@ -344,12 +344,12 @@ export async function ensureVendorAgentSession(
         row_data: {
           id: threadId,
           folder: "inbox",
-          from: "Axis Assistant",
+          from: "PropLane Assistant",
           email: "",
           subject: `Job: ${args.workOrderTitle} - ${args.propertyLabel}`,
           preview: opening.slice(0, 100).replace(/\n/g, " "),
           body: opening,
-          messages: [{ id: `agent-${Date.now().toString(36)}`, from: "Axis Assistant", body: opening, at: shortNow() }],
+          messages: [{ id: `agent-${Date.now().toString(36)}`, from: "PropLane Assistant", body: opening, at: shortNow() }],
           unread: true,
           scope: VENDOR_INBOX_SCOPE,
         },
@@ -367,7 +367,7 @@ export async function ensureVendorAgentSession(
   if (phoneE164 && from && !optedOut && consentOk) {
     await sendSms(
       phoneE164,
-      `Axis here about the job "${args.workOrderTitle}" at ${args.propertyLabel}. Reply to this number any time with questions about the job (entry details, directions, timing). Reply STOP to opt out.`,
+      `PropLane here about the job "${args.workOrderTitle}" at ${args.propertyLabel}. Reply to this number any time with questions about the job (entry details, directions, timing). Reply STOP to opt out.`,
       from,
     );
   }

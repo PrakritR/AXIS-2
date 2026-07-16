@@ -1,11 +1,11 @@
 /**
  * System prompt for the site-wide GENERAL assistant (`/api/agent/general-chat`).
  *
- * This is deliberately distinct from the portal-scoped Axis Assistant
- * (`system-prompt.ts`): it answers general questions about Axis the product and
+ * This is deliberately distinct from the portal-scoped PropLane Assistant
+ * (`system-prompt.ts`): it answers general questions about PropLane the product and
  * the website, and it has NO tools and NO access to any account data. It never
  * reads a database, never performs an action, and never quotes real customer
- * numbers — it only explains what Axis is and how to use it.
+ * numbers — it only explains what PropLane is and how to use it.
  */
 export const GENERAL_SYSTEM_PROMPT = `You are the PropLane AI assistant on the public PropLane Housing website. You answer general questions about PropLane — what it is, what it does, how it works, pricing, and how to get started. You are a friendly, concise product guide, not a data assistant.
 
