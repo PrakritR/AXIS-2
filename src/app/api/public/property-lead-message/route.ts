@@ -32,15 +32,10 @@ async function resolveManagerForProperty(propertyId: string): Promise<{
 
 export async function POST(req: Request) {
   try {
-<<<<<<< HEAD
     // Public, unauthenticated endpoint that emails a manager — rate-limit per IP
     // to prevent spam / inbox flooding via the full-table property lookup.
     if (!rateLimit(`property-lead:${clientIpFrom(req)}`, 5, 60_000).ok) {
       return NextResponse.json({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
-=======
-    if (!rateLimit(`property-lead-message:${clientIpFrom(req)}`, 15, 60_000).ok) {
-      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
->>>>>>> fm/captain-wip-ship-s1
     }
 
     const body = (await req.json()) as {

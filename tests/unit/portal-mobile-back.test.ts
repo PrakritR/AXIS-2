@@ -35,7 +35,6 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
-<<<<<<< HEAD
   it("hides dashboard back on early rental-application wizard steps", () => {
     const params = new URLSearchParams({ wizardStep: "2" });
     expect(resolvePortalMobileBackTarget("/resident/applications/apply", residentPortal, params)).toBeNull();
@@ -47,10 +46,6 @@ describe("resolvePortalMobileBackTarget", () => {
       href: "/resident/dashboard",
       label: "Dashboard",
     });
-=======
-  it("returns null on in-progress application apply route", () => {
-    expect(resolvePortalMobileBackTarget("/resident/applications/apply", residentPortal)).toBeNull();
->>>>>>> fm/captain-wip-ship-s1
   });
 
   it("returns first inbox tab from a deeper inbox tab", () => {

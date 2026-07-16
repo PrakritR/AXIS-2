@@ -52,53 +52,9 @@ function GetStartedContent() {
       );
       return;
     }
-<<<<<<< HEAD
     // Residents create accounts from the emailed setup link after applying — not here.
     showToast("Apply first, then use the account setup link from your email. Or sign in if you already have an account.");
     window.location.replace(nativeAwarePath("/rent/browse"));
-=======
-    if (id === "resident") {
-      try {
-        const res = await fetch("/api/auth/register-resident-oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({}),
-        });
-        const body = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          showToast(body.error ?? "Could not finish resident setup.");
-          setBusy(null);
-          return;
-        }
-        await navigateAfterRoleSignup("/resident/applications/apply");
-      } catch {
-        showToast("Network error. Try again.");
-        setBusy(null);
-      }
-      return;
-    }
-    if (id === "vendor") {
-      try {
-        const res = await fetch("/api/auth/register-vendor-oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({}),
-        });
-        const body = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          showToast(body.error ?? "Could not finish vendor setup.");
-          setBusy(null);
-          return;
-        }
-        await navigateAfterRoleSignup("/vendor/dashboard");
-      } catch {
-        showToast("Network error. Try again.");
-        setBusy(null);
-      }
-    }
->>>>>>> fm/captain-wip-ship-s1
   };
 
   const signOut = async () => {
@@ -125,18 +81,12 @@ function GetStartedContent() {
     <AuthCard>
       <AuthPageHeader
         showLogo
-<<<<<<< HEAD
         title="How do you want to use PropLane?"
         subtitle="Pick the option that fits you — you can add the other later."
-=======
-        title="Which portal is for you?"
-        subtitle="Pick one to get started. You can add the others later with the same email."
->>>>>>> fm/captain-wip-ship-s1
         accent={false}
       />
 
       <AuthRoleStack
-<<<<<<< HEAD
         options={[
           {
             id: "manager",
@@ -153,9 +103,6 @@ function GetStartedContent() {
             tone: "steel",
           },
         ]}
-=======
-        options={AUTH_PORTAL_PICKER_OPTIONS}
->>>>>>> fm/captain-wip-ship-s1
         onSelect={(id) => void choose(id)}
         disabled={busy !== null}
         busyId={busy}

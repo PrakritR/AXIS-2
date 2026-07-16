@@ -29,16 +29,10 @@ export function resolvePortalMobileBackTarget(
   const section = sectionParts[0];
   if (!section || section === "dashboard") return null;
 
-<<<<<<< HEAD
   // Early rental-application steps hide the dashboard back affordance (browse link is in the wizard).
   if (section === "applications" && sectionParts[1] === "apply") {
     const wizardStep = Number(searchParams?.get("wizardStep") ?? "0");
     if (wizardStep >= 1 && wizardStep <= 3) return null;
-=======
-  // In-progress rental application — no top back arrow until submit (wizard has Exit application).
-  if (section === "applications" && sectionParts[1] === "apply") {
-    return null;
->>>>>>> fm/captain-wip-ship-s1
   }
 
   const meta = definition.sections.find((entry) => entry.section === section);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   INBOX_TAB_DEFS,

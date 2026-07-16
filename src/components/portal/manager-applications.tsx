@@ -20,20 +20,8 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-<<<<<<< HEAD
   PortalTableDetailActions,
   PortalTableInlineExpand,
-=======
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PortalTableDetailActions,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
->>>>>>> fm/captain-wip-ship-s1
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
@@ -57,12 +45,11 @@ import {
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { transitionApplicationBucket } from "@/lib/application-review";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   fetchCosignerSubmissionsForSignerAppId,
   readCosignerSubmissionsForSignerAppId,
-  type CosignerSubmission,
 } from "@/lib/cosigner-submissions-storage";
-<<<<<<< HEAD
 import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   inProgressApplicationResumeUrl,
@@ -72,10 +59,6 @@ import {
   APPLICATION_COMPLETION_REMINDER_SUBJECT,
   buildApplicationCompletionReminderBody,
 } from "@/lib/application-completion-reminder-email";
-=======
-import { buildApplicationHtml } from "@/lib/manager-application-html";
-import { getRoomChoiceLabel } from "@/lib/rental-application/data";
->>>>>>> fm/captain-wip-ship-s1
 import {
   removeAllApplicationCharges,
   removeResidentHouseholdPaymentData,
@@ -95,8 +78,7 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
-import { triggerDocumentDownload } from "@/components/portal/resident-other-documents";
+import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
@@ -155,30 +137,18 @@ export function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: bool
 }
 
 /** Trigger a browser download of the application PDF without opening a blank tab. */
-export async function downloadApplicationPdf(row: DemoApplicantRow): Promise<void> {
-  const filename = `rental-application-${row.id}.pdf`;
-  if (isDemoModeActive()) {
-    const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-    const cosignerSubmissions =
-      row.application?.hasCosigner === "yes"
-        ? await fetchCosignerSubmissionsForSignerAppId(row.id).catch(() =>
-            readCosignerSubmissionsForSignerAppId(row.id),
-          )
-        : [];
-    const url = await buildDemoApplicationPdfDataUrl(
-      row,
-      applicationRoomLabel(row) || undefined,
-      cosignerSubmissions,
-    );
-    triggerDocumentDownload(url, filename);
-    return;
-  }
-  triggerDocumentDownload(applicationPdfHref(row), filename);
+export function downloadApplicationPdf(row: DemoApplicantRow): void {
+  const anchor = document.createElement("a");
+  anchor.href = applicationPdfHref(row);
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 /**
- * Inline application preview — rendered HTML matching the lease document frame
- * (no browser PDF toolbar). Download PDF still uses the same bytes as before.
+ * Inline application preview — the same PDF bytes as Download PDF, embedded without
+ * opening a new tab (demo builds the PDF locally; production uses the API route).
  */
 export function ApplicationDocumentPreview({
   row,
@@ -189,37 +159,32 @@ export function ApplicationDocumentPreview({
   collapsible?: boolean;
   showDownload?: boolean;
 }) {
-  const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
-  const [cosignerReady, setCosignerReady] = useState(row.application?.hasCosigner !== "yes");
+  const demo = isDemoModeActive();
+  const [pdfSrc, setPdfSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (row.application?.hasCosigner !== "yes") {
-      setCosignerSubmissions([]);
-      setCosignerReady(true);
-      return;
-    }
     let cancelled = false;
-    setCosignerReady(false);
-    void fetchCosignerSubmissionsForSignerAppId(row.id)
-      .catch(() => readCosignerSubmissionsForSignerAppId(row.id))
-      .then((submissions) => {
-        if (!cancelled) {
-          setCosignerSubmissions(submissions);
-          setCosignerReady(true);
-        }
-      });
+    if (demo) {
+      void (async () => {
+        const cosignerSubmissions =
+          row.application?.hasCosigner === "yes"
+            ? await fetchCosignerSubmissionsForSignerAppId(row.id).catch(() =>
+                readCosignerSubmissionsForSignerAppId(row.id),
+              )
+            : [];
+        const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+        const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
+        if (!cancelled) setPdfSrc(url);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    setPdfSrc(`${applicationPdfHref(row, { inline: true })}#toolbar=0&navpanes=0`);
     return () => {
       cancelled = true;
     };
-  }, [row.id, row.application?.hasCosigner]);
-
-  const html = useMemo(() => {
-    if (!cosignerReady) return null;
-    return buildApplicationHtml(row, {
-      roomLabel: applicationRoomLabel(row) || undefined,
-      cosignerSubmissions,
-    });
-  }, [row, cosignerSubmissions, cosignerReady]);
+  }, [row, demo]);
 
   const downloadButton = showDownload ? (
     <Button
@@ -227,28 +192,25 @@ export function ApplicationDocumentPreview({
       variant="outline"
       className="h-8 rounded-full px-4 text-xs"
       data-attr="application-pdf-download"
-      onClick={() => void downloadApplicationPdf(row)}
+      onClick={() => downloadApplicationPdf(row)}
     >
       Download PDF
     </Button>
   ) : null;
 
   const previewBody = (
-    <div className="overflow-hidden rounded-2xl border border-border bg-accent/30">
-      <p className="border-b border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-        Application document
-      </p>
-      {html ? (
+    <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+      {pdfSrc ? (
         <iframe
+          key={pdfSrc}
+          src={pdfSrc}
           title="Application document"
-          srcDoc={html}
-          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           loading="lazy"
-          className="h-[min(52vh,420px)] w-full bg-card"
+          className="h-[min(52vh,420px)] w-full border-0 bg-white"
         />
       ) : (
         <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-          Loading application…
+          Loading application PDF…
         </div>
       )}
     </div>
@@ -762,7 +724,6 @@ export function ManagerApplications() {
           }
         />
       ) : (
-<<<<<<< HEAD
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <ul className="divide-y divide-[var(--border)]">
           {rowsForBucket.map((row) => {
@@ -792,73 +753,6 @@ export function ManagerApplications() {
                     </PortalTableInlineExpand>
                     {subtitle ? (
                       <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
-=======
-      <>
-      <div className="space-y-2 lg:hidden">
-        {rowsForBucket.map((row) => {
-          const expanded = expandedId === row.id;
-          return (
-            <div key={row.id} id={`portal-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-              <button
-                type="button"
-                className="flex w-full gap-2 text-left"
-                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                aria-expanded={expanded}
-              >
-                <div className="min-w-0 flex-1">
-                  <PortalTableInlineExpand expanded={expanded} className="font-semibold text-foreground">
-                    <span className="truncate">{row.name}</span>
-                  </PortalTableInlineExpand>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
-                  </p>
-                  {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
-                </div>
-              </button>
-              {expanded ? (
-                <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rowsForBucket.map((row) => (
-                  <Fragment key={row.id}>
-                    <tr
-                      id={`portal-application-${row.id}`}
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                      )}
-                      aria-expanded={expandedId === row.id}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <PortalTableInlineExpand expanded={expandedId === row.id} className="font-medium text-foreground">
-                          {row.name}
-                        </PortalTableInlineExpand>
-                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
-                      </td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                    </tr>
-                    {expandedId === row.id ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                          {renderApplicationDetail(row)}
-                        </td>
-                      </tr>
->>>>>>> fm/captain-wip-ship-s1
                     ) : null}
                   </span>
                   <span className="ml-auto flex shrink-0 items-center">

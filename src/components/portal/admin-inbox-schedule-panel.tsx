@@ -11,7 +11,7 @@ import {
   PORTAL_TABLE_TD,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
-import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
+import { ScheduleInboxComposeForm } from "@/components/portal/schedule-inbox-compose-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   INBOX_SCHEDULE_HORIZON_OPTIONS,
@@ -162,21 +162,18 @@ export function AdminInboxSchedulePanel({
         </div>
       )}
 
-      <ScheduleInboxComposeModal
-        open={Boolean(editMessage)}
-        onClose={() => setEditMessage(null)}
-        onSaved={onReload}
-        contacts={[]}
-        editMessage={editMessage}
-        onToggleCancelled={
-          editMessage
-            ? async (cancelled) => {
-                await toggleCancelled(editMessage, cancelled);
-                setEditMessage(null);
-              }
-            : undefined
-        }
-      />
+      {editMessage ? (
+        <ScheduleInboxComposeForm
+          onClose={() => setEditMessage(null)}
+          onSaved={onReload}
+          contacts={[]}
+          editMessage={editMessage}
+          onToggleCancelled={async (cancelled: boolean) => {
+            await toggleCancelled(editMessage, cancelled);
+            setEditMessage(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

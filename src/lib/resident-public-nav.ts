@@ -8,17 +8,10 @@ export function residentBrowseFromAuthHref(): string {
   return `${RESIDENT_BROWSE_PATH}?from=auth`;
 }
 
-<<<<<<< HEAD
 /** In-portal application wizard → browse listings, then return to apply. */
 export function residentBrowseFromApplicationHref(returnPath = `${RESIDENT_APPLICATIONS_PATH}/apply`): string {
   const next = returnPath.startsWith("/") ? returnPath : `${RESIDENT_APPLICATIONS_PATH}/apply`;
   const q = new URLSearchParams({ from: "application", return: next });
-=======
-/** In-portal application wizard → browse listings, with return path for back navigation. */
-export function residentBrowseFromApplicationHref(applyPath = "/resident/applications/apply"): string {
-  const returnPath = applyPath.startsWith("/") ? applyPath : "/resident/applications/apply";
-  const q = new URLSearchParams({ from: "application", return: returnPath });
->>>>>>> fm/captain-wip-ship-s1
   return `${RESIDENT_BROWSE_PATH}?${q.toString()}`;
 }
 

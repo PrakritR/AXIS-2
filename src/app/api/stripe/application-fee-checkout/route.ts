@@ -68,7 +68,6 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const { data: propertyRow } = await db
       .from("manager_property_records")
-<<<<<<< HEAD
       .select("property_data, manager_user_id")
       .eq("id", propertyId)
       .maybeSingle();
@@ -83,30 +82,6 @@ export async function POST(req: Request) {
     }
 
     const listing = listingFromPropertyData(propertyRow?.property_data);
-=======
-      .select("manager_user_id, status, property_data")
-      .eq("id", propertyId)
-      .maybeSingle();
-
-    if (!propertyRow || propertyRow.status !== "live") {
-      return NextResponse.json({ error: "Property not found." }, { status: 404 });
-    }
-
-    const ownerManagerUserId = String(propertyRow.manager_user_id ?? "").trim();
-    if (!ownerManagerUserId || ownerManagerUserId !== managerUserId) {
-      return NextResponse.json({ error: "Invalid manager for this property." }, { status: 403 });
-    }
-
-    const expectedFeeCents = applicationFeeCentsFromPropertyData(propertyRow.property_data);
-    if (expectedFeeCents <= 0) {
-      return NextResponse.json({ error: "This listing does not require an application fee." }, { status: 422 });
-    }
-    if (amountCents !== expectedFeeCents) {
-      return NextResponse.json({ error: "Application fee amount does not match this listing." }, { status: 400 });
-    }
-
-    const listing = listingFromPropertyData(propertyRow.property_data);
->>>>>>> fm/captain-wip-ship-s1
     if (!listingApplicationFeeChannels(listing ?? undefined).ach) {
       return NextResponse.json(
         {

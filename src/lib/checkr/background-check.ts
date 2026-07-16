@@ -305,9 +305,9 @@ export async function runBackgroundCheck(opts: {
       categoryCode: "service_fees",
       amountCents: costCents,
       expenseDate: now.slice(0, 10),
-      memo: `Applicant background check (Checkr) — ${row.application.fullLegalName || row.id}`,
-      propertyId: row.assignedPropertyId || row.propertyId || row.application.propertyId,
-      sourceStripePaymentId: stripePaymentIntentId,
+      memo: `Applicant background check (Checkr) — ${row.application?.fullLegalName || row.id}`,
+      propertyId: row.assignedPropertyId || row.propertyId || row.application?.propertyId || "",
+      sourceStripePaymentId: stripePaymentIntentId ?? `checkr_screening_${row.id}`,
     });
   } catch (e) {
     // The manager was already charged; a bookkeeping failure here must not
