@@ -1,24 +1,25 @@
 import { NextResponse } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
 import { agentRegistry } from "@/lib/tools";
 import { runAgentTurn } from "@/lib/agent/loop";
+import { sanitizeChatMessages } from "@/lib/agent/chat-handler";
 import { buildDemoAgentContext } from "@/lib/demo/demo-agent-context";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
-
 /**
  * PUBLIC, UNAUTHENTICATED demo chatbot for the marketing `/demo` page.
  *
- * It runs the SAME read-only agent loop as `/api/agent/chat`, but against a
- * fixed, sandboxed context backed by fictional in-memory data — never a real
- * account or database (`buildDemoAgentContext`). This is safe by construction:
+ * It runs the SAME agent loop as `/api/agent/chat`, but against a fixed,
+ * sandboxed context backed by fictional in-memory data — never a real account
+ * or database (`buildDemoAgentContext`). This is safe by construction:
  *
- *  - The agent loop only ever exposes READ tools; write tools are never callable
- *    by the model, and this route deliberately omits the gated `confirmAction`
- *    write path entirely — so nothing can be sent, charged, or persisted.
+ *  - A write-tool proposal halts the loop with a preview, exactly like the
+ *    real assistant — but this route NEVER persists it. It returns a
+ *    `simulated` pending action; confirming from the demo UI posts back here
+ *    and receives a canned "nothing was actually sent" reply. Nothing can
+ *    execute because /api/agent/action requires an authenticated actor and a
+ *    real persisted row.
  *  - The stub DB has no real rows, so a prompt-injection attempt in the (fake)
  *    tenant text can neither read real data nor trigger an action. The system
  *    prompt additionally treats tool-result text as untrusted data.
@@ -40,27 +41,17 @@ export async function POST(req: Request) {
     body = {};
   }
 
-  // The write/confirm path is intentionally unsupported in the demo.
-  if (body.confirmAction) {
+  // Demo confirm path: the card was shown, but nothing is ever executed.
+  if (body.actionId || body.confirmAction) {
     return NextResponse.json({
+      status: "executed",
       reply:
-        "In this live demo, actions like sending a rent reminder are shown but not actually sent — sign up to enable real actions.",
+        "In this live demo, actions are previewed but not actually performed — sign up to enable real actions.",
       toolTrace: [],
     });
   }
 
-  const rawMessages = Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : [];
-  const messages: Anthropic.MessageParam[] = rawMessages
-    .filter(
-      (m) =>
-        m &&
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.trim().length > 0,
-    )
-    .slice(-16)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
-
+  const messages = sanitizeChatMessages(body.messages, { maxMessages: 16, maxChars: 4000 });
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
   }
@@ -75,6 +66,20 @@ export async function POST(req: Request) {
   try {
     const ctx = buildDemoAgentContext();
     const result = await runAgentTurn({ ctx, registry: agentRegistry, messages });
+    if (result.proposedAction) {
+      return NextResponse.json({
+        reply: result.reply,
+        toolTrace: result.toolTrace,
+        pendingAction: {
+          id: "demo",
+          toolName: result.proposedAction.toolName,
+          destructive: result.proposedAction.destructive,
+          expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+          preview: result.proposedAction.preview,
+          simulated: true,
+        },
+      });
+    }
     return NextResponse.json({ reply: result.reply, toolTrace: result.toolTrace });
   } catch (e) {
     console.error("[agent/demo-chat] turn failed:", e);

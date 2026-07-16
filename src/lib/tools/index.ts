@@ -3,7 +3,7 @@
  * Add new site capabilities here as typed, permission-scoped ToolDefinitions.
  */
 import { buildRegistry } from "./registry";
-import { getOverdueChargesTool, listChargesTool } from "./domains/payments";
+import { getOverdueChargesTool, listChargesTool, sendRentReminderTool } from "./domains/payments";
 import { listLeasesTool } from "./domains/leases";
 import { listWorkOrdersTool, suggestVendorsForWorkOrderTool } from "./domains/work-orders";
 import { listVendorsTool } from "./domains/vendors";
@@ -30,6 +30,8 @@ export const agentRegistry = buildRegistry([
   listCalendarEventsTool,
   listScheduledMessagesTool,
   listServiceRequestsTool,
+  // Write tools (confirm-gated; the loop halts on these and the user approves)
+  sendRentReminderTool,
 ]);
 
 export { resolveAgentContext, type AgentContext } from "./context";

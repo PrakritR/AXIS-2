@@ -1,25 +1,47 @@
 /**
- * Thin custom agent loop on the Anthropic SDK with native tool-calling. The model
- * is given only READ tools; it orchestrates and explains, the system computes.
- * Reliability guards: a max-iteration cap and pause_turn handling. Tool results
- * are returned to the model as data, never as instructions.
+ * Thin custom agent loop on the Anthropic SDK with native tool-calling. The
+ * model orchestrates and explains, the system computes. Read tools run
+ * directly; a write tool call runs its READ-ONLY preview phase and halts the
+ * turn with a proposedAction — nothing executes until the user confirms
+ * through the gated endpoint. Reliability guards: a max-iteration cap and
+ * pause_turn handling. Tool results are returned to the model as data, never
+ * as instructions.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentContext } from "@/lib/tools/context";
-import { type ToolRegistry, toAnthropicTools, runReadTool } from "@/lib/tools/registry";
+import {
+  type ToolRegistry,
+  type ActionPreview,
+  toAnthropicTools,
+  runReadTool,
+  prepareWriteAction,
+  executeWriteAction,
+} from "@/lib/tools/registry";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { selectModel, type ModelTier } from "./model";
 
-const MAX_ITERATIONS = 6;
+const MAX_ITERATIONS = 8;
 
 export type ToolTraceEntry = { tool: string; ok: boolean };
 export type TurnUsage = { inputTokens: number; outputTokens: number };
+
+/** A write tool the model proposed; the turn halted awaiting user confirmation. */
+export type ProposedAction = {
+  toolName: string;
+  /** Zod-validated + preview-normalized. Persisted server-side, never sent to the client. */
+  input: unknown;
+  preview: ActionPreview;
+  destructive: boolean;
+};
+
 export type AgentTurnResult = {
   reply: string;
   toolTrace: ToolTraceEntry[];
   model: string;
   tier: ModelTier;
   usage: TurnUsage;
+  /** Present => the turn halted on a write-tool proposal. */
+  proposedAction?: ProposedAction;
 };
 
 /**
@@ -44,10 +66,18 @@ export type ToolCallEvent = {
   ok: boolean;
   output: unknown; // result.data on success, error string on failure
 };
+export type PendingActionEvent = {
+  iteration: number;
+  toolName: string;
+  ok: boolean;
+  preview?: ActionPreview;
+  error?: string;
+};
 export type AgentObserver = {
   onStart?(info: { system: string; toolsAvailable: string[]; model: string; tier: ModelTier }): void;
   onLlmCall?(e: LlmCallEvent): void;
   onToolCall?(e: ToolCallEvent): void;
+  onPendingAction?(e: PendingActionEvent): void;
 };
 
 /** Invoke an observer hook, swallowing any error so tracing can't break a turn. */
@@ -60,14 +90,17 @@ function notify(fn: (() => void) | undefined) {
   }
 }
 
-export async function runAgentTurn(opts: {
-  ctx: AgentContext;
-  registry: ToolRegistry;
+export async function runAgentTurn<Ctx = AgentContext>(opts: {
+  ctx: Ctx;
+  registry: ToolRegistry<Ctx>;
   messages: Anthropic.MessageParam[];
+  /** Portal-specific system prompt; defaults to the manager prompt. */
+  system?: string;
   observer?: AgentObserver;
 }): Promise<AgentTurnResult> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env
-  const tools = toAnthropicTools(opts.registry, { readOnly: true });
+  const system = opts.system ?? SYSTEM_PROMPT;
+  const tools = toAnthropicTools(opts.registry);
   const messages: Anthropic.MessageParam[] = [...opts.messages];
   const toolTrace: ToolTraceEntry[] = [];
 
@@ -80,7 +113,7 @@ export async function runAgentTurn(opts: {
   const observer = opts.observer;
   notify(
     observer?.onStart &&
-      (() => observer.onStart!({ system: SYSTEM_PROMPT, toolsAvailable: tools.map((t) => t.name), model, tier })),
+      (() => observer.onStart!({ system, toolsAvailable: tools.map((t) => t.name), model, tier })),
   );
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -90,7 +123,7 @@ export async function runAgentTurn(opts: {
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system,
       tools: tools as unknown as Anthropic.Tool[],
       messages,
     });
@@ -134,29 +167,89 @@ export async function runAgentTurn(opts: {
       return { reply: reply || "I couldn't find an answer to that.", toolTrace, model, tier, usage };
     }
 
+    // A confirm-gated write proposal halts the turn. Only the FIRST such call
+    // is honored (the system prompt tells the model to propose one action at a
+    // time; batches go inside one tool call's array input). If its preview
+    // succeeds we return immediately — sibling tool calls are dropped, which is
+    // safe because the client conversation history is text-only, so the
+    // abandoned tool_use blocks never reach a future API call.
+    const gatedWrite = toolUses.find((u) => {
+      const t = opts.registry.get(u.name);
+      return t?.kind === "write" && t.confirm !== "none";
+    });
+    if (gatedWrite) {
+      const prepared = await prepareWriteAction(opts.registry, opts.ctx, gatedWrite.name, gatedWrite.input);
+      notify(
+        observer?.onPendingAction &&
+          (() =>
+            observer.onPendingAction!({
+              iteration: i,
+              toolName: gatedWrite.name,
+              ok: prepared.ok,
+              preview: prepared.ok ? prepared.preview : undefined,
+              error: prepared.ok ? undefined : prepared.error,
+            })),
+      );
+      if (prepared.ok) {
+        toolTrace.push({ tool: gatedWrite.name, ok: true });
+        const reply = response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("")
+          .trim();
+        return {
+          reply,
+          toolTrace,
+          model,
+          tier,
+          usage,
+          proposedAction: {
+            toolName: gatedWrite.name,
+            input: prepared.input,
+            preview: prepared.preview,
+            destructive: Boolean(prepared.tool.destructive),
+          },
+        };
+      }
+      // Preview failed: feed the error back so the model can self-correct.
+      // Every tool_use in this response still needs a tool_result; sibling
+      // reads run normally, extra gated writes are refused.
+      toolTrace.push({ tool: gatedWrite.name, ok: false });
+      messages.push({ role: "assistant", content: response.content });
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const use of toolUses) {
+        if (use.id === gatedWrite.id) {
+          results.push({
+            type: "tool_result",
+            tool_use_id: use.id,
+            content: prepared.error,
+            is_error: true,
+          });
+          continue;
+        }
+        const tool = opts.registry.get(use.name);
+        if (tool?.kind === "write" && tool.confirm !== "none") {
+          toolTrace.push({ tool: use.name, ok: false });
+          results.push({
+            type: "tool_result",
+            tool_use_id: use.id,
+            content: "Propose one action at a time. This call was not processed.",
+            is_error: true,
+          });
+          continue;
+        }
+        const result = await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, observer);
+        results.push(result);
+      }
+      messages.push({ role: "user", content: results });
+      continue;
+    }
+
     messages.push({ role: "assistant", content: response.content });
 
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const use of toolUses) {
-      const result = await runReadTool(opts.registry, opts.ctx, use.name, use.input);
-      toolTrace.push({ tool: use.name, ok: result.ok });
-      notify(
-        observer?.onToolCall &&
-          (() =>
-            observer.onToolCall!({
-              iteration: i,
-              name: use.name,
-              input: use.input,
-              ok: result.ok,
-              output: result.ok ? result.data : result.error,
-            })),
-      );
-      results.push({
-        type: "tool_result",
-        tool_use_id: use.id,
-        content: result.ok ? JSON.stringify(result.data) : result.error,
-        is_error: !result.ok,
-      });
+      results.push(await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, observer));
     }
     messages.push({ role: "user", content: results });
   }
@@ -167,5 +260,58 @@ export async function runAgentTurn(opts: {
     model,
     tier,
     usage,
+  };
+}
+
+/**
+ * Run a tool the loop may execute inline: read tools, and low-risk
+ * confirm:"none" write tools (preview → execute in one step; still
+ * audit-logged inside execute()).
+ */
+async function runInlineTool<Ctx>(
+  registry: ToolRegistry<Ctx>,
+  ctx: Ctx,
+  use: Anthropic.ToolUseBlock,
+  iteration: number,
+  toolTrace: ToolTraceEntry[],
+  observer?: AgentObserver,
+): Promise<Anthropic.ToolResultBlockParam> {
+  const tool = registry.get(use.name);
+  let ok: boolean;
+  let output: unknown;
+
+  if (tool?.kind === "write" && tool.confirm === "none") {
+    const prepared = await prepareWriteAction(registry, ctx, use.name, use.input);
+    if (!prepared.ok) {
+      ok = false;
+      output = prepared.error;
+    } else {
+      const executed = await executeWriteAction(registry, ctx, use.name, prepared.input);
+      ok = executed.ok;
+      output = executed.ok ? { done: true, result: executed.reply } : executed.error;
+    }
+  } else {
+    const result = await runReadTool(registry, ctx, use.name, use.input);
+    ok = result.ok;
+    output = result.ok ? result.data : result.error;
+  }
+
+  toolTrace.push({ tool: use.name, ok });
+  notify(
+    observer?.onToolCall &&
+      (() =>
+        observer.onToolCall!({
+          iteration,
+          name: use.name,
+          input: use.input,
+          ok,
+          output,
+        })),
+  );
+  return {
+    type: "tool_result",
+    tool_use_id: use.id,
+    content: ok ? JSON.stringify(output) : String(output),
+    is_error: !ok,
   };
 }

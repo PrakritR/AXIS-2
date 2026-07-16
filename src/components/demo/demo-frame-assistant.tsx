@@ -15,6 +15,18 @@ import { cn } from "@/lib/utils";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ToolTraceEntry = { tool: string; ok: boolean };
 type Suggestion = { label: string; prompt: string };
+type PendingAction = {
+  id: string;
+  toolName: string;
+  preview: {
+    title: string;
+    summary: string;
+    lines: { label: string; value: string }[];
+    confirmLabel?: string;
+    batchCount?: number;
+  };
+  simulated?: boolean;
+};
 
 // Portal/property-scoped starters — the same kind of questions the real portal
 // Axis Assistant answers, grounded in the sandboxed demo portfolio.
@@ -54,6 +66,7 @@ export function DemoFrameAssistant() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,18 +93,27 @@ export function DemoFrameAssistant() {
       setInput("");
       setLoading(true);
       setLastTools([]);
+      setPendingAction(null);
       try {
         const res = await fetch("/api/agent/demo-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: next }),
         });
-        const data = (await res.json()) as { reply?: string; toolTrace?: ToolTraceEntry[]; error?: string };
+        const data = (await res.json()) as {
+          reply?: string;
+          toolTrace?: ToolTraceEntry[];
+          pendingAction?: PendingAction;
+          error?: string;
+        };
         if (!res.ok || data.error) {
           setError(data.error ?? "Something went wrong.");
         } else {
-          setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
+          if (data.reply || !data.pendingAction) {
+            setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
+          }
           setLastTools(data.toolTrace ?? []);
+          setPendingAction(data.pendingAction ?? null);
         }
       } catch {
         setError("Network error.");
@@ -100,6 +122,36 @@ export function DemoFrameAssistant() {
       }
     },
     [input, loading, messages],
+  );
+
+  const resolvePendingAction = useCallback(
+    async (decision: "confirm" | "cancel") => {
+      if (!pendingAction || loading) return;
+      if (decision === "cancel") {
+        setPendingAction(null);
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch("/api/agent/demo-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actionId: pendingAction.id, decision }),
+        });
+        const data = (await res.json()) as { reply?: string; error?: string };
+        if (!res.ok || data.error) {
+          setError(data.error ?? "Something went wrong.");
+        } else {
+          setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
+          setPendingAction(null);
+        }
+      } catch {
+        setError("Network error.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [pendingAction, loading],
   );
 
   // Scripted prompts from the "Run demo" auto-play arrive on the shared channel.
@@ -116,6 +168,7 @@ export function DemoFrameAssistant() {
   function resetConversation() {
     setMessages([]);
     setLastTools([]);
+    setPendingAction(null);
     setError(null);
     setInput("");
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -266,6 +319,39 @@ export function DemoFrameAssistant() {
               }}
               className="shrink-0 border-t border-border/60 bg-background/60 px-3 pb-3 pt-3 backdrop-blur-sm"
             >
+              {pendingAction ? (
+                <div className="mb-3 rounded-2xl border border-primary/25 bg-primary/5 p-3">
+                  <p className="text-xs font-semibold text-foreground">{pendingAction.preview.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted">{pendingAction.preview.summary}</p>
+                  {pendingAction.preview.lines.slice(0, 4).map((line, i) => (
+                    <div key={i} className="mt-1 flex items-baseline justify-between gap-3 text-xs">
+                      <span className="shrink-0 font-medium text-foreground">{line.label}</span>
+                      <span className="truncate text-right text-muted">{line.value}</span>
+                    </div>
+                  ))}
+                  <p className="mt-2 text-[11px] italic text-muted">Demo — nothing will actually be sent.</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void resolvePendingAction("confirm")}
+                      data-attr="demo-assistant-action-confirm"
+                      className="flex-1 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {pendingAction.preview.confirmLabel ?? "Confirm"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void resolvePendingAction("cancel")}
+                      data-attr="demo-assistant-action-cancel"
+                      className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div className="relative rounded-2xl border border-border bg-auth-input-bg transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
                 <textarea
                   ref={inputRef}

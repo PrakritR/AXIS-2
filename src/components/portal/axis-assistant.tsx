@@ -55,11 +55,87 @@ function AxisAssistantSparkleIcon({ className }: { className?: string }) {
   );
 }
 
-function handleOpenAssistant() {
-  track("assistant_opened");
+function handleOpenAssistant(portal: AssistantPortal) {
+  track("assistant_opened", { portal });
   startTransition(() => {
     openAxisAssistant();
   });
+}
+
+/**
+ * Generic confirmation card for a proposed write action. Everything rendered
+ * here is server-derived preview data; the Confirm button is the only way any
+ * assistant action executes.
+ */
+function PendingActionCard({
+  action,
+  loading,
+  onDecision,
+}: {
+  action: PendingAction;
+  loading: boolean;
+  onDecision: (decision: "confirm" | "cancel") => void;
+}) {
+  const destructive = action.destructive || Boolean(action.preview.warning);
+  return (
+    <div
+      className={cn(
+        "mb-3 rounded-2xl border p-3",
+        destructive ? "border-danger/30 bg-danger/5" : "border-primary/25 bg-primary/5",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">{action.preview.title}</p>
+        {action.preview.batchCount && action.preview.batchCount > 1 ? (
+          <span className="rounded-full border border-border bg-foreground/5 px-2 py-0.5 text-[10px] font-semibold text-muted">
+            {action.preview.batchCount} actions
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-muted">{action.preview.summary}</p>
+      {action.preview.lines.length > 0 ? (
+        <dl className="mt-2 space-y-1">
+          {action.preview.lines.map((line, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-3 text-xs">
+              <dt className="shrink-0 font-medium text-foreground">{line.label}</dt>
+              <dd className="truncate text-right text-muted">{line.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {action.preview.warning ? (
+        <p className="mt-2 rounded-lg border border-danger/20 bg-danger/5 px-2 py-1.5 text-[11px] leading-relaxed text-danger">
+          {action.preview.warning}
+        </p>
+      ) : null}
+      {action.simulated ? (
+        <p className="mt-2 text-[11px] italic text-muted">Demo — nothing will actually be sent.</p>
+      ) : null}
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => onDecision("confirm")}
+          data-attr="assistant-action-confirm"
+          className={cn(
+            "flex-1 rounded-full px-3 py-2 text-xs font-semibold text-white disabled:opacity-50",
+            destructive ? "bg-danger" : "bg-primary",
+          )}
+        >
+          {action.preview.confirmLabel ?? "Confirm"}
+        </button>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => onDecision("cancel")}
+          data-attr="assistant-action-cancel"
+          className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -67,14 +143,14 @@ function handleOpenAssistant() {
  * via the same measured `--portal-native-bottom-nav-inset` the bar itself uses),
  * bottom-right on web. Always rendered: the assistant is no longer a bar slot.
  */
-function AxisAssistantFixedTrigger() {
+function AxisAssistantFixedTrigger({ portal }: { portal: AssistantPortal }) {
   const open = useAxisAssistantOpen();
   if (open) return null;
 
   return (
     <button
       type="button"
-      onClick={handleOpenAssistant}
+      onClick={() => handleOpenAssistant(portal)}
       aria-label="Open Axis Assistant"
       aria-expanded={open}
       data-attr="axis-assistant-fab"
@@ -86,19 +162,33 @@ function AxisAssistantFixedTrigger() {
   );
 }
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; checkoutUrl?: string };
 type ToolTraceEntry = { tool: string; ok: boolean };
-type PendingConfirm = {
-  type: "send_rent_reminder";
-  chargeId: string;
-  residentName: string;
-  chargeTitle: string;
-  balanceDue?: string;
+
+/** Wire shape of a proposed write action awaiting user confirmation. */
+type PendingAction = {
+  id: string;
+  toolName: string;
+  destructive: boolean;
+  expiresAt: string;
+  preview: {
+    title: string;
+    summary: string;
+    lines: { label: string; value: string }[];
+    confirmLabel?: string;
+    warning?: string;
+    batchCount?: number;
+  };
+  simulated?: boolean;
 };
+
+type ChatImage = { mediaType: string; dataBase64: string; previewUrl: string };
+
+export type AssistantPortal = "manager" | "resident" | "vendor";
 
 type Suggestion = { label: string; prompt: string; icon: ReactNode; toneClass: string };
 
-const SUGGESTIONS: Suggestion[] = [
+const MANAGER_SUGGESTIONS: Suggestion[] = [
   {
     label: "Late on rent",
     prompt: "Who is late on rent right now?",
@@ -165,6 +255,174 @@ const SUGGESTIONS: Suggestion[] = [
   },
 ];
 
+const RECEIPT_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 12h.01M3 10h18"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const WRENCH_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6l-3 3-2.8-.7-.7-2.8 3-3Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const MESSAGE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const CALENDAR_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const RESIDENT_SUGGESTIONS: Suggestion[] = [
+  {
+    label: "My balance",
+    prompt: "What's my current balance and when is rent due?",
+    toneClass: "text-primary",
+    icon: RECEIPT_ICON,
+  },
+  {
+    label: "Report a problem",
+    prompt: "I need to report a maintenance problem in my home.",
+    toneClass: "text-[var(--status-pending-fg)]",
+    icon: WRENCH_ICON,
+  },
+  {
+    label: "Message my manager",
+    prompt: "I'd like to send a message to my property manager.",
+    toneClass: "text-[var(--status-approved-fg)]",
+    icon: MESSAGE_ICON,
+  },
+  {
+    label: "My lease",
+    prompt: "What's the status of my lease and when does it end?",
+    toneClass: "text-[var(--status-overdue-fg)]",
+    icon: CALENDAR_ICON,
+  },
+];
+
+const VENDOR_SUGGESTIONS: Suggestion[] = [
+  {
+    label: "My jobs",
+    prompt: "What jobs am I currently assigned to?",
+    toneClass: "text-primary",
+    icon: WRENCH_ICON,
+  },
+  {
+    label: "Bid invitations",
+    prompt: "Do I have any open bid invitations?",
+    toneClass: "text-[var(--status-pending-fg)]",
+    icon: RECEIPT_ICON,
+  },
+  {
+    label: "Next visit",
+    prompt: "When is my next scheduled visit?",
+    toneClass: "text-[var(--status-approved-fg)]",
+    icon: CALENDAR_ICON,
+  },
+  {
+    label: "My payouts",
+    prompt: "Have I been paid for my completed jobs?",
+    toneClass: "text-[var(--status-overdue-fg)]",
+    icon: MESSAGE_ICON,
+  },
+];
+
+type PortalCopy = {
+  subtitle: string;
+  emptyTitle: string;
+  emptyBlurb: string;
+  placeholder: string;
+  suggestions: Suggestion[];
+  chatEndpoint: string;
+  /** Whether the paperclip/photo attach button shows (manager: listing photos). */
+  allowImages: boolean;
+};
+
+const PORTAL_COPY: Record<AssistantPortal, PortalCopy> = {
+  manager: {
+    subtitle: "Ask about your portfolio in plain language",
+    emptyTitle: "What should we look at first?",
+    emptyBlurb: "Rent, leases, reminders — grounded in your live portfolio data.",
+    placeholder: "Ask about your portfolio…",
+    suggestions: MANAGER_SUGGESTIONS,
+    chatEndpoint: "/api/agent/chat",
+    allowImages: true,
+  },
+  resident: {
+    subtitle: "Ask about your home and tenancy",
+    emptyTitle: "How can I help with your home?",
+    emptyBlurb: "Rent, your lease, repairs, messages — grounded in your own records.",
+    placeholder: "Ask about your rent, lease, or a repair…",
+    suggestions: RESIDENT_SUGGESTIONS,
+    chatEndpoint: "/api/agent/resident-chat",
+    allowImages: false,
+  },
+  vendor: {
+    subtitle: "Ask about your jobs and payouts",
+    emptyTitle: "What do you want to check?",
+    emptyBlurb: "Jobs, bids, visits, payouts — grounded in your own work records.",
+    placeholder: "Ask about your jobs, bids, or payouts…",
+    suggestions: VENDOR_SUGGESTIONS,
+    chatEndpoint: "/api/agent/vendor-chat",
+    allowImages: false,
+  },
+};
+
+const MAX_ATTACHED_IMAGES = 3;
+
+/** Downscale + JPEG-encode an image client-side so requests stay small. */
+async function imageToChatAttachment(file: File): Promise<ChatImage | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxEdge = 1568;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return null;
+    ctx2d.drawImage(bitmap, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    const dataBase64 = dataUrl.split(",")[1] ?? "";
+    if (!dataBase64) return null;
+    return { mediaType: "image/jpeg", dataBase64, previewUrl: dataUrl };
+  } catch {
+    return null;
+  }
+}
+
 const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { children: ReactNode }) {
   return children;
 });
@@ -173,7 +431,19 @@ const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { chil
  * Panel + FAB live outside the portal layout tree so opening the assistant does not
  * re-render dashboard/sidebar content (keeps INP under budget).
  */
-function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { managerName?: string | null; endpoint?: string }) {
+function AxisAssistantChrome({
+  managerName,
+  portal = "manager",
+  endpoint,
+  actionEndpoint = "/api/agent/action",
+}: {
+  managerName?: string | null;
+  portal?: AssistantPortal;
+  endpoint?: string;
+  actionEndpoint?: string;
+}) {
+  const copy = PORTAL_COPY[portal];
+  const chatEndpoint = endpoint ?? copy.chatEndpoint;
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
@@ -181,7 +451,9 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [attachments, setAttachments] = useState<ChatImage[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -256,29 +528,43 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     if (!text || loading) return;
     setError(null);
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+    const images = attachments;
     setMessages(next);
     setInput("");
+    setAttachments([]);
     setLoading(true);
     setLastTools([]);
-    setPendingConfirm(null);
+    setPendingAction(null);
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(chatEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({
+          // History is text-only; the server ignores extra fields on messages.
+          messages: next.map((m) => ({ role: m.role, content: m.content })),
+          ...(sessionId ? { sessionId } : {}),
+          ...(images.length > 0
+            ? { images: images.map((i) => ({ mediaType: i.mediaType, dataBase64: i.dataBase64 })) }
+            : {}),
+        }),
       });
       const data = (await res.json()) as {
         reply?: string;
         toolTrace?: ToolTraceEntry[];
-        pendingConfirm?: PendingConfirm;
+        pendingAction?: PendingAction;
+        sessionId?: string;
         error?: string;
       };
       if (!res.ok || data.error) {
         setError(data.error ?? "Something went wrong.");
       } else {
-        setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
+        // A halted write proposal may carry no text — the card is the reply.
+        if (data.reply || !data.pendingAction) {
+          setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
+        }
         setLastTools(data.toolTrace ?? []);
-        setPendingConfirm(data.pendingConfirm ?? null);
+        setPendingAction(data.pendingAction ?? null);
+        if (data.sessionId) setSessionId(data.sessionId);
       }
     } catch {
       setError("Network error.");
@@ -290,36 +576,93 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   function resetConversation() {
     setMessages([]);
     setLastTools([]);
-    setPendingConfirm(null);
+    setPendingAction(null);
+    setAttachments([]);
+    setSessionId(null);
     setError(null);
     setInput("");
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  async function confirmPendingAction() {
-    if (!pendingConfirm || loading) return;
+  async function resolvePendingAction(decision: "confirm" | "cancel") {
+    if (!pendingAction || loading) return;
+    // Demo/simulated proposals post back to the chat endpoint for a canned reply.
+    const target = pendingAction.simulated ? chatEndpoint : actionEndpoint;
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(endpoint, {
+      if (decision === "cancel" && pendingAction.simulated) {
+        setPendingAction(null);
+        return;
+      }
+      const res = await fetch(target, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          confirmAction: { type: pendingConfirm.type, chargeId: pendingConfirm.chargeId },
-        }),
+        body: JSON.stringify({ actionId: pendingAction.id, decision }),
       });
-      const data = (await res.json()) as { reply?: string; toolTrace?: ToolTraceEntry[]; error?: string };
+      const data = (await res.json()) as {
+        reply?: string;
+        toolTrace?: ToolTraceEntry[];
+        checkoutUrl?: string;
+        error?: string;
+      };
       if (!res.ok || data.error) {
         setError(data.error ?? "Could not complete that action.");
+        // A 409/410 means the card is stale — clear it.
+        if (res.status === 404 || res.status === 409 || res.status === 410) setPendingAction(null);
       } else {
-        setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: data.reply ?? "Done.", checkoutUrl: data.checkoutUrl },
+        ]);
         setLastTools(data.toolTrace ?? []);
-        setPendingConfirm(null);
+        setPendingAction(null);
       }
     } catch {
       setError("Network error.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function attachImage() {
+    if (attachments.length >= MAX_ATTACHED_IMAGES || loading) return;
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      let file: File | null = null;
+      let nativePreview: string | null = null;
+      if (Capacitor.isNativePlatform()) {
+        const { Camera, CameraResultType, CameraSource } = await import("@capacitor/camera");
+        const photo = await Camera.getPhoto({
+          quality: 80,
+          allowEditing: false,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Prompt,
+        });
+        if (photo.webPath) {
+          const blob = await (await fetch(photo.webPath)).blob();
+          file = new File([blob], `photo-${Date.now()}.jpeg`, { type: blob.type || "image/jpeg" });
+          nativePreview = photo.webPath;
+        }
+      } else {
+        file = await new Promise<File | null>((resolve) => {
+          const inputEl = document.createElement("input");
+          inputEl.type = "file";
+          inputEl.accept = "image/*";
+          inputEl.onchange = () => resolve(inputEl.files?.[0] ?? null);
+          inputEl.click();
+        });
+      }
+      if (!file) return;
+      const attachment = await imageToChatAttachment(file);
+      if (nativePreview && attachment) attachment.previewUrl = nativePreview;
+      if (!attachment) {
+        setError("That image couldn't be read — try a different photo.");
+        return;
+      }
+      setAttachments((prev) => (prev.length >= MAX_ATTACHED_IMAGES ? prev : [...prev, attachment]));
+    } catch {
+      /* user cancelled the picker */
     }
   }
 
@@ -380,7 +723,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                     Axis Assistant
                   </p>
                   <p className="truncate text-xs text-muted [html[data-native]_&]:hidden">
-                    Ask about your portfolio in plain language
+                    {copy.subtitle}
                   </p>
                 </div>
               </div>
@@ -439,11 +782,11 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                         <h2 className="text-lg font-medium tracking-tight text-muted">Hi {firstName},</h2>
                       )}
                       <h3 className="text-[17px] font-semibold tracking-[-0.01em] text-foreground">
-                        What should we look at first?
+                        {copy.emptyTitle}
                       </h3>
                     </div>
                     <p className="max-w-[18rem] text-sm leading-relaxed text-muted">
-                      Rent, leases, reminders — grounded in your live portfolio data.
+                      {copy.emptyBlurb}
                     </p>
                   </div>
                   <div
@@ -452,7 +795,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       keyboardOpen && "hidden",
                     )}
                   >
-                    {SUGGESTIONS.map((s) => (
+                    {copy.suggestions.map((s) => (
                       <button
                         key={s.label}
                         type="button"
@@ -482,6 +825,17 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                         style={m.role === "user" ? { background: "var(--btn-primary)" } : undefined}
                       >
                         {m.content}
+                        {m.checkoutUrl ? (
+                          <a
+                            href={m.checkoutUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            data-attr="assistant-open-checkout"
+                            className="mt-2 flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-semibold text-white transition-[filter] hover:brightness-110"
+                          >
+                            Open secure checkout
+                          </a>
+                        ) : null}
                       </span>
                     </div>
                   ))}
@@ -509,31 +863,33 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
             }}
             className="shrink-0 border-t border-border/60 bg-background/60 px-3 pb-3 pt-3 backdrop-blur-sm [html[data-native]_&]:pb-[max(0.75rem,var(--native-safe-bottom))]"
           >
-            {pendingConfirm ? (
-              <div className="mb-3 rounded-2xl border border-primary/25 bg-primary/5 p-3">
-                <p className="text-xs font-semibold text-foreground">Confirm action</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Send a payment reminder to {pendingConfirm.residentName} for {pendingConfirm.chargeTitle}
-                  {pendingConfirm.balanceDue ? ` (${pendingConfirm.balanceDue})` : ""}?
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => void confirmPendingAction()}
-                    className="flex-1 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  >
-                    Send reminder
-                  </button>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => setPendingConfirm(null)}
-                    className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted"
-                  >
-                    Cancel
-                  </button>
-                </div>
+            {pendingAction ? (
+              <PendingActionCard
+                action={pendingAction}
+                loading={loading}
+                onDecision={(d) => void resolvePendingAction(d)}
+              />
+            ) : null}
+            {attachments.length > 0 ? (
+              <div className="mb-2 flex items-center gap-2">
+                {attachments.map((img, i) => (
+                  <span key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local data-URL preview */}
+                    <img
+                      src={img.previewUrl}
+                      alt={`Attached image ${i + 1}`}
+                      className="h-12 w-12 rounded-lg border border-border object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove image ${i + 1}`}
+                      onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                      className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[10px] leading-none text-background"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
               </div>
             ) : null}
             <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
@@ -548,9 +904,32 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                   }
                 }}
                 rows={1}
-                placeholder="Ask about your portfolio…"
-                className="max-h-32 min-h-[2.75rem] w-full resize-none [field-sizing:content] rounded-2xl bg-transparent py-3 pl-4 pr-12 text-sm text-foreground outline-none placeholder:text-muted/70"
+                placeholder={copy.placeholder}
+                className={cn(
+                  "max-h-32 min-h-[2.75rem] w-full resize-none [field-sizing:content] rounded-2xl bg-transparent py-3 pr-12 text-sm text-foreground outline-none placeholder:text-muted/70",
+                  copy.allowImages ? "pl-11" : "pl-4",
+                )}
               />
+              {copy.allowImages ? (
+                <button
+                  type="button"
+                  onClick={() => void attachImage()}
+                  disabled={loading || attachments.length >= MAX_ATTACHED_IMAGES}
+                  aria-label="Attach a photo"
+                  data-attr="assistant-attach-image"
+                  className="absolute bottom-2 left-2 flex h-8 w-8 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                    <path
+                      d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              ) : null}
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
@@ -586,25 +965,32 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
 
   return (
     <>
-      <AxisAssistantFixedTrigger />
+      <AxisAssistantFixedTrigger portal={portal} />
       {isClient && panel ? createPortal(panel, document.body) : null}
     </>
   );
 }
 
 /**
- * Axis Assistant panel. Read-only Q&A: it sends the conversation to the
- * agent endpoint and renders grounded answers plus which tools ran.
+ * Axis Assistant panel. Grounded Q&A plus confirm-gated actions: it sends the
+ * conversation to the portal's agent endpoint, renders grounded answers and
+ * which tools ran, and shows a confirmation card whenever the assistant
+ * proposes an action — nothing executes until the user confirms.
  */
 export function AxisAssistant({
   managerName,
+  portal = "manager",
   endpoint,
+  actionEndpoint,
   children,
 }: {
   managerName?: string | null;
-  /** Chat backend to target. Defaults to the auth-gated `/api/agent/chat`; the
-   * public demo passes the sandboxed `/api/agent/demo-chat`. */
+  /** Which portal this assistant serves; sets endpoint, copy, and suggestions. */
+  portal?: AssistantPortal;
+  /** Chat backend override (the public demo passes `/api/agent/demo-chat`). */
   endpoint?: string;
+  /** Confirm backend override; defaults to `/api/agent/action`. */
+  actionEndpoint?: string;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -618,7 +1004,12 @@ export function AxisAssistant({
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
       <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-      <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+      <AxisAssistantChrome
+        managerName={managerName}
+        portal={portal}
+        endpoint={endpoint}
+        actionEndpoint={actionEndpoint}
+      />
     </AxisAssistantPresenceContext.Provider>
   );
 }

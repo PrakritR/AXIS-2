@@ -86,6 +86,27 @@ export async function assertManagerFinancialsAccess(ctx: ReportsAuthContext): Pr
   return { ok: true };
 }
 
+/**
+ * Tier-only variant for callers that already hold an authenticated,
+ * landlord-scoped identity (e.g. agent tools): does this manager's
+ * subscription allow financial writes? Returns a structured, honest error the
+ * assistant can relay instead of a bare status code.
+ */
+export async function assertFinancialsTier(
+  landlordId: string,
+): Promise<{ ok: true } | { ok: false; code: "tier_required"; error: string }> {
+  const tier = await getManagerSubscriptionTier(landlordId);
+  if (!managerSectionAllowedForTier("documents", tier)) {
+    return {
+      ok: false,
+      code: "tier_required",
+      error:
+        "Recording financials requires the Pro or Business plan. Upgrade in Settings → Subscription.",
+    };
+  }
+  return { ok: true };
+}
+
 export async function assertResidentFinancialsAccess(ctx: ReportsAuthContext): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   if (ctx.role === "admin") return { ok: true };
   if (ctx.role !== "resident") {

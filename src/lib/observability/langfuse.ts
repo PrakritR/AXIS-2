@@ -1,13 +1,14 @@
 /**
- * Langfuse agent tracing. One trace per agent turn, carrying landlordId and the
- * user id so sessions are replayable and attributable. The loop emits per-LLM-call
- * and per-tool-call events through an observer; we record them as nested
- * generations/spans so the prompt, tools available, tool args, tool results,
- * per-call token counts, and cost are all first-class. Degrades to a no-op when
- * Langfuse env is unset or the SDK misbehaves — tracing must never break a turn.
+ * Langfuse agent tracing. One trace per agent turn, carrying the actor's
+ * attribution metadata (landlordId / role / managerIds) and the user id so
+ * sessions are replayable and attributable across all three portals. The loop
+ * emits per-LLM-call, per-tool-call, and pending-action events through an
+ * observer; we record them as nested generations/spans so the prompt, tools
+ * available, tool args, tool results, per-call token counts, and cost are all
+ * first-class. Degrades to a no-op when Langfuse env is unset or the SDK
+ * misbehaves — tracing must never break a turn.
  */
 import { Langfuse } from "langfuse";
-import type { AgentContext } from "@/lib/tools/context";
 import type { AgentObserver } from "@/lib/agent/loop";
 import { estimateCostUsd } from "@/lib/agent/model";
 
@@ -32,6 +33,18 @@ function getClient(): Langfuse | null {
   return client;
 }
 
+/**
+ * Who a trace is attributed to. The manager route passes
+ * `{ userId, metadata: { landlordId, role: "manager" } }`; resident/vendor
+ * routes pass their own role + linked-manager ids. `sessionId` groups turns
+ * of one conversation (falls back to userId).
+ */
+export type TraceActor = {
+  userId: string;
+  sessionId?: string;
+  metadata?: Record<string, unknown>;
+};
+
 /** The subset of a Langfuse trace the observer uses; lets us unit-test the mapping. */
 export type TraceLike = {
   update(args: Record<string, unknown>): void;
@@ -50,17 +63,18 @@ function safe(fn: () => void) {
 
 /**
  * Map loop events onto a Langfuse trace: tools-available + system size up front,
- * one generation per LLM call (with that call's tokens and cost), and one span
- * per tool call carrying the full arguments and result. Pure over `trace` so it
- * is testable with a fake.
+ * one generation per LLM call (with that call's tokens and cost), one span per
+ * tool call carrying the full arguments and result, and one span per write-tool
+ * proposal (pending action). Pure over `trace` so it is testable with a fake.
  */
-export function buildTraceObserver(trace: TraceLike, ctx: AgentContext): AgentObserver {
+export function buildTraceObserver(trace: TraceLike, actor: TraceActor): AgentObserver {
+  const actorMeta = actor.metadata ?? {};
   return {
     onStart: (info) =>
       safe(() =>
         trace.update({
           metadata: {
-            landlordId: ctx.landlordId,
+            ...actorMeta,
             toolsAvailable: info.toolsAvailable,
             systemPromptChars: info.system.length,
           },
@@ -79,7 +93,7 @@ export function buildTraceObserver(trace: TraceLike, ctx: AgentContext): AgentOb
             stopReason: e.stopReason,
             toolsChosen: e.toolsChosen,
             estimatedCostUsd: estimateCostUsd(e.model, e.usage),
-            landlordId: ctx.landlordId,
+            ...actorMeta,
           },
         }),
       ),
@@ -91,7 +105,16 @@ export function buildTraceObserver(trace: TraceLike, ctx: AgentContext): AgentOb
           name: `tool:${e.name}`,
           input: e.input,
           output: e.output,
-          metadata: { ok: e.ok, iteration: e.iteration, landlordId: ctx.landlordId },
+          metadata: { ok: e.ok, iteration: e.iteration, ...actorMeta },
+        }),
+      ),
+    onPendingAction: (e) =>
+      safe(() =>
+        trace.span({
+          name: `pending:${e.toolName}`,
+          input: { toolName: e.toolName },
+          output: e.ok ? e.preview : e.error,
+          metadata: { ok: e.ok, iteration: e.iteration, ...actorMeta },
         }),
       ),
   };
@@ -176,17 +199,18 @@ type TracedResult = {
   model?: string;
   tier?: string;
   usage?: TurnUsage;
+  proposedAction?: { toolName: string };
 };
 
 /**
  * Wrap an agent turn in a Langfuse trace. The trace records the input, the final
- * reply, the tools that ran, and — when the loop reports them — the chosen
- * model, complexity tier, token counts, and estimated cost, all attributed to
- * landlordId + the session/user id. Failures in tracing are swallowed; the
+ * reply, the tools that ran, any pending write proposal, and — when the loop
+ * reports them — the chosen model, complexity tier, token counts, and estimated
+ * cost, all attributed to the actor. Failures in tracing are swallowed; the
  * wrapped function's result is always returned.
  */
 export async function traceAgentTurn<T extends TracedResult>(
-  ctx: AgentContext,
+  actor: TraceActor,
   messages: TurnInput,
   run: (observer?: AgentObserver) => Promise<T>,
 ): Promise<T> {
@@ -198,16 +222,16 @@ export async function traceAgentTurn<T extends TracedResult>(
   try {
     trace = lf.trace({
       name: "axis-agent-turn",
-      userId: ctx.userId,
-      sessionId: ctx.userId,
-      metadata: { landlordId: ctx.landlordId },
+      userId: actor.userId,
+      sessionId: actor.sessionId ?? actor.userId,
+      metadata: actor.metadata ?? {},
       input: lastUser,
     });
   } catch {
     trace = null;
   }
 
-  const observer = trace ? buildTraceObserver(trace, ctx) : undefined;
+  const observer = trace ? buildTraceObserver(trace, actor) : undefined;
 
   try {
     const result = await run(observer);
@@ -219,13 +243,14 @@ export async function traceAgentTurn<T extends TracedResult>(
       trace?.update({
         output: result.reply,
         metadata: {
-          landlordId: ctx.landlordId,
+          ...(actor.metadata ?? {}),
           tools: result.toolTrace.map((t) => t.tool),
           model: result.model,
           tier: result.tier,
           inputTokens: result.usage?.inputTokens,
           outputTokens: result.usage?.outputTokens,
           estimatedCostUsd: costUsd,
+          pendingAction: result.proposedAction?.toolName,
         },
       });
     } catch {
@@ -238,6 +263,48 @@ export async function traceAgentTurn<T extends TracedResult>(
     } catch {
       /* ignore */
     }
+    throw e;
+  } finally {
+    try {
+      await lf.flushAsync();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Wrap the confirm endpoint's execute/cancel of a pending action in its own
+ * small trace, so every state change is attributable and replayable alongside
+ * the turn that proposed it.
+ */
+export async function traceAgentAction<T extends { ok?: boolean; reply?: string }>(
+  actor: TraceActor,
+  info: { toolName: string; actionId: string; decision: "confirm" | "cancel" },
+  run: () => Promise<T>,
+): Promise<T> {
+  const lf = getClient();
+  if (!lf) return run();
+
+  let trace: ReturnType<Langfuse["trace"]> | null = null;
+  try {
+    trace = lf.trace({
+      name: "axis-agent-action",
+      userId: actor.userId,
+      sessionId: actor.sessionId ?? actor.userId,
+      metadata: { ...(actor.metadata ?? {}), toolName: info.toolName, actionId: info.actionId, decision: info.decision },
+      input: `${info.decision}:${info.toolName}`,
+    });
+  } catch {
+    trace = null;
+  }
+
+  try {
+    const result = await run();
+    safe(() => trace?.update({ output: result.reply ?? (result.ok === false ? "failed" : "done") }));
+    return result;
+  } catch (e) {
+    safe(() => trace?.update({ output: e instanceof Error ? e.message : "error" }));
     throw e;
   } finally {
     try {
