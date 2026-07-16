@@ -16,6 +16,7 @@ import {
   updateServiceRequest,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
+import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 
 export type ManagerServiceRequestBucket = "pending" | "approved" | "denied";
 
@@ -64,6 +65,7 @@ export function ManagerServiceRequestDetail({
   const [editingCharges, setEditingCharges] = useState(false);
   const [editPrice, setEditPrice] = useState(() => moneyFieldValue(req.price ?? ""));
   const [editDeposit, setEditDeposit] = useState(() => moneyFieldValue(req.deposit ?? ""));
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     setEditPrice(moneyFieldValue(req.price ?? ""));
@@ -247,18 +249,28 @@ export function ManagerServiceRequestDetail({
             type="button"
             variant="outline"
             className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            onClick={() => {
-              if (!window.confirm("Delete this request? This cannot be undone.")) return;
-              deleteServiceRequest(req.id);
-              onUpdated();
-              onCollapsed?.();
-              showToast("Request deleted.");
-            }}
+            onClick={() => setDeleteOpen(true)}
           >
             Delete
           </Button>
         ) : null}
       </PortalTableDetailActions>
+
+      <ConfirmDeleteModal
+        open={deleteOpen}
+        title="Delete request"
+        description={`Delete “${req.offerName}”?`}
+        confirmLabel="Delete request"
+        dataAttr="service-request-delete-confirm"
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => {
+          deleteServiceRequest(req.id);
+          setDeleteOpen(false);
+          onUpdated();
+          onCollapsed?.();
+          showToast("Request deleted.");
+        }}
+      />
     </>
   );
 }

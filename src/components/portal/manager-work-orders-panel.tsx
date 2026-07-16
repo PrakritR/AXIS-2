@@ -30,6 +30,7 @@ import {
   updateHouseholdChargeAmount,
 } from "@/lib/household-charges";
 import { deleteManagerWorkOrderRow, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
+import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import {
   MANAGER_VENDORS_EVENT,
   readActiveManagerVendorRows,
@@ -147,6 +148,7 @@ export function ManagerWorkOrdersPanel({
   const [autoSchedulingId, setAutoSchedulingId] = useState<string | null>(null);
   const [approvePayRow, setApprovePayRow] = useState<DemoManagerWorkOrderRow | null>(null);
   const [approvePayBusy, setApprovePayBusy] = useState(false);
+  const [deleteRow, setDeleteRow] = useState<DemoManagerWorkOrderRow | null>(null);
 
   useEffect(() => {
     void syncManagerVendorsFromServer();
@@ -562,12 +564,18 @@ export function ManagerWorkOrdersPanel({
   );
 
   const onDeleteWorkOrder = (row: DemoManagerWorkOrderRow) => {
-    if (!window.confirm(`Delete work order ${row.id} (${row.title})? This cannot be undone.`)) return;
+    setDeleteRow(row);
+  };
+
+  const confirmDeleteWorkOrder = () => {
+    const row = deleteRow;
+    if (!row) return;
     if (deleteManagerWorkOrderRow(row.id)) {
       showToast("Work order removed.");
       setExpandedId(null);
       setHcTick((n) => n + 1);
     } else showToast("Could not delete work order.");
+    setDeleteRow(null);
   };
 
   const assignVendor = (row: DemoManagerWorkOrderRow, choice: string) => {
@@ -1281,6 +1289,20 @@ export function ManagerWorkOrdersPanel({
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmDeleteModal
+        open={deleteRow !== null}
+        title="Delete work order"
+        description={
+          deleteRow
+            ? `Delete work order ${deleteRow.id}${deleteRow.title ? ` (“${deleteRow.title}”)` : ""}?`
+            : null
+        }
+        confirmLabel="Delete work order"
+        dataAttr="work-order-delete-confirm"
+        onClose={() => setDeleteRow(null)}
+        onConfirm={confirmDeleteWorkOrder}
+      />
     </div>
   );
 }

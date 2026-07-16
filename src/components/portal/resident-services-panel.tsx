@@ -7,6 +7,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { formatPacificDate } from "@/lib/pacific-time";
 import { Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
@@ -222,10 +223,11 @@ export function ServiceRequestCard({
   onEdit: () => void;
 }) {
   const { showToast } = useAppUi();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   function removeRequest() {
-    if (!window.confirm("Delete this service request? This cannot be undone.")) return;
     deleteServiceRequest(req.id);
+    setDeleteOpen(false);
     onDelete();
     showToast("Request deleted.");
   }
@@ -319,11 +321,21 @@ export function ServiceRequestCard({
           type="button"
           variant="outline"
           className={PORTAL_DETAIL_BTN}
-          onClick={removeRequest}
+          onClick={() => setDeleteOpen(true)}
         >
           Delete request
         </Button>
       </PortalTableDetailActions>
+
+      <ConfirmDeleteModal
+        open={deleteOpen}
+        title="Delete request"
+        description={`Delete “${req.offerName}”?`}
+        confirmLabel="Delete request"
+        dataAttr="resident-service-request-delete-confirm"
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={removeRequest}
+      />
     </>
   );
 }
@@ -354,6 +366,7 @@ export function WorkOrderDetail({
   const canModify = row.bucket === "open";
   const reminderCooldownMs = canModify ? residentWorkOrderReminderCooldownMs(row) : 0;
   const reminderDisabled = reminderSending || reminderCooldownMs > 0;
+  const [cancelOpen, setCancelOpen] = useState(false);
   return (
     <>
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Priority</p>
@@ -426,12 +439,25 @@ export function WorkOrderDetail({
             type="button"
             variant="outline"
             className={PORTAL_DETAIL_BTN}
-            onClick={onCancel}
+            onClick={() => setCancelOpen(true)}
           >
             Cancel work order
           </Button>
         </PortalTableDetailActions>
       ) : null}
+
+      <ConfirmDeleteModal
+        open={cancelOpen}
+        title="Cancel work order"
+        description={`Cancel work order “${row.title || row.id}”?`}
+        confirmLabel="Cancel work order"
+        dataAttr="resident-work-order-cancel-confirm"
+        onClose={() => setCancelOpen(false)}
+        onConfirm={() => {
+          setCancelOpen(false);
+          onCancel();
+        }}
+      />
     </>
   );
 }
@@ -695,7 +721,6 @@ export function ResidentServicesPanel({
   }
 
   function cancelWorkOrder(id: string) {
-    if (!window.confirm("Cancel this work order? This cannot be undone.")) return;
     deleteManagerWorkOrderRow(id);
     setAllRows(readManagerWorkOrderRows());
     setExpandedId(null);
