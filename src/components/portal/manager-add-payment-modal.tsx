@@ -323,11 +323,11 @@ export function ManagerAddPaymentModal({
       if (notice.ok) {
         showToast(
           notice.skipped
-            ? "Payment added. Notice sent to inbox (demo email skipped)."
-            : "Payment added and notice sent via inbox and email.",
+            ? "Payment added. Notice sent (sandbox email skipped; SMS/inbox when available)."
+            : "Payment added and notice sent via inbox, email, and SMS when available.",
         );
       } else {
-        showToast("Payment added, but notice could not be sent.");
+        showToast(notice.error ? `Payment added, but notice failed: ${notice.error}` : "Payment added, but notice could not be sent.");
       }
     } finally {
       setNoticeBusy(false);

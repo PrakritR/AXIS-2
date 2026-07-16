@@ -8,6 +8,7 @@ import {
   duplicateHouseholdChargeIds,
   householdChargeToLedgerRow,
   isHouseholdChargeOverdue,
+  isManagerAddedOneOffCharge,
   mergeHouseholdChargesWithServer,
 } from "@/lib/household-charges";
 import type { HouseholdCharge } from "@/lib/household-charges";
@@ -265,5 +266,18 @@ describe("mergeHouseholdChargesWithServer", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.id).toBe("hc_app_fee_app123");
     expect(duplicateHouseholdChargeIds([fallback, canonical])).toEqual(["hc_app_fee_res@test.com_prop1"]);
+  });
+});
+
+describe("isManagerAddedOneOffCharge", () => {
+  it("recognizes hc_mgr_ ids and legacy work_order_charge without workOrderId", () => {
+    expect(isManagerAddedOneOffCharge(makeCharge({ id: "hc_mgr_1_abc", kind: "other_cost" }))).toBe(true);
+    expect(
+      isManagerAddedOneOffCharge(makeCharge({ id: "legacy-1", kind: "work_order_charge", workOrderId: undefined })),
+    ).toBe(true);
+    expect(
+      isManagerAddedOneOffCharge(makeCharge({ id: "wo-1", kind: "work_order_charge", workOrderId: "wo_123" })),
+    ).toBe(false);
+    expect(isManagerAddedOneOffCharge(makeCharge({ id: "rent-1", kind: "rent" }))).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ import {
 import {
   applicationVisibleToPortalUser,
   collectLinkedPropertyIdsForModule,
+  moduleRowVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -47,7 +48,7 @@ import {
   syncManagerWorkOrdersFromServer,
 } from "@/lib/manager-work-orders-storage";
 import {
-  readServiceRequestsForManager,
+  readAllServiceRequests,
   SERVICE_REQUESTS_EVENT,
   syncServiceRequestsFromServer,
 } from "@/lib/service-requests-storage";
@@ -481,11 +482,11 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-    const managerWorkOrders = readManagerWorkOrderRows().filter(
-      (w) => !w.managerUserId || w.managerUserId === userId,
+    const managerWorkOrders = readManagerWorkOrderRows().filter((w) =>
+      moduleRowVisibleToPortalUser(w, userId, "services"),
     );
-    const pendingServiceRequests = readServiceRequestsForManager(userId).filter(
-      (r) => r.status === "pending",
+    const pendingServiceRequests = readAllServiceRequests().filter(
+      (r) => moduleRowVisibleToPortalUser(r, userId, "services") && r.status === "pending",
     );
     const pendingWorkOrders = managerWorkOrders.filter((w) => w.bucket === "open");
     const serviceItems = [

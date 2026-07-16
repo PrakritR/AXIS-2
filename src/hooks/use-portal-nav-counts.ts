@@ -13,6 +13,7 @@ import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import {
   applicationVisibleToPortalUser,
+  moduleRowVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
 import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import {
@@ -24,7 +25,7 @@ import {
   readManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import {
-  readServiceRequestsForManager,
+  readAllServiceRequests,
   SERVICE_REQUESTS_EVENT,
 } from "@/lib/service-requests-storage";
 import {
@@ -96,9 +97,11 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const pendingApps = readManagerApplicationRows().filter(
         (a) => applicationVisibleToPortalUser(a, userId) && isSubmittedPendingApplicationRow(a),
       ).length;
-      const pendingServiceRequests = readServiceRequestsForManager(userId).filter((r) => r.status === "pending").length;
+      const pendingServiceRequests = readAllServiceRequests().filter(
+        (r) => moduleRowVisibleToPortalUser(r, userId, "services") && r.status === "pending",
+      ).length;
       const pendingWorkOrders = readManagerWorkOrderRows().filter(
-        (w) => (!w.managerUserId || w.managerUserId === userId) && w.bucket === "open",
+        (w) => moduleRowVisibleToPortalUser(w, userId, "services") && w.bucket === "open",
       ).length;
       const inbox = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
       return {

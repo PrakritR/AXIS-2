@@ -4,7 +4,7 @@ import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { sendSms } from "@/lib/twilio";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import { DEFAULT_NOTIFICATION_PREFERENCES, resolveChannels } from "@/lib/notification-preferences";
 
 export const runtime = "nodejs";
@@ -136,13 +136,24 @@ export async function POST(req: Request) {
       row_data: { id: outboundId, to: residentEmail, subject, body: messageBody, sentAt: new Date().toISOString(), emailSent, chargeId: chargeId || undefined },
     }, { onConflict: "id" });
 
-    // 4. SMS delivery (manager has a work number AND resident opted into payments SMS)
+    // 4. SMS delivery (Claw preferred, else manager work number) when resident opted into payments SMS
     const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
-    if (smsFromNumber && channels.sms) {
+    if (canSendResidentOutboundSms(smsFromNumber) && channels.sms) {
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
-        const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Log in to your PropLane portal to pay. — ${managerName}`;
-        const smsResult = await sendSms(residentPhone, smsBody, smsFromNumber);
+        const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Reply here with questions. — ${managerName}`;
+        const smsResult = await sendResidentOutboundSms({
+          to: residentPhone,
+          text: smsBody,
+          fromNumber: smsFromNumber,
+          linkKind: "payments",
+          openThread: {
+            managerUserId: user.id,
+            residentUserId: residentUserId ?? null,
+            residentEmail,
+            topic: "payment",
+          },
+        });
         if (smsResult.sent) {
           const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           await db.from("portal_outbound_mail_records").upsert({
@@ -150,7 +161,15 @@ export async function POST(req: Request) {
             recipient_email: residentEmail.toLowerCase(),
             subject,
             channel: "sms",
-            row_data: { id: smsLogId, to: residentPhone, subject, body: smsBody, sentAt: new Date().toISOString(), smsSent: true },
+            row_data: {
+              id: smsLogId,
+              to: residentPhone,
+              subject,
+              body: smsBody,
+              sentAt: new Date().toISOString(),
+              smsSent: true,
+              smsChannel: smsResult.channel ?? null,
+            },
           }, { onConflict: "id" });
         }
       }

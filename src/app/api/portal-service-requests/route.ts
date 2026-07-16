@@ -4,8 +4,9 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { residentBelongsToManager } from "@/lib/resident-manager-scope";
-import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
+import { resolveResidentFilingScope } from "@/lib/resident-manager-scope";
+import { repairServiceRequestScopesForManager } from "@/lib/repair-service-request-scopes.server";
+import { notifyManagerOfResidentFiledItem } from "@/lib/work-order-notification.server";
 
 export const runtime = "nodejs";
 
@@ -20,13 +21,22 @@ async function sessionUser() {
 type ServiceRequestScopeRecord = { id: string; row_data: ServiceRequest | null; updated_at: string | null };
 
 function recordFromRow(row: ServiceRequest) {
+  const residentEmail = row.residentEmail?.trim().toLowerCase() || row.residentEmail;
+  const managerUserId = row.managerUserId?.trim() || "";
+  const propertyId = row.propertyId?.trim() || "";
+  const normalized: ServiceRequest = {
+    ...row,
+    residentEmail: residentEmail || row.residentEmail,
+    managerUserId,
+    propertyId,
+  };
   return {
-    id: row.id,
-    manager_user_id: row.managerUserId || null,
-    resident_email: row.residentEmail?.trim().toLowerCase() || null,
-    property_id: row.propertyId || null,
-    status: row.status || null,
-    row_data: { ...row, residentEmail: row.residentEmail?.trim().toLowerCase() || row.residentEmail },
+    id: normalized.id,
+    manager_user_id: managerUserId || null,
+    resident_email: residentEmail || null,
+    property_id: propertyId || null,
+    status: normalized.status || null,
+    row_data: normalized,
     updated_at: new Date().toISOString(),
   };
 }
@@ -42,10 +52,24 @@ export async function GET() {
     const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
 
-    // Managers/pro see the requests they own plus rows on properties shared
-    // with them via an accepted co-manager link with services access.
+    // Managers/pro see the requests they own plus rows on properties they own
+    // or share via co-manager services access — catches mis-stamped manager_user_id
+    // as long as property_id is correct.
     if (!admin && role !== "resident") {
+      // Heal orphans for this manager's residents before listing (wrong/empty
+      // manager_user_id on older client-mirrored rows).
+      await repairServiceRequestScopesForManager(db, user.id).catch(() => undefined);
+
       const linkedPropertyIds = await linkedPropertyIdsForModule(db, user.id, "services");
+      const { data: ownedProps } = await db
+        .from("manager_property_records")
+        .select("id")
+        .eq("manager_user_id", user.id)
+        .limit(500);
+      for (const prop of ownedProps ?? []) {
+        const id = String((prop as { id?: unknown }).id ?? "").trim();
+        if (id) linkedPropertyIds.add(id);
+      }
       const records = await fetchRowsForManagerWithLinked<ServiceRequestScopeRecord>(
         db,
         "portal_service_request_records",
@@ -78,7 +102,42 @@ export async function GET() {
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ServiceRequest[];
+    let rows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ServiceRequest[];
+
+    // Resident load: re-stamp any of their rows that lost manager/property so
+    // the matching manager portal can pick them up on next sync.
+    if (!admin && role === "resident" && email) {
+      const healed: ServiceRequest[] = [];
+      for (const row of rows) {
+        const scope = await resolveResidentFilingScope(db, {
+          residentEmail: email,
+          claimedManagerUserId: row.managerUserId,
+          claimedPropertyId: row.propertyId,
+        }).catch(() => null);
+        if (!scope) {
+          healed.push(row);
+          continue;
+        }
+        const needsHeal =
+          row.managerUserId?.trim() !== scope.managerUserId ||
+          (!row.propertyId?.trim() && Boolean(scope.propertyId));
+        if (!needsHeal) {
+          healed.push(row);
+          continue;
+        }
+        const next: ServiceRequest = {
+          ...row,
+          managerUserId: scope.managerUserId,
+          propertyId: row.propertyId?.trim() || scope.propertyId,
+          residentEmail: email,
+        };
+        const record = recordFromRow(next);
+        await db.from("portal_service_request_records").upsert(record, { onConflict: "id" });
+        healed.push(next);
+      }
+      rows = healed;
+    }
+
     return NextResponse.json({ rows });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load service requests.";
@@ -104,20 +163,26 @@ function actorOwnsRecord(
 /**
  * Bind the scope columns to the authenticated caller so a client cannot spoof
  * ownership: a manager's writes are pinned to their own id; a resident's writes
- * are pinned to their own email. The opposite-party field is taken from the row
- * (e.g. which manager a resident's request targets).
+ * are pinned to their own email. Manager/property for residents are server-
+ * resolved from residency records, not trusted from the client alone.
  */
 function recordForActor(actor: Actor, role: string, row: ServiceRequest) {
-  const base = recordFromRow(row);
-  if (actor.admin) return base; // admins may act on behalf of any account
+  if (actor.admin) return recordFromRow(row);
   if (role === "resident") {
-    // The resident only owns the resident side; which manager they target stays
-    // from the row (their property's owner).
-    return { ...base, resident_email: actor.email || base.resident_email };
+    const pinned: ServiceRequest = {
+      ...row,
+      residentEmail: actor.email || row.residentEmail,
+    };
+    return recordFromRow(pinned);
   }
   // Any other non-admin caller is treated as the owning manager — never trust a
-  // client-supplied manager_user_id for a non-resident.
-  return { ...base, manager_user_id: actor.userId };
+  // client-supplied manager_user_id for a non-resident. Keep row_data in sync
+  // with the column so client filters that key on managerUserId stay correct.
+  const pinned: ServiceRequest = {
+    ...row,
+    managerUserId: actor.userId,
+  };
+  return recordFromRow(pinned);
 }
 
 export async function POST(req: Request) {
@@ -152,14 +217,21 @@ export async function POST(req: Request) {
       return data == null || actorOwnsRecord(actor, data);
     };
 
-    // A resident may only file against a manager that actually has them as a
-    // resident; never trust a client-supplied manager_user_id to route a row
-    // into an arbitrary manager's queue.
-    const residentMayTargetRowManager = async (row: ServiceRequest): Promise<boolean> => {
-      if (actor.admin || role !== "resident") return true;
-      const claimedManager = row?.managerUserId?.trim() || "";
-      if (!claimedManager) return false;
-      return residentBelongsToManager(db, { residentEmail: actor.email, managerUserId: claimedManager });
+    /** Stamp manager + property from residency; reject if resident has no scope. */
+    const stampResidentRow = async (row: ServiceRequest): Promise<ServiceRequest | null> => {
+      if (actor.admin || role !== "resident") return row;
+      const scope = await resolveResidentFilingScope(db, {
+        residentEmail: actor.email,
+        claimedManagerUserId: row.managerUserId,
+        claimedPropertyId: row.propertyId,
+      });
+      if (!scope) return null;
+      return {
+        ...row,
+        managerUserId: scope.managerUserId,
+        propertyId: scope.propertyId || row.propertyId?.trim() || "",
+        residentEmail: actor.email || row.residentEmail,
+      };
     };
 
     if (body.action === "replace") {
@@ -167,8 +239,9 @@ export async function POST(req: Request) {
       for (const row of rows) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
-        if (!(await residentMayTargetRowManager(row))) continue;
-        await db.from("portal_service_request_records").upsert(recordForActor(actor, role, row), { onConflict: "id" });
+        const stamped = await stampResidentRow(row);
+        if (!stamped) continue;
+        await db.from("portal_service_request_records").upsert(recordForActor(actor, role, stamped), { onConflict: "id" });
       }
       return NextResponse.json({ ok: true });
     }
@@ -194,7 +267,8 @@ export async function POST(req: Request) {
     if (!(await ownsExisting(body.row.id))) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    if (!(await residentMayTargetRowManager(body.row))) {
+    const stamped = await stampResidentRow(body.row);
+    if (!stamped) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     // The client mirrors both creates and edits through this same single-row
@@ -205,29 +279,27 @@ export async function POST(req: Request) {
       .select("id")
       .eq("id", body.row.id)
       .maybeSingle();
-    const record = recordForActor(actor, role, body.row);
+    const record = recordForActor(actor, role, stamped);
     const { error } = await db
       .from("portal_service_request_records")
       .upsert(record, { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const managerUserId = record.manager_user_id;
     if (!preExisting && !actor.admin && role === "resident" && managerUserId) {
-      // New resident-submitted request → best-effort inbox/SMS/email notice to
-      // the property's manager. Never fails the request.
-      const title = body.row.offerName?.trim() || "Service request";
-      const description = body.row.notes?.trim() || body.row.offerDescription?.trim();
-      await notifyWorkOrderEvent(db, {
-        event: "created",
+      // New resident-submitted request → Axis inbox + email + SMS to manager.
+      const title = stamped.offerName?.trim() || "Service request";
+      const description = stamped.notes?.trim() || stamped.offerDescription?.trim();
+      await notifyManagerOfResidentFiledItem(db, {
+        kind: "service-request",
         senderUserId: actor.userId,
         senderEmail: actor.email,
-        senderName: body.row.residentName?.trim() || undefined,
-        subject: `New maintenance request: ${title}`,
-        text: description || `New maintenance request "${title}" submitted.`,
+        senderName: stamped.residentName?.trim() || undefined,
+        managerUserId,
         title,
-        toUserIds: [managerUserId],
+        description: description || undefined,
       }).catch(() => undefined);
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, row: record.row_data });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save service request.";
     return NextResponse.json({ error: message }, { status: 500 });

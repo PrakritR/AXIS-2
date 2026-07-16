@@ -9,15 +9,26 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { POST } from "@/app/api/portal-service-requests/route";
 
-type Rec = { id: string; manager_user_id: string | null; resident_email: string | null; row_data: unknown };
-type AppRec = { id: string; manager_user_id: string; resident_email: string };
+type Rec = {
+  id: string;
+  manager_user_id: string | null;
+  resident_email: string | null;
+  property_id?: string | null;
+  row_data: unknown;
+};
+type AppRec = {
+  id: string;
+  manager_user_id: string;
+  resident_email: string;
+  property_id?: string | null;
+  assigned_property_id?: string | null;
+};
 
 /**
  * In-memory stand-in for the service-role client, seeded with one request owned
  * by manager "mgr-a" / resident "res@a.com". Captures upserts and deletes so the
  * ownership-gating behavior can be asserted. `appSeed` seeds the
- * `manager_application_records` table that backs the resident->manager scope
- * check.
+ * `manager_application_records` table that backs resident filing scope.
  */
 function mockDb(seed: Rec[], profile: { email: string; role: string }, appSeed: AppRec[] = []) {
   const store = new Map(seed.map((r) => [r.id, r]));
@@ -40,11 +51,45 @@ function mockDb(seed: Rec[], profile: { email: string; role: string }, appSeed: 
             filters[col] = val;
             return builder;
           },
+          order: () => builder,
           limit: async () => {
-            const rows = appSeed.filter(
-              (a) => a.manager_user_id === filters.manager_user_id && a.resident_email === filters.resident_email,
-            );
-            return { data: rows.map((a) => ({ id: a.id })), error: null };
+            const rows = appSeed.filter((a) => {
+              if (filters.manager_user_id && a.manager_user_id !== filters.manager_user_id) return false;
+              if (filters.resident_email && a.resident_email !== filters.resident_email) return false;
+              return true;
+            });
+            return {
+              data: rows.map((a) => ({
+                id: a.id,
+                manager_user_id: a.manager_user_id,
+                property_id: a.property_id ?? null,
+                assigned_property_id: a.assigned_property_id ?? null,
+                row_data: {},
+                updated_at: new Date().toISOString(),
+              })),
+              error: null,
+            };
+          },
+          maybeSingle: async () => {
+            const rows = appSeed.filter((a) => {
+              if (filters.manager_user_id && a.manager_user_id !== filters.manager_user_id) return false;
+              if (filters.resident_email && a.resident_email !== filters.resident_email) return false;
+              return true;
+            });
+            const a = rows[0];
+            return {
+              data: a
+                ? {
+                    id: a.id,
+                    manager_user_id: a.manager_user_id,
+                    property_id: a.property_id ?? null,
+                    assigned_property_id: a.assigned_property_id ?? null,
+                    row_data: {},
+                    updated_at: new Date().toISOString(),
+                  }
+                : null,
+              error: null,
+            };
           },
         };
         return builder;
@@ -116,38 +161,59 @@ describe("/api/portal-service-requests POST ownership gating", () => {
   it("pins resident_email to the session on a resident upsert (no spoofing)", async () => {
     asUser("res-b", "res@b.com");
     const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
-      { id: "APP-1", manager_user_id: "mgr-a", resident_email: "res@b.com" },
+      { id: "APP-1", manager_user_id: "mgr-a", resident_email: "res@b.com", property_id: "prop-1" },
     ]);
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
 
     const res = await POST(
       jsonRequest("http://t/api/portal-service-requests", {
         method: "POST",
-        body: { row: { id: "SR-9", residentEmail: "victim@x.com", managerUserId: "mgr-a", status: "pending" } },
+        body: {
+          row: {
+            id: "SR-9",
+            residentEmail: "victim@x.com",
+            managerUserId: "mgr-a",
+            propertyId: "prop-1",
+            status: "pending",
+          },
+        },
+      }),
+    );
+    const { status, data } = await parseJsonResponse<{ row?: { managerUserId?: string; propertyId?: string } }>(res);
+    expect(status).toBe(200);
+    expect(upserts[0]!.resident_email).toBe("res@b.com");
+    expect(upserts[0]!.manager_user_id).toBe("mgr-a");
+    expect(data.row?.managerUserId).toBe("mgr-a");
+  });
+
+  it("ignores a claimed manager the resident does not belong to and stamps their real residency", async () => {
+    asUser("res-b", "res@b.com");
+    // res@b.com belongs to mgr-b only; they try to claim mgr-a.
+    const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
+      { id: "APP-1", manager_user_id: "mgr-b", resident_email: "res@b.com", property_id: "prop-b" },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t/api/portal-service-requests", {
+        method: "POST",
+        body: {
+          row: {
+            id: "SR-evil",
+            residentEmail: "res@b.com",
+            managerUserId: "mgr-a",
+            propertyId: "prop-a",
+            status: "pending",
+            offerName: "Parking",
+          },
+        },
       }),
     );
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(200);
-    expect(upserts[0]!.resident_email).toBe("res@b.com");
-  });
-
-  it("rejects a resident filing into a manager that does not have them as a resident (injection)", async () => {
-    asUser("res-b", "res@b.com");
-    // res@b.com belongs to mgr-b only; they try to inject into mgr-a's queue.
-    const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
-      { id: "APP-1", manager_user_id: "mgr-b", resident_email: "res@b.com" },
-    ]);
-    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
-
-    const res = await POST(
-      jsonRequest("http://t/api/portal-service-requests", {
-        method: "POST",
-        body: { row: { id: "SR-evil", residentEmail: "res@b.com", managerUserId: "mgr-a", status: "pending" } },
-      }),
-    );
-    const { status } = await parseJsonResponse(res);
-    expect(status).toBe(403);
-    expect(upserts).toHaveLength(0);
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]!.manager_user_id).toBe("mgr-b");
+    expect(upserts[0]!.property_id).toBe("prop-b");
   });
 
   it("pins manager_user_id to the session on a manager upsert (no spoofing)", async () => {
@@ -161,8 +227,43 @@ describe("/api/portal-service-requests POST ownership gating", () => {
         body: { row: { id: "SR-10", managerUserId: "mgr-victim", residentEmail: "r@x.com", status: "approved" } },
       }),
     );
-    const { status } = await parseJsonResponse(res);
+    const { status, data } = await parseJsonResponse<{ row?: { managerUserId?: string } }>(res);
     expect(status).toBe(200);
     expect(upserts[0]!.manager_user_id).toBe("mgr-real");
+    expect((upserts[0]!.row_data as { managerUserId?: string }).managerUserId).toBe("mgr-real");
+    expect(data.row?.managerUserId).toBe("mgr-real");
+  });
+
+  it("stamps property_id from residency when resident omits a property", async () => {
+    asUser("res-b", "res@b.com");
+    const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
+      {
+        id: "APP-1",
+        manager_user_id: "mgr-a",
+        resident_email: "res@b.com",
+        assigned_property_id: "pioneer-1",
+      },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t/api/portal-service-requests", {
+        method: "POST",
+        body: {
+          row: {
+            id: "SR-prop",
+            residentEmail: "res@b.com",
+            managerUserId: "mgr-a",
+            propertyId: "",
+            status: "pending",
+            offerName: "Parking",
+          },
+        },
+      }),
+    );
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(200);
+    expect(upserts[0]!.manager_user_id).toBe("mgr-a");
+    expect(upserts[0]!.property_id).toBe("pioneer-1");
   });
 });

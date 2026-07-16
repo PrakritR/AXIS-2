@@ -17,8 +17,10 @@ import {
   listingLinkTargetProps,
   useListingPreviewNewTab,
 } from "@/components/marketing/listing-preview-context";
-import { buildPropertyMessageHref } from "@/lib/manager-property-links";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import {
+  buildSmsDeepLink,
+  isClawMessagingPubliclyEnabled,
+} from "@/lib/claw-leasing-links";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 
@@ -331,6 +333,14 @@ function ListingModalCta({
     variant === "primary"
       ? "flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95"
       : "flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30";
+  // sms: must use a plain anchor — Next Link treats it as an app route.
+  if (href.startsWith("sms:")) {
+    return (
+      <a href={href} className="flex-1" data-attr={dataAttr}>
+        <span className={className}>{label}</span>
+      </a>
+    );
+  }
   return (
     <Link href={href} className="flex-1" data-attr={dataAttr} {...newTabProps}>
       <span className={className}>{label}</span>
@@ -411,15 +421,28 @@ function ListingDetailModal({
   state,
   onClose,
   listingPropertyId,
+  propertyLabel = null,
 }: {
   state: ModalState;
   onClose: () => void;
   listingPropertyId: string;
+  propertyLabel?: string | null;
 }) {
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
   const isClient = useIsClient();
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
-  const messageContactHref = buildPropertyMessageHref(listingPropertyId);
+  const textEnabled = isClawMessagingPubliclyEnabled();
+  const label = propertyLabel?.trim() || null;
+  const textApplyHref = textEnabled
+    ? buildSmsDeepLink({ intent: "apply", propertyId: listingPropertyId, propertyLabel: label })
+    : "#";
+  const textMessageHref = textEnabled
+    ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label })
+    : "#";
+  const textMessageAbout = (topic: string) =>
+    textEnabled
+      ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, topic })
+      : "#";
 
   useEffect(() => {
     if (!state) return;
@@ -562,17 +585,22 @@ function ListingDetailModal({
                   <ListingModalActions
                     newTabProps={newTabProps}
                     primary={{
-                      href: buildRentalApplyHref({
-                        propertyId: listingPropertyId,
-                        listingRoomId: state.room.id,
-                        listingRoomName: state.room.name,
-                        floorLabel: state.floorLabel,
-                        roomPrice: state.room.price,
-                      }),
-                      label: "Apply for this room",
-                      dataAttr: "listing-apply-room",
+                      href: textEnabled
+                        ? buildSmsDeepLink({
+                            intent: "apply",
+                            propertyId: listingPropertyId,
+                            propertyLabel: label,
+                            roomName: state.room.name,
+                          })
+                        : textApplyHref,
+                      label: "Text to apply",
+                      dataAttr: "listing-text-apply-room",
                     }}
-                    secondary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
+                    secondary={{
+                      href: textMessageHref,
+                      label: "Text a message",
+                      dataAttr: "listing-text-message",
+                    }}
                   />
                 </>
               );
@@ -608,11 +636,15 @@ function ListingDetailModal({
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: messageContactHref, label: "Ask about layout", dataAttr: "listing-ask-about-layout" }}
+              primary={{
+                href: textMessageAbout("the floor plan / layout"),
+                label: "Text a message",
+                dataAttr: "listing-text-message-layout",
+              }}
               secondary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
-                label: "Apply",
-                dataAttr: "listing-apply-online",
+                href: textApplyHref,
+                label: "Text to apply",
+                dataAttr: "listing-text-apply",
               }}
             />
           </ListingModalBody>
@@ -638,11 +670,15 @@ function ListingDetailModal({
             />
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: messageContactHref, label: "Ask about this bathroom", dataAttr: "listing-ask-about-bathroom" }}
+              primary={{
+                href: textMessageAbout("this bathroom"),
+                label: "Text a message",
+                dataAttr: "listing-text-message-bathroom",
+              }}
               secondary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
-                label: "Apply",
-                dataAttr: "listing-apply-online",
+                href: textApplyHref,
+                label: "Text to apply",
+                dataAttr: "listing-text-apply",
               }}
             />
           </ListingModalBody>
@@ -667,11 +703,15 @@ function ListingDetailModal({
             <ListingModalActions
               newTabProps={newTabProps}
               primary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
-                label: "Apply",
-                dataAttr: "listing-apply-online",
+                href: textApplyHref,
+                label: "Text to apply",
+                dataAttr: "listing-text-apply",
               }}
-              secondary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
+              secondary={{
+                href: textMessageHref,
+                label: "Text a message",
+                dataAttr: "listing-text-message",
+              }}
             />
           </ListingModalBody>
         ) : null}
@@ -696,14 +736,14 @@ function ListingDetailModal({
             <ListingModalActions
               newTabProps={newTabProps}
               primary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
-                label: "Apply",
-                dataAttr: "listing-apply-online",
+                href: textApplyHref,
+                label: "Text to apply",
+                dataAttr: "listing-text-apply",
               }}
               secondary={{
-                href: messageContactHref,
-                label: "Ask about lease terms",
-                dataAttr: "listing-ask-about-lease",
+                href: textMessageAbout("lease terms"),
+                label: "Text a message",
+                dataAttr: "listing-text-message-lease",
               }}
             />
           </ListingModalBody>
@@ -743,11 +783,23 @@ function ListingDetailModal({
             <ListingModalActions
               newTabProps={newTabProps}
               primary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId, bundleId: state.row.id }),
-                label: "Apply for this bundle",
-                dataAttr: "listing-apply-bundle",
+                href: textEnabled
+                  ? buildSmsDeepLink({
+                      intent: "bundle",
+                      propertyId: listingPropertyId,
+                      propertyLabel: label,
+                      bundleId: state.row.id,
+                      bundleLabel: state.row.label,
+                    })
+                  : textApplyHref,
+                label: "Text for bundle",
+                dataAttr: "listing-text-bundle",
               }}
-              secondary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
+              secondary={{
+                href: textMessageHref,
+                label: "Text a message",
+                dataAttr: "listing-text-message",
+              }}
             />
           </ListingModalBody>
         ) : null}
@@ -762,11 +814,15 @@ function ListingDetailModal({
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
+              primary={{
+                href: textMessageHref,
+                label: "Text a message",
+                dataAttr: "listing-text-message",
+              }}
               secondary={{
-                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
-                label: "Apply",
-                dataAttr: "listing-apply-online",
+                href: textApplyHref,
+                label: "Text to apply",
+                dataAttr: "listing-text-apply",
               }}
             />
           </ListingModalBody>
@@ -808,7 +864,15 @@ function FloorPlanSummaryBar({
   );
 }
 
-export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: ListingFloorCard; listingPropertyId: string }) {
+export function InteractiveFloorPlanCard({
+  floor,
+  listingPropertyId,
+  propertyLabel = null,
+}: {
+  floor: ListingFloorCard;
+  listingPropertyId: string;
+  propertyLabel?: string | null;
+}) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -821,7 +885,12 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
+      <ListingDetailModal
+        state={modal}
+        onClose={() => setModal(null)}
+        listingPropertyId={listingPropertyId}
+        propertyLabel={propertyLabel}
+      />
     </>
   );
 }
@@ -872,7 +941,15 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
   );
 }
 
-export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: ListingBathroomRow[]; listingPropertyId: string }) {
+export function BathroomTableInteractive({
+  rows,
+  listingPropertyId,
+  propertyLabel = null,
+}: {
+  rows: ListingBathroomRow[];
+  listingPropertyId: string;
+  propertyLabel?: string | null;
+}) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -912,7 +989,12 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
           ))}
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
+      <ListingDetailModal
+        state={modal}
+        onClose={() => setModal(null)}
+        listingPropertyId={listingPropertyId}
+        propertyLabel={propertyLabel}
+      />
     </>
   );
 }
@@ -937,7 +1019,15 @@ function sharedSpaceInfoSummary(useNote: string): string {
   return useNote.trim() ? "With listing" : "—";
 }
 
-export function SharedTableInteractive({ rows, listingPropertyId }: { rows: ListingSharedRow[]; listingPropertyId: string }) {
+export function SharedTableInteractive({
+  rows,
+  listingPropertyId,
+  propertyLabel = null,
+}: {
+  rows: ListingSharedRow[];
+  listingPropertyId: string;
+  propertyLabel?: string | null;
+}) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -974,12 +1064,25 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
           ))}
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
+      <ListingDetailModal
+        state={modal}
+        onClose={() => setModal(null)}
+        listingPropertyId={listingPropertyId}
+        propertyLabel={propertyLabel}
+      />
     </>
   );
 }
 
-export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows: LeaseBasicRow[]; listingPropertyId: string }) {
+export function LeaseBasicsTableInteractive({
+  rows,
+  listingPropertyId,
+  propertyLabel = null,
+}: {
+  rows: LeaseBasicRow[];
+  listingPropertyId: string;
+  propertyLabel?: string | null;
+}) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -1028,7 +1131,12 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
           ))}
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
+      <ListingDetailModal
+        state={modal}
+        onClose={() => setModal(null)}
+        listingPropertyId={listingPropertyId}
+        propertyLabel={propertyLabel}
+      />
     </>
   );
 }
@@ -1059,7 +1167,15 @@ function BundleRoomPreview({ row }: { row: BundleCard }) {
   );
 }
 
-export function BundleTableInteractive({ rows, listingPropertyId }: { rows: BundleCard[]; listingPropertyId: string }) {
+export function BundleTableInteractive({
+  rows,
+  listingPropertyId,
+  propertyLabel = null,
+}: {
+  rows: BundleCard[];
+  listingPropertyId: string;
+  propertyLabel?: string | null;
+}) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -1106,12 +1222,25 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
           </div>
         ))}
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
+      <ListingDetailModal
+        state={modal}
+        onClose={() => setModal(null)}
+        listingPropertyId={listingPropertyId}
+        propertyLabel={propertyLabel}
+      />
     </>
   );
 }
 
-export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: AmenityItem[]; listingPropertyId: string }) {
+export function AmenitiesTableInteractive({
+  rows,
+  listingPropertyId,
+  propertyLabel = null,
+}: {
+  rows: AmenityItem[];
+  listingPropertyId: string;
+  propertyLabel?: string | null;
+}) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
@@ -1154,7 +1283,12 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
           ))}
         </div>
       </div>
-      <ListingDetailModal state={modal} onClose={() => setModal(null)} listingPropertyId={listingPropertyId} />
+      <ListingDetailModal
+        state={modal}
+        onClose={() => setModal(null)}
+        listingPropertyId={listingPropertyId}
+        propertyLabel={propertyLabel}
+      />
     </>
   );
 }

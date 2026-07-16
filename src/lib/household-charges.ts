@@ -18,6 +18,7 @@ import {
   type ResidentAcceptedPaymentMethod,
 } from "@/lib/payment-policy";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
+import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
@@ -740,6 +741,14 @@ export function filterChargesEligibleForPaymentReminders(
   return charges.filter(
     (charge) => isUnpaidHouseholdCharge(charge) && !isStaleRecurringHouseholdCharge(charge, profileById, charges),
   );
+}
+
+/** Manager Payments → Add payment rows (id prefix `hc_mgr_`). */
+export function isManagerAddedOneOffCharge(charge: Pick<HouseholdCharge, "id" | "kind" | "workOrderId">): boolean {
+  if (charge.id.startsWith("hc_mgr_")) return true;
+  // Legacy: createManagerCharge used kind work_order_charge without a workOrderId.
+  if (charge.kind === "work_order_charge" && !charge.workOrderId) return true;
+  return false;
 }
 
 function dueLabelForLeaseStart(leaseStart?: string | null): string {
@@ -1466,8 +1475,11 @@ export function reconcileApprovedResidentPaymentSchedules(managerUserId: string 
     const email = row.email?.trim();
     if (!email) return false;
     if (!managerUserId) return true;
-    const rowManager = row.managerUserId?.trim();
-    return !rowManager || rowManager === managerUserId;
+    // Match Add payment / Payments UI: include co-managed residents the portal
+    // user can see, not only rows whose managerUserId equals the signed-in user.
+    // The old ownership-only filter caused Add payment one-offs to be purged
+    // (resident visible in picker → charge created → reconcile wiped it).
+    return applicationVisibleToPortalUser(row, managerUserId);
   });
 
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
@@ -1476,6 +1488,11 @@ export function reconcileApprovedResidentPaymentSchedules(managerUserId: string 
   const existingProfiles = readRentProfiles();
   const filteredCharges = existingCharges.filter((charge) => {
     if (charge.managerUserId !== scope) return true;
+    // Manager "Add payment" one-offs (hc_mgr_*) must survive even when the
+    // resident isn't in the approved-current set (e.g. co-managed / catalog
+    // apps, or charges added before approval). The old filter wiped them on
+    // every reconciler run — Pending stayed empty.
+    if (isManagerAddedOneOffCharge(charge)) return true;
     return currentResidentEmails.has(charge.residentEmail.trim().toLowerCase());
   });
   const filteredProfiles = existingProfiles.filter((profile) => {
@@ -2489,12 +2506,14 @@ export function createManagerCharge(input: {
 }): HouseholdCharge | null {
   const email = input.residentEmail.trim();
   if (!email || !Number.isFinite(input.amount) || input.amount <= 0) return null;
+  if (!input.managerUserId?.trim() && !isDemoModeActive()) return null;
   const isPaid = input.initialStatus === "paid";
   const balance = `$${input.amount.toFixed(2)}`;
   const prop = getPropertyById(input.propertyId);
   const sub =
     prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   const paymentSnapshots = paymentSnapshotsFromListing(sub);
+  const managerUserId = input.managerUserId?.trim() || HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
   const charge = ensureChargeDueDateForReminders({
     id: `hc_mgr_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     createdAt: new Date().toISOString(),
@@ -2504,8 +2523,8 @@ export function createManagerCharge(input: {
     residentUserId: null,
     propertyId: input.propertyId,
     propertyLabel: input.propertyLabel,
-    managerUserId: input.managerUserId,
-    kind: "work_order_charge",
+    managerUserId,
+    kind: "other_cost",
     title: input.title.trim() || "Manager charge",
     amountLabel: balance,
     balanceLabel: isPaid ? "$0.00" : balance,
@@ -2515,13 +2534,12 @@ export function createManagerCharge(input: {
     blocksLeaseUntilPaid: input.blocksLeaseUntilPaid ?? false,
     ...paymentSnapshots,
   });
-  writeAll([...readAll(), charge], true);
+  // Emit immediately so Pending updates even before the server upsert finishes.
+  writeAll([...readAll(), charge], false);
   void postHouseholdPayloadAwait({
     action: "replace",
     charges: [charge],
     rentProfiles: readRentProfiles(),
-  }).then((ok) => {
-    if (ok) emit();
   });
   return charge;
 }

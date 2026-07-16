@@ -31,7 +31,7 @@ import {
   type ListingServiceQuickAdd,
 } from "@/lib/manager-listing-submission";
 import { resolvePropertySaveTargetById } from "@/lib/manager-property-save-target";
-import { createServiceRequest, hasDeposit } from "@/lib/service-requests-storage";
+import { createServiceRequest, hasDeposit, CUSTOM_SERVICE_REQUEST_OFFER_ID } from "@/lib/service-requests-storage";
 
 type PropertyOption = { propertyId: string; propertyLabel: string };
 
@@ -142,6 +142,8 @@ export function ManagerCreateServiceRequestModal({
   const [residentEmail, setResidentEmail] = useState("");
   const [offerId, setOfferId] = useState("");
   const [notes, setNotes] = useState("");
+  const [customTitle, setCustomTitle] = useState("");
+  const [customPriceLimit, setCustomPriceLimit] = useState("");
   const [addingOffer, setAddingOffer] = useState(false);
   const [savingOffer, setSavingOffer] = useState(false);
   const [newOfferName, setNewOfferName] = useState("");
@@ -176,6 +178,8 @@ export function ManagerCreateServiceRequestModal({
       }
       setOfferId("");
       setNotes("");
+      setCustomTitle("");
+      setCustomPriceLimit("");
       setAddingOffer(false);
       setNewOfferName("");
       setNewOfferPrice("");
@@ -316,7 +320,9 @@ export function ManagerCreateServiceRequestModal({
     }
   };
 
-  const submit = () => {
+  const isCustomOffer = offerId === CUSTOM_SERVICE_REQUEST_OFFER_ID;
+
+  const submit = async () => {
     if (busy) return;
     if (!managerUserId) {
       showToast("Could not identify your manager account.");
@@ -330,26 +336,62 @@ export function ManagerCreateServiceRequestModal({
       showToast("Choose a resident.");
       return;
     }
-    if (!offerId || !selectedOffer) {
+    if (!offerId) {
+      showToast("Choose a request type.");
+      return;
+    }
+    if (isCustomOffer) {
+      if (!customTitle.trim()) {
+        showToast("Add a title for the custom request.");
+        return;
+      }
+    } else if (!selectedOffer) {
       showToast("Choose a request type.");
       return;
     }
     setBusy(true);
     try {
-      createServiceRequest({
-        offerId: selectedOffer.id,
-        offerName: selectedOffer.name,
-        offerDescription: selectedOffer.description,
-        price: requestPrice.trim(),
-        deposit: requestDeposit.trim(),
-        residentEmail: selectedResident.residentEmail,
-        residentName: selectedResident.residentName,
-        managerUserId,
-        propertyId,
-        returnByDate: "",
-        notes: notes.trim(),
-      });
-      showToast(`${selectedOffer.name} request created for ${selectedResident.residentName}.`);
+      if (isCustomOffer) {
+        const limitRaw = customPriceLimit.trim();
+        const { mirrored } = await createServiceRequest({
+          offerId: CUSTOM_SERVICE_REQUEST_OFFER_ID,
+          offerName: customTitle.trim(),
+          offerDescription: notes.trim(),
+          price: "",
+          priceLimit: limitRaw || undefined,
+          deposit: "",
+          residentEmail: selectedResident.residentEmail,
+          residentName: selectedResident.residentName,
+          managerUserId,
+          propertyId,
+          returnByDate: "",
+          notes: notes.trim(),
+        });
+        if (!mirrored.ok) {
+          showToast(mirrored.error || "Could not save request. Try again.");
+          return;
+        }
+        showToast(`${customTitle.trim()} request created for ${selectedResident.residentName}.`);
+      } else {
+        const { mirrored } = await createServiceRequest({
+          offerId: selectedOffer!.id,
+          offerName: selectedOffer!.name,
+          offerDescription: selectedOffer!.description,
+          price: requestPrice.trim(),
+          deposit: requestDeposit.trim(),
+          residentEmail: selectedResident.residentEmail,
+          residentName: selectedResident.residentName,
+          managerUserId,
+          propertyId,
+          returnByDate: "",
+          notes: notes.trim(),
+        });
+        if (!mirrored.ok) {
+          showToast(mirrored.error || "Could not save request. Try again.");
+          return;
+        }
+        showToast(`${selectedOffer!.name} request created for ${selectedResident.residentName}.`);
+      }
       onSubmitted();
       onClose();
     } finally {
@@ -421,13 +463,21 @@ export function ManagerCreateServiceRequestModal({
 
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Request type *
-          <Select value={offerId} onChange={(e) => setOfferId(e.target.value)} disabled={busy || !propertyId}>
+          <Select
+            value={offerId}
+            onChange={(e) => {
+              setOfferId(e.target.value);
+              if (e.target.value !== CUSTOM_SERVICE_REQUEST_OFFER_ID) {
+                setCustomTitle("");
+                setCustomPriceLimit("");
+              }
+            }}
+            disabled={busy || !propertyId}
+          >
             <option value="">
               {!propertyId
                 ? "Choose a property first"
-                : offersForProperty.length === 0
-                  ? "No offered requests for this property"
-                  : "Select request type"}
+                : "Select request type"}
             </option>
             {offersForProperty.map((o) => (
               <option key={o.id} value={o.id}>
@@ -435,13 +485,37 @@ export function ManagerCreateServiceRequestModal({
                 {o.price ? ` · ${o.price}` : ""}
               </option>
             ))}
+            <option value={CUSTOM_SERVICE_REQUEST_OFFER_ID}>Custom</option>
           </Select>
           {propertyId && offersForProperty.length === 0 ? (
             <span className="text-[11px] font-normal normal-case text-muted">
-              This property has no offered requests yet — add one below.
+              No catalog offerings yet — choose Custom or add one below.
             </span>
           ) : null}
         </label>
+
+        {isCustomOffer ? (
+          <>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Request title *
+              <Input
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                placeholder="e.g. Extra storage bin"
+                disabled={busy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Price limit (optional)
+              <Input
+                value={customPriceLimit}
+                onChange={(e) => setCustomPriceLimit(e.target.value)}
+                placeholder="e.g. $50"
+                disabled={busy}
+              />
+            </label>
+          </>
+        ) : null}
 
         {selectedOffer ? (
           <div className="grid grid-cols-2 gap-2">
@@ -570,7 +644,16 @@ export function ManagerCreateServiceRequestModal({
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="button" variant="primary" onClick={submit} disabled={busy}>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={submit}
+            disabled={
+              busy ||
+              !offerId ||
+              (isCustomOffer ? !customTitle.trim() : !selectedOffer)
+            }
+          >
             {busy ? "Saving…" : "Create request"}
           </Button>
         </div>

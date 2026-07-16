@@ -43,6 +43,7 @@ import {
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
   updateManagerWorkOrder,
+  upsertManagerWorkOrderToServer,
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
@@ -479,8 +480,8 @@ export function ResidentServicesPanel({
   const [mPhotos, setMPhotos] = useState<string[]>([]);
 
   // service request form
-  const [serviceMode, setServiceMode] = useState<"catalog" | "custom">("catalog");
-  const [selectedOffer, setSelectedOffer] = useState<ManagerListingServiceOption | null>(null);
+  /** Catalog offer id, or CUSTOM_SERVICE_REQUEST_OFFER_ID for a free-form request. */
+  const [requestTypeId, setRequestTypeId] = useState("");
   const [customTitle, setCustomTitle] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [customPriceLimit, setCustomPriceLimit] = useState("");
@@ -494,6 +495,8 @@ export function ResidentServicesPanel({
   const [leaseTick, setLeaseTick] = useState(0);
   const [appTick, setAppTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
+  /** Catalog from `/api/portal/resident-property` — authoritative for resident offers. */
+  const [serverCatalogOffers, setServerCatalogOffers] = useState<ManagerListingServiceOption[] | null>(null);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -505,44 +508,43 @@ export function ResidentServicesPanel({
     setServiceRequests(readServiceRequestsForResident(residentEmail));
   }
 
-  // Memoize application lookup to avoid redundant scans
+  // Prefer the approved residency — leftover pending apps at other managers
+  // must not stamp service requests into the wrong queue.
   const residentApplication = useMemo(() => {
     void allRows;
     void appTick;
     if (!residentEmail) return null;
-    return readManagerApplicationRows().find(
+    const matches = readManagerApplicationRows().filter(
       (r) => r.email?.trim().toLowerCase() === residentEmail,
-    ) ?? null;
+    );
+    return matches.find((r) => r.bucket === "approved") ?? matches[0] ?? null;
   }, [residentEmail, allRows, appTick]);
 
-  // Memoize offer loading based on resident application data
+  const visibleToResident = (o: { available: boolean; residentEmails?: string[] }) => {
+    if (!o.available) return false;
+    if (!o.residentEmails?.length) return true;
+    return o.residentEmails.some((e) => e.trim().toLowerCase() === residentEmail);
+  };
+
+  // Prefer server catalog (includes unpublished properties); fall back to local
+  // cached property lookup while the hydrate is in flight.
   const offersForResident = useMemo(() => {
     void propertyTick;
+    if (serverCatalogOffers) {
+      return serverCatalogOffers.filter(visibleToResident);
+    }
     if (!residentApplication) return [];
     const propertyId =
       residentApplication.assignedPropertyId?.trim() ||
       residentApplication.propertyId?.trim() ||
       residentApplication.application?.propertyId?.trim() ||
       "";
-    let managerUserId = residentApplication.managerUserId?.trim() || "";
-    if (!managerUserId && propertyId) {
-      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
-    }
-
-    const visibleToResident = (o: { available: boolean; residentEmails?: string[] }) => {
-      if (!o.available) return false;
-      if (!o.residentEmails?.length) return true;
-      return o.residentEmails.some((e) => e.trim().toLowerCase() === residentEmail);
-    };
-
     if (!propertyId) return [];
-
-    if (!managerUserId) return [];
     const property = getPropertyById(propertyId);
     if (!property?.listingSubmission || property.listingSubmission.v !== 1) return [];
     const options = normalizeManagerListingSubmissionV1(property.listingSubmission).serviceRequestOptions ?? [];
     return options.filter(visibleToResident);
-  }, [propertyTick, residentApplication, residentEmail]);
+  }, [propertyTick, residentApplication, residentEmail, serverCatalogOffers]);
 
   const availableOffers = offersForResident;
 
@@ -562,7 +564,14 @@ export function ResidentServicesPanel({
       // property (it's scoped to properties the caller manages), so hydrate
       // it separately — needed for e.g. manager-offered service requests.
       .then(() => loadResidentPropertyFromServer())
-      .then(() => setPropertyTick((t) => t + 1));
+      .then((loaded) => {
+        if (loaded) {
+          setServerCatalogOffers(loaded.serviceRequestOptions);
+        } else {
+          setServerCatalogOffers([]);
+        }
+        setPropertyTick((t) => t + 1);
+      });
     
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
@@ -769,8 +778,7 @@ export function ResidentServicesPanel({
     if (photoInputRef.current) photoInputRef.current.value = "";
   };
   const resetService = () => {
-    setServiceMode(availableOffers.length > 0 ? "catalog" : "custom");
-    setSelectedOffer(null);
+    setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
     setCustomTitle("");
     setCustomDescription("");
     setCustomPriceLimit("");
@@ -778,7 +786,11 @@ export function ResidentServicesPanel({
   };
 
   function getApplication() {
-    return residentApplication || readManagerApplicationRows().find((r) => r.email?.trim().toLowerCase() === residentEmail);
+    if (residentApplication) return residentApplication;
+    const matches = readManagerApplicationRows().filter(
+      (r) => r.email?.trim().toLowerCase() === residentEmail,
+    );
+    return matches.find((r) => r.bucket === "approved") ?? matches[0];
   }
 
   const submitMaintenance = async () => {
@@ -836,19 +848,31 @@ export function ResidentServicesPanel({
       residentEmail,
       photoDataUrls: mPhotos,
     };
-    writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
+    writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()], { mirror: false });
+    const mirrored = await upsertManagerWorkOrderToServer(row);
+    if (!mirrored.ok) {
+      deleteManagerWorkOrderRow(row.id);
+      setAllRows(readManagerWorkOrderRows());
+      showToast(mirrored.error || "Could not send work order to your manager. Try again.");
+      return;
+    }
+    if (mirrored.row.id === row.id) {
+      updateManagerWorkOrder(row.id, () => mirrored.row);
+    }
     setAllRows(readManagerWorkOrderRows());
     setExpandedId(row.id);
+    const stampedManagerId = mirrored.row.managerUserId || managerUserId;
+    const stampedPropertyId = mirrored.row.propertyId || propertyId;
     const notifyResult = await notifyManagerOfResidentSubmission({
-      managerUserId,
+      managerUserId: stampedManagerId,
       residentName: application?.name || residentEmail,
       residentEmail,
       propertyName: propertyLabel,
-      propertyId,
-      title: row.title,
+      propertyId: stampedPropertyId,
+      title: mirrored.row.title || row.title,
       kind: "work-order",
       details: [
-        `Request ID: ${row.id}`,
+        `Request ID: ${mirrored.row.id}`,
         `Category: ${mCategory}`,
         `Priority: ${mPriority}`,
         `Preferred arrival: ${row.preferredArrival ?? "Anytime"}`,
@@ -870,6 +894,8 @@ export function ResidentServicesPanel({
     }
     resetMaintenance();
     setModalMode("none");
+    await syncManagerWorkOrdersFromServer({ force: true });
+    setAllRows(readManagerWorkOrderRows());
     } finally {
       setMaintenanceSubmitting(false);
     }
@@ -883,7 +909,8 @@ export function ResidentServicesPanel({
     }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
 
-    const isCustom = serviceMode === "custom" || availableOffers.length === 0;
+    const isCustom =
+      requestTypeId === CUSTOM_SERVICE_REQUEST_OFFER_ID || availableOffers.length === 0;
     if (isCustom) {
       if (!customTitle.trim()) { showToast("Add a title for your request."); return; }
       const limitAmount = parseMoneyAmount(customPriceLimit.trim());
@@ -892,7 +919,10 @@ export function ResidentServicesPanel({
         return;
       }
     } else {
-      if (!selectedOffer) { showToast("Select a service first."); return; }
+      if (!requestTypeId || !availableOffers.some((o) => o.id === requestTypeId)) {
+        showToast("Select a request type.");
+        return;
+      }
     }
 
     setServiceSubmitting(true);
@@ -940,10 +970,10 @@ export function ResidentServicesPanel({
         sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
       ];
     } else {
-      const currentOffer = availableOffers.find((offer) => offer.id === selectedOffer!.id) ?? null;
+      const currentOffer = availableOffers.find((offer) => offer.id === requestTypeId) ?? null;
       if (!currentOffer) {
         showToast("That request option is no longer available. Please choose another.");
-        setSelectedOffer(null);
+        setRequestTypeId("");
         return;
       }
       offerId = currentOffer.id;
@@ -961,7 +991,7 @@ export function ResidentServicesPanel({
       ];
     }
 
-    const createdRequest = createServiceRequest({
+    const { request: createdRequest, mirrored } = await createServiceRequest({
       offerId,
       offerName,
       offerDescription,
@@ -975,16 +1005,22 @@ export function ResidentServicesPanel({
       returnByDate: "",
       notes: sNotes.trim(),
     });
+    if (!mirrored.ok) {
+      showToast(mirrored.error || "Could not send request to your manager. Try again.");
+      return;
+    }
+    const stampedManagerId = createdRequest.managerUserId || managerUserId;
+    const stampedPropertyId = createdRequest.propertyId || propertyId;
     const propertyLabel =
       application?.property ||
-      getPropertyById(propertyId)?.address.split(",")[0]?.trim() ||
+      getPropertyById(stampedPropertyId)?.address.split(",")[0]?.trim() ||
       "Assigned house";
     const notifyResult = await notifyManagerOfResidentSubmission({
-      managerUserId,
+      managerUserId: stampedManagerId,
       residentName: application?.name || residentEmail,
       residentEmail,
       propertyName: propertyLabel,
-      propertyId,
+      propertyId: stampedPropertyId,
       title: notifyTitle,
       kind: "service-request",
       details: [`Request ID: ${createdRequest.id}`, ...notifyDetails.filter(Boolean)],
@@ -995,6 +1031,7 @@ export function ResidentServicesPanel({
     }
     resetService();
     setModalMode("none");
+    await syncServiceRequestsFromServer({ force: true });
     reloadServiceRequests();
     } finally {
       setServiceSubmitting(false);
@@ -1031,7 +1068,7 @@ export function ResidentServicesPanel({
                 showToast("Services unlock after your lease is fully signed.");
                 return;
               }
-              setServiceMode(availableOffers.length > 0 ? "catalog" : "custom");
+              setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
               setModalMode("service");
             }}
           >
@@ -1377,126 +1414,151 @@ export function ResidentServicesPanel({
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
       >
-        {availableOffers.length > 0 ? (
-          <div className="mb-4 w-fit max-w-full">
-            <PillTabs
-              items={[
-                { id: "catalog", label: "Catalog" },
-                { id: "custom", label: "Custom request" },
-              ]}
-              activeId={serviceMode}
-              onChange={(id) => {
-                setServiceMode(id as "catalog" | "custom");
-                setSelectedOffer(null);
-              }}
-            />
-          </div>
-        ) : null}
+        {(() => {
+          const isCustom =
+            requestTypeId === CUSTOM_SERVICE_REQUEST_OFFER_ID ||
+            (availableOffers.length === 0 && Boolean(requestTypeId));
+          const selectedCatalogOffer =
+            requestTypeId &&
+            requestTypeId !== CUSTOM_SERVICE_REQUEST_OFFER_ID
+              ? availableOffers.find((o) => o.id === requestTypeId) ?? null
+              : null;
+          return (
+            <>
+              <p className="text-xs text-muted">
+                {isCustom || availableOffers.length === 0
+                  ? "Describe what you need and your max budget. Your manager will set the final price and approve the request."
+                  : "Choose a request type your property offers, or Custom for something else."}
+              </p>
 
-        {serviceMode === "catalog" && availableOffers.length > 0 ? (
-          <>
-            <p className="text-xs text-muted">Select a request option from your manager&apos;s catalog.</p>
-            <div className="mt-4 space-y-2">
-              {availableOffers.map((offer) => (
-                <button
-                  key={offer.id}
-                  type="button"
-                  onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); }}
-                  className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-                    selectedOffer?.id === offer.id
-                      ? "border-primary/30 bg-accent/30 ring-1 ring-primary/20"
-                      : "border-border bg-card hover:border-border hover:bg-accent/30"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-foreground">{offer.name}</p>
-                      {offer.description ? <p className="mt-1 text-xs leading-relaxed text-muted">{offer.description}</p> : null}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {offer.price ? (
-                        <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-xs font-semibold text-muted">{offer.price}</span>
-                      ) : null}
-                      {hasDeposit(offer.deposit) ? (
-                        <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Deposit {offer.deposit}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {selectedOffer ? (
               <div className="mt-4 space-y-3">
                 <div>
-                  <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
-                  <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-card" />
+                  <p className="mb-1 text-[11px] font-medium text-muted">
+                    Request type <span className="text-rose-500">*</span>
+                  </p>
+                  <Select
+                    value={
+                      requestTypeId ||
+                      (availableOffers.length === 0 ? CUSTOM_SERVICE_REQUEST_OFFER_ID : "")
+                    }
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setRequestTypeId(next);
+                      if (next !== CUSTOM_SERVICE_REQUEST_OFFER_ID) {
+                        setCustomTitle("");
+                        setCustomDescription("");
+                        setCustomPriceLimit("");
+                      }
+                    }}
+                    className="bg-card"
+                    disabled={serviceSubmitting}
+                  >
+                    {availableOffers.length > 0 ? (
+                      <option value="">Select request type</option>
+                    ) : null}
+                    {availableOffers.map((offer) => (
+                      <option key={offer.id} value={offer.id}>
+                        {offer.name}
+                        {offer.price ? ` · ${offer.price}` : ""}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_SERVICE_REQUEST_OFFER_ID}>Custom</option>
+                  </Select>
                 </div>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <p className="text-xs text-muted">
-              Describe what you need and your max budget. Your manager will set the final price and approve the request.
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">
-                  Request title <span className="text-rose-500">*</span>
-                </p>
-                <Input
-                  value={customTitle}
-                  onChange={(e) => setCustomTitle(e.target.value)}
-                  placeholder="e.g. Extra storage bin"
-                  className="bg-card"
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">Details (optional)</p>
-                <Textarea
-                  value={customDescription}
-                  onChange={(e) => setCustomDescription(e.target.value)}
-                  placeholder="Size, timing, or other details…"
-                  className="min-h-[72px] bg-card"
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">
-                  Price limit <span className="text-rose-500">*</span>
-                </p>
-                <Input
-                  value={customPriceLimit}
-                  onChange={(e) => setCustomPriceLimit(e.target.value)}
-                  placeholder="$50"
-                  inputMode="decimal"
-                  className="bg-card"
-                />
-                <p className="mt-1 text-[10px] text-muted">Maximum you&apos;re willing to pay — your manager confirms the final amount.</p>
-              </div>
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
-                <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Anything else your manager should know…" className="bg-card" />
-              </div>
-            </div>
-          </>
-        )}
 
-        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button
-            type="button"
-            className="rounded-full"
-            onClick={() => { void submitService(); }}
-            disabled={
-              serviceSubmitting ||
-              (serviceMode === "catalog" && availableOffers.length > 0
-                ? !selectedOffer
-                : !customTitle.trim() || !customPriceLimit.trim())
-            }
-          >
-            {serviceSubmitting ? "Sending…" : "Send request"}
-          </Button>
-        </div>
+                {selectedCatalogOffer ? (
+                  <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm">
+                    <p className="font-semibold text-foreground">{selectedCatalogOffer.name}</p>
+                    {selectedCatalogOffer.description ? (
+                      <p className="mt-1 text-xs text-muted">{selectedCatalogOffer.description}</p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-muted">
+                      {[
+                        selectedCatalogOffer.price ? `Price ${selectedCatalogOffer.price}` : null,
+                        hasDeposit(selectedCatalogOffer.deposit)
+                          ? `Deposit ${selectedCatalogOffer.deposit}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "Manager-set pricing"}
+                    </p>
+                  </div>
+                ) : null}
+
+                {isCustom ||
+                (availableOffers.length === 0 &&
+                  (requestTypeId === CUSTOM_SERVICE_REQUEST_OFFER_ID || !requestTypeId)) ? (
+                  <>
+                    <div>
+                      <p className="mb-1 text-[11px] font-medium text-muted">
+                        Request title <span className="text-rose-500">*</span>
+                      </p>
+                      <Input
+                        value={customTitle}
+                        onChange={(e) => setCustomTitle(e.target.value)}
+                        placeholder="e.g. Extra storage bin"
+                        className="bg-card"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[11px] font-medium text-muted">Details (optional)</p>
+                      <Textarea
+                        value={customDescription}
+                        onChange={(e) => setCustomDescription(e.target.value)}
+                        placeholder="Size, timing, or other details…"
+                        className="min-h-[72px] bg-card"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[11px] font-medium text-muted">
+                        Price limit <span className="text-rose-500">*</span>
+                      </p>
+                      <Input
+                        value={customPriceLimit}
+                        onChange={(e) => setCustomPriceLimit(e.target.value)}
+                        placeholder="$50"
+                        inputMode="decimal"
+                        className="bg-card"
+                      />
+                      <p className="mt-1 text-[10px] text-muted">
+                        Maximum you&apos;re willing to pay — your manager confirms the final amount.
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+
+                {requestTypeId ? (
+                  <div>
+                    <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
+                    <Input
+                      value={sNotes}
+                      onChange={(e) => setSNotes(e.target.value)}
+                      placeholder="Preferred timing, special instructions…"
+                      className="bg-card"
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
+                <Button
+                  type="button"
+                  className="rounded-full"
+                  onClick={() => { void submitService(); }}
+                  disabled={
+                    serviceSubmitting ||
+                    !requestTypeId ||
+                    (isCustom
+                      ? !customTitle.trim() || !customPriceLimit.trim()
+                      : !selectedCatalogOffer)
+                  }
+                >
+                  {serviceSubmitting ? "Sending…" : "Send request"}
+                </Button>
+              </div>
+            </>
+          );
+        })()}
       </Modal>
 
       {/* Edit service request modal */}

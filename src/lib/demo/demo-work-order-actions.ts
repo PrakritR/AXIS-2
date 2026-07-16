@@ -58,7 +58,7 @@ export function createDemoResidentServiceRequest(propertyId: string): string {
     (r) => r.bucket === "approved" && (r.email ?? "").toLowerCase() === CANONICAL_DEMO_GUIDED_EMAIL,
   );
   const id = `demo-guided-req-${Date.now()}`;
-  createServiceRequest({
+  void createServiceRequest({
     offerId: CUSTOM_SERVICE_REQUEST_OFFER_ID,
     offerName: "Kitchen sink slow drain",
     offerDescription: "Water backs up in the kitchen sink after a few seconds. Started this week.",

@@ -20,6 +20,7 @@ import {
   compareDueDateMs,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
+  isManagerAddedOneOffCharge,
   readChargesForManager,
   reconcileApprovedResidentPaymentSchedules,
   removeResidentHouseholdPaymentData,
@@ -242,6 +243,8 @@ export function ManagerPayments() {
     return readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") })
       .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
       .filter((charge) => {
+        // Keep manager "Add payment" one-offs even if that email later moves to Previous.
+        if (isManagerAddedOneOffCharge(charge)) return true;
         const email = charge.residentEmail?.trim().toLowerCase();
         return !email || !previousResidentEmails.has(email);
       })

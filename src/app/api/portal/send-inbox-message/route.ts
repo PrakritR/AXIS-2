@@ -12,7 +12,12 @@ import { appendInboxThreadReply } from "@/lib/portal-inbox-delivery";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { sendSms } from "@/lib/twilio";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
+import {
+  ensureSmsIncludesPortalLink,
+  type ResidentSmsLinkKind,
+} from "@/lib/claw-resident-links";
+import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   NOTIFICATION_CATEGORIES,
@@ -363,17 +368,17 @@ export async function POST(req: Request) {
       ? recipients.some((r) => channelByEmail.get(r.email)?.sms === true)
       : deliverViaSms;
 
-    // All real (non-demo) recipient emails — used for the "any real recipient?"
-    // short-circuit and per-recipient logging (unchanged meaning).
+    // All non-sandbox recipient emails — sandbox accounts skip Resend.
+    // NOTE: endsWith("@axis.local") alone is wrong for "@test.axis.local".
     const toEmails = recipients
       .map((recipient) => recipient.email)
-      .filter((email) => !email.endsWith("@axis.local"));
+      .filter((email) => !isPortalSandboxEmail(email));
     // The actual email SEND list: category mode → recipients whose email channel
     // is on; legacy → all real recipients when deliverViaEmail.
     const emailToSend = recipients
       .filter((recipient) => emailWanted(recipient.email))
       .map((recipient) => recipient.email)
-      .filter((email) => !email.endsWith("@axis.local"));
+      .filter((email) => !isPortalSandboxEmail(email));
 
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
     if (deliverToPortalInbox && recipients.length > 0) {
@@ -524,7 +529,7 @@ export async function POST(req: Request) {
       const { data: senderProfile } = await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle();
       const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
 
-      if (smsFromNumber) {
+      if (canSendResidentOutboundSms(smsFromNumber)) {
         // Fetch phone numbers for all recipients
         const recipientEmails = recipients.map((r) => r.email);
         const { data: phones } = await db
@@ -537,7 +542,32 @@ export async function POST(req: Request) {
           if (eventCategory && channelByEmail.get(recipient.email)?.sms !== true) continue;
           const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
           if (!recipientPhone) continue;
-          const result = await sendSms(recipientPhone, `${subject}\n\n${text}`, smsFromNumber);
+          let smsText = `${subject}\n\n${text}`;
+          const linkKind: ResidentSmsLinkKind | null =
+            eventCategory === "leases"
+              ? "lease"
+              : eventCategory === "payments"
+                ? "payments"
+                : eventCategory === "maintenance"
+                  ? "services"
+                  : eventCategory
+                    ? "inbox"
+                    : null;
+          if (linkKind) smsText = ensureSmsIncludesPortalLink(smsText, linkKind);
+          const result = await sendResidentOutboundSms({
+            to: recipientPhone,
+            text: smsText,
+            fromNumber: smsFromNumber,
+            linkKind: null,
+            openThread:
+              eventCategory === "payments" || eventCategory === "leases"
+                ? {
+                    managerUserId: user.id,
+                    residentEmail: recipient.email,
+                    topic: eventCategory === "leases" ? "lease" : "payment",
+                  }
+                : null,
+          });
           if (result.sent) {
             const logId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             await db.from("portal_outbound_mail_records").upsert(
@@ -546,7 +576,15 @@ export async function POST(req: Request) {
                 recipient_email: recipient.email,
                 subject,
                 channel: "sms",
-                row_data: { id: logId, to: recipientPhone, subject, body: text, sentAt, smsSent: true },
+                row_data: {
+                  id: logId,
+                  to: recipientPhone,
+                  subject,
+                  body: text,
+                  sentAt,
+                  smsSent: true,
+                  smsChannel: result.channel ?? null,
+                },
               },
               { onConflict: "id" },
             );

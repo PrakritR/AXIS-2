@@ -29,7 +29,7 @@ import {
 } from "@/lib/co-manager-permissions";
 
 /** Match property ids across minor formatting differences (avoid importing calendar — cycle). */
-function samePropertyId(a: string | null | undefined, b: string | null | undefined): boolean {
+export function samePropertyId(a: string | null | undefined, b: string | null | undefined): boolean {
   const left = String(a ?? "").trim();
   const right = String(b ?? "").trim();
   if (!left || !right) return false;

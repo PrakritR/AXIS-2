@@ -61,6 +61,32 @@ function mirrorWorkOrdersToServer(rows: DemoManagerWorkOrderRow[]) {
   }).catch(() => undefined);
 }
 
+/** Awaited single-row upsert — used when a resident files a work order so a
+ * failed mirror surfaces instead of leaving a local-only orphan. */
+export async function upsertManagerWorkOrderToServer(
+  row: DemoManagerWorkOrderRow,
+): Promise<{ ok: true; row: DemoManagerWorkOrderRow } | { ok: false; error: string }> {
+  if (typeof window === "undefined" || isDemoModeActive()) {
+    return { ok: true, row };
+  }
+  try {
+    const res = await fetch("/api/portal-work-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "upsert", row }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      return { ok: false, error: body?.error?.trim() || `Save failed (${res.status})` };
+    }
+    const body = (await res.json().catch(() => null)) as { row?: DemoManagerWorkOrderRow } | null;
+    return { ok: true, row: body?.row && typeof body.row === "object" ? body.row : row };
+  } catch {
+    return { ok: false, error: "Could not reach the server." };
+  }
+}
+
 function deleteWorkOrderFromServer(id: string) {
   if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-work-orders", {
@@ -130,13 +156,16 @@ export function readVendorWorkOrderRows(): DemoManagerWorkOrderRow[] {
   return rows.filter((r) => r.vendorName === DEMO_VENDOR_NAME);
 }
 
-export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {
+export function writeManagerWorkOrderRows(
+  rows: DemoManagerWorkOrderRow[],
+  opts?: { mirror?: boolean },
+): void {
   if (workOrderRowsChanged(memoryRows, rows) === false) return;
   memoryRows = rows;
   persistWorkOrdersToSession(rows);
   managerWorkOrdersLastSyncedAt = Date.now();
   emit();
-  mirrorWorkOrdersToServer(rows);
+  if (opts?.mirror !== false) mirrorWorkOrdersToServer(rows);
 }
 
 /** Demo seed: load work-order rows into the local store without server mirror. */

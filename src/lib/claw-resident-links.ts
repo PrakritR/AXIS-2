@@ -1,0 +1,177 @@
+/**
+ * Canonical deep links for resident SMS / iMessage (payment, lease, move-in, …).
+ * Always phone-reachable — never localhost.
+ */
+
+import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
+
+export type ResidentSmsLinkKind =
+  | "payments"
+  | "lease"
+  | "move_in"
+  | "inbox"
+  | "services"
+  | "applications"
+  | "login"
+  | "signup"
+  | "browse"
+  | "apply";
+
+/** Origin for links embedded in SMS (same rules as email + optional Claw override). */
+export function residentSmsLinkOrigin(): string {
+  const claw = (process.env.CLAW_MESSENGER_LINK_ORIGIN ?? "").trim().replace(/\/$/, "");
+  if (claw && !/localhost|127\.0\.0\.1/i.test(claw)) return claw;
+  const emailBase = resolveEmailLinkBaseUrl();
+  if (emailBase && !/localhost|127\.0\.0\.1/i.test(emailBase)) return emailBase;
+  return PRODUCTION_APP_ORIGIN;
+}
+
+export function residentPortalPath(
+  kind: ResidentSmsLinkKind,
+  opts?: { propertyId?: string | null; bundleId?: string | null },
+): string {
+  switch (kind) {
+    case "payments":
+      return "/resident/payments/pending";
+    case "lease":
+      return "/resident/lease";
+    case "move_in":
+      return "/resident/move-in";
+    case "inbox":
+      return "/resident/inbox/unopened";
+    case "services":
+      return "/resident/services/requests";
+    case "applications":
+      return "/resident/applications";
+    case "login":
+      return "/auth/login";
+    case "signup":
+      return "/auth/resident-setup";
+    case "browse":
+      return "/rent/browse";
+    case "apply": {
+      const q = new URLSearchParams();
+      const pid = opts?.propertyId?.trim();
+      const bid = opts?.bundleId?.trim();
+      if (pid) q.set("propertyId", pid);
+      if (bid) q.set("bundle", bid);
+      const qs = q.toString();
+      return qs ? `/rent/apply?${qs}` : "/rent/apply";
+    }
+    default:
+      return "/resident/inbox/unopened";
+  }
+}
+
+export function residentPortalUrl(
+  kind: ResidentSmsLinkKind,
+  opts?: { propertyId?: string | null; bundleId?: string | null },
+): string {
+  return `${residentSmsLinkOrigin()}${residentPortalPath(kind, opts)}`;
+}
+
+export type ManagerPortalLinkKind =
+  | "properties"
+  | "calendar"
+  | "applications"
+  | "leases"
+  | "residents"
+  | "payments"
+  | "services_work_orders"
+  | "services_requests"
+  | "inbox"
+  | "relationships"
+  | "promotion";
+
+export function managerPortalPath(kind: ManagerPortalLinkKind): string {
+  switch (kind) {
+    case "properties":
+      return "/portal/properties";
+    case "calendar":
+      return "/portal/calendar";
+    case "applications":
+      return "/portal/applications";
+    case "leases":
+      return "/portal/leases";
+    case "residents":
+      return "/portal/residents";
+    case "payments":
+      return "/portal/payments";
+    case "services_work_orders":
+      return "/portal/services/work-orders";
+    case "services_requests":
+      return "/portal/services/requests";
+    case "inbox":
+      return "/portal/inbox/unopened";
+    case "relationships":
+      return "/portal/relationships";
+    case "promotion":
+      return "/portal/promotion";
+    default:
+      return "/portal/inbox/unopened";
+  }
+}
+
+export function managerPortalUrl(kind: ManagerPortalLinkKind): string {
+  return `${residentSmsLinkOrigin()}${managerPortalPath(kind)}`;
+}
+
+export function managerPortalUrlFromPath(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${residentSmsLinkOrigin()}${p}`;
+}
+
+export function smsLinkKindForThreadTopic(
+  topic: "payment" | "lease" | "leasing" | "move_in" | "general",
+): ResidentSmsLinkKind {
+  switch (topic) {
+    case "payment":
+      return "payments";
+    case "lease":
+      return "lease";
+    case "move_in":
+      return "move_in";
+    case "leasing":
+      return "browse";
+    default:
+      return "inbox";
+  }
+}
+
+const LINK_LABEL: Record<ResidentSmsLinkKind, string> = {
+  payments: "Pay / view charges",
+  lease: "Sign / view lease",
+  move_in: "Move-in details",
+  inbox: "Open inbox",
+  services: "Service requests",
+  applications: "Applications",
+  login: "Sign in",
+  signup: "Create account",
+  browse: "Browse homes",
+  apply: "Apply",
+};
+
+/**
+ * Appends a labeled portal link when the body does not already contain an http(s) URL.
+ */
+export function ensureSmsIncludesPortalLink(
+  body: string,
+  kind: ResidentSmsLinkKind,
+  opts?: { propertyId?: string | null; bundleId?: string | null; label?: string },
+): string {
+  const text = body.trim();
+  if (!text) return text;
+  if (/https?:\/\//i.test(text)) return text;
+  const url = residentPortalUrl(kind, opts);
+  const label = (opts?.label ?? LINK_LABEL[kind]).trim() || LINK_LABEL[kind];
+  return `${text}\n\n${label}: ${url}`;
+}
+
+/** Multi-line default SMS footer links (welcome / onboarding). */
+export function defaultResidentOnboardingSmsLinks(): string[] {
+  return [
+    `Sign in: ${residentPortalUrl("login")}`,
+    `Payments: ${residentPortalUrl("payments")}`,
+    `Lease: ${residentPortalUrl("lease")}`,
+  ];
+}

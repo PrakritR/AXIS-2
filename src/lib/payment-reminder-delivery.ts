@@ -1,7 +1,7 @@
 import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { sendSms } from "@/lib/twilio";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   resolveChannels,
@@ -159,12 +159,25 @@ export async function deliverPaymentReminder(input: {
     }
   }
 
-  if (managerSmsFromNumber && channels.sms) {
+  if (canSendResidentOutboundSms(managerSmsFromNumber) && channels.sms) {
     try {
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
         const smsBody = `${subject}\n\n${text.slice(0, 300)}`;
-        const smsResult = await sendSms(residentPhone, smsBody, managerSmsFromNumber);
+        const smsResult = await sendResidentOutboundSms({
+          to: residentPhone,
+          text: smsBody,
+          fromNumber: managerSmsFromNumber,
+          linkKind: category === "leases" ? "lease" : "payments",
+          openThread: managerId
+            ? {
+                managerUserId: managerId,
+                residentUserId,
+                residentEmail: residentLower,
+                topic: category === "leases" ? "lease" : "payment",
+              }
+            : null,
+        });
         if (smsResult.sent) {
           const smsLogId = `${dedupId}_sms`;
           await db.from("portal_outbound_mail_records").upsert(
@@ -180,6 +193,7 @@ export async function deliverPaymentReminder(input: {
                 body: smsBody,
                 sentAt: new Date().toISOString(),
                 smsSent: true,
+                smsChannel: smsResult.channel ?? null,
                 chargeId: charge.id,
                 slot: slotLabel,
               },

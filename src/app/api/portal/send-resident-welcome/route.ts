@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { sendSms } from "@/lib/twilio";
 import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import {
@@ -11,6 +10,8 @@ import {
   buildResidentWelcomeMailtoHref,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
+import { defaultResidentOnboardingSmsLinks } from "@/lib/claw-resident-links";
 
 export const runtime = "nodejs";
 
@@ -222,17 +223,32 @@ export async function POST(req: Request) {
       /* non-critical — email already sent */
     }
 
-    // SMS welcome if manager has sms_from_number configured
+    // SMS welcome via Claw (preferred) or Twilio manager work number
     try {
       const { data: managerProfile } = await svc.from("profiles").select("sms_from_number, full_name").eq("id", user.id).maybeSingle();
       const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
-      if (smsFromNumber && !skipExternalEmail) {
+      if (canSendResidentOutboundSms(smsFromNumber) && !skipExternalEmail) {
         const { data: residentProfile } = await svc.from("profiles").select("phone").eq("email", to).maybeSingle();
         const residentPhone = String(residentProfile?.phone ?? "").trim();
         if (residentPhone) {
           const senderName = String(managerProfile?.full_name ?? user.email ?? "Your property manager").trim() || "Your property manager";
-          const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your PropLane resident portal is ready. Your PropLane ID: ${axisId}. — ${senderName}`;
-          await sendSms(residentPhone, smsBody, smsFromNumber);
+          const smsBody = [
+            `Welcome${residentName ? `, ${residentName}` : ""}! Your PropLane resident portal is ready.`,
+            `PropLane ID: ${axisId}`,
+            ...defaultResidentOnboardingSmsLinks(),
+            `— ${senderName}`,
+          ].join("\n");
+          await sendResidentOutboundSms({
+            to: residentPhone,
+            text: smsBody,
+            fromNumber: smsFromNumber,
+            linkKind: null,
+            openThread: {
+              managerUserId: user.id,
+              residentEmail: to,
+              topic: "general",
+            },
+          });
         }
       }
     } catch { /* non-critical */ }

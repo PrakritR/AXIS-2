@@ -8,7 +8,7 @@ import {
   buildMoveInReminderText,
   buildMoveInReminderHtml,
 } from "@/lib/move-in-reminder-email";
-import { sendSms } from "@/lib/twilio";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 
 export const runtime = "nodejs";
@@ -204,18 +204,28 @@ export async function GET(req: Request) {
       { onConflict: "id" },
     );
 
-    // SMS delivery if the associated manager has a Twilio number
+    // SMS delivery via Claw (preferred) or manager Twilio work number
     if (managerUserId) {
       try {
         const { data: managerProfile } = await db.from("profiles").select("sms_from_number, full_name").eq("id", managerUserId).maybeSingle();
         const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
-        if (smsFromNumber) {
+        if (canSendResidentOutboundSms(smsFromNumber)) {
           const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", email).maybeSingle();
           const residentPhone = String(residentProfile?.phone ?? "").trim();
           if (residentPhone) {
             const managerName = String(managerProfile?.full_name ?? "Your property manager").trim() || "Your property manager";
-            const smsBody = `Hi ${name || "Resident"}, reminder: your move-in is tomorrow at ${propertyLabel}${addressLine ? `, ${addressLine}` : ""}. — ${managerName}`;
-            const smsResult = await sendSms(residentPhone, smsBody, smsFromNumber);
+            const smsBody = `Hi ${name || "Resident"}, reminder: your move-in is tomorrow at ${propertyLabel}${addressLine ? `, ${addressLine}` : ""}. Reply here with questions. — ${managerName}`;
+            const smsResult = await sendResidentOutboundSms({
+              to: residentPhone,
+              text: smsBody,
+              fromNumber: smsFromNumber,
+              linkKind: "move_in",
+              openThread: {
+                managerUserId,
+                residentEmail: email,
+                topic: "move_in",
+              },
+            });
             if (smsResult.sent) {
               const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               await db.from("portal_outbound_mail_records").upsert(
@@ -224,7 +234,15 @@ export async function GET(req: Request) {
                   recipient_email: email,
                   subject: MOVE_IN_REMINDER_SUBJECT,
                   channel: "sms",
-                  row_data: { id: smsLogId, to: residentPhone, subject: MOVE_IN_REMINDER_SUBJECT, body: smsBody, sentAt: new Date().toISOString(), smsSent: true },
+                  row_data: {
+                    id: smsLogId,
+                    to: residentPhone,
+                    subject: MOVE_IN_REMINDER_SUBJECT,
+                    body: smsBody,
+                    sentAt: new Date().toISOString(),
+                    smsSent: true,
+                    smsChannel: smsResult.channel ?? null,
+                  },
                 },
                 { onConflict: "id" },
               );

@@ -325,10 +325,12 @@ export function getPropertyById(id: string): MockProperty | undefined {
   const base = id.trim();
   if (!base) return undefined;
   const { propertyId } = parseRoomChoiceValue(base);
+  // Prefer the full extras cache (includes resident-hydrated unpublished
+  // listings) over the public live-only catalog, which may be incomplete.
   const fromKnown =
     mockProperties.find((p) => p.id === propertyId) ??
-    readExtraListings().find((p) => p.id === propertyId) ??
-    readAllExtraListings().find((p) => p.id === propertyId);
+    readAllExtraListings().find((p) => p.id === propertyId) ??
+    readExtraListings().find((p) => p.id === propertyId);
   if (fromKnown) return fromKnown;
   // Fall back to pending properties (not yet approved/listed) so their title resolves correctly.
   const pendingRow = readAllPendingManagerProperties().find((p) => p.id === propertyId);

@@ -113,9 +113,8 @@ type RecipientProfile = {
  *
  * - `inbox` is ALWAYS true (durable record, non-suppressible).
  * - `email` follows the stored preference (default when no row exists).
- * - `sms` requires the preference on (OR `account`, which force-enables it) AND
- *   the recipient having a verified phone AND that phone not being opted out of
- *   SMS (STOP handling in sms-consent). Any missing condition disables SMS.
+ * - `sms` requires a phone on the profile (collected at signup) that has not
+ *   texted STOP. Verification OTP is not required for resident delivery.
  *
  * Pass `recipientProfile` to avoid a profile fetch when the caller already has
  * the phone + verification columns loaded.

@@ -6,6 +6,8 @@ import {
 } from "@/lib/auth/resident-setup-token";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
+import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
+import { defaultResidentOnboardingSmsLinks } from "@/lib/claw-resident-links";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -129,6 +131,32 @@ export async function POST(req: Request) {
 
     await supabase.from("profiles").update({ manager_id: lookup.axisId }).eq("id", userId);
     await consumeResidentSetupTokenOnApplication(supabase, lookup.row);
+
+    // Text welcome from the shared Claw/PropLane line when we have a phone on file.
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("phone, full_name")
+        .eq("id", userId)
+        .maybeSingle();
+      const phone = String(profile?.phone ?? "").trim();
+      if (phone && canSendResidentOutboundSms()) {
+        const name =
+          String(profile?.full_name ?? "").trim() ||
+          fullName ||
+          lookup.name ||
+          "Resident";
+        const smsBody = [
+          `Welcome to PropLane, ${name}! Your resident account is ready.`,
+          `PropLane ID: ${lookup.axisId}`,
+          ...defaultResidentOnboardingSmsLinks(),
+          `We'll text this number for lease signing and payment reminders — reply STOP anytime to opt out.`,
+        ].join("\n");
+        await sendResidentOutboundSms({ to: phone, text: smsBody, linkKind: null });
+      }
+    } catch {
+      /* non-critical */
+    }
 
     const propertyId = lookup.propertyId;
     const redirectTo = propertyId

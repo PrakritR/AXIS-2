@@ -12,8 +12,8 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   buildManagerPropertyFilterOptions,
-  collectLinkedPropertyIdsForModule,
   moduleRowVisibleToPortalUser,
+  samePropertyId,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import {
@@ -22,8 +22,7 @@ import {
   MANAGER_WORK_ORDERS_EVENT,
 } from "@/lib/manager-work-orders-storage";
 import {
-  readServiceRequestsForManager,
-  readServiceRequestsForProperty,
+  readAllServiceRequests,
   syncServiceRequestsFromServer,
   SERVICE_REQUESTS_EVENT,
   type ServiceRequest,
@@ -100,8 +99,8 @@ export function ManagerAllServicesPanel({
   useEffect(() => {
     if (!authReady || !userId) return;
     void syncPropertyPipelineFromServer().then(() => setPropertyTick((t) => t + 1));
-    void syncManagerWorkOrdersFromServer();
-    void syncServiceRequestsFromServer();
+    void syncManagerWorkOrdersFromServer({ force: true });
+    void syncServiceRequestsFromServer({ force: true });
     const onWo = () => setDataTick((t) => t + 1);
     const onSr = () => setDataTick((t) => t + 1);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, onWo);
@@ -122,18 +121,9 @@ export function ManagerAllServicesPanel({
   const serviceRequests = useMemo<ServiceRequest[]>(() => {
     void dataTick;
     if (!userId) return [];
-    const own = readServiceRequestsForManager(userId);
-    const seen = new Set(own.map((r) => r.id));
-    const linked: ServiceRequest[] = [];
-    for (const pid of collectLinkedPropertyIdsForModule(userId, "services")) {
-      for (const req of readServiceRequestsForProperty(pid)) {
-        if (!seen.has(req.id)) {
-          seen.add(req.id);
-          linked.push(req);
-        }
-      }
-    }
-    return [...own, ...linked];
+    // Match work orders: owned manager id OR owned/linked property — not exact
+    // managerUserId alone (stale/mis-stamped rows still show for property owners).
+    return readAllServiceRequests().filter((r) => moduleRowVisibleToPortalUser(r, userId, "services"));
   }, [userId, dataTick]);
 
   const filterPropertyOptions = useMemo(() => {
@@ -151,7 +141,7 @@ export function ManagerAllServicesPanel({
     const srProps = serviceRequests
       .filter((r) => r.propertyId?.trim())
       .map((r) => {
-        const match = propertyOptions.find((p) => p.id === r.propertyId);
+        const match = propertyOptions.find((p) => samePropertyId(p.id, r.propertyId));
         return { id: r.propertyId, label: match?.label ?? r.propertyId };
       });
     for (const p of srProps) {
@@ -171,7 +161,11 @@ export function ManagerAllServicesPanel({
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
-    if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter);
+    if (propertyFilter) {
+      rows = rows.filter(
+        (r) => samePropertyId(r.propertyId, propertyFilter) || !r.propertyId?.trim(),
+      );
+    }
     return rows;
   }, [serviceRequests, propertyFilter]);
 

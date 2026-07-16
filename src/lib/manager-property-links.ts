@@ -9,6 +9,7 @@ export type ManagerApplyLinkParams = {
   propertyId: string;
   listingRoomId?: string;
   roomName?: string;
+  bundleId?: string;
 };
 
 export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkParams): string {
@@ -17,6 +18,7 @@ export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkPar
     propertyId: params.propertyId.trim(),
     listingRoomId: params.listingRoomId?.trim() || undefined,
     listingRoomName: params.roomName?.trim() || undefined,
+    bundleId: params.bundleId?.trim() || undefined,
   });
   return `${base}${path}`;
 }

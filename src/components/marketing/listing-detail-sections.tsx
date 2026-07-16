@@ -21,13 +21,9 @@ import {
 } from "@/components/marketing/listing-detail-tables-client";
 import {
   ListingPreviewNewTabContext,
-  listingLinkTargetProps,
-  useListingPreviewNewTab,
 } from "@/components/marketing/listing-preview-context";
 import { listingFallbackMapCenter } from "@/lib/listing-map";
 import { buildSmsDeepLink, isClawMessagingPubliclyEnabled } from "@/lib/claw-leasing-links";
-import { buildTourContactHref } from "@/lib/manager-property-links";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
 import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@/data/listing-rich-content";
 
@@ -169,9 +165,6 @@ function ListingPricingCtaCard({
 }) {
   const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
-  const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
-  const tourHref = buildTourContactHref(property.id);
-  const applyHref = buildRentalApplyHref({ propertyId: property.id });
   const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
   const textEnabled = isClawMessagingPubliclyEnabled();
   const textTourHref = textEnabled
@@ -200,27 +193,18 @@ function ListingPricingCtaCard({
             Text to tour
           </a>
         ) : null}
-        <Link
-          href={tourHref}
-          data-attr="listing-schedule-tour"
-          className={textTourHref ? secondaryCtaClass : `${primaryCtaClass} min-h-[48px] mt-0`}
-          {...newTabProps}
-        >
-          Schedule a tour
-        </Link>
         {textApplyHref ? (
-          <a href={textApplyHref} data-attr="listing-text-apply" className={secondaryCtaClass}>
+          <a
+            href={textApplyHref}
+            data-attr="listing-text-apply"
+            className={textTourHref ? secondaryCtaClass : `${primaryCtaClass} min-h-[48px] mt-0`}
+          >
             Text to apply
           </a>
         ) : null}
-        <Link
-          href={applyHref}
-          data-attr="listing-apply-online"
-          className={secondaryCtaClass}
-          {...newTabProps}
-        >
-          Apply online
-        </Link>
+        {!textTourHref && !textApplyHref ? (
+          <p className="text-sm text-muted">Messaging is temporarily unavailable for this listing.</p>
+        ) : null}
       </div>
     </Card>
   );
@@ -276,6 +260,7 @@ export function ListingDetailSections({
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   const heroUrls = rich.heroHousePhotoUrls ?? [];
+  const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
   return (
     <ListingPreviewNewTabContext.Provider value={previewModal}>
     <div className="bg-background text-foreground" data-listing-sections-root>
@@ -341,14 +326,15 @@ export function ListingDetailSections({
                       key={f.cardKey ?? f.floorLabel}
                       floor={f}
                       listingPropertyId={property.id}
+                      propertyLabel={propertyLabel}
                     />
                   ))}
                 </div>
                 <ListingSubsection title="Bathrooms">
-                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} />
+                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} propertyLabel={propertyLabel} />
                 </ListingSubsection>
                 <ListingSubsection title="Shared spaces" id="listing-shared">
-                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} />
+                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} propertyLabel={propertyLabel} />
                 </ListingSubsection>
               </ListingDetailCollapsibleSection>
 
@@ -357,7 +343,7 @@ export function ListingDetailSections({
                 title="Lease basics"
                 dataAttrToggle="listing-lease-basics-toggle"
               >
-                <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} />
+                <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} propertyLabel={propertyLabel} />
               </ListingDetailCollapsibleSection>
 
               <ListingDetailCollapsibleSection
@@ -366,7 +352,7 @@ export function ListingDetailSections({
                 eyebrow="Building & neighborhood"
                 dataAttrToggle="listing-amenities-toggle"
               >
-                <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} />
+                <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} propertyLabel={propertyLabel} />
               </ListingDetailCollapsibleSection>
 
               <ListingDetailCollapsibleSection
@@ -380,7 +366,7 @@ export function ListingDetailSections({
                   </span>
                 }
               >
-                <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} />
+                <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} propertyLabel={propertyLabel} />
                 <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 listing-detail-surface sm:p-5">
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Lease lengths</p>
                   <p className="mt-2 text-sm leading-relaxed text-muted">{formatBoldSegments(rich.bundlesText)}</p>

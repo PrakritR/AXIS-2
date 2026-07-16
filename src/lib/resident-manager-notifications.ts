@@ -62,6 +62,10 @@ export async function notifyManagerOfResidentSubmission(
         subject: subjectFor(input.kind, input.title),
         text: bodyFor(input),
         deliverToPortalInbox: true,
+        // Inbox + email + SMS (when manager has a phone). Server mirrors also
+        // notify; send-inbox-message dedupes poorly, but SMS prefs + phone gates
+        // still make this the reliable client-side path if mirror lags.
+        eventCategory: "maintenance",
       }),
     });
     const payload = (await response.json().catch(() => ({}))) as SendResult;

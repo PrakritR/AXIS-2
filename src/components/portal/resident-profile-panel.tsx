@@ -14,7 +14,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
-import { PortalTextNotificationsBlock } from "@/components/portal/portal-text-notifications-block";
 import { Button } from "@/components/ui/button";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -189,7 +188,10 @@ export function ResidentProfilePanel() {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-foreground">Phone</label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" />
+            <p className="text-xs text-muted">
+              Used for PropLane texts — payment reminders, maintenance updates, and manager replies. Same number from signup.
+            </p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-foreground">PropLane ID</label>
@@ -204,8 +206,6 @@ export function ResidentProfilePanel() {
           </div>
           </div>
         </PortalCollapsibleSection>
-
-        <PortalTextNotificationsBlock dataAttrPrefix="resident" demo={isDemoModeActive()} />
 
         <NotificationsToggle />
 

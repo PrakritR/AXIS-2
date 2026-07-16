@@ -120,7 +120,7 @@ export function syncServiceRequestPaidFromCharge(chargeId: string): boolean {
   if (idx === -1) return false;
   all[idx] = { ...all[idx]!, servicePaid: true, servicePaidAt: new Date().toISOString() };
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
   return true;
 }
 
@@ -144,21 +144,48 @@ export function seedDemoServiceRequests(requests: ServiceRequest[]): void {
   writeAll(requests);
 }
 
+export type MirrorServiceRequestResult =
+  | { ok: true; row: ServiceRequest }
+  | { ok: false; error: string };
+
 /**
  * Server mirroring. Service requests persist to `portal_service_request_records`
  * via the service-role API route so they survive across devices/browsers and so
  * the AI agent (which runs server-side and cannot read localStorage) can see
- * them. localStorage remains a fast local cache. Writes are fire-and-forget; the
- * optimistic local update already drove the UI.
+ * them. localStorage remains a fast local cache.
  */
-function mirrorServiceRequestToServer(row: ServiceRequest): void {
-  if (typeof window === "undefined" || isDemoModeActive()) return;
-  void fetch("/api/portal-service-requests", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "upsert", row }),
-  }).catch(() => undefined);
+async function mirrorServiceRequestToServer(row: ServiceRequest): Promise<MirrorServiceRequestResult> {
+  if (typeof window === "undefined" || isDemoModeActive()) {
+    return { ok: true, row };
+  }
+  try {
+    const res = await fetch("/api/portal-service-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "upsert", row }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      return { ok: false, error: body?.error?.trim() || `Save failed (${res.status})` };
+    }
+    const body = (await res.json().catch(() => null)) as { row?: ServiceRequest } | null;
+    return { ok: true, row: body?.row && typeof body.row === "object" ? body.row : row };
+  } catch {
+    return { ok: false, error: "Could not reach the server." };
+  }
+}
+
+/** Fire-and-forget mirror for non-critical follow-up updates (paid flags, etc.). */
+function mirrorServiceRequestToServerBestEffort(row: ServiceRequest): void {
+  void mirrorServiceRequestToServer(row).then((result) => {
+    if (!result.ok || result.row === row) return;
+    const all = readAll();
+    const idx = all.findIndex((r) => r.id === result.row.id);
+    if (idx === -1) return;
+    all[idx] = result.row;
+    writeAll(all);
+  });
 }
 
 function deleteServiceRequestFromServer(id: string): void {
@@ -198,9 +225,9 @@ export async function syncServiceRequestsFromServer(opts?: { force?: boolean }):
   }
 }
 
-export function createServiceRequest(
+export async function createServiceRequest(
   req: Omit<ServiceRequest, "id" | "requestedAt" | "status" | "servicePaid" | "depositPaid">,
-): ServiceRequest {
+): Promise<{ request: ServiceRequest; mirrored: MirrorServiceRequestResult }> {
   const newReq: ServiceRequest = {
     ...req,
     id: `SR-${Date.now()}`,
@@ -212,13 +239,36 @@ export function createServiceRequest(
   const serviceChargeId = ensureServiceRequestPendingCharge(newReq);
   if (serviceChargeId) newReq.serviceChargeId = serviceChargeId;
   writeAll([newReq, ...readAll()]);
-  mirrorServiceRequestToServer(newReq);
-  return newReq;
+  const mirrored = await mirrorServiceRequestToServer(newReq);
+  if (mirrored.ok && mirrored.row.id === newReq.id) {
+    // Prefer server-stamped manager/property so resident + manager lists agree.
+    const all = readAll();
+    const idx = all.findIndex((r) => r.id === newReq.id);
+    if (idx !== -1) {
+      all[idx] = mirrored.row;
+      writeAll(all);
+    }
+    return { request: mirrored.row, mirrored };
+  }
+  if (!mirrored.ok && !isDemoModeActive()) {
+    // Roll back optimistic local row so resident UI doesn't show orphans the
+    // manager will never see.
+    writeAll(readAll().filter((r) => r.id !== newReq.id));
+    if (newReq.serviceChargeId) {
+      deleteHouseholdCharge(newReq.serviceChargeId, newReq.managerUserId ?? null);
+    }
+  }
+  return { request: newReq, mirrored };
 }
 
 export function readServiceRequestsForResident(residentEmail: string): ServiceRequest[] {
   const email = residentEmail.trim().toLowerCase();
   return readAll().filter((r) => r.residentEmail.trim().toLowerCase() === email);
+}
+
+/** Unfiltered local cache (manager UI applies `moduleRowVisibleToPortalUser`). */
+export function readAllServiceRequests(): ServiceRequest[] {
+  return readAll();
 }
 
 export function readServiceRequestsForManager(managerUserId: string): ServiceRequest[] {
@@ -241,7 +291,7 @@ export function updateServiceRequest(id: string, updates: Partial<ServiceRequest
   }
   all[idx] = next;
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
 }
 
 export function approveServiceRequest(id: string, managerNote?: string): void {
@@ -259,7 +309,7 @@ export function approveServiceRequest(id: string, managerNote?: string): void {
     serviceChargeId,
   };
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
 }
 
 export function denyServiceRequest(id: string, managerNote?: string): void {
@@ -277,7 +327,7 @@ export function denyServiceRequest(id: string, managerNote?: string): void {
     managerNote: managerNote?.trim() || row.managerNote,
   };
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
 }
 
 export function markServiceRequestServicePaid(id: string): void {
@@ -290,7 +340,7 @@ export function markServiceRequestServicePaid(id: string): void {
   }
   all[idx] = { ...row, servicePaid: true, servicePaidAt: new Date().toISOString() };
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
 }
 
 export function markServiceRequestDepositPaid(id: string): void {
@@ -299,7 +349,7 @@ export function markServiceRequestDepositPaid(id: string): void {
   if (idx === -1) return;
   all[idx] = { ...all[idx]!, depositPaid: true, depositPaidAt: new Date().toISOString() };
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
 }
 
 export function deleteServiceRequest(id: string): void {
@@ -345,7 +395,7 @@ export function submitReturnPhoto(id: string, photoDataUrl: string): void {
     servicePaidAt: row.servicePaidAt ?? new Date().toISOString(),
   };
   writeAll(all);
-  mirrorServiceRequestToServer(all[idx]!);
+  mirrorServiceRequestToServerBestEffort(all[idx]!);
 }
 
 export function hasDeposit(deposit: string): boolean {

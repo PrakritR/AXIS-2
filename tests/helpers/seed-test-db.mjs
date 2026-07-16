@@ -309,6 +309,43 @@ try {
       `profile_roles(${everythingEmail}:${extraRole})`,
     );
   }
+
+  // Real phones for Claw Messenger two-way testing on localhost / test DB.
+  // Manager personal cell (forward + replies): +1 510-309-8345
+  // Resident personal cell: +1 510-579-1976
+  // Shared Claw agent line stays on sms_from_number for outbound.
+  const TEST_MANAGER_PHONE = "+15103098345";
+  const TEST_RESIDENT_PHONE = "+15105791976";
+  const CLAW_AGENT_PHONE = "+12053690702";
+  await must(
+    supabase
+      .from("profiles")
+      .update({ phone: TEST_RESIDENT_PHONE, updated_at: new Date().toISOString() })
+      .eq("id", residentUserId),
+    "profiles(phone resident)",
+  );
+  await must(
+    supabase
+      .from("profiles")
+      .update({
+        phone: TEST_MANAGER_PHONE,
+        sms_from_number: CLAW_AGENT_PHONE,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", everythingUserId),
+    "profiles(phone+claw testeverything)",
+  );
+  await must(
+    supabase
+      .from("profiles")
+      .update({
+        phone: TEST_MANAGER_PHONE,
+        sms_from_number: CLAW_AGENT_PHONE,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", managerUserId),
+    "profiles(phone+claw manager)",
+  );
   // Pro tier so tier-gated manager tabs aren't paywalled for this account either.
   const { data: everythingPurchases } = await supabase
     .from("manager_purchases")
@@ -835,7 +872,7 @@ try {
     return {
       fullLegalName: p.name,
       email: p.email,
-      phone: `(206) 555-0${String(140 + p.index).padStart(3, "0")}`,
+      phone: p.index % 2 === 0 ? "(510) 309-8345" : "(510) 579-1976",
       dateOfBirth: "1995-05-14",
       ssn: "000-00-0000",
       driversLicense: "WA-DL-4821990",
@@ -984,6 +1021,8 @@ try {
     p.residentUserId = await ensureUser(p.email, AUTO_RESIDENT_PASSWORD, "resident", {
       metadata: { axis_id: p.axisId, auto_provisioned_resident: true },
     });
+    // Keep catalog auto-residents phoneless — only resident@ uses the real test cell
+    // so Claw inbound routing is unambiguous.
     await must(
       supabase.from("profiles").upsert(
         {

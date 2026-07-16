@@ -1,6 +1,7 @@
 /** Client helper — deliver to Axis inbox and email (when configured). */
 
 import type { NotificationCategory } from "@/lib/notification-preferences";
+import { residentPortalUrl } from "@/lib/claw-resident-links";
 
 export type PortalMessageDeliveryResult = {
   ok: boolean;
@@ -55,6 +56,7 @@ export function buildNewChargeNoticeBody(input: {
   dueDateLabel?: string;
   propertyLabel?: string;
 }): string {
+  const payUrl = residentPortalUrl("payments");
   const lines = [
     `Hi ${input.residentName || "there"},`,
     "",
@@ -66,9 +68,9 @@ export function buildNewChargeNoticeBody(input: {
   if (input.propertyLabel?.trim()) lines.push(`Property: ${input.propertyLabel.trim()}`);
   lines.push(
     "",
-    "Please sign in to your PropLane resident portal to review and pay at your earliest convenience.",
+    `Review and pay: ${payUrl}`,
     "",
-    "If you have any questions, reply in your PropLane inbox and we will help.",
+    "Questions? Reply to this text or message us in your PropLane inbox.",
     "",
     "PropLane",
   );

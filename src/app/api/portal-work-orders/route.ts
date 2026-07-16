@@ -4,8 +4,12 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { residentBelongsToManager } from "@/lib/resident-manager-scope";
-import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
+import { resolveResidentFilingScope } from "@/lib/resident-manager-scope";
+import { repairWorkOrderScopesForManager } from "@/lib/repair-service-request-scopes.server";
+import {
+  notifyManagerOfResidentFiledItem,
+  notifyWorkOrderEvent,
+} from "@/lib/work-order-notification.server";
 import type { WorkOrderRowWithDispatch } from "@/lib/work-order-dispatch";
 import { prepareDispatch } from "@/lib/work-order-dispatch.server";
 
@@ -97,10 +101,23 @@ export async function GET() {
     }
 
     if (!admin && role !== "resident") {
+      // Heal orphans for this manager's residents before listing.
+      await repairWorkOrderScopesForManager(db, user.id).catch(() => undefined);
+
       // Managers see their own work orders (plus legacy unassigned rows), never
-      // other landlords' — and additionally rows on properties shared with them
-      // via an accepted co-manager link with services access.
+      // other landlords' — and additionally rows on properties they own or share
+      // via an accepted co-manager link with services access (covers mis-stamped
+      // manager_user_id when property_id is correct).
       const linkedPropertyIds = await linkedPropertyIdsForModule(db, user.id, "services");
+      const { data: ownedProps } = await db
+        .from("manager_property_records")
+        .select("id")
+        .eq("manager_user_id", user.id)
+        .limit(500);
+      for (const prop of ownedProps ?? []) {
+        const id = String((prop as { id?: unknown }).id ?? "").trim();
+        if (id) linkedPropertyIds.add(id);
+      }
       const records = await fetchRowsForManagerWithLinked<WorkOrderScopeRecord>(
         db,
         "portal_work_order_records",
@@ -227,14 +244,18 @@ async function resolveVendorOwnerManagerUserId(
  * so a client cannot spoof ownership. */
 function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow, vendorUserId: string | null) {
   const normalized = normalizeRow(row);
+  const withManager: DemoManagerWorkOrderRow =
+    actor.admin || actor.role === "resident"
+      ? normalized
+      : { ...normalized, managerUserId: actor.userId };
   const base = {
-    id: normalized.id,
-    manager_user_id: normalized.managerUserId || null,
-    resident_email: normalized.residentEmail?.trim().toLowerCase() || null,
-    property_id: normalized.propertyId || null,
-    assigned_property_id: normalized.assignedPropertyId || null,
-    vendor_user_id: normalized.selfAssigned ? null : vendorUserId,
-    row_data: normalized,
+    id: withManager.id,
+    manager_user_id: withManager.managerUserId || null,
+    resident_email: withManager.residentEmail?.trim().toLowerCase() || null,
+    property_id: withManager.propertyId || null,
+    assigned_property_id: withManager.assignedPropertyId || null,
+    vendor_user_id: withManager.selfAssigned ? null : vendorUserId,
+    row_data: withManager,
     updated_at: new Date().toISOString(),
   };
   if (actor.admin) return base;
@@ -269,6 +290,30 @@ async function notifyResidentOfCreatedWorkOrder(db: Db, actor: Actor, row: DemoM
     title,
     propertyLabel: row.propertyName || undefined,
     toEmails: [residentEmail],
+    audience: "resident",
+  }).catch(() => undefined);
+}
+
+/** Resident-filed work order → manager Axis inbox + email + SMS. Never throws. */
+async function notifyManagerOfCreatedWorkOrder(
+  db: Db,
+  actor: Actor,
+  row: DemoManagerWorkOrderRow,
+  managerUserId: string | null | undefined,
+): Promise<void> {
+  if (actor.admin || actor.role !== "resident") return;
+  const mid = managerUserId?.trim() || row.managerUserId?.trim();
+  if (!mid) return;
+  const title = row.title?.trim() || "Work order";
+  await notifyManagerOfResidentFiledItem(db, {
+    kind: "work-order",
+    senderUserId: actor.userId,
+    senderEmail: actor.email,
+    senderName: row.residentName?.trim() || undefined,
+    managerUserId: mid,
+    title,
+    description: row.description?.trim() || undefined,
+    propertyLabel: row.propertyName?.trim() || undefined,
   }).catch(() => undefined);
 }
 
@@ -337,14 +382,24 @@ export async function POST(req: Request) {
       }
     };
 
-    // A resident may only file against a manager that actually has them as a
-    // resident; never trust a client-supplied manager_user_id to route a row
-    // into an arbitrary manager's queue.
-    const residentMayTargetRowManager = async (row: DemoManagerWorkOrderRow): Promise<boolean> => {
-      if (actor.admin || actor.role !== "resident") return true;
-      const claimedManager = row?.managerUserId?.trim() || "";
-      if (!claimedManager) return false;
-      return residentBelongsToManager(db, { residentEmail: actor.email, managerUserId: claimedManager });
+    // Stamp manager + property from residency for residents; reject if none.
+    const stampResidentWorkOrder = async (
+      row: DemoManagerWorkOrderRow,
+    ): Promise<DemoManagerWorkOrderRow | null> => {
+      if (actor.admin || actor.role !== "resident") return row;
+      const scope = await resolveResidentFilingScope(db, {
+        residentEmail: actor.email,
+        claimedManagerUserId: row.managerUserId,
+        claimedPropertyId: row.propertyId || row.assignedPropertyId,
+      });
+      if (!scope) return null;
+      return {
+        ...row,
+        managerUserId: scope.managerUserId,
+        propertyId: scope.propertyId || row.propertyId || "",
+        assignedPropertyId: row.assignedPropertyId || scope.propertyId || undefined,
+        residentEmail: actor.email || row.residentEmail,
+      };
     };
 
     if (body.action === "replace") {
@@ -359,21 +414,25 @@ export async function POST(req: Request) {
         const existing = await findExisting(row.id);
         // A brand-new id (no existing row) may be created.
         if (existing && !actorOwnsRecord(actor, existing)) continue;
-        if (!(await residentMayTargetRowManager(row))) continue;
+        const stamped = await stampResidentWorkOrder(row);
+        if (!stamped) continue;
         const { vendorUserId, rejected } = await resolveVendorUserId(
           db,
-          row.vendorId,
-          await resolveVendorOwnerManagerUserId(db, actor, row),
+          stamped.vendorId,
+          await resolveVendorOwnerManagerUserId(db, actor, stamped),
         );
         if (rejected) continue;
-        const persisted = recordForActor(actor, row, vendorUserId);
+        const persisted = recordForActor(actor, stamped, vendorUserId);
         preserveServerDispatch(persisted.row_data, existing);
         const { error: upsertError } = await db
           .from("portal_work_order_records")
           .upsert(persisted, { onConflict: "id" });
         if (!upsertError) {
-          if (!existing) await notifyResidentOfCreatedWorkOrder(db, actor, row);
-          maybePrepareDispatch(existing, row.id);
+          if (!existing) {
+            await notifyResidentOfCreatedWorkOrder(db, actor, stamped);
+            await notifyManagerOfCreatedWorkOrder(db, actor, stamped, persisted.manager_user_id);
+          }
+          maybePrepareDispatch(existing, stamped.id);
         }
       }
       return NextResponse.json({ ok: true });
@@ -402,26 +461,30 @@ export async function POST(req: Request) {
     if (existing && !actorOwnsRecord(actor, existing)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    if (!(await residentMayTargetRowManager(body.row))) {
+    const stamped = await stampResidentWorkOrder(body.row);
+    if (!stamped) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     const { vendorUserId, rejected } = await resolveVendorUserId(
       db,
-      body.row.vendorId,
-      await resolveVendorOwnerManagerUserId(db, actor, body.row),
+      stamped.vendorId,
+      await resolveVendorOwnerManagerUserId(db, actor, stamped),
     );
     if (rejected) return NextResponse.json({ error: "Forbidden: vendor not available to this manager." }, { status: 403 });
     // Single-row upserts also serve both create and edit; `existing` (fetched
     // above) being null means a genuinely new row → notify the resident.
-    const persisted = recordForActor(actor, body.row, vendorUserId);
+    const persisted = recordForActor(actor, stamped, vendorUserId);
     preserveServerDispatch(persisted.row_data, existing);
     const { error } = await db
       .from("portal_work_order_records")
       .upsert(persisted, { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!existing) await notifyResidentOfCreatedWorkOrder(db, actor, body.row);
-    maybePrepareDispatch(existing, body.row.id);
-    return NextResponse.json({ ok: true });
+    if (!existing) {
+      await notifyResidentOfCreatedWorkOrder(db, actor, stamped);
+      await notifyManagerOfCreatedWorkOrder(db, actor, stamped, persisted.manager_user_id);
+    }
+    maybePrepareDispatch(existing, stamped.id);
+    return NextResponse.json({ ok: true, row: persisted.row_data });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save work order.";
     return NextResponse.json({ error: message }, { status: 500 });
