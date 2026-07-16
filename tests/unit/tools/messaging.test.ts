@@ -3,6 +3,7 @@ import { buildRegistry } from "@/lib/tools/registry";
 import type { AgentContext } from "@/lib/tools/context";
 import {
   sendMessageTool,
+  replyToThreadTool,
   scheduleMessageTool,
   cancelScheduledMessageTool,
 } from "@/lib/tools/domains/messaging";
@@ -567,6 +568,122 @@ describe("inbox thread tools", () => {
   });
 });
 
+describe("reply_to_thread", () => {
+  let tables: Tables;
+  let ctx: AgentContext;
+  beforeEach(() => {
+    tables = seedRecipientTables();
+    tables.portal_inbox_thread_records = [
+      {
+        id: "t_pat",
+        scope: MANAGER_INBOX_SCOPE,
+        owner_user_id: "manager_a",
+        participant_email: "pat@x.com",
+        row_data: {
+          id: "t_pat",
+          folder: "inbox",
+          from: "Pat Doe",
+          email: "pat@x.com",
+          subject: "Leaky faucet",
+          preview: "The kitchen faucet is leaking",
+          body: "The kitchen faucet is leaking, please help.",
+          time: "Jul 15, 9:12 AM",
+          unread: true,
+        },
+      },
+      {
+        id: "t_disconnected",
+        scope: MANAGER_INBOX_SCOPE,
+        owner_user_id: "manager_a",
+        participant_email: "foreign@x.com",
+        row_data: {
+          id: "t_disconnected",
+          folder: "inbox",
+          from: "Foreign Res",
+          email: "foreign@x.com", // manager_b's resident — not in manager_a's scope
+          subject: "Hello",
+          preview: "…",
+          body: "…",
+          time: "Jul 15, 9:12 AM",
+          unread: false,
+        },
+      },
+      {
+        id: "t_foreign_owner",
+        scope: MANAGER_INBOX_SCOPE,
+        owner_user_id: "manager_b",
+        participant_email: "someone@x.com",
+        row_data: {
+          id: "t_foreign_owner",
+          folder: "inbox",
+          from: "Someone",
+          email: "someone@x.com",
+          subject: "Not yours",
+          preview: "…",
+          body: "…",
+          time: "Jul 15, 9:12 AM",
+          unread: false,
+        },
+      },
+    ];
+    ctx = makeCtx(tables);
+  });
+
+  it("preview builds To/Subject/Reply lines from the owned thread", async () => {
+    const res = await replyToThreadTool.preview(ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.preview.lines).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
+    expect(res.preview.lines).toContainEqual({ label: "Subject", value: "Re: Leaky faucet" });
+    expect(res.preview.lines.find((l) => l.label === "Reply")?.value).toContain("plumber tomorrow");
+  });
+
+  it("preview rejects another landlord's thread as unknown (anti-enumeration)", async () => {
+    const res = await replyToThreadTool.preview(ctx, { threadId: "t_foreign_owner", body: "hi" });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error).toContain("No inbox thread");
+  });
+
+  it("preview rejects replying when the counterparty is no longer connected", async () => {
+    const res = await replyToThreadTool.preview(ctx, { threadId: "t_disconnected", body: "hi" });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error).toContain("not connected");
+  });
+
+  it("execute appends the reply to the own thread, delivers to the resident, and audits", async () => {
+    const res = await replyToThreadTool.execute(ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
+    expect(res.ok).toBe(true);
+    // RESEND_API_KEY is blanked above: the reply degrades to portal-only and says so.
+    if (res.ok) expect(res.reply).toContain("portal inbox only");
+
+    // Own thread gained the reply message + updated preview.
+    const own = tables.portal_inbox_thread_records!.find((r) => r.id === "t_pat")!;
+    const rowData = own.row_data as { messages?: { body: string }[]; preview: string; unread: boolean };
+    expect(rowData.messages?.some((m) => m.body.includes("plumber tomorrow"))).toBe(true);
+    expect(rowData.preview).toContain("plumber tomorrow");
+    expect(rowData.unread).toBe(false);
+
+    // The resident got a delivered inbox row (their own scope, not the manager's thread).
+    const delivered = tables.portal_inbox_thread_records!.filter(
+      (r) => r.id !== "t_pat" && r.id !== "t_disconnected" && r.id !== "t_foreign_owner",
+    );
+    expect(delivered.length).toBeGreaterThan(0);
+
+    // Audit row with the reply dedupe key.
+    const audit = tables.audit_log!.find((r) => String(r.dedupe_key ?? "").startsWith("reply_to_thread:manager_a:t_pat:"));
+    expect(audit).toBeTruthy();
+
+    // Same reply again the same day: idempotent, no second delivery.
+    const countBefore = tables.portal_inbox_thread_records!.length;
+    const again = await replyToThreadTool.execute(ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
+    expect(again.ok).toBe(true);
+    if (again.ok) expect(again.reply.toLowerCase()).toContain("already");
+    expect(tables.portal_inbox_thread_records!.length).toBe(countBefore);
+  });
+});
+
 describe("registry acceptance", () => {
   it("new tools register without banned identity fields in write schemas", () => {
     const registry = buildRegistry([
@@ -574,10 +691,11 @@ describe("registry acceptance", () => {
       getThreadMessagesTool,
       updateThreadTool,
       sendMessageTool,
+      replyToThreadTool,
       scheduleMessageTool,
       cancelScheduledMessageTool,
     ]);
-    expect(registry.size).toBe(6);
+    expect(registry.size).toBe(7);
     expect((registry.get("update_thread") as { confirm?: string }).confirm).toBe("none");
   });
 });

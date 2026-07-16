@@ -11,6 +11,8 @@ import type { AgentContext } from "../context";
 import { writeAuditLog, updateAuditResult, auditDayBucket } from "../audit";
 import { filterRecipientsBySenderScope, type InboxScopeSender } from "@/lib/inbox-recipient-scope";
 import { deliverPortalInboxMessage, resolveBroadcastRecipients } from "@/lib/portal-inbox-delivery";
+import { MANAGER_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
+import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import {
   createScheduledInboxMessage,
   generateScheduledInboxMessageId,
@@ -263,6 +265,185 @@ export const sendMessageTool = defineWriteTool({
       ok: true,
       reply: `Sent "${subject}" to ${delivery.recipientCount} recipient${delivery.recipientCount === 1 ? "" : "s"} ${deliverViaEmail ? "(portal inbox + email)" : "(portal inbox only)"}.`,
       resultSummary: { recipientCount: delivery.recipientCount, deliverViaEmail },
+    };
+  },
+});
+
+type OwnThreadRow = {
+  id: string;
+  owner_user_id: string;
+  participant_email: string | null;
+  scope: string;
+  row_data: PersistedInboxThread;
+};
+
+/** Load ONE of the landlord's own inbox threads (scope + owner filtered), or null. */
+async function loadOwnInboxThread(ctx: AgentContext, threadId: string): Promise<OwnThreadRow | null> {
+  const { data, error } = await ctx.db
+    .from("portal_inbox_thread_records")
+    .select("id, owner_user_id, participant_email, scope, row_data")
+    .eq("scope", MANAGER_INBOX_SCOPE)
+    .eq("owner_user_id", ctx.userId)
+    .eq("id", threadId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as OwnThreadRow | null) ?? null;
+}
+
+/** The counterparty address of a thread: sender for received mail, recipient for sent. */
+function threadCounterpartyEmail(thread: PersistedInboxThread): string {
+  return normalizeEmail(String(thread.email ?? ""));
+}
+
+export const replyToThreadTool = defineWriteTool({
+  name: "reply_to_thread",
+  description:
+    "Reply to an existing inbox conversation: the reply is appended to the landlord's thread and delivered to the other person (resident, applicant, co-manager, or vendor) in their portal inbox and by email. Pass the thread id from list_inbox_threads or get_thread_messages; use get_thread_messages first to read what you are replying to.",
+  kind: "write",
+  inputSchema: z
+    .object({
+      threadId: z.string().min(1).describe("Inbox thread id from list_inbox_threads."),
+      body: z.string().min(1).max(5000).describe("The reply text (plain text)."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const row = await loadOwnInboxThread(ctx, input.threadId);
+    if (!row) {
+      return {
+        ok: false,
+        error: `No inbox thread ${input.threadId} for this landlord. Use list_inbox_threads to get valid thread ids.`,
+      };
+    }
+    const thread = row.row_data;
+    if (thread.folder === "trash") {
+      return { ok: false, error: "This thread is in the trash — restore it before replying." };
+    }
+    const counterparty = threadCounterpartyEmail(thread);
+    if (!counterparty.includes("@")) {
+      return { ok: false, error: "This thread has no reply address (it may be a system notification)." };
+    }
+    // Same authorization gate as a fresh message: the counterparty must still
+    // be connected to this landlord.
+    const { allowed } = await resolveMessageRecipients(ctx, { toEmails: [counterparty] });
+    const recipient = allowed[0];
+    if (!recipient) {
+      return {
+        ok: false,
+        error: `${counterparty} is not connected to this landlord anymore, so this thread cannot be replied to.`,
+      };
+    }
+    const body = input.body.trim();
+    const subject = thread.subject?.startsWith("Re:") ? thread.subject : `Re: ${thread.subject ?? ""}`.trim();
+    const bodyPreview = body.length > 280 ? `${body.slice(0, 280)}…` : body;
+    const emailConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
+    return {
+      ok: true,
+      input: { threadId: row.id, body },
+      preview: {
+        title: "Send reply",
+        summary: `Reply to ${recipientLabel(recipient)} in "${thread.subject ?? "(no subject)"}".`,
+        lines: [
+          { label: "To", value: recipientLabel(recipient) },
+          { label: "Subject", value: subject },
+          { label: "Reply", value: bodyPreview },
+          {
+            label: "Delivery",
+            value: emailConfigured ? "Portal inbox + email" : "Portal inbox only (email is not configured)",
+          },
+        ],
+        confirmLabel: "Send reply",
+      },
+    };
+  },
+  execute: async (ctx, input) => {
+    // Re-resolve the thread AND re-authorize the counterparty at execute time.
+    const row = await loadOwnInboxThread(ctx, input.threadId);
+    if (!row) return { ok: false, error: "No inbox thread with that id for this landlord." };
+    const thread = row.row_data;
+    const counterparty = threadCounterpartyEmail(thread);
+    const { allowed } = await resolveMessageRecipients(ctx, { toEmails: [counterparty] });
+    const recipient = allowed[0];
+    if (!recipient) {
+      return { ok: false, error: "The other person in this thread is no longer connected to this landlord; nothing was sent." };
+    }
+    const body = input.body.trim();
+    const subject = thread.subject?.startsWith("Re:") ? thread.subject : `Re: ${thread.subject ?? ""}`.trim();
+
+    // Idempotent per identical reply per thread per day.
+    const dedupeKey = `reply_to_thread:${ctx.landlordId}:${row.id}:${contentHash(body)}:${auditDayBucket()}`;
+    const audit = await writeAuditLog(ctx, {
+      action: "reply_to_thread",
+      toolName: "reply_to_thread",
+      inputSummary: { threadId: row.id, recipientEmail: recipient.email },
+      dedupeKey,
+    });
+    if (!audit.recorded) {
+      if (audit.duplicate) {
+        return { ok: true, reply: "This exact reply already went out on this thread today — not sending it again." };
+      }
+      return { ok: false, error: "Could not record the action; nothing was sent." };
+    }
+
+    const { data: senderProfile } = await ctx.db
+      .from("profiles")
+      .select("full_name")
+      .eq("id", ctx.userId)
+      .maybeSingle();
+    const fromName = String(senderProfile?.full_name ?? "").trim() || ctx.email || "Property manager";
+
+    // 1. Append the reply onto the landlord's own thread (same shape the
+    //    interactive reply flow writes), so their inbox shows the exchange.
+    const messages = Array.isArray(thread.messages) ? [...thread.messages] : [];
+    messages.push({
+      id: `reply-${Date.now().toString(36)}`,
+      from: fromName,
+      body,
+      at: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+    });
+    const { error: threadError } = await ctx.db.from("portal_inbox_thread_records").upsert(
+      {
+        id: row.id,
+        scope: row.scope,
+        owner_user_id: row.owner_user_id,
+        participant_email: row.participant_email,
+        row_data: {
+          ...thread,
+          messages,
+          preview: body.slice(0, 100).replace(/\n/g, " "),
+          unread: false,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+    if (threadError) {
+      await updateAuditResult(ctx, dedupeKey, { delivered: false }, { clearDedupeKey: true });
+      return { ok: false, error: "Could not update the conversation; nothing was sent." };
+    }
+
+    // 2. Deliver the reply to the counterparty through the same scope-filtered
+    //    pipeline as send_message. Degrades honestly to portal-only when email
+    //    isn't configured — the portal thread is the primary channel.
+    const emailConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
+    const delivery = await deliverPortalInboxMessage(ctx.db, {
+      senderUserId: ctx.landlordId,
+      senderEmail: ctx.email,
+      fromName,
+      subject,
+      text: body,
+      ...(recipient.userId ? { toUserIds: [recipient.userId] } : { toEmails: [recipient.email] }),
+      deliverViaEmail: emailConfigured,
+      senderRole: "manager",
+    });
+    if (!delivery.ok) {
+      await updateAuditResult(ctx, dedupeKey, { delivered: false }, { clearDedupeKey: true });
+      return { ok: false, error: delivery.error };
+    }
+    await updateAuditResult(ctx, dedupeKey, { delivered: true, emailed: emailConfigured });
+    return {
+      ok: true,
+      reply: `Replied to ${recipientLabel(recipient)} on "${thread.subject ?? "(no subject)"}" ${emailConfigured ? "(portal inbox + email)" : "(portal inbox only — email is not configured)"}.`,
+      resultSummary: { threadId: row.id },
     };
   },
 });

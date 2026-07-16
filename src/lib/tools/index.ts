@@ -55,7 +55,12 @@ import {
   sharePropertyLinkTool,
 } from "./domains/properties";
 import { listInboxThreadsTool, getThreadMessagesTool, updateThreadTool } from "./domains/inbox";
-import { sendMessageTool, scheduleMessageTool, cancelScheduledMessageTool } from "./domains/messaging";
+import {
+  sendMessageTool,
+  replyToThreadTool,
+  scheduleMessageTool,
+  cancelScheduledMessageTool,
+} from "./domains/messaging";
 import {
   listCalendarEventsTool,
   listScheduledMessagesTool,
@@ -114,6 +119,7 @@ export const agentRegistry = buildRegistry([
   cancelScheduledReminderTool,
   rescheduleReminderTool,
   sendMessageTool,
+  replyToThreadTool,
   scheduleMessageTool,
   cancelScheduledMessageTool,
   updateThreadTool, // confirm:"none" — low-risk inbox housekeeping

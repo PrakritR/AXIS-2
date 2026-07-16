@@ -150,7 +150,8 @@ See `src/lib/tools/domains/` — payments (`get_overdue_charges`,
 (`get_automation_settings` R, `update_automation_settings` W,
 `cancel_scheduled_reminder`/`reschedule_reminder` W), messaging
 (`send_message` W, `schedule_message` W, `cancel_scheduled_message` W),
-inbox (`list_inbox_threads` R, `get_thread_messages` R, `update_thread` W*),
+inbox (`list_inbox_threads` R, `get_thread_messages` R, `reply_to_thread` W,
+`update_thread` W*),
 calendar (`list_calendar_events` R, `list_tour_inquiries` R,
 `update_manager_availability` W, `create_calendar_event` W,
 `cancel_calendar_event` W, `accept_tour_inquiry` W), work orders
