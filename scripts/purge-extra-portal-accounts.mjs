@@ -18,6 +18,7 @@ const confirm = process.env.CONFIRM_PURGE === "yes";
 /** Canonical manager accounts (property portal). */
 const KEEP_MANAGER_EMAILS = new Set(
   [
+    "admin@axis-seattle-housing.com",
     "akhilthebest23@gmail.com",
     "hiteshkjm@gmail.com",
     "ocenedella@gmail.com",

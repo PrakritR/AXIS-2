@@ -3,7 +3,7 @@
  * Admin access itself is role-based (any `admin`-role account; see admin-role.ts);
  * this email is an always-admin fallback and the self-registration/provisioning gate.
  */
-export const PRIMARY_ADMIN_EMAIL = "prakritramachandran@gmail.com";
+export const PRIMARY_ADMIN_EMAIL = "admin@axis-seattle-housing.com";
 
 export function normalizeAdminEmail(email: string | null | undefined): string {
   return (email ?? "").trim().toLowerCase();

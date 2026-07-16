@@ -12,9 +12,9 @@ export const CANONICAL_DEMO_ADMIN_EMAIL = "testeverything@test.axis.local";
 
 /** Guided tour autoplay mirrors this account's real portal data (blank when it has none). */
 export const CANONICAL_DEMO_GUIDED_EMAIL = CANONICAL_DEMO_ADMIN_EMAIL;
-export const CANONICAL_DEMO_GUIDED_NAME = "Everything Test";
+export const CANONICAL_DEMO_GUIDED_NAME = "Test Everything";
 
-export const CANONICAL_DEMO_MANAGER_NAME = "Demo Manager";
+export const CANONICAL_DEMO_MANAGER_NAME = "Test Manager";
 export const CANONICAL_DEMO_RESIDENT_NAME = "Test Resident";
 export const CANONICAL_DEMO_VENDOR_NAME = "Test Vendor";
 

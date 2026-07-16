@@ -79,7 +79,7 @@ describe("POST /api/auth/register-admin", () => {
     const req = jsonRequest("http://localhost/api/auth/register-admin", {
       method: "POST",
       body: {
-        email: "prakritramachandran@gmail.com",
+        email: "admin@axis-seattle-housing.com",
         password: "password123",
         adminKey: "prakrit-admin-register",
         fullName: "Test Admin",

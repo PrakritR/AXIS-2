@@ -15,8 +15,8 @@ describe("PropLane assistant intro copy", () => {
   });
 
   it("manager intro keeps ops clarity", () => {
-    const text = buildManagerPropLaneAssistantIntroSms({ name: "Demo Manager" });
-    expect(text).toContain("Hi Demo Manager!");
+    const text = buildManagerPropLaneAssistantIntroSms({ name: "Test Manager" });
+    expect(text).toContain("Hi Test Manager!");
     expect(text).toMatch(/I'm your PropLane messaging assistant/i);
     expect(text).toMatch(/work orders|applications|payments/i);
     expect(text).toMatch(/PropLane line/i);

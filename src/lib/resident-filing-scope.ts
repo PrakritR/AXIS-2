@@ -15,8 +15,8 @@ export type FilingScopeCandidate = {
 
 /**
  * Lower is better. Canonical demo portfolio (`mgr-demo-*`) outranks guided
- * tour mirrors (`mgr-te-demo-*`) so sandbox residents file into Demo Manager's
- * queue instead of the Everything Test duplicate.
+ * tour mirrors (`mgr-te-demo-*`) so sandbox residents file into Test Manager's
+ * queue instead of the Test Everything duplicate.
  */
 export function filingPropertyPriority(propertyId: string): number {
   const id = propertyId.trim().toLowerCase();

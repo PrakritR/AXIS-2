@@ -4,7 +4,7 @@
  * Same env vars as scripts/ensure-admin-account.mjs
  *
  * Usage:
- *   node --env-file=.env scripts/ensure-demo-manager-account.mjs demo.manager@example.com 'YourPasswordHere' "Demo Manager"
+ *   node --env-file=.env scripts/ensure-demo-manager-account.mjs demo.manager@example.com 'YourPasswordHere' "Test Manager"
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -18,7 +18,7 @@ const fullNameArg = process.argv[4]?.trim();
 
 const email = (emailArg || process.env.EMAIL || "").trim().toLowerCase();
 const password = passwordArg ?? process.env.PASSWORD ?? "";
-const fullName = fullNameArg || process.env.FULL_NAME || "Demo Manager";
+const fullName = fullNameArg || process.env.FULL_NAME || "Test Manager";
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");

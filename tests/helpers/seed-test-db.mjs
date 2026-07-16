@@ -59,11 +59,11 @@ const vendorPassword = process.env.E2E_VENDOR_PASSWORD ?? "TestVendor123!";
 // src/lib/demo/demo-canonical-accounts.ts.
 const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL ?? "testeverything@test.axis.local").toLowerCase();
 const everythingPassword = process.env.E2E_EVERYTHING_PASSWORD ?? "TestEverything123!";
-const EVERYTHING_NAME = "Everything Test";
+const EVERYTHING_NAME = "Test Everything";
 // Keep in sync with src/lib/demo/demo-canonical-accounts.ts (plain-node script
 // can't import the TS module).
 const PRIMARY_RESIDENT_NAME = "Test Resident";
-const CANONICAL_DEMO_MANAGER_NAME = "Demo Manager";
+const CANONICAL_DEMO_MANAGER_NAME = "Test Manager";
 const CANONICAL_DEMO_VENDOR_NAME = "Test Vendor";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
