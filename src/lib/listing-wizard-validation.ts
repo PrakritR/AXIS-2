@@ -111,34 +111,6 @@ export function validateListingWizardStep(
     }
   }
 
-  // Application step — saved overrides and custom questions must be complete.
-  if (stepIndex === 7) {
-    for (const field of sub.customApplicationFields ?? []) {
-      const key = listingCustomQuestionErrorKey(field.id);
-      if (!field.label.trim()) {
-        errs[key] = "Enter the question, or remove it.";
-        continue;
-      }
-      if (field.type === "select" && field.options.length === 0) {
-        errs[key] = "Add at least one dropdown option (comma-separated).";
-      }
-    }
-    if (Object.keys(errs).length > 0) {
-      errs.customApplicationFields = "Complete each highlighted question below.";
-    }
-  }
-
-  // Lease step — custom lease setup must have content when customization is on.
-  if (stepIndex === 8 && sub.leaseConfigMode === "custom") {
-    if (sub.leaseCustomKind === "document") {
-      if (!sub.leaseTemplateDocUrl?.trim()) {
-        errs.leaseTemplateDoc = "Upload your lease template (PDF), or switch back to the PropLane standard lease.";
-      }
-    } else if (!sub.customLeaseTerms?.trim()) {
-      errs.customLeaseTerms = "Enter the lease information you want included, or switch back to the PropLane standard lease.";
-    }
-  }
-
   return errs;
 }
 
@@ -159,9 +131,6 @@ export function buildListingStepFieldOrder(stepIndex: number, sub: ManagerListin
     const monthlyIdx = base.indexOf("monthlyRent");
     if (monthlyIdx === -1) return [...rentKeys, ...base];
     return [...base.slice(0, monthlyIdx + 1), ...rentKeys, ...base.slice(monthlyIdx + 1)];
-  }
-  if (stepIndex === 7) {
-    return [...(sub.customApplicationFields ?? []).map((f) => listingCustomQuestionErrorKey(f.id)), "customApplicationFields"];
   }
   return base;
 }

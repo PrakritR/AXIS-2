@@ -719,12 +719,16 @@ html {
 
 .modal-panel {
   background: #ffffff;
+  background-color: #ffffff;
   border-color: var(--border);
+  opacity: 1;
 }
 
 [data-theme="dark"] .modal-panel {
   background: #111827;
+  background-color: #111827;
   border-color: rgba(255, 255, 255, 0.14);
+  opacity: 1;
 }
 
 /*
@@ -2040,7 +2044,7 @@ html[data-native] #axis-public-navbar {
   display: none;
 }
 
-html[data-native] [data-listing-subnav] {
+html[data-native] [data-listing-subnav]:not([data-listing-subnav-pinned]) {
   top: var(--native-safe-top, env(safe-area-inset-top, 0px)) !important;
   z-index: 50;
 }
@@ -2055,17 +2059,22 @@ html[data-native] [data-listing-sections-root] {
   }
 }
 
-/* Web mobile: subnav sits below the sticky public navbar (native hides navbar — see html[data-native] rules). */
+/* Web: subnav sits below the sticky public navbar — never offset pinned preview subnavs. */
 @media (max-width: 1023px) {
-  html:not([data-native]) [data-listing-subnav] {
+  html:not([data-native]) [data-listing-subnav]:not([data-listing-subnav-pinned]) {
     top: max(var(--public-nav-height, 4rem), env(safe-area-inset-top, 0px));
   }
 }
 
 @media (min-width: 1024px) {
-  html:not([data-native]) [data-listing-subnav] {
+  html:not([data-native]) [data-listing-subnav]:not([data-listing-subnav-pinned]) {
     top: max(var(--public-nav-height, 4rem), env(safe-area-inset-top, 0px));
   }
+}
+
+/* Manager/admin listing preview: tabs sit flush at the top of the preview shell. */
+[data-listing-subnav-pinned] {
+  top: 0 !important;
 }
 
 /* Keep horizontal table scroll from breaking the page layout on listing detail. */

@@ -1,5 +1,10 @@
 import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  isClawSharedLineBridgeEnabled,
+  isLegacyClawSharedSmsNumber,
+  isPlaceholderManagerWorkNumber,
+} from "@/lib/claw-leasing-links";
 import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 export type EnsureManagerSmsNumberResult =
@@ -33,18 +38,6 @@ export async function ensureManagerSmsNumber(
 ): Promise<EnsureManagerSmsNumberResult> {
   if (!managerUserId) return { ok: false, error: "Missing manager id." };
 
-  // Legacy shared Claw agent line — not a Twilio-owned number. Treat as unset
-  // so we buy a real work number (inbound + outbound require Twilio ownership).
-  const legacyClawShared = new Set(
-    [
-      process.env.CLAW_MESSENGER_AGENT_PHONE,
-      process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE,
-      "+12053690702",
-    ]
-      .map((p) => String(p ?? "").replace(/\D/g, ""))
-      .filter((d) => d.length >= 10),
-  );
-
   // 1. Idempotent short-circuit — already provisioned with a real number.
   try {
     const { data: existing, error } = await db
@@ -55,11 +48,14 @@ export async function ensureManagerSmsNumber(
     if (error) return { ok: false, error: error.message };
     const current = String(existing?.sms_from_number ?? "").trim();
     if (current) {
-      const digits = current.replace(/\D/g, "");
-      if (!legacyClawShared.has(digits)) {
+      // Keep the shared Claw line while A2P is pending — do not buy Twilio yet.
+      if (isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
         return { ok: true, number: current };
       }
-      // Clear the Claw stamp so the purchase path can claim the slot.
+      if (!isPlaceholderManagerWorkNumber(current)) {
+        return { ok: true, number: current };
+      }
+      // Clear placeholder stamp so the purchase path can claim the slot.
       await db
         .from("profiles")
         .update({ sms_from_number: null })
@@ -153,4 +149,25 @@ export async function ensureManagerSmsNumber(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not provision a work number." };
   }
+}
+
+/**
+ * Read the manager's work number for SMS UI / sends.
+ * Keeps the Claw shared line while the bridge is on; otherwise provisions Twilio.
+ */
+export async function resolveManagerWorkNumber(
+  db: SupabaseClient,
+  managerUserId: string,
+): Promise<string | null> {
+  if (!managerUserId) return null;
+  const { data } = await db.from("profiles").select("sms_from_number").eq("id", managerUserId).maybeSingle();
+  const current = String(data?.sms_from_number ?? "").trim();
+  if (current && isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
+    return current;
+  }
+  if (current && !isPlaceholderManagerWorkNumber(current)) return current;
+  // While Claw bridge is on, do not auto-buy Twilio for empty profiles.
+  if (isClawSharedLineBridgeEnabled()) return current || null;
+  const provisioned = await ensureManagerSmsNumber(db, managerUserId);
+  return provisioned.ok ? provisioned.number : null;
 }

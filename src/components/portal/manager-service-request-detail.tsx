@@ -8,7 +8,17 @@ import {
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
+import {
+  PortalNotificationPreviewModal,
+  type NotificationDeliveryChannels,
+} from "@/components/portal/portal-notification-preview-modal";
+import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { sanitizeMoneyInput } from "@/lib/listing-form-inputs";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
+import {
+  buildServiceRequestApprovedNotice,
+  buildServiceRequestDeniedNotice,
+} from "@/lib/resident-service-notices";
 import {
   approveServiceRequest,
   deleteServiceRequest,
@@ -16,7 +26,6 @@ import {
   updateServiceRequest,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
-import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 
 export type ManagerServiceRequestBucket = "pending" | "approved" | "denied";
 
@@ -39,6 +48,8 @@ export function managerServiceRequestPricingSummary(req: ServiceRequest): string
 function moneyFieldValue(raw: string): string {
   return sanitizeMoneyInput(raw.replace(/^\$/, ""));
 }
+
+type DecisionKind = "approve" | "deny";
 
 export function ManagerServiceRequestDetail({
   req,
@@ -66,6 +77,9 @@ export function ManagerServiceRequestDetail({
   const [editPrice, setEditPrice] = useState(() => moneyFieldValue(req.price ?? ""));
   const [editDeposit, setEditDeposit] = useState(() => moneyFieldValue(req.deposit ?? ""));
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [decisionKind, setDecisionKind] = useState<DecisionKind | null>(null);
+  const [decisionBusy, setDecisionBusy] = useState(false);
+  const [decisionDraft, setDecisionDraft] = useState<{ subject: string; body: string } | null>(null);
 
   useEffect(() => {
     setEditPrice(moneyFieldValue(req.price ?? ""));
@@ -98,6 +112,106 @@ export function ManagerServiceRequestDetail({
     setEditingCharges(false);
     showToast("Charges updated.");
   };
+
+  const openApprovePreview = () => {
+    const price = (editPrice.trim() || moneyFieldValue(req.price ?? "")) ?? "";
+    if (!price) {
+      showToast("Set a service fee before approving.");
+      return;
+    }
+    const priceLabel = price.startsWith("$") ? price : `$${price}`;
+    const depositRaw = editDeposit.trim();
+    setDecisionDraft(
+      buildServiceRequestApprovedNotice({
+        residentName: req.residentName,
+        offerName: req.offerName,
+        price: priceLabel,
+        deposit: depositRaw,
+        propertyLabel,
+      }),
+    );
+    setDecisionKind("approve");
+  };
+
+  const openDenyPreview = () => {
+    setDecisionDraft(
+      buildServiceRequestDeniedNotice({
+        residentName: req.residentName,
+        offerName: req.offerName,
+        propertyLabel,
+      }),
+    );
+    setDecisionKind("deny");
+  };
+
+  const applyDecision = async (
+    skipMessage: boolean,
+    channels?: NotificationDeliveryChannels,
+    draft?: { subject: string; body: string },
+  ) => {
+    if (!decisionKind) return;
+    const kind = decisionKind;
+    setDecisionBusy(true);
+    try {
+      if (kind === "approve") {
+        const price = (editPrice.trim() || moneyFieldValue(req.price ?? "")) ?? "";
+        if (!price) {
+          showToast("Set a service fee before approving.");
+          return;
+        }
+        if (price !== moneyFieldValue(req.price ?? "") || editDeposit.trim() !== moneyFieldValue(req.deposit ?? "")) {
+          updateServiceRequest(req.id, {
+            price,
+            deposit: editDeposit.trim(),
+          });
+        }
+        approveServiceRequest(req.id, draft?.body);
+        onUpdated();
+        onApproved?.();
+      } else {
+        denyServiceRequest(req.id, draft?.body);
+        onUpdated();
+        onDenied?.();
+      }
+
+      const email = req.residentEmail?.trim() ?? "";
+      if (!skipMessage && email.includes("@") && draft?.subject && draft.body) {
+        const notify = await deliverPortalInboxMessage({
+          eventCategory: "messages",
+          fromName: "Property Manager",
+          toEmails: [email],
+          subject: draft.subject,
+          text: draft.body,
+          deliverViaEmail: channels?.viaEmail !== false,
+          deliverViaSms: channels?.viaSms !== false,
+        });
+        if (!notify.ok) {
+          showToast(
+            kind === "approve"
+              ? `Approved "${req.offerName}", but the resident message could not be sent.`
+              : "Request denied, but the resident message could not be sent.",
+          );
+        } else {
+          showToast(
+            kind === "approve"
+              ? `Approved "${req.offerName}" and messaged the resident.`
+              : "Request denied and resident notified.",
+          );
+        }
+      } else {
+        showToast(kind === "approve" ? `Approved "${req.offerName}".` : "Request denied.");
+      }
+      setDecisionKind(null);
+      setDecisionDraft(null);
+    } finally {
+      setDecisionBusy(false);
+    }
+  };
+
+  const recipientLabel =
+    [req.residentName?.trim(), req.residentEmail?.trim()].filter(Boolean).join(" · ") ||
+    req.residentEmail ||
+    "Resident";
 
   return (
     <>
@@ -189,23 +303,8 @@ export function ManagerServiceRequestDetail({
               type="button"
               variant="primary"
               className={PORTAL_DETAIL_BTN}
-              onClick={() => {
-                const price = (editPrice.trim() || moneyFieldValue(req.price ?? "")) ?? "";
-                if (!price) {
-                  showToast("Set a service fee before approving.");
-                  return;
-                }
-                if (price !== moneyFieldValue(req.price ?? "") || editDeposit.trim() !== moneyFieldValue(req.deposit ?? "")) {
-                  updateServiceRequest(req.id, {
-                    price,
-                    deposit: editDeposit.trim(),
-                  });
-                }
-                approveServiceRequest(req.id);
-                onUpdated();
-                onApproved?.();
-                showToast(`Approved "${req.offerName}".`);
-              }}
+              data-attr="service-request-approve"
+              onClick={openApprovePreview}
             >
               Approve
             </Button>
@@ -213,12 +312,8 @@ export function ManagerServiceRequestDetail({
               type="button"
               variant="outline"
               className={PORTAL_DETAIL_BTN}
-              onClick={() => {
-                denyServiceRequest(req.id);
-                onUpdated();
-                onDenied?.();
-                showToast("Request denied.");
-              }}
+              data-attr="service-request-deny"
+              onClick={openDenyPreview}
             >
               Deny
             </Button>
@@ -255,6 +350,32 @@ export function ManagerServiceRequestDetail({
           </Button>
         ) : null}
       </PortalTableDetailActions>
+
+      <PortalNotificationPreviewModal
+        open={decisionKind !== null && decisionDraft !== null}
+        title={decisionKind === "deny" ? "Deny service request" : "Approve service request"}
+        onClose={() => {
+          if (decisionBusy) return;
+          setDecisionKind(null);
+          setDecisionDraft(null);
+        }}
+        recipient={recipientLabel}
+        subject={decisionDraft?.subject ?? ""}
+        body={decisionDraft?.body ?? ""}
+        intro={
+          decisionKind === "deny"
+            ? "Deny this request and notify the resident."
+            : "Approve this request and notify the resident."
+        }
+        showChannelPicker
+        emailAvailable={Boolean(req.residentEmail?.includes("@"))}
+        smsAvailable
+        confirmLabel={decisionKind === "deny" ? "Deny & notify" : "Approve & notify"}
+        confirmLabelWithoutMessage={decisionKind === "deny" ? "Deny only" : "Approve only"}
+        confirmBusy={decisionBusy}
+        confirmBusyLabel={decisionKind === "deny" ? "Denying…" : "Approving…"}
+        onConfirm={(skip, channels, draft) => void applyDecision(skip, channels, draft)}
+      />
 
       <ConfirmDeleteModal
         open={deleteOpen}

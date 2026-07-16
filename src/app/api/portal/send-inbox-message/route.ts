@@ -53,7 +53,7 @@ function scopeForRole(role: string | null | undefined): string {
 /** Deep-link a push notification tap into the recipient's own inbox. */
 function inboxDeepLinkForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
-  if (normalized === "manager" || normalized === "pro") return "/portal/inbox/unopened";
+  if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
   if (normalized === "admin") return "/admin/inbox/unopened";
   if (normalized === "vendor") return "/vendor/inbox/unopened";
   return "/resident/inbox/unopened";
@@ -476,24 +476,28 @@ export async function POST(req: Request) {
     }
 
     let emailResendId: string | null = null;
+    let emailSent = false;
 
     if (emailToSend.length > 0) {
       const apiKey = process.env.RESEND_API_KEY?.trim();
-      if (!apiKey) {
-        return NextResponse.json({ ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." }, { status: 503 });
+      if (apiKey) {
+        const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
+        const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
+        try {
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ from, to: emailToSend, subject, text, html }),
+          });
+          const emailPayload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+          if (res.ok) {
+            emailResendId = emailPayload.id ?? null;
+            emailSent = true;
+          }
+        } catch {
+          // Inbox already written — soft-fail external email.
+        }
       }
-      const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
-      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: emailToSend, subject, text, html }),
-      });
-      const emailPayload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
-      if (!res.ok) {
-        return NextResponse.json({ ok: false, error: emailPayload.message ?? "Email send failed." }, { status: 502 });
-      }
-      emailResendId = emailPayload.id ?? null;
     }
 
     const sentAt = new Date().toISOString();
@@ -507,14 +511,15 @@ export async function POST(req: Request) {
             id: logId,
             recipient_email: recipient.email,
             subject,
-            channel: "email",
+            channel: emailSent ? "email" : "portal",
             row_data: {
               id: logId,
               to: recipient.email,
               subject,
               body: text,
               sentAt,
-              emailSent: emailToSend.includes(recipient.email),
+              emailSent: emailSent && emailToSend.includes(recipient.email),
+              emailResendId: emailSent ? emailResendId : null,
             },
           },
           { onConflict: "id" },

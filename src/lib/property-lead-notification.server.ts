@@ -85,7 +85,7 @@ export async function notifyManagerPropertyLeadMessage(input: {
     "",
     input.body,
     "",
-    `Open your inbox: ${origin}/portal/inbox`,
+    `Open your inbox: ${origin}/portal/communication/inbox/unopened`,
     "",
     "— PropLane",
   ].filter(Boolean);

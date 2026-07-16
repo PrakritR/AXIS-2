@@ -59,12 +59,9 @@ export async function deliverPaymentReminder(input: {
         body: JSON.stringify({ from, to: [residentLower], subject, text, html }),
       });
       emailSent = res.ok;
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => ({}))) as { message?: string };
-        return { sent: false, error: `${charge.id}/${slotLabel}: ${payload.message ?? res.statusText}` };
-      }
-    } catch (e) {
-      return { sent: false, error: `${charge.id}/${slotLabel}: ${e instanceof Error ? e.message : String(e)}` };
+      // Soft-fail: still write Axis inbox + SMS when Resend rejects the address.
+    } catch {
+      emailSent = false;
     }
   }
 

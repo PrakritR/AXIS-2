@@ -29,6 +29,11 @@ vi.mock("@/lib/sms-inbox-notice.server", () => ({
   upsertManagerInboxNotice: vi.fn(async () => undefined),
 }));
 
+vi.mock("@/lib/agent/leasing-sms-agent.server", () => ({
+  runLeasingSmsAgentTurn: vi.fn(async () => null),
+  deliverLeasingSmsReply: vi.fn(async () => ({ ok: false })),
+}));
+
 vi.mock("@/lib/supabase/service", () => {
   const chain = (): Record<string, unknown> => {
     const c: Record<string, unknown> = {};
@@ -66,7 +71,7 @@ describe("handleClawLeasingInbound via Twilio work number", () => {
       text: "Hi — I'd like to schedule a tour for Magnolia House.",
       messageId: `test-${Date.now()}`,
       managerUserId: "mgr-1",
-      workNumber: "+12065550100",
+      workNumber: "+14258909021",
     });
     expect(result.ok).toBe(true);
     expect(result.replied).toBe(true);
@@ -78,7 +83,7 @@ describe("handleClawLeasingInbound via Twilio work number", () => {
       text: string;
     };
     expect(call.to).toBe("+15551234567");
-    expect(call.fromNumber).toBe("+12065550100");
+    expect(call.fromNumber).toBe("+14258909021");
     expect(call.text).toMatch(/tour/i);
   });
 });

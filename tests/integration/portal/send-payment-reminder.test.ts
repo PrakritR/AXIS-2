@@ -81,16 +81,26 @@ describe("POST /api/portal/send-payment-reminder", () => {
     const profileMaybeSingle = vi.fn().mockResolvedValue({
       data: { role: "manager", full_name: "Manager", email: "manager@test.com", sms_from_number: "" },
     });
+    const residentMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "resident-1",
+        email: charge.residentEmail,
+        phone: "+15105794001",
+      },
+    });
     const upsert = vi.fn().mockResolvedValue({ error: null });
-    const eq = vi.fn().mockImplementation((_col: string, val: string) => {
-      if (val === charge.id) return { maybeSingle: chargeMaybeSingle };
-      if (val === MANAGER_ID) return { maybeSingle: profileMaybeSingle };
+    const eq = vi.fn().mockImplementation((col: string, val: string) => {
+      if (col === "id" && val === charge.id) return { maybeSingle: chargeMaybeSingle };
+      if (col === "id" && val === MANAGER_ID) return { maybeSingle: profileMaybeSingle };
+      if (col === "email") return { maybeSingle: residentMaybeSingle };
       return { maybeSingle: profileMaybeSingle };
     });
     const select = vi.fn().mockReturnValue({ eq });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
       from: vi.fn().mockImplementation((table: string) => {
-        if (table === "portal_inbox_thread_records") return { upsert };
+        if (table === "portal_inbox_thread_records" || table === "portal_outbound_mail_records") {
+          return { upsert };
+        }
         return { select };
       }),
     } as never);
@@ -180,14 +190,18 @@ describe("POST /api/portal/send-payment-reminder", () => {
     const profileMaybeSingle = vi.fn().mockResolvedValue({
       data: { role: "manager", full_name: "Co Manager", email: "comanager@test.com", sms_from_number: "" },
     });
+    const residentMaybeSingle = vi.fn().mockResolvedValue({ data: null });
     const upsert = vi.fn().mockResolvedValue({ error: null });
-    const eq = vi.fn().mockImplementation((_col: string, val: string) => {
-      if (val === "hc_unpaid_1") return { maybeSingle: chargeMaybeSingle };
+    const eq = vi.fn().mockImplementation((col: string, val: string) => {
+      if (col === "id" && val === "hc_unpaid_1") return { maybeSingle: chargeMaybeSingle };
+      if (col === "email") return { maybeSingle: residentMaybeSingle };
       return { maybeSingle: profileMaybeSingle };
     });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
       from: vi.fn().mockImplementation((table: string) => {
-        if (table === "portal_inbox_thread_records") return { upsert };
+        if (table === "portal_inbox_thread_records" || table === "portal_outbound_mail_records") {
+          return { upsert };
+        }
         return { select: vi.fn().mockReturnValue({ eq }) };
       }),
     } as never);

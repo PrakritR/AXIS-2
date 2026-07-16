@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { MockProperty } from "@/data/types";
+import { managerContactSmsPhoneForPublicCta } from "@/lib/claw-leasing-links";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
 import { isSandboxPublicListing } from "@/lib/public-sandbox-listings";
 import { isProductionRuntime } from "@/lib/server-env";
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Property is not active for apply or tour links." }, { status: 404 });
     }
 
-    let contactSmsPhone = property.contactSmsPhone;
+    let contactSmsPhone = managerContactSmsPhoneForPublicCta(property.contactSmsPhone);
     let managerEmail: string | null = null;
     if (data.manager_user_id) {
       const { data: profile } = await db
@@ -46,7 +47,7 @@ export async function GET(req: Request) {
         .eq("id", data.manager_user_id)
         .maybeSingle();
       managerEmail = profile?.email ?? null;
-      const sms = String(profile?.sms_from_number ?? "").trim();
+      const sms = managerContactSmsPhoneForPublicCta(String(profile?.sms_from_number ?? "").trim() || null);
       if (sms) contactSmsPhone = sms;
     }
 

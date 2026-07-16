@@ -52,7 +52,7 @@ export async function notifyManagerFromAgent(
       await sendPushToUser(args.landlordId, {
         title: args.subject,
         body: args.text.slice(0, 120).replace(/\n/g, " "),
-        url: args.url ?? "/portal/inbox/unopened",
+        url: args.url ?? "/portal/communication/inbox/unopened",
       });
     } catch {
       /* push is best-effort; the inbox row is the durable notice */

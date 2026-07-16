@@ -95,7 +95,15 @@ export function Modal({
               Close
             </button>
           </div>
-          <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", dense ? "pt-2" : "pt-4")}>
+          <div
+            className={cn(
+              "min-h-0 flex-1 overscroll-contain",
+              // With a sticky footer, keep the shell fixed and let children scroll
+              // internally (e.g. message body only) so the popup fits one screen.
+              footer ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+              dense ? "pt-2" : "pt-4",
+            )}
+          >
             {children}
           </div>
           {footer ? (

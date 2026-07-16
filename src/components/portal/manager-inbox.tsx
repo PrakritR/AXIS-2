@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -41,6 +41,11 @@ import {
 } from "@/lib/scheduled-inbox-messages";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
+import {
+  threadPassesCommunicationFilters,
+  type CommunicationThreadFilters,
+} from "@/lib/communication-thread-filters";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 
 type InboxThread = {
@@ -83,10 +88,42 @@ function countThreads(threads: InboxThread[], scheduleCount: number) {
   };
 }
 
-export function ManagerInbox({ tabId }: { tabId: string }) {
+export type ManagerInboxHandle = {
+  openCompose: () => void;
+  deleteAllTrash: () => void;
+  reloadInbox: () => void;
+};
+
+export const ManagerInbox = forwardRef<
+  ManagerInboxHandle,
+  {
+    tabId: string;
+    embeddedInCommunication?: boolean;
+    commBase?: string;
+    externalTitleActions?: boolean;
+    /** When true, Communication shell owns New message — do not render compose here. */
+    suppressCompose?: boolean;
+    threadFilters?: CommunicationThreadFilters;
+    filterContacts?: InboxScopedContact[];
+    onTabCountsChange?: (counts: ReturnType<typeof countThreads>) => void;
+  }
+>(function ManagerInbox(
+  {
+    tabId,
+    embeddedInCommunication = false,
+    commBase,
+    externalTitleActions = false,
+    suppressCompose = false,
+    threadFilters,
+    filterContacts,
+    onTabCountsChange,
+  },
+  ref,
+) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
+  const inboxBase = embeddedInCommunication && commBase ? `${commBase}/inbox` : `${portalBase}/inbox`;
   const { messages: scheduledMessages } = useScheduledPaymentMessages({ includeHidden: false });
   const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
 
@@ -136,9 +173,11 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     const bump = () => setContactTick((n) => n + 1);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
     window.addEventListener("axis-pro-relationships", bump);
+    window.addEventListener("axis:manager-vendors", bump);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
       window.removeEventListener("axis-pro-relationships", bump);
+      window.removeEventListener("axis:manager-vendors", bump);
     };
   }, []);
 
@@ -166,13 +205,29 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
   }, [local, inboxSynced]);
 
-  const counts = useMemo(() => countThreads(local, scheduleCount), [local, scheduleCount]);
+  const emailThreads = useMemo(() => {
+    const base = embeddedInCommunication ? filterEmailInboxThreads(local) : local;
+    if (!threadFilters || !filterContacts) return base;
+    return base.filter((t) =>
+      threadPassesCommunicationFilters({
+        filters: threadFilters,
+        contacts: filterContacts,
+        counterpartyEmail: t.email,
+      }),
+    );
+  }, [embeddedInCommunication, local, threadFilters, filterContacts]);
+
+  const counts = useMemo(() => countThreads(emailThreads, scheduleCount), [emailThreads, scheduleCount]);
   const tabs = useMemo(
     () => [
       ...INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
     ],
     [counts],
   );
+
+  useEffect(() => {
+    if (embeddedInCommunication) onTabCountsChange?.(counts);
+  }, [counts, embeddedInCommunication, onTabCountsChange]);
 
   function threadTimestamp(t: InboxThread): number {
     const match = t.id.match(/(\d{10,})/);
@@ -182,14 +237,14 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const rowsForTab = useMemo(() => {
     let filtered: InboxThread[];
     if (tabId === "unopened")
-      filtered = local.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
-    else if (tabId === "opened") filtered = local.filter((t) => t.folder === "inbox" && !t.unread);
-    else if (tabId === "sent") filtered = local.filter((t) => t.folder === "sent");
-    else if (tabId === "trash") filtered = local.filter((t) => t.folder === "trash");
+      filtered = emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
+    else if (tabId === "opened") filtered = emailThreads.filter((t) => t.folder === "inbox" && !t.unread);
+    else if (tabId === "sent") filtered = emailThreads.filter((t) => t.folder === "sent");
+    else if (tabId === "trash") filtered = emailThreads.filter((t) => t.folder === "trash");
     else filtered = [];
 
     return [...filtered].sort((a, b) => threadTimestamp(b) - threadTimestamp(a));
-  }, [local, tabId, retainedIds]);
+  }, [emailThreads, tabId, retainedIds]);
 
   // Returning to Unopened (or refreshing) shows the true unread set.
   useEffect(() => {
@@ -296,7 +351,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     })();
   };
 
-  const deleteAllTrash = () => {
+  const deleteAllTrash = useCallback(() => {
     const trashItems = local.filter((t) => t.folder === "trash");
     if (trashItems.length === 0) {
       showToast("Trash is already empty.");
@@ -323,7 +378,26 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       persistInboxRef.current = true;
       showToast("Trash cleared.");
     })().catch(() => showToast("Could not clear trash."));
-  };
+  }, [local, showToast]);
+
+  const reloadInbox = useCallback(() => {
+    invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setLocal(rows as InboxThread[]);
+    });
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCompose: () => {
+        if (!suppressCompose) setComposeOpen(true);
+      },
+      deleteAllTrash,
+      reloadInbox,
+    }),
+    [deleteAllTrash, reloadInbox, suppressCompose],
+  );
 
   const toggleExpand = (id: string) => {
     setExpandedId((cur) => (cur === id ? null : id));
@@ -394,6 +468,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
               subject: p.subject.trim(),
               text: p.body.trim(),
               deliverToPortalInbox: true,
+              deliverViaSms: p.deliverViaSms === true,
               eventCategory: "messages",
             }),
           });
@@ -408,15 +483,17 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           showToast(
             p.includesAxisAdmin && !p.includesDirectoryRecipients
               ? "Message sent to PropLane admin."
-              : "Message sent via inbox, email, and text.",
+              : p.deliverViaSms
+                ? "Message sent via inbox, email, and text."
+                : "Message sent.",
           );
-          navigate(`${portalBase}/inbox/sent`);
+          navigate(`${inboxBase}/sent`);
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [navigate, showToast, portalBase],
+    [navigate, showToast, inboxBase],
   );
 
   const emptyCopy =
@@ -451,11 +528,10 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     threadSelection.clearSelection();
   };
 
-  return (
-    <ManagerPortalPageShell
-      title="Inbox"
-      titleAside={
-        <>
+  const inboxBody = (
+    <>
+      {embeddedInCommunication && !externalTitleActions ? (
+        <div className="mb-4 flex flex-wrap justify-end gap-2">
           {tabId === "trash" ? (
             <Button
               type="button"
@@ -466,30 +542,29 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
               Delete all trash
             </Button>
           ) : null}
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="inbox-new-message" onClick={() => setComposeOpen(true)}>
+          <Button
+            type="button"
+            variant="primary"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="inbox-new-message"
+            onClick={() => setComposeOpen(true)}
+          >
             New message
           </Button>
-        </>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            tabs={tabs}
-            activeId={tabId}
-            onChange={(id) => navigate(`${portalBase}/inbox/${id}`)}
-          />
-        </ManagerPortalFilterRow>
-      }
-    >
-      <ScopedInboxComposeModal
-        open={composeOpen}
-        onClose={() => setComposeOpen(false)}
-        onSend={handleComposeSend}
-        portal="manager"
-        senderName="Property manager"
-        senderEmail="manager@example.com"
-        liveContacts={liveContacts}
-      />
+        </div>
+      ) : null}
+
+      {!suppressCompose ? (
+        <ScopedInboxComposeModal
+          open={composeOpen}
+          onClose={() => setComposeOpen(false)}
+          onSend={handleComposeSend}
+          portal="manager"
+          senderName="Property manager"
+          senderEmail="manager@example.com"
+          liveContacts={liveContacts}
+        />
+      ) : null}
 
       {tabId === "schedule" ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
@@ -570,6 +645,42 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           />
         </div>
       )}
+    </>
+  );
+
+  if (embeddedInCommunication) return inboxBody;
+
+  return (
+    <ManagerPortalPageShell
+      title="Inbox"
+      titleAside={
+        <>
+          {tabId === "trash" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+              onClick={deleteAllTrash}
+            >
+              Delete all trash
+            </Button>
+          ) : null}
+          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="inbox-new-message" onClick={() => setComposeOpen(true)}>
+            New message
+          </Button>
+        </>
+      }
+      filterRow={
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills
+            tabs={tabs}
+            activeId={tabId}
+            onChange={(id) => navigate(`${inboxBase}/${id}`)}
+          />
+        </ManagerPortalFilterRow>
+      }
+    >
+      {inboxBody}
     </ManagerPortalPageShell>
   );
-}
+});

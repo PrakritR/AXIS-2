@@ -2,11 +2,67 @@
  * Client-safe listing SMS helpers (no Node/ws imports).
  * Used by listing CTAs (`sms:` deep links) and server auto-replies.
  *
- * Production CTAs target the manager's Twilio work number (`contactSmsPhone`
- * on the listing). Shared Claw agent line is opt-in legacy only.
+ * Prefer per-manager Twilio work numbers. While A2P is pending, set
+ * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so the shared Claw agent line may be
+ * used for listing CTAs / work-number display on the few opted-in managers.
  */
 
 export const CLAW_DEFAULT_AGENT_PHONE = "+12053690702";
+
+/** Digit forms of the shared Claw agent line. */
+export function legacyClawSharedPhoneDigits(): Set<string> {
+  return new Set(
+    [
+      process.env.CLAW_MESSENGER_AGENT_PHONE,
+      process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE,
+      CLAW_DEFAULT_AGENT_PHONE,
+    ]
+      .map((p) => String(p ?? "").replace(/\D/g, ""))
+      .filter((d) => d.length >= 10),
+  );
+}
+
+export function isLegacyClawSharedSmsNumber(phone: string | null | undefined): boolean {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  return digits.length >= 10 && legacyClawSharedPhoneDigits().has(digits);
+}
+
+/** Reserved 555 exchange — seed placeholders, not real Twilio lines. */
+export function isFictionalUs555Number(phone: string | null | undefined): boolean {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (national.length !== 10) return false;
+  return national.slice(3, 6) === "555";
+}
+
+/**
+ * Temporary bridge: allow the shared Claw agent line for CTAs / display while
+ * Twilio A2P is still in review. Client-safe (NEXT_PUBLIC_ only).
+ */
+export function isClawSharedLineBridgeEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED === "1";
+}
+
+/** Fictional 555 placeholders, or Claw when the bridge is off — replace with Twilio. */
+export function isPlaceholderManagerWorkNumber(phone: string | null | undefined): boolean {
+  if (isFictionalUs555Number(phone)) return true;
+  if (isLegacyClawSharedSmsNumber(phone)) return !isClawSharedLineBridgeEnabled();
+  return false;
+}
+
+/**
+ * Number safe for public "Text to tour/apply" CTAs and work-number display.
+ * Real Twilio numbers always; Claw shared line only while the bridge is on.
+ */
+export function managerContactSmsPhoneForPublicCta(phone: string | null | undefined): string | null {
+  const trimmed = phone?.trim();
+  if (!trimmed) return null;
+  if (isFictionalUs555Number(trimmed)) return null;
+  if (isLegacyClawSharedSmsNumber(trimmed)) {
+    return isClawSharedLineBridgeEnabled() ? trimmed : null;
+  }
+  return trimmed;
+}
 
 /** @deprecated Prefer per-listing `contactSmsPhone` (manager Twilio work number). */
 export function clawLeasingAgentPhoneE164(): string {
@@ -21,18 +77,9 @@ export function clawLeasingAgentPhoneE164(): string {
   return CLAW_DEFAULT_AGENT_PHONE;
 }
 
-/**
- * Whether public listings may show "Text to …" CTAs.
- * Prefer a per-property Twilio work number; legacy shared Claw line only when
- * NEXT_PUBLIC_CLAW_MESSENGER_ENABLED is explicitly on.
- */
+/** Whether public listings may show "Text to …" CTAs (manager Twilio work number only). */
 export function isClawMessagingPubliclyEnabled(contactSmsPhone?: string | null): boolean {
-  if (contactSmsPhone?.trim()) return true;
-  if (typeof process === "undefined") return false;
-  const flag = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED?.trim();
-  if (flag === "1" || flag === "true") return Boolean(clawLeasingAgentPhoneE164());
-  // Default off — no shared Claw line on public listings.
-  return false;
+  return Boolean(managerContactSmsPhoneForPublicCta(contactSmsPhone));
 }
 
 export type LeasingIntent =
@@ -70,9 +117,10 @@ export function classifyLeasingIntent(text: string): LeasingIntent {
   if (/\b(apply|application|rental app|submit (an )?app)\b/.test(t)) return "apply";
   if (/\b(lease|sign(ing)?|lease signing|e-?sign|contract)\b/.test(t)) return "lease";
   if (
-    /\b(tour|showing|visit|schedule a (tour|showing)|see the (place|unit|home|house)|walkthrough|open house)\b/.test(
-      t,
-    )
+    /\b(tour|showing|visit|walkthrough|open house)\b/.test(t) ||
+    /\b(schedule|book|set up|want|like|need)\s+(a\s+)?(tour|showing|visit)\b/.test(t) ||
+    /\b(see|tour)\s+the\s+(place|unit|home|house|property)\b/.test(t) ||
+    /\bschedule a (tour|showing)\b/.test(t)
   ) {
     return "tour";
   }
@@ -120,6 +168,7 @@ export function extractPropertyLabelHint(text: string): string | null {
     /apply for the bundle\s+"[^"]+"\s+at\s+(.+?)\.?$/i,
     /apply for a room bundle at\s+(.+?)\.?$/i,
     /schedule a tour for\s+(.+?)\.?$/i,
+    /tour for\s+(.+?)\.?$/i,
     /apply for .+? at\s+(.+?)\.?$/i,
     /apply for\s+(.+?)\.?$/i,
     /question about .+? at\s+(.+?)\.?$/i,
@@ -139,9 +188,10 @@ export function extractBundleLabelHint(text: string): string | null {
 }
 
 /**
- * Prefixed listing CTA bodies / keyword shortcuts — used so a manager testing
- * from their personal phone still gets the leasing bot (not the "reply to
- * resident" relay path).
+ * Prefixed listing CTA bodies / leasing intents — used so prospects (and a
+ * manager testing from their personal phone) hit the leasing bot instead of
+ * the resident payment/lease hub. Freeform "I want a tour" must qualify here
+ * or sticky payment threads swallow the message with a payments ack.
  */
 export function looksLikeProspectLeasingCta(text: string): boolean {
   const t = text.trim();
@@ -150,7 +200,13 @@ export function looksLikeProspectLeasingCta(text: string): boolean {
   if (/propertyId=/i.test(t) || /bundleId=/i.test(t)) return true;
   if (/\/rent\/(listings|apply)\//i.test(t) || /\/rent\/apply\?/i.test(t)) return true;
   if (/^(TOUR|APPLY|LEASE|HELP|BUNDLE)([\s!.?,]|$)/i.test(t)) return true;
-  return false;
+  const intent = classifyLeasingIntent(text);
+  return (
+    intent === "tour" ||
+    intent === "tour_details" ||
+    intent === "apply" ||
+    intent === "bundle"
+  );
 }
 
 export type SmsDeepLinkIntent = "tour" | "apply" | "lease" | "bundle" | "question";
@@ -167,7 +223,9 @@ export function buildSmsDeepLink(args: {
   /** Manager Twilio work number (E.164). Required for production CTAs. */
   toPhone?: string | null;
 }): string {
-  const phoneRaw = (args.toPhone?.trim() || clawLeasingAgentPhoneE164()).replace(/\D/g, "");
+  const toPhone = managerContactSmsPhoneForPublicCta(args.toPhone);
+  if (!toPhone) return "#";
+  const phoneRaw = toPhone.replace(/\D/g, "");
   const phoneDigits = phoneRaw.startsWith("1") && phoneRaw.length === 11 ? phoneRaw : phoneRaw.length === 10 ? `1${phoneRaw}` : phoneRaw;
   const label = (args.propertyLabel ?? "").trim();
   const bundleLabel = (args.bundleLabel ?? "").trim();

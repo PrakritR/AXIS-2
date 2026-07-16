@@ -8,10 +8,7 @@ import { ListingDetailSections } from "@/components/marketing/listing-detail-sec
 import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
-import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
-import { ManagerPropertyServiceOptionsPanel } from "@/components/portal/manager-property-service-options-panel";
-import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -31,6 +28,7 @@ import {
   portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
   adminPropertyRentDisplayLabel,
@@ -59,7 +57,6 @@ import {
 import { samePropertyId } from "@/lib/co-manager-calendar";
 import {
   collectLinkedPropertyIds,
-  collectLinkedPropertyIdsForModule,
   hasLinkedPropertyModuleLevel,
   linkedPropertyOwnerId,
   syncManagerPortfolioFromServer,
@@ -89,6 +86,7 @@ import {
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
+import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -179,35 +177,24 @@ function ManagerPropertyInlineDetails({
   onSendToProspect?: (listingId: string) => void;
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
-  const rich = useMemo(() => (mock ? getListingRichContent(mock) : null), [mock]);
-  const hasPreview = Boolean(mock && rich);
+  const contactSmsPhone = useListingContactSmsPhone({
+    listingId: row?.listingId,
+    ownerManagerUserId: row?.managerUserId,
+    viewerManagerUserId: managerUserId,
+  });
+  const previewProperty = useMemo(
+    () => (mock ? withListingContactSmsPhone(mock, contactSmsPhone) : null),
+    [mock, contactSmsPhone],
+  );
+  const rich = useMemo(() => (previewProperty ? getListingRichContent(previewProperty) : null), [previewProperty]);
+  const hasPreview = Boolean(previewProperty && rich);
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
-  // For a LINKED (co-managed) property, the Application section is shown only
-  // when the co-manager holds the `applications` grant on that property. Own
-  // properties always show it. (The Applications nav tab is unaffected — it is
-  // gated separately by whether applications is granted on ANY property.)
   const isLinkedProperty = Boolean(
     managerUserId && stablePropertyId && collectLinkedPropertyIds(managerUserId).has(stablePropertyId),
   );
-  const showApplicationSection =
-    !isLinkedProperty ||
-    Boolean(
-      managerUserId &&
-        stablePropertyId &&
-        collectLinkedPropertyIdsForModule(managerUserId, "applications").has(stablePropertyId),
-    );
-  // Same gating for the Lease section (template/PDF editor). Linked property →
-  // only with the `leases` grant; own properties always show it.
-  const showLeaseSection =
-    !isLinkedProperty ||
-    Boolean(
-      managerUserId &&
-        stablePropertyId &&
-        collectLinkedPropertyIdsForModule(managerUserId, "leases").has(stablePropertyId),
-    );
 
   // For a LINKED property, the listing itself is owned by another manager and
   // stored under the owner's key. Resolve that owner so edits/deletes attribute
@@ -668,47 +655,13 @@ function ManagerPropertyInlineDetails({
       >
         {hasPreview ? (
           <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
-            <ListingDetailSections property={mock!} rich={rich!} previewModal hidePreviewSubnav />
+            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
           </ListingPreviewScrollShell>
         ) : null}
       </PortalCollapsibleSection>
 
       <ManagerPropertyHouseDetailsPanel
         noteKey={noteKey}
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-      />
-
-      {showApplicationSection ? (
-        <ManagerPropertyApplicationQuestionsPanel
-          sub={managerSubmission}
-          saveTarget={houseSaveTarget}
-          managerUserId={managerUserId}
-          onUpdated={onUpdated}
-          showToast={showToast}
-        />
-      ) : null}
-
-      {showLeaseSection ? (
-        <ManagerPropertyLeasePanel
-          sub={managerSubmission}
-          saveTarget={houseSaveTarget}
-          managerUserId={managerUserId}
-          onUpdated={onUpdated}
-          showToast={showToast}
-          propertyHint={{
-            buildingName: mock.buildingName || mock.title,
-            unitLabel: mock.unitLabel,
-            rentLabel: mock.rentLabel,
-          }}
-          demoMode={isDemoModeActive()}
-        />
-      ) : null}
-
-      <ManagerPropertyServiceOptionsPanel
         sub={managerSubmission}
         saveTarget={houseSaveTarget}
         managerUserId={managerUserId}

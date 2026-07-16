@@ -276,7 +276,11 @@ export function ManagerAddPaymentModal({
     setNoticePreview(preview);
   };
 
-  const confirmPayment = async (skipMessage: boolean) => {
+  const confirmPayment = async (
+    skipMessage: boolean,
+    channels?: { viaEmail: boolean; viaSms: boolean },
+    draft?: { subject: string; body: string },
+  ) => {
     if (!noticePreview || noticeBusy) return;
     setNoticeBusy(true);
     try {
@@ -305,19 +309,23 @@ export function ManagerAddPaymentModal({
       }
 
       const amountLabel = `$${noticePreview.amount.toFixed(2)}`;
-      const subject = `New charge: ${noticePreview.chargeTitle}`;
-      const body = buildNewChargeNoticeBody({
-        residentName: noticePreview.residentName,
-        chargeTitle: noticePreview.chargeTitle,
-        amountLabel,
-        dueDateLabel: noticePreview.dueDateLabel,
-        propertyLabel: noticePreview.propertyName,
-      });
+      const subject = draft?.subject?.trim() || `New charge: ${noticePreview.chargeTitle}`;
+      const body =
+        draft?.body?.trim() ||
+        buildNewChargeNoticeBody({
+          residentName: noticePreview.residentName,
+          chargeTitle: noticePreview.chargeTitle,
+          amountLabel,
+          dueDateLabel: noticePreview.dueDateLabel,
+          propertyLabel: noticePreview.propertyName,
+        });
       const notice = await deliverPortalInboxMessage({
         eventCategory: "payments",
         toEmails: [noticePreview.residentEmail],
         subject,
         text: body,
+        deliverViaEmail: channels?.viaEmail !== false,
+        deliverViaSms: channels?.viaSms !== false,
       });
 
       if (notice.ok) {
@@ -468,13 +476,15 @@ export function ManagerAddPaymentModal({
         recipient={noticePreview?.residentEmail ?? ""}
         subject={noticePreview ? `New charge: ${noticePreview.chargeTitle}` : ""}
         body={previewBody ?? ""}
+        showChannelPicker
+        emailAvailable={Boolean(noticePreview?.residentEmail?.includes("@"))}
+        smsAvailable
         confirmLabel="Add payment & send notice"
         confirmLabelWithoutMessage="Add payment only"
         confirmBusy={noticeBusy}
         confirmBusyLabel="Adding…"
         cancelLabel="Back"
-        panelClassName="max-w-xl p-3 sm:p-4"
-        onConfirm={(skipMessage) => void confirmPayment(skipMessage)}
+        onConfirm={(skipMessage, channels, draft) => void confirmPayment(skipMessage, channels, draft)}
       />
     </>
   );

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
@@ -47,6 +47,8 @@ import { acceptDemoWorkOrderBid, approveDemoWorkOrderPay } from "@/lib/demo/demo
 import { isWorkOrderCostLockedByVendor } from "@/lib/work-order-cost-lock";
 import { entryPermissionLabel } from "@/lib/work-order-entry";
 import { notifyResidentOfWorkOrderUpdate } from "@/lib/work-order-resident-notifications";
+import { buildWorkOrderCompletedNotice } from "@/lib/resident-service-notices";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { track } from "@/lib/analytics/track-client";
 
 function priorityClass(p: string) {
@@ -141,6 +143,11 @@ export function ManagerWorkOrdersPanel({
     materialsCost: "",
     materialsMemo: "",
     workDoneSummary: "",
+    notifyResident: true,
+    residentSubject: "",
+    residentBody: "",
+    viaEmail: true,
+    viaSms: true,
   });
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid[]>>({});
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
@@ -398,18 +405,48 @@ export function ManagerWorkOrdersPanel({
 
   const openCompleteModal = (row: DemoManagerWorkOrderRow) => {
     if (row.bucket !== "scheduled") return;
+    const summary = row.workDoneSummary ?? row.title;
+    const notice = buildWorkOrderCompletedNotice({
+      residentName: row.residentName ?? "",
+      title: row.title,
+      propertyLabel: row.propertyName,
+      unit: row.unit,
+      workDoneSummary: summary,
+    });
     setCompleteRow(row);
     setCompleteDraft({
       category: row.category ?? parseWorkOrderCategoryFromDescription(row.description),
       vendorCost: row.vendorCostCents ? String(row.vendorCostCents / 100) : "",
       materialsCost: row.materialsCostCents ? String(row.materialsCostCents / 100) : "",
       materialsMemo: row.materialsMemo ?? "",
-      workDoneSummary: row.workDoneSummary ?? row.title,
+      workDoneSummary: summary,
+      notifyResident: Boolean(row.residentEmail?.includes("@")),
+      residentSubject: notice.subject,
+      residentBody: notice.body,
+      viaEmail: true,
+      viaSms: true,
     });
   };
 
   const submitComplete = async () => {
     if (!completeRow) return;
+    if (
+      completeDraft.notifyResident &&
+      completeRow.residentEmail?.includes("@") &&
+      (!completeDraft.residentSubject.trim() || !completeDraft.residentBody.trim())
+    ) {
+      showToast("Add a subject and message for the resident, or uncheck notify.");
+      return;
+    }
+    if (
+      completeDraft.notifyResident &&
+      completeRow.residentEmail?.includes("@") &&
+      !completeDraft.viaEmail &&
+      !completeDraft.viaSms
+    ) {
+      showToast("Choose Email and/or Messages, or uncheck notify.");
+      return;
+    }
     setCompleteBusy(true);
     try {
       const vendorCostCents = completeDraft.vendorCost.trim()
@@ -448,17 +485,42 @@ export function ManagerWorkOrdersPanel({
           materialsCostCents: materialsCostCents > 0 ? materialsCostCents : undefined,
           materialsMemo: completeDraft.materialsMemo,
           workDoneSummary: completeDraft.workDoneSummary,
+          skipResidentNotify: true,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not complete work order.");
       updateManagerWorkOrder(completeRow.id, () => data.workOrder as DemoManagerWorkOrderRow);
       void syncManagerWorkOrdersFromServer();
-      showToast(
-        data.expenseEntryIds?.length
-          ? "Work order completed and expenses logged."
-          : "Work order marked complete.",
-      );
+
+      const residentEmail = completeRow.residentEmail?.trim() ?? "";
+      if (completeDraft.notifyResident && residentEmail.includes("@")) {
+        const notify = await deliverPortalInboxMessage({
+          eventCategory: "maintenance",
+          fromName: "Property Manager",
+          toEmails: [residentEmail],
+          subject: completeDraft.residentSubject.trim(),
+          text: completeDraft.residentBody.trim(),
+          deliverViaEmail: completeDraft.viaEmail,
+          deliverViaSms: completeDraft.viaSms,
+        });
+        track("work_order_resident_notified", { stage: "completed", work_order_id: completeRow.id });
+        showToast(
+          notify.ok
+            ? data.expenseEntryIds?.length
+              ? "Completed, expenses logged, and resident notified."
+              : "Work order completed and resident notified."
+            : data.expenseEntryIds?.length
+              ? "Completed and expenses logged, but resident message failed."
+              : "Work order completed, but resident message failed.",
+        );
+      } else {
+        showToast(
+          data.expenseEntryIds?.length
+            ? "Work order completed and expenses logged."
+            : "Work order marked complete.",
+        );
+      }
       setCompleteRow(null);
       setExpandedId(null);
     } catch (e) {
@@ -1231,12 +1293,79 @@ export function ManagerWorkOrdersPanel({
                 disabled={completeBusy}
               />
             </label>
+            {completeRow.residentEmail?.includes("@") ? (
+              <div className="space-y-2 rounded-xl border border-border bg-accent/20 p-3">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+                    checked={completeDraft.notifyResident}
+                    disabled={completeBusy}
+                    data-attr="work-order-complete-notify"
+                    onChange={(e) => setCompleteDraft({ ...completeDraft, notifyResident: e.target.checked })}
+                  />
+                  <span className="font-medium text-foreground">Message resident (email + SMS)</span>
+                </label>
+                {completeDraft.notifyResident ? (
+                  <>
+                    <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                      Subject
+                      <Input
+                        value={completeDraft.residentSubject}
+                        onChange={(e) => setCompleteDraft({ ...completeDraft, residentSubject: e.target.value })}
+                        disabled={completeBusy}
+                        data-attr="work-order-complete-resident-subject"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                      Message
+                      <Textarea
+                        className="min-h-[120px]"
+                        value={completeDraft.residentBody}
+                        onChange={(e) => setCompleteDraft({ ...completeDraft, residentBody: e.target.value })}
+                        disabled={completeBusy}
+                        data-attr="work-order-complete-resident-body"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary"
+                          checked={completeDraft.viaEmail}
+                          disabled={completeBusy}
+                          onChange={(e) => setCompleteDraft({ ...completeDraft, viaEmail: e.target.checked })}
+                          data-attr="work-order-complete-via-email"
+                        />
+                        Email
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary"
+                          checked={completeDraft.viaSms}
+                          disabled={completeBusy}
+                          onChange={(e) => setCompleteDraft({ ...completeDraft, viaSms: e.target.checked })}
+                          data-attr="work-order-complete-via-sms"
+                        />
+                        Messages (SMS)
+                      </label>
+                    </div>
+                    <p className="text-xs text-muted">Always saved to Axis inbox. SMS uses your work number.</p>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex justify-start gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
                 Cancel
               </Button>
               <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
-                Complete &amp; log expenses
+                {completeBusy
+                  ? "Completing…"
+                  : completeDraft.notifyResident && completeRow.residentEmail?.includes("@")
+                    ? "Complete & notify"
+                    : "Complete & log expenses"}
               </Button>
             </div>
           </div>

@@ -19,7 +19,7 @@ test.describe("Cross-portal interconnect", () => {
   test("manager can compose and view sent inbox message", async ({ page }) => {
     await mockStripeAllRoutes(page);
     await signInAsManager(page);
-    await page.goto("/portal/inbox/sent");
+    await page.goto("/portal/communication/inbox/sent");
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
 
     // Try to compose a new message
@@ -50,7 +50,7 @@ test.describe("Cross-portal interconnect", () => {
 
   test("resident inbox tab loads correctly", async ({ page }) => {
     await signInAsResident(page);
-    await page.goto("/resident/inbox/unopened");
+    await page.goto("/resident/communication/email/unopened");
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
     const errorEl = page.getByText(/something went wrong|500/i);
     await expect(errorEl).not.toBeVisible({ timeout: 10_000 });

@@ -168,7 +168,13 @@ export function ManagerLeasesPipelinePanel({
     }
   }
 
-  async function sendLeaseSigningReminder(row: LeasePipelineRow, recipient: string, subject: string, text: string) {
+  async function sendLeaseSigningReminder(
+    row: LeasePipelineRow,
+    recipient: string,
+    subject: string,
+    text: string,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+  ) {
     setReminderBusyForRow(row.id);
     try {
       const res = await deliverPortalInboxMessage({
@@ -177,6 +183,8 @@ export function ManagerLeasesPipelinePanel({
         toEmails: [recipient],
         subject,
         text,
+        deliverViaEmail: channels?.viaEmail !== false,
+        deliverViaSms: channels?.viaSms === true,
       });
 
       if (!res.ok) {
@@ -186,9 +194,9 @@ export function ManagerLeasesPipelinePanel({
 
       appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.", managerUserId);
       if (res.skipped) {
-        showToast("Reminder sent to PropLane inbox (demo email, no external email sent).");
+        showToast("Reminder saved to Axis inbox.");
       } else {
-        showToast("Lease-signing reminder sent via email and PropLane inbox.");
+        showToast("Lease-signing reminder sent.");
       }
     } catch {
       showToast("Could not send lease signing reminder.");
@@ -571,11 +579,14 @@ export function ManagerLeasesPipelinePanel({
         recipient={leaseReminderPreview?.recipient ?? ""}
         subject={leaseReminderPreview?.subject ?? ""}
         body={leaseReminderPreview?.body ?? ""}
+        showSkipMessage={false}
+        showChannelPicker
+        emailAvailable
+        smsAvailable
         confirmLabel="Send reminder"
-        confirmLabelWithoutMessage="Close without sending"
         confirmBusy={Boolean(leaseReminderPreview?.row && reminderBusyForRow === leaseReminderPreview.row.id)}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => {
+        onConfirm={(skipMessage, channels) => {
           if (!leaseReminderPreview) return;
           if (skipMessage) {
             setLeaseReminderPreview(null);
@@ -583,7 +594,13 @@ export function ManagerLeasesPipelinePanel({
           }
           const preview = leaseReminderPreview;
           setLeaseReminderPreview(null);
-          void sendLeaseSigningReminder(preview.row, preview.recipient, preview.subject, preview.body);
+          void sendLeaseSigningReminder(
+            preview.row,
+            preview.recipient,
+            preview.subject,
+            preview.body,
+            channels,
+          );
         }}
       />
       <input

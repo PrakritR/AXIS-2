@@ -31,6 +31,12 @@ import {
   getJobDetailsTool,
   listMyJobsWithThisManagerTool,
 } from "./domains/vendor-work-order";
+import {
+  buildProspectLinksTool,
+  escalateLeasingToManagerTool,
+  getListingDetailsTool,
+  listLiveListingsTool,
+} from "./domains/leasing-sms";
 import { managerFinancialsWriteTools } from "./domains/financials-write";
 
 export const agentRegistry = buildRegistry([
@@ -81,6 +87,17 @@ export const vendorWorkOrderAgentRegistry = buildRegistry([
   getJobAccessInfoTool,
   listMyJobsWithThisManagerTool,
   escalateToManagerTool,
+]);
+
+/**
+ * Prospect-facing leasing SMS agent on each manager's Twilio work number.
+ * Separate registry so it never sees financials, residents, or vendor tools.
+ */
+export const leasingSmsAgentRegistry = buildRegistry([
+  listLiveListingsTool,
+  getListingDetailsTool,
+  buildProspectLinksTool,
+  escalateLeasingToManagerTool,
 ]);
 
 /**

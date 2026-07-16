@@ -32,7 +32,7 @@ function isPaidRow(row: DemoManagerPaymentLedgerRow): boolean {
 }
 
 function isRemindableRow(row: DemoManagerPaymentLedgerRow): boolean {
-  return !isPaidRow(row) && Boolean(row.residentEmail?.trim());
+  return !isPaidRow(row) && Boolean(row.householdChargeId || row.id);
 }
 
 function dueDateDisplayToInputValue(display: string): string {
@@ -284,9 +284,9 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
-    const email = row.residentEmail?.trim();
-    if (!email) {
-      showToast("No email on file for this resident.");
+    const chargeId = row.householdChargeId?.trim() || row.id?.trim();
+    if (!chargeId) {
+      showToast("This payment is missing a charge id — sync payments and try again.");
       return;
     }
     const residentName = row.residentName || "Resident";
@@ -314,89 +314,110 @@ export function ManagerPaymentsLedgerPanel({
 
   const sendReminderForRow = async (
     row: DemoManagerPaymentLedgerRow,
-  ): Promise<{ ok: boolean; skipped?: boolean; chargePaid?: boolean }> => {
-    const email = row.residentEmail?.trim();
-    if (!email) return { ok: false };
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject?: string; body?: string },
+  ): Promise<{ ok: boolean; skipped?: boolean; chargePaid?: boolean; error?: string; emailSent?: boolean; smsSent?: boolean }> => {
+    const chargeId = row.householdChargeId?.trim() || row.id?.trim();
+    if (!chargeId) return { ok: false, error: "Missing charge id." };
     try {
       const res = await fetch("/api/portal/send-payment-reminder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          chargeId: row.householdChargeId,
-          residentEmail: email,
-          residentName: row.residentName,
-          chargeTitle: row.chargeTitle,
-          balanceDue: row.balanceDue,
-          dueDate: row.dueDate,
-          propertyLabel: row.propertyName,
+          chargeId,
+          viaEmail: channels?.viaEmail !== false,
+          viaSms: channels?.viaSms === true,
+          subject: draft?.subject?.trim() || undefined,
+          text: draft?.body?.trim() || undefined,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean; code?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        skipped?: boolean;
+        code?: string;
+        error?: string;
+        emailSent?: boolean;
+        smsSent?: boolean;
+      };
       if (res.status === 409 && data.code === "charge_paid") {
         return { ok: false, chargePaid: true };
       }
-      return { ok: Boolean(data.ok), skipped: data.skipped };
+      return {
+        ok: Boolean(data.ok),
+        skipped: data.skipped,
+        error: data.error,
+        emailSent: data.emailSent,
+        smsSent: data.smsSent,
+      };
     } catch {
-      return { ok: false };
+      return { ok: false, error: "Network error." };
     }
   };
 
   const sendBulkReminders = async () => {
     const targets = remindableSelectedRows;
     if (targets.length === 0) {
-      if (selectedRows.some((row) => !isPaidRow(row))) {
-        showToast("No email on file for selected resident(s).");
-      }
+      showToast("Select unpaid charges to remind.");
       return;
     }
     setSendingReminderId("bulk");
     let ok = 0;
     let skipped = 0;
+    let lastError = "";
     for (const row of targets) {
-      const result = await sendReminderForRow(row);
+      const result = await sendReminderForRow(row, { viaEmail: true, viaSms: true });
       if (result.chargePaid) continue;
       if (result.ok) {
         ok += 1;
         if (result.skipped) skipped += 1;
+      } else if (result.error) {
+        lastError = result.error;
       }
     }
     setSendingReminderId(null);
     setSelectedIds(new Set());
     if (ok === 0) {
-      showToast("Could not send reminder. Please try again.");
+      showToast(lastError || "Could not send reminder. Please try again.");
       return;
     }
     if (skipped === ok) {
-      showToast(ok === 1 ? "Reminder sent to portal inbox (demo email — no real email sent)." : `Sent ${ok} reminders to portal inbox (demo email — no real email sent).`);
+      showToast(ok === 1 ? "Reminder saved to Axis inbox." : `Sent ${ok} reminders to Axis inbox.`);
     } else if (skipped > 0) {
-      showToast(`Sent ${ok} reminder${ok === 1 ? "" : "s"} (${skipped} via portal inbox only).`);
+      showToast(`Sent ${ok} reminder${ok === 1 ? "" : "s"} (${skipped} inbox-only).`);
     } else {
-      showToast(ok === 1 ? "Reminder sent to resident via email and portal inbox." : `Sent ${ok} reminders via email and portal inbox.`);
+      showToast(ok === 1 ? "Reminder sent." : `Sent ${ok} reminders.`);
     }
   };
 
-  const doSendReminder = async (skipMessage: boolean) => {
+  const doSendReminder = async (
+    skipMessage: boolean,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject: string; body: string },
+  ) => {
     if (!reminderPreview) return;
     if (skipMessage) {
       setReminderPreview(null);
       return;
     }
     const { row } = reminderPreview;
-    const email = row.residentEmail?.trim();
-    if (!email) return;
     setReminderPreview(null);
     setSendingReminderId(row.id);
     try {
-      const result = await sendReminderForRow(row);
+      const result = await sendReminderForRow(row, channels, draft);
       if (result.chargePaid) {
         showToast("This charge is already paid — no reminder was sent.");
-      } else if (result.skipped) {
-        showToast("Reminder sent to portal inbox (demo email — no real email sent).");
       } else if (result.ok) {
-        showToast("Reminder sent to resident via email and portal inbox.");
+        const parts: string[] = ["Axis inbox"];
+        if (result.emailSent) parts.push("email");
+        if (result.smsSent) parts.push("Messages");
+        showToast(
+          result.skipped
+            ? "Reminder saved to Axis inbox."
+            : `Reminder sent via ${parts.join(" + ")}.`,
+        );
       } else {
-        showToast("Could not send reminder. Please try again.");
+        showToast(result.error || "Could not send reminder. Please try again.");
       }
     } finally {
       setSendingReminderId(null);
@@ -542,14 +563,23 @@ export function ManagerPaymentsLedgerPanel({
         open
         title="Send payment reminder"
         onClose={() => setReminderPreview(null)}
-        recipient={reminderPreview.row.residentEmail ?? ""}
+        recipient={
+          reminderPreview.row.residentEmail?.trim() ||
+          reminderPreview.row.residentName ||
+          "Resident"
+        }
         subject={reminderPreview.subject}
         body={reminderPreview.body}
-        confirmLabel="Send"
-        confirmLabelWithoutMessage="Close without sending"
+        showSkipMessage={false}
+        showChannelPicker
+        emailAvailable={Boolean(reminderPreview.row.residentEmail?.includes("@"))}
+        smsAvailable
+        defaultViaEmail={Boolean(reminderPreview.row.residentEmail?.includes("@"))}
+        defaultViaSms
+        confirmLabel="Send reminder"
         confirmBusy={!!sendingReminderId}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => void doSendReminder(skipMessage)}
+        onConfirm={(skipMessage, channels, draft) => void doSendReminder(skipMessage, channels, draft)}
       />
     )}
     {chargeRemindersRow?.householdChargeId ? (

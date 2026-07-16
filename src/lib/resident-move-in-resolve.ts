@@ -6,6 +6,13 @@ import type { MockProperty } from "@/data/types";
 import { normalizeManagerListingSubmissionV1, isEntireHomeListing } from "@/lib/manager-listing-submission";
 import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 
+export type ResidentMoveInHousemate = {
+  name: string;
+  email: string;
+  roomLabel: string;
+  phone: string | null;
+};
+
 export type ResidentMoveInResolved = {
   propertyLabel: string;
   addressLine: string;
@@ -18,6 +25,8 @@ export type ResidentMoveInResolved = {
   amenities: string[];
   wifiNetworkName: string | null;
   wifiPassword: string | null;
+  /** Other approved residents on the same property (for house details / messaging). */
+  housemates: ResidentMoveInHousemate[];
 };
 
 export function asObject(value: unknown): Record<string, unknown> | null {
@@ -230,5 +239,6 @@ export function resolveResidentMoveInFromApplications(
     amenities,
     wifiNetworkName,
     wifiPassword,
+    housemates: [],
   };
 }

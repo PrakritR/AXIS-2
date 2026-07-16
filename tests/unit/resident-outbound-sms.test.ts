@@ -58,7 +58,7 @@ describe("sendResidentOutboundSms", () => {
     const result = await sendResidentOutboundSms({
       to: "5103098345",
       text: "Lease ready to sign",
-      fromNumber: "+12065550100",
+      fromNumber: "+14258909021",
     });
     expect(result.sent).toBe(true);
     expect(result.channel).toBe("twilio");
@@ -75,7 +75,7 @@ describe("sendResidentOutboundSms", () => {
     const result = await sendResidentOutboundSms({
       to: "+15103098345",
       text: "Payment reminder: rent is due.",
-      fromNumber: "+12065550100",
+      fromNumber: "+14258909021",
     });
     expect(result).toEqual({ sent: true, channel: "twilio", sid: "SM2" });
     expect(sendTwilio).toHaveBeenCalled();

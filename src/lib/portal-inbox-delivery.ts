@@ -349,16 +349,25 @@ export async function deliverPortalInboxMessage(
 
   if (toEmails.length > 0) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) return { ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." };
-    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
-    const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: toEmails, subject, text, html }),
-    });
-    const emailPayload = (await res.json().catch(() => ({}))) as { message?: string };
-    if (!res.ok) return { ok: false, error: emailPayload.message ?? "Email send failed." };
+    if (apiKey) {
+      const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
+      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
+      try {
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from, to: toEmails, subject, text, html }),
+        });
+        if (!res.ok) {
+          // Inbox already written — soft-fail email so the manager action still succeeds.
+          for (const email of toEmails) willEmail.delete(email);
+        }
+      } catch {
+        for (const email of toEmails) willEmail.delete(email);
+      }
+    } else {
+      for (const email of toEmails) willEmail.delete(email);
+    }
   }
 
   const sentAt = new Date().toISOString();
@@ -426,11 +435,7 @@ export async function deliverPortalInboxMessage(
         // SMS recipient is the manager (e.g. new work-order alert) inverts the
         // roles and breaks manager reply routing.
         const openThread =
-          recipientIsResident &&
-          (eventCategory === "payments" ||
-            eventCategory === "leases" ||
-            eventCategory === "maintenance" ||
-            eventCategory === "applications")
+          recipientIsResident
             ? {
                 managerUserId: opts.senderUserId,
                 residentUserId: recipient.userId,
@@ -442,7 +447,9 @@ export async function deliverPortalInboxMessage(
                       ? ("payment" as const)
                       : eventCategory === "applications"
                         ? ("applications" as const)
-                        : ("maintenance" as const),
+                        : eventCategory === "maintenance"
+                          ? ("maintenance" as const)
+                          : ("general" as const),
               }
             : null;
         const result = await sendResidentOutboundSms({

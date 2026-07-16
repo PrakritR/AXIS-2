@@ -22,7 +22,6 @@ import {
 import {
   ListingPreviewNewTabContext,
 } from "@/components/marketing/listing-preview-context";
-import { listingFallbackMapCenter } from "@/lib/listing-map";
 import { buildSmsDeepLink, isClawMessagingPubliclyEnabled } from "@/lib/claw-leasing-links";
 import { buildTourContactHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
@@ -426,11 +425,7 @@ export function ListingDetailSections({
                 title="Location"
                 dataAttrToggle="listing-location-toggle"
               >
-                <ListingLocationBlock
-                  {...listingFallbackMapCenter(property)}
-                  address={property.address}
-                  embedded
-                />
+                <ListingLocationBlock property={property} embedded />
               </ListingDetailCollapsibleSection>
             </div>
 

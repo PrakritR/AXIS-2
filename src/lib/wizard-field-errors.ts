@@ -82,8 +82,6 @@ export const LISTING_STEP_FIELD_ORDER: Record<number, string[]> = {
     "venmoContact",
     "residentPaymentMethods",
   ],
-  7: ["customApplicationFields"],
-  8: ["customLeaseTerms", "leaseTemplateDoc"],
 };
 
 export const COSIGNER_STEP_FIELD_ORDER: Record<number, string[]> = {

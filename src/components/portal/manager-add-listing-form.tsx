@@ -13,7 +13,7 @@ import {
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { LeaseConfigForm, readLeaseTemplateFile } from "@/components/portal/lease-config-form";
+import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
   submitManagerPendingPropertyToServer,
   updateExtraListingFromSubmissionOnServer,
@@ -36,12 +36,7 @@ import {
   applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
-  CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
   customApplicationFieldKeyFromLabel,
-  LISTING_SERVICE_QUICK_ADDS,
-  resolveServiceOfferPricing,
-  type ListingServiceQuickAdd,
-  emptyCustomApplicationField,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
@@ -60,7 +55,6 @@ import {
   type ManagerBathroomSubmission,
   type ManagerBundleRow,
   type ManagerCustomApplicationField,
-  type ManagerCustomApplicationFieldType,
   type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
   type ManagerListingServiceOption,
@@ -73,15 +67,6 @@ import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
-import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
-import {
-  addListingApplicationField,
-  patchListingApplicationField,
-  removeListingApplicationField,
-  resolveListingApplicationFields,
-  restoreDefaultApplicationConfig,
-  type ResolvedApplicationField,
-} from "@/lib/rental-application/application-field-catalog";
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
@@ -127,7 +112,6 @@ import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
-  listingCustomQuestionErrorKey,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
@@ -139,24 +123,13 @@ import {
   wizardSectionErrorClass,
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
-import { Modal } from "@/components/ui/modal";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
-  "min-h-[44px] w-full rounded-xl border border-border bg-auth-input-bg px-3.5 py-2.5 text-[14px] text-foreground outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20";
+  "min-h-[44px] w-full rounded-xl border border-white/20 bg-[#1c2433] px-3.5 py-2.5 text-[14px] text-foreground outline-none transition focus:border-primary/50 focus:bg-[#232c3d] focus:ring-2 focus:ring-primary/20 [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-auth-input-bg [html[data-theme=light]_&]:focus:bg-card";
 
-/** Comma/newline-separated dropdown options → clean deduped list. */
-function parseQuestionOptionsText(raw: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const part of raw.split(/[\n,]/)) {
-    const t = part.trim();
-    if (!t || seen.has(t.toLowerCase())) continue;
-    seen.add(t.toLowerCase());
-    out.push(t);
-  }
-  return out;
-}
+const listingTextInputCls =
+  "rounded-xl border-white/20 bg-[#1c2433] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-auth-input-bg";
 
 function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
@@ -261,14 +234,30 @@ const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   furnishing: ROOM_FURNISHING_OPTIONS,
 };
 
-function FormSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: React.ReactNode }) {
+function FormSection({
+  id,
+  title,
+  description,
+  children,
+  compact,
+}: {
+  id?: string;
+  title: string;
+  description?: ReactNode;
+  children: React.ReactNode;
+  compact?: boolean;
+}) {
   return (
-    <section id={id} className="space-y-5">
+    <section id={id} className={compact ? "space-y-3" : "space-y-5"}>
       <header>
         <h3 className="text-base font-bold tracking-tight text-foreground sm:text-[17px]">{title}</h3>
-        {description ? <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-muted">{description}</p> : null}
+        {description ? (
+          <p className={`max-w-3xl text-muted ${compact ? "mt-1 text-xs leading-snug" : "mt-1.5 text-[13px] leading-relaxed"}`}>
+            {description}
+          </p>
+        ) : null}
       </header>
-      <div className="space-y-5">{children}</div>
+      <div className={compact ? "space-y-3" : "space-y-5"}>{children}</div>
     </section>
   );
 }
@@ -459,26 +448,22 @@ function PlaceCategoryPicker({
       data-wizard-field="listingPlaceCategoryId"
       className={wizardSectionErrorClass(Boolean(hasError))}
     >
-      <p className="text-sm font-semibold text-foreground">How is this property rented?</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted">
-        Choose one model — we’ll tailor rent, utilities, and proration fields below.
-      </p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => {
-          const on = value === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => onSelect(opt.id)}
-              className={listingChoiceCardClass(on)}
-            >
-              <span className="text-sm font-semibold text-foreground">{opt.label}</span>
-              <span className="mt-0.5 block text-xs text-muted">{opt.hint}</span>
-            </button>
-          );
-        })}
-      </div>
+      <FieldLabel hint="We’ll tailor rent, utilities, and proration fields below.">
+        How is this property rented?
+      </FieldLabel>
+      <Select
+        aria-label="Rental model"
+        className={wizardFieldErrorClass(Boolean(hasError), selectInputCls)}
+        value={value ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+      >
+        <option value="">Select</option>
+        {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </Select>
       <StepFieldError msg={errorMsg} />
     </div>
   );
@@ -640,14 +625,10 @@ const LISTING_FORM_STEPS = [
   { id: "bathrooms",   label: "Bathrooms",      icon: "🚿" },
   { id: "spaces",      label: "Shared spaces",  icon: "🪑" },
   { id: "lease",       label: "Pricing",        icon: "💰" },
-  { id: "move",        label: "Move info",      icon: "📦" },
-  { id: "services",    label: "Services",       icon: "🛎" },
-  { id: "application", label: "Application",    icon: "📋" },
-  { id: "leasedoc",    label: "Lease",          icon: "📄" },
   { id: "finish",      label: "Submit",         icon: "✅" },
 ] as const;
 
-/** Public listing preview tabs — home through pricing plus sidebar quick facts. */
+/** Public listing preview tabs — same steps as the full wizard (marketing + submit). */
 export const LISTING_PREVIEW_STEP_IDS = ["home", "rooms", "bathrooms", "spaces", "lease", "finish"] as const;
 
 export type ListingWizardScope = "full" | "preview";
@@ -661,15 +642,11 @@ export function listingWizardStepIndices(scope: ListingWizardScope): number[] {
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
-  home:        "Property type, address, layout, building amenities, house details, and full-house photos.",
-  rooms:       "Bedroom names, floor, furnishing, and amenities — pricing is set on Pricing.",
+  home:        "Property type, address, layout, move-in access, amenities, and photos.",
+  rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
   bathrooms:   "Bathroom name, location, and amenities for the public listing.",
   spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
   lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
-  move:        "Move-in access instructions for residents.",
-  services:    "Optional paid or free services residents can request from their portal.",
-  application: "Review the rental application applicants complete for this property, and add your own questions to any section.",
-  leasedoc:    "Use the PropLane standard generated lease, or provide your own lease terms or template for this property.",
   finish:      "Sidebar quick facts and final submit.",
 };
 
@@ -1003,19 +980,19 @@ export function ManagerAddListingForm({
   /** adminRefId of a "request change" (edits requested by admin) row to save back to. */
   editRequestChangeId?: string | null;
   initialSubmission?: ManagerListingSubmissionV1 | null;
-  /** Stable key for legacy localStorage house-detail notes, used to backfill houseDescription/houseRulesText if empty on the submission. */
+  /** Stable key for legacy localStorage house-detail notes, used to backfill houseRulesText if empty on the submission. */
   noteKey?: string | null;
   /** `preview` limits steps to public listing marketing content (floor plans, lease basics, amenities, etc.). */
   wizardScope?: ListingWizardScope;
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => {
     const base = initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission();
-    if (!noteKey || (base.houseDescription?.trim() && base.houseRulesText?.trim())) return base;
+    if (!noteKey || base.houseRulesText?.trim()) return base;
     const legacy = getPortalListingNote(noteKey);
     return {
       ...base,
-      houseDescription: base.houseDescription?.trim() || legacy.houseDescription || "",
       houseRulesText: base.houseRulesText?.trim() || legacy.houseRulesText || "",
+      generalHouseInfo: base.generalHouseInfo?.trim() || legacy.generalHouseInfo || "",
     };
   });
   const [busy, setBusy] = useState(false);
@@ -1035,11 +1012,6 @@ export function ManagerAddListingForm({
     const normalized = normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission());
     return normalized.serviceRequestOptions ?? [];
   });
-  const [serviceModalOpen, setServiceModalOpen] = useState(false);
-  const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);
-  const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
-  // Application step — free-text drafts for dropdown options so typing commas feels natural.
-  const [questionOptionsDrafts, setQuestionOptionsDrafts] = useState<Record<string, string>>({});
   const [expandedListingItems, setExpandedListingItems] = useState<Set<string>>(() => new Set());
 
   const toggleListingItem = (key: string) => {
@@ -1115,49 +1087,6 @@ export function ManagerAddListingForm({
     return () => window.removeEventListener(DEMO_LISTING_AUTOFILL_EVENT, onAutofill as EventListener);
   }, []);
 
-  const handleSaveService = () => {
-    if (!serviceForm.name.trim()) return;
-    const offer: ManagerListingServiceOption = {
-      id: editingOffer?.id ?? `offer-${Date.now()}`,
-      name: serviceForm.name.trim(),
-      description: serviceForm.description.trim(),
-      price: serviceForm.price.trim(),
-      deposit: serviceForm.deposit.trim(),
-      available: editingOffer?.available ?? true,
-      createdAt: editingOffer?.createdAt ?? new Date().toISOString(),
-    };
-    setServiceOffers((prev) => {
-      const idx = prev.findIndex((o) => o.id === offer.id);
-      if (idx === -1) return [offer, ...prev];
-      const next = [...prev];
-      next[idx] = offer;
-      return next;
-    });
-    setServiceModalOpen(false);
-    setEditingOffer(null);
-    setServiceForm({ name: "", description: "", price: "", deposit: "" });
-  };
-
-  const addQuickService = (preset: ListingServiceQuickAdd) => {
-    setServiceOffers((prev) => {
-      if (prev.some((o) => o.name.trim().toLowerCase() === preset.name.toLowerCase())) return prev;
-      const pricing = resolveServiceOfferPricing({ name: preset.name, price: preset.price, deposit: preset.deposit });
-      return [
-        ...prev,
-        {
-          id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: preset.name,
-          description: preset.description,
-          price: pricing.price,
-          deposit: pricing.deposit,
-          available: true,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-    });
-  };
-
-  /** Set or replace the preview object URL for a video key, revoking the old one. */
   const setVideoPreview = (key: string, file: File) => {
     setVideoPreviewUrls((prev) => {
       const old = prev[key];
@@ -1323,89 +1252,6 @@ export function ManagerAddListingForm({
       sharedSpaces[i] = { ...sharedSpaces[i]!, ...patch };
       return { ...s, sharedSpaces };
     });
-  };
-
-  // ── Application step (all questions — built-in + custom) ─────────────────
-  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
-
-  const patchApplicationQuestion = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
-    clearListingFieldError(listingCustomQuestionErrorKey(field.id));
-    clearListingFieldError("customApplicationFields");
-    setSub((s) => ({ ...s, ...patchListingApplicationField(s, field, patch) }));
-  };
-
-  const addCustomQuestion = (section: string) => {
-    expandListingItem(listingItemKey("app-section", section));
-    setSub((s) => ({
-      ...s,
-      ...addListingApplicationField(s, emptyCustomApplicationField(section)),
-    }));
-  };
-
-  const removeApplicationQuestion = (field: ResolvedApplicationField) => {
-    clearListingFieldError(listingCustomQuestionErrorKey(field.id));
-    setSub((s) => ({ ...s, ...removeListingApplicationField(s, field) }));
-  };
-
-  const restoreApplicationDefaults = () => {
-    setStepFieldErrors({});
-    setSub((s) => ({ ...s, ...restoreDefaultApplicationConfig() }));
-  };
-
-  const questionOptionsText = (field: ManagerCustomApplicationField): string =>
-    questionOptionsDrafts[field.id] ?? field.options.join(", ");
-
-  const setQuestionOptionsText = (field: ResolvedApplicationField, text: string) => {
-    setQuestionOptionsDrafts((d) => ({ ...d, [field.id]: text }));
-    patchApplicationQuestion(field, { options: parseQuestionOptionsText(text) });
-  };
-
-  useEffect(() => {
-    const toExpand = new Set<string>();
-    if (stepIndex === 1) {
-      for (const room of sub.rooms) {
-        if (stepFieldErrors[listingRoomNameKey(room.id)] || stepFieldErrors[listingRoomRentKey(room.id)]) {
-          toExpand.add(listingItemKey("room", room.id));
-        }
-      }
-      if (stepFieldErrors.rooms) sub.rooms.forEach((r) => toExpand.add(listingItemKey("room", r.id)));
-    }
-    if (stepIndex === 2) {
-      for (const bath of sub.bathrooms) {
-        if (stepFieldErrors[listingBathroomNameKey(bath.id)]) {
-          toExpand.add(listingItemKey("bathroom", bath.id));
-        }
-      }
-      if (stepFieldErrors.bathrooms) sub.bathrooms.forEach((b) => toExpand.add(listingItemKey("bathroom", b.id)));
-    }
-    if (stepIndex === 3) {
-      for (const sp of sub.sharedSpaces) {
-        if (stepFieldErrors[listingSharedSpaceNameKey(sp.id)]) {
-          toExpand.add(listingItemKey("shared", sp.id));
-        }
-      }
-      if (stepFieldErrors.sharedSpaces) sub.sharedSpaces.forEach((s) => toExpand.add(listingItemKey("shared", s.id)));
-    }
-    if (stepIndex === 7) {
-      for (const field of applicationFields) {
-        if (stepFieldErrors[listingCustomQuestionErrorKey(field.id)]) {
-          toExpand.add(listingItemKey("app-section", field.section ?? "additional"));
-        }
-      }
-    }
-    if (toExpand.size === 0) return;
-    setExpandedListingItems((prev) => new Set([...prev, ...toExpand]));
-  }, [stepFieldErrors, stepIndex, sub.rooms, sub.bathrooms, sub.sharedSpaces, applicationFields]);
-
-  const onPickLeaseTemplateDoc = (file: File | null) => {
-    readLeaseTemplateFile(
-      file,
-      (dataUrl, fileName) => {
-        clearListingFieldError("leaseTemplateDoc");
-        setSub((s) => ({ ...s, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: fileName }));
-      },
-      showToast,
-    );
   };
 
   const addRoom = () => {
@@ -2135,7 +1981,7 @@ export function ManagerAddListingForm({
 
   const submitListing = async () => {
     const invalid = (() => {
-      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 8);
+      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
       for (const i of wizardSteps) {
         const errors = validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
         if (Object.keys(errors).length > 0) return { stepIndex: i, errors };
@@ -2301,7 +2147,7 @@ export function ManagerAddListingForm({
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className="modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)]"
+        className="modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
@@ -2379,38 +2225,32 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-building"
             title="Tell us about your place"
-            description="Pick the property type and basics, then we’ll match room slots on the next step. Everything here can be changed later."
+            description="Type the address to autofill ZIP and neighborhood. Everything can be changed later."
+            compact
           >
-            <div
-              data-wizard-field="listingPropertyTypeId"
-              className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId))}`}
-            >
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Step 1 · Basics</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">What kind of place is this?</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {LISTING_PROPERTY_TYPE_OPTIONS.map((opt) => {
-                  const on = sub.listingPropertyTypeId === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        clearListingFieldError("listingPropertyTypeId");
-                        setSub((s) => ({ ...s, listingPropertyTypeId: opt.id }));
-                      }}
-                      className={listingChoiceCardClass(on)}
-                    >
-                      <span className="text-sm font-semibold text-foreground">{opt.label}</span>
-                      <span className="mt-0.5 block text-xs leading-snug text-muted">{opt.hint}</span>
-                    </button>
-                  );
-                })}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div data-wizard-field="listingPropertyTypeId" className={wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId))}>
+                <FieldLabel>Property type *</FieldLabel>
+                <Select
+                  aria-label="Property type"
+                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId), selectInputCls)}
+                  value={sub.listingPropertyTypeId ?? ""}
+                  onChange={(e) => {
+                    clearListingFieldError("listingPropertyTypeId");
+                    setSub((s) => ({ ...s, listingPropertyTypeId: e.target.value }));
+                  }}
+                >
+                  <option value="">Select</option>
+                  {LISTING_PROPERTY_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+                <StepFieldError msg={stepFieldErrors.listingPropertyTypeId} />
               </div>
-              <StepFieldError msg={stepFieldErrors.listingPropertyTypeId} />
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2" data-wizard-field="buildingName">
+              <div data-wizard-field="buildingName">
                 <FieldLabel>Building name</FieldLabel>
                 <Input
                   value={sub.buildingName}
@@ -2418,74 +2258,83 @@ export function ManagerAddListingForm({
                     clearListingFieldError("buildingName");
                     setSub((s) => ({ ...s, buildingName: sanitizeBuildingNameInput(e.target.value) }));
                   }}
-                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.buildingName))}
-                  placeholder="e.g. Pioneer Collective"
+                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.buildingName), listingTextInputCls)}
+                  placeholder="Optional"
                 />
                 <StepFieldError msg={stepFieldErrors.buildingName} />
               </div>
-              <div className="sm:col-span-2" data-wizard-field="address">
+
+              <div className="relative z-20 sm:col-span-2" data-wizard-field="address">
                 <FieldLabel>Street address *</FieldLabel>
-                <Input
+                <ListingAddressAutocomplete
                   value={sub.address}
-                  onChange={(e) => {
+                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.address), listingTextInputCls)}
+                  aria-invalid={Boolean(stepFieldErrors.address)}
+                  onChange={(address) => {
                     clearListingFieldError("address");
-                    setSub((s) => ({ ...s, address: sanitizeStreetAddressInput(e.target.value) }));
+                    setSub((s) => ({ ...s, address }));
                   }}
-                  className={wizardFieldErrorClass(Boolean(stepFieldErrors.address))}
-                  placeholder="Street, unit if any"
+                  onSelect={(suggestion) => {
+                    clearListingFieldError("address");
+                    clearListingFieldError("zip");
+                    clearListingFieldError("neighborhood");
+                    setSub((s) => ({
+                      ...s,
+                      address: sanitizeStreetAddressInput(suggestion.address || suggestion.label),
+                      zip: suggestion.zip ? sanitizeZipInput(suggestion.zip) : s.zip,
+                      neighborhood: suggestion.neighborhood
+                        ? sanitizeNeighborhoodInput(suggestion.neighborhood)
+                        : s.neighborhood,
+                    }));
+                  }}
                 />
                 <StepFieldError msg={stepFieldErrors.address} />
               </div>
+
               <GridField>
+                <FieldLabel>ZIP *</FieldLabel>
                 <div data-wizard-field="zip">
-                  <FieldLabel>ZIP *</FieldLabel>
-                </div>
-                <div>
                   <Input
                     value={sub.zip}
                     onChange={(e) => {
                       clearListingFieldError("zip");
                       setSub((s) => ({ ...s, zip: sanitizeZipInput(e.target.value) }));
                     }}
-                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.zip))}
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.zip), listingTextInputCls)}
                     maxLength={10}
                     inputMode="numeric"
+                    placeholder="Autofilled"
                   />
                   <StepFieldError msg={stepFieldErrors.zip} />
                 </div>
               </GridField>
               <GridField>
+                <FieldLabel>Neighborhood</FieldLabel>
                 <div data-wizard-field="neighborhood">
-                  <FieldLabel>Neighborhood</FieldLabel>
-                </div>
-                <div>
                   <Input
                     value={sub.neighborhood}
                     onChange={(e) => {
                       clearListingFieldError("neighborhood");
                       setSub((s) => ({ ...s, neighborhood: sanitizeNeighborhoodInput(e.target.value) }));
                     }}
-                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.neighborhood))}
-                    placeholder="e.g. Capitol Hill"
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.neighborhood), listingTextInputCls)}
+                    placeholder="Autofilled"
                   />
                   <StepFieldError msg={stepFieldErrors.neighborhood} />
                 </div>
               </GridField>
 
               <GridField>
+                <FieldLabel>Floors *</FieldLabel>
                 <div data-wizard-field="listingStoriesId">
-                  <FieldLabel>Floors / levels in the home *</FieldLabel>
-                </div>
-                <div>
-                  <div className="relative">
-                    <Select
-                      aria-label="Number of floors"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)}`}
-                      value={sub.listingStoriesId ?? ""}
-                      onChange={(e) => {
-                        clearListingFieldError("listingStoriesId");
-                        setSub((s) => ({ ...s, listingStoriesId: e.target.value }));
-                      }}
+                  <Select
+                    aria-label="Number of floors"
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)}
+                    value={sub.listingStoriesId ?? ""}
+                    onChange={(e) => {
+                      clearListingFieldError("listingStoriesId");
+                      setSub((s) => ({ ...s, listingStoriesId: e.target.value }));
+                    }}
                   >
                     <option value="">Select</option>
                     {LISTING_STORIES_OPTIONS.map((o) => (
@@ -2494,24 +2343,20 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                </div>
                   <StepFieldError msg={stepFieldErrors.listingStoriesId} />
                 </div>
               </GridField>
               <GridField>
+                <FieldLabel>Bathrooms *</FieldLabel>
                 <div data-wizard-field="listingTotalBathroomsId">
-                  <FieldLabel hint="We’ll open that many bathroom cards on the next steps with names autofilled.">Bathrooms in the home *</FieldLabel>
-                </div>
-                <div>
-                  <div className="relative">
-                    <Select
-                      aria-label="Total bathrooms"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)}`}
-                      value={sub.listingTotalBathroomsId ?? ""}
-                      onChange={(e) => {
-                        clearListingFieldError("listingTotalBathroomsId");
-                        setSub((s) => ({ ...s, listingTotalBathroomsId: e.target.value }));
-                      }}
+                  <Select
+                    aria-label="Total bathrooms"
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)}
+                    value={sub.listingTotalBathroomsId ?? ""}
+                    onChange={(e) => {
+                      clearListingFieldError("listingTotalBathroomsId");
+                      setSub((s) => ({ ...s, listingTotalBathroomsId: e.target.value }));
+                    }}
                   >
                     <option value="">Select</option>
                     {LISTING_TOTAL_BATH_OPTIONS.map((o) => (
@@ -2520,26 +2365,20 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                </div>
                   <StepFieldError msg={stepFieldErrors.listingTotalBathroomsId} />
                 </div>
               </GridField>
-              <GridField className="sm:col-span-2">
+              <GridField>
+                <FieldLabel>Bedrooms *</FieldLabel>
                 <div data-wizard-field="listingBedroomSlots">
-                  <FieldLabel hint="We’ll open that many room cards on the next step with names autofilled. Other room fields stay optional.">
-                    Bedrooms in the home *
-                  </FieldLabel>
-                </div>
-                <div>
-                  <div className="relative max-w-md">
-                    <Select
-                      aria-label="Bedrooms for rent"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)}`}
-                      value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
-                      onChange={(e) => {
-                        clearListingFieldError("listingBedroomSlots");
-                        setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }));
-                      }}
+                  <Select
+                    aria-label="Bedrooms for rent"
+                    className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)}
+                    value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
+                    onChange={(e) => {
+                      clearListingFieldError("listingBedroomSlots");
+                      setSub((s) => ({ ...s, listingBedroomSlots: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }));
+                    }}
                   >
                     {LISTING_BEDROOM_SLOT_OPTIONS.map((n) => (
                       <option key={n} value={n}>
@@ -2547,56 +2386,69 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                </div>
                   <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
               </GridField>
-
-              <div className="sm:col-span-2">
-                <FieldLabel hint="Optional — only if the layout is unusual (split level, ADU, etc.). Otherwise your selections above appear on the listing.">
-                  Extra layout note
-                </FieldLabel>
-                <Textarea
-                  className=""
-                  value={sub.homeStructureNote}
-                  onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
-                  placeholder="e.g. Garden apartment in a triplex; private entrance on the side."
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <FieldLabel>Listing tagline</FieldLabel>
-                <Input value={sub.tagline} onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))} placeholder="Short headline for search cards" />
-              </div>
-              <div className="sm:col-span-2">
-                <FieldLabel hint="Describe the home, culture, and who it is good for.">House overview</FieldLabel>
-                <Textarea
-                  className=""
-                  value={sub.houseOverview}
-                  onChange={(e) => setSub((s) => ({ ...s, houseOverview: e.target.value }))}
-                  placeholder="Full description of the house, co-living setup, and what applicants should know."
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-accent/30 p-4 transition hover:border-border">
+              <div className="flex items-end pb-1">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                   <input
                     type="checkbox"
                     checked={sub.petFriendly}
                     onChange={(e) => setSub((s) => ({ ...s, petFriendly: e.target.checked }))}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+                    className="h-4 w-4 shrink-0 rounded border-border"
                   />
-                  <span className="text-sm font-medium text-foreground">Pet-friendly listing (subject to approval)</span>
+                  Pet-friendly
                 </label>
+              </div>
+
+              <div className="sm:col-span-2">
+                <FieldLabel>Listing tagline</FieldLabel>
+                <Input
+                  value={sub.tagline}
+                  onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))}
+                  className={listingTextInputCls}
+                  placeholder="Short headline for search cards"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel>House overview</FieldLabel>
+                <Textarea
+                  rows={3}
+                  value={sub.houseOverview}
+                  onChange={(e) => setSub((s) => ({ ...s, houseOverview: e.target.value }))}
+                  className={listingTextInputCls}
+                  placeholder="Describe the home and who it’s good for."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel hint="Optional — only if the layout is unusual.">Extra layout note</FieldLabel>
+                <Input
+                  value={sub.homeStructureNote}
+                  onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
+                  className={listingTextInputCls}
+                  placeholder="e.g. Garden ADU with private entrance"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                <Textarea
+                  rows={4}
+                  value={sub.houseMoveInInstructions ?? ""}
+                  onChange={(e) => setSub((s) => ({ ...s, houseMoveInInstructions: e.target.value }))}
+                  className={listingTextInputCls}
+                  placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
+                />
               </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-4">
             <ListingSubsection
               title="Full-house photos & video"
-              description="Hero gallery at the top of your public listing — exterior, kitchen, living areas, and common spaces. Up to 12 photos."
+              description="Up to 12 photos for the public listing gallery."
             >
-              <div className="mt-2 grid gap-4 sm:grid-cols-2">
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <div
-                  className={`flex min-h-[12.5rem] flex-col ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
+                  className={`flex min-h-[8.5rem] flex-col ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
                   onDragOver={(e) => handleDragOver(e, "house-photos")}
                   onDragEnter={(e) => handleDragOver(e, "house-photos")}
                   onDragLeave={(e) => handleDragLeave(e, "house-photos")}
@@ -2606,7 +2458,7 @@ export function ManagerAddListingForm({
                   <MediaPickTrigger accept="image/*" multiple onFiles={(files) => { void onPickHousePhotos(files); }}>
                     Add house photos
                   </MediaPickTrigger>
-                  <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
+                  <p className="mt-2 text-xs text-muted">Drag and drop, or use the button.</p>
                   {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
@@ -2622,7 +2474,7 @@ export function ManagerAddListingForm({
                   )}
                 </div>
                 <div
-                  className={`flex min-h-[12.5rem] flex-col ${mediaDropZoneClass(activeDropZone === "house-video")}`}
+                  className={`flex min-h-[8.5rem] flex-col ${mediaDropZoneClass(activeDropZone === "house-video")}`}
                   onDragOver={(e) => handleDragOver(e, "house-video")}
                   onDragEnter={(e) => handleDragOver(e, "house-video")}
                   onDragLeave={(e) => handleDragLeave(e, "house-video")}
@@ -2677,50 +2529,6 @@ export function ManagerAddListingForm({
                   value={sub.amenitiesText}
                   onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))}
                   placeholder="Add custom amenities not listed above (one per line)."
-                />
-              </div>
-            </ListingSubsection>
-
-            <ListingSubsection
-              title="House details"
-              description="House rules and general info appear in the resident portal. House description is for your internal notes only."
-            >
-              <div>
-                <div className="mb-0.5 flex items-center gap-2">
-                  <FieldLabel>House description</FieldLabel>
-                  <span className="portal-badge-notice rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Manager only</span>
-                </div>
-                <Textarea
-                  rows={4}
-                  value={sub.houseDescription ?? ""}
-                  onChange={(e) => setSub((s) => ({ ...s, houseDescription: e.target.value }))}
-                  placeholder="Internal notes about the house…"
-                />
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-2">
-                  <FieldLabel>House rules</FieldLabel>
-                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-                </div>
-                <p className="mb-1.5 text-[11px] text-muted">Shown to residents in their Move-in portal after approval.</p>
-                <Textarea
-                  rows={3}
-                  value={sub.houseRulesText}
-                  onChange={(e) => setSub((s) => ({ ...s, houseRulesText: e.target.value }))}
-                  placeholder="Quiet hours, guests, smoking, pets…"
-                />
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-2">
-                  <FieldLabel>General house info</FieldLabel>
-                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-                </div>
-                <p className="mb-1.5 text-[11px] text-muted">Shown to residents in their Move-in portal after approval.</p>
-                <Textarea
-                  rows={4}
-                  value={sub.generalHouseInfo ?? ""}
-                  onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
-                  placeholder="Gate/door codes, laundry tips, trash schedule…"
                 />
               </div>
             </ListingSubsection>
@@ -3533,59 +3341,6 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {/* ── Step 5: Move info ── */}
-          {stepIndex === 5 ? (
-          <FormSection
-            id="edit-move-info"
-            title="Move info"
-            description={
-              isEntireHome
-                ? "Access instructions for the entire home."
-                : "Set move-in instructions for each bedroom — shown to placed residents."
-            }
-          >
-            {isEntireHome ? (
-              <div className="rounded-2xl border border-border bg-accent/30 p-4 sm:p-5">
-                <p className="text-sm font-bold text-foreground">Entire home</p>
-                <div className="mt-3">
-                  <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
-                  <Textarea
-                    rows={4}
-                    value={sub.houseMoveInInstructions ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, houseMoveInInstructions: e.target.value }))}
-                    placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {sub.rooms.map((room, i) => {
-                  const moveKey = listingItemKey("move", room.id);
-                  const movePreview = room.moveInInstructions.trim();
-                  return (
-                  <ListingWizardCollapsibleCard
-                    key={room.id}
-                    expanded={isListingItemExpanded(moveKey)}
-                    onToggle={() => toggleListingItem(moveKey)}
-                    title={room.name.trim() || `Room ${i + 1}`}
-                    subtitle={movePreview ? movePreview.slice(0, 80) + (movePreview.length > 80 ? "…" : "") : "No move-in instructions yet"}
-                    toggleDataAttr={`listing-move-toggle-${room.id}`}
-                  >
-                    <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
-                    <Textarea
-                      rows={3}
-                      value={room.moveInInstructions}
-                      onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
-                      placeholder="Room-specific access, parking, and move-in details…"
-                    />
-                  </ListingWizardCollapsibleCard>
-                  );
-                })}
-              </div>
-            )}
-          </FormSection>
-          ) : null}
-
           {/* ── Step 1: Rooms ── */}
           {stepIndex === 1 ? (
           <FormSection
@@ -3593,8 +3348,8 @@ export function ManagerAddListingForm({
             title="Rooms"
             description={
               isEntireHome
-                ? "List each bedroom — name, floor, furnishing, and amenities. Rent and utilities are set on Pricing."
-                : "Name, floor, furnishing, and amenities for each bedroom. Rent is set on Pricing."
+                ? "List each bedroom — name, floor, furnishing, and amenities. Rent and utilities are set on Pricing. House move-in instructions are on Home."
+                : "Name, floor, furnishing, amenities, and per-room move-in notes. Rent is set on Pricing."
             }
           >
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
@@ -3876,6 +3631,21 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       </>
+                      ) : null}
+
+                      {!isEntireHome ? (
+                        <div className="sm:col-span-2">
+                          <FieldLabel hint="Keys, parking, access, what to bring for this room.">
+                            Move-in instructions
+                          </FieldLabel>
+                          <Textarea
+                            rows={3}
+                            value={room.moveInInstructions}
+                            onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
+                            className={listingTextInputCls}
+                            placeholder="Room-specific access, parking, and move-in details…"
+                          />
+                        </div>
                       ) : null}
                   </ListingWizardCollapsibleCard>
                 );
@@ -4559,273 +4329,8 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {/* ── Step 6: Services ── */}
-          {stepIndex === 6 ? (
-          <FormSection
-            id="edit-services"
-            title="Resident services"
-            description="Optional services residents can request from their portal."
-          >
-            <div className="space-y-4">
-              {serviceOffers.length > 0 ? (
-                <div className="space-y-3">
-                  {serviceOffers.map((offer) => (
-                    <ListingWizardCollapsibleCard
-                      key={offer.id}
-                      expanded={isListingItemExpanded(listingItemKey("service", offer.id))}
-                      onToggle={() => toggleListingItem(listingItemKey("service", offer.id))}
-                      title={offer.name}
-                      subtitle={[offer.price, offer.available ? "Active" : "Paused"].filter(Boolean).join(" · ")}
-                      toggleDataAttr={`listing-service-toggle-${offer.id}`}
-                      headerActions={
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={LISTING_WIZARD_ACTION_BTN}
-                            onClick={() => {
-                              setEditingOffer(offer);
-                              setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" });
-                              setServiceModalOpen(true);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={LISTING_WIZARD_ACTION_BTN}
-                            onClick={() => {
-                              setServiceOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, available: !o.available } : o)));
-                            }}
-                          >
-                            {offer.available ? "Pause" : "Resume"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={LISTING_WIZARD_REMOVE_BTN}
-                            onClick={() => {
-                              setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </>
-                      }
-                    >
-                      {offer.description ? (
-                        <p className="text-sm leading-relaxed text-muted">{offer.description}</p>
-                      ) : (
-                        <p className="text-sm text-muted">No description — use Edit to add details.</p>
-                      )}
-                      {offer.deposit ? (
-                        <p className="text-xs text-muted">Deposit: {offer.deposit}</p>
-                      ) : null}
-                    </ListingWizardCollapsibleCard>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-10 text-center">
-                  <p className="text-sm font-medium text-muted">No services yet</p>
-                  <p className="mt-1 text-xs text-muted">Add a preset below or create a custom service.</p>
-                </div>
-              )}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Quick add</p>
-                <div className="flex flex-wrap gap-2">
-                  {LISTING_SERVICE_QUICK_ADDS.map((preset) => {
-                    const added = serviceOffers.some(
-                      (o) => o.name.trim().toLowerCase() === preset.name.toLowerCase(),
-                    );
-                    return (
-                      <Button
-                        key={preset.name}
-                        type="button"
-                        variant="outline"
-                        className="rounded-full text-xs"
-                        disabled={added}
-                        onClick={() => addQuickService(preset)}
-                      >
-                        {added ? `${preset.name} added` : `+ ${preset.name}`}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Button type="button" variant="primary" className="rounded-full text-xs" onClick={() => { setEditingOffer(null); setServiceForm({ name: "", description: "", price: "", deposit: "" }); setServiceModalOpen(true); }}>
-                  + Custom service
-                </Button>
-              </div>
-            </div>
-          </FormSection>
-          ) : null}
-
-          {/* ── Step 7: Application ── */}
-          {stepIndex === 7 ? (
-          <FormSection
-            id="edit-application"
-            title="Rental application"
-            description="Review and adjust every question applicants answer. Built-in PropLane questions can be edited or removed; add your own in any section."
-          >
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-muted">
-                  {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={LISTING_WIZARD_ACTION_BTN}
-                  data-attr="listing-application-restore-defaults"
-                  onClick={restoreApplicationDefaults}
-                >
-                  Restore PropLane defaults
-                </Button>
-              </div>
-
-              {stepFieldErrors.customApplicationFields ? (
-                <div data-wizard-field="customApplicationFields">
-                  <StepFieldError msg={stepFieldErrors.customApplicationFields} />
-                </div>
-              ) : null}
-
-              <div className="space-y-3">
-                {RENTAL_APPLICATION_SECTIONS.map((section, sectionIdx) => {
-                  const sectionQuestions = applicationFields.filter(
-                    (f) => (f.section ?? "additional") === section.id,
-                  );
-                  const sectionKey = listingItemKey("app-section", section.id);
-                  return (
-                    <ListingWizardCollapsibleCard
-                      key={section.id}
-                      expanded={isListingItemExpanded(sectionKey)}
-                      onToggle={() => toggleListingItem(sectionKey)}
-                      title={`${sectionIdx + 1}. ${section.title}`}
-                      subtitle={`${sectionQuestions.length} question${sectionQuestions.length === 1 ? "" : "s"}`}
-                      bodyClassName="space-y-3 px-4 py-3"
-                      toggleDataAttr={`listing-application-section-toggle-${section.id}`}
-                      headerActions={
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={LISTING_WIZARD_ACTION_BTN}
-                          data-attr="listing-application-add-question"
-                          onClick={() => addCustomQuestion(section.id)}
-                        >
-                          + Add question
-                        </Button>
-                      }
-                    >
-                        {sectionQuestions.length > 0 ? (
-                          sectionQuestions.map((field) => {
-                            const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
-                            return (
-                              <div
-                                key={field.id}
-                                data-wizard-field={listingCustomQuestionErrorKey(field.id)}
-                                className={`space-y-3 rounded-xl border p-3 ${err ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${field.isStandard ? "bg-sky-100 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "bg-violet-100 text-violet-900 dark:bg-violet-950/40 dark:text-violet-100"}`}
-                                  >
-                                    {field.isStandard ? "Built-in" : "Custom"}
-                                  </span>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className={LISTING_WIZARD_REMOVE_BTN}
-                                    onClick={() => removeApplicationQuestion(field)}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                                <div>
-                                  <FieldLabel>Question</FieldLabel>
-                                  <Input
-                                    value={field.label}
-                                    onChange={(e) => patchApplicationQuestion(field, { label: e.target.value })}
-                                    placeholder="e.g. Do you smoke?"
-                                  />
-                                </div>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                  <div>
-                                    <FieldLabel>Answer type</FieldLabel>
-                                    <Select
-                                      value={field.type}
-                                      onChange={(e) =>
-                                        patchApplicationQuestion(field, {
-                                          type: e.target.value as ManagerCustomApplicationFieldType,
-                                        })
-                                      }
-                                    >
-                                      {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
-                                        <option key={o.id} value={o.id}>
-                                          {o.label}
-                                        </option>
-                                      ))}
-                                    </Select>
-                                  </div>
-                                  <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-border text-primary"
-                                      checked={field.required}
-                                      onChange={(e) => patchApplicationQuestion(field, { required: e.target.checked })}
-                                    />
-                                    <span className="text-sm font-medium text-foreground">Required</span>
-                                  </label>
-                                </div>
-                                {field.type === "select" ? (
-                                  <div>
-                                    <FieldLabel>Dropdown options</FieldLabel>
-                                    <Input
-                                      value={questionOptionsText(field)}
-                                      onChange={(e) => setQuestionOptionsText(field, e.target.value)}
-                                      placeholder="Comma-separated, e.g. Yes, No, Occasionally"
-                                    />
-                                  </div>
-                                ) : null}
-                                <StepFieldError msg={err} />
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p className="text-xs text-muted">No questions in this section — add one or restore defaults.</p>
-                        )}
-                    </ListingWizardCollapsibleCard>
-                  );
-                })}
-              </div>
-            </div>
-          </FormSection>
-          ) : null}
-
-          {/* ── Step 8: Lease ── */}
-          {stepIndex === 8 ? (
-          <FormSection id="edit-leasedoc" title="Lease">
-            <LeaseConfigForm
-              variant="wizard"
-              dataAttrPrefix="listing"
-              draft={{
-                leaseConfigMode: sub.leaseConfigMode,
-                leaseCustomKind: sub.leaseCustomKind,
-                customLeaseTerms: sub.customLeaseTerms,
-                leaseTemplateDocUrl: sub.leaseTemplateDocUrl,
-                leaseTemplateDocName: sub.leaseTemplateDocName,
-              }}
-              onDraftChange={(patch) => setSub((s) => ({ ...s, ...patch }))}
-              onStandardToggle={() => setStepFieldErrors({})}
-              onCustomTermsChange={() => clearListingFieldError("customLeaseTerms")}
-              onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
-              customTermsError={stepFieldErrors.customLeaseTerms ?? null}
-              leaseTemplateError={stepFieldErrors.leaseTemplateDoc ?? null}
-            />
-          </FormSection>
-          ) : null}
-
-          {/* ── Step 9: Highlights ── */}
-          {stepIndex === 9 ? (
+          {/* ── Step 5: Highlights ── */}
+          {stepIndex === 5 ? (
           <FormSection
             id="edit-highlights"
             title="Highlights & submit"
@@ -4934,39 +4439,6 @@ export function ManagerAddListingForm({
         </div>
       </form>
 
-      {/* Service add/edit modal */}
-      <Modal
-        open={serviceModalOpen}
-        title={editingOffer ? "Edit request option" : "Add request option"}
-        onClose={() => setServiceModalOpen(false)}
-        stackClassName="fixed inset-0 z-[10050] overflow-y-auto"
-        panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
-      >
-        <div className="grid gap-3">
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-muted">Request name *</p>
-            <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: sanitizePlaceNameInput(e.target.value) }))} placeholder="e.g. Weekly cleaning, Linen set" className="bg-card" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">Price</p>
-              <Input value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. $25, Free" className="bg-card" />
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">Deposit (optional)</p>
-              <Input value={serviceForm.deposit} onChange={(e) => setServiceForm((f) => ({ ...f, deposit: sanitizeMoneyInput(e.target.value) }))} placeholder="e.g. $50" className="bg-card" />
-            </div>
-          </div>
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-muted">Description</p>
-            <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setServiceModalOpen(false)}>Cancel</Button>
-          <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add request"}</Button>
-        </div>
-      </Modal>
     </div>,
     portalContainer ?? document.body,
   );

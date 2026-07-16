@@ -31,8 +31,8 @@ describe("Claw SMS sender labels", () => {
   });
 
   it("labels resident→manager relay for the manager", () => {
-    expect(labelClawSmsFromResident("hey", "+15105791976")).toBe(
-      ["Property: Unknown property", "Resident: Resident (+15105791976)", "Said: hey"].join("\n"),
+    expect(labelClawSmsFromResident("hey", "+15105794001")).toBe(
+      ["Property: Unknown property", "Resident: Resident (+15105794001)", "Said: hey"].join("\n"),
     );
   });
 
@@ -45,18 +45,18 @@ describe("Claw SMS sender labels", () => {
       labelClawSmsFromPropLaneForManager(plain, {
         propertyLabel: "The Pioneer",
         residentName: "Test Resident",
-        residentPhone: "+15105791976",
+        residentPhone: "+15105794001",
       }),
     ).toBe(
       [
         "Property: The Pioneer",
-        "Resident: Test Resident (+15105791976)",
+        "Resident: Test Resident (+15105794001)",
         `Sent: ${plain}`,
       ].join("\n"),
     );
   });
 
   it("defaults the resident pairing phone used when no thread exists", () => {
-    expect(clawDefaultResidentPhoneFromEnv()).toBe("+15105791976");
+    expect(clawDefaultResidentPhoneFromEnv()).toBe("+15105794001");
   });
 });

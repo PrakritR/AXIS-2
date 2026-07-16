@@ -148,6 +148,14 @@ export async function sendResidentOutboundSms(args: {
     to: toNorm,
     text,
     fromNumber: args.fromNumber,
+    log: args.openThread?.managerUserId
+      ? {
+          managerUserId: args.openThread.managerUserId,
+          residentUserId: args.openThread.residentUserId,
+          residentPhone: toNorm,
+          source: "automated",
+        }
+      : undefined,
   });
 
   if (result.ok) {

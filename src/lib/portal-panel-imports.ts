@@ -24,6 +24,10 @@ export async function loadManagerInbox() {
   return (await import("@/components/portal/manager-inbox")).ManagerInbox;
 }
 
+export async function loadManagerCommunication() {
+  return (await import("@/components/portal/manager-communication")).ManagerCommunication;
+}
+
 export async function loadManagerFinancesPanel() {
   return (await import("@/components/portal/manager-finances-panel")).ManagerFinancesPanel;
 }

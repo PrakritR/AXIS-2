@@ -55,8 +55,8 @@ describe("pro portal documents section", () => {
     expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("residents"));
     expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("payments"));
     expect(sections.indexOf("payments")).toBeLessThan(sections.indexOf("services"));
-    expect(sections.indexOf("services")).toBeLessThan(sections.indexOf("inbox"));
-    expect(sections.indexOf("inbox")).toBeLessThan(sections.indexOf("relationships"));
+    expect(sections.indexOf("services")).toBeLessThan(sections.indexOf("communication"));
+    expect(sections.indexOf("communication")).toBeLessThan(sections.indexOf("relationships"));
     expect(sections.indexOf("relationships")).toBeLessThan(sections.indexOf("promotion"));
     expect(sections.indexOf("promotion")).toBeLessThan(sections.indexOf("financials"));
     expect(sections.indexOf("financials")).toBeLessThan(sections.indexOf("documents"));

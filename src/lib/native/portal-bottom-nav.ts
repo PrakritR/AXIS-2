@@ -22,7 +22,7 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
   "residents",
   "payments",
   "services",
-  "inbox",
+  "communication",
   "relationships",
   "promotion",
   "financials",
@@ -41,7 +41,7 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
   "payments",
   "move-in",
   "services",
-  "inbox",
+  "communication",
   "documents",
 ] as const;
 
@@ -53,7 +53,7 @@ export const NATIVE_BOTTOM_NAV_VENDOR_ORDER = [
   "dashboard",
   "work-orders",
   "calendar",
-  "inbox",
+  "communication",
   "financials",
   "payments",
   "documents",
@@ -98,12 +98,12 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
   "lease",
   "services",
   "payments",
-  "inbox",
+  "communication",
 ] as const;
 
 export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis-users", "events"] as const;
 
-export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "inbox", "payments"] as const;
+export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "communication", "payments"] as const;
 
 /**
  * Every role gets the fixed native bottom bar — Dashboard and Settings are

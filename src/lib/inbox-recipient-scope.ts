@@ -14,9 +14,10 @@ import { managerOwnsResident } from "@/lib/auth/resident-relationship";
  * into this module so the two can never drift.
  *
  * Rules (non-admin senders):
- *  - Resident sender  → may message ONLY the managers/owners tied to their own
- *    listing(s)/lease(s), plus those managers' linked co-managers, plus Axis
- *    admin ops. Never other residents, never arbitrary managers.
+ *  - Resident sender  → may message the managers/owners tied to their own
+ *    listing(s)/lease(s), those managers' linked co-managers, other approved
+ *    residents on the same property (building housemates), plus Axis admin ops.
+ *    Never arbitrary managers or residents on other properties.
  *  - Manager sender   → may message ONLY the residents on their own properties,
  *    plus their own linked co-managers, plus Axis admin ops. Never arbitrary
  *    residents, never unlinked managers.
@@ -128,6 +129,75 @@ async function vendorEmailsForManagers(
     if (email) emails.add(email);
   }
   return emails;
+}
+
+/** Property ids from approved applications for this resident email. */
+async function propertyIdsForResident(db: SupabaseClient, residentEmail: string): Promise<string[]> {
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return [];
+  const ids = new Set<string>();
+  const { data: apps } = await db
+    .from("manager_application_records")
+    .select("row_data")
+    .eq("resident_email", email);
+  for (const row of apps ?? []) {
+    const rowData = (row.row_data ?? {}) as Record<string, unknown>;
+    if (rowData.bucket !== "approved") continue;
+    const application = (rowData.application ?? {}) as Record<string, unknown>;
+    const propertyId =
+      String(rowData.assignedPropertyId ?? rowData.propertyId ?? application.propertyId ?? "").trim();
+    if (propertyId) ids.add(propertyId);
+  }
+  return [...ids];
+}
+
+function propertyIdFromAppRowData(rowData: Record<string, unknown>): string {
+  const application = (rowData.application ?? {}) as Record<string, unknown>;
+  return String(rowData.assignedPropertyId ?? rowData.propertyId ?? application.propertyId ?? "").trim();
+}
+
+/** Other approved residents on the same property/building (housemates). */
+async function housemateContactsForResident(
+  db: SupabaseClient,
+  senderEmail: string,
+): Promise<InboxScopedContact[]> {
+  const email = senderEmail.trim().toLowerCase();
+  const propertyIds = await propertyIdsForResident(db, email);
+  if (propertyIds.length === 0) return [];
+  const propertySet = new Set(propertyIds);
+  const managerIds = await managerIdsOwningResident(db, email);
+  if (managerIds.length === 0) return [];
+
+  const { data: apps } = await db
+    .from("manager_application_records")
+    .select("id, resident_email, row_data")
+    .in("manager_user_id", managerIds);
+
+  const out: InboxScopedContact[] = [];
+  const seen = new Set<string>();
+  for (const row of apps ?? []) {
+    const rowData = (row.row_data ?? {}) as Record<string, unknown>;
+    if (rowData.bucket !== "approved") continue;
+    const propertyId = propertyIdFromAppRowData(rowData);
+    if (!propertyId || !propertySet.has(propertyId)) continue;
+    const peerEmail = String(row.resident_email ?? rowData.email ?? "").trim().toLowerCase();
+    if (!peerEmail || peerEmail === email || seen.has(peerEmail)) continue;
+    seen.add(peerEmail);
+    out.push({
+      id: `res-${row.id}`,
+      name: String(rowData.name ?? rowData.residentName ?? "").trim() || peerEmail,
+      email: peerEmail,
+      role: "resident",
+      propertyLabel: String(rowData.property ?? "").trim() || undefined,
+      propertyId,
+    });
+  }
+  return out;
+}
+
+async function housemateEmailsForResident(db: SupabaseClient, senderEmail: string): Promise<Set<string>> {
+  const contacts = await housemateContactsForResident(db, senderEmail);
+  return new Set(contacts.map((c) => c.email.trim().toLowerCase()).filter(Boolean));
 }
 
 /** Manager user ids that own the given resident (applications / charges / leases). */
@@ -263,7 +333,10 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
   // Resident (and any other non-staff) sender.
   const managerIds = await managerIdsOwningResident(db, senderEmail);
   const managerIdSet = new Set(managerIds);
-  const allowedEmails = await coManagerEmailsForManagers(db, managerIds);
+  const [allowedEmails, housemateEmails] = await Promise.all([
+    coManagerEmailsForManagers(db, managerIds),
+    housemateEmailsForResident(db, senderEmail),
+  ]);
   if (managerIds.length > 0) {
     const { data } = await db.from("profiles").select("id, email").in("id", managerIds);
     for (const row of data ?? []) {
@@ -271,6 +344,7 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
       if (email) allowedEmails.add(email);
     }
   }
+  for (const email of housemateEmails) allowedEmails.add(email);
   const keep = recipients.map((recipient) => {
     const email = recipient.email.trim().toLowerCase();
     if (email === ADMIN_EMAIL) return true;
@@ -302,14 +376,18 @@ export async function listEligibleInboxContacts(
   };
 
   if (isManagerRole(sender.role) || sender.isAdmin) {
-    // Own approved residents.
+    // Own approved residents + pending applicants (house-scoped messaging).
     const { data: apps } = await db
       .from("manager_application_records")
       .select("id, resident_email, row_data")
       .eq("manager_user_id", sender.id);
     for (const row of apps ?? []) {
       const rowData = (row.row_data ?? {}) as Record<string, unknown>;
-      if (rowData.bucket !== "approved") continue;
+      const bucket = String(rowData.bucket ?? "").trim();
+      if (bucket !== "approved" && bucket !== "pending") continue;
+      if (bucket === "pending" && String(rowData.stage ?? "").trim().toLowerCase() === "in progress") {
+        continue;
+      }
       const email = String(row.resident_email ?? rowData.email ?? "").trim();
       if (!email) continue;
       push({
@@ -320,10 +398,28 @@ export async function listEligibleInboxContacts(
         propertyLabel: String(rowData.property ?? "").trim() || undefined,
         propertyId:
           String(rowData.assignedPropertyId ?? rowData.propertyId ?? "").trim() || undefined,
+        tenancyStatus: bucket === "approved" ? "resident" : "applicant",
       });
     }
     // Own linked co-managers.
     await pushCoManagers(db, [sender.id], push);
+    // Own vendor directory contacts (email required to message).
+    const { data: vendors } = await db
+      .from("manager_vendor_records")
+      .select("id, row_data")
+      .eq("manager_user_id", sender.id);
+    for (const row of vendors ?? []) {
+      const rowData = (row.row_data ?? {}) as Record<string, unknown>;
+      if (rowData.active === false) continue;
+      const email = String(rowData.email ?? "").trim();
+      if (!email) continue;
+      push({
+        id: `ven-${row.id}`,
+        name: String(rowData.name ?? "").trim() || email,
+        email,
+        role: "vendor",
+      });
+    }
     return out;
   }
 
@@ -349,7 +445,7 @@ export async function listEligibleInboxContacts(
     return out;
   }
 
-  // Resident sender → their own manager(s) plus those managers' co-managers.
+  // Resident sender → their managers, co-managers, and housemates on the same property.
   const managerIds = await managerIdsOwningResident(db, senderEmail);
   if (managerIds.length > 0) {
     const { data: managers } = await db
@@ -367,6 +463,9 @@ export async function listEligibleInboxContacts(
       });
     }
     await pushCoManagers(db, managerIds, push);
+  }
+  for (const housemate of await housemateContactsForResident(db, senderEmail)) {
+    push(housemate);
   }
   return out;
 }

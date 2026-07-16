@@ -38,7 +38,7 @@ export function residentPortalPath(
     case "move_in":
       return "/resident/move-in";
     case "inbox":
-      return "/resident/inbox/unopened";
+      return "/resident/communication/email/unopened";
     case "services":
       return "/resident/services/requests";
     case "applications":
@@ -59,7 +59,7 @@ export function residentPortalPath(
       return qs ? `/rent/apply?${qs}` : "/rent/apply";
     }
     default:
-      return "/resident/inbox/unopened";
+      return "/resident/communication/email/unopened";
   }
 }
 
@@ -102,13 +102,13 @@ export function managerPortalPath(kind: ManagerPortalLinkKind): string {
     case "services_requests":
       return "/portal/services/requests";
     case "inbox":
-      return "/portal/inbox/unopened";
+      return "/portal/communication/inbox/unopened";
     case "relationships":
       return "/portal/relationships";
     case "promotion":
       return "/portal/promotion";
     default:
-      return "/portal/inbox/unopened";
+      return "/portal/communication/inbox/unopened";
   }
 }
 
@@ -152,7 +152,7 @@ export function smsLinkKindForThreadTopic(
 const LINK_LABEL: Record<ResidentSmsLinkKind, string> = {
   payments: "Pay / view charges",
   lease: "Sign / view lease",
-  move_in: "Move-in details",
+  move_in: "House details",
   inbox: "Open inbox",
   services: "Service requests",
   applications: "Applications",

@@ -50,7 +50,7 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
     expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
     expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
-    expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("inbox"));
+    expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("communication"));
     expect(ordered.indexOf("documents")).toBeLessThan(ordered.indexOf("profile"));
   });
 });
@@ -59,7 +59,7 @@ describe("pro portal nav grouping (leasing → tenancy → operations → market
   const sections = sectionIds(proPortal.sections);
   const leasingBlock = ["properties", "calendar", "applications", "leases"];
   const tenancyBlock = ["residents", "payments"];
-  const operationsBlock = ["services", "inbox"];
+  const operationsBlock = ["services", "communication"];
   const financesBlock = ["financials", "documents"];
 
   it("places leasing workflow contiguously after dashboard", () => {
@@ -96,7 +96,7 @@ describe("pro portal nav grouping (leasing → tenancy → operations → market
       "residents",
       "payments",
       "services",
-      "inbox",
+      "communication",
       "relationships",
       "promotion",
     ]);
@@ -108,15 +108,15 @@ describe("resident portal nav grouping", () => {
 
   it("limited: groups locked sections after move-in", () => {
     const sections = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["inbox", "documents"], "move-in", "profile");
-    for (const id of ["inbox", "documents"]) {
+    expectContiguousBlock(sections, ["communication", "documents"], "move-in", "profile");
+    for (const id of ["communication", "documents"]) {
       expect(freeIds.has(id)).toBe(false);
     }
   });
 
   it("approved: follows property-management block order after move-in", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["services", "inbox", "documents"], "move-in", "profile");
+    expectContiguousBlock(sections, ["services", "communication", "documents"], "move-in", "profile");
   });
 
   it("approved: mirrors pro free block then paid workspace pattern", () => {

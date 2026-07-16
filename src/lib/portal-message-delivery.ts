@@ -1,4 +1,4 @@
-/** Client helper — deliver to Axis inbox and email (when configured). */
+/** Client helper — deliver to Axis inbox and optional email / SMS. */
 
 import type { NotificationCategory } from "@/lib/notification-preferences";
 import { residentPortalUrl } from "@/lib/claw-resident-links";
@@ -18,6 +18,10 @@ export async function deliverPortalInboxMessage(input: {
   text: string;
   /** Gates email/SMS per recipient's saved preference for this category (inbox always on). Omitted → 'messages' default at the route. */
   eventCategory?: NotificationCategory;
+  /** When set, overrides preference-driven email (still skips sandbox addresses server-side). */
+  deliverViaEmail?: boolean;
+  /** When true, also try SMS for recipients with phones. */
+  deliverViaSms?: boolean;
 }): Promise<PortalMessageDeliveryResult> {
   const toEmails = (input.toEmails ?? []).map((e) => e.trim()).filter((e) => e.includes("@"));
   if (toEmails.length === 0 && !input.toBroadcast?.length) {
@@ -35,7 +39,8 @@ export async function deliverPortalInboxMessage(input: {
         subject: input.subject.trim(),
         text: input.text.trim(),
         deliverToPortalInbox: true,
-        deliverViaEmail: true,
+        deliverViaEmail: input.deliverViaEmail !== false,
+        deliverViaSms: input.deliverViaSms === true,
         eventCategory: input.eventCategory,
       }),
     });

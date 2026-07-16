@@ -22,6 +22,8 @@ export async function POST(req: Request) {
       materialsCostCents?: number;
       materialsMemo?: string;
       workDoneSummary?: string;
+      /** When true, the client sends the resident notice (editable email + SMS). */
+      skipResidentNotify?: boolean;
     };
 
     const workOrder = body.workOrder;
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    if (!alreadyCompleted) {
+    if (!alreadyCompleted && !body.skipResidentNotify) {
       const propertyLabel = updated.propertyName ? `${updated.propertyName}${updated.unit ? ` · ${updated.unit}` : ""}` : "";
       const title = updated.title || "Work order";
       const residentEmail = (updated.residentEmail ?? "").trim();

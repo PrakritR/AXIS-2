@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components/ui/checkbox-multi-select";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_INBOX_COMPOSE_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -12,7 +13,6 @@ import {
   categoryForContactRole,
   contactsForPortal,
   PRIMARY_AXIS_ADMIN_LABEL,
-  rolesForRecipientCategory,
   type InboxRecipientCategory,
   type InboxScopedContact,
 } from "@/data/inbox-scoped-directory";
@@ -32,46 +32,12 @@ export type ScopedInboxSendPayload = {
   broadcastCategories: ("management" | "resident")[];
   scheduleLater?: boolean;
   sendAt?: string;
+  /** Also deliver via SMS when the recipient has a phone on file. */
+  deliverViaSms?: boolean;
 };
 
-type Chip =
-  | { key: string; kind: "broadcast"; category: InboxRecipientCategory }
-  | { key: string; kind: "contact"; contact: InboxScopedContact }
-  | { key: string; kind: "manual"; email: string };
-
-function categoryHint(portal: "resident" | "manager" | "vendor", category: InboxRecipientCategory): string {
-  if (category === "admin") return "Messages to PropLane operations.";
-  if (portal === "manager") {
-    if (category === "management") return "Property owners on your listings.";
-    return "Tenants & approved residents.";
-  }
-  if (portal === "vendor") return "Your property manager(s).";
-  if (category === "management") return "Property managers and owners.";
-  return "Household / co-tenants.";
-}
-
-function allLabelForCategory(category: InboxRecipientCategory): string {
-  if (category === "admin") return "All admins";
-  if (category === "management") return "All management";
-  return "All residents";
-}
-
-const CATEGORY_ORDER: InboxRecipientCategory[] = ["admin", "management", "resident"];
-
-/**
- * Categories the sender may actually reach. Residents message their manager(s)
- * only — no admin broadcast and no other residents.
- */
-function visibleCategoriesForPortal(portal: "resident" | "manager" | "vendor"): InboxRecipientCategory[] {
-  if (portal === "resident") return ["management"];
-  if (portal === "vendor") return ["admin", "management"];
-  return CATEGORY_ORDER;
-}
-
-function isLikelyEmail(value: string): boolean {
-  const email = value.trim();
-  return email.includes("@") && email.indexOf("@") > 0 && email.indexOf("@") < email.length - 1;
-}
+type ComposeCategory = "resident" | "management" | "admin" | "vendor";
+type PersonKey = "admin" | "broadcast:management" | "broadcast:resident" | `id:${string}`;
 
 function defaultScheduleSendAt(): string {
   const d = new Date();
@@ -81,6 +47,65 @@ function defaultScheduleSendAt(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function contactOptionLabel(contact: InboxScopedContact): string {
+  const property = contact.propertyLabel?.trim();
+  const status =
+    contact.role === "resident"
+      ? contact.tenancyStatus === "applicant"
+        ? "Applicant"
+        : "Resident"
+      : null;
+  const bits = [contact.name, status, property || contact.email].filter(Boolean);
+  return bits.join(" · ");
+}
+
+function categoriesForPortal(portal: "resident" | "manager" | "vendor"): ComposeCategory[] {
+  if (portal === "manager") return ["resident", "management", "admin", "vendor"];
+  if (portal === "vendor") return ["management", "admin"];
+  return ["resident", "management", "admin"];
+}
+
+function categoryLabel(category: ComposeCategory): string {
+  if (category === "resident") return "Residents & applicants";
+  if (category === "management") return "Manager";
+  if (category === "vendor") return "Vendor";
+  return "PropLane admin";
+}
+
+function peopleForCategory(
+  category: ComposeCategory,
+  portal: "resident" | "manager" | "vendor",
+  contacts: InboxScopedContact[],
+): { key: PersonKey; label: string }[] {
+  if (category === "admin") {
+    return [{ key: "admin", label: PRIMARY_AXIS_ADMIN_LABEL }];
+  }
+
+  if (category === "vendor") {
+    return contacts
+      .filter((c) => c.role === "vendor")
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+      .map((c) => ({ key: `id:${c.id}` as const, label: contactOptionLabel(c) }));
+  }
+
+  const roleCategory: InboxRecipientCategory = category === "resident" ? "resident" : "management";
+  const people = contacts
+    .filter((c) => categoryForContactRole(portal, c.role) === roleCategory)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+    .map((c) => ({ key: `id:${c.id}` as const, label: contactOptionLabel(c) }));
+
+  if (portal === "manager" && category === "resident") {
+    return [{ key: "broadcast:resident", label: "All residents" }, ...people];
+  }
+  if (portal === "manager" && category === "management") {
+    return [{ key: "broadcast:management", label: "All management" }, ...people];
+  }
+  return people;
+}
+
+/**
+ * New message compose: two multi-select dropdowns (sections + people) with checkboxes.
+ */
 export function ScopedInboxComposeModal({
   open,
   onClose,
@@ -98,21 +123,46 @@ export function ScopedInboxComposeModal({
   title?: string;
   senderName?: string;
   senderEmail?: string;
-  /** Live contacts derived from real data (residents, linked accounts). */
   liveContacts?: InboxScopedContact[];
 }) {
   const { showToast } = useAppUi();
-  const visibleCategories = useMemo(() => visibleCategoriesForPortal(portal), [portal]);
   const contacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
-  const [broadcastCats, setBroadcastCats] = useState<Set<InboxRecipientCategory>>(new Set());
-  const [contactIds, setContactIds] = useState<Set<string>>(new Set());
-  const [manualEmails, setManualEmails] = useState<Set<string>>(new Set());
-  const [manualEmailDraft, setManualEmailDraft] = useState("");
+  const categoryOptions = useMemo(() => categoriesForPortal(portal), [portal]);
+  const [selectedCategories, setSelectedCategories] = useState<ComposeCategory[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<PersonKey[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [deliverViaSms, setDeliverViaSms] = useState(false);
   const [scheduleLater, setScheduleLater] = useState(false);
   const [sendAt, setSendAt] = useState(defaultScheduleSendAt);
-  const managerOnlyCompose = portal === "resident";
+
+  const sectionOptions = useMemo(
+    () => categoryOptions.map((c) => ({ value: c, label: categoryLabel(c) })),
+    [categoryOptions],
+  );
+
+  const personGroups = useMemo((): CheckboxMultiSelectGroup[] => {
+    const cats = selectedCategories.length > 0 ? selectedCategories : [];
+    return cats
+      .map((category) => ({
+        label: categoryLabel(category),
+        options: peopleForCategory(category, portal, contacts).map((p) => ({
+          value: p.key,
+          label: p.label,
+        })),
+      }))
+      .filter((g) => g.options.length > 0);
+  }, [selectedCategories, portal, contacts]);
+
+  const flatPersonOptions = useMemo(() => personGroups.flatMap((g) => g.options), [personGroups]);
+  const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
+
+  const showSmsOption = portal === "manager";
+  const smsEligible = selectedKeys.some((key) => {
+    if (key === "broadcast:resident") return true;
+    if (!key.startsWith("id:")) return false;
+    return contacts.some((c) => c.role === "resident" && `id:${c.id}` === key);
+  });
 
   useEffect(() => {
     if (!isDemoModeActive()) return;
@@ -126,7 +176,10 @@ export function ScopedInboxComposeModal({
       const email = detail?.residentEmail?.trim().toLowerCase();
       if (email) {
         const hit = contacts.find((c) => c.email?.toLowerCase() === email);
-        if (hit) setContactIds(new Set([hit.id]));
+        if (hit) {
+          setSelectedCategories(["resident"]);
+          setSelectedKeys([`id:${hit.id}`]);
+        }
       }
     };
     window.addEventListener(DEMO_INBOX_COMPOSE_PREFILL_EVENT, onPrefill as EventListener);
@@ -136,130 +189,33 @@ export function ScopedInboxComposeModal({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
-      setBroadcastCats(new Set());
-      setContactIds(new Set());
-      setManualEmails(new Set());
-      setManualEmailDraft("");
+      setSelectedCategories([]);
+      setSelectedKeys([]);
       setSubject("");
       setBody("");
+      setDeliverViaSms(false);
       setScheduleLater(false);
       setSendAt(defaultScheduleSendAt());
     });
-  }, [open]);
+  }, [open, portal]);
 
   useEffect(() => {
-    if (!open || !managerOnlyCompose) return;
-    const managers = contacts.filter((c) => categoryForContactRole(portal, c.role) === "management");
-    if (managers.length === 1) {
-      queueMicrotask(() => setContactIds(new Set([managers[0]!.id])));
-    }
-  }, [open, managerOnlyCompose, contacts, portal]);
+    setSelectedKeys((prev) => prev.filter((key) => validPersonKeys.has(key)));
+  }, [validPersonKeys]);
 
-  const contactsByCategory = useMemo(() => {
-    const map: Record<InboxRecipientCategory, InboxScopedContact[]> = {
-      admin: [],
-      management: [],
-      resident: [],
-    };
-    for (const c of contacts) {
-      const cat = categoryForContactRole(portal, c.role);
-      map[cat].push(c);
-    }
-    for (const k of Object.keys(map) as InboxRecipientCategory[]) {
-      map[k].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-    }
-    return map;
-  }, [contacts, portal]);
+  useEffect(() => {
+    if (!smsEligible && deliverViaSms) setDeliverViaSms(false);
+  }, [smsEligible, deliverViaSms]);
 
-  const toggleBroadcast = (category: InboxRecipientCategory) => {
-    setBroadcastCats((prev) => {
-      const next = new Set(prev);
-      const wasOn = next.has(category);
-      if (wasOn) {
-        next.delete(category);
-      } else {
-        next.add(category);
-        const roles = category === "admin" ? [] : rolesForRecipientCategory(portal, category);
-        if (roles.length > 0) {
-          setContactIds((ids) => {
-            const n = new Set(ids);
-            for (const c of contacts) {
-              if (roles.includes(c.role)) n.delete(c.id);
-            }
-            return n;
-          });
-        }
-      }
-      return next;
-    });
+  const onCategoriesChange = (next: string[]) => {
+    const cats = next.filter((v): v is ComposeCategory =>
+      categoryOptions.includes(v as ComposeCategory),
+    );
+    setSelectedCategories(cats);
   };
 
-  const toggleContact = (contact: InboxScopedContact) => {
-    const category = categoryForContactRole(portal, contact.role);
-    setContactIds((prev) => {
-      const next = new Set(prev);
-      const adding = !next.has(contact.id);
-      if (adding) {
-        next.add(contact.id);
-        setBroadcastCats((bc) => {
-          const nbc = new Set(bc);
-          nbc.delete(category);
-          return nbc;
-        });
-      } else {
-        next.delete(contact.id);
-      }
-      return next;
-    });
-  };
-
-  const addManualEmail = (raw: string) => {
-    const email = raw.trim().toLowerCase();
-    if (!isLikelyEmail(email)) {
-      showToast("Enter a valid email address.");
-      return;
-    }
-    setManualEmails((prev) => new Set([...prev, email]));
-    setManualEmailDraft("");
-  };
-
-  const chips = useMemo((): Chip[] => {
-    const out: Chip[] = [];
-    for (const category of CATEGORY_ORDER) {
-      if (broadcastCats.has(category)) {
-        out.push({ key: `b:${category}`, kind: "broadcast", category });
-      }
-    }
-    for (const id of [...contactIds].sort()) {
-      const c = contacts.find((x) => x.id === id);
-      if (c) out.push({ key: `c:${id}`, kind: "contact", contact: c });
-    }
-    for (const email of [...manualEmails].sort()) {
-      out.push({ key: `m:${email}`, kind: "manual", email });
-    }
-    return out;
-  }, [broadcastCats, contactIds, contacts, manualEmails]);
-
-  const removeChip = (chip: Chip) => {
-    if (chip.kind === "broadcast") {
-      setBroadcastCats((prev) => {
-        const next = new Set(prev);
-        next.delete(chip.category);
-        return next;
-      });
-    } else if (chip.kind === "manual") {
-      setManualEmails((prev) => {
-        const next = new Set(prev);
-        next.delete(chip.email);
-        return next;
-      });
-    } else {
-      setContactIds((prev) => {
-        const next = new Set(prev);
-        next.delete(chip.contact.id);
-        return next;
-      });
-    }
+  const onPeopleChange = (next: string[]) => {
+    setSelectedKeys(next as PersonKey[]);
   };
 
   const submit = () => {
@@ -269,11 +225,15 @@ export function ScopedInboxComposeModal({
       showToast("Add a subject and message.");
       return;
     }
-    if (chips.length === 0) {
-      showToast(managerOnlyCompose ? "Choose your property manager." : "Add at least one recipient in To.");
+    if (selectedCategories.length === 0) {
+      showToast("Select at least one section (Resident, Manager, …).");
       return;
     }
-    if (scheduleLater) {
+    if (selectedKeys.length === 0) {
+      showToast("Select at least one recipient.");
+      return;
+    }
+    if (portal === "resident" && scheduleLater) {
       const when = new Date(sendAt);
       if (Number.isNaN(when.getTime())) {
         showToast("Choose a valid send date and time.");
@@ -285,265 +245,155 @@ export function ScopedInboxComposeModal({
       }
     }
 
-    const seen = new Set<string>();
-    const parts: { label: string; email: string }[] = [];
-    for (const chip of chips) {
-      if (chip.kind === "broadcast") {
-        const stub = broadcastStubForCategory(chip.category);
-        const key = stub.email.toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          parts.push(stub);
+    const labels: string[] = [];
+    const directEmails: string[] = [];
+    let includesAxisAdmin = false;
+    let includesDirectoryRecipients = false;
+    const broadcastCategories: ("management" | "resident")[] = [];
+    const seenBroadcast = new Set<string>();
+    const seenEmail = new Set<string>();
+
+    for (const key of selectedKeys) {
+      if (key === "admin") {
+        const stub = broadcastStubForCategory("admin");
+        includesAxisAdmin = true;
+        labels.push(PRIMARY_AXIS_ADMIN_LABEL);
+        const email = stub.email.trim().toLowerCase();
+        if (!seenEmail.has(email)) {
+          seenEmail.add(email);
+          directEmails.push(stub.email.trim());
         }
-      } else if (chip.kind === "manual") {
-        const key = chip.email.trim().toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          parts.push({ label: chip.email, email: chip.email });
+        continue;
+      }
+      if (key === "broadcast:management") {
+        if (!seenBroadcast.has("management")) {
+          seenBroadcast.add("management");
+          broadcastCategories.push("management");
+          labels.push("All management");
+          includesDirectoryRecipients = true;
         }
-      } else {
-        const key = chip.contact.email.trim().toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          parts.push({ label: chip.contact.name, email: chip.contact.email.trim() });
+        continue;
+      }
+      if (key === "broadcast:resident") {
+        if (!seenBroadcast.has("resident")) {
+          seenBroadcast.add("resident");
+          broadcastCategories.push("resident");
+          labels.push("All residents");
+          includesDirectoryRecipients = true;
         }
+        continue;
+      }
+      const id = key.slice(3);
+      const contact = contacts.find((c) => c.id === id);
+      if (!contact) continue;
+      labels.push(contact.name);
+      includesDirectoryRecipients = true;
+      const email = contact.email.trim();
+      const lower = email.toLowerCase();
+      if (!lower || seenEmail.has(lower)) continue;
+      seenEmail.add(lower);
+      directEmails.push(email);
+      if (lower === broadcastStubForCategory("admin").email.toLowerCase()) {
+        includesAxisAdmin = true;
       }
     }
 
-    const toLabel = parts.map((p) => p.label).join(", ");
-    const toEmailLine = parts.map((p) => p.email).join("; ");
-    // "management"/"resident" broadcast chips are placeholder addresses (resolved server-side via
-    // broadcastCategories below) — exclude them here so we don't send literal toEmails to nobody.
-    const directRecipientEmailLine = parts
-      .filter((p) => p.email.toLowerCase() !== broadcastStubForCategory("management").email.toLowerCase()
-        && p.email.toLowerCase() !== broadcastStubForCategory("resident").email.toLowerCase())
-      .map((p) => p.email)
-      .join("; ");
-
-    const adminEmail = broadcastStubForCategory("admin").email.toLowerCase();
-    const includesAxisAdmin =
-      broadcastCats.has("admin") ||
-      [...manualEmails].some((email) => email === adminEmail) ||
-      [...contactIds].some((id) => {
-        const c = contacts.find((x) => x.id === id);
-        return c?.email.trim().toLowerCase() === adminEmail;
-      });
-
-    const includesDirectoryRecipients =
-      broadcastCats.has("management") ||
-      broadcastCats.has("resident") ||
-      [...contactIds].some((id) => {
-        const c = contacts.find((x) => x.id === id);
-        return c && categoryForContactRole(portal, c.role) !== "admin";
-      });
-
-    const broadcastCategories = [...broadcastCats].filter(
-      (c): c is "management" | "resident" => c === "management" || c === "resident",
-    );
+    if (!includesAxisAdmin && broadcastCategories.length === 0 && directEmails.length === 0) {
+      showToast("Select at least one recipient.");
+      return;
+    }
 
     onSend({
       subject: s,
       body: b,
       senderName,
       senderEmail,
-      toLabel,
-      toEmailLine,
-      directRecipientEmailLine,
+      toLabel: labels.join(", "),
+      toEmailLine: directEmails.join("; "),
+      directRecipientEmailLine: directEmails.join("; "),
       includesAxisAdmin,
       includesDirectoryRecipients,
       broadcastCategories,
-      scheduleLater,
-      sendAt: scheduleLater ? new Date(sendAt).toISOString() : undefined,
+      scheduleLater: portal === "resident" ? scheduleLater : false,
+      sendAt: portal === "resident" && scheduleLater ? new Date(sendAt).toISOString() : undefined,
+      deliverViaSms: showSmsOption && smsEligible ? deliverViaSms : false,
     });
   };
 
   return (
     <Modal open={open} title={title} onClose={onClose}>
-      <div className="space-y-4">
-        {!managerOnlyCompose ? (
-        <div>
-          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="scoped-compose-to-chips">
-            Send to
-          </label>
-          <div
-            id="scoped-compose-to-chips"
-            className="mt-1.5 flex min-h-[48px] flex-wrap gap-1.5 rounded-xl border border-border bg-card px-2 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-          >
-            {chips.length === 0 ? (
-              <span className="select-none px-1 py-1 text-sm text-muted">Use the sections below to add people or groups…</span>
-            ) : (
-              chips.map((chip) => {
-                const label =
-                  chip.kind === "broadcast"
-                    ? broadcastStubForCategory(chip.category).label
-                    : chip.kind === "manual"
-                      ? chip.email
-                      : `${chip.contact.name} · ${chip.contact.email}`;
-                return (
-                  <button
-                    key={chip.key}
-                    type="button"
-                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-accent/30 px-2.5 py-1 text-left text-xs font-medium text-foreground shadow-sm hover:bg-accent/30"
-                    onClick={() => removeChip(chip)}
-                    title="Remove"
-                  >
-                    <span className="min-w-0 truncate">{label}</span>
-                    <span className="shrink-0 text-muted" aria-hidden>
-                      ×
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <Input
-              type="email"
-              className="min-w-0 flex-1"
-              value={manualEmailDraft}
-              onChange={(e) => setManualEmailDraft(e.target.value)}
-              placeholder="Add email address"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addManualEmail(manualEmailDraft);
-                }
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 rounded-full"
-              onClick={() => addManualEmail(manualEmailDraft)}
-            >
-              Add
-            </Button>
-          </div>
-          <p className="mt-1.5 text-[11px] text-muted">Click a chip to remove it. You can mix groups, contacts, and typed emails.</p>
-        </div>
-        ) : null}
-
-        <div className="space-y-3">
-          {managerOnlyCompose ? (
-            <div className="rounded-2xl border border-border bg-accent/30/40 px-4 py-3">
-              <p className="text-sm font-semibold text-foreground">Property manager</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted">Messages go to your assigned manager only.</p>
-              {contactsByCategory.management.length > 0 ? (
-                <ul className="mt-3 space-y-2">
-                  {contactsByCategory.management.map((c) => (
-                    <li key={c.id}>
-                      <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-card px-3 py-2.5 ring-1 ring-border hover:bg-accent/30">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                          checked={contactIds.has(c.id)}
-                          onChange={() => toggleContact(c)}
-                        />
-                        <span>
-                          <span className="text-sm font-medium text-foreground">{c.name}</span>
-                          <span className="mt-0.5 block text-xs text-muted">{c.email}</span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-sm text-muted">No manager contact available yet.</p>
-              )}
-            </div>
-          ) : (
-          visibleCategories.map((category) => {
-            const titleCase =
-              category === "admin" ? "Admin" : category === "management" ? "Management" : "Resident";
-            const subtitle = categoryHint(portal, category);
-            const list = contactsByCategory[category];
-
-            return (
-              <details
-                key={category}
-                className="group rounded-2xl border border-border bg-accent/30/40 open:bg-card open:shadow-sm"
-                open={category === "admin"}
-              >
-                <summary className="cursor-pointer list-none px-4 py-3 [&::-webkit-details-marker]:hidden">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{titleCase}</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-muted">{subtitle}</p>
-                    </div>
-                    <span className="mt-0.5 text-xs font-semibold text-primary group-open:hidden">Open</span>
-                    <span className="mt-0.5 hidden text-xs font-semibold text-muted group-open:inline">Hide</span>
-                  </div>
-                </summary>
-                <div className="border-t border-border px-4 py-3">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-card px-3 py-2.5 ring-1 ring-border hover:bg-accent/30">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                      checked={broadcastCats.has(category)}
-                      onChange={() => toggleBroadcast(category)}
-                    />
-                    <span>
-                      <span className="text-sm font-medium text-foreground">{allLabelForCategory(category)}</span>
-                      {category === "admin" ? (
-                        <span className="mt-0.5 block text-xs text-muted">{PRIMARY_AXIS_ADMIN_LABEL}</span>
-                      ) : null}
-                    </span>
-                  </label>
-
-                  {list.length > 0 ? (
-                    <>
-                      <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Or choose people</p>
-                      <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1">
-                        {list.map((c) => (
-                          <li key={c.id}>
-                            <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-card px-3 py-2.5 ring-1 ring-border hover:bg-accent/30">
-                              <input
-                                type="checkbox"
-                                className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                                checked={contactIds.has(c.id)}
-                                disabled={broadcastCats.has(category)}
-                                onChange={() => toggleContact(c)}
-                              />
-                              <span>
-                                <span className="text-sm font-medium text-foreground">{c.name}</span>
-                                <span className="mt-0.5 block text-xs text-muted">{c.email}</span>
-                              </span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : category !== "admin" ? (
-                    <p className="mt-3 text-sm text-muted">No saved contacts in this category yet.</p>
-                  ) : null}
-                </div>
-              </details>
-            );
-          })
-          )}
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CheckboxMultiSelect
+            label="To"
+            options={sectionOptions}
+            selected={selectedCategories}
+            onChange={onCategoriesChange}
+            dataAttr="inbox-compose-category"
+          />
+          <CheckboxMultiSelect
+            label="Which people"
+            groups={personGroups}
+            selected={selectedKeys}
+            onChange={onPeopleChange}
+            disabled={selectedCategories.length === 0}
+            emptyMenuText={
+              selectedCategories.length === 0 ? "Pick a section first" : "No contacts in selected sections"
+            }
+            dataAttr="inbox-compose-person"
+          />
         </div>
 
         <div>
-          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="scoped-compose-subject">
+          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="compose-subject">
             Subject
           </label>
-          <Input id="scoped-compose-subject" className="mt-1.5" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
+          <Input
+            id="compose-subject"
+            className="mt-1"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Subject"
+          />
         </div>
 
         <div>
-          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="scoped-compose-body">
+          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="compose-body">
             Message
           </label>
           <Textarea
-            id="scoped-compose-body"
-            className="mt-1.5 min-h-[140px]"
+            id="compose-body"
+            className="mt-1 min-h-[120px]"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your message…"
           />
         </div>
 
-        {managerOnlyCompose ? (
+        {showSmsOption ? (
+          <label
+            className={`flex items-start gap-2.5 text-sm ${smsEligible ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+              checked={deliverViaSms}
+              disabled={!smsEligible}
+              onChange={(e) => setDeliverViaSms(e.target.checked)}
+              data-attr="inbox-compose-sms"
+            />
+            <span>
+              <span className="font-medium text-foreground">Also send as SMS</span>
+              <span className="mt-0.5 block text-xs text-muted">
+                {smsEligible
+                  ? "Texts selected residents from your work number when a phone is on file."
+                  : "Select a resident to enable SMS."}
+              </span>
+            </span>
+          </label>
+        ) : null}
+
+        {portal === "resident" ? (
           <>
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <input
@@ -559,7 +409,7 @@ export function ScopedInboxComposeModal({
                 <span className="font-medium text-muted">Send date &amp; time</span>
                 <Input
                   type="datetime-local"
-                  className="mt-1.5"
+                  className="mt-1"
                   value={sendAt}
                   onChange={(e) => setSendAt(e.target.value)}
                 />
@@ -568,12 +418,12 @@ export function ScopedInboxComposeModal({
           </>
         ) : null}
 
-        <div className="flex flex-wrap justify-start gap-2 pt-2">
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>
           <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
-            {scheduleLater ? "Schedule message" : "Send"}
+            {scheduleLater ? "Schedule" : deliverViaSms ? "Send email + SMS" : "Send"}
           </Button>
         </div>
       </div>

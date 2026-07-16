@@ -80,7 +80,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
       intent: "unknown",
       domain: "Inbox",
       wantsLabel: "manager attention / reply",
-      managerPath: "/portal/inbox/unopened",
+      managerPath: "/portal/communication/inbox/unopened",
       skipManagerBrief: false,
     };
   }
@@ -90,7 +90,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
       intent: "greeting",
       domain: "Inbox",
       wantsLabel: "opened chat",
-      managerPath: "/portal/inbox/unopened",
+      managerPath: "/portal/communication/inbox/unopened",
       skipManagerBrief: true,
     };
   }
@@ -100,7 +100,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
       intent: "help",
       domain: "Inbox",
       wantsLabel: "help menu",
-      managerPath: "/portal/inbox/unopened",
+      managerPath: "/portal/communication/inbox/unopened",
       skipManagerBrief: true,
     };
   }
@@ -190,7 +190,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
       intent: "inbox",
       domain: "Inbox",
       wantsLabel: "message the manager",
-      managerPath: "/portal/inbox/unopened",
+      managerPath: "/portal/communication/inbox/unopened",
       skipManagerBrief: false,
     };
   }
@@ -199,7 +199,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
     intent: "unknown",
     domain: "Inbox",
     wantsLabel: "manager attention / reply",
-    managerPath: "/portal/inbox/unopened",
+    managerPath: "/portal/communication/inbox/unopened",
     skipManagerBrief: false,
   };
 }

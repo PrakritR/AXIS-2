@@ -1,5 +1,6 @@
 import "server-only";
 import type { MockProperty } from "@/data/types";
+import { managerContactSmsPhoneForPublicCta } from "@/lib/claw-leasing-links";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
 import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 import { isProductionRuntime } from "@/lib/server-env";
@@ -46,7 +47,7 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     if (profileError) throw new Error(profileError.message);
     for (const profile of profiles ?? []) {
       managerEmailByUserId.set(profile.id, profile.email ?? null);
-      const sms = String(profile.sms_from_number ?? "").trim() || null;
+      const sms = managerContactSmsPhoneForPublicCta(String(profile.sms_from_number ?? "").trim() || null);
       managerSmsByUserId.set(profile.id, sms);
     }
   }
@@ -60,7 +61,7 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     if (!isPropertyActiveForLeads(live)) continue;
     const contactSmsPhone =
       (row.manager_user_id ? managerSmsByUserId.get(row.manager_user_id) : null) ||
-      live.contactSmsPhone ||
+      managerContactSmsPhoneForPublicCta(live.contactSmsPhone) ||
       undefined;
     const withOwner = {
       ...live,

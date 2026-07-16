@@ -312,12 +312,16 @@ try {
 
   // Real phones for Claw Messenger two-way testing on localhost / test DB.
   // Manager personal cell (forward + replies): +1 510-309-8345
-  // Resident personal cell: +1 510-579-1976
-  // Shared Claw agent line stays on sms_from_number for outbound.
+  // Resident personal cell: +1 510-579-4001
+  // Shared Claw agent line on sms_from_number while Twilio A2P is pending.
   const TEST_MANAGER_PHONE = "+15103098345";
-  const TEST_RESIDENT_PHONE = "+15105791976";
-  // Twilio-style work number for outbound (not the legacy Claw shared agent line).
-  const CLAW_AGENT_PHONE = "+12065550100";
+  const TEST_RESIDENT_PHONE = "+15105794001";
+  const CLAW_AGENT_PHONE =
+    process.env.CLAW_MESSENGER_AGENT_PHONE?.trim() ||
+    process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE?.trim() ||
+    "+12053690702";
+  const pinnedWorkNumber = process.env.TEST_MANAGER_SMS_FROM_NUMBER?.trim() || null;
+  const managerSmsPatch = { sms_from_number: pinnedWorkNumber || CLAW_AGENT_PHONE };
   await must(
     supabase
       .from("profiles")
@@ -330,22 +334,22 @@ try {
       .from("profiles")
       .update({
         phone: TEST_MANAGER_PHONE,
-        sms_from_number: CLAW_AGENT_PHONE,
+        ...managerSmsPatch,
         updated_at: new Date().toISOString(),
       })
       .eq("id", everythingUserId),
-    "profiles(phone+claw testeverything)",
+    "profiles(phone+sms testeverything)",
   );
   await must(
     supabase
       .from("profiles")
       .update({
         phone: TEST_MANAGER_PHONE,
-        sms_from_number: CLAW_AGENT_PHONE,
+        ...managerSmsPatch,
         updated_at: new Date().toISOString(),
       })
       .eq("id", managerUserId),
-    "profiles(phone+claw manager)",
+    "profiles(phone+sms manager)",
   );
   // Pro tier so tier-gated manager tabs aren't paywalled for this account either.
   const { data: everythingPurchases } = await supabase
@@ -873,7 +877,7 @@ try {
     return {
       fullLegalName: p.name,
       email: p.email,
-      phone: p.index % 2 === 0 ? "(510) 309-8345" : "(510) 579-1976",
+      phone: p.index % 2 === 0 ? "(510) 309-8345" : "(510) 579-4001",
       dateOfBirth: "1995-05-14",
       ssn: "000-00-0000",
       driversLicense: "WA-DL-4821990",
@@ -1406,6 +1410,33 @@ try {
     await must(supabase.from("profile_roles").delete().in("user_id", orphanProfileIds), "prune orphan profile_roles");
     await must(supabase.from("profiles").delete().in("id", orphanProfileIds), "prune orphan profiles");
     console.error(`Pruned ${orphanProfileIds.length} orphan profiles`);
+  }
+
+  // Stamp shared Claw agent line on opted-in manager emails (A2P pending).
+  // New signups are left alone until Twilio work-number setup is ready.
+  const clawStampEmails = new Set(
+    (process.env.CLAW_MESSENGER_MANAGER_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  for (const email of [managerEmail, everythingEmail]) {
+    clawStampEmails.add(email);
+  }
+  if (clawStampEmails.size > 0) {
+    const { data: clawProfiles } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .in("email", [...clawStampEmails]);
+    for (const row of clawProfiles ?? []) {
+      await must(
+        supabase
+          .from("profiles")
+          .update({ sms_from_number: CLAW_AGENT_PHONE, updated_at: new Date().toISOString() })
+          .eq("id", row.id),
+        `profiles(claw sms_from_number ${row.email})`,
+      );
+    }
   }
 
   console.log(

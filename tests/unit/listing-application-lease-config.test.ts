@@ -19,7 +19,6 @@ import {
 import { buildLeaseHtml } from "@/lib/lease-templates/build-lease-html";
 import { SEATTLE_LEASE_CONFIG } from "@/lib/lease-templates/types";
 import { buildAiGeneratedLeaseHtml, type LeaseGenerationContext } from "@/lib/generated-lease";
-import { validateListingWizardStep } from "@/lib/listing-wizard-validation";
 
 function subWith(patch: Partial<ManagerListingSubmissionV1>): ManagerListingSubmissionV1 {
   return { ...createDefaultListingSubmission(), ...patch };
@@ -95,30 +94,6 @@ describe("custom application field sections", () => {
     sub.applicationConfigMode = undefined;
     sub.customApplicationFields = normalizeCustomApplicationFields(fields);
     expect(listingCustomApplicationFields(sub)).toHaveLength(3);
-  });
-});
-
-describe("listing wizard application/lease step validation", () => {
-  it("flags incomplete custom questions", () => {
-    const draft = subWith({
-      applicationConfigMode: "custom",
-      customApplicationFields: [
-        { id: "x", key: "", label: "", type: "text", required: false, options: [] },
-      ],
-    });
-    expect(Object.keys(validateListingWizardStep(7, draft))).toContain("appq-x");
-  });
-
-  it("requires custom lease content when the lease is customized", () => {
-    const draft = subWith({ leaseConfigMode: "custom", leaseCustomKind: "terms", customLeaseTerms: "" });
-    expect(validateListingWizardStep(8, draft)).toHaveProperty("customLeaseTerms");
-    draft.customLeaseTerms = "No smoking anywhere.";
-    expect(validateListingWizardStep(8, draft)).toEqual({});
-    draft.leaseCustomKind = "document";
-    draft.leaseTemplateDocUrl = null;
-    expect(validateListingWizardStep(8, draft)).toHaveProperty("leaseTemplateDoc");
-    draft.leaseTemplateDocUrl = "https://example.com/lease.pdf";
-    expect(validateListingWizardStep(8, draft)).toEqual({});
   });
 });
 

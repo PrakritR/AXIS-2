@@ -83,3 +83,4 @@ playwright.config.ts
 .env.local
 /ios/App/fastlane/.keys/
 /env.local
+.env*

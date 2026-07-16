@@ -1118,13 +1118,16 @@ export function PortalCalendarPanels({
       recipient={tourConfirmPreview?.meeting.email ?? ""}
       subject={tourConfirmPreview?.subject ?? ""}
       body={tourConfirmPreview?.body ?? ""}
-      intro="Confirming this tour will schedule it on your calendar and send the message below to the guest via PropLane inbox and email."
+      intro="Confirming schedules the tour and sends this message to the guest."
       skipMessageLabel="Don't message guest"
+      showChannelPicker
+      emailAvailable={Boolean(tourConfirmPreview?.meeting.email?.includes("@"))}
+      smsAvailable
       confirmLabel="Confirm tour & send notification"
       confirmLabelWithoutMessage="Confirm tour only"
       confirmBusy={tourConfirmBusy}
       confirmBusyLabel="Confirming…"
-      panelClassName="modal-panel relative z-[90] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border p-4 shadow-2xl sm:my-4 sm:p-6"
+      panelClassName="z-[90] max-w-xl"
       onConfirm={(skipMessage) => void confirmTourWithNotification(skipMessage)}
     />
   );

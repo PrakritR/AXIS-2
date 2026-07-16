@@ -225,7 +225,7 @@ export function DemoSectionRenderer({
 }
 
 /**
- * Same Move-in tab as the real resident portal: the shared presentational
+ * Same House details tab as the real resident portal: the shared presentational
  * view fed by the shared resolver, over the browser-local demo data
  * (the real portal resolves the identical shape server-side).
  */
@@ -240,12 +240,12 @@ function ResidentMoveInDemo() {
   }, []);
 
   return (
-    <ManagerPortalPageShell title="Move-in">
+    <ManagerPortalPageShell title="House details">
       <div className="space-y-6 text-sm leading-relaxed text-muted">
         {resolved ? (
           <ResidentMoveInResolvedView resolved={resolved} />
         ) : (
-          <PortalDataTableEmpty message="Move-in details appear here once a placement is assigned." icon="default" />
+          <PortalDataTableEmpty message="House details appear here once a placement is assigned." icon="default" />
         )}
       </div>
     </ManagerPortalPageShell>

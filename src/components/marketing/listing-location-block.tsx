@@ -1,22 +1,35 @@
+"use client";
+
+import type { MockProperty } from "@/data/types";
+import { useListingMapCoords } from "@/hooks/use-listing-map-coords";
 import { ListingLocationMap } from "@/components/marketing/listing-location-map";
 
 export function ListingLocationBlock({
-  lat,
-  lng,
-  address,
+  property,
   embedded = false,
 }: {
-  lat: number;
-  lng: number;
-  address: string;
+  property: Pick<MockProperty, "address" | "zip" | "neighborhood" | "unitLabel" | "mapLat" | "mapLng">;
   /** When true, render map + address only (parent supplies section chrome). */
   embedded?: boolean;
 }) {
+  const { coords, loading } = useListingMapCoords(property);
+  const addressLine = [property.address?.trim(), property.zip?.trim()].filter(Boolean).join(", ");
+
   const body = (
     <>
-      <p className="text-sm text-muted">{address}</p>
-      <div className="mt-4 overflow-hidden rounded-2xl">
-        <ListingLocationMap lat={lat} lng={lng} />
+      <p className="text-sm text-muted">{addressLine}</p>
+      <div className="relative mt-4 overflow-hidden rounded-2xl">
+        {loading || !coords ? (
+          <div
+            className="flex h-[min(22rem,48vh)] min-h-[220px] w-full items-center justify-center rounded-2xl border border-border bg-accent/30 text-sm text-muted"
+            aria-busy="true"
+            aria-label="Loading map"
+          >
+            Locating address…
+          </div>
+        ) : (
+          <ListingLocationMap lat={coords.lat} lng={coords.lng} />
+        )}
       </div>
     </>
   );

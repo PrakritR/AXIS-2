@@ -59,7 +59,7 @@ describe("buildManagerResidentBrief", () => {
     const brief = buildManagerResidentBrief({
       residentName: "Test Resident",
       residentEmail: "resident@test.axis.local",
-      residentPhone: "+15105791976",
+      residentPhone: "+15105794001",
       said: "my toilet is broken",
       wants: "file a maintenance work order",
       domain: "Services",
@@ -69,7 +69,7 @@ describe("buildManagerResidentBrief", () => {
       reply: "Got it — I filed a work order.",
     });
     expect(brief).toContain("Property: The Pioneer");
-    expect(brief).toContain("Resident: Test Resident (+15105791976)");
+    expect(brief).toContain("Resident: Test Resident (+15105794001)");
     expect(brief).toContain("Said: my toilet is broken");
     expect(brief).toContain("Reply: Got it — I filed a work order.");
     expect(brief).toContain("REQ-1");
@@ -81,18 +81,18 @@ describe("buildManagerResidentBrief", () => {
     const brief = buildManagerResidentBrief({
       residentName: "Test Resident",
       residentEmail: null,
-      residentPhone: "+15105791976",
+      residentPhone: "+15105794001",
       said: "Ok",
       wants: "manager attention / reply",
       domain: "Inbox",
-      managerPath: "/portal/inbox/unopened",
+      managerPath: "/portal/communication/inbox/unopened",
       propertyLabel: "The Pioneer",
       reply: "Got it — your property manager will see this.",
     });
     expect(brief).toBe(
       [
         "Property: The Pioneer",
-        "Resident: Test Resident (+15105791976)",
+        "Resident: Test Resident (+15105794001)",
         "Said: Ok",
         "Reply: Got it — your property manager will see this.",
       ].join("\n"),

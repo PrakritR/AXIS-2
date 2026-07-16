@@ -36,7 +36,7 @@ const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Default test / staging pairing when no durable thread exists yet. */
 const DEFAULT_MANAGER_PHONE = "+15103098345";
-const DEFAULT_RESIDENT_PHONE = "+15105791976";
+const DEFAULT_RESIDENT_PHONE = "+15105794001";
 
 function threadId(managerUserId: string, residentPhone: string): string {
   return `claw_thread_${managerUserId}_${residentPhone.replace(/\D/g, "")}`;
@@ -405,6 +405,8 @@ export async function forwardResidentMessageToManagers(args: {
           to,
           text: body,
           fromNumber: args.workNumber,
+          // Brief to the manager's personal phone — not a resident SMS thread.
+          skipLog: true,
         });
         return send.ok ? to : null;
       }),
@@ -434,6 +436,7 @@ export async function tryRelayManagerReplyViaClaw(args: {
       to: from,
       text: "(Not delivered)\nNo resident thread is open on this line yet. Message a resident from the portal inbox first, or wait for a resident to text in.",
       fromNumber: args.workNumber,
+      log: null,
     });
     return { relayed: false, error: "no_open_thread" };
   }
@@ -447,6 +450,7 @@ export async function tryRelayManagerReplyViaClaw(args: {
     to: thread.residentPhone,
     text: outbound,
     fromNumber: args.workNumber,
+    residentUserId: thread.residentUserId,
   });
   if (!send.ok) {
     // Silent failures read as being ignored — tell the manager it didn't land.
@@ -454,6 +458,7 @@ export async function tryRelayManagerReplyViaClaw(args: {
       to: from,
       text: "(Not delivered)\nCouldn't reach the resident by text right now. Try again in a minute or use the portal inbox.",
       fromNumber: args.workNumber,
+      log: null,
     }).catch(() => undefined);
     return { relayed: false, error: send.error || "send_failed" };
   }
@@ -556,6 +561,8 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
     managerUserId,
     to: managerPhone,
     text: body,
+    // Mirror is a manager CC — do not create a fake "resident" SMS thread.
+    skipLog: true,
   });
   if (!send.ok) return { mirrored: false };
 

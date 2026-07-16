@@ -1,20 +1,25 @@
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { PRIMARY_AXIS_ADMIN_EMAIL, PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { readOwnActiveManagerVendorRows, isVendorCategorySettingsRow } from "@/lib/manager-vendors-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
 
-/** Approved residents + linked co-managers for manager inbox / schedule compose. */
+/** Approved residents + pending applicants + linked co-managers + vendors for Communication. */
 export function buildManagerInboxLiveContacts(userId: string | null | undefined): InboxScopedContact[] {
   const out: InboxScopedContact[] = [];
   const seen = new Set<string>();
 
   for (const row of readManagerApplicationRows()) {
-    if (row.bucket !== "approved" || !row.email?.trim()) continue;
+    const bucket = String(row.bucket ?? "").trim();
+    if ((bucket !== "approved" && bucket !== "pending") || !row.email?.trim()) continue;
+    // Skip in-progress drafts that are not real applications yet.
+    if (bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress") continue;
     const email = row.email.trim().toLowerCase();
     if (seen.has(email)) continue;
     seen.add(email);
     const propertyLabel = row.property?.trim() || undefined;
     const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || undefined;
+    const tenancyStatus = bucket === "approved" ? "resident" : "applicant";
     out.push({
       id: `res-${row.id}`,
       name: row.name || row.email.trim(),
@@ -22,6 +27,7 @@ export function buildManagerInboxLiveContacts(userId: string | null | undefined)
       role: "resident",
       propertyLabel,
       propertyId,
+      tenancyStatus,
     });
   }
 
@@ -35,6 +41,19 @@ export function buildManagerInboxLiveContacts(userId: string | null | undefined)
         name: rel.linkedDisplayName || rel.linkedAxisId,
         email: rel.linkedAxisId,
         role: "manager",
+      });
+    }
+
+    for (const vendor of readOwnActiveManagerVendorRows(userId)) {
+      if (isVendorCategorySettingsRow(vendor)) continue;
+      const email = vendor.email?.trim();
+      if (!email || seen.has(email.toLowerCase())) continue;
+      seen.add(email.toLowerCase());
+      out.push({
+        id: `ven-${vendor.id}`,
+        name: vendor.name?.trim() || email,
+        email,
+        role: "vendor",
       });
     }
   }

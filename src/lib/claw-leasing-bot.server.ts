@@ -10,6 +10,8 @@ import { after } from "next/server";
 import {
   buildManagerApplyUrl,
   buildManagerListingUrl,
+  buildManagerTourUrl,
+  buildPropertyMessageHref,
 } from "@/lib/manager-property-links";
 import { residentPortalUrl } from "@/lib/claw-resident-links";
 import {
@@ -282,14 +284,31 @@ export function replyForIntent(args: {
   propertyId: string | null;
   propertyLabel: string | null;
   bundleId?: string | null;
+  /** Prospect phone for apply-link prefill. */
+  phone?: string | null;
+  listingRoomId?: string | null;
+  roomName?: string | null;
 }): string {
   const { intent, origin, propertyId, propertyLabel } = args;
   const bundleId = args.bundleId?.trim() || null;
+  const phone = args.phone?.trim() || null;
+  const listingRoomId = args.listingRoomId?.trim() || undefined;
+  const roomName = args.roomName?.trim() || undefined;
   const where = propertyLabel ? ` for ${propertyLabel}` : "";
   const apply = propertyId
-    ? buildManagerApplyUrl(origin, { propertyId, bundleId: bundleId || undefined })
+    ? buildManagerApplyUrl(origin, {
+        propertyId,
+        bundleId: bundleId || undefined,
+        phone: phone || undefined,
+        listingRoomId,
+        roomName,
+      })
     : `${origin}/rent/apply`;
   const listing = propertyId ? buildManagerListingUrl(origin, propertyId) : `${origin}/rent`;
+  const tour = propertyId ? buildManagerTourUrl(origin, propertyId) : `${origin}/rent`;
+  const message = propertyId
+    ? `${origin.replace(/\/$/, "")}${buildPropertyMessageHref(propertyId)}`
+    : null;
   const leasePortal = residentPortalUrl("lease");
   const signup = residentPortalUrl("signup");
 
@@ -297,34 +316,39 @@ export function replyForIntent(args: {
     case "tour":
       return [
         `Nice — happy to set up a tour${where}.`,
-        `Just reply with your name, email, a couple times that work, and which room you're looking at (or say you're not sure yet).`,
+        `Book a time here: ${tour}`,
+        `Or reply with your name, email, a couple times that work, and which room you're looking at (or say you're not sure yet).`,
         `Once we have that we'll lock in a time.`,
       ].join("\n");
     case "tour_details":
       return [
         `Perfect, got your tour details${where}.`,
         `We'll confirm a time once the manager picks one.`,
-        apply ? `If you want to apply in the meantime: ${apply}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
+        `Tour page: ${tour}`,
+        `If you want to apply in the meantime: ${apply}`,
+      ].join("\n");
     case "apply":
       return [
-        `Here's the application${where}:`,
+        `Great — here's the application${where}:`,
         apply,
-        `Want a tour first instead? Just say so.`,
+        `Prefer to tour first? ${tour}`,
       ].join("\n");
     case "bundle":
       return [
         `Here's the bundle application${where}:`,
         apply,
+        `Want a tour of the home first? ${tour}`,
         `Any questions, just text back.`,
       ].join("\n");
     case "question":
       return [
         `Got your note${where} — someone will reply here.`,
-        `Need the application link? Say apply. Want a tour? Say tour.`,
-      ].join("\n");
+        message ? `Or leave more detail online: ${message}` : null,
+        `Tour: ${tour}`,
+        `Apply: ${apply}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
     case "lease":
       return [
         `Lease signing is here:`,
@@ -335,14 +359,17 @@ export function replyForIntent(args: {
     case "help":
       return [
         `Hey${where ? ` — ${propertyLabel}` : ""}.`,
-        `Tell me what you need (tour, apply, lease, rent, whatever) and I'll help from here.`,
+        `I can help with tours, applications, and lease signing.`,
+        `Tour: ${tour}`,
+        `Apply: ${apply}`,
         propertyId ? `Listing: ${listing}` : `Browse: ${origin}/rent`,
       ].join("\n");
     default:
       return [
         `Got it${where}. Someone will reply here.`,
-        `Or just say tour / apply if that's what you need.`,
-        propertyId ? `Listing: ${listing}` : `Browse: ${origin}/rent`,
+        `Or say tour / apply and I'll send the right link.`,
+        `Tour: ${tour}`,
+        `Apply: ${apply}`,
       ].join("\n");
   }
 }
@@ -591,11 +618,99 @@ export async function handleClawLeasingInbound(args: {
     bundleId = await resolveBundleIdByLabel(propertyId, extractBundleLabelHint(text));
   }
 
-  const reply = replyForIntent({ intent, origin, propertyId, propertyLabel, bundleId });
+  const landlordId = managers[0]?.userId ?? scopedManagerId;
+
+  // Claude leasing agent on the manager's work number — grounds replies on live
+  // listings, matches house/room, and mints apply links with phone/room prefills.
+  // Keyword templates remain the fallback when the API key is missing or the
+  // turn fails (keeps SMS responsive).
+  if (landlordId) {
+    try {
+      const { runLeasingSmsAgentTurn, deliverLeasingSmsReply } = await import(
+        "@/lib/agent/leasing-sms-agent.server"
+      );
+      const db = createSupabaseServiceRoleClient();
+      const agent = await runLeasingSmsAgentTurn(db, {
+        landlordId,
+        prospectPhoneE164: from,
+        inboundText: text,
+        workNumber,
+      });
+      if (agent?.reply) {
+        const send = await deliverLeasingSmsReply({
+          landlordId,
+          toPhone: from,
+          text: agent.reply,
+          workNumber,
+        });
+        if (send.ok) {
+          const subjectLabel =
+            intent === "tour" || intent === "tour_details"
+              ? "Tour request"
+              : intent === "apply" || intent === "bundle"
+                ? "Application"
+                : intent === "question"
+                  ? "Question"
+                  : "Leasing text";
+          runAfterReply(async () => {
+            const { resolvePropertyScopedManagerRecipientIds } = await import(
+              "@/lib/co-manager-notification-recipients.server"
+            );
+            const recipientIds = await resolvePropertyScopedManagerRecipientIds(db, {
+              ownerManagerUserId: landlordId,
+              propertyId,
+              channel: "inbox",
+            });
+            await Promise.all([
+              forwardClawInboundToManagers({
+                fromResident: from,
+                text,
+                intentLabel: "leasing conversation",
+                propertyLabel,
+                managerUserId: landlordId,
+                workNumber,
+              }),
+              ...recipientIds.map((managerUserId) =>
+                upsertManagerInboxNotice(db, {
+                  managerUserId,
+                  idPrefix: "claw_lease",
+                  threadType: "claw_leasing_sms",
+                  from: from,
+                  subject: `(${subjectLabel}${propertyLabel ? ` — ${propertyLabel}` : ""}) ${from}`,
+                  preview: text.slice(0, 140) || "(empty)",
+                  body: [
+                    `(${subjectLabel}${propertyLabel ? ` — ${propertyLabel}` : ""}) ${from}`,
+                    "",
+                    text || "(empty message)",
+                    "",
+                    `— Leasing assistant replied —`,
+                    agent.reply,
+                  ].join("\n"),
+                  unread: true,
+                }),
+              ),
+            ]);
+          });
+          return { ok: true, intent, replied: true };
+        }
+      }
+    } catch (e) {
+      console.error("leasing SMS agent path failed; falling back to templates", e);
+    }
+  }
+
+  const reply = replyForIntent({
+    intent,
+    origin,
+    propertyId,
+    propertyLabel,
+    bundleId,
+    phone: from,
+  });
   const send = await replySms({
     to: from,
     text: reply,
-    managerUserId: managers[0]?.userId ?? scopedManagerId,
+    managerUserId: landlordId,
     workNumber,
   });
   if (!send.ok) {
@@ -621,6 +736,17 @@ export async function handleClawLeasingInbound(args: {
 
   runAfterReply(async () => {
     const db = createSupabaseServiceRoleClient();
+    const { resolvePropertyScopedManagerRecipientIds } = await import(
+      "@/lib/co-manager-notification-recipients.server"
+    );
+    const ownerId = managers[0]?.userId ?? landlordId;
+    const recipientIds = ownerId
+      ? await resolvePropertyScopedManagerRecipientIds(db, {
+          ownerManagerUserId: ownerId,
+          propertyId,
+          channel: "inbox",
+        })
+      : [];
     await Promise.all([
       forwardClawInboundToManagers({
         fromResident: from,
@@ -630,9 +756,9 @@ export async function handleClawLeasingInbound(args: {
         managerUserId: managers[0]?.userId ?? null,
         workNumber,
       }),
-      ...managers.map((manager) =>
+      ...recipientIds.map((managerUserId) =>
         upsertManagerInboxNotice(db, {
-          managerUserId: manager.userId,
+          managerUserId,
           idPrefix: "claw_lease",
           threadType: "claw_leasing_sms",
           from: from,

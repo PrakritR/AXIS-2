@@ -15,7 +15,8 @@ import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
-import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
+import { ResidentCommunication } from "@/components/portal/resident-communication";
+import { VendorCommunication } from "@/components/portal/vendor-communication";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentFinancialsPanel } from "@/components/portal/resident-financials-panel";
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
@@ -26,7 +27,6 @@ import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-
 import { VendorDashboard } from "@/components/portal/vendor-dashboard";
 import { VendorWorkOrdersPanel } from "@/components/portal/vendor-work-orders-panel";
 import { VendorCalendarPanel } from "@/components/portal/vendor-calendar-panel";
-import { VendorInboxPanel } from "@/components/portal/vendor-inbox-panel";
 import { VendorFinancesPanel } from "@/components/portal/vendor-finances-panel";
 import { VendorPaymentsPanel } from "@/components/portal/vendor-payments-panel";
 import { VendorDocumentsPanel } from "@/components/portal/vendor-documents-panel";
@@ -40,7 +40,7 @@ import {
   loadManagerApplications,
   loadManagerDocumentsPanel,
   loadManagerFinancesPanel,
-  loadManagerInbox,
+  loadManagerCommunication,
   loadManagerProperties,
   loadManagerResidents,
   loadPortalCalendar,
@@ -398,19 +398,43 @@ export async function renderPortalSection(
     }
 
     if (section === "inbox") {
-      if (!meta.tabs.length) notFound();
+      const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
+      redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
+    }
+
+    if (section === "communication") {
       if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+        redirect(`${def.basePath}/communication/inbox/unopened`);
       }
-      const inboxTab = tabParts[0]!;
-      if (!isManagerInboxTab(inboxTab)) notFound();
-      const ManagerInbox = await loadManagerInbox();
-      return subscriptionGated(
-        <ManagerInbox tabId={inboxTab} />,
-        kind,
-        "inbox",
-        managerOwnerSubscriptionTier,
-      );
+      const channel = tabParts[0]!;
+      if (channel === "sms") {
+        const smsTab = tabParts[1] ?? "all";
+        if (["unopened", "opened", "schedule", "sent"].includes(smsTab)) {
+          redirect(`${def.basePath}/communication/sms/all`);
+        }
+        if (smsTab !== "all") notFound();
+        if (tabParts.length > 2) notFound();
+        const ManagerCommunication = await loadManagerCommunication();
+        return subscriptionGated(
+          <ManagerCommunication channel="sms" smsTabId="all" />,
+          kind,
+          "communication",
+          managerOwnerSubscriptionTier,
+        );
+      }
+      if (channel === "inbox") {
+        const inboxTab = tabParts[1] ?? "unopened";
+        if (!isManagerInboxTab(inboxTab)) notFound();
+        if (tabParts.length > 2) notFound();
+        const ManagerCommunication = await loadManagerCommunication();
+        return subscriptionGated(
+          <ManagerCommunication channel="inbox" inboxTabId={inboxTab} />,
+          kind,
+          "communication",
+          managerOwnerSubscriptionTier,
+        );
+      }
+      notFound();
     }
 
     if (section === "work-orders" || section === "services") {
@@ -597,7 +621,7 @@ export async function renderPortalSection(
     const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
     if (!leaseSigned) {
       return (
-        <ManagerPortalPageShell title="Move-in">
+        <ManagerPortalPageShell title="House details">
           <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
         </ManagerPortalPageShell>
       );
@@ -606,24 +630,49 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "inbox") {
-    const tierGate = residentManagerTierGate("inbox", residentManagerTier, meta.label);
+    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
+    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
+  }
+
+  if (kind === "resident" && section === "communication") {
+    const tierGate = residentManagerTierGate("communication", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
     const inboxEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
     const inboxLeaseSigned = inboxEmail ? await loadResidentLeaseSignedStatus(inboxEmail) : false;
     if (!inboxLeaseSigned) {
       return (
-        <ManagerPortalPageShell title="Inbox">
+        <ManagerPortalPageShell title="Communication">
           <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
         </ManagerPortalPageShell>
       );
     }
-    if (!meta.tabs.length) notFound();
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      redirect(`${def.basePath}/communication/email/unopened`);
     }
-    const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "schedule", "sent", "trash"].includes(inboxTab)) notFound();
-    return <ResidentInboxPanel tabId={inboxTab} />;
+    const channel = tabParts[0]!;
+    if (channel === "sms") {
+      const smsTab = tabParts[1] ?? "unopened";
+      if (!["unopened", "opened", "schedule", "sent"].includes(smsTab)) notFound();
+      if (tabParts.length > 2) notFound();
+      return (
+        <ResidentCommunication
+          channel="sms"
+          smsTabId={smsTab as "unopened" | "opened" | "schedule" | "sent"}
+        />
+      );
+    }
+    if (channel === "email") {
+      const emailTab = tabParts[1] ?? "unopened";
+      if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
+      if (tabParts.length > 2) notFound();
+      return (
+        <ResidentCommunication
+          channel="email"
+          emailTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"}
+        />
+      );
+    }
+    notFound();
   }
 
   if (kind === "resident") {
@@ -665,13 +714,38 @@ export async function renderPortalSection(
   }
 
   if (kind === "vendor" && section === "inbox") {
-    if (!meta.tabs.length) notFound();
+    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
+    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
+  }
+
+  if (kind === "vendor" && section === "communication") {
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      redirect(`${def.basePath}/communication/email/unopened`);
     }
-    const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
-    return <VendorInboxPanel tabId={inboxTab} />;
+    const channel = tabParts[0]!;
+    if (channel === "sms") {
+      const smsTab = tabParts[1] ?? "unopened";
+      if (!["unopened", "opened", "sent"].includes(smsTab)) notFound();
+      if (tabParts.length > 2) notFound();
+      return (
+        <VendorCommunication
+          channel="sms"
+          smsTabId={smsTab as "unopened" | "opened" | "sent"}
+        />
+      );
+    }
+    if (channel === "email") {
+      const emailTab = tabParts[1] ?? "unopened";
+      if (!["unopened", "opened", "sent", "trash"].includes(emailTab)) notFound();
+      if (tabParts.length > 2) notFound();
+      return (
+        <VendorCommunication
+          channel="email"
+          emailTabId={emailTab as "unopened" | "opened" | "sent" | "trash"}
+        />
+      );
+    }
+    notFound();
   }
 
   if (kind === "vendor" && section === "financials") {

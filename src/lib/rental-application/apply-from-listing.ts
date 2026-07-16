@@ -10,6 +10,11 @@ export type RentalApplyFromListingParams = {
   roomPrice?: string;
   /** Manager-defined bundle id — pre-selects the bundle in the wizard. */
   bundleId?: string;
+  /**
+   * Prospect phone (E.164 or 10-digit US). Prefills the application phone field
+   * when opened from a leasing SMS apply link.
+   */
+  phone?: string;
 };
 
 export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
@@ -20,5 +25,6 @@ export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
   if (p.floorLabel) q.set("floor", p.floorLabel);
   if (p.roomPrice) q.set("roomPrice", p.roomPrice);
   if (p.bundleId) q.set("bundle", p.bundleId);
+  if (p.phone?.trim()) q.set("phone", p.phone.trim());
   return `/rent/apply?${q.toString()}`;
 }

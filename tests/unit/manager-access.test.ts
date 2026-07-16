@@ -42,11 +42,11 @@ describe("manager-access", () => {
     expect(managerSectionAllowedForTier("residents", "free")).toBe(false);
     expect(managerSectionAllowedForTier("leases", "free")).toBe(false);
     expect(managerSectionAllowedForTier("services", "free")).toBe(false);
-    expect(managerSectionAllowedForTier("inbox", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("communication", "free")).toBe(false);
     expect(managerSectionAllowedForTier("documents", "free")).toBe(false);
     expect(managerSectionAllowedForTier("financials", "free")).toBe(false);
     expect(managerSectionAllowedForTier("documents", "paid")).toBe(true);
-    expect(managerSectionAllowedForTier("inbox", "paid")).toBe(true);
+    expect(managerSectionAllowedForTier("communication", "paid")).toBe(true);
   });
 
   it("requires paid plan for applicant screening", () => {
@@ -69,7 +69,7 @@ describe("manager-access", () => {
     expect(residentSectionAllowedForManagerTier("services", "free")).toBe(false);
     expect(residentSectionAllowedForManagerTier("documents", "free")).toBe(false);
     expect(residentSectionAllowedForManagerTier("financials", "free")).toBe(false);
-    expect(residentSectionAllowedForManagerTier("inbox", "free")).toBe(false);
+    expect(residentSectionAllowedForManagerTier("communication", "free")).toBe(false);
     expect(residentSectionLockedForManagerTier("services", "free")).toBe(true);
     expect(residentSectionAllowedForManagerTier("services", "paid")).toBe(true);
   });

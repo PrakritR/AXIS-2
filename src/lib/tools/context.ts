@@ -23,6 +23,8 @@ export type AgentContext = {
   db: ReturnType<typeof createSupabaseServiceRoleClient>;
   /** Present only on vendor-agent turns; pins every vendor tool to one job. */
   vendorScope?: VendorAgentScope;
+  /** Present only on leasing SMS agent turns; pins links to the prospect phone. */
+  leasingScope?: LeasingSmsAgentScope;
 };
 
 /** The single work-order conversation a vendor-agent turn is allowed to see. */
@@ -31,6 +33,13 @@ export type VendorAgentScope = {
   vendorDirectoryId: string;
   vendorUserId: string | null;
   workOrderId: string;
+};
+
+/** Prospect texting one manager's Twilio work number. */
+export type LeasingSmsAgentScope = {
+  sessionId: string;
+  prospectPhoneE164: string;
+  workNumber: string | null;
 };
 
 /**
@@ -85,5 +94,25 @@ export function buildVendorAgentContext(
     isAdmin: false,
     db,
     vendorScope: args.scope,
+  };
+}
+
+/**
+ * Context for a leasing-SMS agent turn. Built ONLY from a work-number inbound
+ * webhook we already authenticated — landlordId and prospect phone never come
+ * from model or client input.
+ */
+export function buildLeasingSmsAgentContext(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  args: { landlordId: string; scope: LeasingSmsAgentScope },
+): AgentContext {
+  return {
+    landlordId: args.landlordId,
+    userId: args.landlordId,
+    email: "",
+    roles: ["leasing_sms_agent"],
+    isAdmin: false,
+    db,
+    leasingScope: args.scope,
   };
 }

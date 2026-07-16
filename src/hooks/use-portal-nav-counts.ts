@@ -28,8 +28,9 @@ import {
   readAllServiceRequests,
   SERVICE_REQUESTS_EVENT,
 } from "@/lib/service-requests-storage";
+import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
-  countUnopenedPersistedInbox,
+  loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   RESIDENT_INBOX_STORAGE_KEY,
 } from "@/lib/portal-inbox-storage";
@@ -103,18 +104,22 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const pendingWorkOrders = readManagerWorkOrderRows().filter(
         (w) => moduleRowVisibleToPortalUser(w, userId, "services") && w.bucket === "open",
       ).length;
-      const inbox = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+      const inboxRows = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+      const emailOnly = filterEmailInboxThreads(inboxRows);
+      const inbox = emailOnly.filter((t) => t.folder === "inbox" && t.unread).length;
       return {
         properties: pendingProps,
         applications: pendingApps,
         services: pendingServiceRequests + pendingWorkOrders,
-        inbox,
+        communication: inbox,
       };
     }
 
     if (kind === "resident") {
-      const inbox = countUnopenedPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
-      return { inbox };
+      const residentRows = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
+      const emailOnly = filterEmailInboxThreads(residentRows);
+      const inbox = emailOnly.filter((t) => t.folder === "inbox" && t.unread).length;
+      return { communication: inbox };
     }
 
     return {};

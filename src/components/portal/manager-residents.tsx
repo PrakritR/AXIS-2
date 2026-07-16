@@ -2,7 +2,7 @@
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -175,6 +175,8 @@ import {
 } from "@/components/portal/manager-create-service-request-modal";
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
+import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
+import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 
@@ -314,13 +316,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [svcWoBucket, setSvcWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
 
-  // Inbox tab replica (Unopened / Opened / Sent / Trash — mirrors resident-inbox-panel.tsx)
+  // Communication tab replica (Email folders / SMS by phone)
   const [inboxSubTab, setInboxSubTab] = useState<"unopened" | "opened" | "schedule" | "sent" | "trash">("unopened");
+  const [residentCommChannel, setResidentCommChannel] = useState<"email" | "sms">("email");
+  const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
   const [inboxExpandedId, setInboxExpandedId] = useState<string | null>(null);
 
   // Expanded-resident detail: collapsed section summaries, opened one at a time on click
   const [expandedResidentSection, setExpandedResidentSection] = useState<
-    "application" | "lease" | "payments" | "services" | "inbox" | null
+    "application" | "lease" | "payments" | "services" | "communication" | null
   >(null);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
   const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
@@ -764,9 +768,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     void inboxTick;
     if (!selected?.email) return [];
     const email = selected.email.trim().toLowerCase();
-    return loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
-      .filter((thread) => thread.email.trim().toLowerCase() === email)
-      .sort((a, b) => String(b.time).localeCompare(String(a.time)));
+    return filterEmailInboxThreads(
+      loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
+        .filter((thread) => thread.email.trim().toLowerCase() === email)
+        .sort((a, b) => String(b.time).localeCompare(String(a.time))),
+    );
   }, [selected, inboxTick]);
 
   const chargeCounts = useMemo(
@@ -2496,36 +2502,67 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             </ResidentDetailSection>
 
                             <ResidentDetailSection
-                              title="Inbox"
+                              title="Communication"
                               summary={
                                 residentInboxCounts.unopened > 0
-                                  ? `${residentInboxCounts.unopened} unopened message${residentInboxCounts.unopened === 1 ? "" : "s"}`
-                                  : "No unopened messages."
+                                  ? `${residentInboxCounts.unopened} unopened email${residentInboxCounts.unopened === 1 ? "" : "s"}`
+                                  : "No unopened email."
                               }
-                              expanded={expandedResidentSection === "inbox"}
-                              onToggle={() => setExpandedResidentSection((cur) => (cur === "inbox" ? null : "inbox"))}
+                              expanded={expandedResidentSection === "communication"}
+                              onToggle={() =>
+                                setExpandedResidentSection((cur) => (cur === "communication" ? null : "communication"))
+                              }
                               headerAction={
-                                <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={openResidentMessageModal}>
-                                  New message
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {residentCommChannel === "email" ? (
+                                    <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={openResidentMessageModal}>
+                                      New message
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full px-3 py-1 text-xs"
+                                      data-attr="resident-detail-sms-new-message"
+                                      onClick={() => residentSmsPanelRef.current?.openCompose()}
+                                    >
+                                      New message
+                                    </Button>
+                                  )}
+                                </div>
                               }
                             >
-                              <div className="mb-3">
-                                <ManagerPortalStatusPills
-                                  activeTone="primary"
-                                  tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-                                    id,
-                                    label,
-                                    count: residentInboxCounts[id as keyof typeof residentInboxCounts],
-                                  }))}
-                                  activeId={inboxSubTab}
-                                  onChange={(id) => {
-                                    setInboxSubTab(id as "unopened" | "opened" | "schedule" | "sent" | "trash");
-                                    setInboxExpandedId(null);
-                                  }}
+                              <div className="mb-4 space-y-4">
+                                <PillTabs
+                                  items={[
+                                    { id: "email", label: "Email" },
+                                    { id: "sms", label: "SMS" },
+                                  ]}
+                                  activeId={residentCommChannel}
+                                  onChange={(id) => setResidentCommChannel(id as "email" | "sms")}
                                 />
+                                {residentCommChannel === "email" ? (
+                                  <ManagerPortalStatusPills
+                                    activeTone="primary"
+                                    tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
+                                      id,
+                                      label,
+                                      count: residentInboxCounts[id as keyof typeof residentInboxCounts],
+                                    }))}
+                                    activeId={inboxSubTab}
+                                    onChange={(id) => {
+                                      setInboxSubTab(id as "unopened" | "opened" | "schedule" | "sent" | "trash");
+                                      setInboxExpandedId(null);
+                                    }}
+                                  />
+                                ) : null}
                               </div>
-                              {inboxSubTab === "schedule" ? (
+                              {residentCommChannel === "sms" ? (
+                                <ManagerSmsPanel
+                                  ref={residentSmsPanelRef}
+                                  filterResidentEmail={selected.email}
+                                />
+                              ) : inboxSubTab === "schedule" ? (
                                 <ManagerInboxSchedulePanel portalBase={portalBase} filterResidentEmail={selected.email} />
                               ) : residentInboxTableRows.length === 0 ? (
                                 <PortalInboxEmptyState

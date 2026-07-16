@@ -1,6 +1,8 @@
 import { createHash, randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import twilio from "twilio";
+import { managerContactSmsPhoneForPublicCta } from "@/lib/claw-leasing-links";
+import { scheduleManagerMessagingReady } from "@/lib/proplane-sms-transport.server";
 import { sendSms } from "@/lib/twilio";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -60,11 +62,16 @@ export async function GET() {
     .select("phone, phone_verified_at, sms_forward_inbound, sms_from_number")
     .eq("id", user.id)
     .maybeSingle();
+  const rawWorkNumber = data?.sms_from_number ?? null;
+  const workNumber = managerContactSmsPhoneForPublicCta(rawWorkNumber);
+  if (!workNumber && rawWorkNumber) {
+    scheduleManagerMessagingReady(user.id);
+  }
   return NextResponse.json({
     phone: data?.phone ?? null,
     phoneVerifiedAt: data?.phone_verified_at ?? null,
     forwardInbound: data?.sms_forward_inbound !== false,
-    workNumber: data?.sms_from_number ?? null,
+    workNumber,
     smsConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
   });
 }

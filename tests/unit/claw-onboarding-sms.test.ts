@@ -17,13 +17,13 @@ describe("PropLane assistant intro copy", () => {
   it("manager intro keeps ops clarity", () => {
     const text = buildManagerPropLaneAssistantIntroSms({
       name: "Test Manager",
-      workNumber: "+12065550100",
+      workNumber: "+14258909021",
     });
     expect(text).toContain("Hi Test Manager!");
     expect(text).toMatch(/I'm your PropLane messaging assistant/i);
     expect(text).toMatch(/work orders|applications|payments/i);
     expect(text).toMatch(/PropLane line/i);
-    expect(text).toContain("+12065550100");
+    expect(text).toContain("+14258909021");
     expect(text).toMatch(/no registration needed/i);
   });
 });

@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
 import { getListingRichContent } from "@/data/listing-rich-content";
+import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
+import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
 import {
   PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
@@ -123,8 +125,16 @@ function AdminPropertyInlineDetails({
 }) {
   const mock = useMemo(() => resolveAdminPropertyRowPreview(row), [row]);
   const listingId = row.listingId;
+  const contactSmsPhone = useListingContactSmsPhone({
+    listingId,
+    ownerManagerUserId: row.managerUserId,
+  });
+  const previewProperty = useMemo(
+    () => withListingContactSmsPhone(mock, contactSmsPhone),
+    [mock, contactSmsPhone],
+  );
   const [composeEdit, setComposeEdit] = useState<null | "pending" | "listed">(null);
-  const rich = useMemo(() => getListingRichContent(mock), [mock]);
+  const rich = useMemo(() => getListingRichContent(previewProperty), [previewProperty]);
   const publicHref = publicListingHrefForPropertyRow(row);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
@@ -357,7 +367,7 @@ function AdminPropertyInlineDetails({
         ) : null}
       </div>
 <ListingPreviewScrollShell className="portal-desktop-scroll-panel max-h-[min(70vh,640px)] rounded-2xl border border-border">
-        <ListingDetailSections property={mock} rich={rich} previewModal hidePreviewSubnav />
+        <ListingDetailSections property={previewProperty} rich={rich} previewModal hidePreviewSubnav />
       </ListingPreviewScrollShell>
       <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5">{footer}</div>
     </div>

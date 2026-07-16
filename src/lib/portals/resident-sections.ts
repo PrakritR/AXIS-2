@@ -61,8 +61,8 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [...PAYMENTS_TABS] },
-  { section: "move-in", label: "Move-in", tabs: [] },
-  { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
+  { section: "move-in", label: "House details", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
@@ -73,9 +73,9 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [...PAYMENTS_TABS] },
-  { section: "move-in", label: "Move-in", tabs: [] },
+  { section: "move-in", label: "House details", tabs: [] },
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
-  { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
@@ -98,7 +98,7 @@ export const RESIDENT_RENDERED_SECTION_IDS = [
   "lease",
   "payments",
   "move-in",
-  "inbox",
+  "communication",
   "documents",
   "bugs-feedback",
   "profile",
@@ -116,8 +116,8 @@ export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Applications", path: `${RESIDENT_PORTAL_BASE_PATH}/applications` },
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
-  { label: "Move-in", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
-  { label: "Inbox", path: `${RESIDENT_PORTAL_BASE_PATH}/inbox/unopened` },
+  { label: "House details", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
+  { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/email/unopened` },
   { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/application` },
 ] as const;
 

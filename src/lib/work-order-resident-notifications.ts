@@ -1,4 +1,5 @@
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 
 type WorkOrderUpdateKind = "vendor_assigned" | "visit_scheduled";
 
@@ -10,52 +11,60 @@ export function buildResidentWorkOrderUpdate(
   extras?: { scheduledLabel?: string },
 ): { subject: string; text: string } {
   const title = row.title?.trim() || "Work order";
+  const name = row.residentName?.trim() || "there";
 
   if (kind === "vendor_assigned") {
     const vendorName = row.vendorName?.trim() || "A vendor";
     return {
       subject: `Update on "${title}": vendor assigned`,
-      text: `${vendorName} has been assigned to your work order "${title}". They'll be in touch to schedule a visit.`,
+      text: [
+        `Hi ${name},`,
+        "",
+        `${vendorName} has been assigned to your work order "${title}".`,
+        "They'll be in touch to schedule a visit.",
+        "",
+        "PropLane",
+      ].join("\n"),
     };
   }
 
   const scheduledLabel = extras?.scheduledLabel?.trim() || row.scheduled || "soon";
   return {
     subject: `Update on "${title}": visit scheduled for ${scheduledLabel}`,
-    text: `Your work order "${title}" has a visit scheduled for ${scheduledLabel}.`,
+    text: [
+      `Hi ${name},`,
+      "",
+      `Your work order "${title}" has a visit scheduled for ${scheduledLabel}.`,
+      "",
+      "PropLane",
+    ].join("\n"),
   };
 }
 
 export async function notifyResidentOfWorkOrderUpdate(
   kind: WorkOrderUpdateKind,
   row: DemoManagerWorkOrderRow,
-  extras?: { scheduledLabel?: string },
+  extras?: {
+    scheduledLabel?: string;
+    subject?: string;
+    text?: string;
+    viaEmail?: boolean;
+    viaSms?: boolean;
+  },
 ): Promise<SendResult> {
   const residentEmail = row.residentEmail?.trim();
-  if (!residentEmail) return { ok: false, skipped: true };
+  if (!residentEmail?.includes("@")) return { ok: false, skipped: true };
 
-  const { subject, text } = buildResidentWorkOrderUpdate(kind, row, extras);
-  try {
-    const response = await fetch("/api/portal/send-inbox-message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        toEmails: [residentEmail],
-        subject,
-        text,
-        deliverToPortalInbox: true,
-        deliverViaEmail: false,
-        fromName: "PropLane Portal",
-        eventCategory: "maintenance",
-      }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as SendResult;
-    if (!response.ok || !payload.ok) {
-      return { ok: false, error: payload.error ?? "Notification delivery failed." };
-    }
-    return payload;
-  } catch {
-    return { ok: false, error: "Notification delivery failed." };
-  }
+  const built = buildResidentWorkOrderUpdate(kind, row, extras);
+  const subject = extras?.subject?.trim() || built.subject;
+  const text = extras?.text?.trim() || built.text;
+  return deliverPortalInboxMessage({
+    fromName: "PropLane Portal",
+    toEmails: [residentEmail],
+    subject,
+    text,
+    eventCategory: "maintenance",
+    deliverViaEmail: extras?.viaEmail !== false,
+    deliverViaSms: extras?.viaSms !== false,
+  });
 }

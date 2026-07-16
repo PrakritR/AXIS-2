@@ -6,7 +6,7 @@ export type DemoSegment =
   | "overall"
   | "applications"
   | "leasing"
-  | "inbox"
+  | "communication"
   | "promotion"
   | "payments"
   | "work_orders";
@@ -48,9 +48,9 @@ export const GUIDED_STEPS_APPLICATIONS: SegmentStepDef[] = [
 ];
 
 export const GUIDED_STEPS_INBOX: SegmentStepDef[] = [
-  { step: 1, title: "Read resident message", hint: "Manager opens an unopened inbox thread.", role: "manager", section: "inbox", tab: "unopened" },
-  { step: 2, title: "Send a message", hint: "Manager composes and sends a new message.", role: "manager", section: "inbox" },
-  { step: 3, title: "Resident replies", hint: "Resident reads and replies in inbox.", role: "resident", section: "inbox" },
+  { step: 1, title: "Read resident message", hint: "Manager opens an unopened inbox thread.", role: "manager", section: "communication", tab: "unopened" },
+  { step: 2, title: "Send a message", hint: "Manager composes and sends a new message.", role: "manager", section: "communication" },
+  { step: 3, title: "Resident replies", hint: "Resident reads and replies in Communication.", role: "resident", section: "communication" },
 ];
 
 export const GUIDED_STEPS_PROMOTION: SegmentStepDef[] = [

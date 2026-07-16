@@ -513,7 +513,10 @@ export function ManagerApplications() {
     );
   };
 
-  const sendApplicationReminder = async (row: DemoApplicantRow) => {
+  const sendApplicationReminder = async (
+    row: DemoApplicantRow,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+  ) => {
     if (reminderBusyId) return;
     setReminderBusyId(row.id);
     try {
@@ -526,7 +529,11 @@ export function ManagerApplications() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ applicationId: row.id }),
+        body: JSON.stringify({
+          applicationId: row.id,
+          viaEmail: channels?.viaEmail !== false,
+          viaSms: channels?.viaSms === true,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
       if (res.ok && data.ok) {
@@ -810,14 +817,17 @@ export function ManagerApplications() {
         recipient={reminderPreview?.to ?? ""}
         subject={reminderPreview?.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT}
         body={reminderPreview?.text ?? ""}
-        intro="This is the exact email that will be sent to the applicant to finish their application."
+        intro="Choose Email and/or SMS — always saved to Axis inbox."
         showSkipMessage={false}
+        showChannelPicker
+        emailAvailable
+        smsAvailable
         confirmLabel="Send reminder"
         confirmBusy={reminderBusyId !== null}
         confirmBusyLabel="Sending…"
-        onConfirm={() => {
+        onConfirm={(_skip, channels) => {
           if (!reminderPreview) return;
-          void sendApplicationReminder(reminderPreview.row);
+          void sendApplicationReminder(reminderPreview.row, channels);
         }}
       />
       <ShareLeadLinkModal

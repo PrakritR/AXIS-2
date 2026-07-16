@@ -50,6 +50,12 @@ import { useIsClient } from "@/hooks/use-is-client";
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
   if (!meta) return def.basePath;
+  if (section === "communication") {
+    if (def.kind === "resident" || def.kind === "vendor") {
+      return `${def.basePath}/communication/email/unopened`;
+    }
+    return `${def.basePath}/communication/inbox/unopened`;
+  }
   if (!meta.tabs.length) return `${def.basePath}/${section}`;
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
 }

@@ -13,7 +13,7 @@ const PAID_MANAGER_NAV = [
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
   { label: "Services", path: "/portal/services/requests" },
-  { label: "Inbox", path: "/portal/inbox/unopened" },
+  { label: "Communication", path: "/portal/communication/inbox/unopened" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Co-managers", path: "/portal/relationships" },
   { label: "Settings", path: "/portal/profile" },
@@ -83,7 +83,7 @@ test.describe("Manager portal", () => {
   });
 
   test("inbox tab loads and compose modal appears", async ({ page }) => {
-    await page.goto("/portal/inbox/unopened");
+    await page.goto("/portal/communication/inbox/unopened");
     await expect(page.getByRole("heading").first()).toBeVisible();
     const composeBtn = page.getByRole("button", { name: /new message|compose/i }).first();
     if (await composeBtn.count() > 0) {

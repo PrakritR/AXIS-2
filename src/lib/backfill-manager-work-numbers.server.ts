@@ -1,21 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isPlaceholderManagerWorkNumber } from "@/lib/claw-leasing-links";
 import { ensureManagerSmsNumber } from "@/lib/twilio-provisioning";
-
-const LEGACY_CLAW_SHARED_DIGITS = new Set(
-  [
-    process.env.CLAW_MESSENGER_AGENT_PHONE,
-    process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE,
-    "+12053690702",
-  ]
-    .map((p) => String(p ?? "").replace(/\D/g, ""))
-    .filter((d) => d.length >= 10),
-);
 
 export function managerNeedsWorkNumber(smsFromNumber: string | null | undefined): boolean {
   const current = String(smsFromNumber ?? "").trim();
   if (!current) return true;
-  const digits = current.replace(/\D/g, "");
-  return LEGACY_CLAW_SHARED_DIGITS.has(digits);
+  return isPlaceholderManagerWorkNumber(current);
 }
 
 async function listManagerUserIds(db: SupabaseClient, managerUserId?: string): Promise<string[]> {

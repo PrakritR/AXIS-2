@@ -6,6 +6,8 @@ import { ListingDetailSections } from "@/components/marketing/listing-detail-sec
 import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
+import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
+import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
 
 /**
  * Full listing UI exactly as renters see on /rent/listings/[id], in a scrollable overlay.
@@ -25,9 +27,16 @@ export function ListingPublicPreviewModal({
   /** When set, shows “Open public page” next to Close. */
   publicHref?: string | null;
 }) {
+  const contactSmsPhone = useListingContactSmsPhone({
+    listingId: property?.id,
+    ownerManagerUserId: property?.managerUserId,
+    enabled: open && Boolean(property),
+  });
+
   if (!open || !property) return null;
 
-  const rich = getListingRichContent(property);
+  const previewProperty = withListingContactSmsPhone(property, contactSmsPhone);
+  const rich = getListingRichContent(previewProperty);
 
   return (
     <>
@@ -67,7 +76,7 @@ export function ListingPublicPreviewModal({
           </div>
         </div>
         <ListingPreviewScrollShell className="min-h-0 flex-1">
-          <ListingDetailSections property={property} rich={rich} previewModal hidePreviewSubnav />
+          <ListingDetailSections property={previewProperty} rich={rich} previewModal hidePreviewSubnav />
         </ListingPreviewScrollShell>
         {footer ? (
           <div className="shrink-0 border-t border-border bg-card px-4 py-4 sm:px-5">{footer}</div>

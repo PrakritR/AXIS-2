@@ -204,7 +204,7 @@ describe("listing fee and lease helpers", () => {
 
 describe("listing wizard scope", () => {
   it("preview scope includes marketing steps only", () => {
-    expect(listingWizardStepIndices("full")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(listingWizardStepIndices("preview")).toEqual([0, 1, 2, 3, 4, 9]);
+    expect(listingWizardStepIndices("full")).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(listingWizardStepIndices("preview")).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });

@@ -907,14 +907,14 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           <AttentionGroup
             title="Inbox"
-            href={`${BASE}/inbox/unopened`}
+            href={`${BASE}/communication/inbox/unopened`}
             linkLabel="Inbox →"
             items={inboxThreads}
             emptyMessage="No unread messages — inbox is clear."
             keyForItem={(thread) => thread.id}
             renderRow={(thread) => (
               <IssueRow
-                href={`${BASE}/inbox/unopened`}
+                href={`${BASE}/communication/inbox/unopened`}
                 dot={DOT_INFO}
                 title={thread.from || "Unknown sender"}
                 subtitle={thread.subject || thread.preview || "—"}

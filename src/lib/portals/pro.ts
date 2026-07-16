@@ -35,15 +35,9 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
-      section: "inbox",
-      label: "Inbox",
-      tabs: [
-        { id: "unopened", label: "Unopened" },
-        { id: "opened", label: "Opened" },
-        { id: "schedule", label: "Schedule" },
-        { id: "sent", label: "Sent" },
-        { id: "trash", label: "Trash" },
-      ],
+      section: "communication",
+      label: "Communication",
+      tabs: [],
     },
     {
       section: "relationships",
@@ -103,7 +97,7 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
   { label: "Services", path: "/portal/services/requests" },
-  { label: "Inbox", path: "/portal/inbox/unopened" },
+  { label: "Communication", path: "/portal/communication/inbox/unopened" },
   { label: "Team", path: "/portal/relationships" },
   { label: "Promotion", path: "/portal/promotion" },
   { label: "Finances", path: "/portal/financials/income" },

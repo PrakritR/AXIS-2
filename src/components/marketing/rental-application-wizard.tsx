@@ -53,7 +53,7 @@ import {
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
-import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
+import { digitsOnly, maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
 import {
   RENTAL_WIZARD_STEP_FIELD_ORDER,
@@ -233,6 +233,7 @@ function RentalApplicationWizardInner({
       searchParams.get("roomPrice") ?? "",
       searchParams.get("listingRoomId") ?? "",
       searchParams.get("bundle") ?? "",
+      searchParams.get("phone") ?? "",
     ].join("|");
   }, [searchParams]);
 
@@ -408,6 +409,7 @@ function RentalApplicationWizardInner({
 
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
     const bundleParam = (searchParams.get("bundle") ?? "").trim();
+    const phoneParam = (searchParams.get("phone") ?? "").trim();
 
     queueMicrotask(() => {
       setForm((prev) => {
@@ -431,10 +433,17 @@ function RentalApplicationWizardInner({
           : "";
         const bundleReplacesRooms = Boolean(bundleId) && isPropertyRentedByRoom(pid);
 
+        const phoneDigits = digitsOnly(phoneParam).slice(-10);
+        const phone =
+          phoneDigits.length === 10 && digitsOnly(prev.phone).length < 10
+            ? maskPhoneInput("", phoneDigits)
+            : prev.phone;
+
         return {
           ...prev,
           propertyId: pid,
           bundleId,
+          phone,
           roomChoice1: bundleReplacesRooms ? "" : room1 || prev.roomChoice1,
           roomChoice2: "",
           roomChoice3: "",

@@ -349,6 +349,8 @@ export function ManagerCreateWorkOrderModal({
         ]
           .filter(Boolean)
           .join("\n"),
+        deliverViaEmail: true,
+        deliverViaSms: true,
       });
 
       showToast("Work order created.");

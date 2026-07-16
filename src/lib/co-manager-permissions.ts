@@ -11,7 +11,7 @@ export const CO_MANAGER_PERMISSION_OPTIONS = [
   { id: "financials", label: "Finances" },
   { id: "services", label: "Services" },
   { id: "promotion", label: "Promotion" },
-  { id: "inbox", label: "Inbox" },
+  { id: "inbox", label: "Communication" },
   { id: "calendar", label: "Calendar" },
 ] as const;
 
@@ -257,6 +257,7 @@ export const PORTAL_SECTION_CO_MANAGER_PERMISSION: Partial<Record<string, CoMana
   payments: "payments",
   documents: "documents",
   financials: "financials",
+  communication: "inbox",
   inbox: "inbox",
   calendar: "calendar",
   services: "services",

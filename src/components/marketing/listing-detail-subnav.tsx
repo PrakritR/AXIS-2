@@ -270,14 +270,21 @@ export function ListingStickySubnav({
     <nav
       ref={rootRef}
       data-listing-subnav
-      className={`z-[45] border-b border-border px-2 py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:px-3 sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${pinned ? "relative bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
+      data-listing-subnav-pinned={pinned ? "" : undefined}
+      className={`z-[45] border-b border-border px-2 py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:px-3 sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${pinned ? "relative top-0 bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
         pinned
           ? "bg-background"
           : pageScrolled
             ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
             : "bg-background/90"
       }`}
-      style={mode === "modal" && !pinned ? { top: 0 } : undefined}
+      style={
+        pinned
+          ? { top: 0 }
+          : mode === "modal"
+            ? { top: 0 }
+            : undefined
+      }
       aria-label="Listing sections"
     >
       <ul

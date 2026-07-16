@@ -12,14 +12,25 @@ const residentPortal: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     {
-      section: "inbox",
-      label: "Inbox",
+      section: "communication",
+      label: "Communication",
       tabs: [
         { id: "unopened", label: "Unopened" },
         { id: "sent", label: "Sent" },
       ],
     },
     { section: "profile", label: "Settings", tabs: [] },
+  ],
+};
+
+const managerPortal: PortalDefinition = {
+  kind: "manager",
+  basePath: "/portal",
+  title: "Manager Portal",
+  accent: "blue",
+  sections: [
+    { section: "dashboard", label: "Dashboard", tabs: [] },
+    { section: "communication", label: "Communication", tabs: [] },
   ],
 };
 
@@ -48,21 +59,48 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
-  it("returns first inbox tab from a deeper inbox tab", () => {
-    expect(resolvePortalMobileBackTarget("/resident/inbox/sent", residentPortal)).toEqual({
-      href: "/resident/inbox/unopened",
-      label: "Inbox",
+  it("returns first communication email tab from a deeper email tab", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/email/sent", residentPortal)).toEqual({
+      href: "/resident/communication/email/unopened",
+      label: "Communication",
     });
   });
 
-  it("returns dashboard from the default inbox tab", () => {
-    expect(resolvePortalMobileBackTarget("/resident/inbox/unopened", residentPortal)).toEqual({
+  it("returns dashboard from the default communication email tab", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/email/unopened", residentPortal)).toEqual({
       href: "/resident/dashboard",
       label: "Dashboard",
     });
   });
-});
 
+  it("returns sms all view from deeper resident sms bucket", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/sms/sent", residentPortal)).toEqual({
+      href: "/resident/communication/sms/all",
+      label: "Communication",
+    });
+  });
+
+  it("returns sms all view from deeper manager sms bucket", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/opened", managerPortal)).toEqual({
+      href: "/portal/communication/sms/all",
+      label: "Communication",
+    });
+  });
+
+  it("returns dashboard from communication sms all view", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/all", managerPortal)).toEqual({
+      href: "/portal/dashboard",
+      label: "Dashboard",
+    });
+  });
+
+  it("returns dashboard from legacy communication sms unopened bucket", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/unopened", managerPortal)).toEqual({
+      href: "/portal/dashboard",
+      label: "Dashboard",
+    });
+  });
+});
 describe("portalDashboardMobileHeaderLabel", () => {
   it("returns the dashboard label on the dashboard route", () => {
     expect(portalDashboardMobileHeaderLabel("/resident/dashboard", residentPortal)).toBe("Dashboard");

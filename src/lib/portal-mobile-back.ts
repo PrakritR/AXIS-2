@@ -39,6 +39,32 @@ export function resolvePortalMobileBackTarget(
   const tabId = sectionParts[1];
   const firstTabId = meta?.tabs[0]?.id;
 
+  // Communication nests email/inbox folders and SMS buckets:
+  // /communication/inbox|email/{folder} or /communication/sms/{bucket}.
+  if (section === "communication") {
+    const channel = tabId;
+    const folder = sectionParts[2];
+    if ((channel === "inbox" || channel === "email") && folder && folder !== "unopened") {
+      return {
+        href: `${definition.basePath}/communication/${channel}/unopened`,
+        label: meta?.label ?? section,
+      };
+    }
+    if (channel === "sms" && folder && folder !== "all" && folder !== "unopened") {
+      return {
+        href: `${definition.basePath}/communication/sms/all`,
+        label: meta?.label ?? section,
+      };
+    }
+    if (channel === "inbox" || channel === "email" || channel === "sms") {
+      const dashboard = definition.sections.find((entry) => entry.section === "dashboard");
+      return {
+        href: `${definition.basePath}/dashboard`,
+        label: dashboard?.label ?? "Dashboard",
+      };
+    }
+  }
+
   if (tabId && firstTabId && tabId !== firstTabId) {
     return {
       href: `${definition.basePath}/${section}/${firstTabId}`,

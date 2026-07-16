@@ -30,7 +30,7 @@ const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
   { id: "leasing", label: "Leasing", sections: ["properties", "calendar", "applications", "leases"] },
   { id: "tenancy", label: "Tenancy", sections: ["residents", "payments"] },
-  { id: "operations", label: "Operations", sections: ["services", "inbox"] },
+  { id: "operations", label: "Operations", sections: ["services", "communication"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
   { id: "finances", label: "Finances", sections: ["financials", "documents"] },
@@ -49,14 +49,14 @@ const RESIDENT_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard", "applications"] },
   { id: "my-home", label: "My home", sections: ["lease", "move-in", "services"] },
   { id: "finances", label: "Finances", sections: ["payments", "documents"] },
-  { id: "messages", label: "Messages", sections: ["inbox"] },
+  { id: "messages", label: "Messages", sections: ["communication"] },
   { id: "account", label: null, sections: ["profile"] },
 ];
 
 const VENDOR_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
   { id: "work", label: "Work", sections: ["work-orders", "calendar"] },
-  { id: "operations", label: "Operations", sections: ["inbox"] },
+  { id: "operations", label: "Operations", sections: ["communication"] },
   { id: "finances", label: "Finances", sections: ["financials", "payments", "documents"] },
   { id: "account", label: null, sections: ["profile"] },
 ];

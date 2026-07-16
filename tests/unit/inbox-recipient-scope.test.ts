@@ -104,10 +104,24 @@ describe("filterRecipientsBySenderScope", () => {
     expect(res.blocked.map((r) => r.email)).toEqual(["random-manager@example.com"]);
   });
 
-  it("resident may message their own manager (+admin) but not another resident or arbitrary manager", async () => {
+  it("resident may message their manager, co-manager, housemate, and admin — not arbitrary people", async () => {
     const db = makeDb({
       manager_application_records: [
-        { manager_user_id: "mgr_1", resident_email: "me@example.com", row_data: { bucket: "approved" } },
+        {
+          manager_user_id: "mgr_1",
+          resident_email: "me@example.com",
+          row_data: { bucket: "approved", assignedPropertyId: "prop_1", name: "Me" },
+        },
+        {
+          manager_user_id: "mgr_1",
+          resident_email: "housemate@example.com",
+          row_data: { bucket: "approved", assignedPropertyId: "prop_1", name: "Housemate" },
+        },
+        {
+          manager_user_id: "mgr_1",
+          resident_email: "other-building@example.com",
+          row_data: { bucket: "approved", assignedPropertyId: "prop_2", name: "Other" },
+        },
       ],
       portal_household_charge_records: [],
       portal_lease_pipeline_records: [],
@@ -123,14 +137,15 @@ describe("filterRecipientsBySenderScope", () => {
       { email: "mymanager@example.com", userId: "mgr_1" },
       { email: "co@example.com", userId: "mgr_2" },
       { email: ADMIN, userId: null },
-      { email: "other-resident@example.com", userId: "res_2" },
+      { email: "housemate@example.com", userId: "res_2" },
+      { email: "other-building@example.com", userId: "res_3" },
       { email: "unrelated-manager@example.com", userId: "mgr_9" },
     ]);
     expect(res.allowed.map((r) => r.email).sort()).toEqual(
-      ["mymanager@example.com", "co@example.com", ADMIN].sort(),
+      ["mymanager@example.com", "co@example.com", ADMIN, "housemate@example.com"].sort(),
     );
     expect(res.blocked.map((r) => r.email).sort()).toEqual(
-      ["other-resident@example.com", "unrelated-manager@example.com"].sort(),
+      ["other-building@example.com", "unrelated-manager@example.com"].sort(),
     );
   });
 

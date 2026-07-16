@@ -7,7 +7,6 @@ import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
-import { DEFAULT_NOTIFICATION_PREFERENCES, resolveChannels } from "@/lib/notification-preferences";
 
 export const runtime = "nodejs";
 
@@ -17,6 +16,10 @@ function canSendPaymentReminder(role: string | null | undefined): boolean {
 
 function escapeHtmlText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function isUsableEmail(email: string): boolean {
+  return Boolean(email && email.includes("@"));
 }
 
 async function loadChargeForReminder(
@@ -55,7 +58,13 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
 
-    const body = (await req.json().catch(() => ({}))) as { chargeId?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      chargeId?: string;
+      viaEmail?: boolean;
+      viaSms?: boolean;
+      subject?: string;
+      text?: string;
+    };
 
     const db = createSupabaseServiceRoleClient();
     const [{ data: requestor }, admin] = await Promise.all([
@@ -92,89 +101,151 @@ export async function POST(req: Request) {
     const managerProfile = requestor;
     const managerName =
       managerProfile?.full_name?.trim() || managerProfile?.email?.trim() || "Your property manager";
+    const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
 
-    if (!residentEmail || !residentEmail.includes("@")) {
-      return NextResponse.json({ ok: false, error: "Valid resident email required." }, { status: 400 });
+    const chargeResidentUserId = String(ownedCharge.residentUserId ?? "").trim() || null;
+    let residentProfile: {
+      id: string;
+      email: string | null;
+      phone: string | null;
+    } | null = null;
+    if (chargeResidentUserId) {
+      const { data } = await db
+        .from("profiles")
+        .select("id, email, phone")
+        .eq("id", chargeResidentUserId)
+        .maybeSingle();
+      if (data) {
+        residentProfile = {
+          id: String(data.id),
+          email: (data.email as string | null) ?? null,
+          phone: (data.phone as string | null) ?? null,
+        };
+      }
+    }
+    if (!residentProfile && isUsableEmail(residentEmail)) {
+      const { data } = await db
+        .from("profiles")
+        .select("id, email, phone")
+        .eq("email", residentEmail)
+        .maybeSingle();
+      if (data) {
+        residentProfile = {
+          id: String(data.id),
+          email: (data.email as string | null) ?? null,
+          phone: (data.phone as string | null) ?? null,
+        };
+      }
     }
 
-    const senderLower = (user.email ?? "").trim().toLowerCase();
-    const skipExternalEmail = shouldSkipOutboundEmail(residentEmail) || (!!senderLower && residentEmail === senderLower);
+    const inboxEmail =
+      (isUsableEmail(residentEmail) ? residentEmail : "") ||
+      String(residentProfile?.email ?? "").trim().toLowerCase() ||
+      "";
+    const residentPhone = String(residentProfile?.phone ?? "").trim();
+    const residentUserId = residentProfile?.id?.trim() || chargeResidentUserId;
 
-    if (skipExternalEmail) {
-      // Demo email — still deliver to portal inbox, just skip real email
-      await deliverToPortalInbox({ db, userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
-      return NextResponse.json({ ok: true, skipped: true, reason: "Skipped external delivery; portal inbox updated." });
+    const wantEmail = body.viaEmail !== false;
+    const wantSms = body.viaSms === true;
+    const canEmailExternally =
+      wantEmail &&
+      isUsableEmail(inboxEmail) &&
+      !shouldSkipOutboundEmail(inboxEmail) &&
+      inboxEmail !== (user.email ?? "").trim().toLowerCase();
+    const canSms = wantSms && Boolean(residentPhone) && canSendResidentOutboundSms(smsFromNumber);
+
+    if (!inboxEmail && !canSms) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Add a resident email or phone number (and set up your work number) to send a reminder.",
+        },
+        { status: 400 },
+      );
     }
 
-    const subject = `Payment reminder: ${chargeTitle}`;
-    const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
+    const subject =
+      String(body.subject ?? "").trim() || `Payment reminder: ${chargeTitle}`;
+    const messageBody =
+      String(body.text ?? "").trim() ||
+      buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
 
-    // Gate email/SMS by the resident's saved "payments" preference (inbox is
-    // always delivered below). Account-less residents fall back to email-default-ON,
-    // never SMS.
-    const { data: residentProfile } = await db
-      .from("profiles")
-      .select("id, phone, phone_verified_at")
-      .eq("email", residentEmail.toLowerCase())
-      .maybeSingle();
-    const residentUserId = String(residentProfile?.id ?? "").trim() || null;
-    const channels = residentUserId
-      ? await resolveChannels(db, residentUserId, "payments", {
-          phone: (residentProfile?.phone as string | null) ?? null,
-          phone_verified_at: (residentProfile?.phone_verified_at as string | null) ?? null,
-        })
-      : { inbox: true, email: DEFAULT_NOTIFICATION_PREFERENCES.payments.email, sms: false };
+    // Always write Axis inbox when we have any email key (real or sandbox).
+    if (inboxEmail) {
+      await deliverToPortalInbox({
+        db,
+        userId: user.id,
+        managerEmail: user.email ?? "",
+        residentEmail: inboxEmail,
+        residentName,
+        chargeTitle,
+        balanceDue,
+        dueDate,
+        propertyLabel,
+        managerName,
+        residentUserId,
+      });
+    }
 
-    // 1. Send real email via Resend
     let emailSent = false;
     const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (apiKey && channels.email) {
+    if (canEmailExternally && apiKey) {
       const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
       const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${escapeHtmlText(messageBody)}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${escapeHtmlText(managerName)}</p>`;
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: [residentEmail], subject, text: messageBody, html }),
-      });
-      emailSent = res.ok;
+      try {
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from, to: [inboxEmail], subject, text: messageBody, html }),
+        });
+        emailSent = res.ok;
+      } catch {
+        emailSent = false;
+      }
     }
 
-    // 2. Deliver to resident's Axis portal inbox
-    await deliverToPortalInbox({ db, userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
-
-    // 3. Log to outbound mail records
     const outboundId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    await db.from("portal_outbound_mail_records").upsert({
-      id: outboundId,
-      recipient_email: residentEmail.toLowerCase(),
-      subject,
-      channel: "email",
-      row_data: { id: outboundId, to: residentEmail, subject, body: messageBody, sentAt: new Date().toISOString(), emailSent, chargeId: chargeId || undefined },
-    }, { onConflict: "id" });
+    await db.from("portal_outbound_mail_records").upsert(
+      {
+        id: outboundId,
+        recipient_email: inboxEmail || `sms:${residentPhone}`,
+        subject,
+        channel: emailSent ? "email" : canSms ? "sms" : "portal",
+        row_data: {
+          id: outboundId,
+          to: inboxEmail || residentPhone,
+          subject,
+          body: messageBody,
+          sentAt: new Date().toISOString(),
+          emailSent,
+          chargeId,
+        },
+      },
+      { onConflict: "id" },
+    );
 
-    // 4. SMS delivery (Claw preferred, else manager work number) when resident opted into payments SMS
-    const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
-    if (canSendResidentOutboundSms(smsFromNumber) && channels.sms) {
-      const residentPhone = String(residentProfile?.phone ?? "").trim();
-      if (residentPhone) {
-        const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Reply here with questions. — ${managerName}`;
-        const smsResult = await sendResidentOutboundSms({
-          to: residentPhone,
-          text: smsBody,
-          fromNumber: smsFromNumber,
-          linkKind: "payments",
-          openThread: {
-            managerUserId: user.id,
-            residentUserId: residentUserId ?? null,
-            residentEmail,
-            topic: "payment",
-          },
-        });
-        if (smsResult.sent) {
-          const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          await db.from("portal_outbound_mail_records").upsert({
+    let smsSent = false;
+    if (canSms) {
+      const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Reply here with questions. — ${managerName}`;
+      const smsResult = await sendResidentOutboundSms({
+        to: residentPhone,
+        text: smsBody,
+        fromNumber: smsFromNumber,
+        linkKind: "payments",
+        openThread: {
+          managerUserId: user.id,
+          residentUserId: residentUserId ?? null,
+          residentEmail: inboxEmail || null,
+          topic: "payment",
+        },
+      });
+      smsSent = Boolean(smsResult.sent);
+      if (smsSent) {
+        const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await db.from("portal_outbound_mail_records").upsert(
+          {
             id: smsLogId,
-            recipient_email: residentEmail.toLowerCase(),
+            recipient_email: inboxEmail || `sms:${residentPhone}`,
             subject,
             channel: "sms",
             row_data: {
@@ -186,13 +257,24 @@ export async function POST(req: Request) {
               smsSent: true,
               smsChannel: smsResult.channel ?? null,
             },
-          }, { onConflict: "id" });
-        }
+          },
+          { onConflict: "id" },
+        );
       }
     }
 
-    track("payment_reminder_sent", user.id, { email_sent: emailSent });
-    return NextResponse.json({ ok: true, emailSent });
+    const skippedExternal = !emailSent && !smsSent;
+    track("payment_reminder_sent", user.id, {
+      email_sent: emailSent,
+      sms_sent: smsSent,
+    });
+    return NextResponse.json({
+      ok: true,
+      emailSent,
+      smsSent,
+      skipped: skippedExternal,
+      reason: skippedExternal ? "Saved to Axis inbox (external email/SMS not sent)." : undefined,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
@@ -245,6 +327,7 @@ async function deliverToPortalInbox({
   dueDate,
   propertyLabel,
   managerName,
+  residentUserId,
 }: {
   db: ReturnType<typeof createSupabaseServiceRoleClient>;
   userId: string;
@@ -256,6 +339,7 @@ async function deliverToPortalInbox({
   dueDate: string;
   propertyLabel: string;
   managerName: string;
+  residentUserId?: string | null;
 }) {
   const subject = `Payment reminder: ${chargeTitle}`;
   const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
@@ -296,14 +380,13 @@ async function deliverToPortalInbox({
     { onConflict: "id" },
   );
 
-  // Skip resident inbox record when recipient = sender (self-send) to avoid polluting manager's Unopened tab
   if (residentLower !== senderLower) {
     const residentThreadId = `payment_inbox_${ts}_${rand}`;
     await db.from("portal_inbox_thread_records").upsert(
       {
         id: residentThreadId,
         scope: "axis_portal_inbox_resident_v1",
-        owner_user_id: null,
+        owner_user_id: residentUserId || null,
         participant_email: residentLower,
         thread_type: "payment_reminder",
         row_data: {
