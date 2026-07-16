@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
-import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   readPartnerInquiries,
   syncScheduleRecordsFromServer,
@@ -80,13 +79,11 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     }
 
     if (kind === "admin") {
-      const [pendingProps] = adminKpiCounts();
       const inboxUnread = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
       const pendingMeetings = readPartnerInquiries().filter((r) => r.status === "pending" && r.kind !== "tour").length;
       const pendingTours = readPartnerInquiries().filter((r) => r.kind === "tour" && r.status === "pending").length;
       const openFeedback = readBugFeedbackRows().filter((r) => r.status === "open" || r.status === "in_progress").length;
       return {
-        properties: pendingProps,
         events: pendingMeetings + pendingTours,
         inbox: inboxUnread,
         "bugs-feedback": openFeedback,
@@ -94,7 +91,6 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     }
 
     if ((kind === "manager" || kind === "pro") && userId) {
-      const [pendingProps] = adminKpiCounts(userId);
       const pendingApps = readManagerApplicationRows().filter(
         (a) => applicationVisibleToPortalUser(a, userId) && isSubmittedPendingApplicationRow(a),
       ).length;
@@ -108,7 +104,6 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const emailOnly = filterEmailInboxThreads(inboxRows);
       const inbox = emailOnly.filter((t) => t.folder === "inbox" && t.unread).length;
       return {
-        properties: pendingProps,
         applications: pendingApps,
         services: pendingServiceRequests + pendingWorkOrders,
         communication: inbox,

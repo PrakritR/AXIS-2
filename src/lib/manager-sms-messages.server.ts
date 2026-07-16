@@ -16,14 +16,18 @@ function phoneKey(raw: string): string {
   return normalizeE164(raw) ?? raw.trim();
 }
 
-/** Viewer + owners who granted this user Communication (inbox) co-manager access. */
+/**
+ * Viewer + owners who granted this user Communication (inbox) co-manager
+ * access at the given level ("read" for viewing, "edit" for send/delete).
+ */
 export async function resolveSmsScopeManagerIds(
   db: SupabaseClient,
   viewerUserId: string,
+  level: "read" | "edit" = "read",
 ): Promise<string[]> {
   const ids = new Set<string>([viewerUserId.trim()].filter(Boolean));
   try {
-    const { ownerIds } = await linkedOwnerScopeForModule(db, viewerUserId, "inbox");
+    const { ownerIds } = await linkedOwnerScopeForModule(db, viewerUserId, "inbox", level);
     for (const id of ownerIds) {
       if (id.trim()) ids.add(id.trim());
     }
@@ -45,8 +49,14 @@ export async function deleteManagerSmsConversation(
   const phoneVariants = new Set<string>([phone]);
   if (digits.length >= 10) {
     phoneVariants.add(`+${digits}`);
-    phoneVariants.add(`+1${digits.slice(-10)}`);
-    phoneVariants.add(digits.slice(-10));
+    // Only US numbers get the +1/last-10 legacy variants — for other country
+    // codes, +1 + last-10 digits is a DIFFERENT number that may belong to an
+    // unrelated counterparty, and matching it would delete their history.
+    if (digits.length === 10 || (digits.length === 11 && digits.startsWith("1"))) {
+      const last10 = digits.slice(-10);
+      phoneVariants.add(`+1${last10}`);
+      phoneVariants.add(last10);
+    }
   }
 
   let deleted = 0;
@@ -431,10 +441,14 @@ export async function fetchResidentSmsConversation(
   const messages: ManagerSmsMessageRow[] = [];
   const { data: profile } = await db
     .from("profiles")
-    .select("phone")
+    .select("phone, phone_verified_at")
     .eq("id", residentUserId)
     .maybeSingle();
-  const residentPhone = profile?.phone ? phoneKey(String(profile.phone)) : "";
+  // Relay threads are matched purely by phone number, so an unverified
+  // self-set phone must never be trusted here — anyone could set a victim's
+  // number on their own profile and read the victim's relay history.
+  const residentPhone =
+    profile?.phone && profile.phone_verified_at ? phoneKey(String(profile.phone)) : "";
 
   const { data: stored } = await db
     .from("manager_sms_messages")
@@ -446,7 +460,10 @@ export async function fetchResidentSmsConversation(
   for (const row of stored ?? []) {
     messages.push({
       id: String(row.id),
-      direction: row.direction === "inbound" ? "inbound" : "outbound",
+      // Rows are stored from the manager's perspective (inbound = resident
+      // texted the manager) — flip so the resident sees their own texts as
+      // sent and the manager's as received, matching the relay branch below.
+      direction: row.direction === "inbound" ? "outbound" : "inbound",
       body: String(row.body ?? ""),
       fromPhone: row.from_phone ? String(row.from_phone) : null,
       toPhone: String(row.to_phone ?? ""),

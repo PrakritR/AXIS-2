@@ -35,6 +35,7 @@ export function ResidentCommunication({
     trash: 0,
   });
   const [smsBucketCounts, setSmsBucketCounts] = useState<Record<ManagerSmsBucketId, number>>({
+    all: 0,
     unopened: 0,
     opened: 0,
     schedule: 0,

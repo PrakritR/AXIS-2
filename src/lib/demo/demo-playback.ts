@@ -18,7 +18,7 @@ export const DEMO_PROMOTION_GENERATED_EVENT = "axis:demo-promotion-generated";
 export const DEMO_MANAGER_INBOX_THREAD_ID = "demo-mi-1";
 export const DEMO_RESIDENT_INBOX_THREAD_ID = "demo-ri-1";
 
-export type DemoPropertiesStage = "pending" | "listed" | "unlisted" | "rejected";
+export type DemoPropertiesStage = "listed" | "unlisted";
 
 let lastSubmittedPendingId: string | null = null;
 let lastListedPropertyId: string | null = null;

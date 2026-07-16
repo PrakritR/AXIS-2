@@ -276,6 +276,16 @@ export async function renderPortalSection(
     redirect(`${def.basePath}/services/vendors`);
   }
 
+  // Legacy path support: Inbox became Communication. Old deep links (push
+  // notifications, bookmarks, post-send navigation) must keep resolving.
+  if (section === "inbox") {
+    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
+    if (kind === "manager" || kind === "pro") {
+      redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
+    }
+    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
+  }
+
   const meta = findSection(def, section);
   if (!meta) notFound();
 
@@ -395,11 +405,6 @@ export async function renderPortalSection(
         "residents",
         managerOwnerSubscriptionTier,
       );
-    }
-
-    if (section === "inbox") {
-      const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
-      redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
     }
 
     if (section === "communication") {
@@ -629,11 +634,6 @@ export async function renderPortalSection(
     return <ResidentMoveInPanel residentEmail={moveInEmail} />;
   }
 
-  if (kind === "resident" && section === "inbox") {
-    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
-    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
-  }
-
   if (kind === "resident" && section === "communication") {
     const tierGate = residentManagerTierGate("communication", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
@@ -651,13 +651,13 @@ export async function renderPortalSection(
     }
     const channel = tabParts[0]!;
     if (channel === "sms") {
-      const smsTab = tabParts[1] ?? "unopened";
-      if (!["unopened", "opened", "schedule", "sent"].includes(smsTab)) notFound();
+      const smsTab = tabParts[1] ?? "all";
+      if (!["all", "unopened", "opened", "schedule", "sent"].includes(smsTab)) notFound();
       if (tabParts.length > 2) notFound();
       return (
         <ResidentCommunication
           channel="sms"
-          smsTabId={smsTab as "unopened" | "opened" | "schedule" | "sent"}
+          smsTabId={smsTab as "all" | "unopened" | "opened" | "schedule" | "sent"}
         />
       );
     }
@@ -713,24 +713,19 @@ export async function renderPortalSection(
     return <VendorCalendarPanel />;
   }
 
-  if (kind === "vendor" && section === "inbox") {
-    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
-    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
-  }
-
   if (kind === "vendor" && section === "communication") {
     if (!tabParts?.length) {
       redirect(`${def.basePath}/communication/email/unopened`);
     }
     const channel = tabParts[0]!;
     if (channel === "sms") {
-      const smsTab = tabParts[1] ?? "unopened";
-      if (!["unopened", "opened", "sent"].includes(smsTab)) notFound();
+      const smsTab = tabParts[1] ?? "all";
+      if (!["all", "unopened", "opened", "sent"].includes(smsTab)) notFound();
       if (tabParts.length > 2) notFound();
       return (
         <VendorCommunication
           channel="sms"
-          smsTabId={smsTab as "unopened" | "opened" | "sent"}
+          smsTabId={smsTab as "all" | "unopened" | "opened" | "sent"}
         />
       );
     }

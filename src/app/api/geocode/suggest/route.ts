@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseNominatimAddressSuggestions } from "@/lib/geocode-address";
-import { nominatimUserAgent, throttleNominatim } from "@/lib/nominatim.server";
+import { boundedCacheSet, nominatimUserAgent, throttleNominatim } from "@/lib/nominatim.server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,10 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
   if (q.length < 3) {
     return NextResponse.json({ suggestions: [] });
+  }
+
+  if (!rateLimit(`geocode-suggest:${clientIpFrom(req)}`, 30, 60_000).ok) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
   const key = cacheKey(q);
@@ -48,7 +53,7 @@ export async function GET(req: Request) {
 
     const rows = (await res.json()) as unknown;
     const suggestions = parseNominatimAddressSuggestions(rows);
-    suggestCache.set(key, { suggestions, at: Date.now() });
+    boundedCacheSet(suggestCache, key, { suggestions, at: Date.now() });
 
     return NextResponse.json(
       { suggestions },

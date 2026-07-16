@@ -110,7 +110,8 @@ export function classifyLeasingIntent(text: string): LeasingIntent {
   // a lease is a question, not a lease-signing request.
   if (
     /\b(question|have a question|ask about|message about|ask a question)\b/.test(t) ||
-    /^hi — i have a question\b/i.test(text.trim())
+    /^hi — i have a question\b/i.test(text.trim()) ||
+    /\b(more info|info about|tell me about|learn more|details (on|about|for))\b/.test(t)
   ) {
     return "question";
   }
@@ -173,6 +174,9 @@ export function extractPropertyLabelHint(text: string): string | null {
     /apply for\s+(.+?)\.?$/i,
     /question about .+? at\s+(.+?)\.?$/i,
     /question about\s+(.+?)\.?$/i,
+    /(?:more )?info(?:rmation)? about\s+(.+?)\.?$/i,
+    /tell me about\s+(.+?)\.?$/i,
+    /interested in\s+(.+?)\.?$/i,
   ];
   for (const re of patterns) {
     const m = text.trim().match(re);
@@ -185,6 +189,24 @@ export function extractPropertyLabelHint(text: string): string | null {
 export function extractBundleLabelHint(text: string): string | null {
   const m = text.match(/bundle\s+"([^"]+)"/i);
   return m?.[1]?.trim() || null;
+}
+
+/**
+ * Freeform listing / availability interest that is not a sticky resident
+ * payment/lease message. Used so "more info about 4709a" hits leasing instead
+ * of manager→resident relay when the sender is a mapped manager phone.
+ */
+export function looksLikeListingInterest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return (
+    /\b(more info|info about|tell me about|interested in|learn more|details (on|about|for))\b/.test(
+      t,
+    ) ||
+    /\b(is|are)\b.{0,40}\b(available|open|vacant|still listed)\b/.test(t) ||
+    /\b(listing|listings|showing|open house|for rent|room bundle|bedroom|studio)\b/.test(t) ||
+    /\b(house|home|unit|apartment|property|building)\b/.test(t)
+  );
 }
 
 /**
@@ -201,12 +223,19 @@ export function looksLikeProspectLeasingCta(text: string): boolean {
   if (/\/rent\/(listings|apply)\//i.test(t) || /\/rent\/apply\?/i.test(t)) return true;
   if (/^(TOUR|APPLY|LEASE|HELP|BUNDLE)([\s!.?,]|$)/i.test(t)) return true;
   const intent = classifyLeasingIntent(text);
-  return (
+  if (
     intent === "tour" ||
     intent === "tour_details" ||
     intent === "apply" ||
     intent === "bundle"
-  );
+  ) {
+    return true;
+  }
+  // Freeform "more info about …" / availability questions → leasing, not resident hub.
+  if ((intent === "question" || intent === "help" || intent === "unknown") && looksLikeListingInterest(t)) {
+    return true;
+  }
+  return false;
 }
 
 export type SmsDeepLinkIntent = "tour" | "apply" | "lease" | "bundle" | "question";

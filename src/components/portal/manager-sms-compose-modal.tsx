@@ -73,10 +73,11 @@ export function ManagerSmsComposeModal({
   );
 
   const sectionOptions = useMemo(() => {
-    const base: { value: SmsComposeSection; label: string }[] = [
+    const allSections: { value: SmsComposeSection; label: string }[] = [
       { value: "resident", label: "Residents" },
       { value: "applicant", label: "Applicants" },
-    ].filter((opt) =>
+    ];
+    const base = allSections.filter((opt) =>
       withPhone.some((r) =>
         opt.value === "applicant" ? r.tenancyStatus === "applicant" : r.tenancyStatus !== "applicant",
       ),

@@ -2089,7 +2089,7 @@ export function ManagerAddListingForm({
           showToast("Could not save changes.");
           return;
         }
-        showToast("Changes saved and resubmitted for admin re-approval.");
+        showToast("Changes saved. Your listing is live on Rent with PropLane.");
         onSubmitted();
         return;
       }
@@ -2101,7 +2101,7 @@ export function ManagerAddListingForm({
           showToast("Could not save changes.");
           return;
         }
-        showToast("Listing saved. It is pending admin review before it appears on Rent with PropLane again.");
+        showToast("Listing saved. It is live on Rent with PropLane.");
         onSubmitted();
         return;
       }
@@ -4378,7 +4378,7 @@ export function ManagerAddListingForm({
                 <p className="mt-1 text-sm leading-6 text-muted">
                   {isEditMode
                     ? "Review each step, then submit your changes when the listing is ready for review."
-                    : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete and ready for admin approval."}
+                    : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete — it will go live on Rent with PropLane right away."}
                 </p>
               </div>
             </div>

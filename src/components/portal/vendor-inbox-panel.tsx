@@ -408,7 +408,7 @@ export const VendorInboxPanel = forwardRef<
               ? "Message sent to PropLane admin."
               : "Message sent.",
           );
-          navigate("/vendor/inbox/sent");
+          navigate("/vendor/communication/email/sent");
         } catch {
           showToast("Message could not be sent.");
         }
@@ -641,7 +641,7 @@ export const VendorInboxPanel = forwardRef<
             activeTone="primary"
             tabs={tabs}
             activeId={tabId}
-            onChange={(id) => navigate(`/vendor/inbox/${id}`)}
+            onChange={(id) => navigate(`/vendor/communication/email/`)}
           />
           <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
             <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>

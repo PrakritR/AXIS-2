@@ -313,25 +313,19 @@ export function adminKpiCounts(forManagerUserId?: string | null): [number, numbe
     const scopeUserId = resolveManagerScopeUserId(forManagerUserId ?? null);
     if (scopeUserId) {
       const extras = readScopedExtraListings(scopeUserId);
-      const pending = readPendingManagerPropertiesForUser(scopeUserId).length;
-      const awaitingReapproval = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true).length;
       const side = readSide(scopeUserId);
-      const listed = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
+      const listed = extras.filter((p) => p?.adminPublishLive === true).length;
       return [
-        pending + awaitingReapproval + linkedAdminPropertyRowsForBucket(0, scopeUserId).length,
-        side.requestChange.length + linkedAdminPropertyRowsForBucket(1, scopeUserId).length,
+        0,
+        0,
         listed + linkedAdminPropertyRowsForBucket(2, scopeUserId).length,
         side.unlisted.length + linkedAdminPropertyRowsForBucket(3, scopeUserId).length,
-        side.rejected.length + linkedAdminPropertyRowsForBucket(4, scopeUserId).length,
+        0,
       ];
     }
-    const pending = readAllPendingManagerProperties().length;
-    const awaitingReapproval = readAllExtraListings().filter(
-      (p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true,
-    ).length;
     const side = readSide();
-    const listed = readAllExtraListings().filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
-    return [pending + awaitingReapproval, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
+    const listed = readAllExtraListings().filter((p) => p?.adminPublishLive === true).length;
+    return [0, 0, listed, side.unlisted.length, 0];
   } catch {
     return [0, 0, 0, 0, 0];
   }
@@ -342,33 +336,23 @@ export function readAdminPropertyRows(
   forManagerUserId?: string | null,
 ): AdminPropertyRow[] {
   const side = readSide(forManagerUserId);
-  if (bucket === 0) {
-    const pendingSource = forManagerUserId
-      ? readPendingManagerPropertiesForUser(forManagerUserId)
-      : readAllPendingManagerProperties();
-    const pendingRows = pendingSource.map(pendingToAdminRow);
-    const awaitingExtras = forManagerUserId
-      ? readScopedExtraListings(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
-      : readAllExtraListings().filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true);
-    const awaitingRows = awaitingExtras.map((p) => mockToAdminRow(p, p.id));
-    const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(0, forManagerUserId) : [];
-    return dedupeAdminPropertyRows([...pendingRows, ...awaitingRows, ...linked]);
-  }
-  if (bucket === 1) {
-    return dedupeAdminPropertyRows([
-      ...side.requestChange.map((r) => normalizeAdminPropertyRow(r)),
-      ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(1, forManagerUserId) : []),
-    ]);
+  if (bucket === 0 || bucket === 1 || bucket === 4) {
+    // Approval queue removed — listings publish immediately.
+    return [];
   }
   if (bucket === 2) {
     const extras = forManagerUserId ? readScopedExtraListings(forManagerUserId) : readAllExtraListings();
-    /** Must match {@link adminKpiCounts}: only catalog-live mgr listings. Edits set `adminPublishLive: false` until admin re-approves (see {@link updateExtraListingFromSubmission}). */
-    const live = extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true);
+    const live = extras.filter((p) => p.adminPublishLive === true);
     const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(2, forManagerUserId) : [];
     return dedupeAdminPropertyRows([...live.map((p) => mockToAdminRow(p, p.id)), ...linked]);
   }
-  if (bucket === 3) return dedupeAdminPropertyRows([...side.unlisted.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(3, forManagerUserId) : [])]);
-  return dedupeAdminPropertyRows([...side.rejected.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(4, forManagerUserId) : [])]);
+  if (bucket === 3) {
+    return dedupeAdminPropertyRows([
+      ...side.unlisted.map((r) => normalizeAdminPropertyRow(r)),
+      ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(3, forManagerUserId) : []),
+    ]);
+  }
+  return [];
 }
 
 /** Deduped property rows for a manager portal stage tab (matches visible table rows). */

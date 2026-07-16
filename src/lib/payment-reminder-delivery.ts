@@ -156,6 +156,7 @@ export async function deliverPaymentReminder(input: {
     }
   }
 
+  let smsDelivered = false;
   if (canSendResidentOutboundSms(managerSmsFromNumber) && channels.sms) {
     try {
       const residentPhone = String(residentProfile?.phone ?? "").trim();
@@ -176,6 +177,7 @@ export async function deliverPaymentReminder(input: {
             : null,
         });
         if (smsResult.sent) {
+          smsDelivered = true;
           const smsLogId = `${dedupId}_sms`;
           await db.from("portal_outbound_mail_records").upsert(
             {
@@ -235,6 +237,19 @@ export async function deliverPaymentReminder(input: {
     }
   } catch {
     /* non-critical — no-ops when FCM is not configured */
+  }
+
+  // An account-less resident (no profile row) can't see the portal inbox — if
+  // the email failed and no SMS went out, nothing actually reached them. Drop
+  // the dedup row so the next cron run retries instead of recording a
+  // phantom send.
+  if (!emailSent && !smsDelivered && !residentUserId) {
+    try {
+      await db.from("portal_outbound_mail_records").delete().eq("id", dedupId);
+    } catch {
+      /* keep the row — a duplicate reminder beats silently never retrying */
+    }
+    return { sent: false, error: "email_failed_no_other_channel" };
   }
 
   return { sent: true };

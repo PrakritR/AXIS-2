@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { handleClawLeasingInbound } from "@/lib/claw-leasing-bot.server";
-import { clawMessengerApiKey, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
+import {
+  clawLeasingAgentPhoneE164,
+  clawMessengerApiKey,
+  isClawMessengerConfigured,
+} from "@/lib/claw-messenger.server";
 
 export const runtime = "nodejs";
 
@@ -87,12 +91,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skippedReplay: true });
   }
 
+  // Replies MUST come from the shared Claw agent line so they land in the same
+  // iMessage/RCS thread the prospect is texting. Without this, sendFromManagerWorkNumber
+  // looks up the manager's Twilio work number and the reply appears in a different thread
+  // (looks like "no agent reply" on the Claw conversation).
   const result = await handleClawLeasingInbound({
     from,
     text,
     messageId: body.messageId ?? null,
     chatId: body.chatId ?? null,
     service: body.service ?? null,
+    workNumber: clawLeasingAgentPhoneE164(),
   });
 
   if (!result.ok) {

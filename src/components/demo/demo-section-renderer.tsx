@@ -116,6 +116,7 @@ export function DemoSectionRenderer({
       case "calendar":
         return <VendorCalendarPanel />;
       case "inbox":
+      case "communication":
         return <VendorInboxPanel tabId={tabId} />;
       case "financials":
         return <VendorFinancesPanel tabId={tabId ?? "income"} basePath="/vendor" />;
@@ -154,6 +155,7 @@ export function DemoSectionRenderer({
           />
         );
       case "inbox":
+      case "communication":
         return <ManagerInbox tabId={tabId} />;
       case "financials":
         return <ManagerFinancesPanel tabId={tabId} basePath={basePath} />;
@@ -212,6 +214,7 @@ export function DemoSectionRenderer({
     case "services":
       return <ResidentServicesPanel tabId={(tabId as "requests" | "work-orders") ?? "requests"} basePath={basePath} />;
     case "inbox":
+    case "communication":
       return <ResidentInboxPanel tabId={tabId} />;
     case "documents":
       return <ResidentDocumentsPanel tabId={tabId} basePath={basePath} tabs={meta?.tabs ?? []} />;

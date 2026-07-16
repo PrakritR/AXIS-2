@@ -14,10 +14,8 @@ import {
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   PROPERTY_PIPELINE_EVENT,
-  readPendingManagerPropertiesForUser,
   readScopedExtraListings,
   syncPropertyPipelineFromServer,
-  type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import {
   chargeDueLabel,
@@ -539,10 +537,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       .filter((t) => Number.isFinite(t.startMs) && t.startMs >= cutoff)
       .sort((a, b) => a.startMs - b.startMs);
 
-    const pendingProperties = readPendingManagerPropertiesForUser(userId).sort(
-      (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
-    );
-    const livePropertyCount = readScopedExtraListings(userId).length;
+    const livePropertyCount = readScopedExtraListings(userId).filter(
+      (p) => p.adminPublishLive === true,
+    ).length;
 
     const activeResidents = leases
       .filter((l) => l.status === "Fully Signed")
@@ -580,7 +577,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       serviceItems,
       pendingServiceCount,
       tours,
-      pendingProperties,
       livePropertyCount,
       activeResidents,
       paymentsByMonth,
@@ -600,7 +596,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     serviceItems,
     pendingServiceCount,
     tours,
-    pendingProperties,
     livePropertyCount,
     activeResidents,
     paymentsByMonth,
@@ -615,13 +610,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const overdueBalanceLabel = formatUsd(
     overdueCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0),
   );
-  const propertiesEmptyMessage =
-    pendingProperties.length === 0 && livePropertyCount > 0
-      ? `No listings pending review — ${livePropertyCount} live ${livePropertyCount === 1 ? "property" : "properties"}.`
-      : "No listings pending review.";
 
   const openCount =
-    pendingProperties.length +
     pendingTours.length +
     pendingApps.length +
     pendingLeaseRows.length +
@@ -731,26 +721,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               </span>
             ) : null}
           </div>
-
-          <AttentionGroup
-            title="Properties"
-            href={`${BASE}/properties`}
-            linkLabel="Properties →"
-            items={pendingProperties}
-            emptyMessage={propertiesEmptyMessage}
-            keyForItem={(property) => property.id}
-            renderRow={(property: ManagerPendingPropertyRow) => (
-              <IssueRow
-                href={`${BASE}/properties`}
-                dot={DOT_PENDING}
-                title={property.buildingName || property.address}
-                subtitle={formatCompactPlacementLine(property.unitLabel || "—")}
-                meta={property.monthlyRent ? `$${property.monthlyRent.toLocaleString()}/mo` : undefined}
-                pill={<StatusPill tone="pending">Pending review</StatusPill>}
-                dataAttr="dashboard-attention-property"
-              />
-            )}
-          />
 
           <AttentionGroup
             title="Tour requests"

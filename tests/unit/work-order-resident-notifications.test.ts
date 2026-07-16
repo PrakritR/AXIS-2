@@ -62,7 +62,21 @@ describe("notifyResidentOfWorkOrderUpdate", () => {
     const body = JSON.parse((init as { body: string }).body);
     expect(body.toEmails).toEqual(["resident@test.com"]);
     expect(body.deliverToPortalInbox).toBe(true);
+    expect(body.deliverViaEmail).toBe(true);
+    expect(body.deliverViaSms).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it("suppresses email and SMS when viaEmail/viaSms are false", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyResidentOfWorkOrderUpdate("vendor_assigned", { ...baseRow, vendorName: "Alex Plumbing" }, { viaEmail: false, viaSms: false });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse((init as { body: string }).body);
     expect(body.deliverViaEmail).toBe(false);
+    expect(body.deliverViaSms).toBe(false);
     vi.unstubAllGlobals();
   });
 

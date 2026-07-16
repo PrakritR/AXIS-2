@@ -177,11 +177,8 @@ export async function POST(req: Request) {
         userId: user.id,
         managerEmail: user.email ?? "",
         residentEmail: inboxEmail,
-        residentName,
-        chargeTitle,
-        balanceDue,
-        dueDate,
-        propertyLabel,
+        subject,
+        messageBody,
         managerName,
         residentUserId,
       });
@@ -226,7 +223,11 @@ export async function POST(req: Request) {
 
     let smsSent = false;
     if (canSms) {
-      const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Reply here with questions. — ${managerName}`;
+      // Honor the manager's edited message on the SMS leg too — only fall
+      // back to the canned copy when no custom text was provided.
+      const smsBody =
+        String(body.text ?? "").trim() ||
+        `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Reply here with questions. — ${managerName}`;
       const smsResult = await sendResidentOutboundSms({
         to: residentPhone,
         text: smsBody,
@@ -321,11 +322,8 @@ async function deliverToPortalInbox({
   userId,
   managerEmail,
   residentEmail,
-  residentName,
-  chargeTitle,
-  balanceDue,
-  dueDate,
-  propertyLabel,
+  subject,
+  messageBody,
   managerName,
   residentUserId,
 }: {
@@ -333,16 +331,11 @@ async function deliverToPortalInbox({
   userId: string;
   managerEmail: string;
   residentEmail: string;
-  residentName: string;
-  chargeTitle: string;
-  balanceDue: string;
-  dueDate: string;
-  propertyLabel: string;
+  subject: string;
+  messageBody: string;
   managerName: string;
   residentUserId?: string | null;
 }) {
-  const subject = `Payment reminder: ${chargeTitle}`;
-  const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 6);
   const residentLower = residentEmail.toLowerCase();

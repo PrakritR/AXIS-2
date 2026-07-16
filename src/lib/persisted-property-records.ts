@@ -127,6 +127,8 @@ export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): Proper
         // Stamp the DB owner onto the listing so linked-property resolution and
         // co-manager "owned vs linked" checks agree with manager_property_records.
         ...(uid !== "__axis_legacy__" ? { managerUserId: uid } : {}),
+        // Listings are auto-published — `review` is treated as live.
+        adminPublishLive: true,
       } as MockProperty;
       snapshot.extrasByUser[uid] = [...(snapshot.extrasByUser[uid] ?? []), property];
       continue;

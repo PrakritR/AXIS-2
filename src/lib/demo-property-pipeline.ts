@@ -316,9 +316,11 @@ export async function syncPropertyPipelineFromServer(opts?: {
         writeSessionJson(key, side);
       }
       writePropertyPipelineSyncedAt(Date.now());
+      // Legacy pending/review rows auto-publish (admin approval queue removed).
+      const promoted = await promoteLegacyPendingListingsToLive();
       // Only notify listeners when the snapshot actually changed — an unconditional
       // dispatch here loops with force-syncing listeners (see lastPipelineSnapshotSig).
-      if (changed) window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      if (changed || promoted > 0) window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
       return true;
     })();
     return await propertyPipelineSyncPromise;
@@ -626,22 +628,19 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput, m
   if (!managerUserId.trim()) {
     throw new Error("submitManagerPendingProperty requires a signed-in manager user id.");
   }
-  const id = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const legacy = deriveLegacyFields(input);
+  const draftId = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const listingId = `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${draftId.slice(-6)}`;
   const row: ManagerPendingPropertyRow = {
     ...legacy,
-    id,
+    id: draftId,
     submittedAt: new Date().toISOString(),
     submission: input,
     submittedByUserId: managerUserId,
   };
-  const map = readPendingMap();
-  const list = map[managerUserId] ?? [];
-  list.push(row);
-  map[managerUserId] = list;
-  writePendingMap(map);
-  mirrorPropertyRecord({ id, managerUserId, status: "pending", rowData: row });
-  return id;
+  const prop: MockProperty = { ...buildMockPropertyFromDraft(row, listingId), adminPublishLive: true };
+  appendExtraListing(prop, managerUserId);
+  return listingId;
 }
 
 export async function submitManagerPendingPropertyToServer(
@@ -649,21 +648,37 @@ export async function submitManagerPendingPropertyToServer(
   managerUserId: string,
 ): Promise<string | null> {
   if (!managerUserId.trim()) return null;
-  const id = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const legacy = deriveLegacyFields(input);
+  const draftId = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const listingId = `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${draftId.slice(-6)}`;
   const row: ManagerPendingPropertyRow = {
     ...legacy,
-    id,
+    id: draftId,
     submittedAt: new Date().toISOString(),
     submission: input,
     submittedByUserId: managerUserId,
   };
-  const ok = await upsertPropertyRecordToServer({ id, managerUserId, status: "pending", rowData: row });
+  const prop: MockProperty = {
+    ...buildMockPropertyFromDraft(row, listingId),
+    adminPublishLive: true,
+    managerUserId,
+  };
+  const ok = await upsertPropertyRecordToServer({
+    id: listingId,
+    managerUserId,
+    status: "live",
+    propertyData: prop,
+    rowData: {
+      ...legacy,
+      adminRefId: listingId,
+      listingId,
+      managerUserId,
+    },
+  });
   if (!ok) return null;
-  const map = readPendingMap();
-  map[managerUserId] = [...(map[managerUserId] ?? []), row];
-  writePendingMap(map);
-  return id;
+  appendExtraListing(prop, managerUserId);
+  await syncPropertyPipelineFromServer({ force: true });
+  return listingId;
 }
 
 export function updatePendingManagerProperty(
@@ -732,18 +747,17 @@ export function updateExtraListingFromSubmission(
     submission: input,
     submittedByUserId: managerUserId,
   };
-  const prev = list[idx]!;
   const next = buildMockPropertyFromDraft(pendingLike, listingId);
   const owner = next.managerUserId ?? managerUserId;
-  // Keep current approval state; manager edits should not auto-demote approved listings.
-  const publishLive = prev.adminPublishLive === true;
+  // Listings publish immediately — edits stay live on the rent catalog.
+  const publishLive = true;
   list[idx] = { ...next, managerUserId: owner, adminPublishLive: publishLive };
   map[managerUserId] = list;
   writeExtrasMap(map);
   mirrorPropertyRecord({
     id: listingId,
     managerUserId,
-    status: publishLive ? "live" : "review",
+    status: "live",
     propertyData: list[idx],
     rowData: { ...legacy, adminRefId: listingId, listingId, managerUserId },
   });
@@ -769,17 +783,15 @@ export async function updateExtraListingFromSubmissionOnServer(
     submission: input,
     submittedByUserId: managerUserId,
   };
-  const prev = list[idx]!;
   const next = buildMockPropertyFromDraft(pendingLike, listingId);
   const owner = next.managerUserId ?? managerUserId;
-  // Keep current approval state; manager edits should not auto-demote approved listings.
-  const publishLive = prev.adminPublishLive === true;
-  const propertyData: MockProperty = { ...next, managerUserId: owner, adminPublishLive: publishLive };
+  // Listings publish immediately — edits stay live on the rent catalog.
+  const propertyData: MockProperty = { ...next, managerUserId: owner, adminPublishLive: true };
   const rowData = { ...legacy, adminRefId: listingId, listingId, managerUserId };
   const ok = await upsertPropertyRecordToServer({
     id: listingId,
     managerUserId,
-    status: publishLive ? "live" : "review",
+    status: "live",
     propertyData,
     rowData,
   });
@@ -938,6 +950,73 @@ export function approvePendingManagerProperty(pendingId: string): MockProperty |
   migrateAmenityOffersPropertyId(owner, pendingId, listingId);
   appendExtraListing(prop, owner);
   return prop;
+}
+
+/** Promotes legacy pending/review submissions to live (listings no longer need admin approval). */
+export async function promoteLegacyPendingListingsToLive(): Promise<number> {
+  if (!isBrowser()) return 0;
+  let promoted = 0;
+
+  const extrasMap = readExtrasMap();
+  let extrasDirty = false;
+  for (const uid of Object.keys(extrasMap)) {
+    const list = extrasMap[uid] ?? [];
+    let changed = false;
+    const next = list.map((p) => {
+      if (p.adminPublishLive === true) return p;
+      changed = true;
+      promoted += 1;
+      const live = { ...p, adminPublishLive: true as const };
+      mirrorPropertyRecord({
+        id: p.id,
+        managerUserId: uid,
+        status: "live",
+        propertyData: live,
+      });
+      void upsertPropertyRecordToServer({
+        id: p.id,
+        managerUserId: uid,
+        status: "live",
+        propertyData: live,
+      });
+      return live;
+    });
+    if (changed) {
+      extrasMap[uid] = next;
+      extrasDirty = true;
+    }
+  }
+  if (extrasDirty) writeExtrasMap(extrasMap);
+
+  for (const pending of [...readAllPendingManagerProperties()]) {
+    const created = approvePendingManagerProperty(pending.id);
+    if (!created) continue;
+    promoted += 1;
+    const owner = created.managerUserId ?? pending.submittedByUserId ?? "";
+    if (owner) {
+      void upsertPropertyRecordToServer({
+        id: created.id,
+        managerUserId: owner,
+        status: "live",
+        propertyData: created,
+        rowData: {
+          adminRefId: created.id,
+          listingId: created.id,
+          managerUserId: owner,
+          buildingName: created.buildingName,
+          unitLabel: created.unitLabel,
+          address: created.address,
+        },
+      });
+      void fetch("/api/property-records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id: pending.id }),
+      }).catch(() => {});
+    }
+  }
+
+  return promoted;
 }
 
 /** Reserved for optional onboarding seeding; no automatic listing data is injected. */

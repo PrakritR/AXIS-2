@@ -270,7 +270,7 @@ async function runOverallSegment(frame: HTMLElement, nav: DemoPlaybackNav): Prom
   setDemoPlaybackApplicationAxisId(null);
 
   nav.onNavigateProperties();
-  dispatchDemoPropertiesStage("pending");
+  dispatchDemoPropertiesStage("listed");
   await sleep(800);
 
   window.dispatchEvent(new Event(DEMO_OPEN_CREATE_LISTING_EVENT));
@@ -291,7 +291,7 @@ async function runOverallSegment(frame: HTMLElement, nav: DemoPlaybackNav): Prom
     await sleep(1200);
     pendingId = getDemoPlaybackPendingId();
   }
-  dispatchDemoPropertiesStage("pending");
+  dispatchDemoPropertiesStage("listed");
   await sleep(2800);
 
   let listedPropertyId: string | null = null;
@@ -381,7 +381,7 @@ async function runInboxSegment(frame: HTMLElement, nav: DemoPlaybackNav): Promis
   nav.setDemoRole("manager");
   nav.onNavigateManagerInbox("unopened");
   await sleep(800);
-  await demoNavClick(frame, "inbox");
+  await demoNavClick(frame, "communication");
   await expandPortalRow(frame, inboxThreadSelector(DEMO_MANAGER_INBOX_THREAD_ID));
   await clickIfPresent(frame, INBOX_MARK_READ);
 
@@ -403,7 +403,7 @@ async function runInboxSegment(frame: HTMLElement, nav: DemoPlaybackNav): Promis
   nav.setDemoRole("resident");
   nav.onNavigateResidentInbox("unopened");
   await sleep(800);
-  await demoNavClick(frame, "inbox");
+  await demoNavClick(frame, "communication");
   await expandPortalRow(frame, inboxThreadSelector(DEMO_RESIDENT_INBOX_THREAD_ID));
   window.dispatchEvent(
     new CustomEvent(DEMO_INBOX_REPLY_PREFILL_EVENT, {
@@ -545,7 +545,7 @@ async function runSegmentPlayback(
     await runApplicationsSegment(frame, nav, propertyId);
     return;
   }
-  if (segment === "inbox") {
+  if (segment === "communication") {
     await runInboxSegment(frame, nav);
     return;
   }

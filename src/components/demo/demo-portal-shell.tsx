@@ -275,7 +275,7 @@ export function DemoPortalShell() {
   const navigateToManagerInbox = useCallback(
     (nextTab: string | null = "unopened") => {
       setDemoRole("manager");
-      selectSection("inbox", nextTab);
+      selectSection("communication", nextTab);
     },
     [selectSection],
   );
@@ -283,7 +283,7 @@ export function DemoPortalShell() {
   const navigateToResidentInbox = useCallback(
     (nextTab: string | null = "unopened") => {
       setDemoRole("resident");
-      selectSection("inbox", nextTab);
+      selectSection("communication", nextTab);
     },
     [selectSection],
   );
@@ -300,7 +300,7 @@ export function DemoPortalShell() {
       navigateToProperties();
     } else if (selectedSegment === "payments") {
       navigateToManagerPayments();
-    } else if (selectedSegment === "inbox") {
+    } else if (selectedSegment === "communication") {
       navigateToManagerInbox("unopened");
     } else if (selectedSegment === "promotion") {
       navigateToManagerPromotion();

@@ -13,7 +13,7 @@ import { TabNav } from "@/components/ui/tabs";
 
 export type VendorCommunicationChannel = "email" | "sms";
 export type VendorEmailTabId = "unopened" | "opened" | "sent" | "trash";
-export type VendorSmsTabId = "unopened" | "opened" | "sent";
+export type VendorSmsTabId = "all" | "unopened" | "opened" | "sent";
 
 const VENDOR_EMAIL_TAB_DEFS = INBOX_TAB_DEFS.filter((tab) => tab.id !== "schedule");
 
@@ -36,6 +36,7 @@ export function VendorCommunication({
     trash: 0,
   });
   const [smsBucketCounts, setSmsBucketCounts] = useState<Record<ManagerSmsBucketId, number>>({
+    all: 0,
     unopened: 0,
     opened: 0,
     schedule: 0,
@@ -135,7 +136,6 @@ export function VendorCommunication({
           apiPath="/api/vendor/sms-conversations"
           storageScope="vendor"
           tabId={smsTabId}
-          includeSchedule={false}
           onBucketCountsChange={handleSmsBucketCountsChange}
         />
       )}

@@ -2,10 +2,11 @@ import "server-only";
 
 import { collectLinkedPropertyPermissionsForUser } from "@/lib/auth/manager-lease-scope";
 import {
-  hasCoManagerPermissionForProperty,
+  hasCoManagerPermissionLevelForProperty,
   normalizePropertyCoManagerPermissions,
   permissionsForProperty,
   type CoManagerPermissionId,
+  type CoManagerPermissionLevel,
 } from "@/lib/co-manager-permissions";
 import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -24,11 +25,12 @@ function moduleAllowed(
   propertyPerms: ReturnType<typeof normalizePropertyCoManagerPermissions> | undefined,
   propertyId: string,
   module: CoManagerPermissionId,
+  level: CoManagerPermissionLevel = "read",
 ): boolean {
   const flat = permissionsForProperty(propertyPerms, propertyId);
   const anyGranted = Object.values(flat).some(Boolean);
   if (!anyGranted) return true;
-  return hasCoManagerPermissionForProperty(propertyPerms, propertyId, module);
+  return hasCoManagerPermissionLevelForProperty(propertyPerms, propertyId, module, level);
 }
 
 /**
@@ -89,6 +91,7 @@ export async function linkedOwnerScopeForModule(
   db: ServiceClient,
   userId: string,
   module: CoManagerPermissionId,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<LinkedOwnerScope> {
   const ownerIds = new Set<string>();
   const propertyIds = new Set<string>();
@@ -139,7 +142,7 @@ export async function linkedOwnerScopeForModule(
 
       let ownerQualifies = false;
       for (const propertyId of assigned) {
-        if (moduleAllowed(perms, propertyId, module)) {
+        if (moduleAllowed(perms, propertyId, module, level)) {
           propertyIds.add(propertyId);
           ownerQualifies = true;
         }

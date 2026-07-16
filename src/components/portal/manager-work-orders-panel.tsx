@@ -316,8 +316,9 @@ export function ManagerWorkOrdersPanel({
       if (created) setHcTick((n) => n + 1);
       const vendorEmailed = await sendVendorVisitEmail(row, iso);
       if (!isDemoModeActive() && iso !== row.scheduledAtIso) {
-        void notifyResidentOfWorkOrderUpdate("visit_scheduled", row, { scheduledLabel });
-        track("work_order_resident_notified", { stage: "visit_scheduled", work_order_id: row.id });
+        void notifyResidentOfWorkOrderUpdate("visit_scheduled", row, { scheduledLabel }).then((notify) => {
+          if (notify.ok) track("work_order_resident_notified", { stage: "visit_scheduled", work_order_id: row.id });
+        });
       }
       const billingPart = created
         ? created.status === "paid"
@@ -504,7 +505,9 @@ export function ManagerWorkOrdersPanel({
           deliverViaEmail: completeDraft.viaEmail,
           deliverViaSms: completeDraft.viaSms,
         });
-        track("work_order_resident_notified", { stage: "completed", work_order_id: completeRow.id });
+        if (notify.ok) {
+          track("work_order_resident_notified", { stage: "completed", work_order_id: completeRow.id });
+        }
         showToast(
           notify.ok
             ? data.expenseEntryIds?.length
@@ -686,8 +689,9 @@ export function ManagerWorkOrdersPanel({
         vendorName: vendor.name,
         vendorAssignedAt: assignedAt,
         selfAssigned: false,
+      }).then((notify) => {
+        if (notify.ok) track("work_order_resident_notified", { stage: "vendor_assigned", work_order_id: row.id });
       });
-      track("work_order_resident_notified", { stage: "vendor_assigned", work_order_id: row.id });
     }
   };
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listingGeocodeQuery, parseGeocodeResult, type GeocodeCoords } from "@/lib/geocode-address";
-import { nominatimUserAgent, throttleNominatim } from "@/lib/nominatim.server";
+import { boundedCacheSet, nominatimUserAgent, throttleNominatim } from "@/lib/nominatim.server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import type { MockProperty } from "@/data/types";
 
 export const runtime = "nodejs";
@@ -56,6 +57,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "A valid address query is required." }, { status: 400 });
   }
 
+  if (!rateLimit(`geocode:${clientIpFrom(req)}`, 30, 60_000).ok) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
+
   const key = cacheKey(query);
   const cached = geocodeCache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
@@ -69,7 +74,7 @@ export async function GET(req: Request) {
     if (!coords) {
       return NextResponse.json({ error: "Address could not be located." }, { status: 404 });
     }
-    geocodeCache.set(key, { coords, at: Date.now() });
+    boundedCacheSet(geocodeCache, key, { coords, at: Date.now() });
     return NextResponse.json(coords, {
       headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" },
     });

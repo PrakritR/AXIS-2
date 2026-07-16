@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   deleteManagerSmsConversation,
   fetchManagerSmsConversations,
+  resolveSmsScopeManagerIds,
 } from "@/lib/manager-sms-messages.server";
 import { sendFromManagerWorkNumber } from "@/lib/proplane-sms-transport.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -62,6 +63,14 @@ export async function DELETE(req: Request) {
   }
 
   const ownerManagerUserId = String(match.ownerManagerUserId ?? auth.user.id).trim() || auth.user.id;
+  // Deleting an owner's conversation needs an edit-level inbox grant —
+  // read-level co-manager access only allows viewing.
+  if (ownerManagerUserId !== auth.user.id) {
+    const editScope = await resolveSmsScopeManagerIds(auth.db, auth.user.id, "edit");
+    if (!editScope.includes(ownerManagerUserId)) {
+      return NextResponse.json({ error: "You do not have edit access to this conversation." }, { status: 403 });
+    }
+  }
 
   const result = await deleteManagerSmsConversation(auth.db, {
     managerUserId: ownerManagerUserId,
@@ -108,6 +117,14 @@ export async function POST(req: Request) {
   }
 
   const ownerManagerUserId = String(match.ownerManagerUserId ?? auth.user.id).trim() || auth.user.id;
+  // Sending from an owner's work number needs an edit-level inbox grant —
+  // read-level co-manager access only allows viewing conversations.
+  if (ownerManagerUserId !== auth.user.id) {
+    const editScope = await resolveSmsScopeManagerIds(auth.db, auth.user.id, "edit");
+    if (!editScope.includes(ownerManagerUserId)) {
+      return NextResponse.json({ error: "You do not have edit access to this conversation." }, { status: 403 });
+    }
+  }
   const workNumber = await resolveManagerWorkNumber(auth.db, ownerManagerUserId);
   if (!workNumber) {
     return NextResponse.json(

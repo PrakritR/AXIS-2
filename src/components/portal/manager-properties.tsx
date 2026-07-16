@@ -59,7 +59,7 @@ export function ManagerProperties() {
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [shareListingOpen, setShareListingOpen] = useState(false);
   const [shareListingPropertyId, setShareListingPropertyId] = useState<string | undefined>();
-  const [demoStage, setDemoStage] = useState<ManagerStageKey>("pending");
+  const [demoStage, setDemoStage] = useState<ManagerStageKey>("listed");
 
   const activeStage = isDemoModeActive()
     ? demoStage
@@ -145,11 +145,8 @@ export function ManagerProperties() {
     void portfolioTick;
     const kpiValues = adminKpiCounts(scopeUserId);
     return {
-      pending: kpiValues[0],
-      requestChange: kpiValues[1],
       listed: kpiValues[2],
       unlisted: kpiValues[3],
-      rejected: kpiValues[4],
     };
   }, [portfolioTick, scopeUserId]);
 
@@ -193,7 +190,7 @@ export function ManagerProperties() {
     const onOpen = () => tryOpenAdd();
     const onStage = (e: Event) => {
       const stage = (e as CustomEvent<{ stage?: DemoPropertiesStage }>).detail?.stage;
-      if (stage) setActiveStage(stage);
+      if (stage === "listed" || stage === "unlisted") setActiveStage(stage);
     };
     window.addEventListener(DEMO_OPEN_CREATE_LISTING_EVENT, onOpen);
     window.addEventListener(DEMO_PROPERTIES_STAGE_EVENT, onStage as EventListener);
@@ -275,7 +272,7 @@ export function ManagerProperties() {
           onSubmitted={() => {
             setWizardOpen(false);
             refreshPending();
-            showToast("Listing submitted for admin review.");
+            showToast("Listing submitted and published.");
           }}
           showToast={showToast}
           skuTier={skuTier}

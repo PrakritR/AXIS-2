@@ -56,13 +56,11 @@ export function RoleSmsPanel({
   apiPath,
   storageScope,
   tabId,
-  includeSchedule = true,
   onBucketCountsChange,
 }: {
   apiPath: string;
   storageScope: string;
   tabId: ManagerSmsBucketId;
-  includeSchedule?: boolean;
   onBucketCountsChange?: (counts: Record<ManagerSmsBucketId, number>) => void;
 }) {
   const storageKey = `${OPENED_STORAGE_PREFIX}${storageScope}`;
@@ -95,7 +93,7 @@ export function RoleSmsPanel({
   const bucketedMessages = useMemo(() => {
     if (tabId === "schedule") return [];
     return [...messages]
-      .filter((msg) => smsMessageBucket(msg, openedIds) === tabId)
+      .filter((msg) => tabId === "all" || smsMessageBucket(msg, openedIds) === tabId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [messages, openedIds, tabId]);
 
@@ -109,7 +107,7 @@ export function RoleSmsPanel({
       else if (bucket === "opened") opened += 1;
       else if (bucket === "unopened") unopened += 1;
     }
-    return { unopened, opened, schedule: 0, sent };
+    return { all: messages.length, unopened, opened, schedule: 0, sent };
   }, [messages, openedIds]);
 
   useEffect(() => {
@@ -129,7 +127,7 @@ export function RoleSmsPanel({
     [storageKey],
   );
 
-  if (tabId === "schedule" || (!includeSchedule && tabId === "schedule")) {
+  if (tabId === "schedule") {
     return <PortalInboxEmptyState title="No scheduled SMS yet." />;
   }
 
@@ -146,7 +144,7 @@ export function RoleSmsPanel({
   }
 
   if (bucketedMessages.length === 0) {
-    return <PortalInboxEmptyState title={`No ${tabId} SMS yet.`} />;
+    return <PortalInboxEmptyState title={tabId === "all" ? "No SMS yet." : `No ${tabId === "unopened" ? "unread" : tabId} SMS yet.`} />;
   }
 
   return (

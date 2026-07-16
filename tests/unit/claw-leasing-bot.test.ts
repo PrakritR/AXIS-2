@@ -55,7 +55,15 @@ describe("claw leasing intent", () => {
     expect(looksLikeProspectLeasingCta("Hi — I have a question (propertyId=mgr-1).")).toBe(true);
     expect(looksLikeProspectLeasingCta("Hey I want a tour of the house can you help me")).toBe(true);
     expect(looksLikeProspectLeasingCta("Can I apply for The Pioneer?")).toBe(true);
+    expect(looksLikeProspectLeasingCta("Hey I want more info about 4709a house")).toBe(true);
     expect(looksLikeProspectLeasingCta("Sure, Saturday at 2 works for them")).toBe(false);
+    expect(looksLikeProspectLeasingCta("When is my rent due this month?")).toBe(false);
+  });
+
+  it("extracts property labels from freeform info asks", async () => {
+    const { extractPropertyLabelHint } = await import("@/lib/claw-leasing-links");
+    expect(extractPropertyLabelHint("Hey I want more info about 4709a house")).toBe("4709a house");
+    expect(extractPropertyLabelHint("Hi — I'd like to schedule a tour for The Pioneer.")).toBe("The Pioneer");
   });
 
   it("classifies freeform tour requests", () => {

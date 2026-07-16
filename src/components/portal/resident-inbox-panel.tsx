@@ -490,7 +490,7 @@ export const ResidentInboxPanel = forwardRef<
             }
             showToast("Message scheduled.");
             void reloadScheduledMessages();
-            navigate("/resident/inbox/schedule");
+            navigate("/resident/communication/email/schedule");
             return;
           }
 
@@ -520,7 +520,7 @@ export const ResidentInboxPanel = forwardRef<
           const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
           showToast("Message sent.");
-          navigate("/resident/inbox/sent");
+          navigate("/resident/communication/email/sent");
         } catch {
           showToast("Message could not be sent.");
         }
@@ -881,7 +881,7 @@ export const ResidentInboxPanel = forwardRef<
             activeTone="primary"
             tabs={tabs}
             activeId={tabId}
-            onChange={(id) => navigate(`/resident/inbox/${id}`)}
+            onChange={(id) => navigate(`/resident/communication/email/`)}
           />
           {tabId === "trash" && counts.trash > 0 ? (
             <div className={PORTAL_FILTER_ACTIONS_MOBILE}>

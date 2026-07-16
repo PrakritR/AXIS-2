@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -38,9 +38,6 @@ import {
   managerPropertyRowsForStage,
   readAdminPropertyRows,
   resolveAdminPropertyRowPreview,
-  removeRejectedProperty,
-  restoreRejectedToPending,
-  returnRequestChangeToPending,
   unlistManagerListing,
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
@@ -48,11 +45,8 @@ import {
 import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   PROPERTY_PIPELINE_EVENT,
-  deletePendingSubmissionForManager,
   mirrorLocalPropertyPipelineToServer,
   readExtraListingsForUser,
-  readPendingManagerPropertiesForUser,
-  type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import { samePropertyId } from "@/lib/co-manager-calendar";
 import {
@@ -87,11 +81,6 @@ import {
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
 import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
-
-function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
-  const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
-  return normalizeManagerListingSubmissionV1(raw);
-}
 
 function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
   if (p.listingSubmission) return normalizeManagerListingSubmissionV1(p.listingSubmission);
@@ -138,25 +127,19 @@ function deferCatalogMutation(fn: () => void) {
 }
 
 const MANAGER_STAGES = [
-  { key: "pending", label: "Pending", buckets: [0] as AdminPropertyBucketIndex[] },
-  { key: "requestChange", label: "Request change", buckets: [1] as AdminPropertyBucketIndex[] },
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
-  { key: "rejected", label: "Rejected", buckets: [4] as AdminPropertyBucketIndex[] },
 ] as const;
 
 export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 
 export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
-  pending: "Nothing awaiting review.",
-  requestChange: "No properties awaiting edits.",
   listed: "No listed properties.",
   unlisted: "No unlisted properties.",
-  rejected: "No rejected properties.",
 };
 
 export function managerStageFromParam(raw: string | null): ManagerStageKey {
-  return MANAGER_STAGES.some((stage) => stage.key === raw) ? (raw as ManagerStageKey) : "pending";
+  return MANAGER_STAGES.some((stage) => stage.key === raw) ? (raw as ManagerStageKey) : "listed";
 }
 
 export { MANAGER_STAGES };
@@ -226,7 +209,7 @@ function ManagerPropertyInlineDetails({
   const portalSub = useMemo<
     | {
         sub: ManagerListingSubmissionV1;
-        saveMode: "pending" | "listing" | "requestChange";
+        saveMode: "listing";
         saveId: string;
         listingId?: string;
         ownerUserId?: string;
@@ -254,21 +237,10 @@ function ManagerPropertyInlineDetails({
       }
       const p = readExtraListingsForUser(managerUserId).find((x) => x.id === listingId);
       if (p) return { sub: submissionForListedEdit(p), saveMode: "listing", saveId: listingId, listingId };
-      if (bucket === 1) {
-        return { sub: submissionForAdminRow(row), saveMode: "requestChange", saveId: row.adminRefId, listingId };
-      }
-      if (bucket === 0 && row.adminRefId.startsWith("mgr-")) {
-        return { sub: submissionForAdminRow(row), saveMode: "listing", saveId: row.adminRefId, listingId };
-      }
-    }
-
-    if (bucket === 0) {
-      const p = readPendingManagerPropertiesForUser(managerUserId).find((r) => r.id === row.adminRefId);
-      return p ? { sub: submissionForPendingEdit(p), saveMode: "pending", saveId: row.adminRefId } : null;
     }
 
     return null;
-  }, [managerUserId, row, bucket, linkedOwnerId]);
+  }, [managerUserId, row, linkedOwnerId]);
 
   // noteKey is stable per listing — derived from row identifiers so it doesn't depend on portalSub.
   const noteKey = useMemo(
@@ -336,9 +308,9 @@ function ManagerPropertyInlineDetails({
         propCountBeforeSubmit: 0,
         initialSubmission: portalSub.sub,
         noteKey,
-        editPendingId: portalSub.saveMode === "pending" ? portalSub.saveId : null,
-        editListingId: portalSub.saveMode === "listing" ? portalSub.saveId : null,
-        editRequestChangeId: portalSub.saveMode === "requestChange" ? portalSub.saveId : null,
+        editPendingId: null,
+        editListingId: portalSub.saveId,
+        editRequestChangeId: null,
         editListingOwnerUserId: portalSub.ownerUserId ?? null,
       }
     : null;
@@ -359,92 +331,7 @@ function ManagerPropertyInlineDetails({
 
   const footer = (
     <div className="flex flex-col gap-3">
-      {bucket === 1 && row.editRequestNote?.trim() ? (
-        <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Requested changes</p>
-          <p className="mt-1.5 whitespace-pre-wrap text-muted">{row.editRequestNote.trim()}</p>
-        </div>
-      ) : null}
-
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Actions</p>
-
-      {bucket === 0 ? (
-        <>
-          {row.adminRefId.startsWith("mgr-") ? (
-            <p className="text-xs text-muted">
-              This listing was edited and is pending admin re-approval. Edit sections below.
-            </p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            {canEditListing ? (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={actionBtnClass}
-                  data-attr="listing-edit-full"
-                  onClick={openFullListingEditor}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                  data-attr="listing-delete"
-                  onClick={() => {
-                    if (row.adminRefId.startsWith("mgr-")) {
-                      if (!window.confirm("Permanently delete this listing from your catalog?")) return;
-                      deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(row.adminRefId, managerUserId)));
-                      return;
-                    }
-                    if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
-                    deferCatalogMutation(() =>
-                      run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
-                    );
-                  }}
-                >
-                  {row.adminRefId.startsWith("mgr-") ? "Delete listing" : "Delete submission"}
-                </Button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                data-attr="listing-delete"
-                onClick={() => {
-                  if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
-                  deferCatalogMutation(() =>
-                    run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
-                  );
-                }}
-              >
-                Delete submission
-              </Button>
-            )}
-          </div>
-        </>
-      ) : null}
-
-      {bucket === 1 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className={actionBtnClass}
-            data-attr="listing-move-to-pending"
-            onClick={() =>
-              deferCatalogMutation(() =>
-                run("Returned to pending — you can edit and resubmit.", returnRequestChangeToPending(row.adminRefId, managerUserId)),
-              )
-            }
-          >
-            Move to pending & revise
-          </Button>
-          {editDeleteGroup}
-        </div>
-      ) : null}
 
       {bucket === 2 && listingId ? (
         <div className="grid grid-cols-3 gap-2">
@@ -591,35 +478,6 @@ function ManagerPropertyInlineDetails({
           )}
         </div>
       ) : null}
-
-      {bucket === 4 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className={actionBtnClass}
-            data-attr="listing-restore-pending"
-            onClick={() =>
-              deferCatalogMutation(() =>
-                run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId, managerUserId)),
-              )
-            }
-          >
-            Move to pending approval
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} ml-auto border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            data-attr="listing-delete"
-            onClick={() =>
-              deferCatalogMutation(() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId)))
-            }
-          >
-            Delete property
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 
@@ -729,14 +587,11 @@ export function ManagerHousePropertiesPanel({
   const stageCounts = useMemo(() => {
     void tick;
     if (!scopeUserId) {
-      return { pending: 0, requestChange: 0, listed: 0, unlisted: 0, rejected: 0 };
+      return { listed: 0, unlisted: 0 };
     }
     return {
-      pending: managerPropertyRowsForStage([0], scopeUserId).length,
-      requestChange: managerPropertyRowsForStage([1], scopeUserId).length,
       listed: managerPropertyRowsForStage([2], scopeUserId).length,
       unlisted: managerPropertyRowsForStage([3], scopeUserId).length,
-      rejected: managerPropertyRowsForStage([4], scopeUserId).length,
     };
   }, [tick, scopeUserId]);
 
@@ -757,15 +612,6 @@ export function ManagerHousePropertiesPanel({
       }),
     );
   }, [tick, scopeUserId, activeStage]);
-
-  const didAutoStageRef = useRef(false);
-  useEffect(() => {
-    if (didAutoStageRef.current || !scopeUserId) return;
-    if (activeStage === "pending" && (stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
-      onStageChange("listed");
-    }
-    didAutoStageRef.current = true;
-  }, [activeStage, onStageChange, scopeUserId, stageCounts]);
 
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;

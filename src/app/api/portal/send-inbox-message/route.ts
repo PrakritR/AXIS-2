@@ -55,8 +55,8 @@ function inboxDeepLinkForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
   if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
   if (normalized === "admin") return "/admin/inbox/unopened";
-  if (normalized === "vendor") return "/vendor/inbox/unopened";
-  return "/resident/inbox/unopened";
+  if (normalized === "vendor") return "/vendor/communication/email/unopened";
+  return "/resident/communication/email/unopened";
 }
 
 type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" };

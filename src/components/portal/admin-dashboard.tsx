@@ -15,7 +15,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { readInboxMessages, syncInboxMessagesFromServer } from "@/lib/demo-admin-partner-inbox";
-import { adminKpiCounts, readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
+import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   getPartnerInquiryWindows,
   pendingInquiryCount,
@@ -225,10 +225,8 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
 
   const data = useMemo(() => {
     void tick;
-    const [pendingProps, , listedProps] = adminKpiCounts();
-    const totalProps = pendingProps + listedProps;
-
-    const pendingPropertyRows = readAdminPropertyRows(0).slice(0, 5);
+    const [, , listedProps, unlistedProps] = adminKpiCounts();
+    const totalProps = listedProps + unlistedProps;
 
     const inboxMessages = readInboxMessages();
     const inboxUnread = inboxMessages.filter((m) => m.folder === "inbox" && !m.read).length;
@@ -270,10 +268,9 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
     const totalMeetings = pendingMeetingCount + confirmedMeetingCount;
 
     return {
-      pendingProps,
       listedProps,
+      unlistedProps,
       totalProps,
-      pendingPropertyRows,
       inboxUnread,
       inboxPreview,
       feedbackTotal,
@@ -286,10 +283,9 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
   }, [tick, cutoffMs]);
 
   const {
-    pendingProps,
     listedProps,
+    unlistedProps,
     totalProps,
-    pendingPropertyRows,
     inboxUnread,
     inboxPreview,
     feedbackTotal,
@@ -307,7 +303,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
         ? "No upcoming meetings on the calendar."
         : "No meeting requests yet.";
 
-  const openCount = pendingProps + pendingMeetingCount + inboxUnread + openFeedbackTotal;
+  const openCount = pendingMeetingCount + inboxUnread + openFeedbackTotal;
 
   return (
     <ManagerPortalPageShell
@@ -320,18 +316,10 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
         <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
             <KpiTile
-              label="Pending review"
-              value={pendingProps}
-              sub={pendingProps > 0 ? "Awaiting admin action" : "All caught up"}
-              accent={pendingProps > 0}
-              href="/admin/properties?tab=pending"
-              dataAttr="admin-dashboard-kpi-pending"
-            />
-            <KpiTile
               label="Live properties"
               value={listedProps}
-              sub={`${totalProps} total`}
-              href="/admin/properties"
+              sub={unlistedProps > 0 ? `${unlistedProps} unlisted · ${totalProps} total` : `${totalProps} total`}
+              href="/admin/properties?tab=listed"
               dataAttr="admin-dashboard-kpi-properties"
             />
             <KpiTile
@@ -375,29 +363,6 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
               </span>
             ) : null}
           </div>
-
-          <AttentionGroup
-            title="Properties pending review"
-            href="/admin/properties?tab=pending"
-            linkLabel="Properties →"
-            items={pendingPropertyRows}
-            emptyMessage="No properties waiting for admin review."
-            keyForItem={(row) => row.adminRefId}
-            renderRow={(row) => (
-              <IssueRow
-                href="/admin/properties?tab=pending"
-                dot={DOT_PENDING}
-                title={row.buildingName || row.unitLabel || "Listing"}
-                subtitle={row.address || row.neighborhood || "Pending submission"}
-                meta={
-                  row.rentRangeLabel ||
-                  (row.monthlyRent ? `$${row.monthlyRent.toLocaleString()}/mo` : undefined)
-                }
-                pill={<StatusPill tone="pending">Review</StatusPill>}
-                dataAttr="admin-dashboard-attention-property"
-              />
-            )}
-          />
 
           <AttentionGroup
             title="Meetings"

@@ -181,11 +181,15 @@ export async function sendFromManagerWorkNumber(args: {
         .maybeSingle();
       const raw = String(data?.sms_from_number ?? "").trim();
       from = managerContactSmsPhoneForPublicCta(raw);
-      // Do not auto-buy Twilio while the Claw bridge is covering opted-in managers.
-      if (!from && raw && !isLegacyClawSharedSmsNumber(raw) && !isClawSharedLineBridgeEnabled()) {
+      // Do not auto-buy Twilio while the Claw bridge is covering opted-in
+      // managers. Once the bridge is off, ensureManagerSmsNumber handles every
+      // stale stamp itself (legacy Claw line, 555 placeholder, empty) — do not
+      // pre-filter here or legacy-stamped profiles get stranded with no
+      // transport at all.
+      if (!from && !isClawSharedLineBridgeEnabled()) {
         const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
         const provisioned = await ensureManagerSmsNumber(db, managerUserId);
-        if (provisioned.ok) from = provisioned.number;
+        if (provisioned.ok) from = managerContactSmsPhoneForPublicCta(provisioned.number);
       }
     } catch {
       from = null;

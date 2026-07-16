@@ -3,7 +3,7 @@
  *
  * Prospects text the manager's `sms_from_number` about tours / applications;
  * we reply with deep links (apply) or intake questions (tour) and mirror the
- * thread into that manager's Axis inbox. Claw Messenger is opt-in legacy only.
+ * thread into that manager's PropLane inbox. Claw Messenger is opt-in legacy only.
  */
 
 import { after } from "next/server";
@@ -454,10 +454,12 @@ export async function handleClawLeasingInbound(args: {
   // Manager typing from their personal phone.
   // "agent …" commands run locally (mark paid, lease link, …) and are NOT relayed.
   // Everything else relays to the open resident thread (unless it's a listing CTA).
+  // Identity first: a known manager's personal phone is never a prospect,
+  // even when their message mentions tours/visits/applying.
   const fromIsManager = scopedManagerId
     ? await isManagerPersonalPhone(from, scopedManagerId)
     : await isMappedManagerPhone(from);
-  if (fromIsManager && !looksLikeProspectLeasingCta(text)) {
+  if (fromIsManager) {
     const { runManagerAgentCommand } = await import("@/lib/claw-manager-actions.server");
     const agent = await runManagerAgentCommand({ fromPhone: from, text });
     if (agent) {
@@ -490,7 +492,7 @@ export async function handleClawLeasingInbound(args: {
 
   // Existing resident (payment/lease thread or known profile) → two-way messaging,
   // not the leasing auto-reply menu.
-  if (!looksLikeProspectLeasingCta(text)) {
+  {
     const [profileHit, existingThread] = await Promise.all([
       findResidentProfileByPhone(from),
       findThreadByResidentPhone(from),
@@ -506,6 +508,13 @@ export async function handleClawLeasingInbound(args: {
       residentProfile = null;
       thread = null;
     }
+    // Identity first: a KNOWN resident's freeform text stays in their thread
+    // ("when will the plumber visit?" must not trigger the leasing menu).
+    // Only unknown senders are routed by prospect-CTA text matching.
+    const knownSender = Boolean(residentProfile || thread);
+    if (!knownSender && looksLikeProspectLeasingCta(text)) {
+      // fall through to the prospect leasing responder below
+    } else {
     const managerForThread =
       residentProfile?.managerUserId || thread?.managerUserId || scopedManagerId || null;
     if (!thread && managerForThread) {
@@ -599,6 +608,7 @@ export async function handleClawLeasingInbound(args: {
         error: send.ok ? undefined : send.error,
       };
     }
+    }
   }
 
   const intent = classifyLeasingIntent(text);
@@ -683,7 +693,7 @@ export async function handleClawLeasingInbound(args: {
                     "",
                     text || "(empty message)",
                     "",
-                    `— Leasing assistant replied —`,
+                    `— PropLane leasing assistant replied —`,
                     agent.reply,
                   ].join("\n"),
                   unread: true,
@@ -739,14 +749,20 @@ export async function handleClawLeasingInbound(args: {
     const { resolvePropertyScopedManagerRecipientIds } = await import(
       "@/lib/co-manager-notification-recipients.server"
     );
-    const ownerId = managers[0]?.userId ?? landlordId;
-    const recipientIds = ownerId
-      ? await resolvePropertyScopedManagerRecipientIds(db, {
-          ownerManagerUserId: ownerId,
+    // Every mapped manager gets the notice (a shared line can map several),
+    // each expanded to their property-scoped co-managers.
+    const ownerIds = [...new Set(managers.map((m) => m.userId).filter(Boolean))];
+    if (ownerIds.length === 0 && landlordId) ownerIds.push(landlordId);
+    const recipientIdSets = await Promise.all(
+      ownerIds.map((ownerManagerUserId) =>
+        resolvePropertyScopedManagerRecipientIds(db, {
+          ownerManagerUserId,
           propertyId,
           channel: "inbox",
-        })
-      : [];
+        }),
+      ),
+    );
+    const recipientIds = [...new Set(recipientIdSets.flat())];
     await Promise.all([
       forwardClawInboundToManagers({
         fromResident: from,

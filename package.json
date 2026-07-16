@@ -56,6 +56,7 @@
     "scrape:apm:quick": "node scripts/scrape-allpropertymanagement.mjs --quick",
     "scrape:apm:contacts": "node scripts/scrape-apm-contacts.mjs",
     "claw:gateway": "node --env-file=.env.local scripts/claw-messenger-gateway.mjs",
+    "claw:setup": "node --env-file=.env.local scripts/setup-claw-messenger.mjs",
     "claw:assign-numbers": "node --env-file=.env.local scripts/assign-claw-leasing-numbers.mjs",
     "admin:backfill-work-numbers": "npx tsx --env-file=.env.local scripts/backfill-manager-work-numbers.ts",
     "setup:twilio-vercel": "node --env-file=.env.local scripts/sync-twilio-vercel-env.mjs",
