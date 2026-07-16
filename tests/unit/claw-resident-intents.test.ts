@@ -40,7 +40,10 @@ describe("classifyResidentSmsIntent", () => {
   it("skips manager brief for help and greeting", () => {
     expect(classifyResidentSmsIntent("help").skipManagerBrief).toBe(true);
     expect(classifyResidentSmsIntent("hi").skipManagerBrief).toBe(true);
-    expect(residentHelpMenuText()).toContain("PAY");
+    const help = residentHelpMenuText();
+    expect(help.toLowerCase()).toContain("text me");
+    expect(help).not.toMatch(/PAY \/ BALANCE/);
+    expect(help).not.toMatch(/PropLane resident menu/i);
   });
 
   it("falls back to inbox/unknown for freeform chat", () => {
@@ -52,7 +55,7 @@ describe("classifyResidentSmsIntent", () => {
 });
 
 describe("buildManagerResidentBrief", () => {
-  it("includes said / wants / domain / open link", () => {
+  it("leads with Property, Resident, Said, and Reply; link only when auto-filed", () => {
     const brief = buildManagerResidentBrief({
       residentName: "Test Resident",
       residentEmail: "resident@test.axis.local",
@@ -62,13 +65,38 @@ describe("buildManagerResidentBrief", () => {
       domain: "Services",
       managerPath: "/portal/services/work-orders",
       autoFiledNote: "PropLane auto-filed work order REQ-1 (Toilet issue).",
+      propertyLabel: "The Pioneer",
+      reply: "Got it — I filed a work order.",
     });
-    expect(brief).toContain('Resident Test Resident (resident@test.axis.local)');
-    expect(brief).toContain('"my toilet is broken"');
-    expect(brief).toContain("Wants: file a maintenance work order");
-    expect(brief).toContain("Domain: Services");
-    expect(brief).toContain("/portal/services/work-orders");
+    expect(brief).toContain("Property: The Pioneer");
+    expect(brief).toContain("Resident: Test Resident (+15105791976)");
+    expect(brief).toContain("Said: my toilet is broken");
+    expect(brief).toContain("Reply: Got it — I filed a work order.");
     expect(brief).toContain("REQ-1");
+    expect(brief).toContain("/portal/services/work-orders");
+    expect(brief).not.toContain("Wants:");
+  });
+
+  it("omits the portal link when nothing was auto-filed", () => {
+    const brief = buildManagerResidentBrief({
+      residentName: "Test Resident",
+      residentEmail: null,
+      residentPhone: "+15105791976",
+      said: "Ok",
+      wants: "manager attention / reply",
+      domain: "Inbox",
+      managerPath: "/portal/inbox/unopened",
+      propertyLabel: "The Pioneer",
+      reply: "Got it — your property manager will see this.",
+    });
+    expect(brief).toBe(
+      [
+        "Property: The Pioneer",
+        "Resident: Test Resident (+15105791976)",
+        "Said: Ok",
+        "Reply: Got it — your property manager will see this.",
+      ].join("\n"),
+    );
   });
 });
 
@@ -91,6 +119,6 @@ describe("formatPendingChargesForSms", () => {
   });
 
   it("handles empty list", () => {
-    expect(formatPendingChargesForSms([])).toContain("No pending charges");
+    expect(formatPendingChargesForSms([])).toMatch(/caught up|nothing due/i);
   });
 });

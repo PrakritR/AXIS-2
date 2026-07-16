@@ -85,6 +85,33 @@ export async function GET() {
         })
         .map((record) => record.row_data)
         .filter(Boolean) as ServiceRequest[];
+      // #region agent log
+      fetch("http://127.0.0.1:7518/ingest/13325f45-ca08-4e41-b48c-2517464d2c52", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7a8007" },
+        body: JSON.stringify({
+          sessionId: "7a8007",
+          hypothesisId: "C",
+          location: "portal-service-requests/route.ts:GET",
+          message: "manager GET service requests",
+          data: {
+            managerIdPrefix: user.id.slice(0, 8),
+            linkedPropCount: linkedPropertyIds.size,
+            ownedPropSample: [...linkedPropertyIds].slice(0, 8),
+            rowCount: rows.length,
+            pendingCount: rows.filter((r) => r.status === "pending").length,
+            sample: rows.slice(0, 5).map((r) => ({
+              id: r.id,
+              mgr: String(r.managerUserId ?? "").slice(0, 8),
+              prop: r.propertyId,
+              offer: String(r.offerName ?? "").slice(0, 32),
+              status: r.status,
+            })),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return NextResponse.json({ rows });
     }
 
@@ -271,6 +298,29 @@ export async function POST(req: Request) {
     if (!stamped) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
+    // #region agent log
+    fetch("http://127.0.0.1:7518/ingest/13325f45-ca08-4e41-b48c-2517464d2c52", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7a8007" },
+      body: JSON.stringify({
+        sessionId: "7a8007",
+        hypothesisId: "B",
+        location: "portal-service-requests/route.ts:POST",
+        message: "resident upsert stamp result",
+        data: {
+          role,
+          actorEmailDomain: actor.email.split("@")[1] ?? "",
+          claimedMgr: String(body.row.managerUserId ?? "").slice(0, 8),
+          claimedProp: String(body.row.propertyId ?? ""),
+          stampedMgr: String(stamped.managerUserId ?? "").slice(0, 8),
+          stampedProp: String(stamped.propertyId ?? ""),
+          offerName: String(stamped.offerName ?? "").slice(0, 40),
+          rowId: stamped.id,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     // The client mirrors both creates and edits through this same single-row
     // upsert, so a genuinely new submission (vs an update) is detected with an
     // existence check BEFORE the write — only brand-new rows notify.

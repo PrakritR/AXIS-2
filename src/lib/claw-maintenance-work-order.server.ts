@@ -249,16 +249,14 @@ export function maintenanceWorkOrderResidentAck(result: CreateWorkOrderFromResid
   const services = residentPortalUrl("services");
   if ("alreadyOpen" in result && result.alreadyOpen) {
     return [
-      `You already have an open request for this: "${result.title}".`,
-      `We'll keep your property manager in the loop.`,
-      `Track it here: ${services}`,
+      `Looks like we already have that open ("${result.title}").`,
+      `Your manager's on it — you can check here if you want: ${services}`,
     ].join("\n");
   }
   if (result.created) {
     return [
-      `Got it — I filed a work order: "${result.title}".`,
-      `Your property manager has been notified and will follow up here.`,
-      `Track it: ${services}`,
+      `Got it, I put in a work order for "${result.title}".`,
+      `Your manager will follow up here.`,
     ].join("\n");
   }
   return null;

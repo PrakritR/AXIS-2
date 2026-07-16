@@ -13,6 +13,7 @@ import {
 } from "@/lib/claw-service-request-sms.server";
 import {
   classifyResidentSmsIntent,
+  residentGreetingText,
   residentHelpMenuText,
   type ClassifiedResidentSms,
 } from "@/lib/claw-resident-intents";
@@ -28,8 +29,15 @@ export type ResidentSmsActionResult = {
   autoFiledNote: string | null;
   threadTopic: ClawThreadTopic;
   forwardSaid: string;
+  /** Property label for manager brief header (resolved from residency). */
+  propertyLabel: string | null;
 };
 
+/**
+ * Manager-phone alert header + body.
+ * Top lines always identify property + resident (looked up from the sender phone),
+ * then the resident's message, then what PropLane replied.
+ */
 export function buildManagerResidentBrief(args: {
   residentName: string;
   residentEmail?: string | null;
@@ -39,42 +47,44 @@ export function buildManagerResidentBrief(args: {
   domain: string;
   managerPath: string;
   autoFiledNote?: string | null;
+  propertyLabel?: string | null;
+  /** What PropLane sent back to the resident. */
+  reply?: string | null;
 }): string {
-  const who = [
-    args.residentName.trim() || "Resident",
-    args.residentEmail?.trim() ? `(${args.residentEmail.trim()})` : null,
-    args.residentPhone.trim() ? args.residentPhone.trim() : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const name = args.residentName.trim() || "Resident";
+  const phone = args.residentPhone.trim();
+  const property = args.propertyLabel?.trim() || "Unknown property";
+  const residentLine = phone ? `${name} (${phone})` : name;
+  const said = (args.said || "").trim() || "(empty)";
+  const reply = args.reply?.trim() || "";
 
   const lines = [
-    `Resident ${who} said:`,
-    `"${(args.said || "").trim() || "(empty)"}"`,
-    "",
-    `Wants: ${args.wants}`,
-    `Domain: ${args.domain}`,
-    `Open: ${managerPortalUrlFromPath(args.managerPath)}`,
+    `Property: ${property}`,
+    `Resident: ${residentLine}`,
+    `Said: ${said}`,
   ];
-  if (args.autoFiledNote?.trim()) {
-    lines.push("", args.autoFiledNote.trim());
+  if (reply) {
+    lines.push(`Reply: ${reply}`);
   }
-  lines.push("", "Reply in this thread to text them back.");
+  if (args.autoFiledNote?.trim()) {
+    lines.push("", args.autoFiledNote.trim(), `Review: ${managerPortalUrlFromPath(args.managerPath)}`);
+  }
   return lines.join("\n");
 }
 
 export function formatPendingChargesForSms(charges: HouseholdCharge[]): string {
+  const pay = residentPortalUrl("payments");
   if (charges.length === 0) {
-    return ["No pending charges right now.", `Pay / view charges: ${residentPortalUrl("payments")}`].join("\n");
+    return `You're all caught up — nothing due right now.\n${pay}`;
   }
-  const lines = ["Your pending charges:"];
+  const lines = ["Here's what's open:"];
   for (const c of charges.slice(0, 8)) {
-    const due = c.dueDateLabel?.trim() ? ` · due ${c.dueDateLabel.trim()}` : "";
+    const due = c.dueDateLabel?.trim() ? ` (due ${c.dueDateLabel.trim()})` : "";
     const balance = (c.balanceLabel || c.amountLabel || "").trim() || "—";
-    lines.push(`• ${c.title.trim() || "Charge"} — ${balance}${due}`);
+    lines.push(`${c.title.trim() || "Charge"} — ${balance}${due}`);
   }
-  if (charges.length > 8) lines.push(`…and ${charges.length - 8} more`);
-  lines.push("", `Pay / view charges: ${residentPortalUrl("payments")}`);
+  if (charges.length > 8) lines.push(`…plus ${charges.length - 8} more`);
+  lines.push(`You can pay here: ${pay}`);
   return lines.join("\n");
 }
 
@@ -116,12 +126,61 @@ async function resolveResidentDisplayName(args: {
   const { data: app } = await db
     .from("manager_application_records")
     .select("row_data")
-    .eq("email", args.residentEmail.trim().toLowerCase())
+    .eq("resident_email", args.residentEmail.trim().toLowerCase())
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   const name = String(((app as { row_data?: { name?: string } } | null)?.row_data ?? {}).name ?? "").trim();
   return name || "Resident";
+}
+
+/** Resolve property display name for a resident under a manager (phone → email → residency). */
+export async function resolveResidentPropertyLabel(args: {
+  residentEmail?: string | null;
+  managerUserId: string;
+}): Promise<string | null> {
+  const email = (args.residentEmail ?? "").trim().toLowerCase();
+  const managerUserId = args.managerUserId.trim();
+  if (!email || !managerUserId) return null;
+
+  const db = createSupabaseServiceRoleClient();
+  const { data: app } = await db
+    .from("manager_application_records")
+    .select("row_data, property_id, assigned_property_id")
+    .eq("resident_email", email)
+    .eq("manager_user_id", managerUserId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const rowData = (app as { row_data?: Record<string, unknown> } | null)?.row_data ?? {};
+  const fromRow =
+    String(rowData.propertyTitle ?? "").trim() ||
+    String(rowData.property ?? "").trim() ||
+    String((rowData.application as { propertyTitle?: string } | undefined)?.propertyTitle ?? "").trim();
+  if (fromRow) return fromRow;
+
+  const propertyId =
+    String((app as { assigned_property_id?: unknown } | null)?.assigned_property_id ?? "").trim() ||
+    String((app as { property_id?: unknown } | null)?.property_id ?? "").trim() ||
+    String(rowData.assignedPropertyId ?? "").trim() ||
+    String(rowData.propertyId ?? "").trim() ||
+    String((rowData.application as { propertyId?: string } | undefined)?.propertyId ?? "").trim();
+  if (!propertyId) return null;
+
+  const { data: prop } = await db
+    .from("manager_property_records")
+    .select("property_data, row_data")
+    .eq("id", propertyId)
+    .maybeSingle();
+  const propertyData = (prop as { property_data?: Record<string, unknown> } | null)?.property_data ?? {};
+  const propRow = (prop as { row_data?: Record<string, unknown> } | null)?.row_data ?? {};
+  const title =
+    String(propertyData.title ?? "").trim() ||
+    String(propertyData.buildingName ?? "").trim() ||
+    String(propRow.buildingName ?? "").trim() ||
+    String(propRow.title ?? "").trim();
+  return title || null;
 }
 
 export async function runResidentSmsAction(args: {
@@ -135,12 +194,18 @@ export async function runResidentSmsAction(args: {
   const text = args.text.trim();
   const classification = classifyResidentSmsIntent(text);
   const residentEmail = (args.residentEmail ?? "").trim().toLowerCase();
-  const residentName = residentEmail
-    ? await resolveResidentDisplayName({
-        residentUserId: args.residentUserId,
-        residentEmail,
-      })
-    : "Resident";
+  const [residentName, propertyLabel] = await Promise.all([
+    residentEmail
+      ? resolveResidentDisplayName({
+          residentUserId: args.residentUserId,
+          residentEmail,
+        })
+      : Promise.resolve("Resident"),
+    resolveResidentPropertyLabel({
+      residentEmail: residentEmail || null,
+      managerUserId: args.managerUserId,
+    }),
+  ]);
 
   let residentReply = "";
   let autoFiledNote: string | null = null;
@@ -150,20 +215,15 @@ export async function runResidentSmsAction(args: {
   switch (classification.intent) {
     case "help":
     case "greeting": {
-      residentReply = [
-        classification.intent === "greeting" ? `Hi${residentName !== "Resident" ? ` ${residentName}` : ""}!` : null,
-        residentHelpMenuText(),
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+      residentReply =
+        classification.intent === "greeting"
+          ? [residentGreetingText(residentName), residentHelpMenuText()].join("\n\n")
+          : residentHelpMenuText();
       break;
     }
     case "maintenance": {
       if (!residentEmail) {
-        residentReply = [
-          "I can file a maintenance request once your account phone is linked.",
-          `Open services: ${residentPortalUrl("services")}`,
-        ].join("\n");
+        residentReply = `Mind using this link so we can file it under your unit?\n${residentPortalUrl("services")}`;
         break;
       }
       const wo = await createWorkOrderFromResidentSms({
@@ -176,7 +236,7 @@ export async function runResidentSmsAction(args: {
       });
       residentReply =
         maintenanceWorkOrderResidentAck(wo) ||
-        `Could not file that automatically. Please use: ${residentPortalUrl("services")}`;
+        `Got it — can you send a bit more detail (or use this link)?\n${residentPortalUrl("services")}`;
       if ("workOrderId" in wo && wo.workOrderId) {
         autoFiledNote = wo.created
           ? `PropLane auto-filed work order ${wo.workOrderId} (${wo.title}).`
@@ -187,12 +247,12 @@ export async function runResidentSmsAction(args: {
           ? `file maintenance work order (${wo.title})`
           : `follow up on open work order (${wo.title})`;
       }
-      threadTopic = "general";
+      threadTopic = "maintenance";
       break;
     }
     case "service_request": {
       if (!residentEmail) {
-        residentReply = `Open services to submit a request: ${residentPortalUrl("services")}`;
+        residentReply = `Sure — easiest is this link:\n${residentPortalUrl("services")}`;
         break;
       }
       const sr = await createServiceRequestFromResidentSms({
@@ -204,7 +264,7 @@ export async function runResidentSmsAction(args: {
       });
       residentReply =
         serviceRequestResidentAck(sr) ||
-        `Could not file that automatically. Please use: ${residentPortalUrl("services")}`;
+        `Gotcha — mind trying again here?\n${residentPortalUrl("services")}`;
       if ("requestId" in sr && sr.requestId) {
         autoFiledNote = sr.created
           ? `PropLane auto-filed service request ${sr.requestId} (${sr.title}).`
@@ -213,14 +273,14 @@ export async function runResidentSmsAction(args: {
             : null;
         wants = `submit service request (${sr.title})`;
       }
-      threadTopic = "general";
+      threadTopic = "maintenance";
       break;
     }
     case "balance":
     case "pay": {
       threadTopic = "payment";
       if (!residentEmail) {
-        residentReply = `Sign in to view charges: ${residentPortalUrl("payments")}`;
+        residentReply = `Here's payments:\n${residentPortalUrl("payments")}`;
         break;
       }
       const charges = await listPendingChargesForResident({
@@ -237,10 +297,7 @@ export async function runResidentSmsAction(args: {
     case "i_paid": {
       threadTopic = "payment";
       if (!residentEmail) {
-        residentReply = [
-          "Please report the payment in your portal so we can match the charge.",
-          `Open payments: ${residentPortalUrl("payments")}`,
-        ].join("\n");
+        residentReply = `Cool — can you note it here so we can match it?\n${residentPortalUrl("payments")}`;
         break;
       }
       const report = await reportManualPaymentForResident({
@@ -251,17 +308,16 @@ export async function runResidentSmsAction(args: {
       });
       if (!report.ok) {
         residentReply = [
-          "I couldn’t match an open charge to mark as paid offline.",
-          `Open payments to report Zelle/Venmo: ${residentPortalUrl("payments")}`,
+          "Hmm, I couldn't match that to an open charge.",
+          `Can you mark it here? ${residentPortalUrl("payments")}`,
         ].join("\n");
         wants = "confirm offline payment (no open charge matched)";
         break;
       }
       const channelLabel = report.channel === "venmo" ? "Venmo" : "Zelle";
       residentReply = [
-        `Got it — we noted you paid via ${channelLabel} (${report.charges.length} charge${report.charges.length === 1 ? "" : "s"}).`,
-        "Your manager will verify and mark them paid.",
-        `Payments: ${residentPortalUrl("payments")}`,
+        `Nice — noted you paid via ${channelLabel}.`,
+        "We'll confirm once it shows up on our side.",
       ].join("\n");
       autoFiledNote = `Resident reported ${channelLabel} payment on ${report.charges.length} charge(s).`;
       wants = `confirm ${channelLabel} payment received`;
@@ -269,33 +325,61 @@ export async function runResidentSmsAction(args: {
     }
     case "lease": {
       threadTopic = "lease";
-      residentReply = [
-        "Your lease is in the resident portal.",
-        `Sign / view lease: ${residentPortalUrl("lease")}`,
-      ].join("\n");
+      residentReply = `Lease is here if you need it:\n${residentPortalUrl("lease")}`;
       break;
     }
     case "applications": {
+      threadTopic = "applications";
+      if (!residentEmail) {
+        residentReply = [
+          "Don't think I have an app tied to this number yet.",
+          `You can apply here: ${residentPortalUrl("apply")}`,
+        ].join("\n");
+        break;
+      }
+      const db = createSupabaseServiceRoleClient();
+      let appQ = db
+        .from("manager_application_records")
+        .select("id, row_data, manager_user_id")
+        .eq("resident_email", residentEmail)
+        .order("updated_at", { ascending: false })
+        .limit(5);
+      if (args.managerUserId?.trim()) {
+        appQ = appQ.eq("manager_user_id", args.managerUserId.trim());
+      }
+      const { data: appRows } = await appQ;
+      const latest = (appRows ?? [])[0] as
+        | { id?: string; row_data?: { bucket?: string; propertyTitle?: string; name?: string } }
+        | undefined;
+      if (!latest?.row_data) {
+        residentReply = [
+          "I don't see an application on file for you yet.",
+          `Want to start one? ${residentPortalUrl("apply")}`,
+        ].join("\n");
+        break;
+      }
+      const bucket = String(latest.row_data.bucket ?? "pending").toLowerCase();
+      const statusLabel =
+        bucket === "approved"
+          ? "you're approved"
+          : bucket === "rejected"
+            ? "it wasn't approved"
+            : "it's still under review";
+      const where = String(latest.row_data.propertyTitle ?? "").trim();
       residentReply = [
-        "Application details live in your portal.",
-        `Applications: ${residentPortalUrl("applications")}`,
-        `Or apply: ${residentPortalUrl("apply")}`,
+        `For your application${where ? ` at ${where}` : ""} — ${statusLabel}.`,
+        `More here if you need it: ${residentPortalUrl("applications")}`,
       ].join("\n");
+      wants = `application status (${statusLabel})`;
       break;
     }
     case "move_in": {
       threadTopic = "move_in";
-      residentReply = [
-        "Move-in details are in your portal.",
-        `Move-in: ${residentPortalUrl("move_in")}`,
-      ].join("\n");
+      residentReply = `Move-in stuff is here:\n${residentPortalUrl("move_in")}`;
       break;
     }
     case "inbox": {
-      residentReply = [
-        "Got it — your property manager will see this and can reply here.",
-        `Open inbox: ${residentPortalUrl("inbox")}`,
-      ].join("\n");
+      residentReply = "Got it — I'll make sure your manager sees this.";
       break;
     }
     default: {
@@ -311,5 +395,6 @@ export async function runResidentSmsAction(args: {
     threadTopic,
     forwardSaid: text,
     residentName,
+    propertyLabel,
   };
 }

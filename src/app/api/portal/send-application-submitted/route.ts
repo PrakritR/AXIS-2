@@ -5,6 +5,7 @@ import {
   buildApplicationSubmittedEmailHtml,
   buildApplicationSubmittedMailtoHref,
 } from "@/lib/application-submitted-email";
+import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
 import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const { data: rows, error } = await db
       .from("manager_application_records")
-      .select("id, resident_email, row_data")
+      .select("id, resident_email, row_data, manager_user_id")
       .in("id", idVariants(axisId));
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -91,6 +92,39 @@ export async function POST(req: Request) {
       propertyTitle: propertyTitle || undefined,
       setupToken: ensured.token,
     });
+
+    const rowData = (match.row_data ?? {}) as {
+      application?: { phone?: string };
+      name?: string;
+    };
+    const applicantPhone = String(rowData.application?.phone ?? "").trim() || null;
+    const managerUserId = String(match.manager_user_id ?? "").trim() || null;
+
+    // PropLane SMS (best-effort) — same moment as the confirmation email.
+    try {
+      let fromNumber: string | null = null;
+      if (managerUserId) {
+        const { data: mgr } = await db
+          .from("profiles")
+          .select("sms_from_number")
+          .eq("id", managerUserId)
+          .maybeSingle();
+        fromNumber = String(mgr?.sms_from_number ?? "").trim() || null;
+      }
+      await notifyApplicantApplicationSms(db, {
+        event: "submitted",
+        applicantEmail: email,
+        applicantPhone,
+        applicantName: applicantName || rowData.name || null,
+        propertyTitle: propertyTitle || null,
+        axisId: ensured.axisId,
+        signupUrl,
+        managerUserId,
+        fromNumber,
+      });
+    } catch {
+      /* non-critical */
+    }
 
     // The setup token is a resident-account claim capability, so it must only
     // ever leave the server via the email sent to the applicant's own address —

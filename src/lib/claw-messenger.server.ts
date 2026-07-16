@@ -105,9 +105,76 @@ function waitForSendResult(ws: WebSocket, correlationId: string, timeoutMs: numb
   });
 }
 
+/* ── Pooled WebSocket ─────────────────────────────────────────────────────
+ * Reply latency was dominated by a fresh WS handshake to the Render relay per
+ * send (multiple sends per inbound → serial handshakes, plus cold starts).
+ * Keep one socket open per warm process and multiplex sends over it by
+ * correlation id; an idle timer closes it so dev servers don't hold sockets. */
+let pooledWs: WebSocket | null = null;
+let pooledUrl = "";
+let pooledIdleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function touchPooledIdle(): void {
+  if (pooledIdleTimer) clearTimeout(pooledIdleTimer);
+  pooledIdleTimer = setTimeout(() => {
+    try {
+      pooledWs?.close();
+    } catch {
+      /* ignore */
+    }
+    pooledWs = null;
+  }, 60_000);
+  pooledIdleTimer.unref?.();
+}
+
+function openSocket(url: string, timeoutMs: number): Promise<WebSocket> {
+  return new Promise<WebSocket>((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const timer = setTimeout(() => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      reject(new Error("Timed out opening Claw Messenger WebSocket."));
+    }, timeoutMs);
+    ws.once("open", () => {
+      clearTimeout(timer);
+      resolve(ws);
+    });
+    ws.once("error", (err) => {
+      clearTimeout(timer);
+      reject(err instanceof Error ? err : new Error("WebSocket error."));
+    });
+  });
+}
+
+async function getPooledSocket(url: string, timeoutMs: number): Promise<WebSocket> {
+  if (pooledWs && pooledUrl === url && pooledWs.readyState === WebSocket.OPEN) {
+    touchPooledIdle();
+    return pooledWs;
+  }
+  try {
+    pooledWs?.close();
+  } catch {
+    /* ignore */
+  }
+  const ws = await openSocket(url, timeoutMs);
+  pooledWs = ws;
+  pooledUrl = url;
+  const evict = () => {
+    if (pooledWs === ws) pooledWs = null;
+  };
+  ws.on("close", evict);
+  ws.on("error", evict);
+  touchPooledIdle();
+  return ws;
+}
+
 /**
- * Send one text via Claw Messenger. Opens a temporary WebSocket connection.
- * Preferred service defaults to iMessage with automatic SMS/RCS fallback.
+ * Send one text via Claw Messenger over the pooled WebSocket (fresh socket
+ * retry once on transport failure). Preferred service defaults to iMessage
+ * with automatic SMS/RCS fallback.
  */
 export async function sendClawMessengerText(args: {
   to: string;
@@ -123,47 +190,52 @@ export async function sendClawMessengerText(args: {
   const text = args.text.trim();
   if (!text) return { ok: false, error: "Message text is required." };
 
-  const correlationId = `axis-${randomUUID()}`;
   const url = `${clawMessengerWsUrl()}?key=${encodeURIComponent(apiKey)}`;
+  const openTimeoutMs = args.timeoutMs ?? 10_000;
+  const resultTimeoutMs = args.timeoutMs ?? 20_000;
 
-  return await new Promise<ClawSendResult>((resolve) => {
-    let settled = false;
-    const finish = (result: ClawSendResult) => {
-      if (settled) return;
-      settled = true;
+  const attempt = async (fresh: boolean): Promise<ClawSendResult> => {
+    let ws: WebSocket;
+    try {
+      ws = fresh ? await openSocket(url, openTimeoutMs) : await getPooledSocket(url, openTimeoutMs);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "WebSocket open failed." };
+    }
+    const correlationId = `axis-${randomUUID()}`;
+    const payload: Record<string, unknown> = {
+      type: "send",
+      id: correlationId,
+      to,
+      parts: [{ type: "text", value: text }],
+    };
+    if (args.service) payload.service = args.service;
+    const wait = waitForSendResult(ws, correlationId, resultTimeoutMs);
+    try {
+      ws.send(JSON.stringify(payload));
+    } catch (err) {
+      if (!fresh && pooledWs === ws) pooledWs = null;
+      return { ok: false, error: err instanceof Error ? err.message : "WebSocket send failed." };
+    }
+    const result = await wait;
+    if (fresh) {
       try {
         ws.close();
       } catch {
         /* ignore */
       }
-      resolve(result);
-    };
+    }
+    return result;
+  };
 
-    const ws = new WebSocket(url);
-
-    const openTimer = setTimeout(() => {
-      finish({ ok: false, error: "Timed out opening Claw Messenger WebSocket." });
-    }, args.timeoutMs ?? 12_000);
-
-    ws.on("open", () => {
-      clearTimeout(openTimer);
-      const payload: Record<string, unknown> = {
-        type: "send",
-        id: correlationId,
-        to,
-        parts: [{ type: "text", value: text }],
-      };
-      if (args.service) payload.service = args.service;
-      void waitForSendResult(ws, correlationId, args.timeoutMs ?? 20_000).then(finish);
-      ws.send(JSON.stringify(payload));
-    });
-
-    ws.on("error", (err) => {
-      clearTimeout(openTimer);
-      finish({ ok: false, error: err.message || "WebSocket error." });
-    });
-  });
+  const first = await attempt(false);
+  if (first.ok || !/websocket|timed out/i.test(first.error ?? "")) return first;
+  return await attempt(true);
 }
+
+/* Registration is idempotent server-side; skip the HTTP roundtrip for phones
+ * this warm process already registered recently. */
+const registeredRoutes = new Map<string, number>();
+const ROUTE_REGISTER_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Register a human phone so inbound texts from them reach the WebSocket gateway. */
 export async function registerClawMessengerRoute(phone: string): Promise<{ ok: boolean; error?: string }> {
@@ -171,6 +243,9 @@ export async function registerClawMessengerRoute(phone: string): Promise<{ ok: b
   if (!apiKey) return { ok: false, error: "CLAW_MESSENGER_API_KEY is not set." };
   const phoneNumber = normalizeE164Us(phone);
   if (!phoneNumber) return { ok: false, error: "Invalid phone number." };
+
+  const registeredAt = registeredRoutes.get(phoneNumber);
+  if (registeredAt && Date.now() - registeredAt < ROUTE_REGISTER_TTL_MS) return { ok: true };
 
   try {
     const res = await fetch(`${clawMessengerHttpBase()}/api/routes`, {
@@ -185,6 +260,7 @@ export async function registerClawMessengerRoute(phone: string): Promise<{ ok: b
     if (!res.ok) {
       return { ok: false, error: body.detail || body.error || `HTTP ${res.status}` };
     }
+    registeredRoutes.set(phoneNumber, Date.now());
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Network error." };

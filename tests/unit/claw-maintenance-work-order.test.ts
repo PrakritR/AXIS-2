@@ -42,7 +42,6 @@ describe("maintenanceWorkOrderResidentAck", () => {
       category: "plumbing",
     });
     expect(ack).toContain("Toilet issue");
-    expect(ack).toContain("filed a work order");
-    expect(ack).toMatch(/https?:\/\//);
+    expect(ack).toMatch(/work order/i);
   });
 });

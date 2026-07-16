@@ -25,7 +25,23 @@
       "mcp__claude_ai_Supabase__get_logs",
       "Bash(node -e ' *)",
       "Bash(grep -iE \"\\\\\"[^\\\\\"]*axis[ -]id|'[^']*axis[ -]id|\\\\`[^\\\\`]*axis[ -]id|>[^<]*axis[ -]id\")",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "WebFetch(domain:docs.linqapp.com)",
+      "Bash(node --env-file=.env.local -e ' *)",
+      "Bash(node -e \"fetch\\('http://localhost:3999'\\).then\\(r=>process.exit\\(0\\)\\).catch\\(\\(\\)=>process.exit\\(1\\)\\)\")",
+      "Bash(node -e \"fetch\\('http://localhost:3999'\\).then\\(r=>console.log\\('3999 up:',r.status\\)\\).catch\\(e=>console.log\\('3999 down'\\)\\)\")",
+      "Bash(node -e \"fetch\\('http://localhost:3000'\\).then\\(r=>console.log\\('3000 up:',r.status\\)\\).catch\\(e=>console.log\\('3000 down'\\)\\)\")",
+      "Bash(awk '{print $2, $11, $12, $13}')",
+      "Bash(lsof -nP -iTCP:3000 -iTCP:3999 -sTCP:LISTEN)",
+      "Bash(awk '{print $1,$2,$9}')",
+      "Bash(node /private/tmp/claude-501/-Users-prakrit-axis-2/8829bb4f-3c26-4596-9568-cba56ca36b2e/scratchpad/linq-relay-test.mjs \"+15105791976\" \"Hi, this is the test resident — is the water shutoff tomorrow still happening?\")",
+      "Bash(node /private/tmp/claude-501/-Users-prakrit-axis-2/8829bb4f-3c26-4596-9568-cba56ca36b2e/scratchpad/linq-relay-test.mjs \"+15103098345\" \"Yes — water is off 9am to noon tomorrow. Sorry for the hassle!\")",
+      "Bash(brew install *)",
+      "Bash(cloudflared tunnel *)",
+      "Bash(node /private/tmp/claude-501/-Users-prakrit-axis-2/8829bb4f-3c26-4596-9568-cba56ca36b2e/scratchpad/linq-sub.mjs list)",
+      "Bash(WEBHOOK_BASE=https://stood-developments-posted-deeper.trycloudflare.com node /private/tmp/claude-501/-Users-prakrit-axis-2/8829bb4f-3c26-4596-9568-cba56ca36b2e/scratchpad/linq-relay-test.mjs \"+15105791976\" \"Tunnel test: resident texting the Linq line through the public webhook URL\")",
+      "Bash(python3 -c ' *)",
+      "Bash(NODE_OPTIONS=--max-old-space-size=8192 npx eslint src tests)"
     ]
   }
 }

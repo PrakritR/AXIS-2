@@ -451,6 +451,8 @@ async function fetchPublicPropertyLead(id: string): Promise<MockProperty | null>
 let residentPropertyInFlight: Promise<{
   property: MockProperty;
   serviceRequestOptions: ManagerListingServiceOption[];
+  managerUserId: string;
+  propertyId: string;
 } | null> | null = null;
 
 /**
@@ -462,6 +464,8 @@ let residentPropertyInFlight: Promise<{
 export async function loadResidentPropertyFromServer(): Promise<{
   property: MockProperty;
   serviceRequestOptions: ManagerListingServiceOption[];
+  managerUserId: string;
+  propertyId: string;
 } | null> {
   if (!isBrowser()) return null;
   if (residentPropertyInFlight) return residentPropertyInFlight;
@@ -471,13 +475,23 @@ export async function loadResidentPropertyFromServer(): Promise<{
       const body = (await res.json()) as {
         property?: MockProperty;
         serviceRequestOptions?: ManagerListingServiceOption[];
+        managerUserId?: string;
+        propertyId?: string;
       };
       if (!res.ok || !body.property) return null;
       cachePublicExtraListings([body.property], { silent: true });
       window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      const propertyId =
+        String(body.propertyId ?? "").trim() ||
+        String(body.property.id ?? "").trim();
+      const managerUserId =
+        String(body.managerUserId ?? "").trim() ||
+        String(body.property.managerUserId ?? "").trim();
       return {
         property: body.property,
         serviceRequestOptions: Array.isArray(body.serviceRequestOptions) ? body.serviceRequestOptions : [],
+        managerUserId,
+        propertyId,
       };
     } catch {
       return null;

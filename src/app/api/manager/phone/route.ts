@@ -226,6 +226,15 @@ export async function PUT(req: Request) {
     .eq("id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await db.from("phone_verifications").delete().eq("user_id", user.id);
+
+  // First verified personal phone → PropLane messaging assistant intro (idempotent).
+  try {
+    const { maybeSendManagerPropLaneAssistantIntro } = await import("@/lib/claw-onboarding-sms.server");
+    await maybeSendManagerPropLaneAssistantIntro(db, user.id);
+  } catch {
+    /* non-critical */
+  }
+
   return NextResponse.json({ ok: true, phone: row.phone });
 }
 

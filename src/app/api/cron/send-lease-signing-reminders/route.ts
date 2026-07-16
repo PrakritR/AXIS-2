@@ -97,6 +97,7 @@ export async function GET(req: Request) {
       "Your property manager";
     const propertyLabel = String(lease.propertyLabel ?? lease.property ?? "").trim();
     const smsBody = [
+      `(Lease signing)`,
       `Hi ${residentName}, your lease${propertyLabel ? ` for ${propertyLabel}` : ""} is ready to sign.`,
       `Open: ${leaseUrl}`,
       `Reply here with questions — ${managerName}`,

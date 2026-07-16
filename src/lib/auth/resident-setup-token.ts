@@ -106,23 +106,42 @@ export async function findApplicationForResidentSetup(
   const variants = [...new Set([params.axisId.trim(), axisId].filter(Boolean))];
   const { data, error } = await db
     .from("manager_application_records")
-    .select("id, resident_email, row_data")
+    .select("id, resident_email, row_data, manager_user_id")
     .in("id", variants)
     .limit(5);
 
   if (error) return { ok: false, status: 500, error: error.message };
 
-  const match = (data ?? [])
-    .map((record) => rowFromRecord(record as { id: string; resident_email: string | null; row_data: unknown }))
-    .find((row): row is DemoApplicantRow => Boolean(row && isResidentSetupTokenValid(row, token)));
+  type RecordRow = {
+    id: string;
+    resident_email: string | null;
+    row_data: unknown;
+    manager_user_id?: string | null;
+  };
 
-  if (!match) {
+  let matchedRecord: RecordRow | null = null;
+  let match: DemoApplicantRow | null = null;
+  for (const record of (data ?? []) as RecordRow[]) {
+    const row = rowFromRecord(record);
+    if (row && isResidentSetupTokenValid(row, token)) {
+      matchedRecord = record;
+      match = row;
+      break;
+    }
+  }
+
+  if (!match || !matchedRecord) {
     return { ok: false, status: 403, error: "This setup link is invalid or has expired." };
   }
 
   const email = (match.email ?? "").trim().toLowerCase();
   if (!email.includes("@")) {
     return { ok: false, status: 400, error: "This application is missing an email address." };
+  }
+
+  const managerFromDb = String(matchedRecord.manager_user_id ?? "").trim();
+  if (managerFromDb && !match.managerUserId) {
+    match = { ...match, managerUserId: managerFromDb };
   }
 
   return {

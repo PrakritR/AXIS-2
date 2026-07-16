@@ -151,16 +151,14 @@ export function serviceRequestResidentAck(result: CreateServiceRequestFromSmsRes
   const track = residentPortalUrl("services");
   if ("alreadyOpen" in result && result.alreadyOpen) {
     return [
-      `You already have a pending request for this: "${result.title}".`,
-      `Your property manager will confirm price and approve.`,
-      `Track it: ${track}`,
+      `You already have one pending for "${result.title}".`,
+      `Manager will confirm the price — details here if you need: ${track}`,
     ].join("\n");
   }
   if (result.created) {
     return [
-      `Got it — I filed a service request: "${result.title}".`,
-      `Your manager will confirm the final price before approving.`,
-      `Track it: ${track}`,
+      `Cool — put in a request for "${result.title}".`,
+      `Your manager will confirm the price before anything is final.`,
     ].join("\n");
   }
   return null;

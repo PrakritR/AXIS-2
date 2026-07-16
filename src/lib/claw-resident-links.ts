@@ -122,7 +122,14 @@ export function managerPortalUrlFromPath(path: string): string {
 }
 
 export function smsLinkKindForThreadTopic(
-  topic: "payment" | "lease" | "leasing" | "move_in" | "general",
+  topic:
+    | "payment"
+    | "lease"
+    | "leasing"
+    | "move_in"
+    | "general"
+    | "applications"
+    | "maintenance",
 ): ResidentSmsLinkKind {
   switch (topic) {
     case "payment":
@@ -133,6 +140,10 @@ export function smsLinkKindForThreadTopic(
       return "move_in";
     case "leasing":
       return "browse";
+    case "applications":
+      return "applications";
+    case "maintenance":
+      return "services";
     default:
       return "inbox";
   }

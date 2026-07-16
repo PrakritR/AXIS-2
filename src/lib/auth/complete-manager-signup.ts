@@ -64,6 +64,13 @@ async function linkManagerPurchase(
     .is("user_id", null)
     .neq("id", purchase.id);
 
+  try {
+    const { maybeSendManagerPropLaneAssistantIntro } = await import("@/lib/claw-onboarding-sms.server");
+    void maybeSendManagerPropLaneAssistantIntro(supabase, userId);
+  } catch {
+    /* non-critical */
+  }
+
   return { ok: true, managerId: purchase.manager_id };
 }
 

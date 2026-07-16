@@ -6,8 +6,7 @@ import {
 } from "@/lib/auth/resident-setup-token";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
-import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
-import { defaultResidentOnboardingSmsLinks } from "@/lib/claw-resident-links";
+import { sendResidentPropLaneAssistantIntro } from "@/lib/claw-onboarding-sms.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -132,7 +131,7 @@ export async function POST(req: Request) {
     await supabase.from("profiles").update({ manager_id: lookup.axisId }).eq("id", userId);
     await consumeResidentSetupTokenOnApplication(supabase, lookup.row);
 
-    // Text welcome from the shared Claw/PropLane line when we have a phone on file.
+    // First-account PropLane messaging assistant intro (Claw/Twilio) when phone is on file.
     try {
       const { data: profile } = await supabase
         .from("profiles")
@@ -140,19 +139,22 @@ export async function POST(req: Request) {
         .eq("id", userId)
         .maybeSingle();
       const phone = String(profile?.phone ?? "").trim();
-      if (phone && canSendResidentOutboundSms()) {
+      if (phone) {
         const name =
           String(profile?.full_name ?? "").trim() ||
           fullName ||
           lookup.name ||
           "Resident";
-        const smsBody = [
-          `Welcome to PropLane, ${name}! Your resident account is ready.`,
-          `PropLane ID: ${lookup.axisId}`,
-          ...defaultResidentOnboardingSmsLinks(),
-          `We'll text this number for lease signing and payment reminders — reply STOP anytime to opt out.`,
-        ].join("\n");
-        await sendResidentOutboundSms({ to: phone, text: smsBody, linkKind: null });
+        const managerUserId = String(lookup.row.managerUserId ?? "").trim() || null;
+        await sendResidentPropLaneAssistantIntro({
+          db: supabase,
+          toPhone: phone,
+          residentUserId: userId,
+          residentEmail: email,
+          managerUserId,
+          name,
+          axisId: lookup.axisId,
+        });
       }
     } catch {
       /* non-critical */

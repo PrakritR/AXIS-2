@@ -10,8 +10,8 @@ import {
   buildResidentWelcomeMailtoHref,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
-import { defaultResidentOnboardingSmsLinks } from "@/lib/claw-resident-links";
+import { sendResidentPropLaneAssistantIntro } from "@/lib/claw-onboarding-sms.server";
+import { canSendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 
 export const runtime = "nodejs";
 
@@ -223,31 +223,28 @@ export async function POST(req: Request) {
       /* non-critical — email already sent */
     }
 
-    // SMS welcome via Claw (preferred) or Twilio manager work number
+    // SMS welcome: PropLane messaging assistant intro (idempotent per resident user).
     try {
       const { data: managerProfile } = await svc.from("profiles").select("sms_from_number, full_name").eq("id", user.id).maybeSingle();
       const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
       if (canSendResidentOutboundSms(smsFromNumber) && !skipExternalEmail) {
-        const { data: residentProfile } = await svc.from("profiles").select("phone").eq("email", to).maybeSingle();
+        const { data: residentProfile } = await svc
+          .from("profiles")
+          .select("id, phone, full_name")
+          .eq("email", to)
+          .maybeSingle();
         const residentPhone = String(residentProfile?.phone ?? "").trim();
-        if (residentPhone) {
-          const senderName = String(managerProfile?.full_name ?? user.email ?? "Your property manager").trim() || "Your property manager";
-          const smsBody = [
-            `Welcome${residentName ? `, ${residentName}` : ""}! Your PropLane resident portal is ready.`,
-            `PropLane ID: ${axisId}`,
-            ...defaultResidentOnboardingSmsLinks(),
-            `— ${senderName}`,
-          ].join("\n");
-          await sendResidentOutboundSms({
-            to: residentPhone,
-            text: smsBody,
+        const residentUserId = String(residentProfile?.id ?? "").trim();
+        if (residentPhone && residentUserId) {
+          await sendResidentPropLaneAssistantIntro({
+            db: svc,
+            toPhone: residentPhone,
+            residentUserId,
+            residentEmail: to,
+            managerUserId: user.id,
+            name: residentName || String(residentProfile?.full_name ?? "").trim() || null,
+            axisId,
             fromNumber: smsFromNumber,
-            linkKind: null,
-            openThread: {
-              managerUserId: user.id,
-              residentEmail: to,
-              topic: "general",
-            },
           });
         }
       }

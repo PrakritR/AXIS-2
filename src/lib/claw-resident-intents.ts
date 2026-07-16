@@ -4,6 +4,8 @@
 
 import { looksLikeMaintenanceRequest } from "@/lib/claw-maintenance-detect";
 
+export { residentGreetingText, residentHelpMenuText } from "@/lib/claw-resident-tone";
+
 export type ResidentSmsIntent =
   | "maintenance"
   | "service_request"
@@ -64,19 +66,6 @@ const MOVE_IN_RE =
 
 const INBOX_RE =
   /\b(message (my )?manager|talk to (my )?manager|inbox|reply to manager)\b/i;
-
-export function residentHelpMenuText(): string {
-  return [
-    "PropLane resident menu — text one of:",
-    "PAY / BALANCE — charges & pay link",
-    "LEASE — sign or view lease",
-    "APPLY — application",
-    "MOVE-IN — move-in details",
-    "REQUEST — parking / amenities",
-    "FIX / MAINTENANCE — report a repair",
-    "Or just write your question — your manager gets it.",
-  ].join("\n");
-}
 
 /**
  * Classify a known resident's inbound SMS.

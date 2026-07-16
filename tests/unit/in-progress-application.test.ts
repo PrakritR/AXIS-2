@@ -10,6 +10,7 @@ import { residentApplicationSubmitBlocked } from "@/lib/rental-application/appli
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 
 vi.mock("@/lib/manager-applications-storage", () => ({
+  MANAGER_APPLICATIONS_EVENT: "axis:manager-applications",
   readManagerApplicationRows: vi.fn(() => []),
   replaceManagerApplicationRowInCache: vi.fn(),
   upsertApplicationRowToServer: vi.fn(),

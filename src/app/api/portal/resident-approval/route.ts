@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -40,7 +41,7 @@ export async function PATCH(req: Request) {
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor, error: requestorError } = await svc
       .from("profiles")
-      .select("role, email")
+      .select("role, email, sms_from_number")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -69,6 +70,37 @@ export async function PATCH(req: Request) {
     const { error } = await query;
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // Manager deny → PropLane SMS. Approvals are covered by the welcome + assistant intro.
+    if (requestor.role !== "resident" && !approved) {
+      try {
+        const { data: appRow } = await svc
+          .from("manager_application_records")
+          .select("id, row_data, manager_user_id")
+          .eq("resident_email", email)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const rowData = (appRow?.row_data ?? {}) as {
+          name?: string;
+          propertyTitle?: string;
+          application?: { phone?: string; fullLegalName?: string };
+        };
+        const phone = String(rowData.application?.phone ?? "").trim() || null;
+        await notifyApplicantApplicationSms(svc, {
+          event: "rejected",
+          applicantEmail: email,
+          applicantPhone: phone,
+          applicantName: rowData.name || rowData.application?.fullLegalName || null,
+          propertyTitle: rowData.propertyTitle || null,
+          axisId: appRow?.id ? String(appRow.id) : null,
+          managerUserId: String(appRow?.manager_user_id ?? user.id).trim() || user.id,
+          fromNumber: String(requestor.sms_from_number ?? "").trim() || null,
+        });
+      } catch {
+        /* non-critical */
+      }
     }
 
     track("resident_approval_updated", user.id, { approved });

@@ -163,7 +163,7 @@ export async function deliverPaymentReminder(input: {
     try {
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
-        const smsBody = `${subject}\n\n${text.slice(0, 300)}`;
+        const smsBody = `(${subject})\n${text.slice(0, 300)}`;
         const smsResult = await sendResidentOutboundSms({
           to: residentPhone,
           text: smsBody,

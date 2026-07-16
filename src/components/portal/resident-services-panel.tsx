@@ -55,6 +55,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import type { ManagerListingServiceOption } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { pickPrimaryFilingScope } from "@/lib/resident-filing-scope";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
 import { RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS } from "@/lib/resident-work-order-reminder-email";
@@ -523,6 +524,11 @@ export function ResidentServicesPanel({
   const [propertyTick, setPropertyTick] = useState(0);
   /** Catalog from `/api/portal/resident-property` — authoritative for resident offers. */
   const [serverCatalogOffers, setServerCatalogOffers] = useState<ManagerListingServiceOption[] | null>(null);
+  /** Authoritative manager/property from the same hydrate (beats local app-row order). */
+  const [serverFilingScope, setServerFilingScope] = useState<{
+    managerUserId: string;
+    propertyId: string;
+  } | null>(null);
 
   const residentEmail = session.email?.trim().toLowerCase() ?? "";
 
@@ -534,8 +540,8 @@ export function ResidentServicesPanel({
     setServiceRequests(readServiceRequestsForResident(residentEmail));
   }
 
-  // Prefer the approved residency — leftover pending apps at other managers
-  // must not stamp service requests into the wrong queue.
+  // Prefer approved + canonical demo portfolio over guided-tour mirrors when
+  // the sandbox resident is approved under both managers.
   const residentApplication = useMemo(() => {
     void allRows;
     void appTick;
@@ -543,8 +549,41 @@ export function ResidentServicesPanel({
     const matches = readManagerApplicationRows().filter(
       (r) => r.email?.trim().toLowerCase() === residentEmail,
     );
+    const candidates = matches.map((r) => ({
+      managerUserId: String(r.managerUserId ?? "").trim(),
+      propertyId:
+        r.assignedPropertyId?.trim() ||
+        r.propertyId?.trim() ||
+        r.application?.propertyId?.trim() ||
+        "",
+      approved: r.bucket === "approved",
+      row: r,
+    }));
+    const primary = pickPrimaryFilingScope(
+      candidates.map(({ managerUserId, propertyId, approved }) => ({
+        managerUserId,
+        propertyId,
+        approved,
+      })),
+      serverFilingScope
+        ? {
+            managerUserId: serverFilingScope.managerUserId,
+            propertyId: serverFilingScope.propertyId,
+          }
+        : undefined,
+    );
+    if (primary) {
+      return (
+        candidates.find(
+          (c) =>
+            c.managerUserId === primary.managerUserId && c.propertyId === primary.propertyId,
+        )?.row ??
+        matches.find((r) => String(r.managerUserId ?? "").trim() === primary.managerUserId) ??
+        null
+      );
+    }
     return matches.find((r) => r.bucket === "approved") ?? matches[0] ?? null;
-  }, [residentEmail, allRows, appTick]);
+  }, [residentEmail, allRows, appTick, serverFilingScope]);
 
   const visibleToResident = (o: { available: boolean; residentEmails?: string[] }) => {
     if (!o.available) return false;
@@ -593,8 +632,17 @@ export function ResidentServicesPanel({
       .then((loaded) => {
         if (loaded) {
           setServerCatalogOffers(loaded.serviceRequestOptions);
+          if (loaded.managerUserId && loaded.propertyId) {
+            setServerFilingScope({
+              managerUserId: loaded.managerUserId,
+              propertyId: loaded.propertyId,
+            });
+          } else {
+            setServerFilingScope(null);
+          }
         } else {
           setServerCatalogOffers([]);
+          setServerFilingScope(null);
         }
         setPropertyTick((t) => t + 1);
       });
@@ -815,7 +863,50 @@ export function ResidentServicesPanel({
     const matches = readManagerApplicationRows().filter(
       (r) => r.email?.trim().toLowerCase() === residentEmail,
     );
+    const primary = pickPrimaryFilingScope(
+      matches.map((r) => ({
+        managerUserId: String(r.managerUserId ?? "").trim(),
+        propertyId:
+          r.assignedPropertyId?.trim() ||
+          r.propertyId?.trim() ||
+          r.application?.propertyId?.trim() ||
+          "",
+        approved: r.bucket === "approved",
+      })),
+      serverFilingScope ?? undefined,
+    );
+    if (primary) {
+      return (
+        matches.find(
+          (r) =>
+            String(r.managerUserId ?? "").trim() === primary.managerUserId &&
+            (r.assignedPropertyId?.trim() ||
+              r.propertyId?.trim() ||
+              r.application?.propertyId?.trim() ||
+              "") === primary.propertyId,
+        ) ??
+        matches.find((r) => String(r.managerUserId ?? "").trim() === primary.managerUserId) ??
+        matches[0]
+      );
+    }
     return matches.find((r) => r.bucket === "approved") ?? matches[0];
+  }
+
+  function resolveFilingIds(): { propertyId: string; managerUserId: string } {
+    if (serverFilingScope?.propertyId && serverFilingScope.managerUserId) {
+      return serverFilingScope;
+    }
+    const application = getApplication();
+    const propertyId =
+      application?.assignedPropertyId?.trim() ||
+      application?.propertyId?.trim() ||
+      application?.application?.propertyId?.trim() ||
+      "";
+    let managerUserId = application?.managerUserId?.trim() || "";
+    if (!managerUserId && propertyId) {
+      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
+    }
+    return { propertyId, managerUserId };
   }
 
   const submitMaintenance = async () => {
@@ -830,16 +921,8 @@ export function ResidentServicesPanel({
     setMaintenanceSubmitting(true);
     try {
     const application = getApplication();
-    const propertyId =
-      application?.assignedPropertyId?.trim() ||
-      application?.propertyId?.trim() ||
-      application?.application?.propertyId?.trim() ||
-      "";
-    let managerUserId = application?.managerUserId?.trim() || "";
-    if (!managerUserId && propertyId) {
-      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
-    }
-    if (!managerUserId) {
+    const { propertyId, managerUserId } = resolveFilingIds();
+    if (!propertyId || !managerUserId) {
       showToast("Could not find your property manager. Contact support.");
       return;
     }
@@ -953,20 +1036,32 @@ export function ResidentServicesPanel({
     setServiceSubmitting(true);
     try {
     const application = getApplication();
-    const propertyId =
-      application?.assignedPropertyId?.trim() ||
-      application?.propertyId?.trim() ||
-      application?.application?.propertyId?.trim() ||
-      "";
+    const { propertyId, managerUserId } = resolveFilingIds();
     if (!propertyId) {
       showToast("No property assignment found. Contact support.");
       return;
     }
-    let managerUserId = application?.managerUserId?.trim() || "";
-    if (!managerUserId && propertyId) {
-      managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
-    }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
+
+    // #region agent log
+    fetch("http://127.0.0.1:7518/ingest/13325f45-ca08-4e41-b48c-2517464d2c52", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7a8007" },
+      body: JSON.stringify({
+        sessionId: "7a8007",
+        runId: "post-fix",
+        hypothesisId: "D",
+        location: "resident-services-panel.tsx:submitService",
+        message: "client claimed manager/property before create",
+        data: {
+          claimedMgr: managerUserId.slice(0, 8),
+          claimedProp: propertyId,
+          fromServerScope: Boolean(serverFilingScope),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     let offerId: string;
     let offerName: string;

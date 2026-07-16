@@ -46,7 +46,8 @@ export async function notifyResidentOfWorkOrderUpdate(
         text,
         deliverToPortalInbox: true,
         deliverViaEmail: false,
-        fromName: "Axis Portal",
+        fromName: "PropLane Portal",
+        eventCategory: "maintenance",
       }),
     });
     const payload = (await response.json().catch(() => ({}))) as SendResult;

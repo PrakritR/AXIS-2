@@ -6,6 +6,7 @@
  * the mapped manager's Axis inbox.
  */
 
+import { after } from "next/server";
 import {
   buildManagerApplyUrl,
   buildManagerListingUrl,
@@ -216,74 +217,56 @@ export function replyForIntent(args: {
   const listing = propertyId ? buildManagerListingUrl(origin, propertyId) : `${origin}/rent`;
   const leasePortal = residentPortalUrl("lease");
   const signup = residentPortalUrl("signup");
-  const payments = residentPortalUrl("payments");
 
   switch (intent) {
     case "tour":
       return [
-        `Great — I can help schedule a tour${where}.`,
-        ``,
-        `Reply with these details (one message is fine):`,
-        `1) Your full name`,
-        `2) Email`,
-        `3) Phone (if different from this number)`,
-        `4) A few date/time options that work (e.g. Thu 5pm or Sat morning)`,
-        `5) Room preference, or "not sure yet"`,
-        `6) Anything we should know (pets, parking, questions)`,
-        ``,
-        `Once we have that, the manager will confirm a time.`,
-        `Want to apply meanwhile? Text APPLY or tap Text to apply on the listing.`,
+        `Nice — happy to set up a tour${where}.`,
+        `Just reply with your name, email, a couple times that work, and which room you're looking at (or say you're not sure yet).`,
+        `Once we have that we'll lock in a time.`,
       ].join("\n");
     case "tour_details":
       return [
-        `Thanks — we received your tour details${where} and forwarded them to the property manager.`,
-        `You'll get a confirmation once a time is locked in.`,
-        `Ready to apply? ${apply}`,
-      ].join("\n");
+        `Perfect, got your tour details${where}.`,
+        `We'll confirm a time once the manager picks one.`,
+        apply ? `If you want to apply in the meantime: ${apply}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
     case "apply":
       return [
-        `Perfect — here's your application link${where}:`,
+        `Here's the application${where}:`,
         apply,
-        ``,
-        `If you still want a tour first, text TOUR and I'll ask a few scheduling questions.`,
-        `New to PropLane? ${signup}`,
+        `Want a tour first instead? Just say so.`,
       ].join("\n");
     case "bundle":
       return [
-        `Perfect — here's your bundle application link${where}:`,
+        `Here's the bundle application${where}:`,
         apply,
-        ``,
-        `Open the link to finish the application. Questions about the bundle? Just reply here — the manager will text you back.`,
+        `Any questions, just text back.`,
       ].join("\n");
     case "question":
       return [
-        `Thanks — your message was forwarded to the property manager${where}.`,
-        `They'll reply on this same thread by iMessage or SMS.`,
-        `Need an application link in the meantime? Text APPLY.`,
-        `Want a tour? Text TOUR.`,
+        `Got your note${where} — someone will reply here.`,
+        `Need the application link? Say apply. Want a tour? Say tour.`,
       ].join("\n");
     case "lease":
       return [
-        `Lease signing is in your resident portal:`,
+        `Lease signing is here:`,
         leasePortal,
-        `Payments: ${payments}`,
         `Need an account first? ${signup}`,
       ].join("\n");
     case "greeting":
     case "help":
       return [
-        `PropLane leasing assistant${where ? ` (${propertyLabel})` : ""}.`,
-        `Text TOUR to schedule a showing (I'll ask a few questions).`,
-        `Text APPLY for the application link.`,
-        `Text LEASE for lease signing / resident setup.`,
-        `Payments: ${payments}`,
-        `Or just send your question — a manager will reply here by text.`,
+        `Hey${where ? ` — ${propertyLabel}` : ""}.`,
+        `Tell me what you need (tour, apply, lease, rent, whatever) and I'll help from here.`,
         propertyId ? `Listing: ${listing}` : `Browse: ${origin}/rent`,
       ].join("\n");
     default:
       return [
-        `Thanks for texting PropLane${where}.`,
-        `A manager will reply on this thread. Or text TOUR / APPLY for quick links.`,
+        `Got it${where}. Someone will reply here.`,
+        `Or just say tour / apply if that's what you need.`,
         propertyId ? `Listing: ${listing}` : `Browse: ${origin}/rent`,
       ].join("\n");
   }
@@ -295,6 +278,17 @@ export type HandleClawInboundResult = {
   replied: boolean;
   error?: string;
 };
+
+/** Run manager forwards / inbox mirrors after the reply is out the door.
+ * after() needs a live request scope — outside one (tests) run inline. */
+function runAfterReply(task: () => Promise<unknown>): void {
+  const safe = () => task().catch((e) => console.error("claw deferred task failed", e));
+  try {
+    after(safe);
+  } catch {
+    void safe();
+  }
+}
 
 /**
  * Process one inbound Claw Messenger text.
@@ -312,9 +306,22 @@ export async function handleClawLeasingInbound(args: {
 
   const text = (args.text ?? "").trim();
 
-  // Manager typing from their personal phone → relay to last resident thread.
-  // Exception: listing CTA bodies still run the leasing bot.
+  // Manager typing from their personal phone.
+  // "agent …" commands run locally (mark paid, lease link, …) and are NOT relayed.
+  // Everything else relays to the open resident thread (unless it's a listing CTA).
   if ((await isMappedManagerPhone(from)) && !looksLikeProspectLeasingCta(text)) {
+    const { runManagerAgentCommand } = await import("@/lib/claw-manager-actions.server");
+    const agent = await runManagerAgentCommand({ fromPhone: from, text });
+    if (agent) {
+      await registerClawMessengerRoute(from);
+      const send = await sendClawMessengerText({ to: from, text: agent.reply });
+      return {
+        ok: send.ok,
+        intent: "unknown",
+        replied: send.ok,
+        error: send.ok ? undefined : send.error,
+      };
+    }
     const relay = await tryRelayManagerReplyViaClaw({ from, text });
     return {
       ok: relay.relayed || relay.error === "no_open_thread",
@@ -327,22 +334,22 @@ export async function handleClawLeasingInbound(args: {
   // Existing resident (payment/lease thread or known profile) → two-way messaging,
   // not the leasing auto-reply menu.
   if (!looksLikeProspectLeasingCta(text)) {
-    let thread = await findThreadByResidentPhone(from);
-    if (!thread) {
-      const resident = await findResidentProfileByPhone(from);
-      if (resident?.managerUserId) {
-        thread = await openClawResidentThread({
-          managerUserId: resident.managerUserId,
-          residentPhone: from,
-          residentUserId: resident.userId,
-          residentEmail: resident.email,
-          topic: "general",
-        });
-      }
+    const [profile, existingThread] = await Promise.all([
+      findResidentProfileByPhone(from),
+      findThreadByResidentPhone(from),
+    ]);
+    let thread = existingThread;
+    if (!thread && profile?.managerUserId) {
+      thread = await openClawResidentThread({
+        managerUserId: profile.managerUserId,
+        residentPhone: from,
+        residentUserId: profile.userId,
+        residentEmail: profile.email,
+        topic: "general",
+      });
     }
     if (thread) {
-      await registerClawMessengerRoute(from);
-      const profile = await findResidentProfileByPhone(from);
+      const registerPromise = registerClawMessengerRoute(from);
       const residentEmail = thread.residentEmail || profile?.email || "";
       const residentUserId = thread.residentUserId || profile?.userId || null;
 
@@ -355,48 +362,63 @@ export async function handleClawLeasingInbound(args: {
         threadTopic: thread.topic,
       });
 
+      // Resident reply goes out first; manager forward + inbox mirror follow
+      // after the response so the resident isn't waiting on them.
+      await registerPromise;
       const send = await sendClawMessengerText({ to: from, text: action.residentReply });
 
-      const brief = action.classification.skipManagerBrief
-        ? null
-        : buildManagerResidentBrief({
-            residentName: action.residentName,
-            residentEmail: residentEmail || null,
-            residentPhone: from,
-            said: action.forwardSaid,
-            wants: action.classification.wantsLabel,
-            domain: action.classification.domain,
-            managerPath: action.classification.managerPath,
-            autoFiledNote: action.autoFiledNote,
-          });
+      const threadRef = thread;
+      runAfterReply(async () => {
+        const brief = action.classification.skipManagerBrief
+          ? null
+          : buildManagerResidentBrief({
+              residentName: action.residentName,
+              residentEmail: residentEmail || null,
+              residentPhone: from,
+              said: action.forwardSaid,
+              wants: action.classification.wantsLabel,
+              domain: action.classification.domain,
+              managerPath: action.classification.managerPath,
+              autoFiledNote: action.autoFiledNote,
+              propertyLabel: action.propertyLabel,
+              reply: action.residentReply,
+            });
 
-      if (brief) {
-        await forwardResidentMessageToManagers({
-          fromResident: from,
-          text,
-          topicLabel: action.classification.domain,
-          thread,
-          briefText: brief,
-        });
-        await mirrorResidentTextToManagerInbox({
-          thread,
-          from,
-          text,
-          service: args.service,
-          subject: `${action.classification.domain}: ${action.classification.wantsLabel}`,
-          body: brief,
-        });
-      }
-
-      if (action.threadTopic !== thread.topic) {
-        await openClawResidentThread({
-          managerUserId: thread.managerUserId,
-          residentPhone: from,
-          residentUserId,
-          residentEmail: residentEmail || null,
-          topic: action.threadTopic,
-        });
-      }
+        const tasks: Promise<unknown>[] = [];
+        if (brief) {
+          tasks.push(
+            forwardResidentMessageToManagers({
+              fromResident: from,
+              text,
+              topicLabel: action.classification.domain,
+              thread: threadRef,
+              briefText: brief,
+            }),
+          );
+          tasks.push(
+            mirrorResidentTextToManagerInbox({
+              thread: threadRef,
+              from,
+              text,
+              service: args.service,
+              subject: `${action.propertyLabel ? `${action.propertyLabel} · ` : ""}${action.residentName}`,
+              body: brief,
+            }),
+          );
+        }
+        if (action.threadTopic !== threadRef.topic) {
+          tasks.push(
+            openClawResidentThread({
+              managerUserId: threadRef.managerUserId,
+              residentPhone: from,
+              residentUserId,
+              residentEmail: residentEmail || null,
+              topic: action.threadTopic,
+            }),
+          );
+        }
+        await Promise.all(tasks);
+      });
 
       return {
         ok: send.ok,
@@ -438,49 +460,46 @@ export async function handleClawLeasingInbound(args: {
         : intent === "question"
           ? "question"
           : "leasing message";
+  const subjectLabel =
+    intent === "tour" || intent === "tour_details"
+      ? "Tour request"
+      : intent === "apply" || intent === "bundle"
+        ? "Application"
+        : intent === "question"
+          ? "Question"
+          : "Text";
 
-  await forwardClawInboundToManagers({
-    fromResident: from,
-    text,
-    intentLabel,
-    propertyLabel,
-    managerUserId: managers[0]?.userId ?? null,
+  runAfterReply(async () => {
+    const db = createSupabaseServiceRoleClient();
+    await Promise.all([
+      forwardClawInboundToManagers({
+        fromResident: from,
+        text,
+        intentLabel,
+        propertyLabel,
+        managerUserId: managers[0]?.userId ?? null,
+      }),
+      ...managers.map((manager) =>
+        upsertManagerInboxNotice(db, {
+          managerUserId: manager.userId,
+          idPrefix: "claw_lease",
+          threadType: "claw_leasing_sms",
+          from: from,
+          subject: `(${subjectLabel}${propertyLabel ? ` — ${propertyLabel}` : ""}) ${from}`,
+          preview: text.slice(0, 140) || "(empty)",
+          body: [
+            `(${subjectLabel}${propertyLabel ? ` — ${propertyLabel}` : ""}) ${from}`,
+            "",
+            text || "(empty message)",
+            "",
+            `— Auto-replied (${intent}) —`,
+            reply,
+          ].join("\n"),
+          unread: true,
+        }),
+      ),
+    ]);
   });
-
-  const db = createSupabaseServiceRoleClient();
-  for (const manager of managers) {
-    await upsertManagerInboxNotice(db, {
-      managerUserId: manager.userId,
-      idPrefix: "claw_lease",
-      threadType: "claw_leasing_sms",
-      from: from,
-      subject:
-        intent === "tour" || intent === "tour_details"
-          ? `Tour text from ${from}`
-          : intent === "apply" || intent === "bundle"
-            ? `Apply text from ${from}`
-            : intent === "question"
-              ? `Question text from ${from}`
-              : `Text from ${from}`,
-      preview: text.slice(0, 140) || "(empty)",
-      body: [
-        `Inbound (${args.service || "iMessage/SMS"}) from ${from}`,
-        args.messageId ? `Message id: ${args.messageId}` : null,
-        propertyId ? `Property: ${propertyLabel || propertyId}` : null,
-        bundleId ? `Bundle: ${bundleId}` : null,
-        "",
-        text || "(empty message)",
-        "",
-        `— Auto-replied (${intent}) —`,
-        reply,
-        "",
-        "— Also forwarded to your personal phone via Claw (reply there to text them back) —",
-      ]
-        .filter((line) => line !== null)
-        .join("\n"),
-      unread: true,
-    });
-  }
 
   return { ok: true, intent, replied: true };
 }

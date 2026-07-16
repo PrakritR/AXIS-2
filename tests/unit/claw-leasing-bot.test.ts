@@ -112,9 +112,11 @@ describe("claw leasing intent", () => {
       propertyId: "mgr-test-magnolia",
       propertyLabel: "Magnolia House",
     });
-    expect(tour.toLowerCase()).toContain("full name");
-    expect(tour.toLowerCase()).toContain("date/time");
+    expect(tour.toLowerCase()).toContain("name");
+    expect(tour.toLowerCase()).toContain("times");
     expect(tour).not.toContain("/rent/tours-contact");
+    expect(tour).not.toMatch(/leasing assistant/i);
+    expect(tour).not.toMatch(/^1\)/m);
   });
 
   it("bundle reply includes apply link with bundle query; question does not open web form", () => {
@@ -135,7 +137,8 @@ describe("claw leasing intent", () => {
       propertyId: "mgr-test-magnolia",
       propertyLabel: "Magnolia House",
     });
-    expect(question.toLowerCase()).toMatch(/imessage|sms/);
+    expect(question.toLowerCase()).toMatch(/reply here|got your note/);
     expect(question).not.toContain("/rent/tours-contact");
+    expect(question).not.toMatch(/forwarded to the property manager/i);
   });
 });

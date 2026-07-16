@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ServiceRequest } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { filingPropertyPriority } from "@/lib/resident-filing-scope";
 import {
   isApprovedApplicationRow,
   residentHasApprovedResidency,
@@ -87,12 +88,17 @@ async function shouldReassignToManager(
   // Always reclaim for our approved residency when the other manager only has pending.
   if (weApproved && !theyApproved) return true;
   // When both are approved, reclaim if the row property matches ours (or is empty)
-  // and doesn't clearly belong to their property.
+  // and doesn't clearly belong to their property — or when ours is the canonical
+  // demo portfolio and theirs is a guided-tour mirror (sandbox dual residency).
   if (weApproved && theyApproved) {
     if (!existingProperty) return true;
     if (preferredProperty && existingProperty === preferredProperty) return true;
-    // Mis-stamped onto a property that isn't our approved one — leave alone if it
-    // looks intentional for the other manager.
+    if (
+      preferredProperty &&
+      filingPropertyPriority(preferredProperty) < filingPropertyPriority(existingProperty)
+    ) {
+      return true;
+    }
     return false;
   }
   // We only have pending; don't steal from an approved landlord.

@@ -4,6 +4,7 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingServiceOption,
 } from "@/lib/manager-listing-submission";
+import { pickPrimaryFilingScope } from "@/lib/resident-filing-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -66,25 +67,35 @@ export async function GET() {
 
     const { data: appRows, error: appError } = await db
       .from("manager_application_records")
-      .select("property_id, assigned_property_id, row_data, updated_at")
+      .select("manager_user_id, property_id, assigned_property_id, row_data, updated_at")
       .eq("resident_email", email)
       .order("updated_at", { ascending: false })
       .limit(50);
     if (appError) return NextResponse.json({ error: appError.message }, { status: 500 });
 
     const rows = appRows ?? [];
-    const approvedRow = rows.find((row) => applicationBucket(row.row_data) === "approved");
-    const withProperty =
-      approvedRow ??
-      rows.find((row) => Boolean(propertyIdFromAppRow(row))) ??
-      null;
-    if (!withProperty) {
+    const candidates = rows
+      .map((row) => {
+        const managerUserId = String(row.manager_user_id ?? "").trim();
+        const propertyId = propertyIdFromAppRow(row);
+        if (!managerUserId && !propertyId) return null;
+        return {
+          managerUserId:
+            managerUserId ||
+            String((row.row_data as { managerUserId?: string } | null)?.managerUserId ?? "").trim(),
+          propertyId,
+          approved: applicationBucket(row.row_data) === "approved",
+          updatedAt: row.updated_at ?? null,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => Boolean(c?.managerUserId && c.propertyId));
+
+    const primary = pickPrimaryFilingScope(candidates);
+    if (!primary) {
       return NextResponse.json({ error: "No property linked to this resident." }, { status: 404 });
     }
-    const propertyId = propertyIdFromAppRow(withProperty);
-    if (!propertyId) {
-      return NextResponse.json({ error: "No property linked to this resident." }, { status: 404 });
-    }
+    const propertyId = primary.propertyId;
+    const managerUserId = primary.managerUserId;
 
     const { data: propRecord, error: propError } = await db
       .from("manager_property_records")
@@ -97,25 +108,20 @@ export async function GET() {
 
     // Pending/draft listings sometimes live under a different id — soft-match by scanning
     // this manager's properties when the exact id miss fires (id formatting drift).
-    if (!property) {
-      const managerUserId = String(
-        (withProperty.row_data as { managerUserId?: string } | null)?.managerUserId ?? "",
-      ).trim();
-      if (managerUserId) {
-        const { data: managerProps } = await db
-          .from("manager_property_records")
-          .select("id, property_data")
-          .eq("manager_user_id", managerUserId)
-          .limit(100);
-        const token = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toLowerCase();
-        const match = (managerProps ?? []).find((row) => {
-          const id = String(row.id ?? "").trim();
-          if (id === propertyId) return true;
-          if (!token) return false;
-          return id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toLowerCase() === token;
-        });
-        if (match) property = asProperty(match.property_data, match.id);
-      }
+    if (!property && managerUserId) {
+      const { data: managerProps } = await db
+        .from("manager_property_records")
+        .select("id, property_data")
+        .eq("manager_user_id", managerUserId)
+        .limit(100);
+      const token = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toLowerCase();
+      const match = (managerProps ?? []).find((row) => {
+        const id = String(row.id ?? "").trim();
+        if (id === propertyId) return true;
+        if (!token) return false;
+        return id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toLowerCase() === token;
+      });
+      if (match) property = asProperty(match.property_data, match.id);
     }
 
     if (!property) return NextResponse.json({ error: "Property not found." }, { status: 404 });
@@ -123,7 +129,7 @@ export async function GET() {
     const serviceRequestOptions = serviceOffersFromProperty(property);
 
     return NextResponse.json(
-      { property, serviceRequestOptions },
+      { property, serviceRequestOptions, managerUserId, propertyId: property.id },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {

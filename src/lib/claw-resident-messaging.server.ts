@@ -13,7 +13,14 @@ import { residentPortalUrl } from "@/lib/claw-resident-links";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
 
-export type ClawThreadTopic = "payment" | "lease" | "leasing" | "move_in" | "general";
+export type ClawThreadTopic =
+  | "payment"
+  | "lease"
+  | "leasing"
+  | "move_in"
+  | "general"
+  | "applications"
+  | "maintenance";
 
 export type ClawMessagingThread = {
   id: string;
@@ -54,23 +61,38 @@ export function clawDefaultResidentPhoneFromEnv(): string | null {
 /** SMS body the resident sees when their manager texts the agent line. */
 export function labelClawSmsFromManager(text: string): string {
   const body = text.trim() || "(empty)";
-  return `From your property manager:\n${body}`;
-}
-
-/** SMS body the manager sees when a resident texts the agent line. */
-export function labelClawSmsFromResident(text: string, residentPhone?: string | null): string {
-  const body = text.trim() || "(empty)";
-  const who = residentPhone?.trim() ? `From resident (${residentPhone.trim()}):` : "From resident:";
-  return `${who}\n${body}`;
+  return `(Your property manager)\n${body}`;
 }
 
 /**
  * Carbon-copy to the manager when PropLane sends an automated text to the resident.
- * Resident still gets the plain message; manager sees the labeled copy.
+ * Resident still gets the plain message; manager sees property + resident + sent body.
  */
-export function labelClawSmsFromPropLaneForManager(text: string): string {
+export function labelClawSmsFromPropLaneForManager(
+  text: string,
+  opts?: {
+    propertyLabel?: string | null;
+    residentName?: string | null;
+    residentPhone?: string | null;
+  },
+): string {
   const body = text.trim() || "(empty)";
-  return `From PropLane (sent to resident):\n${body}`;
+  const property = opts?.propertyLabel?.trim() || "Unknown property";
+  const name = opts?.residentName?.trim() || "Resident";
+  const phone = opts?.residentPhone?.trim() || "";
+  const residentLine = phone ? `${name} (${phone})` : name;
+  return [`Property: ${property}`, `Resident: ${residentLine}`, `Sent: ${body}`].join("\n");
+}
+
+/** Fallback when we only know the phone (no profile resolved yet). */
+export function labelClawSmsFromResident(text: string, residentPhone?: string | null): string {
+  const body = text.trim() || "(empty)";
+  const phone = residentPhone?.trim() || "";
+  return [
+    "Property: Unknown property",
+    `Resident: ${phone ? `Resident (${phone})` : "Resident"}`,
+    `Said: ${body}`,
+  ].join("\n");
 }
 
 export async function resolveMappedManagerContacts(): Promise<
@@ -303,7 +325,7 @@ export async function findResidentProfileByPhone(phone: string): Promise<{
     const { data: app } = await db
       .from("manager_application_records")
       .select("manager_user_id")
-      .eq("email", email)
+      .eq("resident_email", email)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -335,15 +357,17 @@ export async function forwardResidentMessageToManagers(args: {
 
   const body = args.briefText?.trim() || labelClawSmsFromResident(args.text, args.fromResident);
 
-  const forwardedTo: string[] = [];
-  for (const to of targets) {
-    await registerClawMessengerRoute(to);
-    const send = await sendClawMessengerText({ to, text: body });
-    if (send.ok) forwardedTo.push(to);
-  }
-
-  await touchThread(args.thread);
-  return { forwardedTo };
+  const [sent] = await Promise.all([
+    Promise.all(
+      [...targets].map(async (to) => {
+        await registerClawMessengerRoute(to);
+        const send = await sendClawMessengerText({ to, text: body });
+        return send.ok ? to : null;
+      }),
+    ),
+    touchThread(args.thread),
+  ]);
+  return { forwardedTo: sent.filter((t): t is string => Boolean(t)) };
 }
 
 export async function tryRelayManagerReplyViaClaw(args: {
@@ -359,7 +383,7 @@ export async function tryRelayManagerReplyViaClaw(args: {
     await registerClawMessengerRoute(from);
     await sendClawMessengerText({
       to: from,
-      text: "Could not reach a resident phone for this PropLane line. Check CLAW_MESSENGER_DEFAULT_RESIDENT_PHONE.",
+      text: "(Not delivered)\nNo resident thread is open on this line yet. Message a resident from the portal inbox first, or wait for a resident to text in.",
     });
     return { relayed: false, error: "no_open_thread" };
   }
@@ -370,7 +394,14 @@ export async function tryRelayManagerReplyViaClaw(args: {
   const outbound = labelClawSmsFromManager(text);
   await registerClawMessengerRoute(thread.residentPhone);
   const send = await sendClawMessengerText({ to: thread.residentPhone, text: outbound });
-  if (!send.ok) return { relayed: false, error: send.error || "send_failed" };
+  if (!send.ok) {
+    // Silent failures read as being ignored — tell the manager it didn't land.
+    await sendClawMessengerText({
+      to: from,
+      text: "(Not delivered)\nCouldn't reach the resident by text right now. Try again in a minute or use the portal inbox.",
+    }).catch(() => undefined);
+    return { relayed: false, error: send.error || "send_failed" };
+  }
 
   await touchThread(thread);
   return { relayed: true, to: thread.residentPhone };
@@ -387,6 +418,8 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
   residentUserId?: string | null;
   residentEmail?: string | null;
   topic?: ClawThreadTopic;
+  propertyLabel?: string | null;
+  residentName?: string | null;
 }): Promise<{ mirrored: boolean; to?: string }> {
   const managerUserId = args.managerUserId.trim();
   const residentPhone = normalizeE164Us(args.residentPhone);
@@ -403,7 +436,66 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
   const managerPhone = thread?.managerPhone || (await resolveManagerPersonalPhone(managerUserId));
   if (!managerPhone || managerPhone === residentPhone) return { mirrored: false };
 
-  const body = labelClawSmsFromPropLaneForManager(plain);
+  let propertyLabel = args.propertyLabel?.trim() || null;
+  let residentName = args.residentName?.trim() || null;
+  if (!propertyLabel || !residentName) {
+    try {
+      const db = createSupabaseServiceRoleClient();
+      const email = (args.residentEmail || thread?.residentEmail || "").trim().toLowerCase();
+      if (!residentName && args.residentUserId) {
+        const { data } = await db.from("profiles").select("full_name").eq("id", args.residentUserId).maybeSingle();
+        residentName = String((data as { full_name?: unknown } | null)?.full_name ?? "").trim() || null;
+      }
+      if ((!propertyLabel || !residentName) && email) {
+        const { data: app } = await db
+          .from("manager_application_records")
+          .select("row_data, property_id, assigned_property_id")
+          .eq("resident_email", email)
+          .eq("manager_user_id", managerUserId)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const rowData = (app as { row_data?: Record<string, unknown> } | null)?.row_data ?? {};
+        if (!residentName) {
+          residentName = String(rowData.name ?? "").trim() || null;
+        }
+        if (!propertyLabel) {
+          propertyLabel =
+            String(rowData.propertyTitle ?? "").trim() ||
+            String(rowData.property ?? "").trim() ||
+            null;
+        }
+        if (!propertyLabel) {
+          const propertyId =
+            String((app as { assigned_property_id?: unknown } | null)?.assigned_property_id ?? "").trim() ||
+            String((app as { property_id?: unknown } | null)?.property_id ?? "").trim() ||
+            String(rowData.propertyId ?? "").trim();
+          if (propertyId) {
+            const { data: prop } = await db
+              .from("manager_property_records")
+              .select("property_data, row_data")
+              .eq("id", propertyId)
+              .maybeSingle();
+            const propertyData = (prop as { property_data?: Record<string, unknown> } | null)?.property_data ?? {};
+            const propRow = (prop as { row_data?: Record<string, unknown> } | null)?.row_data ?? {};
+            propertyLabel =
+              String(propertyData.title ?? "").trim() ||
+              String(propertyData.buildingName ?? "").trim() ||
+              String(propRow.buildingName ?? "").trim() ||
+              null;
+          }
+        }
+      }
+    } catch {
+      /* keep Unknown property / Resident */
+    }
+  }
+
+  const body = labelClawSmsFromPropLaneForManager(plain, {
+    propertyLabel,
+    residentName,
+    residentPhone,
+  });
   await registerClawMessengerRoute(managerPhone);
   const send = await sendClawMessengerText({ to: managerPhone, text: body });
   if (!send.ok) return { mirrored: false };
@@ -415,25 +507,17 @@ export async function mirrorAutomatedResidentSmsToManager(args: {
 export function residentInboundAck(topic: ClawThreadTopic): string {
   switch (topic) {
     case "payment":
-      return [
-        "Got it — your property manager will see this and reply here about your payment.",
-        `Pay / view charges: ${residentPortalUrl("payments")}`,
-      ].join("\n");
+      return `Got it — I'll make sure they see this about your payment.\n${residentPortalUrl("payments")}`;
     case "lease":
-      return [
-        "Got it — your property manager will see this and reply here about your lease.",
-        `Sign / view lease: ${residentPortalUrl("lease")}`,
-      ].join("\n");
+      return `Got it on the lease stuff — they'll reply here.\n${residentPortalUrl("lease")}`;
     case "move_in":
-      return [
-        "Got it — your property manager will see this and reply here about move-in.",
-        `Move-in details: ${residentPortalUrl("move_in")}`,
-      ].join("\n");
+      return `Got it — move-in notes are here if you need them:\n${residentPortalUrl("move_in")}`;
+    case "applications":
+      return `Got it — they'll follow up on your application.\n${residentPortalUrl("applications")}`;
+    case "maintenance":
+      return `Got it — they'll get back to you about that.`;
     default:
-      return [
-        "Got it — your property manager will see this and can reply on this thread.",
-        `Open inbox: ${residentPortalUrl("inbox")}`,
-      ].join("\n");
+      return "Got it — I'll make sure your manager sees this.";
   }
 }
 
@@ -449,16 +533,10 @@ export async function mirrorResidentTextToManagerInbox(args: {
   const body =
     args.body?.trim() ||
     [
-      `Inbound (${args.service || "iMessage/SMS"}) from ${args.from}`,
-      args.thread.residentEmail ? `Resident: ${args.thread.residentEmail}` : null,
-      `Topic: ${args.thread.topic}`,
+      `(Text — ${args.thread.topic}) ${args.thread.residentEmail || args.from}`,
       "",
       args.text || "(empty message)",
-      "",
-      "— Reply from your personal phone in the PropLane iMessage thread to text them back —",
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
+    ].join("\n");
   await upsertManagerInboxNotice(db, {
     managerUserId: args.thread.managerUserId,
     idPrefix: "claw_resident",

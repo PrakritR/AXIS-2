@@ -412,7 +412,9 @@ export async function deliverPortalInboxMessage(
               ? "payments"
               : eventCategory === "maintenance"
                 ? "services"
-                : "inbox";
+                : eventCategory === "applications"
+                  ? "applications"
+                  : "inbox";
         if (linkKind) {
           body = ensureSmsIncludesPortalLink(body, linkKind);
         }
@@ -421,7 +423,10 @@ export async function deliverPortalInboxMessage(
         // roles and breaks manager reply routing.
         const openThread =
           recipientIsResident &&
-          (eventCategory === "payments" || eventCategory === "leases" || eventCategory === "maintenance")
+          (eventCategory === "payments" ||
+            eventCategory === "leases" ||
+            eventCategory === "maintenance" ||
+            eventCategory === "applications")
             ? {
                 managerUserId: opts.senderUserId,
                 residentUserId: recipient.userId,
@@ -431,7 +436,9 @@ export async function deliverPortalInboxMessage(
                     ? ("lease" as const)
                     : eventCategory === "payments"
                       ? ("payment" as const)
-                      : ("general" as const),
+                      : eventCategory === "applications"
+                        ? ("applications" as const)
+                        : ("maintenance" as const),
               }
             : null;
         const result = await sendResidentOutboundSms({

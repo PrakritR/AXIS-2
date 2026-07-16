@@ -1,3 +1,4 @@
+import { pickPrimaryFilingScope } from "@/lib/resident-filing-scope";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ServiceRoleDb = ReturnType<typeof createSupabaseServiceRoleClient>;
@@ -91,9 +92,9 @@ function preferApprovedThenRecent(rows: ApplicationScopeRow[]): ApplicationScope
 
 /**
  * Resolve which manager + property a resident filing should be stamped with.
- * Prefer approved residencies; within that set, honor the client-claimed
- * manager/property when they match. Pending leftover apps never win over an
- * approved lease residency.
+ * Prefer approved residencies; within that set, prefer the canonical demo
+ * portfolio over guided-tour mirrors, and honor client claims only when they
+ * land in that top tier. Pending leftover apps never win over an approved lease.
  */
 export async function resolveResidentFilingScope(
   db: ServiceRoleDb,
@@ -119,30 +120,53 @@ export async function resolveResidentFilingScope(
   const claimedManager = params.claimedManagerUserId?.trim() || "";
   const claimedProperty = params.claimedPropertyId?.trim() || "";
 
-  // Approved residencies first — across all managers — then optionally narrow
-  // to the claimed manager if that claim is also approved (or no approvals).
   const preferred = preferApprovedThenRecent(rows);
-  const forClaimedManager = claimedManager
-    ? preferred.filter((r) => String(r.manager_user_id ?? "").trim() === claimedManager)
-    : preferred;
+  const candidates = preferred
+    .map((r) => {
+      const managerUserId = String(r.manager_user_id ?? "").trim();
+      const propertyId = propertyIdFromApplication(r);
+      if (!managerUserId) return null;
+      return {
+        managerUserId,
+        propertyId,
+        approved: isApprovedApplicationRow(r),
+        updatedAt: r.updated_at ?? null,
+      };
+    })
+    .filter((c): c is NonNullable<typeof c> => Boolean(c));
 
-  let pool: ApplicationScopeRow[];
-  if (forClaimedManager.length > 0) {
-    pool = forClaimedManager;
-  } else if (claimedManager) {
-    // Claimed manager only has pending (or no) rows while another manager has
-    // approved — stamp against approved residency instead of rejecting/wrong queue.
-    pool = preferred;
-  } else {
-    pool = preferred;
-  }
-
-  const propertyMatch = claimedProperty
-    ? pool.find((r) => propertyIdFromApplication(r) === claimedProperty)
-    : undefined;
-  const chosen = propertyMatch ?? pool[0]!;
-  const managerUserId = String(chosen.manager_user_id ?? "").trim();
-  if (!managerUserId) return null;
-  const propertyId = propertyIdFromApplication(chosen) || claimedProperty;
+  const chosen = pickPrimaryFilingScope(candidates, {
+    managerUserId: claimedManager,
+    propertyId: claimedProperty,
+  });
+  if (!chosen) return null;
+  const managerUserId = chosen.managerUserId;
+  const propertyId = chosen.propertyId || claimedProperty;
+  // #region agent log
+  fetch("http://127.0.0.1:7518/ingest/13325f45-ca08-4e41-b48c-2517464d2c52", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7a8007" },
+    body: JSON.stringify({
+      sessionId: "7a8007",
+      runId: "post-fix",
+      hypothesisId: "A",
+      location: "resident-manager-scope.ts:resolveResidentFilingScope",
+      message: "resolved filing scope",
+      data: {
+        claimedManager: claimedManager.slice(0, 8),
+        claimedProperty,
+        preferredCount: preferred.length,
+        preferredBuckets: preferred.slice(0, 6).map((r) => ({
+          mgr: String(r.manager_user_id ?? "").slice(0, 8),
+          prop: propertyIdFromApplication(r),
+          bucket: applicationBucket(r.row_data),
+        })),
+        chosenMgr: managerUserId.slice(0, 8),
+        chosenProp: propertyId,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   return { managerUserId, propertyId };
 }

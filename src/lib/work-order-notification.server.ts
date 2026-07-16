@@ -30,28 +30,28 @@ function workOrderSmsBody(
   switch (event) {
     case "created": {
       if (input.audience === "manager") {
-        const kindLabel = input.itemKind === "service-request" ? "service request" : "work order";
+        const kindLabel = input.itemKind === "service-request" ? "Service request" : "Work order";
         const reviewPath =
           input.itemKind === "service-request"
             ? "/portal/services/requests"
             : "/portal/services/work-orders";
         return [
-          `New ${kindLabel}: "${title}"${at}.`,
+          `(New ${kindLabel.toLowerCase()}) "${title}"${at}`,
           `Review: ${residentSmsLinkOrigin()}${reviewPath}`,
         ].join("\n");
       }
-      return `New maintenance request: "${title}"${at}. We'll keep you updated.`;
+      return `(Maintenance request received)\n"${title}"${at}. We'll keep you updated.`;
     }
     case "vendor_marked_done":
-      return `"${title}"${at} marked done${input.note ? `: ${input.note.slice(0, 120)}` : ""}. Review in Work Orders.`;
+      return `(Work order update)\n"${title}"${at} marked done${input.note ? `: ${input.note.slice(0, 120)}` : ""}. Review in Work Orders.`;
     case "completed":
-      return `Your work order "${title}"${at} has been completed.`;
+      return `(Work order completed)\n"${title}"${at} is done.`;
     case "approved_paid":
-      return `"${title}"${at} approved and paid. Thanks for the work.`;
+      return `(Work order paid)\n"${title}"${at} approved and paid. Thanks for the work.`;
     case "reminder":
-      return `Reminder: pending work order "${title}"${at} needs attention.`;
+      return `(Reminder)\nPending work order "${title}"${at} needs attention.`;
     default:
-      return `"${title}"${at} update from PropLane.`;
+      return `(Update)\n"${title}"${at} update from PropLane.`;
   }
 }
 

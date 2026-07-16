@@ -10,8 +10,8 @@ describe("service request SMS ack", () => {
       title: "Parking request",
     });
     expect(ack).toContain("Parking request");
-    expect(ack).toContain("filed a service request");
-    expect(ack).toMatch(/\/resident\/services/);
+    expect(ack).toMatch(/request/i);
+    expect(ack).toMatch(/manager/i);
   });
 
   it("uses custom offer id constant", () => {

@@ -538,11 +538,12 @@ export async function POST(req: Request) {
           .in("email", recipientEmails);
         const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
 
+        const senderIsManager = ["manager", "pro", "admin"].includes(String(senderRole ?? "").toLowerCase());
         for (const recipient of recipients) {
           if (eventCategory && channelByEmail.get(recipient.email)?.sms !== true) continue;
           const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
           if (!recipientPhone) continue;
-          let smsText = `${subject}\n\n${text}`;
+          let smsText = `(${subject})\n${text}`;
           const linkKind: ResidentSmsLinkKind | null =
             eventCategory === "leases"
               ? "lease"
@@ -550,23 +551,51 @@ export async function POST(req: Request) {
                 ? "payments"
                 : eventCategory === "maintenance"
                   ? "services"
-                  : eventCategory
-                    ? "inbox"
-                    : null;
+                  : eventCategory === "applications"
+                    ? "applications"
+                    : eventCategory
+                      ? "inbox"
+                      : null;
           if (linkKind) smsText = ensureSmsIncludesPortalLink(smsText, linkKind);
+          const recipientIsResident =
+            String(recipient.role ?? "").toLowerCase() === "resident" ||
+            recipient.scope.includes("resident");
+          // A manager's own compose (no event category) still opens the relay
+          // thread — future resident replies route back to their phone — but is
+          // NOT mirrored back to them: they just wrote it.
+          const openThread =
+            eventCategory === "payments" ||
+            eventCategory === "leases" ||
+            eventCategory === "maintenance" ||
+            eventCategory === "applications"
+              ? {
+                  managerUserId: user.id,
+                  residentUserId: recipient.userId,
+                  residentEmail: recipient.email,
+                  topic:
+                    eventCategory === "leases"
+                      ? ("lease" as const)
+                      : eventCategory === "payments"
+                        ? ("payment" as const)
+                        : eventCategory === "applications"
+                          ? ("applications" as const)
+                          : ("maintenance" as const),
+                }
+              : senderIsManager && recipientIsResident
+                ? {
+                    managerUserId: user.id,
+                    residentUserId: recipient.userId,
+                    residentEmail: recipient.email,
+                    topic: "general" as const,
+                  }
+                : null;
           const result = await sendResidentOutboundSms({
             to: recipientPhone,
             text: smsText,
             fromNumber: smsFromNumber,
             linkKind: null,
-            openThread:
-              eventCategory === "payments" || eventCategory === "leases"
-                ? {
-                    managerUserId: user.id,
-                    residentEmail: recipient.email,
-                    topic: eventCategory === "leases" ? "lease" : "payment",
-                  }
-                : null,
+            openThread,
+            mirrorToManager: Boolean(eventCategory),
           });
           if (result.sent) {
             const logId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

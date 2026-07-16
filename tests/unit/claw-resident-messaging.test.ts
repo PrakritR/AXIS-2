@@ -8,11 +8,12 @@ import {
 } from "@/lib/claw-resident-messaging.server";
 
 describe("residentInboundAck", () => {
-  it("returns topic-specific confirmation copy with portal links", () => {
+  it("returns natural confirmations with links when useful", () => {
     const payment = residentInboundAck("payment");
     expect(payment.toLowerCase()).toContain("payment");
     expect(payment).toMatch(/https?:\/\//);
     expect(payment).toContain("/resident/payments/pending");
+    expect(payment).not.toMatch(/property manager will see this and reply here/i);
 
     const lease = residentInboundAck("lease");
     expect(lease.toLowerCase()).toContain("lease");
@@ -20,25 +21,38 @@ describe("residentInboundAck", () => {
 
     const general = residentInboundAck("general");
     expect(general.toLowerCase()).toContain("manager");
-    expect(general).toContain("/resident/inbox");
+    expect(general).not.toMatch(/PropLane/i);
   });
 });
 
 describe("Claw SMS sender labels", () => {
   it("labels manager→resident relay for the resident", () => {
-    expect(labelClawSmsFromManager("Hello")).toBe("From your property manager:\nHello");
+    expect(labelClawSmsFromManager("Hello")).toBe("(Your property manager)\nHello");
   });
 
   it("labels resident→manager relay for the manager", () => {
     expect(labelClawSmsFromResident("hey", "+15105791976")).toBe(
-      "From resident (+15105791976):\nhey",
+      ["Property: Unknown property", "Resident: Resident (+15105791976)", "Said: hey"].join("\n"),
     );
   });
 
   it("labels automated carbon-copy for the manager; resident keeps plain text", () => {
     const plain = "Rent is due Friday.";
     expect(labelClawSmsFromPropLaneForManager(plain)).toBe(
-      "From PropLane (sent to resident):\nRent is due Friday.",
+      ["Property: Unknown property", "Resident: Resident", `Sent: ${plain}`].join("\n"),
+    );
+    expect(
+      labelClawSmsFromPropLaneForManager(plain, {
+        propertyLabel: "The Pioneer",
+        residentName: "Test Resident",
+        residentPhone: "+15105791976",
+      }),
+    ).toBe(
+      [
+        "Property: The Pioneer",
+        "Resident: Test Resident (+15105791976)",
+        `Sent: ${plain}`,
+      ].join("\n"),
     );
   });
 

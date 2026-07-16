@@ -1,5 +1,6 @@
 import { completeFreeManagerTierForUser } from "@/lib/auth/manager-pricing-selection";
 import { finalizePendingManagerFreeTier } from "@/lib/auth/manager-onboarding";
+import { maybeSendManagerPropLaneAssistantIntro } from "@/lib/claw-onboarding-sms.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Tier = "free" | "pro" | "business";
@@ -18,23 +19,27 @@ export async function completeManagerSignupTrial(
     tier: Tier;
   },
 ): Promise<{ managerId: string }> {
+  let managerId: string;
   if (opts.tier === "free") {
-    const { managerId } = await completeFreeManagerTierForUser(supabase, {
+    ({ managerId } = await completeFreeManagerTierForUser(supabase, {
       userId: opts.userId,
       email: opts.email,
       fullName: opts.fullName,
       tier: "free",
       billing: "free",
-    });
-    return { managerId };
+    }));
+  } else {
+    ({ managerId } = await finalizePendingManagerFreeTier(supabase, {
+      userId: opts.userId,
+      email: opts.email,
+      fullName: opts.fullName,
+      tier: opts.tier,
+      billing: "trial",
+    }));
   }
 
-  const { managerId } = await finalizePendingManagerFreeTier(supabase, {
-    userId: opts.userId,
-    email: opts.email,
-    fullName: opts.fullName,
-    tier: opts.tier,
-    billing: "trial",
-  });
+  // Best-effort PropLane assistant intro when a personal phone is already on file.
+  void maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId);
+
   return { managerId };
 }

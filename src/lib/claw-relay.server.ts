@@ -64,20 +64,20 @@ export async function forwardClawInboundToManagers(args: {
   targets.delete(fromResident);
   targets.delete(clawLeasingAgentPhoneE164());
 
-  const where = args.propertyLabel ? ` (${args.propertyLabel})` : "";
-  const body = [
-    `From prospect${where}:`,
-    args.text || "(empty)",
-    "",
-    `(${args.intentLabel}) Reply in this thread to text them back.`,
-  ].join("\n");
+  const label = args.intentLabel.trim()
+    ? args.intentLabel.trim().charAt(0).toUpperCase() + args.intentLabel.trim().slice(1)
+    : "Leasing message";
+  const where = args.propertyLabel?.trim() ? ` — ${args.propertyLabel.trim()}` : "";
+  const body = [`(${label}${where}) ${fromResident}`, args.text || "(empty)"].join("\n");
 
-  const forwardedTo: string[] = [];
-  for (const to of targets) {
-    await registerClawMessengerRoute(to);
-    const send = await sendClawMessengerText({ to, text: body });
-    if (send.ok) forwardedTo.push(to);
-  }
+  const sent = await Promise.all(
+    [...targets].map(async (to) => {
+      await registerClawMessengerRoute(to);
+      const send = await sendClawMessengerText({ to, text: body });
+      return send.ok ? to : null;
+    }),
+  );
+  const forwardedTo = sent.filter((t): t is string => Boolean(t));
 
   const primary =
     (args.managerUserId

@@ -189,9 +189,6 @@ export function ResidentProfilePanel() {
           <div className="space-y-2">
             <label className="text-sm font-semibold text-foreground">Phone</label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" />
-            <p className="text-xs text-muted">
-              Used for PropLane texts — payment reminders, maintenance updates, and manager replies. Same number from signup.
-            </p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-foreground">PropLane ID</label>
