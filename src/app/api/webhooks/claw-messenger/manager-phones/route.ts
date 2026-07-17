@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { clawMessengerApiKey, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
 import { resolveMappedManagerContacts } from "@/lib/claw-resident-messaging.server";
@@ -11,12 +11,24 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 }
 
+/** Keyed so a leaked response body alone can't be used to harvest real phone
+ * numbers — only to confirm/deny a specific candidate number, which is all
+ * the gateway's debounce-bypass check needs. Same key used for auth below, so
+ * this adds no new secret. */
+function hashPhone(apiKey: string, phoneE164: string): string {
+  return createHmac("sha256", apiKey).update(phoneE164.replace(/\D/g, "")).digest("hex");
+}
+
 /**
  * Registered shared-line manager phones, for the Claw gateway's reply-debounce
  * bypass: a manager texting the line from their verified personal phone must
  * be relayed immediately, never held in the prospect quiet-window buffer.
  * Bearer-authenticated with the same CLAW_MESSENGER_API_KEY the gateway
- * already holds — no new secret to provision.
+ * already holds — no new secret to provision. Returns HMAC digests, not raw
+ * phone numbers: CLAW_MESSENGER_API_KEY also travels in the relay WS URL
+ * (upstream logs can capture it — see the sibling webhook route's comment),
+ * so this endpoint must not turn that into a bulk phone-directory leak for
+ * anyone who obtains the key.
  */
 export async function GET(req: Request) {
   if (!isClawMessengerConfigured()) {
@@ -29,6 +41,13 @@ export async function GET(req: Request) {
   }
 
   const managers = await resolveMappedManagerContacts();
-  const phones = [...new Set(managers.map((m) => m.personalPhone).filter((p): p is string => Boolean(p)))];
-  return NextResponse.json({ phones }, { headers: { "Cache-Control": "private, no-store" } });
+  const phoneHashes = [
+    ...new Set(
+      managers
+        .map((m) => m.personalPhone)
+        .filter((p): p is string => Boolean(p))
+        .map((p) => hashPhone(apiKey, p)),
+    ),
+  ];
+  return NextResponse.json({ phoneHashes }, { headers: { "Cache-Control": "private, no-store" } });
 }

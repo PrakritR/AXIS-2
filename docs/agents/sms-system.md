@@ -107,9 +107,15 @@ cross-catalog leasing agent (`src/lib/agent/leasing-sms-agent.server.ts` +
 `resolveRegisteredClawManagers()` / `resolveMappedManagerContacts()`
 (`claw-resident-messaging.server.ts`) are the single choke point that reads
 this: they exclude sandbox/demo accounts (`isPortalSandboxEmail` —
-`@axis.local` / `@test.axis.local`) and only trust a manager's
-`profiles.phone` as their identity when `phone_verified_at` is set (an
-unverified phone is user-editable and forgeable). `CLAW_MESSENGER_MANAGER_EMAILS`
+`@axis.local` / `@test.axis.local`), require `profiles.role` to be one of
+`manager`/`pro`/`admin`/`owner`, and only trust a manager's `profiles.phone`
+as their identity when `phone_verified_at` is set (an unverified phone is
+user-editable and forgeable). The role check matters because
+`sms_from_number` and `phone_verified_at` are themselves settable by ANY
+authenticated user through `/api/manager/phone` (no role gate there — a
+resident verifying their own phone is legitimate) — without the role filter,
+that would let a non-manager account self-register onto the shared-line
+roster. `CLAW_MESSENGER_MANAGER_EMAILS`
 is now an optional ADDITIVE override (e.g. an ops cell not yet fully
 provisioned) — empty by default, never a replacement for DB registration, and
 never able to re-admit a sandbox email. A tenant text about a listing routes
@@ -128,7 +134,12 @@ message in that thread — a new message resets the window. Manager-authored
 texts and WS history replays always bypass the buffer (fetched from
 `GET /api/webhooks/claw-messenger/manager-phones`, bearer-authed with
 `CLAW_MESSENGER_API_KEY`, refreshed every `CLAW_MESSENGER_MANAGER_PHONES_REFRESH_MS`,
-default 5 min). SIGTERM/SIGINT flush pending buffers immediately so a
+default 5 min). That endpoint returns HMAC digests of phone numbers, not raw
+phone numbers — `CLAW_MESSENGER_API_KEY` also travels in the relay WS URL
+(upstream logs can capture it, per the sibling webhook route's own comment),
+so it must never double as a way to bulk-harvest real managers' cell numbers;
+the gateway hashes each inbound `from` with the same key to check membership.
+SIGTERM/SIGINT flush pending buffers immediately so a
 redeploy doesn't add latency; a mid-buffer crash only loses the *timer* — Claw
 Messenger replays everything since `sinceIso` on reconnect, so the message
 itself is never dropped, only re-buffered.

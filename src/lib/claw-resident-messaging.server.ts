@@ -173,10 +173,18 @@ export async function resolveRegisteredClawManagers(): Promise<
   Array<{ userId: string; email: string; fullName: string | null; personalPhone: string | null }>
 > {
   const db = createSupabaseServiceRoleClient();
+  // profiles.sms_from_number and phone_verified_at are settable by ANY
+  // authenticated user (GET/POST/PUT /api/manager/phone have no role check —
+  // any resident/vendor can verify their own phone, and the shared Claw line
+  // auto-stamps sms_from_number on that same route). The role filter below is
+  // what keeps a non-manager account from self-registering onto the shared
+  // line's manager roster (and, via isMappedManagerPhone, the manager-command
+  // surface) purely by verifying their own phone.
   const { data } = await db
     .from("profiles")
-    .select("id, email, full_name, phone, phone_verified_at, sms_from_number, created_at")
+    .select("id, email, full_name, phone, phone_verified_at, sms_from_number, role, created_at")
     .not("sms_from_number", "is", null)
+    .in("role", ["manager", "pro", "admin", "owner"])
     .order("created_at", { ascending: true })
     .limit(500);
 

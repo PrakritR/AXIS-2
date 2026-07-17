@@ -164,8 +164,16 @@ async function resolveManagerTarget(managerUserId: string): Promise<ManagerTarge
   ];
 }
 
+/**
+ * A per-manager Twilio work number is scoped to exactly ONE manager — do NOT
+ * also accept any other registered shared-line manager here (that shortcut
+ * made sense when the shared-line roster was 2-3 trial accounts; now that
+ * it's DB-driven over every real manager, it would let any manager's phone be
+ * recognized as staff on a DIFFERENT manager's dedicated number, breaking the
+ * per-manager isolation this scoped path exists for). The shared Claw line's
+ * own inbound path already checks `isMappedManagerPhone` directly.
+ */
 async function isManagerPersonalPhone(fromE164: string, managerUserId: string): Promise<boolean> {
-  if (await isMappedManagerPhone(fromE164)) return true;
   const db = createSupabaseServiceRoleClient();
   const { data } = await db
     .from("profiles")

@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Minimal chainable Supabase mock: each `.from()` call consumes one queued result. */
 const queryQueue: Array<{ data: unknown[] | null }> = [];
+const inCalls: Array<[string, unknown]> = [];
 function chain(result: { data: unknown[] | null }) {
   const q: Record<string, unknown> = {};
   const ret = () => q;
-  for (const m of ["select", "eq", "in", "order", "limit", "not"]) q[m] = ret;
+  for (const m of ["select", "eq", "order", "limit", "not"]) q[m] = ret;
+  q.in = (col: string, val: unknown) => {
+    inCalls.push([col, val]);
+    return q;
+  };
   q.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
     Promise.resolve(result).then(res, rej);
   return q;
@@ -42,6 +47,7 @@ function profileRow(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   queryQueue.length = 0;
+  inCalls.length = 0;
   delete process.env.CLAW_MESSENGER_MANAGER_EMAILS;
   delete process.env.CLAW_MESSENGER_MANAGER_FORWARD_PHONES;
 });
@@ -53,6 +59,12 @@ describe("resolveRegisteredClawManagers (DB-driven shared-line registration)", (
     expect(managers).toEqual([
       { userId: "mgr-1", email: "real@landlord.com", fullName: "Real Landlord", personalPhone: "+15105551234" },
     ]);
+  });
+
+  it("scopes the query to manager-ish roles — profiles.sms_from_number/phone_verified_at are settable by ANY authenticated user via /api/manager/phone (no role gate there), so this filter is what stops a resident/vendor self-registering onto the shared-line roster", async () => {
+    queryQueue.push({ data: [profileRow()] });
+    await resolveRegisteredClawManagers();
+    expect(inCalls).toContainEqual(["role", ["manager", "pro", "admin", "owner"]]);
   });
 
   it("excludes sandbox/demo accounts even when stamped with the shared line", async () => {

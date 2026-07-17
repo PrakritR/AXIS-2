@@ -20,6 +20,7 @@
  *     node scripts/claw-messenger-gateway.mjs
  */
 
+import { createHmac } from "node:crypto";
 import WebSocket from "ws";
 
 const apiKey = process.env.CLAW_MESSENGER_API_KEY?.trim();
@@ -68,8 +69,17 @@ const seen = new Set();
 
 /* Manager phones bypass the debounce entirely — a manager composing through
  * the shared line expects the same latency they get today, not a 2-3 minute
- * hold meant for prospect auto-replies. */
-let managerPhoneDigits = new Set();
+ * hold meant for prospect auto-replies. The endpoint returns HMAC digests
+ * (keyed on apiKey), not raw phone numbers — apiKey also travels in the
+ * relay WS URL where upstream logs can capture it, so this set must not turn
+ * into a bulk phone-directory leak for anyone who obtains it. */
+let managerPhoneHashes = new Set();
+
+function hashPhone(from) {
+  const digits = String(from ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  return createHmac("sha256", apiKey).update(digits).digest("hex");
+}
 
 async function refreshManagerPhones() {
   try {
@@ -81,22 +91,22 @@ async function refreshManagerPhones() {
       return;
     }
     const body = await res.json();
-    const phones = Array.isArray(body.phones) ? body.phones : [];
-    managerPhoneDigits = new Set(phones.map((p) => String(p).replace(/\D/g, "")).filter(Boolean));
-    console.log(`[claw-gateway] manager phones refreshed count=${managerPhoneDigits.size}`);
+    const hashes = Array.isArray(body.phoneHashes) ? body.phoneHashes : [];
+    managerPhoneHashes = new Set(hashes.filter((h) => typeof h === "string" && h));
+    console.log(`[claw-gateway] manager phones refreshed count=${managerPhoneHashes.size}`);
   } catch (err) {
     console.error("[claw-gateway] manager-phones refresh failed", err);
   }
 }
 
 function isManagerPhone(from) {
-  const digits = String(from ?? "").replace(/\D/g, "");
-  return Boolean(digits) && managerPhoneDigits.has(digits);
+  const hash = hashPhone(from);
+  return Boolean(hash) && managerPhoneHashes.has(hash);
 }
 
-/** Test-only: seed the manager-phone set without a network round-trip. */
+/** Test-only: seed the manager-phone set (as plain E.164 numbers) without a network round-trip. */
 function __setManagerPhonesForTest(phones) {
-  managerPhoneDigits = new Set(phones.map((p) => String(p).replace(/\D/g, "")).filter(Boolean));
+  managerPhoneHashes = new Set(phones.map((p) => hashPhone(p)).filter(Boolean));
 }
 
 /**
