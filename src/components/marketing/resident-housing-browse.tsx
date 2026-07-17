@@ -18,9 +18,12 @@ import { usePublicListings } from "@/hooks/use-public-listings";
 import { HousingBrowseSwipeStack } from "@/components/marketing/housing-browse-swipe-stack";
 import {
   buildPropertyBrowseCards,
+  demoOnlyBrowseCardPlaceholderImage,
   type BrowseSortId,
   type PropertyBrowseCard,
 } from "@/lib/room-listings-catalog";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 
 const SORT_OPTIONS: { id: BrowseSortId; label: string }[] = [
   { id: "price-asc", label: "Price · lowest first" },
@@ -74,8 +77,10 @@ function HousingBrowseCard({
   variant?: "compact" | "carousel";
 }) {
   const rent = formatRent(card);
-  const isDataUrl = card.imageUrl.startsWith("data:");
   const isCarousel = variant === "carousel";
+  const resolvedImageUrl =
+    card.imageUrl || (isDemoModeActive() ? demoOnlyBrowseCardPlaceholderImage(card.propertyId) : "");
+  const isDataUrl = resolvedImageUrl.startsWith("data:");
 
   return (
     <Link
@@ -88,14 +93,18 @@ function HousingBrowseCard({
       }`}
     >
       <div className={`relative w-full overflow-hidden ${isCarousel ? "aspect-[3/4] min-h-[320px]" : "aspect-[3/4]"}`}>
-        <Image
-          src={card.imageUrl}
-          alt=""
-          fill
-          className="object-cover transition duration-500 group-hover:scale-[1.03]"
-          sizes={isCarousel ? "(max-width: 1280px) 30vw, 360px" : "220px"}
-          unoptimized={isDataUrl}
-        />
+        {resolvedImageUrl ? (
+          <Image
+            src={resolvedImageUrl}
+            alt=""
+            fill
+            className="object-cover transition duration-500 group-hover:scale-[1.03]"
+            sizes={isCarousel ? "(max-width: 1280px) 30vw, 360px" : "220px"}
+            unoptimized={isDataUrl}
+          />
+        ) : (
+          <NoImagePlaceholder />
+        )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
         <div className={`absolute inset-x-0 bottom-0 ${isCarousel ? "p-4 sm:p-5" : "p-3 sm:p-3.5"}`}>
           {isCarousel ? (

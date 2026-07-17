@@ -27,6 +27,7 @@ import { buildTourContactHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
 import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@/data/listing-rich-content";
+import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 
 function filterSidebarQuickFacts(
   facts: { label: string; value: string }[],
@@ -79,7 +80,9 @@ function ListingHeroPhotoGrid({
       <div className="relative overflow-hidden rounded-3xl border border-border bg-accent/25 shadow-sm">
         {mainUrl ? (
           <Image src={mainUrl} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 100vw, 60vw" />
-        ) : null}
+        ) : (
+          <NoImagePlaceholder />
+        )}
         {n > 0 ? (
           <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm sm:right-4 sm:top-4 sm:px-3 sm:text-xs">
             {n > 1 ? `${slide + 1} / ${n}` : "1 / 1"}
@@ -122,12 +125,16 @@ function ListingHeroPhotoGrid({
         <div className="relative overflow-hidden rounded-3xl border border-border bg-accent/30 shadow-sm">
           {side1 ? (
             <Image src={side1} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 40vw" />
+          ) : n === 0 ? (
+            <NoImagePlaceholder />
           ) : null}
           <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
         </div>
         <div className="relative overflow-hidden rounded-3xl border border-border bg-accent/30 shadow-sm">
           {side2 ? (
             <Image src={side2} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 40vw" />
+          ) : n === 0 ? (
+            <NoImagePlaceholder />
           ) : null}
           <div className="aspect-[16/10] h-full min-h-[120px] w-full lg:aspect-auto lg:min-h-0" />
         </div>

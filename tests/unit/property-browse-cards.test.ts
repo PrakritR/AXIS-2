@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MockProperty } from "@/data/types";
 import {
   buildPropertyBrowseCards,
+  demoOnlyBrowseCardPlaceholderImage,
   filterRoomListings,
   sortPropertyBrowseCards,
 } from "@/lib/room-listings-catalog";
@@ -47,13 +48,75 @@ describe("buildPropertyBrowseCards", () => {
     }
   });
 
-  it("returns one card per property with an image url", () => {
+  it("leaves imageUrl empty for a listing with no genuine uploaded photo (never fabricates a stock photo)", () => {
     const properties = [mockProperty({ id: "p1" })];
     const cards = buildPropertyBrowseCards(properties);
     if (cards.length === 0) return;
 
-    expect(cards[0]!.imageUrl.length).toBeGreaterThan(0);
+    expect(cards[0]!.imageUrl).toBe("");
     expect(cards[0]!.propertyId).toBe("p1");
+  });
+
+  it("uses the real uploaded photo when one exists", () => {
+    const properties = [
+      mockProperty({
+        id: "p2",
+        listingSubmission: {
+          v: 1,
+          buildingName: "Main House",
+          address: "123 Main St, Seattle, WA",
+          zip: "98101",
+          neighborhood: "Capitol Hill",
+          listingPlaceCategoryId: "private_room",
+          tagline: "",
+          petFriendly: false,
+          houseOverview: "",
+          houseRulesText: "",
+          housePhotoDataUrls: [],
+          leaseTermsBody: "",
+          applicationFee: "",
+          securityDeposit: "",
+          moveInFee: "",
+          paymentAtSigningIncludes: ["security_deposit", "move_in_fee"],
+          houseCostsDetail: "",
+          parkingMonthly: "",
+          hoaMonthly: "",
+          otherMonthlyFees: "",
+          sharedSpaces: [],
+          amenitiesText: "",
+          rooms: [
+            {
+              id: "r1",
+              name: "Room 1",
+              floor: "",
+              monthlyRent: 900,
+              availability: "",
+              moveInAvailableDate: "",
+              moveInInstructions: "",
+              manualUnavailableRanges: [],
+              detail: "",
+              furnishing: "",
+              roomAmenitiesText: "",
+              photoDataUrls: ["https://storage.example.com/real-room-photo.jpg"],
+              videoDataUrl: null,
+              utilitiesEstimate: "",
+            },
+          ],
+          bathrooms: [],
+          bundles: [],
+          quickFacts: [],
+        } as MockProperty["listingSubmission"],
+      }),
+    ];
+    const cards = buildPropertyBrowseCards(properties);
+    if (cards.length === 0) return;
+
+    expect(cards[0]!.imageUrl).toBe("https://storage.example.com/real-room-photo.jpg");
+  });
+
+  it("demo-only placeholder fallback is deterministic per property id (used only when isDemoModeActive())", () => {
+    expect(demoOnlyBrowseCardPlaceholderImage("p1")).toBe(demoOnlyBrowseCardPlaceholderImage("p1"));
+    expect(demoOnlyBrowseCardPlaceholderImage("p1")).toMatch(/^https:\/\/images\.unsplash\.com\//);
   });
 
   it("sorts highest price first when requested", () => {

@@ -397,8 +397,15 @@ export function filterRoomListings(
   return rows;
 }
 
-/** Curated Seattle-area house photos when a listing has no uploads yet. */
-const BROWSE_PLACEHOLDER_PHOTOS = [
+/**
+ * Curated Seattle-area house photos used ONLY as a stand-in for the /demo
+ * sandbox, which always seeds a real (illustrated) house image per property
+ * and should never look "broken" during a demo walkthrough. Production
+ * listings with no genuine uploaded photo must NEVER receive one of these —
+ * they render `NoImagePlaceholder` instead (see `PropertyBrowseCard.imageUrl`
+ * being empty). Do not use this for anything reachable from a real listing.
+ */
+const DEMO_ONLY_BROWSE_PLACEHOLDER_PHOTOS = [
   "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80",
   "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
@@ -407,16 +414,18 @@ const BROWSE_PLACEHOLDER_PHOTOS = [
   "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
 ] as const;
 
-export function browseCardPlaceholderImage(propertyId: string): string {
+/** Demo-sandbox-only fallback photo — callers must gate this behind `isDemoModeActive()`. */
+export function demoOnlyBrowseCardPlaceholderImage(propertyId: string): string {
   let hash = 0;
   for (let i = 0; i < propertyId.length; i++) hash = (hash + propertyId.charCodeAt(i) * (i + 1)) % 9973;
-  return BROWSE_PLACEHOLDER_PHOTOS[hash % BROWSE_PLACEHOLDER_PHOTOS.length]!;
+  return DEMO_ONLY_BROWSE_PLACEHOLDER_PHOTOS[hash % DEMO_ONLY_BROWSE_PLACEHOLDER_PHOTOS.length]!;
 }
 
 export type PropertyBrowseCard = {
   propertyId: string;
   headlineAddress: string;
   neighborhood: string;
+  /** Empty string means no genuine uploaded photo — render `NoImagePlaceholder` (production) or a demo-only fallback (see `demoOnlyBrowseCardPlaceholderImage`). */
   imageUrl: string;
   rentNumeric: number | null;
   priceLabel: string;
@@ -441,7 +450,7 @@ function aggregateRoomRowsToPropertyCards(roomRows: RoomListingRow[]): PropertyB
 
   for (const row of roomRows) {
     const photo = row.mediaSlides.find((s) => s.kind === "photo")?.src?.trim();
-    const imageUrl = photo || browseCardPlaceholderImage(row.propertyId);
+    const imageUrl = photo ?? "";
     const existing = byProperty.get(row.propertyId);
 
     if (!existing) {

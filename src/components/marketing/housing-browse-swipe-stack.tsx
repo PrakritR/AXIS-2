@@ -3,7 +3,9 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import type { PropertyBrowseCard } from "@/lib/room-listings-catalog";
+import { demoOnlyBrowseCardPlaceholderImage, type PropertyBrowseCard } from "@/lib/room-listings-catalog";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 
 const SWIPE_THRESHOLD_PX = 72;
 const TAP_THRESHOLD_PX = 12;
@@ -25,7 +27,9 @@ function SwipeCardFace({
   style?: CSSProperties;
 }) {
   const rent = formatRent(card);
-  const isDataUrl = card.imageUrl.startsWith("data:");
+  const resolvedImageUrl =
+    card.imageUrl || (isDemoModeActive() ? demoOnlyBrowseCardPlaceholderImage(card.propertyId) : "");
+  const isDataUrl = resolvedImageUrl.startsWith("data:");
 
   return (
     <div
@@ -33,15 +37,19 @@ function SwipeCardFace({
       style={style}
     >
       <div className="relative h-full w-full overflow-hidden">
-        <Image
-          src={card.imageUrl}
-          alt=""
-          fill
-          className="object-cover"
-          sizes="(max-width: 1024px) 92vw, 400px"
-          unoptimized={isDataUrl}
-          draggable={false}
-        />
+        {resolvedImageUrl ? (
+          <Image
+            src={resolvedImageUrl}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="(max-width: 1024px) 92vw, 400px"
+            unoptimized={isDataUrl}
+            draggable={false}
+          />
+        ) : (
+          <NoImagePlaceholder />
+        )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
 
         <div className="absolute inset-x-0 bottom-0 p-5">
