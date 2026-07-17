@@ -12,8 +12,8 @@ export const adminPortal: PortalDefinition = {
     { section: "events", label: "Meetings", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     {
-      section: "inbox",
-      label: "Inbox",
+      section: "communication",
+      label: "Communication",
       tabs: [
         { id: "unopened", label: "Unopened" },
         { id: "opened", label: "Opened" },
@@ -32,7 +32,7 @@ export const ADMIN_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/admin/dashboard" },
   { label: "Properties", path: "/admin/properties" },
   { label: "Meetings", path: "/admin/events" },
-  { label: "Inbox", path: "/admin/inbox/unopened" },
+  { label: "Communication", path: "/admin/communication/email/unopened" },
   { label: "Accounts", path: "/admin/axis-users" },
   { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Settings", path: "/admin/profile" },

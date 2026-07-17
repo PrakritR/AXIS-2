@@ -552,3 +552,69 @@ export async function fetchVendorSmsConversation(
     smsConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
   };
 }
+
+/**
+ * Admin Communication → SMS: every text on the shared Claw agent line, across
+ * the mapped-manager trial scope (`resolveMappedManagerContacts`) — the same
+ * underlying rows those managers see in their own SMS tab, merged into one
+ * read-only feed for admin oversight.
+ */
+export async function fetchAdminSharedLineSmsConversation(
+  db: SupabaseClient,
+): Promise<RoleSmsConversationPayload> {
+  const { resolveMappedManagerContacts } = await import("@/lib/claw-resident-messaging.server");
+  const managerIds = (await resolveMappedManagerContacts()).map((m) => m.userId).filter(Boolean);
+  const smsConfigured = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+  if (managerIds.length === 0) return { messages: [], smsConfigured };
+
+  const messages: ManagerSmsMessageRow[] = [];
+  const seenSids = new Set<string>();
+  const addMessage = (row: ManagerSmsMessageRow) => {
+    if (row.messageSid) {
+      if (seenSids.has(row.messageSid)) return;
+      seenSids.add(row.messageSid);
+    }
+    messages.push(row);
+  };
+
+  const { data: inbound } = await db
+    .from("inbound_sms_log")
+    .select("id, from_phone, to_phone, body, message_sid, created_at")
+    .in("manager_user_id", managerIds)
+    .order("created_at", { ascending: true })
+    .limit(1000);
+  for (const row of inbound ?? []) {
+    addMessage({
+      id: String(row.id),
+      direction: "inbound",
+      body: String(row.body ?? ""),
+      fromPhone: row.from_phone ? String(row.from_phone) : null,
+      toPhone: String(row.to_phone ?? ""),
+      messageSid: row.message_sid ? String(row.message_sid) : null,
+      source: "work_number",
+      createdAt: String(row.created_at),
+    });
+  }
+
+  const { data: outbound } = await db
+    .from("manager_sms_messages")
+    .select("id, body, from_phone, to_phone, message_sid, source, created_at, direction")
+    .in("manager_user_id", managerIds)
+    .order("created_at", { ascending: true })
+    .limit(1000);
+  for (const row of outbound ?? []) {
+    addMessage({
+      id: String(row.id),
+      direction: row.direction === "inbound" ? "inbound" : "outbound",
+      body: String(row.body ?? ""),
+      fromPhone: row.from_phone ? String(row.from_phone) : null,
+      toPhone: String(row.to_phone ?? ""),
+      messageSid: row.message_sid ? String(row.message_sid) : null,
+      source: (row.source as ManagerSmsMessageRow["source"]) ?? "work_number",
+      createdAt: String(row.created_at),
+    });
+  }
+
+  messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  return { messages, smsConfigured };
+}

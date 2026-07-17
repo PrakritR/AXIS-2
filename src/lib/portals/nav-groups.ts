@@ -41,7 +41,7 @@ const ADMIN_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
   { id: "portfolio", label: "Portfolio", sections: ["properties"] },
   { id: "people", label: "People", sections: ["axis-users"] },
-  { id: "operations", label: "Operations", sections: ["events", "inbox", "bugs-feedback"] },
+  { id: "operations", label: "Operations", sections: ["events", "communication", "bugs-feedback"] },
   { id: "account", label: null, sections: ["profile"] },
 ];
 

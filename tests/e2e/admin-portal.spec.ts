@@ -8,7 +8,7 @@ const ADMIN_SECTIONS = [
   { label: "Dashboard", path: "/admin/dashboard" },
   { label: "Properties", path: "/admin/properties" },
   { label: "Events", path: "/admin/events" },
-  { label: "Inbox", path: "/admin/inbox/unopened" },
+  { label: "Communication", path: "/admin/communication/email/unopened" },
   { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Settings", path: "/admin/profile" },
 ] as const;
@@ -40,14 +40,25 @@ test.describe("Admin portal", () => {
     }
   });
 
-  test("admin inbox loads and shows compose button", async ({ page }) => {
-    await page.goto("/admin/inbox/unopened");
+  test("admin communication email tab loads and shows compose button", async ({ page }) => {
+    await page.goto("/admin/communication/email/unopened");
     await expect(page.getByRole("heading").first()).toBeVisible();
     const composeBtn = page.getByRole("button", { name: /new message|compose/i }).first();
     // Compose button may or may not be present depending on config
     if (await composeBtn.count() > 0) {
       await expect(composeBtn).toBeVisible();
     }
+  });
+
+  test("admin communication sms tab loads", async ({ page }) => {
+    await page.goto("/admin/communication/sms/all");
+    await expect(page.getByRole("heading").first()).toBeVisible();
+    await expect(page.locator('[data-attr="admin-communication-tab-sms"]')).toBeVisible();
+  });
+
+  test("legacy inbox URL redirects to communication email tab", async ({ page }) => {
+    await page.goto("/admin/inbox/unopened");
+    await expect(page).toHaveURL(/\/admin\/communication\/email\/unopened/);
   });
 
   test("settings page loads without embedded feedback panel", async ({ page }) => {

@@ -51,7 +51,7 @@ function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
   if (!meta) return def.basePath;
   if (section === "communication") {
-    if (def.kind === "resident" || def.kind === "vendor") {
+    if (def.kind === "resident" || def.kind === "vendor" || def.kind === "admin") {
       return `${def.basePath}/communication/email/unopened`;
     }
     return `${def.basePath}/communication/inbox/unopened`;

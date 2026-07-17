@@ -42,6 +42,33 @@ function threadId(managerUserId: string, residentPhone: string): string {
   return `claw_thread_${managerUserId}_${residentPhone.replace(/\D/g, "")}`;
 }
 
+/**
+ * Admin ops cell for shared-line trial forwarding — DB-backed on the Axis
+ * admin account's own profile (role = "admin", the same account identified
+ * by `userHoldsAdminRole` in auth/admin-role.ts) so updating Settings → Phone
+ * re-points every forward without an env/redeploy. Falls back to the
+ * configured env phone / hardcoded trial default when no admin profile has a
+ * phone on file yet.
+ */
+async function resolveAdminForwardPhone(): Promise<string> {
+  try {
+    const db = createSupabaseServiceRoleClient();
+    const { data } = await db
+      .from("profiles")
+      .select("phone")
+      .eq("role", "admin")
+      .not("phone", "is", null)
+      .limit(1)
+      .maybeSingle();
+    const phone = normalizeE164Us(String((data as { phone?: unknown } | null)?.phone ?? ""));
+    if (phone) return phone;
+  } catch {
+    /* fall through to env / hardcoded default */
+  }
+  const env = clawManagerForwardPhonesFromEnv();
+  return env[0] ?? DEFAULT_MANAGER_PHONE;
+}
+
 export function clawManagerForwardPhonesFromEnv(): string[] {
   return (process.env.CLAW_MESSENGER_MANAGER_FORWARD_PHONES ?? "")
     .split(",")
@@ -122,7 +149,7 @@ export async function resolveMappedManagerContacts(): Promise<
 export async function isMappedManagerPhone(fromE164: string): Promise<boolean> {
   const envPhones = new Set(clawManagerForwardPhonesFromEnv());
   if (envPhones.has(fromE164)) return true;
-  if (fromE164 === DEFAULT_MANAGER_PHONE) return true;
+  if (fromE164 === (await resolveAdminForwardPhone())) return true;
   const managers = await resolveMappedManagerContacts();
   return managers.some((m) => m.personalPhone === fromE164);
 }
@@ -142,8 +169,7 @@ async function resolveManagerPersonalPhone(managerUserId: string): Promise<strin
   // A manager outside the shared-line trial with no phone on file gets no SMS —
   // never route another landlord's resident traffic to the default cell.
   if (!match) return null;
-  const env = clawManagerForwardPhonesFromEnv();
-  return env[0] ?? DEFAULT_MANAGER_PHONE;
+  return resolveAdminForwardPhone();
 }
 
 async function resolveManagerUserIdForPhone(managerPhone: string): Promise<string | null> {
@@ -153,7 +179,7 @@ async function resolveManagerUserIdForPhone(managerPhone: string): Promise<strin
   const byPhone = managers.find((m) => m.personalPhone === phone);
   if (byPhone?.userId) return byPhone.userId;
   // Env-forwarded manager cell with no profile phone match → first mapped manager.
-  if (clawManagerForwardPhonesFromEnv().includes(phone) || phone === DEFAULT_MANAGER_PHONE) {
+  if (clawManagerForwardPhonesFromEnv().includes(phone) || phone === (await resolveAdminForwardPhone())) {
     return managers.find((m) => m.userId)?.userId ?? null;
   }
   return null;
@@ -386,11 +412,11 @@ export async function forwardResidentMessageToManagers(args: {
   for (const m of managers) {
     if (m.userId === args.thread.managerUserId && m.personalPhone) targets.add(m.personalPhone);
   }
-  // The env forward phones and the hardcoded trial cell only ever receive
-  // traffic for managers inside the shared-line trial scope.
+  // The env forward phones and the admin ops cell only ever receive traffic
+  // for managers inside the shared-line trial scope.
   if (threadManagerMapped) {
     for (const p of clawManagerForwardPhonesFromEnv()) targets.add(p);
-    targets.add(DEFAULT_MANAGER_PHONE);
+    targets.add(await resolveAdminForwardPhone());
   }
   targets.delete(args.fromResident);
   targets.delete(clawLeasingAgentPhoneE164());

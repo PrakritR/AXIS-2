@@ -54,7 +54,7 @@ function scopeForRole(role: string | null | undefined): string {
 function inboxDeepLinkForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
   if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
-  if (normalized === "admin") return "/admin/inbox/unopened";
+  if (normalized === "admin") return "/admin/communication/email/unopened";
   if (normalized === "vendor") return "/vendor/communication/email/unopened";
   return "/resident/communication/email/unopened";
 }

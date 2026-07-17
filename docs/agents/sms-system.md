@@ -37,6 +37,26 @@ Carriers do not allow sending SMS *from* a personal number — do not fake it.
   `TWILIO_WEBHOOK_URL` + `TWILIO_VERIFY_SERVICE_SID`; per-manager numbers go
   in `profiles.sms_from_number`. Everything no-ops gracefully without them.
 
+**Claw shared agent line (mapped-manager trial + admin oversight).**
+`src/lib/claw-resident-messaging.server.ts` / `claw-relay.server.ts` run a
+SEPARATE transport from the Twilio work-number system above: when Claw is
+enabled (`isClawTransportEnabled()`), all sends route through one shared
+agent line. A small trial cohort (`clawMappedManagerEmails()`, env
+`CLAW_MESSENGER_MANAGER_EMAILS`) shares that line; forwarding targets for
+their threads are the env `CLAW_MESSENGER_MANAGER_FORWARD_PHONES` list plus
+`resolveAdminForwardPhone()` — the Axis admin account's own `profiles.phone`
+(any profile with `role = "admin"`), NOT a hardcoded constant. Set the
+admin's phone from admin Settings (`/admin/profile`) to change where these
+forwards land; there is a hardcoded `+15103098345` fallback only for
+environments where no admin profile has a phone on file yet. Admin views
+these same threads read-only at `/admin/communication` → SMS
+(`fetchAdminSharedLineSmsConversation` in `manager-sms-messages.server.ts`,
+merging `inbound_sms_log` + `manager_sms_messages` across the mapped
+managers) — Admin Communication → Email is the pre-existing admin inbox
+(`AdminInboxClient`), just reachable at `/admin/communication/email/*` now
+(old `/admin/inbox/*` links redirect via the generic "Inbox → Communication"
+legacy-path handler in `render-portal-section.tsx`).
+
 **Proxy-pair relay: manager ↔ resident text from their personal phones through
 a pooled number, neither seeing the other's real number**
 (`src/lib/sms-relay.server.ts`; schema + rationale in
