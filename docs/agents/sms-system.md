@@ -85,3 +85,76 @@ Bought numbers must join the Messaging Service
 (`TWILIO_MESSAGING_SERVICE_SID`) to inherit the A2P campaign; a failed attach
 releases the number. A2P compliance pages: `/sms-terms` + the SMS opt-in
 section on `/privacy`.
+
+## Claw Messenger (production shared line, `+12053690702`)
+
+The live PropLane messaging system today is ONE shared agent line (Twilio
+per-manager numbers above are provisioned but dormant while Claw is primary —
+`ensureManagerSmsNumber` deliberately keeps `sms_from_number` on the Claw
+line and does not buy a Twilio number while `isClawSharedLineBridgeEnabled()`).
+Inbound flow: `scripts/claw-messenger-gateway.mjs` (a long-running WS client,
+NOT a Vercel function) → `POST /api/webhooks/claw-messenger` →
+`handleClawLeasingInbound` (`src/lib/claw-leasing-bot.server.ts`) → either the
+resident/payment/lease hub (`claw-resident-actions.server.ts`) or the
+cross-catalog leasing agent (`src/lib/agent/leasing-sms-agent.server.ts` +
+`src/lib/tools/domains/leasing-sms.ts`) depending on sender/thread state.
+
+**Manager registration is DB-driven, not env-driven.** Every manager gets
+`profiles.sms_from_number` stamped to the shared Claw line at onboarding
+(`assignSharedClawLeasingNumberToManager`) and swept nightly for stragglers
+(`backfillManagerWorkNumbers` cron) — so "has an account" already means
+"participates in the shared line," no separate opt-in step.
+`resolveRegisteredClawManagers()` / `resolveMappedManagerContacts()`
+(`claw-resident-messaging.server.ts`) are the single choke point that reads
+this: they exclude sandbox/demo accounts (`isPortalSandboxEmail` —
+`@axis.local` / `@test.axis.local`) and only trust a manager's
+`profiles.phone` as their identity when `phone_verified_at` is set (an
+unverified phone is user-editable and forgeable). `CLAW_MESSENGER_MANAGER_EMAILS`
+is now an optional ADDITIVE override (e.g. an ops cell not yet fully
+provisioned) — empty by default, never a replacement for DB registration, and
+never able to re-admit a sandbox email. A tenant text about a listing routes
+to that listing's actual owning manager via the cross-catalog property-hint
+match in `claw-leasing-bot.server.ts` regardless of this roster; the roster
+only decides the deterministic default/anchor manager (oldest-registered
+first) when a text names no specific listing, and who a personal-phone text
+is recognized as.
+
+**Reply pacing — never instant.** Inbound prospect texts are buffered PER
+CONVERSATION inside the gateway process (not the webhook — Vercel functions
+here are Hobby-tier, so even Cron is once-per-day only; see the pool-topup
+note above) and forwarded as one consolidated frame after
+`CLAW_MESSENGER_DEBOUNCE_SECONDS` (default 150) of quiet from the last inbound
+message in that thread — a new message resets the window. Manager-authored
+texts and WS history replays always bypass the buffer (fetched from
+`GET /api/webhooks/claw-messenger/manager-phones`, bearer-authed with
+`CLAW_MESSENGER_API_KEY`, refreshed every `CLAW_MESSENGER_MANAGER_PHONES_REFRESH_MS`,
+default 5 min). SIGTERM/SIGINT flush pending buffers immediately so a
+redeploy doesn't add latency; a mid-buffer crash only loses the *timer* — Claw
+Messenger replays everything since `sinceIso` on reconnect, so the message
+itself is never dropped, only re-buffered.
+
+**Two-way logging is the single persistence model.** Every message on the
+Claw line — inbound (prospect or resident) and outbound (agent or manager) —
+is written to `manager_sms_messages` (+ `inbound_sms_log` for inbound) keyed
+by `manager_user_id` + the counterparty phone; `fetchManagerSmsConversations`
+(`manager-sms-messages.server.ts`) is what the portal Communication → SMS
+panel reads, merged with `sms_relay_*` (the separate Twilio proxy-pair
+system above) and sorted into one thread by `direction` + timestamp. Outbound
+is logged for free inside `sendFromManagerWorkNumber` /
+`sendPropLaneSms({ log })`. Inbound must be logged EXPLICITLY at each entry
+point that receives it — the cross-catalog leasing-prospect path and the
+known-resident hub path (`handleClawLeasingInbound`) each do this themselves;
+a new inbound entry point that skips it will silently render as a one-sided
+("outbound only") thread in the portal, which is exactly the bug this system
+was built to fix.
+
+**Defensive catalog filter.** `getPublicListings()`
+(`src/lib/public-listings.server.ts`) already drops sandbox/demo listings from
+the public catalog in production via `filterSandboxFromPublicCatalog`; the
+manager-registration choke point above extends that same guarantee to the
+Claw line's OTHER lookups (a manager's own-listing tools, the default/anchor
+listing, notification fan-out) by ensuring `landlordId` is never resolved to
+a sandbox manager in the first place. Do not add a second, independent
+sandbox filter inside the listing tools themselves (`leasing-sms.ts`) — the
+registration choke point is the intended single source of truth; duplicating
+the check there would just be another place to forget to update.

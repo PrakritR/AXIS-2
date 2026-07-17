@@ -17,6 +17,7 @@ import {
   type ClawMessagingThread,
 } from "@/lib/claw-resident-messaging.server";
 import { cancelFuturePaymentRemindersForCharge } from "@/lib/payment-reminder-lifecycle.server";
+import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import { syncLedgerPaymentEntry } from "@/lib/reports/ledger-sync";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164Us } from "@/lib/claw-messenger.server";
@@ -36,15 +37,19 @@ async function resolveManagerUserIdFromPhone(fromE164: string): Promise<string |
   // Outside the mapped trial scope, agent commands (including financial writes
   // like mark-paid) only run for an OTP-VERIFIED personal phone — profiles.phone
   // alone is user-editable and forgeable. Ambiguous matches never resolve.
+  // Sandbox/demo accounts never match — a test manager's phone must never
+  // authorize a financial write against real tenant data.
   const db = createSupabaseServiceRoleClient();
   const { data } = await db
     .from("profiles")
-    .select("id, phone_verified_at")
+    .select("id, email, phone_verified_at")
     .eq("phone", fromE164)
     .in("role", ["manager", "pro", "admin", "owner"])
     .limit(5);
-  const verified = (data ?? []).filter((row) =>
-    Boolean((row as { phone_verified_at?: string | null }).phone_verified_at),
+  const verified = (data ?? []).filter(
+    (row) =>
+      Boolean((row as { phone_verified_at?: string | null }).phone_verified_at) &&
+      !isPortalSandboxEmail(String((row as { email?: unknown }).email ?? "")),
   );
   if (verified.length !== 1) return null;
   const id = String((verified[0] as { id?: unknown }).id ?? "").trim();

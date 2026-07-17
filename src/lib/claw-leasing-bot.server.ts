@@ -31,12 +31,12 @@ import {
   tryRelayManagerReplyViaClaw,
 } from "@/lib/claw-relay.server";
 import {
-  clawMappedManagerEmails,
   findResidentProfileByPhone,
   findThreadByResidentPhone,
   forwardResidentMessageToManagers,
   mirrorResidentTextToManagerInbox,
   openClawResidentThread,
+  resolveMappedManagerContacts,
 } from "@/lib/claw-resident-messaging.server";
 import { buildManagerResidentBrief, runResidentSmsAction } from "@/lib/claw-resident-actions.server";
 import { sendFromManagerWorkNumber, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
@@ -78,37 +78,26 @@ type ManagerTarget = {
 
 type PropertyHint = { propertyId: string; propertyLabel: string | null; managerUserId?: string | null };
 
+/**
+ * Managers who participate in the shared Claw line — DB-driven registration
+ * (`resolveRegisteredClawManagers`, sandbox-excluded), ordered oldest-first so
+ * `managers[0]` is a deterministic anchor for session/escalation/notice
+ * routing when an inbound text names no specific listing. Cross-catalog
+ * listing lookup does not depend on this ordering (any registered manager's
+ * matched listing wins via the property hint), but this IS the choke point
+ * that keeps demo/test accounts out of the shared line entirely.
+ */
 async function resolveMappedManagers(): Promise<ManagerTarget[]> {
-  const emails = clawMappedManagerEmails();
-  if (emails.length === 0) return [];
+  const contacts = await resolveMappedManagerContacts();
+  if (contacts.length === 0) return [];
   const db = createSupabaseServiceRoleClient();
-  const { data: profiles } = await db
-    .from("profiles")
-    .select("id, email, full_name")
-    .in("email", emails);
-
-  // Order managers by the configured email list, not Postgres' arbitrary IN
-  // order — managers[0] is the primary the shared-line session/escalation binds
-  // to, so it must be deterministic (put the real listing owner first in
-  // CLAW_MESSENGER_MANAGER_EMAILS). Cross-catalog listing lookup no longer
-  // depends on this ordering, but notice/escalation routing still does.
-  const emailRank = new Map(emails.map((e, i) => [e.trim().toLowerCase(), i]));
-  const orderedProfiles = [...(profiles ?? [])].sort((a, b) => {
-    const ra = emailRank.get(String((a as { email?: unknown }).email ?? "").trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
-    const rb = emailRank.get(String((b as { email?: unknown }).email ?? "").trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
-    return ra - rb;
-  });
 
   const out: ManagerTarget[] = [];
-  for (const profile of orderedProfiles) {
-    const userId = String((profile as { id?: unknown }).id ?? "").trim();
-    const email = String((profile as { email?: unknown }).email ?? "").trim().toLowerCase();
-    if (!userId || !email) continue;
-
+  for (const contact of contacts) {
     const { data: props } = await db
       .from("manager_property_records")
       .select("id, property_data, status")
-      .eq("manager_user_id", userId)
+      .eq("manager_user_id", contact.userId)
       .in("status", ["live", "listed"])
       .order("updated_at", { ascending: false })
       .limit(1);
@@ -124,9 +113,9 @@ async function resolveMappedManagers(): Promise<ManagerTarget[]> {
       null;
 
     out.push({
-      userId,
-      email,
-      fullName: String((profile as { full_name?: unknown }).full_name ?? "").trim() || null,
+      userId: contact.userId,
+      email: contact.email,
+      fullName: contact.fullName,
       defaultPropertyId: propertyId,
       defaultPropertyLabel: label,
     });
@@ -589,6 +578,38 @@ export async function handleClawLeasingInbound(args: {
       const residentEmail = thread.residentEmail || residentProfile?.email || "";
       const residentUserId = thread.residentUserId || residentProfile?.userId || null;
 
+      // Persist the resident's inbound text so Communication → SMS is a full
+      // two-way replica of the Claw thread, not just the agent's outbound
+      // replies — mirrors the logging already done for the leasing-prospect
+      // path below. Outbound is logged for free inside replySms/sendFromManagerWorkNumber.
+      const dbForResidentLog = createSupabaseServiceRoleClient();
+      const toLine = workNumber || clawLeasingAgentPhoneE164();
+      void (async () => {
+        try {
+          const { logManagerSmsMessage } = await import("@/lib/manager-sms-messages.server");
+          await logManagerSmsMessage(dbForResidentLog, {
+            managerUserId: thread.managerUserId,
+            residentUserId,
+            residentPhone: from,
+            direction: "inbound",
+            body: text,
+            fromPhone: from,
+            toPhone: toLine,
+            messageSid: messageId || null,
+            source: "automated",
+          });
+          await dbForResidentLog.from("inbound_sms_log").insert({
+            manager_user_id: thread.managerUserId,
+            from_phone: from,
+            to_phone: toLine,
+            body: text,
+            message_sid: messageId || null,
+          });
+        } catch (e) {
+          console.error("claw resident inbound log failed", e);
+        }
+      })();
+
       const action = await runResidentSmsAction({
         text,
         residentPhone: from,
@@ -845,10 +866,11 @@ export async function handleClawLeasingInbound(args: {
     const { resolvePropertyScopedManagerRecipientIds } = await import(
       "@/lib/co-manager-notification-recipients.server"
     );
-    // Every mapped manager gets the notice (a shared line can map several),
-    // each expanded to their property-scoped co-managers.
-    const ownerIds = [...new Set(managers.map((m) => m.userId).filter(Boolean))];
-    if (ownerIds.length === 0 && landlordId) ownerIds.push(landlordId);
+    // Scope strictly to the RESOLVED owner of this conversation (the matched
+    // listing's manager, or the deterministic anchor when unmatched) — never
+    // every mapped manager, or a shared line with several real managers would
+    // leak each other's prospects into every manager's inbox.
+    const ownerIds = landlordId ? [landlordId] : [];
     const recipientIdSets = await Promise.all(
       ownerIds.map((ownerManagerUserId) =>
         resolvePropertyScopedManagerRecipientIds(db, {
@@ -865,7 +887,7 @@ export async function handleClawLeasingInbound(args: {
         text,
         intentLabel,
         propertyLabel,
-        managerUserId: managers[0]?.userId ?? null,
+        managerUserId: landlordId,
         workNumber,
         autoReply: reply,
       }),

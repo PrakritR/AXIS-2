@@ -8,7 +8,9 @@ import {
   clawLeasingAgentPhoneE164,
   normalizeE164Us,
 } from "@/lib/claw-messenger.server";
+import { isLegacyClawSharedSmsNumber } from "@/lib/claw-leasing-links";
 import { residentPortalUrl } from "@/lib/claw-resident-links";
+import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import { sendFromManagerWorkNumber, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
@@ -141,29 +143,98 @@ export function labelClawSmsFromResident(text: string, residentPhone?: string | 
   ].join("\n");
 }
 
-/** Emails whose messaging contact is the shared Claw agent line (prod + test).
- * Single source of truth — the shared-line trial is scoped to exactly these. */
+/**
+ * Explicit, optional ADDITIONS to the shared-line manager roster (e.g. an ops
+ * cell that needs command access before its profile is fully provisioned).
+ * Empty by default — DB-driven registration (`resolveRegisteredClawManagers`)
+ * is the source of truth for who participates in the shared Claw line.
+ */
 export function clawMappedManagerEmails(): string[] {
-  const fromEnv = (process.env.CLAW_MESSENGER_MANAGER_EMAILS ?? "")
+  return (process.env.CLAW_MESSENGER_MANAGER_EMAILS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  if (fromEnv.length > 0) return fromEnv;
-  return ["ogambik2@gmail.com", "testeverything@test.axis.local", "manager@test.axis.local"];
+}
+
+/**
+ * DB-driven shared-line registration: any manager whose profile is stamped
+ * with the shared Claw agent number participates automatically — every
+ * manager gets that stamp at onboarding (`assignSharedClawLeasingNumberToManager`)
+ * and it's swept nightly for stragglers (`backfillManagerWorkNumbers`), so
+ * "has an account" already implies "registered" with no separate opt-in step.
+ * Sandbox/demo accounts (`isPortalSandboxEmail`) are excluded here — this is
+ * the single choke point that keeps demo/test rows out of every shared-line
+ * lookup (default listing, manager-phone recognition, notification fan-out)
+ * downstream, not just the public catalog.
+ * Ordered oldest-registered-first — the deterministic anchor manager when an
+ * inbound text names no specific listing.
+ */
+export async function resolveRegisteredClawManagers(): Promise<
+  Array<{ userId: string; email: string; fullName: string | null; personalPhone: string | null }>
+> {
+  const db = createSupabaseServiceRoleClient();
+  const { data } = await db
+    .from("profiles")
+    .select("id, email, full_name, phone, phone_verified_at, sms_from_number, created_at")
+    .not("sms_from_number", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(500);
+
+  const out: Array<{ userId: string; email: string; fullName: string | null; personalPhone: string | null }> = [];
+  for (const row of data ?? []) {
+    const smsFromNumber = String((row as { sms_from_number?: unknown }).sms_from_number ?? "");
+    if (!isLegacyClawSharedSmsNumber(smsFromNumber)) continue;
+    const email = String((row as { email?: unknown }).email ?? "").trim().toLowerCase();
+    if (!email || isPortalSandboxEmail(email)) continue;
+    const userId = String((row as { id?: unknown }).id ?? "").trim();
+    if (!userId) continue;
+    // Manager identity on the shared line must come from a VERIFIED phone —
+    // an unverified profiles.phone is user-editable and forgeable.
+    const verified = Boolean((row as { phone_verified_at?: string | null }).phone_verified_at);
+    const personalPhone = verified
+      ? normalizeE164Us(String((row as { phone?: unknown }).phone ?? "")) || null
+      : null;
+    out.push({
+      userId,
+      email,
+      fullName: String((row as { full_name?: unknown }).full_name ?? "").trim() || null,
+      personalPhone,
+    });
+  }
+  return out;
 }
 
 export async function resolveMappedManagerContacts(): Promise<
-  Array<{ userId: string; email: string; personalPhone: string | null }>
+  Array<{ userId: string; email: string; fullName: string | null; personalPhone: string | null }>
 > {
-  const emails = clawMappedManagerEmails();
-  if (emails.length === 0) return [];
-  const db = createSupabaseServiceRoleClient();
-  const { data } = await db.from("profiles").select("id, email, phone").in("email", emails);
-  return (data ?? []).map((row) => ({
-    userId: String((row as { id?: unknown }).id ?? "").trim(),
-    email: String((row as { email?: unknown }).email ?? "").trim().toLowerCase(),
-    personalPhone: normalizeE164Us(String((row as { phone?: unknown }).phone ?? "")) || null,
-  }));
+  const registered = await resolveRegisteredClawManagers();
+  const byEmail = new Map(registered.map((m) => [m.email, m] as const));
+
+  const extraEmails = clawMappedManagerEmails().filter((e) => !isPortalSandboxEmail(e) && !byEmail.has(e));
+  if (extraEmails.length > 0) {
+    const db = createSupabaseServiceRoleClient();
+    const { data } = await db
+      .from("profiles")
+      .select("id, email, full_name, phone, phone_verified_at")
+      .in("email", extraEmails);
+    for (const row of data ?? []) {
+      const email = String((row as { email?: unknown }).email ?? "").trim().toLowerCase();
+      if (!email || isPortalSandboxEmail(email)) continue;
+      const userId = String((row as { id?: unknown }).id ?? "").trim();
+      if (!userId) continue;
+      const verified = Boolean((row as { phone_verified_at?: string | null }).phone_verified_at);
+      byEmail.set(email, {
+        userId,
+        email,
+        fullName: String((row as { full_name?: unknown }).full_name ?? "").trim() || null,
+        personalPhone: verified
+          ? normalizeE164Us(String((row as { phone?: unknown }).phone ?? "")) || null
+          : null,
+      });
+    }
+  }
+
+  return [...byEmail.values()];
 }
 
 export async function isMappedManagerPhone(fromE164: string): Promise<boolean> {

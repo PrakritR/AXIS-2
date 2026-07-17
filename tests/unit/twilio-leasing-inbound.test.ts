@@ -18,6 +18,8 @@ vi.mock("@/lib/claw-relay.server", () => ({
 
 vi.mock("@/lib/claw-resident-messaging.server", () => ({
   clawMappedManagerEmails: () => [],
+  resolveMappedManagerContacts: vi.fn(async () => []),
+  resolveRegisteredClawManagers: vi.fn(async () => []),
   findResidentProfileByPhone: vi.fn(async () => null),
   findThreadByResidentPhone: vi.fn(async () => null),
   forwardResidentMessageToManagers: vi.fn(async () => ({ forwardedTo: [] })),

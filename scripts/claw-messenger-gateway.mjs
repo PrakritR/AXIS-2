@@ -5,6 +5,13 @@
  * Keeps a connection open so inbound iMessage/SMS replies are not dropped
  * ("Reply missed your agent"), and forwards each message to the Axis webhook.
  *
+ * Reply pacing: prospect texts are buffered per conversation and forwarded as
+ * one consolidated frame after CLAW_MESSENGER_DEBOUNCE_SECONDS (default 150)
+ * of quiet from the last inbound message — never an instant reply. Set to 0
+ * to disable. Manager-authored texts (CLAW_MESSENGER_MANAGER_PHONES_REFRESH_MS,
+ * default 300000, controls how often the registered-manager roster is
+ * refreshed from the webhook) always bypass the buffer.
+ *
  * Usage (local):
  *   node --env-file=.env.local scripts/claw-messenger-gateway.mjs
  *
@@ -22,15 +29,133 @@ const webhookUrl =
   process.env.AXIS_WEBHOOK_URL?.trim() ||
   `${(process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000").replace(/\/$/, "")}/api/webhooks/claw-messenger`;
 const webhookSecret = process.env.CLAW_MESSENGER_WEBHOOK_SECRET?.trim() || "";
+const managerPhonesUrl = `${webhookUrl.replace(/\/$/, "")}/manager-phones`;
 
 if (!apiKey) {
   console.error("CLAW_MESSENGER_API_KEY is required.");
   process.exit(1);
 }
 
+/*
+ * Reply pacing (never reply instantly): buffer inbound prospect texts per
+ * conversation and forward ONE consolidated frame after a quiet window from
+ * the last inbound message, resetting on every new message in that window.
+ *
+ * Why here and not the webhook route: the webhook is a Vercel serverless
+ * function — it can't cheaply sleep 2-3 minutes per request (cold-start cost,
+ * function-duration limits, and no durable timer across invocations without a
+ * new queue/cron). This gateway is already the one long-running, always-on
+ * process in the pipeline (a persistent WS connection to Claw Messenger), so
+ * an in-memory per-conversation timer is the simplest reliable place to hold
+ * the debounce state. A crash mid-buffer loses only the *timer*, not the
+ * messages — Claw Messenger resends everything since `sinceIso` on reconnect
+ * (the existing replay mechanism), so nothing is dropped, just re-buffered.
+ * SIGTERM/SIGINT flush immediately so a routine redeploy doesn't add latency.
+ */
+const debounceMs = (() => {
+  const raw = Number(process.env.CLAW_MESSENGER_DEBOUNCE_SECONDS);
+  const seconds = Number.isFinite(raw) && raw >= 0 ? raw : 150;
+  return seconds * 1000;
+})();
+const managerPhonesRefreshMs = (() => {
+  const raw = Number(process.env.CLAW_MESSENGER_MANAGER_PHONES_REFRESH_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5 * 60 * 1000;
+})();
+
 let backoffMs = 1000;
 let sinceIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 const seen = new Set();
+
+/* Manager phones bypass the debounce entirely — a manager composing through
+ * the shared line expects the same latency they get today, not a 2-3 minute
+ * hold meant for prospect auto-replies. */
+let managerPhoneDigits = new Set();
+
+async function refreshManagerPhones() {
+  try {
+    const res = await fetch(managerPhonesUrl, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      console.error(`[claw-gateway] manager-phones refresh HTTP ${res.status}`);
+      return;
+    }
+    const body = await res.json();
+    const phones = Array.isArray(body.phones) ? body.phones : [];
+    managerPhoneDigits = new Set(phones.map((p) => String(p).replace(/\D/g, "")).filter(Boolean));
+    console.log(`[claw-gateway] manager phones refreshed count=${managerPhoneDigits.size}`);
+  } catch (err) {
+    console.error("[claw-gateway] manager-phones refresh failed", err);
+  }
+}
+
+function isManagerPhone(from) {
+  const digits = String(from ?? "").replace(/\D/g, "");
+  return Boolean(digits) && managerPhoneDigits.has(digits);
+}
+
+/** Test-only: seed the manager-phone set without a network round-trip. */
+function __setManagerPhonesForTest(phones) {
+  managerPhoneDigits = new Set(phones.map((p) => String(p).replace(/\D/g, "")).filter(Boolean));
+}
+
+/**
+ * Replays (WS history sync on reconnect) and manager-authored texts skip the
+ * quiet-window buffer entirely — replays are already historical, and a
+ * manager composing through the line should not wait out the prospect
+ * debounce meant for auto-replies.
+ */
+function shouldBypassDebounce(frame) {
+  return frame.replay === true || debounceMs <= 0 || isManagerPhone(frame.from);
+}
+
+const debounceBuffers = new Map();
+
+function debounceKey(frame) {
+  const digits = String(frame.from ?? "").replace(/\D/g, "");
+  return digits || String(frame.chatId ?? frame.from ?? "unknown");
+}
+
+function flushDebounceBuffer(key) {
+  const buf = debounceBuffers.get(key);
+  if (!buf) return;
+  debounceBuffers.delete(key);
+  if (buf.timer) clearTimeout(buf.timer);
+  if (buf.frames.length === 0) return;
+  const frames = buf.frames;
+  const last = frames[frames.length - 1];
+  const mergedText = frames
+    .map((f) => String(f.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+  const merged = {
+    ...last,
+    text: mergedText,
+    mergedCount: frames.length,
+    mergedMessageIds: frames.map((f) => f.messageId).filter(Boolean),
+  };
+  console.log(
+    `[claw-gateway] debounce flush key=${key} count=${frames.length} after ${debounceMs}ms quiet window`,
+  );
+  void deliverWithRetry(merged);
+}
+
+function bufferForDebounce(frame) {
+  const key = debounceKey(frame);
+  const buf = debounceBuffers.get(key) ?? { frames: [], timer: null };
+  buf.frames.push(frame);
+  if (buf.timer) clearTimeout(buf.timer);
+  buf.timer = setTimeout(() => flushDebounceBuffer(key), debounceMs);
+  buf.timer.unref?.();
+  debounceBuffers.set(key, buf);
+  console.log(
+    `[claw-gateway] buffered from=${frame.from || "?"} queue=${buf.frames.length} (resets ${debounceMs}ms quiet window)`,
+  );
+}
+
+function flushAllDebounceBuffers() {
+  for (const key of [...debounceBuffers.keys()]) flushDebounceBuffer(key);
+}
 
 async function forward(frame) {
   const messageId = typeof frame.messageId === "string" ? frame.messageId : "";
@@ -116,7 +241,11 @@ function connect() {
       return;
     }
     if (frame.type === "message") {
-      void deliverWithRetry(frame);
+      if (shouldBypassDebounce(frame)) {
+        void deliverWithRetry(frame);
+      } else {
+        bufferForDebounce(frame);
+      }
     }
   });
 
@@ -132,4 +261,39 @@ function connect() {
   });
 }
 
-connect();
+// Guard the network/process side effects behind "run directly" so unit tests
+// can import the pure debounce/routing logic above without opening sockets,
+// polling the manager-phones endpoint, or registering process signal handlers.
+const isMainModule = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  void refreshManagerPhones();
+  setInterval(refreshManagerPhones, managerPhonesRefreshMs).unref?.();
+
+  // A routine redeploy/restart must not silently drop a buffered prospect
+  // reply — flush pending debounce windows immediately instead of waiting for
+  // timers that die with the process.
+  process.on("SIGTERM", () => {
+    flushAllDebounceBuffers();
+    process.exit(0);
+  });
+  process.on("SIGINT", () => {
+    flushAllDebounceBuffers();
+    process.exit(0);
+  });
+
+  connect();
+}
+
+export {
+  debounceMs,
+  debounceKey,
+  bufferForDebounce,
+  flushDebounceBuffer,
+  flushAllDebounceBuffers,
+  debounceBuffers,
+  isManagerPhone,
+  shouldBypassDebounce,
+  refreshManagerPhones,
+  deliverWithRetry,
+  __setManagerPhonesForTest,
+};
