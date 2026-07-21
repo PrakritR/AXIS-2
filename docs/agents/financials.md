@@ -28,11 +28,17 @@ and `markApplicationFeePaidFromStripeSession` re-run `syncLedgerPaymentEntry` ev
 on their already-paid short-circuit (best-effort — a failure is logged, never
 thrown), so a success-page retry or webhook redelivery repairs a ledger row whose
 first sync failed transiently. Phase 2 webhook work builds on these paths — keep
-that idempotent re-sync in place.
+that idempotent re-sync in place. Re-syncs rebuild the ledger row from the charge,
+which usually carries no session id, so both update paths (`upsertLedgerEntryRow`
+and the batched `syncDedupedCharges`) coalesce `stripe_checkout_session_id` to the
+already-stored value — never let a re-sync blank it; it is the only link back to
+the Stripe Checkout session that settled the payment
+(regression coverage: `tests/unit/reports/ledger-sync.test.ts`).
 The batched sweep logic (`backfillLedgerFromCharges` in `ledger-sync.ts`) still exists,
 but only as an explicit, admin-gated, one-time historical repair — it is invoked solely
 via `POST /api/admin/backfill-ledger` (optionally scoped to one `managerUserId` in the
-body), never from a report route or page load. Run it once per environment after
+body, which must be a uuid — anything else is rejected with 400), never from a report
+route or page load. Run it once per environment after
 deploying write-through sync to mirror any charge history that predates it.
 
 **`security_deposit` charges book to `security_deposit_liability` (a liability), not

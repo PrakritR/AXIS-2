@@ -221,3 +221,55 @@ describe("syncLedgerChargeEntry", () => {
     );
   });
 });
+
+describe("syncDedupedCharges", () => {
+  it("keeps a stored Stripe checkout session id through the batched backfill update path", async () => {
+    const inFn = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: "ledger-pay-1",
+          source_charge_id: "charge-1",
+          entry_type: "payment",
+          stripe_checkout_session_id: "cs_live_abc",
+        },
+        {
+          id: "ledger-chg-1",
+          source_charge_id: "charge-1",
+          entry_type: "charge",
+          stripe_checkout_session_id: null,
+        },
+      ],
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({ in: inFn });
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn(() => ({ select, insert, upsert }));
+
+    const { syncDedupedCharges } = await import("@/lib/reports/ledger-sync");
+    const db = { from } as unknown as Parameters<typeof syncDedupedCharges>[0];
+    // Re-sync of a paid charge rebuilt WITHOUT a session id (charge edit /
+    // backfill sweep) — the stored payment-entry session id must survive.
+    const paid = {
+      id: "charge-1",
+      managerUserId: "3b9c2c65-6f0f-4d3a-9a3e-0b7f6f8a1c2d",
+      residentUserId: null,
+      residentEmail: "r@example.com",
+      propertyId: "prop-1",
+      propertyLabel: "Unit 1",
+      kind: "rent",
+      status: "paid",
+      paidAt: "2026-01-05T00:00:00.000Z",
+      amountLabel: "$100.00",
+      balanceLabel: "$0.00",
+      title: "Rent",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    } as HouseholdCharge;
+
+    await expect(syncDedupedCharges(db, [paid])).resolves.toBe(1);
+    expect(insert).not.toHaveBeenCalled();
+    const updated = upsert.mock.calls[0]![0] as Array<Record<string, unknown>>;
+    const payment = updated.find((r) => r.entry_type === "payment");
+    expect(payment).toMatchObject({ id: "ledger-pay-1", stripe_checkout_session_id: "cs_live_abc" });
+  });
+});

@@ -204,6 +204,16 @@ describe("POST /api/admin/backfill-ledger", () => {
     expect(db.tables.ledger_entries).toHaveLength(1);
   });
 
+  it("rejects a non-uuid managerUserId with 400 before touching any data", async () => {
+    state.user = { id: ADMIN_ID };
+    const res = await post({ managerUserId: "mgr-1'; DROP TABLE ledger_entries;--" });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "managerUserId must be a uuid." });
+    const db = state.db as ReturnType<typeof makeFakeDb>;
+    expect(db.tables.portal_household_charge_records).toHaveLength(3);
+    expect(db.tables.ledger_entries).toHaveLength(1);
+  });
+
   it("sweeps charges into the ledger for admins and reports the real duplicates-removed count", async () => {
     state.user = { id: ADMIN_ID };
     const res = await post({});
