@@ -47,7 +47,6 @@ describe("buildManagerOutgoingPaymentRows", () => {
         },
       ],
       workOrders,
-      paidCharges: [],
     });
 
     expect(rows.some((row) => row.id === "work-order-wo-1" && row.bucket === "pending")).toBe(true);
@@ -92,7 +91,6 @@ describe("buildManagerOutgoingPaymentRows", () => {
         },
       ],
       workOrders,
-      paidCharges: [],
     });
 
     const expenseRow = rows.find((row) => row.id === "expense-exp-wo");

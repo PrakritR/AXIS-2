@@ -1,6 +1,5 @@
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import type { HouseholdCharge } from "@/lib/household-charges";
 import { enrichOutgoingRowWithVendorPayments, managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
@@ -182,7 +181,6 @@ export function buildManagerOutgoingPaymentRows(input: {
   managerUserId: string | null;
   expenses: ManagerExpenseSnapshot[];
   workOrders?: DemoManagerWorkOrderRow[];
-  paidCharges?: HouseholdCharge[];
   propertyLabelById?: Map<string, string>;
   vendorNameById?: Map<string, string>;
   vendorById?: Map<string, ManagerVendorRow>;
