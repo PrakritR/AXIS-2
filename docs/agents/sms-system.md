@@ -139,10 +139,16 @@ phone numbers — `CLAW_MESSENGER_API_KEY` also travels in the relay WS URL
 (upstream logs can capture it, per the sibling webhook route's own comment),
 so it must never double as a way to bulk-harvest real managers' cell numbers;
 the gateway hashes each inbound `from` with the same key to check membership.
-SIGTERM/SIGINT flush pending buffers immediately so a
-redeploy doesn't add latency; a mid-buffer crash only loses the *timer* — Claw
-Messenger replays everything since `sinceIso` on reconnect, so the message
-itself is never dropped, only re-buffered.
+SIGTERM/SIGINT flush pending buffers immediately (awaited, capped at 8s) so a
+redeploy doesn't add latency or drop the flush. Hard-crash durability is
+deliberately bounded: `sinceIso` never advances past the oldest still-pending
+buffered/in-flight frame, so Claw Messenger replays the buffered window on
+reconnect — but the webhook skips replay frames unless
+`CLAW_MESSENGER_PROCESS_REPLAYS=1` (default off), so a hard crash with a
+non-empty buffer loses at most one quiet window of prospect texts. Frequent
+gateway restarts make duplicate replies a worse failure mode than that rare
+<=150s loss window; durable webhook-side messageId idempotency is the
+prerequisite for flipping `CLAW_MESSENGER_PROCESS_REPLAYS` on later.
 
 **Two-way logging is the single persistence model.** Every message on the
 Claw line — inbound (prospect or resident) and outbound (agent or manager) —

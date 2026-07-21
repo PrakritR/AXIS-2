@@ -8,7 +8,7 @@ import {
   clawLeasingAgentPhoneE164,
   normalizeE164Us,
 } from "@/lib/claw-messenger.server";
-import { isLegacyClawSharedSmsNumber } from "@/lib/claw-leasing-links";
+import { isLegacyClawSharedSmsNumber, legacyClawSharedPhoneDigits } from "@/lib/claw-leasing-links";
 import { residentPortalUrl } from "@/lib/claw-resident-links";
 import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import { sendFromManagerWorkNumber, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
@@ -180,13 +180,28 @@ export async function resolveRegisteredClawManagers(): Promise<
   // what keeps a non-manager account from self-registering onto the shared
   // line's manager roster (and, via isMappedManagerPhone, the manager-command
   // surface) purely by verifying their own phone.
+  // Query only rows stamped with the shared Claw line itself — per-manager
+  // Twilio numbers must not consume the row cap and push shared-line managers
+  // out of the roster. Stamps are written as E.164 (`assignSharedClawLeasingNumberToManager`);
+  // the digit variants cover any legacy formatting, and the
+  // isLegacyClawSharedSmsNumber re-check below stays as the authority.
+  const sharedLineVariants = [...legacyClawSharedPhoneDigits()].flatMap((d) => {
+    const national = d.length === 11 && d.startsWith("1") ? d.slice(1) : d;
+    return [`+${d}`, d, `+1${national}`, `1${national}`, national];
+  });
   const { data } = await db
     .from("profiles")
     .select("id, email, full_name, phone, phone_verified_at, sms_from_number, role, created_at")
-    .not("sms_from_number", "is", null)
+    .in("sms_from_number", [...new Set(sharedLineVariants)])
     .in("role", ["manager", "pro", "admin", "owner"])
     .order("created_at", { ascending: true })
     .limit(500);
+
+  if ((data?.length ?? 0) >= 500) {
+    console.error(
+      "[claw-messaging] resolveRegisteredClawManagers hit the 500-row cap — newer shared-line managers may be missing from the roster",
+    );
+  }
 
   const out: Array<{ userId: string; email: string; fullName: string | null; personalPhone: string | null }> = [];
   for (const row of data ?? []) {
@@ -264,10 +279,12 @@ async function resolveManagerPersonalPhone(managerUserId: string): Promise<strin
   const mapped = await resolveMappedManagerContacts();
   const match = mapped.find((m) => m.userId === managerUserId || m.email === email);
   if (match?.personalPhone) return match.personalPhone;
-  // The env / hardcoded pairing is the trial default for MAPPED managers only.
-  // A manager outside the shared-line trial with no phone on file gets no SMS —
-  // never route another landlord's resident traffic to the default cell.
-  if (!match) return null;
+  // The env / hardcoded pairing is the trial default ONLY for managers
+  // explicitly listed in CLAW_MESSENGER_MANAGER_EMAILS — DB-registered
+  // managers are not in the trial. A manager outside that explicit list with
+  // no phone on file gets no SMS — never route another landlord's resident
+  // traffic to the default cell.
+  if (!match || !clawMappedManagerEmails().includes(match.email)) return null;
   return resolveAdminForwardPhone();
 }
 
@@ -277,9 +294,13 @@ async function resolveManagerUserIdForPhone(managerPhone: string): Promise<strin
   const managers = await resolveMappedManagerContacts();
   const byPhone = managers.find((m) => m.personalPhone === phone);
   if (byPhone?.userId) return byPhone.userId;
-  // Env-forwarded manager cell with no profile phone match → first mapped manager.
+  // Env-forwarded manager cell with no profile phone match → first manager
+  // explicitly listed in CLAW_MESSENGER_MANAGER_EMAILS (trial scope only) —
+  // never a DB-registered manager, whose residents the trial cell holder must
+  // not be able to text as "(Your property manager)".
   if (clawManagerForwardPhonesFromEnv().includes(phone) || phone === (await resolveAdminForwardPhone())) {
-    return managers.find((m) => m.userId)?.userId ?? null;
+    const explicit = clawMappedManagerEmails();
+    return managers.find((m) => m.userId && explicit.includes(m.email))?.userId ?? null;
   }
   return null;
 }
@@ -507,13 +528,18 @@ export async function forwardResidentMessageToManagers(args: {
   const targets = new Set<string>();
   if (args.thread.managerPhone) targets.add(args.thread.managerPhone);
   const managers = await resolveMappedManagerContacts();
-  const threadManagerMapped = managers.some((m) => m.userId === args.thread.managerUserId);
   for (const m of managers) {
     if (m.userId === args.thread.managerUserId && m.personalPhone) targets.add(m.personalPhone);
   }
   // The env forward phones and the admin ops cell only ever receive traffic
-  // for managers inside the shared-line trial scope.
-  if (threadManagerMapped) {
+  // for managers inside the shared-line trial scope — explicitly listed in
+  // CLAW_MESSENGER_MANAGER_EMAILS, NOT merely DB-registered (which is every
+  // real manager platform-wide).
+  const explicitTrialEmails = clawMappedManagerEmails();
+  const threadManagerInTrial = managers.some(
+    (m) => m.userId === args.thread.managerUserId && explicitTrialEmails.includes(m.email),
+  );
+  if (threadManagerInTrial) {
     for (const p of clawManagerForwardPhonesFromEnv()) targets.add(p);
     targets.add(await resolveAdminForwardPhone());
   }

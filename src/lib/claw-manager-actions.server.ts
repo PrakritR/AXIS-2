@@ -31,8 +31,9 @@ export type ManagerAgentActionResult = {
 
 async function resolveManagerUserIdFromPhone(fromE164: string): Promise<string | null> {
   const managers = await resolveMappedManagerContacts();
-  const hit = managers.find((m) => m.personalPhone === fromE164);
-  if (hit?.userId) return hit.userId;
+  const roster = managers.filter((m) => m.personalPhone === fromE164 && m.userId);
+  if (roster.length > 1) return null;
+  if (roster.length === 1) return roster[0].userId;
 
   // Outside the mapped trial scope, agent commands (including financial writes
   // like mark-paid) only run for an OTP-VERIFIED personal phone — profiles.phone

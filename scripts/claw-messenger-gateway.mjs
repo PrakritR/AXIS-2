@@ -48,9 +48,16 @@ if (!apiKey) {
  * new queue/cron). This gateway is already the one long-running, always-on
  * process in the pipeline (a persistent WS connection to Claw Messenger), so
  * an in-memory per-conversation timer is the simplest reliable place to hold
- * the debounce state. A crash mid-buffer loses only the *timer*, not the
- * messages — Claw Messenger resends everything since `sinceIso` on reconnect
- * (the existing replay mechanism), so nothing is dropped, just re-buffered.
+ * the debounce state. On a crash mid-buffer, `sinceIso` never advances past
+ * the oldest still-pending frame, so Claw Messenger resends the buffered
+ * window on reconnect — but the webhook skips replay frames by default
+ * (CLAW_MESSENGER_PROCESS_REPLAYS unset), so those texts are NOT re-processed:
+ * a hard crash with a non-empty buffer loses at most one quiet window of
+ * prospect texts. That trade is deliberate — frequent gateway restarts make
+ * duplicate replies a worse failure mode than a rare <=150s crash-loss window.
+ * Durable webhook-side messageId idempotency (not just the in-memory
+ * markInboundMessageSeen dedupe) is the prerequisite for safely flipping
+ * CLAW_MESSENGER_PROCESS_REPLAYS on later.
  * SIGTERM/SIGINT flush immediately so a routine redeploy doesn't add latency.
  */
 const debounceMs = (() => {
@@ -131,8 +138,35 @@ function shouldBypassDebounce(frame) {
 
 const debounceBuffers = new Map();
 
+/* Frames flushed out of a buffer but whose delivery hasn't succeeded yet —
+ * their arrival time must keep bounding `sinceIso` just like buffered ones. */
+const inFlightDeliveries = new Set();
+
+/** Earliest arrival among buffered + in-flight frames; Infinity when none. */
+function oldestPendingArrivalMs() {
+  let oldest = Infinity;
+  for (const buf of debounceBuffers.values()) {
+    if (buf.firstFrameAtMs < oldest) oldest = buf.firstFrameAtMs;
+  }
+  for (const marker of inFlightDeliveries) {
+    if (marker.arrivalMs < oldest) oldest = marker.arrivalMs;
+  }
+  return oldest;
+}
+
+/* `sinceIso` is a single global reconnect-sync cursor shared by every
+ * conversation. A successful delivery (including a manager-bypass delivery for
+ * an unrelated conversation) must never advance it past a frame still sitting
+ * in another conversation's debounce buffer, or a crash would drop that frame
+ * out of the replay window. When nothing is pending, advance to now. */
+function advanceSinceCursor() {
+  const boundMs = Math.min(Date.now(), oldestPendingArrivalMs());
+  const next = new Date(boundMs).toISOString();
+  if (next > sinceIso) sinceIso = next;
+}
+
 function debounceKey(frame) {
-  const digits = String(frame.from ?? "").replace(/\D/g, "");
+  const digits = normalizedPhoneDigits(frame.from);
   if (digits) return digits;
   if (frame.chatId) return String(frame.chatId);
   // No phone digits AND no chatId: fall back to the message's own id (or a
@@ -166,12 +200,12 @@ function flushDebounceBuffer(key) {
   console.log(
     `[claw-gateway] debounce flush key=${key} count=${frames.length} after ${debounceMs}ms quiet window`,
   );
-  return deliverWithRetry(merged);
+  return deliverWithRetry(merged, buf.firstFrameAtMs);
 }
 
 function bufferForDebounce(frame) {
   const key = debounceKey(frame);
-  const buf = debounceBuffers.get(key) ?? { frames: [], timer: null };
+  const buf = debounceBuffers.get(key) ?? { frames: [], timer: null, firstFrameAtMs: Date.now() };
   buf.frames.push(frame);
   if (buf.timer) clearTimeout(buf.timer);
   buf.timer = setTimeout(() => flushDebounceBuffer(key), debounceMs);
@@ -225,23 +259,31 @@ async function forward(frame) {
   return true;
 }
 
-async function deliverWithRetry(frame) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      if (await forward(frame)) {
-        // Advance the reconnect-sync cursor only after a successful delivery —
-        // a webhook outage must not permanently drop the inbound text.
-        sinceIso = new Date().toISOString();
-        return;
+async function deliverWithRetry(frame, arrivalMs = null) {
+  const marker = arrivalMs != null ? { arrivalMs } : null;
+  if (marker) inFlightDeliveries.add(marker);
+  try {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        if (await forward(frame)) {
+          if (marker) inFlightDeliveries.delete(marker);
+          // Advance the reconnect-sync cursor only after a successful delivery
+          // — a webhook outage must not permanently drop the inbound text —
+          // and never past a frame another conversation still has pending.
+          advanceSinceCursor();
+          return;
+        }
+      } catch (err) {
+        console.error("[claw-gateway] forward error", err);
       }
-    } catch (err) {
-      console.error("[claw-gateway] forward error", err);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, 2000 * 2 ** attempt)));
     }
-    await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, 2000 * 2 ** attempt)));
+    console.error(
+      `[claw-gateway] giving up on message ${frame.messageId || "?"} — reconnect sync will replay it`,
+    );
+  } finally {
+    if (marker) inFlightDeliveries.delete(marker);
   }
-  console.error(
-    `[claw-gateway] giving up on message ${frame.messageId || "?"} — reconnect sync will replay it`,
-  );
 }
 
 function connect() {
