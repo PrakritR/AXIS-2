@@ -35,4 +35,4 @@ only beat Stripe above ~1,000 payments/month once monthly minimums are counted
 
 # Resident payments + financials merge (§9.3)
 
-**Payments** section uses URL tabs: `pending`, `paid`, `balance`, `statements` (`PAYMENTS_TABS` in `resident-sections.ts`). Balance/statements render `ResidentFinancialsPanel`; `/resident/financials` redirects to `/resident/payments/pending`.
+**Payments** section uses URL tabs: `charges`, `summary`, `statements` (`PAYMENTS_TABS` in `resident-sections.ts`), all rendered by `ResidentPaymentsPanel` (the former `ResidentFinancialsPanel` was merged into it). Pending / Overdue / Paid are status pills inside the Charges tab, not tabs. Legacy tab ids redirect via `RESIDENT_PAYMENTS_LEGACY_TABS`: `pending`/`overdue`/`paid` → `/resident/payments/charges?status=…` (forwarded as the panel's `initialStatus`), `balance` → `/resident/payments/summary`; `/resident/financials/*` redirects the same way. See AGENTS.md "Financials UI cleanup" for the routing gotchas.
