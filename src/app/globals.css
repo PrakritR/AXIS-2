@@ -2352,6 +2352,13 @@ html[data-native] [data-listing-sections-root] {
   color: var(--pl-ink);
 }
 
+[data-theme="dark"] .landing-stats-strip {
+  background:
+    radial-gradient(ellipse 50% 140% at 12% 50%, color-mix(in srgb, var(--pl-purple) 10%, transparent) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 140% at 88% 50%, color-mix(in srgb, var(--pl-purple-deep) 10%, transparent) 0%, transparent 70%),
+    var(--pl-black);
+}
+
 .landing-stats-strip .landing-stat-value {
   color: var(--pl-ink);
 }
