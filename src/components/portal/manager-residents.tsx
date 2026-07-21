@@ -2340,8 +2340,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               title="Services"
                               summary={
                                 residentServiceRequests.length + residentWorkOrders.length === 0
-                                  ? "No service requests or work orders yet."
-                                  : `${residentServiceRequests.length} request${residentServiceRequests.length === 1 ? "" : "s"} · ${residentWorkOrders.length} work order${residentWorkOrders.length === 1 ? "" : "s"}`
+                                  ? "No add-on services or work orders yet."
+                                  : `${residentServiceRequests.length} add-on service${residentServiceRequests.length === 1 ? "" : "s"} · ${residentWorkOrders.length} work order${residentWorkOrders.length === 1 ? "" : "s"}`
                               }
                               expanded={expandedResidentSection === "services"}
                               onToggle={() =>
@@ -2371,7 +2371,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               <div className="mb-4">
                                 <PillTabs
                                   items={[
-                                    { id: "requests", label: "Requests" },
+                                    { id: "requests", label: "Add-on services" },
                                     { id: "work-orders", label: "Work orders" },
                                   ]}
                                   activeId={svcSubTab}
@@ -2398,9 +2398,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     />
                                   </div>
                                   {residentServiceRequests.length === 0 ? (
-                                    <PortalDataTableEmpty message="No service requests yet." icon="service" />
+                                    <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
                                   ) : residentFilteredServiceRequests.length === 0 ? (
-                                    <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
+                                    <PortalDataTableEmpty message="No add-on services in this status yet." icon="service" />
                                   ) : (
                                     <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
                                       <div className={`${PORTAL_DATA_TABLE_SCROLL} overflow-x-auto`}>

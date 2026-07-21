@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
+import { isPrimaryAdminEmail, PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 
 /**
  * Single source of truth for "is this account an Axis admin", shared by the
@@ -40,4 +40,28 @@ export async function userHoldsAdminRole(db: SupabaseClient, userId: string): Pr
   if (!id) return false;
   const admins = await filterAdminUserIds(db, [id]);
   return admins.has(id);
+}
+
+/**
+ * All user ids currently holding the `admin` role, resolved by the same rule as
+ * `filterAdminUserIds` (`profile_roles`, legacy `profiles.role`, or the
+ * primary-admin email), returned sorted for deterministic consumers.
+ */
+export async function listAdminUserIds(db: SupabaseClient): Promise<string[]> {
+  const [roleRes, legacyRes, primaryRes] = await Promise.all([
+    db.from("profile_roles").select("user_id").eq("role", "admin"),
+    db.from("profiles").select("id").ilike("role", "admin"),
+    db.from("profiles").select("id").ilike("email", PRIMARY_ADMIN_EMAIL),
+  ]);
+
+  const admins = new Set<string>();
+  for (const row of (roleRes.data ?? []) as { user_id?: string | null }[]) {
+    const id = String(row.user_id ?? "").trim();
+    if (id) admins.add(id);
+  }
+  for (const row of [...(legacyRes.data ?? []), ...(primaryRes.data ?? [])] as { id?: string | null }[]) {
+    const id = String(row.id ?? "").trim();
+    if (id) admins.add(id);
+  }
+  return [...admins].sort();
 }

@@ -36,7 +36,7 @@ function summarizeServiceRequest(r: ServiceRequest) {
 export const listServiceRequestsTool = defineTool({
   name: "list_service_requests",
   description:
-    "List the current landlord's resident service/amenity requests (e.g. equipment rentals, add-on services) with offer, resident, property, status (pending/approved/denied/returned), price, deposit, and payment status. Use for 'any pending service requests', 'which services are awaiting approval', etc.",
+    "List the current landlord's resident add-on service requests (e.g. parking, storage, equipment rentals) with offer, resident, property, status (pending/approved/denied/returned), price, deposit, and payment status. These are add-on services, NOT maintenance work orders — use list_work_orders for maintenance/repair items. Use for 'any pending add-on service requests', 'which services are awaiting approval', etc.",
   kind: "read",
   inputSchema: z
     .object({

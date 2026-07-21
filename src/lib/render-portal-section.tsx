@@ -11,7 +11,7 @@ import { AdminAxisUsersClient } from "@/components/portal/admin-axis-users-clien
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { AdminProfileSection } from "@/components/portal/admin-profile-section";
-import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
+import { AdminCommunication } from "@/components/portal/admin-communication";
 import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
@@ -278,7 +278,10 @@ export async function renderPortalSection(
 
   // Legacy path support: Inbox became Communication. Old deep links (push
   // notifications, bookmarks, post-send navigation) must keep resolving.
-  if (section === "inbox") {
+  // Only for portals that actually have a Communication section — the admin
+  // portal still ships Inbox as a real section, so redirecting it would send
+  // /admin/inbox/* to a section that does not exist (notFound).
+  if (section === "inbox" && findSection(def, "communication")) {
     const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
     if (kind === "manager" || kind === "pro") {
       redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
@@ -345,14 +348,34 @@ export async function renderPortalSection(
     return <AdminProfileSection />;
   }
 
-  if (kind === "admin" && section === "inbox") {
-    if (!meta.tabs.length) notFound();
+  if (kind === "admin" && section === "communication") {
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      redirect(`${def.basePath}/communication/email/unopened`);
     }
-    const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "schedule", "sent", "trash"].includes(inboxTab)) notFound();
-    return <AdminInboxClient tabId={inboxTab} />;
+    const channel = tabParts[0]!;
+    if (channel === "sms") {
+      const smsTab = tabParts[1] ?? "all";
+      if (!["all", "unopened", "opened", "schedule", "sent"].includes(smsTab)) notFound();
+      if (tabParts.length > 2) notFound();
+      return (
+        <AdminCommunication
+          channel="sms"
+          smsTabId={smsTab as "all" | "unopened" | "opened" | "schedule" | "sent"}
+        />
+      );
+    }
+    if (channel === "email") {
+      const emailTab = tabParts[1] ?? "unopened";
+      if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
+      if (tabParts.length > 2) notFound();
+      return (
+        <AdminCommunication
+          channel="email"
+          emailTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"}
+        />
+      );
+    }
+    notFound();
   }
 
   if (kind === "admin" && section === "bugs-feedback") {

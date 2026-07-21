@@ -13,7 +13,7 @@ describe("listingGeocodeQuery", () => {
     ).toBe("41932 Paseo Padre Pkwy, Fremont, 94538, USA");
   });
 
-  it("appends unit when not already in the street line", () => {
+  it("omits the unit — it adds no geographic precision and hurts the match", () => {
     expect(
       listingGeocodeQuery({
         address: "4709B 8th Ave NE",
@@ -21,7 +21,18 @@ describe("listingGeocodeQuery", () => {
         neighborhood: "University District",
         unitLabel: "Room 2",
       }),
-    ).toBe("4709B 8th Ave NE, Room 2, University District, 98105, USA");
+    ).toBe("4709B 8th Ave NE, University District, 98105, USA");
+  });
+
+  it("strips a unit already embedded in the street line", () => {
+    expect(
+      listingGeocodeQuery({
+        address: "3655 Birchwood Ter APT 211",
+        zip: "94536",
+        neighborhood: "",
+        unitLabel: "APT 211",
+      }),
+    ).toBe("3655 Birchwood Ter, 94536, USA");
   });
 
   it("returns empty when no address parts", () => {

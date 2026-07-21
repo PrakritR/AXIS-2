@@ -149,7 +149,7 @@ test.describe("Dark mode — admin portal", () => {
     await signInAsAdmin(page);
   });
 
-  const routes = ["/admin/dashboard", "/admin/properties", "/admin/axis-users", "/admin/events", "/admin/inbox"] as const;
+  const routes = ["/admin/dashboard", "/admin/properties", "/admin/axis-users", "/admin/events", "/admin/communication/email/unopened"] as const;
 
   for (const route of routes) {
     test(`${route} has no light-themed main content`, async ({ page }) => {

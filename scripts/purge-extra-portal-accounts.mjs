@@ -15,10 +15,20 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const confirm = process.env.CONFIRM_PURGE === "yes";
 
+/** Keep in sync with src/lib/auth/primary-admin.ts and ensure-admin-account.mjs. */
+const PRIMARY_ADMIN_EMAIL = "founders@axis-seattle-housing.com";
+
+/**
+ * The sole ops admin (src/lib/auth/primary-admin.ts). It is admin-ONLY: it must
+ * never be carried in the manager or resident keep-lists, or a purge run would
+ * imply it is a portal account of that kind. Kept here so the purge never
+ * deletes it.
+ */
+const KEEP_ADMIN_EMAILS = new Set([PRIMARY_ADMIN_EMAIL]);
+
 /** Canonical manager accounts (property portal). */
 const KEEP_MANAGER_EMAILS = new Set(
   [
-    "admin@axis-seattle-housing.com",
     "akhilthebest23@gmail.com",
     "hiteshkjm@gmail.com",
     "ocenedella@gmail.com",
@@ -224,10 +234,15 @@ const residentIds = await idsForRole("resident");
 const managerProfiles = await loadProfiles(managerIds);
 const residentProfiles = await loadProfiles(residentIds);
 
-const managersToDelete = managerProfiles.filter((p) => !KEEP_MANAGER_EMAILS.has(normEmail(p.email)));
-const managersToKeep = managerProfiles.filter((p) => KEEP_MANAGER_EMAILS.has(normEmail(p.email)));
-const residentsToDelete = residentProfiles.filter((p) => !KEEP_RESIDENT_EMAILS.has(normEmail(p.email)));
-const residentsToKeep = residentProfiles.filter((p) => KEEP_RESIDENT_EMAILS.has(normEmail(p.email)));
+// The ops admin is admin-only and is already excluded from managerIds via
+// adminIds, but guard by email too: if it ever wrongly picks up a manager or
+// resident role row, the purge must still never delete it.
+const isAdminEmail = (p) => KEEP_ADMIN_EMAILS.has(normEmail(p.email));
+
+const managersToDelete = managerProfiles.filter((p) => !KEEP_MANAGER_EMAILS.has(normEmail(p.email)) && !isAdminEmail(p));
+const managersToKeep = managerProfiles.filter((p) => KEEP_MANAGER_EMAILS.has(normEmail(p.email)) || isAdminEmail(p));
+const residentsToDelete = residentProfiles.filter((p) => !KEEP_RESIDENT_EMAILS.has(normEmail(p.email)) && !isAdminEmail(p));
+const residentsToKeep = residentProfiles.filter((p) => KEEP_RESIDENT_EMAILS.has(normEmail(p.email)) || isAdminEmail(p));
 
 const keepUserIds = new Set([
   ...adminIds,

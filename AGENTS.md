@@ -189,9 +189,29 @@ hand-rolled markup:
   `createPortalRowExpandClick`) plus `MANAGER_TABLE_TH` from
   `portal-metrics.tsx`.
 
-Feedback (`admin-bug-feedback-client.tsx`) and Inbox (`admin-inbox-client.tsx`)
-are the reference implementations — copy their structure rather than
-reinventing table/filter markup per tab.
+Feedback (`admin-bug-feedback-client.tsx`) and Communication → Email
+(`admin-inbox-client.tsx`) are the reference implementations — copy their
+structure rather than reinventing table/filter markup per tab.
+
+## Listing images: never fabricate a photo
+
+A production listing/room with zero genuine uploaded photos must render
+`NoImagePlaceholder` (`src/components/ui/no-image-placeholder.tsx`) — never a
+stock/fabricated image. A prospective tenant seeing a photo on a listing card
+reasonably assumes it's a photo of that unit; showing stock photography is
+misleading.
+
+`PropertyBrowseCard.imageUrl` (and any future listing-image field) uses an
+empty string to mean "no real photo" — render the placeholder rather than
+falling back to anything else. This applies to Browse cards
+(`resident-housing-browse.tsx`, `housing-browse-swipe-stack.tsx`) and the
+listing detail hero gallery (`listing-detail-sections.tsx`). The only
+permitted stock fallback is `demoOnlyBrowseCardPlaceholderImage`
+(`src/lib/room-listings-catalog.ts`), gated behind `isDemoModeActive()` so it
+can only ever affect the `/demo` sandbox, whose seeded properties always carry
+a real (illustrated) house photo and should never look "broken"
+mid-walkthrough. Regression coverage:
+`tests/unit/property-browse-cards.test.ts`.
 
 ## Portal UI system
 
@@ -354,6 +374,27 @@ Never point a local `.env` at production. Schema parity between the two projects
 is maintained with the Supabase CLI (`npm run db:push`), not the SQL Editor. Full
 model and workflow: [`docs/database-environments.md`](docs/database-environments.md).
 
+# Portal routing precedence (a section can be silently unreachable)
+
+A portal section is only reachable if **both** layers above it let the request
+through. Two classes of bug have shipped here, each making a live nav item dead
+while the section's component still compiled and its tests still passed:
+
+1. **`next.config.ts` `redirects()` outranks the app router.** A legacy entry
+   whose `source` later became a real section shadows it before
+   `renderPortalSection` ever runs. Before adding a section, grep
+   `next.config.ts` for its path; when deleting a section, delete its redirect
+   with it.
+2. **Legacy redirects in `renderPortalSection` fire for every portal unless gated.** The
+   rewrites near the top of `src/lib/render-portal-section.tsx` run before
+   `findSection`, so an ungated `section === "..."` rule fires for *every*
+   portal. Gate on the capability, not a kind allowlist — e.g. the Inbox →
+   Communication rewrite checks `findSection(def, "communication")`, so the
+   admin portal (which still ships Inbox as a real section) is unaffected.
+
+Neither layer is covered by the unit suite. After adding or renaming a section,
+load its URL in the browser — a passing build is not evidence it resolves.
+
 # Feature architecture notes (mandatory pre-reads)
 
 The deep per-feature history lives in `docs/agents/` — one file per area.
@@ -371,3 +412,18 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
+
+## Add-on services vs. work orders
+
+Parking, storage, and other resident-purchasable offerings are **"Add-on
+services"** in every UI surface and in agent copy — never "work orders". They
+were already a separate data model before that rename: `ServiceRequest` rows in
+`portal_service_request_records` (`src/lib/service-requests-storage.ts`), edited
+via `manager-create-service-request-modal.tsx` / `resident-services-panel.tsx`
+("Add-on services" tab) and read by the `list_service_requests` agent tool
+(`src/lib/tools/domains/services.ts`). Real maintenance/repair work orders keep
+their name and live in the separate `portal_work_order_records` model
+(`src/lib/manager-work-orders-storage.ts`, `list_work_orders` tool). The two
+share only a "Services" nav section and a combined nav-count badge
+(`src/hooks/use-portal-nav-counts.ts`) — do not merge their tables, tabs, or
+counts when adding features to either.

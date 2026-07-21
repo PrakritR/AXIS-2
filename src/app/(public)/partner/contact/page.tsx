@@ -3,9 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 
-// The partner contact experience is now unified into the single public
-// /contact page ("Connect with Axis Team"). This route redirects there,
-// preserving the ?tab=schedule deep link used by "Book consultation" CTAs.
+// Partner inquiries unify into public /contact ("Connect with the PropLane team").
+// Preserves ?tab=schedule for "Book a demo" / consultation deep links.
 function PartnerContactRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();

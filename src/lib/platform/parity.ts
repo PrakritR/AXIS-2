@@ -37,7 +37,7 @@ export const REGISTERED_PUSH_DEEP_LINKS = [
   "/resident/communication/email/unopened",
   "/portal/communication/inbox/unopened",
   "/portal/communication/sms",
-  "/admin/inbox/unopened",
+  "/admin/communication/email/unopened",
   "/vendor/communication/email/unopened",
 ] as const;
 

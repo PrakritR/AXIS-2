@@ -27,7 +27,7 @@ const INBOX_TABS = [
 ] as const;
 
 const SERVICES_TABS = [
-  { id: "requests", label: "Requests" },
+  { id: "requests", label: "Add-on services" },
   { id: "work-orders", label: "Work orders" },
 ] as const;
 

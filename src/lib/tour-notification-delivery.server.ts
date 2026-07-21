@@ -3,6 +3,7 @@
  */
 
 import { resolveAppOrigin } from "@/lib/app-url";
+import { sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
   resolveManagerRecipientProfiles,
@@ -212,6 +213,18 @@ export async function notifyManagerTourRequest(
     subject,
     text,
   );
+
+  // Also text any recipient with a forward-enabled phone on file (e.g. the
+  // admin's own DB-backed number) — a tour request shouldn't wait on email.
+  const smsText = `PropLane: new tour request${ctx.propertyTitle ? ` — ${ctx.propertyTitle}` : ""}${
+    ctx.tourStartIso ? ` (${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)})` : ""
+  }. ${ctx.guestName} requested a tour. Check your PropLane inbox for details.`;
+  await Promise.all(
+    recipients
+      .filter((recipient) => recipient.phone)
+      .map((recipient) => sendPropLaneSms({ to: recipient.phone!, text: smsText, log: null }).catch(() => undefined)),
+  );
+
   if (email.error) return { ok: true, skipped: true, error: email.error };
   return { ok: true, skipped: email.skipped };
 }

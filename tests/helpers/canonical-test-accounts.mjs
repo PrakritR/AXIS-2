@@ -18,7 +18,7 @@ export const TEST_SUPABASE_PROJECT_REF = "emstjswhotsnyksqhqyf";
  * ONLY in the production project — it must never be provisioned into, or kept
  * canonical in, the test DB.
  */
-export const PRODUCTION_ADMIN_EMAIL = "admin@axis-seattle-housing.com";
+export const PRODUCTION_ADMIN_EMAIL = "founders@axis-seattle-housing.com";
 
 /** Workflow seed removed — no bulk fictional residents in the test DB. */
 export const DEMO_WORKFLOW_RESIDENT_EMAILS = [];

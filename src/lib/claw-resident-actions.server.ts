@@ -223,7 +223,7 @@ export async function runResidentSmsAction(args: {
     }
     case "maintenance": {
       if (!residentEmail) {
-        residentReply = `Mind using this link so we can file it under your unit?\n${residentPortalUrl("services")}`;
+        residentReply = `Mind using this link so we can file it under your unit?\n${residentPortalUrl("services_work_orders")}`;
         break;
       }
       const wo = await createWorkOrderFromResidentSms({
@@ -236,7 +236,7 @@ export async function runResidentSmsAction(args: {
       });
       residentReply =
         maintenanceWorkOrderResidentAck(wo) ||
-        `Got it — can you send a bit more detail (or use this link)?\n${residentPortalUrl("services")}`;
+        `Got it — can you send a bit more detail (or use this link)?\n${residentPortalUrl("services_work_orders")}`;
       if ("workOrderId" in wo && wo.workOrderId) {
         autoFiledNote = wo.created
           ? `PropLane auto-filed work order ${wo.workOrderId} (${wo.title}).`
@@ -267,13 +267,13 @@ export async function runResidentSmsAction(args: {
         `Gotcha — mind trying again here?\n${residentPortalUrl("services")}`;
       if ("requestId" in sr && sr.requestId) {
         autoFiledNote = sr.created
-          ? `PropLane auto-filed service request ${sr.requestId} (${sr.title}).`
+          ? `PropLane auto-filed add-on service request ${sr.requestId} (${sr.title}).`
           : sr.alreadyOpen
-            ? `PropLane matched existing service request ${sr.requestId} (${sr.title}).`
+            ? `PropLane matched existing add-on service request ${sr.requestId} (${sr.title}).`
             : null;
-        wants = `submit service request (${sr.title})`;
+        wants = `submit add-on service request (${sr.title})`;
       }
-      threadTopic = "maintenance";
+      threadTopic = "services";
       break;
     }
     case "balance":

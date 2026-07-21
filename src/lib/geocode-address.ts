@@ -48,9 +48,15 @@ export function listingGeocodeQuery(
   const neighborhood = property.neighborhood?.trim() ?? "";
   const zip = property.zip?.trim() ?? "";
 
-  const streetLine = unit && street && !street.toLowerCase().includes(unit.toLowerCase())
-    ? `${street}, ${unit}`
-    : street;
+  // Deliberately DROP the unit from the geocode query. A unit is inside the same
+  // building, so it adds no geographic precision, but "APT 211" / "#3" is not a
+  // geocodable token and measurably degrades the match - Nominatim either misses
+  // or returns a lower-confidence centroid. Strip a unit already embedded in the
+  // street line for the same reason; the unit is still shown in the UI.
+  const streetLine = (street || unit)
+    .replace(/[,\s]+(?:apt|apartment|unit|ste|suite|#)\s*[\w-]+\s*$/i, "")
+    .replace(/[,\s]+$/, "")
+    .trim() || street;
 
   const parts = [streetLine, neighborhood, zip].filter(Boolean);
   if (!parts.length) return "";

@@ -271,7 +271,7 @@ export function ManagerAllServicesPanel({
               data-attr="manager-service-request-add"
               onClick={() => setAddRequestOpen(true)}
             >
-              Add request
+              Add add-on service
             </Button>
           ) : null}
           {typeFilter === "work-orders" ? (
@@ -293,7 +293,7 @@ export function ManagerAllServicesPanel({
             shallow
             activeId={typeFilter}
             items={[
-              { id: "requests", label: "Requests", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
+              { id: "requests", label: "Add-on services", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders`, dataAttr: "manager-services-tab-work-orders" },
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
             ]}
@@ -335,7 +335,7 @@ export function ManagerAllServicesPanel({
             </div>
             {bucketedRequests.length === 0 ? (
               <PortalDataTableEmpty
-                message={filteredRequests.length === 0 ? "No service requests yet." : "No requests in this bucket yet."}
+                message={filteredRequests.length === 0 ? "No add-on services requested yet." : "No add-on services in this bucket yet."}
                 icon="service"
               />
             ) : (

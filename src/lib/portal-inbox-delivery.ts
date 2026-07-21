@@ -424,7 +424,7 @@ export async function deliverPortalInboxMessage(
             : eventCategory === "payments"
               ? "payments"
               : eventCategory === "maintenance"
-                ? "services"
+                ? "services_work_orders"
                 : eventCategory === "applications"
                   ? "applications"
                   : "inbox";

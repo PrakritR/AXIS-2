@@ -159,7 +159,7 @@ export async function GET() {
 
     return NextResponse.json({ rows });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to load service requests.";
+    const message = e instanceof Error ? e.message : "Failed to load add-on service requests.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -306,7 +306,7 @@ export async function POST(req: Request) {
     const managerUserId = record.manager_user_id;
     if (!preExisting && !actor.admin && role === "resident" && managerUserId) {
       // New resident-submitted request → Axis inbox + email + SMS to manager.
-      const title = stamped.offerName?.trim() || "Service request";
+      const title = stamped.offerName?.trim() || "Add-on service";
       const description = stamped.notes?.trim() || stamped.offerDescription?.trim();
       await notifyManagerOfResidentFiledItem(db, {
         kind: "service-request",
@@ -320,7 +320,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true, row: record.row_data });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to save service request.";
+    const message = e instanceof Error ? e.message : "Failed to save add-on service request.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

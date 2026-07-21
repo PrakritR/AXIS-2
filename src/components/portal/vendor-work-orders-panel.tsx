@@ -35,6 +35,7 @@ import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payout
 import { upsertWorkOrderBid, WORK_ORDER_BIDS_EVENT } from "@/lib/work-order-bids-storage";
 import {
   isPricingPendingBid,
+  vendorWorkOrderPhaseLabel,
   vendorWorkOrderTab,
   VENDOR_WORK_ORDER_TAB_LABELS,
   VENDOR_WORK_ORDER_TAB_ORDER,
@@ -745,6 +746,7 @@ export function VendorWorkOrdersPanel() {
           <div className="space-y-2 lg:hidden">
             {visible.map((row) => {
               const isExpanded = expandedId === row.id;
+              const phaseLabel = vendorWorkOrderPhaseLabel(row, bidsByWorkOrderId[row.id]);
               return (
                 <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
@@ -761,6 +763,11 @@ export function VendorWorkOrdersPanel() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <WorkOrderStatusBadge bucket={row.bucket} />
                       </div>
+                      {/* Same reason as the desktop table: the bucket badge is the
+                          manager-side state, so a job this vendor already quoted reads
+                          identically to an untouched one. This branch is what the
+                          Capacitor iOS app renders, so the label has to be here too. */}
+                      {phaseLabel ? <p className="mt-1 text-xs text-muted">{phaseLabel}</p> : null}
                     </div>
                   </button>
                   {isExpanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
@@ -774,7 +781,7 @@ export function VendorWorkOrdersPanel() {
                 <PortalDataTableColGroup percents={portalTableColumnPercents(4)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={MANAGER_TABLE_TH}>Charge</th>
+                    <th className={MANAGER_TABLE_TH}>Service</th>
                     <th className={MANAGER_TABLE_TH}>Property</th>
                     <th className={MANAGER_TABLE_TH}>Scheduled visit</th>
                     <th className={MANAGER_TABLE_TH}>Status</th>
@@ -783,6 +790,7 @@ export function VendorWorkOrdersPanel() {
                 <tbody>
                   {visible.map((row) => {
                     const isExpanded = expandedId === row.id;
+                    const phaseLabel = vendorWorkOrderPhaseLabel(row, bidsByWorkOrderId[row.id]);
                     return (
                       <Fragment key={row.id}>
                         <tr
@@ -801,6 +809,10 @@ export function VendorWorkOrdersPanel() {
                           <td className={PORTAL_TABLE_TD}>{row.scheduled || "Not yet scheduled"}</td>
                           <td className={PORTAL_TABLE_TD}>
                             <WorkOrderStatusBadge bucket={row.bucket} />
+                            {/* The bucket badge is the manager-side state, so a job this
+                                vendor has already quoted looks identical to one they
+                                haven't. Surface the vendor's own next step too. */}
+                            {phaseLabel ? <p className="mt-0.5 text-xs text-muted">{phaseLabel}</p> : null}
                           </td>
                         </tr>
                         {isExpanded ? (

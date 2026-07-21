@@ -213,11 +213,23 @@ export async function deleteOwnAccount(db: ServiceDb, userId: string) {
   return purgeAndDeletePortalAccount(db, trimmedId);
 }
 
-/** Cascade-delete manager properties, payments, leases, etc., then remove manager access / auth user. */
+/**
+ * Cascade-delete manager properties, payments, leases, etc., then remove ONLY
+ * manager access. `removePortalAccess` deletes the auth user outright when
+ * manager was the last role, but revokes just that role when the person also
+ * holds vendor/resident — so deleting someone's manager account never takes
+ * their other portals with it.
+ *
+ * Stripe is cancelled first: `purgeManagerPortalData` wipes `manager_purchases`,
+ * so cancelling afterwards would have nothing left to look up and the customer
+ * would keep being billed for an account that no longer exists.
+ */
 export async function deleteManagerAccount(db: ServiceDb, managerUserId: string) {
+  await cancelActiveManagerSubscription(db, managerUserId);
   await purgeManagerPortalData(db, managerUserId);
   const result = await removePortalAccess(db, managerUserId, "manager");
   return { ok: true as const, mode: result.mode };
 }
+
 
 export type { PortalRole };

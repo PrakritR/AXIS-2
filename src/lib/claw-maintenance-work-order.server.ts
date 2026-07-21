@@ -254,7 +254,7 @@ export async function createWorkOrderFromResidentSms(args: {
 export function maintenanceWorkOrderResidentAck(result: CreateWorkOrderFromResidentSmsResult): string | null {
   if ("error" in result && !("alreadyOpen" in result)) return null;
   if (!("workOrderId" in result) || !result.workOrderId) return null;
-  const services = residentPortalUrl("services");
+  const services = residentPortalUrl("services_work_orders");
   if ("alreadyOpen" in result && result.alreadyOpen) {
     return [
       `Looks like we already have that open ("${result.title}").`,

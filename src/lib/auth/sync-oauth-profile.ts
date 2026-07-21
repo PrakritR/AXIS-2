@@ -26,6 +26,11 @@ export async function syncOAuthProfile(
   if (!email) return;
 
   const fullName = oauthFullName(user);
+  // The ops admin is admin-ONLY. It must never be auto-provisioned a free
+  // manager portal (its address is a Workspace/Gmail identity, so it would
+  // otherwise match isGoogleOrGmailAccount and pick up a manager role on every
+  // Google sign-in).
+  const isPrimaryAdmin = isPrimaryAdminEmail(email);
   const { data: existing } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
 
   if (existing) {
@@ -33,13 +38,19 @@ export async function syncOAuthProfile(
     if (!existing.full_name?.trim() && fullName) patch.full_name = fullName;
     const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
     if (error) throw error;
+    if (isPrimaryAdmin) {
+      // Re-assert admin so an OAuth sign-in always lands in the admin portal,
+      // even if the role row was lost.
+      await ensureProfileRoleRow(supabase, user.id, "admin");
+      return;
+    }
     if (!opts?.skipAutoProvision) {
       await provisionFreeManagerFromOAuth(supabase, user);
     }
     return;
   }
 
-  if (isPrimaryAdminEmail(email)) {
+  if (isPrimaryAdmin) {
     const { error: profileError } = await supabase.from("profiles").upsert(
       {
         id: user.id,
@@ -54,7 +65,6 @@ export async function syncOAuthProfile(
     if (profileError) throw profileError;
 
     await ensureProfileRoleRow(supabase, user.id, "admin");
-    await ensureProfileRoleRow(supabase, user.id, "manager");
     return;
   }
 

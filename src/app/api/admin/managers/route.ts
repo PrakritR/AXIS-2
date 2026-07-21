@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { backfillOrphanGoogleOAuthManagers } from "@/lib/auth/provision-free-manager-oauth";
-import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
+import { deleteManagerAccount } from "@/lib/auth/delete-portal-account";
 import { normalizeManagerSkuTier, pickBestManagerPurchaseRow } from "@/lib/manager-access";
 import { setManagerPurchaseTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -25,9 +25,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const supabase = createSupabaseServiceRoleClient();
-    await backfillOrphanGoogleOAuthManagers(supabase).catch((err) => {
-      console.error("Google/Gmail manager backfill failed:", err);
-    });
+    // NOTE: the orphan-Google-manager backfill deliberately does NOT run here.
+    // It pages the entire auth user list and then does ~10 sequential queries
+    // (plus writes) per Google/Gmail user, all before this endpoint can return
+    // a single row — which is why the Accounts page sat on "Loading…". A
+    // backfill is a maintenance sweep, not part of a read path; trigger it
+    // explicitly via POST { action: "backfill-oauth-managers" }.
     const { data: roleRows } = await supabase.from("profile_roles").select("user_id").eq("role", "manager");
     const idsFromRoles = [...new Set((roleRows ?? []).map((r) => r.user_id))];
     const { data: legacyRows } = await supabase.from("profiles").select("id").eq("role", "manager");
@@ -123,6 +126,28 @@ export async function GET() {
   }
 }
 
+/**
+ * Maintenance actions. Kept off GET so the Accounts list stays fast.
+ * Body: { action: "backfill-oauth-managers" }
+ */
+export async function POST(req: Request) {
+  try {
+    if (!(await requireAdminActor()).ok) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+    const body = (await req.json().catch(() => ({}))) as { action?: string };
+    if (body.action !== "backfill-oauth-managers") {
+      return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+    }
+    const supabase = createSupabaseServiceRoleClient();
+    const result = await backfillOrphanGoogleOAuthManagers(supabase);
+    return NextResponse.json(result);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function PATCH(req: Request) {
   try {
     if (!(await requireAdminActor()).ok) {
@@ -173,7 +198,7 @@ export async function DELETE(req: Request) {
     }
 
     const supabase = createSupabaseServiceRoleClient();
-    const result = await deletePortalAccountCompletely(supabase, id);
+    const result = await deleteManagerAccount(supabase, id);
     return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
