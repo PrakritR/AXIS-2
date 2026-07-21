@@ -17,7 +17,11 @@ export async function createPendingAction(
   const { data, error } = await ctx.db
     .from("agent_pending_actions")
     .insert({
-      landlord_id: ctx.landlordId,
+      // `landlord_id` is `uuid not null`. A manager's landlordId is their own id;
+      // a resident's is their linked manager. A vendor (and an unlinked resident)
+      // has no landlord, so the row is anchored to the actor instead — `user_id`
+      // is what actually gates the claim below.
+      landlord_id: ctx.landlordId || ctx.userId,
       user_id: ctx.userId,
       tool_name: toolName,
       input,
@@ -37,12 +41,15 @@ async function resolvePendingAction(
   const actionId = String(id ?? "").trim();
   if (!actionId) return null;
   // Single atomic update: only a still-proposed, unexpired row owned by this
-  // landlord flips. A concurrent double-confirm loses the race and gets null.
+  // ACTOR flips. A concurrent double-confirm loses the race and gets null.
+  // `user_id` (not `landlord_id`) is the ownership key: two residents of the
+  // same manager share a landlord_id, so filtering on it alone would let one
+  // confirm the other's pending action.
   const { data, error } = await ctx.db
     .from("agent_pending_actions")
     .update({ status, resolved_at: new Date().toISOString() })
     .eq("id", actionId)
-    .eq("landlord_id", ctx.landlordId)
+    .eq("user_id", ctx.userId)
     .eq("status", "proposed")
     .gt("expires_at", new Date().toISOString())
     .select("tool_name, input");
@@ -71,6 +78,6 @@ export async function markPendingActionFailed(ctx: AgentContext, id: string): Pr
     .from("agent_pending_actions")
     .update({ status: "failed" })
     .eq("id", id)
-    .eq("landlord_id", ctx.landlordId)
+    .eq("user_id", ctx.userId)
     .eq("status", "executed");
 }

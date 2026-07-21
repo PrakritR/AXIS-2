@@ -48,6 +48,52 @@ describe("pending actions", () => {
     expect(store.agent_pending_actions![0]).toMatchObject({ status: "proposed" });
   });
 
+  it("rejects a claim from a co-tenant who shares the proposer's landlord", async () => {
+    // Two residents of the same manager share a landlord_id, so claiming on
+    // landlord_id alone would let either confirm the other's action. The claim
+    // is keyed on user_id for exactly this case.
+    const residentScope = {
+      residentUserId: "resident_a",
+      residentEmail: "a@example.com",
+      residentName: "Ada",
+      managerUserId: "manager_a",
+      propertyId: null,
+    };
+    const { ctx, store } = makeWritableCtx({}, {
+      landlordId: "manager_a",
+      userId: "resident_a",
+      residentScope,
+    });
+    const id = await createPendingAction(ctx, "report_maintenance_issue", { description: "leak" }, preview);
+    expect(store.agent_pending_actions![0]).toMatchObject({ landlord_id: "manager_a", user_id: "resident_a" });
+
+    const { ctx: coTenantCtx } = makeWritableCtx({ agent_pending_actions: store.agent_pending_actions! }, {
+      landlordId: "manager_a",
+      userId: "resident_b",
+      residentScope: { ...residentScope, residentUserId: "resident_b", residentEmail: "b@example.com" },
+    });
+    expect(await claimPendingAction(coTenantCtx, id!)).toBeNull();
+    expect(store.agent_pending_actions![0]).toMatchObject({ status: "proposed" });
+
+    // The rightful resident still can.
+    expect(await claimPendingAction(ctx, id!)).toEqual({
+      toolName: "report_maintenance_issue",
+      input: { description: "leak" },
+    });
+  });
+
+  it("anchors a landlord-less actor (a vendor) to their own user id", async () => {
+    // `landlord_id` is `uuid not null`, and a vendor has no landlord.
+    const { ctx, store } = makeWritableCtx({}, {
+      landlordId: "",
+      userId: "vendor_a",
+      vendorPortalScope: { vendorUserId: "vendor_a", email: "v@example.com" },
+    });
+    const id = await createPendingAction(ctx, "submit_vendor_invoice", { lineItems: [] }, preview);
+    expect(store.agent_pending_actions![0]).toMatchObject({ landlord_id: "vendor_a", user_id: "vendor_a" });
+    expect(await claimPendingAction(ctx, id!)).toBeTruthy();
+  });
+
   it("rejects unknown ids and expired proposals", async () => {
     const { ctx, store } = makeWritableCtx();
     expect(await claimPendingAction(ctx, "no-such-id")).toBeNull();

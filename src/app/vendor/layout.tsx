@@ -24,7 +24,7 @@ export default async function VendorLayout({ children }: { children: React.React
   const sidebarCollapsed = await getSidebarCollapsed();
 
   return (
-    <AxisAssistant managerName={profile?.full_name ?? null}>
+    <AxisAssistant managerName={profile?.full_name ?? null} endpoint="/api/agent/vendor-chat">
     <div className={PORTAL_SHELL_ROOT_CLASS}>
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />

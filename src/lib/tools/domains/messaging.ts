@@ -105,7 +105,7 @@ export const sendResidentMessageTool = defineWriteTool<ResidentMessageInput, { r
         threadId: input.threadId,
         senderUserId: ctx.userId,
         senderEmail: ctx.email,
-        fromName: "Axis Assistant",
+        fromName: "PropLane Assistant",
         text: input.body,
       });
     }
@@ -113,7 +113,7 @@ export const sendResidentMessageTool = defineWriteTool<ResidentMessageInput, { r
     const delivered = await deliverPortalInboxMessage(ctx.db, {
       senderUserId: ctx.userId,
       senderEmail: ctx.email,
-      fromName: "Axis Assistant",
+      fromName: "PropLane Assistant",
       subject: input.subject,
       text: input.body,
       toEmails: [email],
