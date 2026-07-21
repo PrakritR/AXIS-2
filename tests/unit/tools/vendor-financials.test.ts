@@ -7,12 +7,13 @@ import {
 } from "@/lib/tools/domains/vendor-financials";
 import {
   canTransitionVendorInvoice,
+  formatInvoiceMoney,
   normalizeLineItems,
   sumLineItemsCents,
   vendorInvoiceBadgeTone,
   VENDOR_INVOICE_STATUSES,
 } from "@/lib/vendor-invoices";
-import { makeManagerRowsCtx } from "./fake-agent-ctx";
+import { makeManagerRowsCtx, makeWritableCtx } from "./fake-agent-ctx";
 
 function vendorInvoiceRow(vendorUserId: string, id: string, status: string, total: number) {
   return {
@@ -197,6 +198,127 @@ describe("vendor invoice scoping", () => {
         }),
       ).rejects.toThrow(/work order not found/i);
     }
+  });
+});
+
+describe("submit_vendor_invoice preview/confirm gate", () => {
+  const vendorLink = {
+    id: "dir-1",
+    manager_user_id: "manager_a",
+    vendor_user_id: "vendor_a",
+    row_data: { id: "dir-1", name: "Vendor A" },
+  };
+  const lineItems = [
+    { description: "Labor", quantity: 3, unitAmountCents: 5000 },
+    { description: "Parts", quantity: 2, unitAmountCents: 2500 },
+  ];
+
+  it("is a previewable write tool, so it is reachable from vendor chat", () => {
+    expect(submitVendorInvoiceTool.kind).toBe("write");
+    expect(typeof submitVendorInvoiceTool.preview).toBe("function");
+  });
+
+  it("preview shows the resolved work order, line items, and server-recomputed total", async () => {
+    const ctx = makeManagerRowsCtx(
+      {
+        manager_vendor_records: [vendorLink as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number]],
+        portal_work_order_records: [
+          {
+            id: "wo-1",
+            manager_user_id: "manager_a",
+            vendor_user_id: "vendor_a",
+            row_data: {},
+          } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+        ],
+      },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    const preview = await submitVendorInvoiceTool.preview!(ctx, {
+      workOrderId: "wo-1",
+      lineItems,
+      taxCents: 1000,
+    });
+    expect(preview.kind).toBe("submit_vendor_invoice");
+    const byLabel = new Map(preview.fields.map((f) => [f.label, f.value]));
+    expect(byLabel.get("Work order")).toBe("wo-1");
+    expect(byLabel.get("Tax")).toBe(formatInvoiceMoney(1000));
+    expect(byLabel.get("Total")).toBe(formatInvoiceMoney(21000));
+    expect(byLabel.get("Bill to")).toBe("your property manager");
+    expect(byLabel.get("Labor")).toContain(formatInvoiceMoney(15000));
+  });
+
+  it("preview refuses to guess between multiple linked managers", async () => {
+    const otherLink = { ...vendorLink, id: "dir-2", manager_user_id: "manager_b" };
+    const ctx = makeManagerRowsCtx(
+      {
+        manager_vendor_records: [vendorLink, otherLink] as unknown as Parameters<
+          typeof makeManagerRowsCtx
+        >[0][string],
+      },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    await expect(submitVendorInvoiceTool.preview!(ctx, { lineItems })).rejects.toThrow(/multiple managers/i);
+  });
+
+  it("handler writes the invoice and records its id on the audit row", async () => {
+    const { ctx, store } = makeWritableCtx(
+      { manager_vendor_records: [vendorLink] },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    const result = await submitVendorInvoiceTool.handler(ctx, { lineItems, taxCents: 1000 });
+    expect(store.vendor_invoices).toHaveLength(1);
+    const invoice = store.vendor_invoices![0]!;
+    expect(invoice.total_cents).toBe(21000);
+    expect(invoice.vendor_user_id).toBe("vendor_a");
+    expect(store.audit_log).toHaveLength(1);
+    expect(store.audit_log![0]!.result_summary).toEqual({ invoiceId: invoice.id, totalCents: 21000 });
+    expect(result.reply).toContain(formatInvoiceMoney(21000));
+  });
+
+  it("handler marks the audit row as unsaved when the invoice insert fails", async () => {
+    const { ctx, store } = makeWritableCtx(
+      { manager_vendor_records: [vendorLink] },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    const db = ctx.db as { from: (table: string) => unknown };
+    const realFrom = db.from.bind(db);
+    db.from = (table: string) => {
+      if (table !== "vendor_invoices") return realFrom(table);
+      return {
+        insert: () => ({
+          select: () => ({
+            single: async () => ({ data: null, error: { message: "insert failed" } }),
+          }),
+        }),
+      };
+    };
+    await expect(submitVendorInvoiceTool.handler(ctx, { lineItems })).rejects.toThrow(/insert failed/);
+    expect(store.vendor_invoices ?? []).toHaveLength(0);
+    expect(store.audit_log).toHaveLength(1);
+    expect(store.audit_log![0]!.result_summary).toEqual({ saved: false });
+  });
+
+  it("surfaces a work-order lookup DB error instead of misreporting not-found", async () => {
+    const ctx = makeManagerRowsCtx(
+      {
+        manager_vendor_records: [vendorLink as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number]],
+      },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    const db = ctx.db as { from: (table: string) => unknown };
+    const realFrom = db.from.bind(db);
+    db.from = (table: string) => {
+      if (table !== "portal_work_order_records") return realFrom(table);
+      const failing = {
+        select: () => failing,
+        eq: () => failing,
+        maybeSingle: async () => ({ data: null, error: { message: "db unavailable" } }),
+      };
+      return failing;
+    };
+    await expect(
+      submitVendorInvoiceTool.handler(ctx, { workOrderId: "wo-1", lineItems }),
+    ).rejects.toThrow(/could not verify the work order/i);
   });
 });
 

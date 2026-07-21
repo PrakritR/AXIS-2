@@ -11,18 +11,20 @@
  * must never reach the model.
  */
 import { z } from "zod";
-import { defineTool } from "../registry";
+import { defineTool, defineWriteTool } from "../registry";
+import type { ActionPreview } from "../registry";
 import type { AgentContext } from "../context";
-import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
 import { track } from "@/lib/analytics/posthog";
 import {
+  formatInvoiceMoney,
   mapVendorInvoiceRow,
-  normalizeLineItems,
-  sumLineItemsCents,
   VENDOR_INVOICE_SELECT,
   VENDOR_INVOICE_STATUSES,
-  type VendorInvoiceLineItem,
 } from "@/lib/vendor-invoices";
+import {
+  insertVendorInvoiceRow,
+  prepareVendorInvoiceSubmission,
+} from "@/lib/vendor-invoice-submit.server";
 
 function summarizeInvoice(row: Record<string, unknown>) {
   const inv = mapVendorInvoiceRow(row);
@@ -68,123 +70,132 @@ export const listVendorInvoicesTool = defineTool({
   },
 });
 
-export const submitVendorInvoiceTool = defineTool({
+const submitVendorInvoiceSchema = z
+  .object({
+    managerUserId: z
+      .string()
+      .optional()
+      .describe(
+        "Manager to bill. May be omitted when the vendor has exactly one linked manager; with multiple links it is required.",
+      ),
+    workOrderId: z
+      .string()
+      .optional()
+      .describe(
+        "Optional work order this invoice bills for. Must be one of the vendor's own work orders for the billed manager.",
+      ),
+    invoiceNumber: z.string().optional(),
+    lineItems: z
+      .array(
+        z.object({
+          description: z.string(),
+          quantity: z.number().int().nonnegative(),
+          unitAmountCents: z.number().int().nonnegative(),
+        }),
+      )
+      .min(1)
+      .describe("Line items; each amount is quantity × unitAmountCents (cents)."),
+    taxCents: z.number().int().nonnegative().optional(),
+    memo: z.string().optional(),
+  })
+  .strict();
+
+type SubmitVendorInvoiceInput = z.infer<typeof submitVendorInvoiceSchema>;
+
+export const submitVendorInvoiceTool = defineWriteTool<
+  SubmitVendorInvoiceInput,
+  { reply: string; invoice: ReturnType<typeof summarizeInvoice> }
+>({
   name: "submit_vendor_invoice",
   description:
-    "Submit a new invoice from the signed-in vendor to one of the managers they work for. Amounts are integer cents. Requires explicit user confirmation before it runs. The total is computed server-side from the line items — never trust a model-supplied total.",
-  kind: "write",
-  inputSchema: z
-    .object({
-      managerUserId: z
-        .string()
-        .optional()
-        .describe(
-          "Manager to bill. May be omitted when the vendor has exactly one linked manager; with multiple links it is required.",
-        ),
-      workOrderId: z
-        .string()
-        .optional()
-        .describe(
-          "Optional work order this invoice bills for. Must be one of the vendor's own work orders for the billed manager.",
-        ),
-      invoiceNumber: z.string().optional(),
-      lineItems: z
-        .array(
-          z.object({
-            description: z.string(),
-            quantity: z.number().int().nonnegative(),
-            unitAmountCents: z.number().int().nonnegative(),
-          }),
-        )
-        .min(1)
-        .describe("Line items; each amount is quantity × unitAmountCents (cents)."),
-      taxCents: z.number().int().nonnegative().optional(),
-      memo: z.string().optional(),
-    })
-    .strict(),
+    "Submit a new invoice from the signed-in vendor to one of the managers they work for. Amounts are integer cents. The vendor sees exactly what will be billed and must confirm before it is submitted. The total is computed server-side from the line items — never trust a model-supplied total.",
+  inputSchema: submitVendorInvoiceSchema,
+  // Preview and handler both re-run the full shared validation
+  // (prepareVendorInvoiceSubmission) so the handler re-resolves current state
+  // at confirm time; the preview only ever shows the resolved target manager.
+  preview: async (ctx: AgentContext, input): Promise<ActionPreview> => {
+    const prepared = await prepareVendorInvoiceSubmission(ctx.db, ctx.userId, input);
+    const { data: managerProfile } = await ctx.db
+      .from("profiles")
+      .select("full_name")
+      .eq("id", prepared.target.managerUserId)
+      .maybeSingle();
+    const managerName = (managerProfile?.full_name as string | null)?.trim() || "your property manager";
+    return {
+      kind: "submit_vendor_invoice",
+      title: "Submit this invoice",
+      confirmLabel: "Submit invoice",
+      fields: [
+        { label: "Bill to", value: managerName },
+        ...(input.invoiceNumber?.trim() ? [{ label: "Invoice number", value: input.invoiceNumber.trim() }] : []),
+        ...(prepared.workOrderId ? [{ label: "Work order", value: prepared.workOrderId }] : []),
+        ...prepared.lineItems.map((item) => ({
+          label: item.description || "Line item",
+          value: `${item.quantity} × ${formatInvoiceMoney(item.unitAmountCents)} = ${formatInvoiceMoney(item.amountCents)}`,
+        })),
+        ...(prepared.taxCents > 0 ? [{ label: "Tax", value: formatInvoiceMoney(prepared.taxCents) }] : []),
+        { label: "Total", value: formatInvoiceMoney(prepared.totalCents) },
+        ...(input.memo?.trim() ? [{ label: "Memo", value: input.memo.trim() }] : []),
+      ],
+    };
+  },
   handler: async (ctx: AgentContext, input) => {
-    const links = await resolveOwnVendorRecords(ctx.db, ctx.userId);
-    if (links.length === 0) throw new Error("No linked manager found for this vendor account.");
-    const linkedManagerIds = new Set(links.map((l) => l.managerUserId));
-    if (!input.managerUserId && linkedManagerIds.size > 1) {
-      throw new Error(
-        "This vendor account is linked to multiple managers; invoice submission supports one linked manager for now.",
-      );
-    }
-    const target = input.managerUserId
-      ? links.find((l) => l.managerUserId === input.managerUserId)
-      : links[0];
-    if (!target) throw new Error("You are not linked to that manager.");
-
-    // A supplied work-order id must reference a work order owned by the billed
-    // manager and assigned to this vendor — never trust a model-supplied id to
-    // link an invoice to another manager's job.
-    const workOrderId = input.workOrderId?.trim() || null;
-    if (workOrderId) {
-      const { data: workOrder } = await ctx.db
-        .from("portal_work_order_records")
-        .select("id")
-        .eq("id", workOrderId)
-        .eq("manager_user_id", target.managerUserId)
-        .eq("vendor_user_id", ctx.userId)
-        .maybeSingle();
-      if (!workOrder) {
-        throw new Error("Work order not found — it must be one of your own work orders for this manager.");
-      }
-    }
-
-    const lineItems: VendorInvoiceLineItem[] = normalizeLineItems(input.lineItems);
-    if (lineItems.length === 0) throw new Error("At least one line item is required.");
-    const subtotalCents = sumLineItemsCents(lineItems);
-    const taxCents = Math.max(0, Math.round(input.taxCents ?? 0));
-    const totalCents = subtotalCents + taxCents;
+    const prepared = await prepareVendorInvoiceSubmission(ctx.db, ctx.userId, input);
 
     const now = new Date().toISOString();
     // Record the action before mutating state — a write tool never runs
     // without an audit row (same contract as send_rent_reminder).
-    const { error: auditError } = await ctx.db.from("audit_log").insert({
-      actor_user_id: ctx.userId,
-      landlord_id: target.managerUserId,
-      action: "submit_vendor_invoice",
-      tool_name: "submit_vendor_invoice",
-      input_summary: {
-        workOrderId,
-        lineItems: lineItems.length,
-        totalCents,
-      },
-      created_at: now,
-    });
-    if (auditError) throw new Error("Could not record the action; no invoice was submitted.");
-
-    const { data, error } = await ctx.db
-      .from("vendor_invoices")
+    const { data: auditRow, error: auditError } = await ctx.db
+      .from("audit_log")
       .insert({
-        manager_user_id: target.managerUserId,
-        vendor_user_id: ctx.userId,
-        vendor_id: target.id,
-        work_order_id: workOrderId,
-        invoice_number: input.invoiceNumber?.trim() || null,
-        line_items: lineItems,
-        subtotal_cents: subtotalCents,
-        tax_cents: taxCents,
-        total_cents: totalCents,
-        status: "submitted",
-        memo: input.memo?.trim() || null,
-        submitted_at: now,
-        updated_at: now,
+        actor_user_id: ctx.userId,
+        landlord_id: prepared.target.managerUserId,
+        action: "submit_vendor_invoice",
+        tool_name: "submit_vendor_invoice",
+        input_summary: {
+          workOrderId: prepared.workOrderId,
+          lineItems: prepared.lineItems.length,
+          totalCents: prepared.totalCents,
+        },
+        created_at: now,
       })
-      .select(VENDOR_INVOICE_SELECT)
+      .select("id")
       .single();
-    if (error) throw new Error(error.message);
+    if (auditError || !auditRow) {
+      throw new Error("Could not record the action; no invoice was submitted.");
+    }
+
+    const { data, error } = await insertVendorInvoiceRow(ctx.db, prepared, {
+      vendorUserId: ctx.userId,
+      invoiceNumber: input.invoiceNumber,
+      memo: input.memo,
+      now,
+    });
+    if (error || !data) {
+      await ctx.db
+        .from("audit_log")
+        .update({ result_summary: { saved: false } })
+        .eq("id", auditRow.id as string);
+      throw new Error(error?.message || "Could not save the invoice.");
+    }
+
+    await ctx.db
+      .from("audit_log")
+      .update({ result_summary: { invoiceId: data.id as string, totalCents: prepared.totalCents } })
+      .eq("id", auditRow.id as string);
 
     track("vendor_invoice_submitted", ctx.userId, {
       invoice_id: data.id as string,
-      total_cents: totalCents,
-      line_items: lineItems.length,
-      has_work_order: Boolean(workOrderId),
+      total_cents: prepared.totalCents,
+      line_items: prepared.lineItems.length,
+      has_work_order: Boolean(prepared.workOrderId),
     });
 
-    return { invoice: summarizeInvoice(data) };
+    const invoice = summarizeInvoice(data);
+    return {
+      reply: `Submitted invoice ${invoice.invoiceNumber || invoice.id} for ${formatInvoiceMoney(prepared.totalCents)}.`,
+      invoice,
+    };
   },
 });
 

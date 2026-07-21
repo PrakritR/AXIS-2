@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
 import { track } from "@/lib/analytics/posthog";
+import { mapVendorInvoiceRow, VENDOR_INVOICE_SELECT } from "@/lib/vendor-invoices";
 import {
-  mapVendorInvoiceRow,
-  normalizeLineItems,
-  sumLineItemsCents,
-  VENDOR_INVOICE_SELECT,
-} from "@/lib/vendor-invoices";
+  insertVendorInvoiceRow,
+  prepareVendorInvoiceSubmission,
+  VENDOR_INVOICE_SUBMIT_ERROR_STATUS,
+  VendorInvoiceSubmitError,
+} from "@/lib/vendor-invoice-submit.server";
 
 export const runtime = "nodejs";
 
@@ -65,86 +65,39 @@ export async function POST(req: Request) {
       memo?: string;
     };
 
-    // Resolve which manager this vendor may bill — never trust a client-supplied
-    // vendor_id/manager pairing. The vendor can only bill managers they're linked to.
-    const links = await resolveOwnVendorRecords(db, userId);
-    if (links.length === 0) {
-      return NextResponse.json({ error: "No linked manager found for this vendor account." }, { status: 400 });
-    }
-    // Phase 4 scope: single-manager-per-vendor billing. With multiple linked
-    // managers and no explicit choice, fail loudly rather than guessing —
-    // the manager picker lands in Phase 5.
-    const linkedManagerIds = new Set(links.map((l) => l.managerUserId));
-    if (!body.managerUserId && linkedManagerIds.size > 1) {
-      return NextResponse.json(
-        { error: "Your account is linked to multiple managers; invoice submission supports one linked manager for now. Contact support." },
-        { status: 409 },
-      );
-    }
-    const target = body.managerUserId
-      ? links.find((l) => l.managerUserId === body.managerUserId)
-      : links[0];
-    if (!target) {
-      return NextResponse.json({ error: "You are not linked to that manager." }, { status: 403 });
-    }
-
-    // A supplied work-order id must reference a work order owned by the billed
-    // manager and assigned to this vendor — never trust a client-supplied id to
-    // link an invoice to another manager's job.
-    const workOrderId = body.workOrderId?.trim() || null;
-    if (workOrderId) {
-      const { data: workOrder } = await db
-        .from("portal_work_order_records")
-        .select("id")
-        .eq("id", workOrderId)
-        .eq("manager_user_id", target.managerUserId)
-        .eq("vendor_user_id", userId)
-        .maybeSingle();
-      if (!workOrder) {
+    // Shared validation with the submit_vendor_invoice agent tool: resolves
+    // which manager this vendor may bill, verifies any supplied work order
+    // belongs to that manager and this vendor, and recomputes the total from
+    // the line items — never trusting client-supplied ids or amounts.
+    let prepared;
+    try {
+      prepared = await prepareVendorInvoiceSubmission(db, userId, body);
+    } catch (e) {
+      if (e instanceof VendorInvoiceSubmitError) {
         return NextResponse.json(
-          { error: "Work order not found — it must be one of your own work orders for this manager." },
-          { status: 400 },
+          { error: e.message },
+          { status: VENDOR_INVOICE_SUBMIT_ERROR_STATUS[e.code] },
         );
       }
+      throw e;
     }
-
-    const lineItems = normalizeLineItems(body.lineItems);
-    if (lineItems.length === 0) {
-      return NextResponse.json({ error: "At least one line item is required." }, { status: 400 });
-    }
-    const subtotalCents = sumLineItemsCents(lineItems);
-    const taxCents = Math.max(0, Math.round(Number(body.taxCents ?? 0) || 0));
-    const totalCents = subtotalCents + taxCents;
 
     const now = new Date().toISOString();
-    const { data, error } = await db
-      .from("vendor_invoices")
-      .insert({
-        manager_user_id: target.managerUserId,
-        vendor_user_id: userId,
-        vendor_id: target.id,
-        work_order_id: workOrderId,
-        invoice_number: body.invoiceNumber?.trim() || null,
-        line_items: lineItems,
-        subtotal_cents: subtotalCents,
-        tax_cents: taxCents,
-        total_cents: totalCents,
-        status: "submitted",
-        memo: body.memo?.trim() || null,
-        submitted_at: now,
-        updated_at: now,
-      })
-      .select(VENDOR_INVOICE_SELECT)
-      .single();
+    const { data, error } = await insertVendorInvoiceRow(db, prepared, {
+      vendorUserId: userId,
+      invoiceNumber: body.invoiceNumber,
+      memo: body.memo,
+      now,
+    });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     // Server-confirmed outcome — fire only after the row is written.
     track("vendor_invoice_submitted", userId, {
       invoice_id: data.id as string,
-      total_cents: totalCents,
-      line_items: lineItems.length,
-      has_work_order: Boolean(workOrderId),
+      total_cents: prepared.totalCents,
+      line_items: prepared.lineItems.length,
+      has_work_order: Boolean(prepared.workOrderId),
     });
 
     return NextResponse.json({ invoice: mapVendorInvoiceRow(data) });
