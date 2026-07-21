@@ -324,7 +324,7 @@ while the section's component still compiled and its tests still passed:
    `renderPortalSection` ever runs. Before adding a section, grep
    `next.config.ts` for its path; when deleting a section, delete its redirect
    with it.
-2. **Legacy redirects in `renderPortalSection` must be gated on `kind`.** The
+2. **Legacy redirects in `renderPortalSection` fire for every portal unless gated.** The
    rewrites near the top of `src/lib/render-portal-section.tsx` run before
    `findSection`, so an ungated `section === "..."` rule fires for *every*
    portal. Gate on the capability, not a kind allowlist — e.g. the Inbox →

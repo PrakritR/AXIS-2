@@ -746,6 +746,7 @@ export function VendorWorkOrdersPanel() {
           <div className="space-y-2 lg:hidden">
             {visible.map((row) => {
               const isExpanded = expandedId === row.id;
+              const phaseLabel = vendorWorkOrderPhaseLabel(row, bidsByWorkOrderId[row.id]);
               return (
                 <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
@@ -762,6 +763,11 @@ export function VendorWorkOrdersPanel() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <WorkOrderStatusBadge bucket={row.bucket} />
                       </div>
+                      {/* Same reason as the desktop table: the bucket badge is the
+                          manager-side state, so a job this vendor already quoted reads
+                          identically to an untouched one. This branch is what the
+                          Capacitor iOS app renders, so the label has to be here too. */}
+                      {phaseLabel ? <p className="mt-1 text-xs text-muted">{phaseLabel}</p> : null}
                     </div>
                   </button>
                   {isExpanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
