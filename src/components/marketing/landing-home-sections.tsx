@@ -61,7 +61,7 @@ function LearnSection() {
             <div className="lp-art lp-art-messages">
               <Image
                 src="/marketing/guide-messages.webp"
-                alt="PropLane Communication schedule showing automated rent-reminder messages queued to a resident"
+                alt="PropLane Communication schedule showing automated messages queued on upcoming send dates"
                 fill
                 sizes="(max-width: 700px) 100vw, 420px"
                 className="lp-art-img"
