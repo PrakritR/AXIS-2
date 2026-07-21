@@ -16,17 +16,23 @@ vi.mock("@/lib/auth/admin-role", () => ({
 
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        in: vi.fn(() => ({
-          not: vi.fn(() => ({
-            order: vi.fn(async () => ({ data: adminProfileRows, error: null })),
-          })),
-        })),
-        // resolveMappedManagerContacts path (profiles by email) — no rows needed
-        ilike: vi.fn(async () => ({ data: [], error: null })),
-      })),
-    })),
+    from: vi.fn(() => {
+      // Chainable/thenable builder. Only the admin-phone lookup filters with
+      // `.not("phone", "is", null)` — that query resolves the admin profile
+      // rows; every other lookup (shared-line roster, mapped-contact emails)
+      // resolves empty.
+      let isAdminPhoneQuery = false;
+      const q: Record<string, unknown> = {};
+      const ret = () => q;
+      for (const m of ["select", "in", "order", "limit", "ilike", "eq"]) q[m] = ret;
+      q.not = () => {
+        isAdminPhoneQuery = true;
+        return q;
+      };
+      q.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+        Promise.resolve({ data: isAdminPhoneQuery ? adminProfileRows : [], error: null }).then(res, rej);
+      return q;
+    }),
   })),
 }));
 

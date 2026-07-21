@@ -21,6 +21,12 @@ vi.mock("@/lib/supabase/service", () => ({
   }),
 }));
 
+// No admin accounts — keeps resolveAdminForwardPhone from issuing DB queries
+// that would consume queued results meant for the shared-line roster lookup.
+vi.mock("@/lib/auth/admin-role", () => ({
+  listAdminUserIds: vi.fn(async () => []),
+}));
+
 import {
   clawDefaultResidentPhoneFromEnv,
   isMappedManagerPhone,
