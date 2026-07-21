@@ -118,8 +118,37 @@ describe("claw-messenger-gateway reply debounce", () => {
     gw.bufferForDebounce({ type: "message", from: "+12065551111", text: "hi", messageId: "a1" });
     gw.bufferForDebounce({ type: "message", from: "+12065552222", text: "yo", messageId: "b1" });
 
-    gw.flushAllDebounceBuffers();
+    await gw.flushAllDebounceBuffers();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(gw.debounceBuffers.size).toBe(0);
+  });
+
+  it("flushAllDebounceBuffers resolves only after every pending delivery actually completes (graceful-shutdown safety)", async () => {
+    const gw = await loadGateway({ CLAW_MESSENGER_DEBOUNCE_SECONDS: "150" });
+    let resolveFetch: (() => void) | null = null;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = () => resolve({ ok: true, status: 200, text: async () => "{}" });
+        }),
+    );
+
+    gw.bufferForDebounce({ type: "message", from: "+12065551111", text: "hi", messageId: "a1" });
+    let settled = false;
+    const flush = gw.flushAllDebounceBuffers().then(() => {
+      settled = true;
+    });
+
+    // The delivery is in-flight (fetch called, not yet resolved) — the flush
+    // promise must NOT settle until it does. This is the exact bug a bare
+    // process.exit() right after calling flush would hit.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+
+    resolveFetch?.();
+    await flush;
+    expect(settled).toBe(true);
   });
 });

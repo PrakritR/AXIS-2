@@ -82,11 +82,14 @@ export async function forwardClawInboundToManagers(args: {
     } catch {
       /* skip */
     }
-  } else {
-    for (const m of managers) {
-      if (m.personalPhone) targets.add(m.personalPhone);
-    }
   }
+  // No `managerUserId` means the caller never resolved an owner for this
+  // conversation — do NOT fall back to broadcasting to every registered
+  // manager's personal phone. That was a harmless fallback when the roster
+  // was a 2-3 account trial allowlist; now that it's DB-driven over every
+  // real manager, it would leak one prospect's text to the whole platform's
+  // managers. Every current caller always passes `managerUserId`, so this is
+  // a defensive no-broadcast default, not a behavior change in practice.
   targets.delete(fromResident);
   targets.delete(clawLeasingAgentPhoneE164());
 

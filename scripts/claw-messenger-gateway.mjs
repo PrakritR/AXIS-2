@@ -75,8 +75,18 @@ const seen = new Set();
  * into a bulk phone-directory leak for anyone who obtains it. */
 let managerPhoneHashes = new Set();
 
-function hashPhone(from) {
+/** Mirrors normalizeE164Us's digit convention (10-digit US number → prepend
+ * country code "1") so a bare-national-format `from` still matches the
+ * server's E.164-normalized hash instead of silently missing the manager
+ * bypass and sitting in the prospect debounce. */
+function normalizedPhoneDigits(from) {
   const digits = String(from ?? "").replace(/\D/g, "");
+  if (digits.length === 10) return `1${digits}`;
+  return digits;
+}
+
+function hashPhone(from) {
+  const digits = normalizedPhoneDigits(from);
   if (!digits) return null;
   return createHmac("sha256", apiKey).update(digits).digest("hex");
 }
@@ -123,15 +133,24 @@ const debounceBuffers = new Map();
 
 function debounceKey(frame) {
   const digits = String(frame.from ?? "").replace(/\D/g, "");
-  return digits || String(frame.chatId ?? frame.from ?? "unknown");
+  if (digits) return digits;
+  if (frame.chatId) return String(frame.chatId);
+  // No phone digits AND no chatId: fall back to the message's own id (or a
+  // random-ish per-call literal) rather than a shared "unknown" bucket — two
+  // unrelated senders in this edge case must never merge into one
+  // conversation's buffer.
+  return frame.messageId ? `msg:${frame.messageId}` : `unknown:${Date.now()}:${Math.random()}`;
 }
 
+/** Returns the delivery promise so callers that need completion (graceful
+ * shutdown) can await it — the WS message handler's normal path still fires
+ * this without awaiting, which is fine there (nothing needs to block on it). */
 function flushDebounceBuffer(key) {
   const buf = debounceBuffers.get(key);
-  if (!buf) return;
+  if (!buf) return null;
   debounceBuffers.delete(key);
   if (buf.timer) clearTimeout(buf.timer);
-  if (buf.frames.length === 0) return;
+  if (buf.frames.length === 0) return null;
   const frames = buf.frames;
   const last = frames[frames.length - 1];
   const mergedText = frames
@@ -147,7 +166,7 @@ function flushDebounceBuffer(key) {
   console.log(
     `[claw-gateway] debounce flush key=${key} count=${frames.length} after ${debounceMs}ms quiet window`,
   );
-  void deliverWithRetry(merged);
+  return deliverWithRetry(merged);
 }
 
 function bufferForDebounce(frame) {
@@ -163,8 +182,12 @@ function bufferForDebounce(frame) {
   );
 }
 
-function flushAllDebounceBuffers() {
-  for (const key of [...debounceBuffers.keys()]) flushDebounceBuffer(key);
+/** Awaits every pending delivery so a caller (graceful shutdown) can be sure
+ * the HTTP POST actually left the process before it exits — `flushDebounceBuffer`
+ * alone only starts the delivery, it doesn't wait for it. */
+async function flushAllDebounceBuffers() {
+  const pending = [...debounceBuffers.keys()].map((key) => flushDebounceBuffer(key)).filter(Boolean);
+  await Promise.allSettled(pending);
 }
 
 async function forward(frame) {
@@ -280,16 +303,20 @@ if (isMainModule) {
   setInterval(refreshManagerPhones, managerPhonesRefreshMs).unref?.();
 
   // A routine redeploy/restart must not silently drop a buffered prospect
-  // reply — flush pending debounce windows immediately instead of waiting for
-  // timers that die with the process.
-  process.on("SIGTERM", () => {
-    flushAllDebounceBuffers();
+  // reply — flush pending debounce windows and WAIT for the delivery to
+  // actually leave the process before exiting. process.exit() does not drain
+  // pending I/O, so firing the flush without awaiting it (or exiting
+  // immediately after) would start the HTTP POST and then kill it mid-flight
+  // — a bounded wait (capped at 8s) is required, not just calling the flush.
+  const gracefulShutdown = async () => {
+    await Promise.race([
+      flushAllDebounceBuffers(),
+      new Promise((resolve) => setTimeout(resolve, 8_000)),
+    ]);
     process.exit(0);
-  });
-  process.on("SIGINT", () => {
-    flushAllDebounceBuffers();
-    process.exit(0);
-  });
+  };
+  process.on("SIGTERM", () => void gracefulShutdown());
+  process.on("SIGINT", () => void gracefulShutdown());
 
   connect();
 }
