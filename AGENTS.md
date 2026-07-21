@@ -158,19 +158,19 @@ A production listing/room with zero genuine uploaded photos must render
 `NoImagePlaceholder` (`src/components/ui/no-image-placeholder.tsx`) — never a
 stock/fabricated image. A prospective tenant seeing a photo on a listing card
 reasonably assumes it's a photo of that unit; showing stock photography is
-misleading. This was a real production bug (glossy Unsplash stock photos were
-substituted on Browse cards for listings the manager hadn't uploaded photos
-for yet — see `demoOnlyBrowseCardPlaceholderImage` in
-`src/lib/room-listings-catalog.ts`, which still exists but is gated behind
-`isDemoModeActive()` and must only ever be used for the `/demo` sandbox, whose
-seeded properties always carry a real (illustrated) house photo and should
-never look "broken" mid-walkthrough).
+misleading.
 
 `PropertyBrowseCard.imageUrl` (and any future listing-image field) uses an
 empty string to mean "no real photo" — render the placeholder rather than
 falling back to anything else. This applies to Browse cards
 (`resident-housing-browse.tsx`, `housing-browse-swipe-stack.tsx`) and the
-listing detail hero gallery (`listing-detail-sections.tsx`).
+listing detail hero gallery (`listing-detail-sections.tsx`). The only
+permitted stock fallback is `demoOnlyBrowseCardPlaceholderImage`
+(`src/lib/room-listings-catalog.ts`), gated behind `isDemoModeActive()` so it
+can only ever affect the `/demo` sandbox, whose seeded properties always carry
+a real (illustrated) house photo and should never look "broken"
+mid-walkthrough. Regression coverage:
+`tests/unit/property-browse-cards.test.ts`.
 
 ## Portal UI system
 

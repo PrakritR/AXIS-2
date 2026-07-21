@@ -165,7 +165,7 @@ box-shadow: var(--shadow-card);
 
 **Auth card:** max 460px, 24px radius, glass fill, deep ambient shadow + inset top highlight.
 
-**Property / room cards:** 18px radius (`rounded-2xl`), striped photo placeholder, price chip, hover uses `--shadow-card-hover`.
+**Property / room cards:** 18px radius (`rounded-2xl`), `NoImagePlaceholder` tile when no genuine photo (see "Listing images" in `AGENTS.md`), price chip, hover uses `--shadow-card-hover`.
 
 ---
 
