@@ -430,6 +430,7 @@ function ComposeModal({
 
 export type AdminInboxClientHandle = {
   openCompose: () => void;
+  emptyTrash: () => void;
 };
 
 export type AdminInboxTabCounts = {
@@ -570,6 +571,21 @@ export const AdminInboxClient = forwardRef<
     if (embeddedInCommunication) onTabCountsChange?.(folderCounts);
   }, [embeddedInCommunication, onTabCountsChange, folderCounts]);
 
+  const emptyTrash = useCallback(() => {
+    const trashCount = folderCounts.trash;
+    if (trashCount === 0) return;
+    if (!window.confirm(`Delete all ${trashCount} trash message${trashCount === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    void emptyAdminInboxTrash().then((ok) => {
+      if (ok) {
+        showToast("Trash cleared.");
+        setExpandedId(null);
+        setTick((t) => t + 1);
+      } else {
+        showToast("Could not clear trash.");
+      }
+    });
+  }, [folderCounts.trash, showToast]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -577,8 +593,9 @@ export const AdminInboxClient = forwardRef<
         setComposeInitialSchedule(false);
         setComposeOpen(true);
       },
+      emptyTrash,
     }),
-    [],
+    [emptyTrash],
   );
 
   useEffect(() => {
@@ -636,18 +653,7 @@ export const AdminInboxClient = forwardRef<
           type="button"
           variant="outline"
           className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-          onClick={() => {
-            if (!window.confirm(`Delete all ${folderCounts.trash} trash message${folderCounts.trash === 1 ? "" : "s"}? This cannot be undone.`)) return;
-            void emptyAdminInboxTrash().then((ok) => {
-              if (ok) {
-                showToast("Trash cleared.");
-                setExpandedId(null);
-                setTick((t) => t + 1);
-              } else {
-                showToast("Could not clear trash.");
-              }
-            });
-          }}
+          onClick={emptyTrash}
         >
           Delete all trash
         </Button>

@@ -75,14 +75,26 @@ export function AdminCommunication({
 
   const titleAside =
     channel === "email" ? (
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => inboxRef.current?.openCompose()}
-      >
-        New message
-      </Button>
+      <>
+        {emailTabId === "trash" && emailTabCounts.trash > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+            onClick={() => inboxRef.current?.emptyTrash()}
+          >
+            Delete all trash
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="primary"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={() => inboxRef.current?.openCompose()}
+        >
+          New message
+        </Button>
+      </>
     ) : null;
 
   return (
