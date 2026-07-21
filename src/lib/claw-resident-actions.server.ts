@@ -223,7 +223,7 @@ export async function runResidentSmsAction(args: {
     }
     case "maintenance": {
       if (!residentEmail) {
-        residentReply = `Mind using this link so we can file it under your unit?\n${residentPortalUrl("services")}`;
+        residentReply = `Mind using this link so we can file it under your unit?\n${residentPortalUrl("services_work_orders")}`;
         break;
       }
       const wo = await createWorkOrderFromResidentSms({
@@ -236,7 +236,7 @@ export async function runResidentSmsAction(args: {
       });
       residentReply =
         maintenanceWorkOrderResidentAck(wo) ||
-        `Got it — can you send a bit more detail (or use this link)?\n${residentPortalUrl("services")}`;
+        `Got it — can you send a bit more detail (or use this link)?\n${residentPortalUrl("services_work_orders")}`;
       if ("workOrderId" in wo && wo.workOrderId) {
         autoFiledNote = wo.created
           ? `PropLane auto-filed work order ${wo.workOrderId} (${wo.title}).`
