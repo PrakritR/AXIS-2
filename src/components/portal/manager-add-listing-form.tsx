@@ -2542,7 +2542,7 @@ export function ManagerAddListingForm({
             id="edit-lease"
             title="Pricing"
             description={
-              <>Set how the home is rented, monthly amounts, and move-in fees. Leave optional fields blank to hide them on the public listing.</>
+              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount — enter 0 when you do not charge it, and it stays off the public listing.</>
             }
           >
             <div className="space-y-5">

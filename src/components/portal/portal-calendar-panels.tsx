@@ -280,6 +280,10 @@ export function PortalCalendarPanels({
     storageKey ? new Set(readAvailabilityDateSetForStorageKey(storageKey)) : new Set(),
   );
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
+  // Mirrors dragSelection synchronously. mousedown and mouseup can land in the
+  // same React batch on a fast click, so finishDragSelection would otherwise
+  // read a stale `null` and the click would silently do nothing.
+  const dragSelectionRef = useRef<DragSelection | null>(null);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
@@ -806,12 +810,14 @@ export function PortalCalendarPanels({
   }, [prefillBlockModal]);
 
   const startDragSelection = useCallback((dateStr: string, weekday: number, slotIdx: number) => {
-    setDragSelection({
+    const next: DragSelection = {
       dateStr,
       weekday,
       startSlot: slotIdx,
       endSlotExclusive: slotIdx + 1,
-    });
+    };
+    dragSelectionRef.current = next;
+    setDragSelection(next);
   }, []);
 
   const extendDragSelection = useCallback((dateStr: string, slotIdx: number) => {
@@ -819,23 +825,34 @@ export function PortalCalendarPanels({
       if (!current || current.dateStr !== dateStr) return current;
       const start = Math.min(current.startSlot, slotIdx);
       const end = Math.max(current.startSlot, slotIdx) + 1;
-      return {
-        ...current,
-        startSlot: start,
-        endSlotExclusive: end,
-      };
+      const next = { ...current, startSlot: start, endSlotExclusive: end };
+      dragSelectionRef.current = next;
+      return next;
     });
   }, []);
 
   const finishDragSelection = useCallback(() => {
-    if (!dragSelection) return;
-    prefillBlockModal(dragSelection);
+    const pending = dragSelectionRef.current;
+    if (!pending) return;
+    dragSelectionRef.current = null;
+    prefillBlockModal(pending);
     setDragSelection(null);
-  }, [dragSelection, prefillBlockModal]);
+  }, [prefillBlockModal]);
 
   const cancelDragSelection = useCallback(() => {
+    dragSelectionRef.current = null;
     setDragSelection(null);
   }, []);
+
+  /** Open the recurring-block modal prefilled with a single slot (keyboard path). */
+  const openBlockModalForSlot = useCallback(
+    (dateStr: string, weekday: number, slotIdx: number) => {
+      dragSelectionRef.current = null;
+      setDragSelection(null);
+      prefillBlockModal({ dateStr, weekday, startSlot: slotIdx, endSlotExclusive: slotIdx + 1 });
+    },
+    [prefillBlockModal],
+  );
 
   const isSlotInDragSelection = useCallback(
     (dateStr: string, slotIdx: number) =>
@@ -1288,7 +1305,17 @@ export function PortalCalendarPanels({
                     if (readOnly || meeting || active || coManagerOpen) return;
                     finishDragSelection();
                   }}
-                  onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
+                  onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                    // Keyboard activation (Enter / Space) fires click without any
+                    // mousedown/mouseup, so the drag-select path never runs. Open the
+                    // block modal directly for an empty slot so the grid is usable
+                    // without a mouse.
+                    if (!readOnly && !meeting && !active && !coManagerOpen && e.detail === 0) {
+                      openBlockModalForSlot(ds, mondayBasedDayIndex(new Date(`${ds}T12:00:00`)), slotIdx);
+                      return;
+                    }
+                    openSlotDetails(ds, slotIdx, e.currentTarget, meeting);
+                  }}
                   className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
                     meeting
                       ? `${meeting.color} ring-1 ring-inset`
