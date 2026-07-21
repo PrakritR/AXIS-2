@@ -238,7 +238,10 @@ function TourFlow({
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [slotHosts, setSlotHosts] = useState<Record<string, PropertyManagerEntry[]>>({});
-  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  // Starts true: an availability fetch always runs on mount, and it is deferred
+  // behind a microtask. Starting false made the first paint claim "No tour
+  // windows are published" before the request had even been sent.
+  const [availabilityLoading, setAvailabilityLoading] = useState(true);
   const [bookingTour, setBookingTour] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 

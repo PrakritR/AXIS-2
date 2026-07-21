@@ -106,11 +106,23 @@ function YesNoPills({
 }) {
   return (
     <div data-wizard-field={fieldKey} className={wizardSectionErrorClass(Boolean(error))}>
+      {/* aria-pressed is what tells a screen reader which pill is chosen — the
+          active styling alone is invisible to assistive tech. */}
       <div className={pillWrap} role="group" aria-label={name}>
-        <button type="button" className={value === "yes" ? pillActive : pillIdle} onClick={() => onChange("yes")}>
+        <button
+          type="button"
+          aria-pressed={value === "yes"}
+          className={value === "yes" ? pillActive : pillIdle}
+          onClick={() => onChange("yes")}
+        >
           Yes
         </button>
-        <button type="button" className={value === "no" ? pillActive : pillIdle} onClick={() => onChange("no")}>
+        <button
+          type="button"
+          aria-pressed={value === "no"}
+          className={value === "no" ? pillActive : pillIdle}
+          onClick={() => onChange("no")}
+        >
           No
         </button>
       </div>
