@@ -1243,6 +1243,22 @@ export function ensurePendingApplicationFeeCharge(input: {
 }
 
 /**
+ * "The Pioneer" + "12A" -> "The Pioneer · 12A", but never "The Pioneer · 12A · 12A".
+ * Callers pass the property name and unit separately, yet some sources already
+ * fold the unit into the name, which produced a doubled unit on every surface
+ * that echoes the charge (resident Payments, manager Payments, receipts).
+ */
+export function joinPropertyAndUnitLabel(propertyLabel: string, unit: string): string {
+  const label = (propertyLabel ?? "").trim();
+  const u = (unit ?? "").trim();
+  if (!u) return label;
+  if (!label) return u;
+  const tail = label.split("·").pop()?.trim().toLowerCase();
+  if (tail === u.toLowerCase()) return label;
+  return `${label} · ${u}`;
+}
+
+/**
  * Bill a resident for work order cost (pass-through). Creates a pending line on manager Payments and resident Payments.
  */
 export function recordWorkOrderResidentCharge(input: {
@@ -1280,7 +1296,7 @@ export function recordWorkOrderResidentCharge(input: {
     residentName: input.residentName.trim() || "Resident",
     residentUserId: null,
     propertyId: input.propertyId?.trim() || `workorder:${input.workOrderId}`,
-    propertyLabel: `${input.propertyLabel} · ${input.unit}`,
+    propertyLabel: joinPropertyAndUnitLabel(input.propertyLabel, input.unit),
     managerUserId: input.managerUserId,
     kind: "work_order_charge",
     title: `Work order · ${input.workOrderTitle}`,

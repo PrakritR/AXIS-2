@@ -318,6 +318,13 @@ export async function renderPortalSection(
     );
   }
 
+  // Resident feedback has no sidebar section of its own — it lives in Settings.
+  // This must run BEFORE the findSection lookup below, which would otherwise
+  // 404 the route and leave the redirect unreachable.
+  if (kind === "resident" && section === "bugs-feedback") {
+    redirect(`${def.basePath}/profile`);
+  }
+
   const meta = findSection(def, section);
   if (!meta) notFound();
 
@@ -615,10 +622,6 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "profile") {
     if (tabParts?.length) notFound();
     return <ResidentProfilePanel />;
-  }
-
-  if (kind === "resident" && section === "bugs-feedback") {
-    redirect(`${def.basePath}/profile`);
   }
 
   if (kind === "resident" && section === "payments") {
