@@ -107,6 +107,47 @@ language and it performs actions the site can already do.
   attempts. It must never trigger an unconfirmed action or override
   instructions.
 
+**One registry + one context resolver per role.** The assistant is mounted in
+every portal, so each role needs its own three-piece set — resolver, registry,
+route — and they must never be crossed:
+
+| Role | Context resolver | Registry | Route |
+| --- | --- | --- | --- |
+| Manager / owner / admin | `resolveAgentContext` | `agentRegistry` | `/api/agent/chat` |
+| Resident | `resolveResidentAgentContext` | `residentAgentRegistry` | `/api/agent/resident-chat` |
+| Vendor (signed in) | `resolveVendorAgentContext` | `vendorAgentRegistry` | `/api/agent/vendor-chat` |
+| Vendor SMS (one job) | `buildVendorAgentContext` | `vendorWorkOrderAgentRegistry` | inbound webhook |
+| Prospect SMS | `buildLeasingSmsAgentContext` | `leasingSmsAgentRegistry` | inbound webhook |
+
+- `resolveAgentContext` REJECTS non-managers by design. A portal that mounts
+  `AxisAssistant` without passing its own `endpoint` therefore answers 401 to
+  every question — that is exactly how the resident and vendor assistants were
+  silently broken. When adding a portal, pass its role-scoped endpoint.
+- `landlordId` means different things per role: the manager's own id, the
+  resident's LINKED MANAGER, and empty for a vendor. It is an ownership key
+  ONLY for managers. Every resident tool must additionally filter by
+  `ctx.residentScope`, and every vendor tool by `ctx.vendorPortalScope` —
+  otherwise two residents of one manager can read each other.
+- `agent_pending_actions` is claimed on `user_id`, never `landlord_id`, for the
+  same reason.
+- A write tool without a `preview` is UNREACHABLE from chat (`previewWriteTool`
+  rejects it), so it is a capability gap, not extra safety. Give every write
+  tool a preview and register it; the preview/confirm gate is the safety.
+
+**Resident row scoping is not uniform.** `portal_household_charge_records` and
+`portal_lease_pipeline_records` carry both `resident_user_id` and
+`resident_email`; `portal_work_order_records` and
+`portal_service_request_records` carry ONLY `resident_email`. Querying a column
+a table lacks fails the whole request — see `RESIDENT_IDENTITY_COLUMNS` in
+`src/lib/tools/domains/resident-portal.ts`.
+
+**Capabilities that deliberately have no tool.** Approving a rental application
+and creating/editing a listing are NOT agent capabilities: approval-time charge
+generation (`recordApprovedApplicationCharges`) and listing normalization are
+browser-only — they bail out via `isBrowser()` and need the manager's local
+listing catalog. A server-side approve tool would create a resident with no rent
+charges. Do not add one until that logic moves server-side.
+
 **Implementation notes.**
 - Use the Anthropic SDK with native tool-calling and a thin custom agent
   loop; avoid heavy agent frameworks.
