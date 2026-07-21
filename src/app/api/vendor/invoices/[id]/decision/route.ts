@@ -109,9 +109,11 @@ export async function PATCH(
       );
     }
 
+    let responseData = data;
     if (status === "approved") {
       try {
-        await createBillFromVendorInvoice(auth.db, auth.userId, id);
+        const bill = await createBillFromVendorInvoice(auth.db, auth.userId, id);
+        responseData = { ...data, bill_id: bill.id };
       } catch (error) {
         console.error("Failed to create bill for approved vendor invoice", error);
         return NextResponse.json({ error: "Failed to create bill for approved invoice." }, { status: 500 });
@@ -128,7 +130,7 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json({ invoice: mapVendorInvoiceRow(data) });
+    return NextResponse.json({ invoice: mapVendorInvoiceRow(responseData) });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to update invoice.";
     return NextResponse.json({ error: message }, { status: 500 });

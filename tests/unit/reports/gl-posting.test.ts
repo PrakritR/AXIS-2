@@ -6,16 +6,11 @@ function mockGlDb() {
   const lineInserts: Record<string, unknown>[] = [];
 
   const journalMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-  const journalInsert = vi.fn().mockImplementation((row: Record<string, unknown>) => ({
-    select: vi.fn().mockReturnValue({
-      single: vi.fn().mockResolvedValue({
-        data: { id: `je-${journalInserts.length + 1}` },
-        error: null,
-      }),
-    }),
-    then: undefined,
-    // track insert payload via mock side effect below
+  const journalInsertSingle = vi.fn().mockImplementation(async () => ({
+    data: { id: `je-${journalInserts.length}` },
+    error: null,
   }));
+  const lineMaybeSingle = vi.fn().mockResolvedValue({ data: { id: "existing-line" }, error: null });
 
   const from = vi.fn((table: string) => {
     if (table === "gl_journal_entries") {
@@ -28,10 +23,7 @@ function mockGlDb() {
           journalInserts.push(row);
           return {
             select: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: { id: `je-${journalInserts.length}` },
-                error: null,
-              }),
+              single: journalInsertSingle,
             }),
           };
         }),
@@ -39,7 +31,15 @@ function mockGlDb() {
       };
     }
     if (table === "gl_journal_lines") {
+      const lineSelect = {
+        eq: vi.fn(),
+        limit: vi.fn(),
+        maybeSingle: lineMaybeSingle,
+      };
+      lineSelect.eq.mockReturnValue(lineSelect);
+      lineSelect.limit.mockReturnValue(lineSelect);
       return {
+        select: vi.fn().mockReturnValue(lineSelect),
         insert: vi.fn().mockImplementation((rows: Record<string, unknown>[]) => {
           lineInserts.push(...rows);
           return Promise.resolve({ error: null });
@@ -54,7 +54,14 @@ function mockGlDb() {
     return {};
   });
 
-  return { db: { from } as never, journalInserts, lineInserts, journalMaybeSingle };
+  return {
+    db: { from } as never,
+    journalInserts,
+    lineInserts,
+    journalMaybeSingle,
+    journalInsertSingle,
+    lineMaybeSingle,
+  };
 }
 
 describe("gl-posting", () => {
@@ -108,5 +115,41 @@ describe("gl-posting", () => {
 
     expect(id).toBe("existing");
     expect(journalInserts).toHaveLength(0);
+  });
+
+  it("retries when a concurrent header never finishes posting lines", async () => {
+    vi.useFakeTimers();
+    try {
+      const {
+        db,
+        journalInserts,
+        lineInserts,
+        journalMaybeSingle,
+        journalInsertSingle,
+        lineMaybeSingle,
+      } = mockGlDb();
+      journalMaybeSingle
+        .mockResolvedValueOnce({ data: null, error: null })
+        .mockResolvedValueOnce({ data: { id: "concurrent" }, error: null });
+      journalInsertSingle.mockResolvedValueOnce({
+        data: null,
+        error: { message: "duplicate key" },
+      });
+      lineMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+      const posting = postGlChargeEntry(db, {
+        managerUserId: "mgr-1",
+        sourceChargeId: "charge-race",
+        categoryCode: "rent_income",
+        amountCents: 100_000,
+        entryDate: "2026-01-15",
+      });
+      await vi.advanceTimersByTimeAsync(250);
+      await expect(posting).resolves.toBe("je-2");
+      expect(journalInserts).toHaveLength(2);
+      expect(lineInserts).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

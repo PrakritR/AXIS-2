@@ -71,11 +71,47 @@ async function journalEntryExists(
   return data?.id ? String(data.id) : null;
 }
 
-async function insertJournalEntry(db: SupabaseClient, input: PostJournalInput): Promise<string> {
+async function waitForJournalEntryLines(db: SupabaseClient, journalEntryId: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { data, error } = await db
+      .from("gl_journal_lines")
+      .select("id")
+      .eq("journal_entry_id", journalEntryId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`GL journal lines lookup failed: ${error.message}`);
+    if (data?.id) return true;
+    if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+async function retryIncompleteJournalEntry(
+  db: SupabaseClient,
+  input: PostJournalInput,
+  journalEntryId: string,
+  recoveryAttempt: number,
+): Promise<string> {
+  if (recoveryAttempt > 0) {
+    throw new Error("GL journal exists without lines after recovery; retry posting.");
+  }
+  const { error } = await db.from("gl_journal_entries").delete().eq("id", journalEntryId);
+  if (error) throw new Error(`Incomplete GL journal cleanup failed: ${error.message}`);
+  return insertJournalEntry(db, input, recoveryAttempt + 1);
+}
+
+async function insertJournalEntry(
+  db: SupabaseClient,
+  input: PostJournalInput,
+  recoveryAttempt = 0,
+): Promise<string> {
   assertBalanced(input.lines);
 
   const existingId = await journalEntryExists(db, input.managerUserId, input.sourceType, input.sourceId);
-  if (existingId) return existingId;
+  if (existingId) {
+    if (await waitForJournalEntryLines(db, existingId)) return existingId;
+    return retryIncompleteJournalEntry(db, input, existingId, recoveryAttempt);
+  }
 
   const now = new Date().toISOString();
   const { data: entry, error: entryError } = await db
@@ -99,7 +135,10 @@ async function insertJournalEntry(db: SupabaseClient, input: PostJournalInput): 
       input.sourceType,
       input.sourceId,
     );
-    if (concurrentEntryId) return concurrentEntryId;
+    if (concurrentEntryId) {
+      if (await waitForJournalEntryLines(db, concurrentEntryId)) return concurrentEntryId;
+      return retryIncompleteJournalEntry(db, input, concurrentEntryId, recoveryAttempt);
+    }
     throw new Error(`GL journal insert failed: ${entryError?.message ?? "unknown"}`);
   }
 

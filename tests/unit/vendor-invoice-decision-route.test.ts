@@ -70,6 +70,7 @@ vi.mock("@/lib/manager-bills.server", () => ({
   createBillFromVendorInvoice: async (_db: unknown, _managerId: string, invoiceId: string) => {
     state.billsCreated.push(invoiceId);
     if (state.billCreationError) throw state.billCreationError;
+    return { id: "bill-1" };
   },
 }));
 
@@ -133,6 +134,7 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
     expect(res.status).toBe(200);
     expect(json.invoice.status).toBe("approved");
     expect(json.invoice.decisionNote).toBe("Looks good");
+    expect(json.invoice.billId).toBe("bill-1");
     expect(state.events).toEqual([
       { event: "vendor_invoice_approved", userId: VENDOR_ID, props: { invoice_id: "inv-1", status: "approved", total_cents: 10000 } },
     ]);
