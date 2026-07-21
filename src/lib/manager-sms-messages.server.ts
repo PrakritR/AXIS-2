@@ -581,7 +581,7 @@ export async function fetchAdminSharedLineSmsConversation(
     .from("inbound_sms_log")
     .select("id, from_phone, to_phone, body, message_sid, created_at")
     .in("manager_user_id", managerIds)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(1000);
   for (const row of inbound ?? []) {
     addMessage({
@@ -600,7 +600,7 @@ export async function fetchAdminSharedLineSmsConversation(
     .from("manager_sms_messages")
     .select("id, body, from_phone, to_phone, message_sid, source, created_at, direction")
     .in("manager_user_id", managerIds)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(1000);
   for (const row of outbound ?? []) {
     addMessage({

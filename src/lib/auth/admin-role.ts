@@ -50,7 +50,7 @@ export async function userHoldsAdminRole(db: SupabaseClient, userId: string): Pr
 export async function listAdminUserIds(db: SupabaseClient): Promise<string[]> {
   const [roleRes, legacyRes, primaryRes] = await Promise.all([
     db.from("profile_roles").select("user_id").eq("role", "admin"),
-    db.from("profiles").select("id").eq("role", "admin"),
+    db.from("profiles").select("id").ilike("role", "admin"),
     db.from("profiles").select("id").ilike("email", PRIMARY_ADMIN_EMAIL),
   ]);
 
