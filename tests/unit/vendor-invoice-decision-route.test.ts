@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Route-level coverage for PATCH /api/vendor/invoices/[id]/decision: the
  * manager decision endpoint must enforce the submitted → approved/rejected →
- * scheduled → paid status flow (409 on anything else, including repeats, so
- * analytics never double-fire), preserve the decision note when a later
+ * scheduled → paid status flow (repeated approval only repairs bill/GL state
+ * without repeating analytics), preserve the decision note when a later
  * transition omits it, and detect a concurrent status change between read and
  * update. Runs the real handler against an in-memory vendor_invoices fake.
  */
@@ -52,6 +52,7 @@ const state = vi.hoisted(() => ({
   auth: null as { db: unknown; userId: string } | null,
   events: [] as { event: string; userId: string; props: Row }[],
   billsCreated: [] as string[],
+  billCreationError: null as Error | null,
 }));
 
 vi.mock("@/lib/reports/auth", () => ({
@@ -68,6 +69,7 @@ vi.mock("@/lib/analytics/posthog", () => ({
 vi.mock("@/lib/manager-bills.server", () => ({
   createBillFromVendorInvoice: async (_db: unknown, _managerId: string, invoiceId: string) => {
     state.billsCreated.push(invoiceId);
+    if (state.billCreationError) throw state.billCreationError;
   },
 }));
 
@@ -117,6 +119,7 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
   beforeEach(() => {
     state.events = [];
     state.billsCreated = [];
+    state.billCreationError = null;
     rows = [];
     state.auth = { db: makeFakeDb(rows), userId: MANAGER_ID };
     vi.resetModules();
@@ -136,6 +139,26 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
     expect(state.billsCreated).toEqual(["inv-1"]);
   });
 
+  it("returns an error when approval cannot create its bill", async () => {
+    rows.push(invoiceRow("submitted"));
+    state.billCreationError = new Error("Bill create failed");
+
+    const res = await patchDecision({ status: "approved" });
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(json.error).toBe("Failed to create bill for approved invoice.");
+    expect(rows[0]!.status).toBe("approved");
+    expect(state.events).toEqual([]);
+    expect(state.billsCreated).toEqual(["inv-1"]);
+
+    state.billCreationError = null;
+    const retry = await patchDecision({ status: "approved" });
+    expect(retry.status).toBe(200);
+    expect(state.events).toEqual([]);
+    expect(state.billsCreated).toEqual(["inv-1", "inv-1"]);
+  });
+
   it("refuses to mark a submitted invoice paid (409) and leaves the row untouched", async () => {
     rows.push(invoiceRow("submitted"));
     const res = await patchDecision({ status: "paid" });
@@ -149,13 +172,22 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
     expect(state.billsCreated).toEqual([]);
   });
 
-  it("treats a repeated decision as a non-transition so analytics cannot double-fire", async () => {
-    rows.push(invoiceRow("approved"));
+  it("idempotently verifies the linked bill on repeated approval without repeating analytics", async () => {
+    rows.push(invoiceRow("approved", { bill_id: "bill-1" }));
     const res = await patchDecision({ status: "approved" });
     console.log("re-approve approved →", res.status, JSON.stringify(await res.clone().json()));
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
     expect(state.events).toEqual([]);
-    expect(state.billsCreated).toEqual([]);
+    expect(state.billsCreated).toEqual(["inv-1"]);
+  });
+
+  it("repairs an approved invoice that has no linked bill without repeating analytics", async () => {
+    rows.push(invoiceRow("approved"));
+    const res = await patchDecision({ status: "approved" });
+
+    expect(res.status).toBe(200);
+    expect(state.events).toEqual([]);
+    expect(state.billsCreated).toEqual(["inv-1"]);
   });
 
   it("schedules an approved invoice without firing any approval event", async () => {

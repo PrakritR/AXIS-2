@@ -42,9 +42,10 @@ as the bids route. Manager: `PATCH /api/vendor/invoices/[id]/decision`
 The decision route enforces the status flow via
 `canTransitionVendorInvoice` (`src/lib/vendor-invoices.ts`): `submitted →
 approved/rejected`, `approved → scheduled/paid`, `scheduled → paid`; `paid` and
-`rejected` are terminal, and a repeat of the current status is a 409 (so
-analytics never double-fire). A transition that omits `decisionNote` preserves
-the note recorded by the earlier decision rather than clearing it.
+`rejected` are terminal. A repeated approval idempotently repairs its bill/GL
+without firing analytics again; other repeated statuses return 409. A transition
+that omits `decisionNote` preserves the note recorded by the earlier decision
+rather than clearing it.
 Shared types/helpers live in `src/lib/vendor-invoices.ts` (incl.
 `vendorInvoiceBadgeTone`: submitted→pending, approved/scheduled→approved,
 paid→confirmed, rejected→overdue — the four shared `Badge` tones, no fifth).

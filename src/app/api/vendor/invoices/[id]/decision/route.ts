@@ -41,7 +41,7 @@ export async function PATCH(
     // Scope strictly to invoices billed to this manager — never trust the id alone.
     const { data: existing, error: readError } = await auth.db
       .from("vendor_invoices")
-      .select("id, status, vendor_user_id, total_cents")
+      .select("id, status, vendor_user_id, total_cents, bill_id")
       .eq("id", id)
       .eq("manager_user_id", auth.userId)
       .maybeSingle();
@@ -49,11 +49,36 @@ export async function PATCH(
     if (!existing) return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
 
     const currentStatus = existing.status as VendorInvoiceStatus;
-    if (!canTransitionVendorInvoice(currentStatus, status)) {
+    const isApprovalRepair = currentStatus === "approved" && status === "approved";
+    if (!canTransitionVendorInvoice(currentStatus, status) && !isApprovalRepair) {
       return NextResponse.json(
         { error: `Invoice is ${currentStatus}; it cannot be marked ${status}.` },
         { status: 409 },
       );
+    }
+
+    if (currentStatus === "approved") {
+      try {
+        await createBillFromVendorInvoice(auth.db, auth.userId, id);
+      } catch (error) {
+        console.error("Failed to repair approved vendor invoice bill", error);
+        return NextResponse.json({ error: "Failed to create bill for approved invoice." }, { status: 500 });
+      }
+
+      if (isApprovalRepair) {
+        const { data: repaired, error: repairReadError } = await auth.db
+          .from("vendor_invoices")
+          .select(VENDOR_INVOICE_SELECT)
+          .eq("id", id)
+          .eq("manager_user_id", auth.userId)
+          .maybeSingle();
+        if (repairReadError) {
+          console.error("Failed to reload repaired vendor invoice", repairReadError);
+          return NextResponse.json({ error: "Failed to reload approved invoice." }, { status: 500 });
+        }
+        if (!repaired) return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
+        return NextResponse.json({ invoice: mapVendorInvoiceRow(repaired) });
+      }
     }
 
     const now = new Date().toISOString();
@@ -84,6 +109,15 @@ export async function PATCH(
       );
     }
 
+    if (status === "approved") {
+      try {
+        await createBillFromVendorInvoice(auth.db, auth.userId, id);
+      } catch (error) {
+        console.error("Failed to create bill for approved vendor invoice", error);
+        return NextResponse.json({ error: "Failed to create bill for approved invoice." }, { status: 500 });
+      }
+    }
+
     const event = MANAGER_DECISIONS[status];
     if (event) {
       // Attribute the event to the vendor whose invoice moved (server-confirmed).
@@ -92,10 +126,6 @@ export async function PATCH(
         status,
         total_cents: existing.total_cents as number,
       });
-    }
-
-    if (status === "approved") {
-      await createBillFromVendorInvoice(auth.db, auth.userId, id).catch(() => undefined);
     }
 
     return NextResponse.json({ invoice: mapVendorInvoiceRow(data) });

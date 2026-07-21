@@ -93,6 +93,13 @@ async function insertJournalEntry(db: SupabaseClient, input: PostJournalInput): 
     .single();
 
   if (entryError || !entry?.id) {
+    const concurrentEntryId = await journalEntryExists(
+      db,
+      input.managerUserId,
+      input.sourceType,
+      input.sourceId,
+    );
+    if (concurrentEntryId) return concurrentEntryId;
     throw new Error(`GL journal insert failed: ${entryError?.message ?? "unknown"}`);
   }
 

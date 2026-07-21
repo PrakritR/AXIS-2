@@ -158,7 +158,7 @@ export async function createBillFromVendorInvoice(
   db: SupabaseClient,
   managerUserId: string,
   invoiceId: string,
-): Promise<ManagerBill | null> {
+): Promise<ManagerBill> {
   const { data: invoice, error } = await db
     .from("vendor_invoices")
     .select("id, vendor_id, work_order_id, total_cents, memo, bill_id, status")
@@ -166,17 +166,70 @@ export async function createBillFromVendorInvoice(
     .eq("manager_user_id", managerUserId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!invoice || invoice.bill_id || invoice.status !== "approved") return null;
+  if (!invoice) throw new Error("Vendor invoice not found");
+  if (invoice.status !== "approved") throw new Error("Vendor invoice must be approved before bill creation");
 
-  const bill = await createManagerBill(db, {
-    managerUserId,
-    description: String(invoice.memo ?? "Vendor invoice").trim() || "Vendor invoice",
-    amountCents: Number(invoice.total_cents),
-    vendorId: String(invoice.vendor_id),
-    workOrderId: invoice.work_order_id ? String(invoice.work_order_id) : null,
-    vendorInvoiceId: invoiceId,
-    status: "approved",
-  });
+  let bill = invoice.bill_id ? await loadBill(db, managerUserId, String(invoice.bill_id)) : null;
+  if (invoice.bill_id && !bill) throw new Error("Linked manager bill not found");
+
+  if (!bill) {
+    const loadExistingBill = async () => {
+      const { data, error: existingBillError } = await db
+        .from("manager_bills")
+        .select(MANAGER_BILL_SELECT)
+        .eq("manager_user_id", managerUserId)
+        .eq("vendor_invoice_id", invoiceId)
+        .limit(1)
+        .maybeSingle();
+      if (existingBillError) throw new Error(existingBillError.message);
+      return data ? mapManagerBillRow(data as Record<string, unknown>) : null;
+    };
+
+    bill = await loadExistingBill();
+    if (!bill) {
+      try {
+        bill = await createManagerBill(db, {
+          managerUserId,
+          description: String(invoice.memo ?? "Vendor invoice").trim() || "Vendor invoice",
+          amountCents: Number(invoice.total_cents),
+          vendorId: String(invoice.vendor_id),
+          workOrderId: invoice.work_order_id ? String(invoice.work_order_id) : null,
+          vendorInvoiceId: invoiceId,
+          status: "approved",
+        });
+      } catch (createError) {
+        bill = await loadExistingBill();
+        if (!bill) throw createError;
+      }
+    }
+  }
+
+  if (!bill) {
+    throw new Error("Vendor invoice bill creation failed");
+  }
+
+  if (!invoice.bill_id) {
+    const { data: linkedInvoice, error: linkError } = await db
+      .from("vendor_invoices")
+      .update({ bill_id: bill.id, updated_at: new Date().toISOString() })
+      .eq("id", invoiceId)
+      .eq("manager_user_id", managerUserId)
+      .eq("status", "approved")
+      .is("bill_id", null)
+      .select("id")
+      .maybeSingle();
+    if (linkError || !linkedInvoice) {
+      const { data: currentInvoice, error: currentInvoiceError } = await db
+        .from("vendor_invoices")
+        .select("bill_id")
+        .eq("id", invoiceId)
+        .eq("manager_user_id", managerUserId)
+        .maybeSingle();
+      if (currentInvoiceError || currentInvoice?.bill_id !== bill.id) {
+        throw new Error(linkError?.message ?? currentInvoiceError?.message ?? "Vendor invoice bill link failed");
+      }
+    }
+  }
 
   // This bill is created already-approved (skipping approveManagerBill), so post
   // the approval GL entry (DR expense / CR AP) here — otherwise payManagerBill's
@@ -193,6 +246,5 @@ export async function createBillFromVendorInvoice(
     memo: bill.description,
   });
 
-  await db.from("vendor_invoices").update({ bill_id: bill.id, updated_at: new Date().toISOString() }).eq("id", invoiceId);
   return bill;
 }
