@@ -8,7 +8,7 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline" | "metal
 
 const variants: Record<Variant, string> = {
   primary:
-    "text-white shadow-[0_8px_20px_-8px_rgba(47,107,255,0.6)] hover:brightness-110 active:scale-[0.99]",
+    "text-white shadow-[0_8px_20px_-8px_color-mix(in_srgb,var(--btn-primary)_60%,transparent)] hover:brightness-110 active:scale-[0.99]",
   metallic:
     "text-[#08142e] shadow-[0_6px_16px_-6px_rgba(0,0,0,0.25)] hover:brightness-105 active:scale-[0.99]",
   secondary:

@@ -888,6 +888,10 @@ export function ResidentPaymentsPanel({
   }, []);
 
   const loadLedgerStatement = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setReportLoading(false);
+      return;
+    }
     setReportLoading(true);
     try {
       const params = new URLSearchParams({ from: statementRange.from, to: statementRange.to });
