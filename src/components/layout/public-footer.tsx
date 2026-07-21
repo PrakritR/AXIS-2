@@ -9,15 +9,14 @@ const FOOTER_COLUMNS: { heading: string; links: { href: string; label: string }[
       { href: "/why-proplane", label: "Why PropLane" },
       { href: "/pricing", label: "Pricing" },
       { href: "/docs", label: "Docs" },
-      { href: "/reviews", label: "Reviews" },
       { href: "/about", label: "About us" },
     ],
   },
   {
     heading: "Who it's for",
     links: [
+      { href: "/partner", label: "Managers" },
       { href: RESIDENT_BROWSE_PATH, label: "Residents" },
-      { href: "/pricing", label: "Property managers" },
       { href: "/vendors", label: "Vendors" },
     ],
   },

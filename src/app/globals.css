@@ -1,83 +1,135 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/*
+ * PropLane brand palette — four families only:
+ *   purple · blue · white · black
+ * Greys for text/borders are mixes of black + white (no cream/beige/terracotta).
+ * Semantic status (red/amber/green) stays separate from brand accents.
+ */
+:root {
+  --pl-purple: #7c7ff2;
+  --pl-purple-soft: #9a9cf5;
+  --pl-purple-deep: #5b5fd4;
+  --pl-blue: #2f6bff;
+  --pl-blue-soft: #5a8cff;
+  --pl-blue-deep: #1e4fd6;
+  --pl-black: #08090b;
+  --pl-white: #ffffff;
+  /* Cool off-white (not cream) for large light planes */
+  --pl-white-muted: #f7f8fa;
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  /* Linear-light: white surfaces + blue accent, flat + hairline. */
-  --background: #fcfcfd;
-  --background-solid: #fcfcfd;
-  --foreground: #17181a;
-  --muted: #5c6068;
-  --border: rgba(17, 20, 24, 0.09);
-  --card: #ffffff;
-  --primary: #2f6bff;
-  --primary-alt: #5a8cff;
-  --primary-foreground: #ffffff;
-  --accent: rgba(47, 107, 255, 0.07);
-  --auth-input-bg: #ffffff;
+  /* Light: white/off-white + blue brand only (no purple). */
+  --pl-surface: #fcfcfd;
+  --pl-surface-raised: #ffffff;
+  --pl-surface-muted: #f4f5f8;
+  --pl-ink: #17181a;
+  --pl-muted-fg: #5c6068;
+  --pl-line: rgba(8, 9, 11, 0.09);
+  --pl-line-strong: rgba(8, 9, 11, 0.14);
+  --pl-accent: var(--pl-blue);
+  --pl-accent-soft: rgba(47, 107, 255, 0.08);
+  --pl-accent-soft-hex: var(--pl-blue-soft);
+  --pl-accent-deep: var(--pl-blue-deep);
+  --pl-ai: var(--pl-blue);
+  --pl-brand: var(--pl-blue);
+  --pl-brand-soft: var(--pl-blue-soft);
+  --pl-brand-deep: var(--pl-blue-deep);
+
+  --background: var(--pl-surface);
+  --background-solid: var(--pl-surface);
+  --foreground: var(--pl-ink);
+  --muted: var(--pl-muted-fg);
+  --border: var(--pl-line);
+  --card: var(--pl-surface-raised);
+  --primary: var(--pl-blue);
+  --primary-alt: var(--pl-blue-soft);
+  --primary-foreground: var(--pl-white);
+  --accent: var(--pl-accent-soft);
+  --auth-input-bg: var(--pl-white);
   --ring: rgba(47, 107, 255, 0.35);
   --danger: #dc2626;
-  --announce: #17181a;
+  --announce: var(--pl-ink);
   --steel-light: #bcd4ff;
-  --cobalt-deep: #1e4fd6;
-  --sky: #5a8cff;
-  --glass-fill: #ffffff;
-  --glass-border: rgba(17, 20, 24, 0.09);
+  --cobalt-deep: var(--pl-blue-deep);
+  --sky: var(--pl-blue-soft);
+  --glass-fill: var(--pl-white);
+  --glass-border: var(--pl-line);
   --portal-surface-dark: #0b1120;
-  --portal-surface-light: #f7f8fa;
+  --portal-surface-light: var(--pl-white-muted);
   --status-pending-fg: #b45309;
   --status-pending-bg: #fdf0d5;
-  --status-approved-fg: #2f6bff;
+  --status-approved-fg: var(--pl-blue);
   --status-approved-bg: #e6edff;
   --status-confirmed-fg: #15803d;
   --status-confirmed-bg: #dcfce7;
   --status-overdue-fg: #dc2626;
   --status-overdue-bg: #fde4e2;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
-  --shadow-card-hover: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.06);
-  --btn-metallic: #ffffff;
-  --btn-primary: #2f6bff;
-  --popover: #ffffff;
-  --popover-foreground: #17181a;
-  --accent-foreground: #17181a;
-  --input: rgba(17, 20, 24, 0.12);
-  --secondary: #f4f5f7;
-  --secondary-foreground: #17181a;
+  --shadow-sm: 0 1px 2px rgba(8, 9, 11, 0.04);
+  --shadow-card: 0 1px 2px rgba(8, 9, 11, 0.04), 0 1px 3px rgba(8, 9, 11, 0.06);
+  --shadow-card-hover: 0 4px 12px -2px rgba(8, 9, 11, 0.08), 0 2px 6px -2px rgba(8, 9, 11, 0.06);
+  --btn-metallic: var(--pl-white);
+  --btn-primary: var(--pl-blue);
+  --popover: var(--pl-white);
+  --popover-foreground: var(--pl-ink);
+  --accent-foreground: var(--pl-ink);
+  --input: var(--pl-line-strong);
+  --secondary: var(--pl-surface-muted);
+  --secondary-foreground: var(--pl-ink);
   --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --color-background: #fcfcfd;
-  --color-foreground: #17181a;
-  --color-muted: #5c6068;
-  --color-border: rgba(17, 20, 24, 0.09);
-  --color-card: #ffffff;
-  --color-auth-input-bg: #ffffff;
-  --input-readonly-bg: #f4f5f7;
+  --destructive-foreground: var(--pl-white);
+  --color-background: var(--pl-surface);
+  --color-foreground: var(--pl-ink);
+  --color-muted: var(--pl-muted-fg);
+  --color-border: var(--pl-line);
+  --color-card: var(--pl-surface-raised);
+  --color-auth-input-bg: var(--pl-white);
+  --input-readonly-bg: var(--pl-surface-muted);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  /* Linear-dark: black surfaces + purple accent, flat + hairline. */
-  --background: #08090b;
-  --background-solid: #08090b;
-  --foreground: #f7f8f8;
-  --muted: #8a8f98;
-  --border: rgba(255, 255, 255, 0.08);
-  --card: #0f1011;
-  --primary: #7c7ff2;
-  --primary-alt: #9a9cf5;
-  --accent: rgba(124, 127, 242, 0.14);
+  /* Dark: near-black + purple brand only (no blue). */
+  --pl-surface: var(--pl-black);
+  --pl-surface-raised: #0f1011;
+  --pl-surface-muted: #16181b;
+  --pl-ink: #f7f8f8;
+  --pl-muted-fg: #8a8f98;
+  --pl-line: rgba(255, 255, 255, 0.08);
+  --pl-line-strong: rgba(255, 255, 255, 0.14);
+  --pl-accent: var(--pl-purple);
+  --pl-accent-soft: rgba(124, 127, 242, 0.14);
+  --pl-accent-soft-hex: var(--pl-purple-soft);
+  --pl-accent-deep: var(--pl-purple-deep);
+  --pl-ai: var(--pl-purple);
+  --pl-brand: var(--pl-purple);
+  --pl-brand-soft: var(--pl-purple-soft);
+  --pl-brand-deep: var(--pl-purple-deep);
+
+  --background: var(--pl-surface);
+  --background-solid: var(--pl-surface);
+  --foreground: var(--pl-ink);
+  --muted: var(--pl-muted-fg);
+  --border: var(--pl-line);
+  --card: var(--pl-surface-raised);
+  --primary: var(--pl-purple);
+  --primary-alt: var(--pl-purple-soft);
+  --primary-foreground: var(--pl-white);
+  --accent: var(--pl-accent-soft);
   --ring: rgba(124, 127, 242, 0.4);
-  --auth-input-bg: #16181b;
-  --announce: #f7f8f8;
+  --auth-input-bg: var(--pl-surface-muted);
+  --announce: var(--pl-ink);
   --steel-light: #c8ccf7;
-  --cobalt-deep: #6366f1;
-  --sky: #9a9cf5;
-  --glass-fill: #0f1011;
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --btn-metallic: #16181b;
-  --btn-primary: #7c7ff2;
+  --cobalt-deep: var(--pl-purple-deep);
+  --sky: var(--pl-purple-soft);
+  --glass-fill: var(--pl-surface-raised);
+  --glass-border: var(--pl-line);
+  --btn-metallic: var(--pl-surface-muted);
+  --btn-primary: var(--pl-purple);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-card-hover: 0 4px 14px -2px rgba(0, 0, 0, 0.5);
@@ -89,39 +141,39 @@
   --status-confirmed-bg: rgba(76, 183, 130, 0.16);
   --status-overdue-fg: #f87171;
   --status-overdue-bg: rgba(235, 87, 87, 0.15);
-  --popover: #16181b;
-  --popover-foreground: #f7f8f8;
-  --accent-foreground: #f7f8f8;
-  --input: rgba(255, 255, 255, 0.12);
-  --secondary: #16181b;
-  --secondary-foreground: #f7f8f8;
+  --popover: var(--pl-surface-muted);
+  --popover-foreground: var(--pl-ink);
+  --accent-foreground: var(--pl-ink);
+  --input: var(--pl-line-strong);
+  --secondary: var(--pl-surface-muted);
+  --secondary-foreground: var(--pl-ink);
   --destructive: #eb5757;
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--pl-white);
   /* Tailwind @theme color aliases — must mirror semantic tokens for utilities */
-  --color-background: #08090b;
-  --color-foreground: #f7f8f8;
-  --color-muted: #8a8f98;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-card: #0f1011;
-  --color-auth-input-bg: #16181b;
+  --color-background: var(--pl-surface);
+  --color-foreground: var(--pl-ink);
+  --color-muted: var(--pl-muted-fg);
+  --color-border: var(--pl-line);
+  --color-card: var(--pl-surface-raised);
+  --color-auth-input-bg: var(--pl-surface-muted);
   --input-readonly-bg: rgba(255, 255, 255, 0.05);
 }
 
 /* Tailwind semantic utilities — re-bind when data-theme changes (v4 @theme inline) */
 [data-theme="light"] .text-foreground {
-  color: #17181a;
+  color: var(--pl-ink);
 }
 
 [data-theme="dark"] .text-foreground {
-  color: #f7f8f8;
+  color: var(--pl-ink);
 }
 
 [data-theme="light"] .text-muted {
-  color: #5c6068;
+  color: var(--pl-muted-fg);
 }
 
 [data-theme="dark"] .text-muted {
-  color: #8a8f98;
+  color: var(--pl-muted-fg);
 }
 
 /* Always-light embeds (formal "paper" documents: rent receipts, reports).
@@ -322,19 +374,19 @@
 }
 
 [data-theme="light"] .bg-background {
-  background-color: #f7f9fd;
+  background-color: var(--pl-surface);
 }
 
 [data-theme="dark"] .bg-background {
-  background-color: #080b14;
+  background-color: var(--pl-surface);
 }
 
 [data-theme="light"] .border-border {
-  border-color: #e6ebf3;
+  border-color: var(--pl-line);
 }
 
 [data-theme="dark"] .border-border {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--pl-line-strong);
 }
 
 /* Chips/controls overlaid on listing hero photos. In dark theme their
@@ -487,11 +539,11 @@ body {
 }
 
 [data-theme="light"] .axis-page-frame {
-  background: linear-gradient(180deg, #ffffff 0%, #f2f7fd 42%, #e8f0fc 100%);
+  background: linear-gradient(180deg, var(--pl-white) 0%, #f2f5fb 42%, #e8eefc 100%);
 }
 
 [data-theme="dark"] .axis-page-frame {
-  background: #080b14;
+  background: var(--pl-black);
 }
 
 * {
@@ -499,7 +551,7 @@ body {
 }
 
 ::selection {
-  background: rgba(47, 107, 255, 0.18);
+  background: color-mix(in srgb, var(--pl-accent) 18%, transparent);
 }
 
 :focus-visible {
@@ -560,11 +612,11 @@ html {
 }
 
 .chrome-substrate-full {
-  background: #080b14;
+  background: var(--pl-black);
 }
 
 [data-theme="light"] .chrome-substrate-full {
-  background: #f7f9fd;
+  background: var(--pl-surface);
 }
 
 /* Layer 1 — rotating conic "light beams" (chromeFlow). Crisp, screen-blended. */
@@ -1030,8 +1082,16 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
 
 .btn-cobalt {
   background: var(--btn-primary);
-  color: #fff;
-  box-shadow: 0 8px 20px -8px rgba(47, 107, 255, 0.6);
+  color: var(--pl-white);
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--btn-primary) 60%, transparent);
+}
+
+.btn-brand-cta {
+  background: linear-gradient(135deg, var(--cobalt-deep) 0%, var(--sky) 100%) !important;
+  color: var(--pl-white);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 6px 22px color-mix(in srgb, var(--btn-primary) 28%, transparent) !important;
 }
 
 /* ── Budget slider ── */
@@ -2143,6 +2203,333 @@ html[data-native] [data-listing-sections-root] {
     color: #fde68a;
   }
 }
+
+/* —— PropLane homepage split hero (theme-aware) ——
+ * Dark: near-black + purple glows/CTAs (no blue brand accents).
+ * Light: soft white / blue washes, black text, blue CTAs (no purple brand accents).
+ */
+.landing-dark-hero {
+  background: var(--pl-black);
+  color: var(--pl-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+.landing-hero-glow {
+  background:
+    radial-gradient(
+      ellipse 55% 50% at 78% 42%,
+      color-mix(in srgb, var(--pl-purple) 14%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 40% 36% at 18% 80%,
+      color-mix(in srgb, var(--pl-purple-soft) 8%, transparent) 0%,
+      transparent 55%
+    );
+}
+
+.landing-hero-badge {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.landing-hero-badge-dot {
+  background: var(--pl-brand-soft);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--pl-brand-soft) 70%, transparent);
+}
+
+.landing-hero-line {
+  color: var(--pl-white);
+}
+
+.landing-hero-line--muted {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.landing-hero-sub {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.landing-hero-cta-primary {
+  background: var(--pl-brand);
+  color: var(--pl-white);
+  box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--pl-brand) 65%, transparent);
+}
+
+.landing-hero-cta-ghost {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.landing-hero-cta-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.landing-hero-trust {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.landing-hero-check {
+  color: var(--pl-brand-soft);
+}
+
+.landing-attention-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--pl-black) 92%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 24px 64px -20px rgba(0, 0, 0, 0.65),
+    0 0 80px -28px color-mix(in srgb, var(--pl-brand) 35%, transparent);
+}
+
+.landing-attention-title {
+  color: var(--pl-white);
+}
+
+.landing-attention-kicker {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.landing-attention-chip {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.landing-attention-chip-dot {
+  background: var(--pl-brand-soft);
+}
+
+.landing-attention-list {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-attention-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-attention-row:last-child {
+  border-bottom: 0;
+}
+
+.landing-attention-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.landing-attention-meta {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.landing-attention-chevron {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.landing-attention-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.landing-attention-ai {
+  background: color-mix(in srgb, var(--pl-brand) 20%, transparent);
+  color: var(--pl-brand-soft);
+}
+
+.landing-attention-footnote {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.landing-attention-check {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.landing-stats-strip {
+  background: var(--pl-surface);
+  border-color: var(--pl-line);
+  color: var(--pl-ink);
+}
+
+.landing-stats-strip .landing-stat-value {
+  color: var(--pl-ink);
+}
+
+.landing-stats-strip .landing-stat-label {
+  color: var(--pl-muted-fg);
+}
+
+/* Soft bridge: dark hero → theme surface (cool white or black, never cream) */
+.landing-hero-bridge {
+  height: 48px;
+  margin-top: -1px;
+  background: linear-gradient(
+    180deg,
+    var(--pl-black) 0%,
+    color-mix(in srgb, var(--pl-black) 40%, var(--pl-surface)) 45%,
+    var(--pl-surface) 100%
+  );
+}
+
+/* —— Light mode: fully light hero (blue brand only, no purple) —— */
+[data-theme="light"] .landing-dark-hero {
+  background:
+    radial-gradient(
+      ellipse 70% 55% at 82% 38%,
+      color-mix(in srgb, var(--pl-blue) 12%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 12% 72%,
+      color-mix(in srgb, var(--pl-blue-soft) 10%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      165deg,
+      #ffffff 0%,
+      #f7f9fc 42%,
+      #eef2fb 78%,
+      #e8eef8 100%
+    );
+  color: var(--pl-ink);
+}
+
+[data-theme="light"] .landing-hero-glow {
+  background:
+    radial-gradient(
+      ellipse 50% 42% at 76% 40%,
+      color-mix(in srgb, var(--pl-blue) 14%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 42% 38% at 18% 78%,
+      color-mix(in srgb, var(--pl-blue-soft) 12%, transparent) 0%,
+      transparent 58%
+    );
+}
+
+[data-theme="light"] .landing-hero-badge {
+  border-color: color-mix(in srgb, var(--pl-blue) 22%, transparent);
+  background: color-mix(in srgb, var(--pl-blue) 8%, var(--pl-white));
+  color: color-mix(in srgb, var(--pl-blue-deep) 72%, var(--pl-ink));
+}
+
+[data-theme="light"] .landing-hero-badge-dot {
+  background: var(--pl-blue);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--pl-blue) 45%, transparent);
+}
+
+[data-theme="light"] .landing-hero-line {
+  color: var(--pl-ink);
+}
+
+[data-theme="light"] .landing-hero-line--muted {
+  color: color-mix(in srgb, var(--pl-ink) 38%, var(--pl-muted-fg));
+}
+
+[data-theme="light"] .landing-hero-sub {
+  color: var(--pl-muted-fg);
+}
+
+[data-theme="light"] .landing-hero-cta-primary {
+  background: var(--pl-blue);
+  color: var(--pl-white);
+  box-shadow: 0 8px 28px -8px color-mix(in srgb, var(--pl-blue) 45%, transparent);
+}
+
+[data-theme="light"] .landing-hero-cta-ghost {
+  border-color: color-mix(in srgb, var(--pl-ink) 16%, transparent);
+  background: color-mix(in srgb, var(--pl-white) 70%, transparent);
+  color: var(--pl-ink);
+}
+
+[data-theme="light"] .landing-hero-cta-ghost:hover {
+  border-color: color-mix(in srgb, var(--pl-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--pl-blue) 6%, var(--pl-white));
+}
+
+[data-theme="light"] .landing-hero-trust {
+  color: var(--pl-muted-fg);
+}
+
+[data-theme="light"] .landing-hero-check {
+  color: var(--pl-blue);
+}
+
+[data-theme="light"] .landing-attention-card {
+  border-color: color-mix(in srgb, var(--pl-ink) 8%, transparent);
+  background: color-mix(in srgb, var(--pl-white) 92%, transparent);
+  box-shadow:
+    0 1px 2px rgba(8, 9, 11, 0.04),
+    0 18px 48px -24px rgba(8, 9, 11, 0.14),
+    0 0 64px -32px color-mix(in srgb, var(--pl-blue) 28%, transparent);
+}
+
+[data-theme="light"] .landing-attention-title {
+  color: var(--pl-ink);
+}
+
+[data-theme="light"] .landing-attention-kicker {
+  color: var(--pl-muted-fg);
+}
+
+[data-theme="light"] .landing-attention-chip {
+  border-color: color-mix(in srgb, var(--pl-blue) 18%, transparent);
+  background: color-mix(in srgb, var(--pl-blue) 7%, var(--pl-white));
+  color: color-mix(in srgb, var(--pl-blue-deep) 70%, var(--pl-ink));
+}
+
+[data-theme="light"] .landing-attention-list {
+  border-top-color: var(--pl-line);
+}
+
+[data-theme="light"] .landing-attention-row {
+  border-bottom-color: var(--pl-line);
+}
+
+[data-theme="light"] .landing-attention-label {
+  color: var(--pl-ink);
+}
+
+[data-theme="light"] .landing-attention-meta {
+  color: var(--pl-muted-fg);
+}
+
+[data-theme="light"] .landing-attention-chevron {
+  color: color-mix(in srgb, var(--pl-muted-fg) 70%, transparent);
+}
+
+[data-theme="light"] .landing-attention-footer {
+  border-top-color: var(--pl-line);
+  background: color-mix(in srgb, var(--pl-blue) 5%, var(--pl-white-muted));
+}
+
+[data-theme="light"] .landing-attention-ai {
+  background: color-mix(in srgb, var(--pl-blue) 14%, var(--pl-white));
+  color: var(--pl-blue-deep);
+}
+
+[data-theme="light"] .landing-attention-footnote {
+  color: var(--pl-muted-fg);
+}
+
+[data-theme="light"] .landing-attention-check {
+  border-color: color-mix(in srgb, var(--pl-ink) 14%, transparent);
+  color: color-mix(in srgb, var(--pl-ink) 40%, transparent);
+}
+
+/* Light bridge: soft blue wash → surface (no charcoal / purple band) */
+[data-theme="light"] .landing-hero-bridge {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #e8eef8 80%, transparent) 0%,
+    color-mix(in srgb, var(--pl-surface) 50%, #eef2fb) 40%,
+    var(--pl-surface) 100%
+  );
+}
+
+/* Lower Full-flow sections: src/components/marketing/landing-proplane.css (lp-*). */
 
 /* Public listing — native app has no marketing navbar; subnav clears the notch itself. */
 html[data-native] [data-listing-sections-root] {
