@@ -52,7 +52,8 @@ if [ "$(node_major)" != "$NODE_MAJOR_REQUIRED" ]; then
   export HOMEBREW_NO_INSTALL_CLEANUP=TRUE
   export HOMEBREW_NO_AUTO_UPDATE=TRUE
   brew install "node@${NODE_MAJOR_REQUIRED}"
-  export PATH="$(brew --prefix "node@${NODE_MAJOR_REQUIRED}")/bin:$PATH"
+  node_prefix="$(brew --prefix "node@${NODE_MAJOR_REQUIRED}")"
+  export PATH="${node_prefix}/bin:$PATH"
 fi
 
 echo "▸ using node $(node -v) / npm $(npm -v)"

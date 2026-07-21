@@ -192,7 +192,10 @@ package resolution. It:
 3. Runs **`npx cap sync ios`** at the **production** `CAP_SERVER_URL` — Xcode
    Cloud builds Release, whose WebView must load the live site (same as
    `npm run cap:prod`).
-4. **Verifies** all seven SPM-referenced packages landed in `node_modules` and
+4. Runs `scripts/verify-cap-prod-config.sh` (as `CONFIGURATION=Release`) to
+   prove the baked `capacitor.config.json` points at the production origin —
+   the same guard the GitHub workflow runs.
+5. **Verifies** all seven SPM-referenced packages landed in `node_modules` and
    **fails loudly** otherwise — a silent partial install reproduces the exact
    error above, just later and more opaquely inside `xcodebuild`.
 
