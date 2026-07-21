@@ -29,7 +29,7 @@ describe("public-sandbox-listings", () => {
     expect(
       isSandboxPublicListing({
         property: { id: "custom-id", address: "100 Main St, Seattle, WA", managerUserId: "u1" },
-        managerEmail: "admin@axis-seattle-housing.com",
+        managerEmail: "founders@axis-seattle-housing.com",
       }),
     ).toBe(false);
   });
@@ -41,7 +41,7 @@ describe("public-sandbox-listings", () => {
       { id: "qa-1", address: "123 Demo Test St, Seattle, WA", managerUserId: "qa" },
     ];
     const managerEmailByUserId = new Map([
-      ["real", "admin@axis-seattle-housing.com"],
+      ["real", "founders@axis-seattle-housing.com"],
       ["demo", "alex.morgan@axis.local"],
       ["qa", "someone@gmail.com"],
     ]);
