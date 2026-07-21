@@ -9,6 +9,7 @@ import {
   householdChargeToLedgerRow,
   isHouseholdChargeOverdue,
   isManagerAddedOneOffCharge,
+  joinPropertyAndUnitLabel,
   mergeHouseholdChargesWithServer,
 } from "@/lib/household-charges";
 import type { HouseholdCharge } from "@/lib/household-charges";
@@ -279,5 +280,25 @@ describe("isManagerAddedOneOffCharge", () => {
       isManagerAddedOneOffCharge(makeCharge({ id: "wo-1", kind: "work_order_charge", workOrderId: "wo_123" })),
     ).toBe(false);
     expect(isManagerAddedOneOffCharge(makeCharge({ id: "rent-1", kind: "rent" }))).toBe(false);
+  });
+});
+
+describe("joinPropertyAndUnitLabel", () => {
+  it("joins a property name and unit", () => {
+    expect(joinPropertyAndUnitLabel("The Pioneer", "12A")).toBe("The Pioneer · 12A");
+  });
+
+  it("does not repeat a unit the label already ends with", () => {
+    expect(joinPropertyAndUnitLabel("The Pioneer · 12A", "12A")).toBe("The Pioneer · 12A");
+    expect(joinPropertyAndUnitLabel("The Pioneer · 12a", "12A")).toBe("The Pioneer · 12a");
+  });
+
+  it("still appends when the tail is a different unit", () => {
+    expect(joinPropertyAndUnitLabel("The Pioneer · 11B", "12A")).toBe("The Pioneer · 11B · 12A");
+  });
+
+  it("handles a missing side", () => {
+    expect(joinPropertyAndUnitLabel("The Pioneer", "")).toBe("The Pioneer");
+    expect(joinPropertyAndUnitLabel("", "12A")).toBe("12A");
   });
 });

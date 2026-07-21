@@ -253,9 +253,12 @@ export function ManagerAddPaymentModal({
       return null;
     }
 
-    const titleWithRoom = selectedResident.roomLabel
-      ? `${chargeTitle.trim()} — Unit ${selectedResident.roomLabel}`
-      : chargeTitle.trim();
+    // roomLabel often already carries its own prefix ("Unit 12A", "Room 3"),
+    // so prefixing unconditionally produced "Unit Unit 12A" on the charge and
+    // everywhere it is echoed (resident dashboard, payments, receipts).
+    const roomLabel = selectedResident.roomLabel.trim();
+    const roomSuffix = /^(unit|room|apt|apartment|suite)\b/i.test(roomLabel) ? roomLabel : `Unit ${roomLabel}`;
+    const titleWithRoom = roomLabel ? `${chargeTitle.trim()} — ${roomSuffix}` : chargeTitle.trim();
 
     return {
       propertyName: selectedResident.propertyLabel,
