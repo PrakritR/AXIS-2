@@ -1,8 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { Select } from "@/components/ui/input";
 import type { PromotionAssetKind } from "@/lib/promotion-assets";
+
+const PROMOTION_KIND_OPTIONS: { id: PromotionAssetKind; label: string; description: string }[] = [
+  { id: "flyer", label: "Flyer", description: "Printable or social-ready design." },
+  { id: "text", label: "Text", description: "Caption, email, SMS, or listing blurb." },
+];
 
 export function PromotionNewChooserModal({
   open,
@@ -13,32 +20,45 @@ export function PromotionNewChooserModal({
   onClose: () => void;
   onChoose: (kind: PromotionAssetKind) => void;
 }) {
+  const [kind, setKind] = useState<PromotionAssetKind>("flyer");
+
+  // Reset on each open so a previous pick never silently persists.
+  useEffect(() => {
+    if (open) setKind("flyer");
+  }, [open]);
+
+  const selected = PROMOTION_KIND_OPTIONS.find((o) => o.id === kind);
+
   return (
     <Modal open={open} title="New promotion" onClose={onClose} panelClassName="max-w-md">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-auto flex-col items-start gap-1 rounded-2xl px-4 py-4 text-left"
-          onClick={() => onChoose("flyer")}
-          data-attr="promotion-new-flyer"
+      <div className="text-sm">
+        <label className="text-xs font-semibold text-muted" htmlFor="promotion-new-kind">
+          Promotion type
+        </label>
+        <Select
+          id="promotion-new-kind"
+          className="mt-1"
+          value={kind}
+          onChange={(e) => setKind(e.target.value as PromotionAssetKind)}
+          data-attr="promotion-new-kind"
         >
-          <span className="text-sm font-semibold text-foreground">Flyer</span>
-          <span className="text-xs font-normal text-muted">Printable or social-ready design</span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-auto flex-col items-start gap-1 rounded-2xl px-4 py-4 text-left"
-          onClick={() => onChoose("text")}
-          data-attr="promotion-new-text"
-        >
-          <span className="text-sm font-semibold text-foreground">Text</span>
-          <span className="text-xs font-normal text-muted">Caption, email, SMS, or listing blurb</span>
-        </Button>
+          {PROMOTION_KIND_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+        {selected ? <p className="mt-1.5 text-xs text-muted">{selected.description}</p> : null}
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex justify-start gap-2">
+        <Button
+          type="button"
+          onClick={() => onChoose(kind)}
+          data-attr={kind === "flyer" ? "promotion-new-flyer" : "promotion-new-text"}
+        >
+          Continue
+        </Button>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
