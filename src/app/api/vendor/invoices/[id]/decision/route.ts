@@ -93,12 +93,16 @@ export async function PATCH(
     }
     if (status === "paid") patch.paid_at = now;
 
-    const { data, error } = await auth.db
+    let updateQuery = auth.db
       .from("vendor_invoices")
       .update(patch)
       .eq("id", id)
       .eq("manager_user_id", auth.userId)
-      .eq("status", currentStatus)
+      .eq("status", currentStatus);
+    if (status === "scheduled" || status === "paid") {
+      updateQuery = updateQuery.not("bill_id", "is", null);
+    }
+    const { data, error } = await updateQuery
       .select(VENDOR_INVOICE_SELECT)
       .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

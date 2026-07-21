@@ -31,9 +31,20 @@ function makeFakeDb(rows: Row[], hooks: { afterRead?: () => void } = {}) {
         filters.push([col, val]);
         return api;
       },
+      not(col: string, operator: string, val: unknown) {
+        if (operator === "is" && val === null) {
+          filters.push([col, Symbol.for("not-null")]);
+        }
+        return api;
+      },
       maybeSingle() {
         if (mode === "update") {
-          const hit = matched()[0] ?? null;
+          const hit =
+            rows.find((row) =>
+              filters.every(([col, val]) =>
+                val === Symbol.for("not-null") ? row[col] !== null : row[col] === val,
+              ),
+            ) ?? null;
           if (hit && patch) Object.assign(hit, patch);
           return Promise.resolve({ data: hit ? { ...hit } : null, error: null });
         }
@@ -141,7 +152,7 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
     expect(state.billsCreated).toEqual(["inv-1"]);
   });
 
-  it("returns an error when approval cannot create its bill", async () => {
+  it("leaves a failed approval bill creation repairable", async () => {
     rows.push(invoiceRow("submitted"));
     state.billCreationError = new Error("Bill create failed");
 
@@ -192,8 +203,19 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
     expect(state.billsCreated).toEqual(["inv-1"]);
   });
 
+  it("does not schedule or pay an approved invoice until its bill is linked", async () => {
+    for (const status of ["scheduled", "paid"]) {
+      rows.length = 0;
+      rows.push(invoiceRow("approved"));
+      const res = await patchDecision({ status });
+
+      expect(res.status, status).toBe(409);
+      expect(rows[0]!.status).toBe("approved");
+    }
+  });
+
   it("schedules an approved invoice without firing any approval event", async () => {
-    rows.push(invoiceRow("approved"));
+    rows.push(invoiceRow("approved", { bill_id: "bill-1" }));
     const res = await patchDecision({ status: "scheduled" });
     const json = await res.json();
     console.log("schedule approved →", res.status, JSON.stringify(json.invoice.status));
@@ -216,7 +238,7 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
   });
 
   it("preserves the decision note when a later transition omits it", async () => {
-    rows.push(invoiceRow("approved", { decision_note: "Approved at quoted rate" }));
+    rows.push(invoiceRow("approved", { bill_id: "bill-1", decision_note: "Approved at quoted rate" }));
     const res = await patchDecision({ status: "paid" });
     const json = await res.json();
     console.log("pay approved (no note in body) →", res.status, JSON.stringify({ status: json.invoice.status, decisionNote: json.invoice.decisionNote, paidAt: json.invoice.paidAt }));
@@ -227,7 +249,7 @@ describe("PATCH /api/vendor/invoices/[id]/decision status flow", () => {
   });
 
   it("clears the note only when the body sends an explicit blank note", async () => {
-    rows.push(invoiceRow("approved", { decision_note: "Approved at quoted rate" }));
+    rows.push(invoiceRow("approved", { bill_id: "bill-1", decision_note: "Approved at quoted rate" }));
     const res = await patchDecision({ status: "paid", decisionNote: "   " });
     const json = await res.json();
     expect(res.status).toBe(200);
