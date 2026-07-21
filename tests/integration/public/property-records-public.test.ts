@@ -107,7 +107,7 @@ describe("GET /api/property-records/public", () => {
           select: vi.fn().mockReturnValue({
             in: vi.fn().mockResolvedValue({
               data: [
-                { id: "mgr-real", email: "admin@axis-seattle-housing.com" },
+                { id: "mgr-real", email: "founders@axis-seattle-housing.com" },
                 { id: "mgr-qa", email: "someone@gmail.com" },
               ],
               error: null,

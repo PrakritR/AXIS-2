@@ -54,7 +54,7 @@ describe("syncOAuthProfile", () => {
 
     await syncOAuthProfile(supabase as never, {
       id: "admin-1",
-      email: "admin@axis-seattle-housing.com",
+      email: "founders@axis-seattle-housing.com",
       user_metadata: { name: "Prakrit" },
     } as never);
 
