@@ -617,6 +617,15 @@ export async function handleClawLeasingInbound(args: {
     if (thread && residentProfile?.managerUserId && thread.managerUserId !== residentProfile.managerUserId) {
       thread = null;
     }
+    const authoritativeManagerId =
+      residentProfile?.managerUserId || (!profileHit?.managerUserId ? scopedManagerId : null);
+    if (!thread && authoritativeManagerId) {
+      const currentManagerThread = await findThreadByResidentPhone(from, authoritativeManagerId);
+      thread =
+        currentManagerThread?.managerUserId === authoritativeManagerId
+          ? currentManagerThread
+          : null;
+    }
     // Prospect listing CTAs always hit the leasing assistant.
     // Leasing-topic threads stay on the leasing path for follow-ups (do not
     // hand off to the resident payment/lease hub after the first auto-reply).

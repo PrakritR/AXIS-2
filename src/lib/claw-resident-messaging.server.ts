@@ -401,19 +401,23 @@ export async function openClawResidentThread(args: {
   return rowToThread(data as Record<string, unknown>);
 }
 
-export async function findThreadByResidentPhone(residentPhone: string): Promise<ClawMessagingThread | null> {
+export async function findThreadByResidentPhone(
+  residentPhone: string,
+  managerUserId?: string | null,
+): Promise<ClawMessagingThread | null> {
   const phone = normalizeE164Us(residentPhone);
   if (!phone) return null;
   const db = createSupabaseServiceRoleClient();
   const cutoff = new Date(Date.now() - TTL_MS).toISOString();
-  const { data } = await db
+  let q = db
     .from("claw_messaging_threads")
     .select("*")
     .eq("resident_phone", phone)
-    .gte("last_message_at", cutoff)
-    .order("last_message_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .gte("last_message_at", cutoff);
+  if (managerUserId?.trim()) {
+    q = q.eq("manager_user_id", managerUserId.trim());
+  }
+  const { data } = await q.order("last_message_at", { ascending: false }).limit(1).maybeSingle();
   return data ? rowToThread(data as Record<string, unknown>) : null;
 }
 
