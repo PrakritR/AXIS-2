@@ -1255,7 +1255,7 @@ export function joinPropertyAndUnitLabel(propertyLabel: string, unit: string): s
   if (!label) return u;
   const tail = label.split("·").pop()?.trim().toLowerCase();
   const withoutUnitPrefix = (value: string) =>
-    value.replace(/^(?:unit|room|apt(?:artment)?|suite)\s+/i, "").toLowerCase();
+    value.replace(/^(?:unit|room|apt|apartment|suite)\s+/i, "").toLowerCase();
   if (tail && withoutUnitPrefix(tail) === withoutUnitPrefix(u)) return label;
   return `${label} · ${u}`;
 }

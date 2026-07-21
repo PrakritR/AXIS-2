@@ -19,7 +19,7 @@ sequence; Phase 5 adds `references manager_bills(id)` when it lands, so an
 approved invoice can become a bill with no schema rework. RLS mirrors the
 hardened `vendor_payouts` / `work_order_bids` split: vendor `FOR SELECT` only
 (`vendor_user_id = auth.uid()` —
-`20260710130000_vendor_invoices_vendor_select_only.sql` replaced the original
+`20260721141000_vendor_invoices_vendor_select_only.sql` replaced the original
 `FOR ALL` owner policy, which would have let a vendor's own client bypass the
 status flow), manager `FOR SELECT` (denormalized `manager_user_id`). Real
 writes go through service-role routes.

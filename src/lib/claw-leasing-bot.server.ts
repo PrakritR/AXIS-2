@@ -673,8 +673,13 @@ export async function handleClawLeasingInbound(args: {
         return false;
       });
       if (!inboundLogged) {
-        releaseInboundMessageClaims(claimedMessageIds);
-        return { ok: false, intent: "unknown", replied: false, error: "Inbound SMS logging failed." };
+        // Best-effort: the inbound log powers the Communication → SMS mirror, it
+        // does not gate the resident reply. A persistent insert failure must not
+        // silence every reply on this conversation nor trigger gateway retries —
+        // log loudly and let the reply + manager forward proceed.
+        console.error("claw resident inbound log failed; replying anyway", {
+          managerUserId: thread.managerUserId,
+        });
       }
 
       const action = await runResidentSmsAction({
@@ -794,8 +799,12 @@ export async function handleClawLeasingInbound(args: {
       return false;
     });
     if (!inboundLogged) {
-      releaseInboundMessageClaims(claimedMessageIds);
-      return { ok: false, intent, replied: false, error: "Inbound SMS logging failed." };
+      // Best-effort: the inbound log powers the Communication → SMS mirror, it
+      // does not gate the prospect auto-reply. A persistent insert failure must
+      // not silence replies nor trigger gateway retries — log loudly and proceed.
+      console.error("claw leasing inbound log failed; replying anyway", {
+        managerUserId: landlordId,
+      });
     }
   }
 

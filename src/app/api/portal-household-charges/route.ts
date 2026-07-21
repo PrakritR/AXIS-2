@@ -338,7 +338,9 @@ export async function POST(req: Request) {
           // reminders itself). A stale mirror can no longer revert a paid charge.
           // Attribute the ledger/GL entry to the SERVER-resolved owner, not the
           // client-supplied row_data.managerUserId (which a caller controls).
-          await syncLedgerChargeEntry(db, { ...(row.row_data as HouseholdCharge), managerUserId: managerId });
+          await syncLedgerChargeEntry(db, { ...(row.row_data as HouseholdCharge), managerUserId: managerId }).catch(
+            () => undefined,
+          );
         }
       }
     }
