@@ -179,7 +179,7 @@ function buildNextServiceRequest(
     propertyId: propertyId || rd.propertyId || "",
     status: (record.status as ServiceRequest["status"]) || rd.status || "pending",
     offerId: String(rd.offerId ?? "custom"),
-    offerName: String(rd.offerName ?? "Service request"),
+    offerName: String(rd.offerName ?? "Add-on service"),
     offerDescription: String(rd.offerDescription ?? ""),
     price: String(rd.price ?? ""),
     deposit: String(rd.deposit ?? ""),

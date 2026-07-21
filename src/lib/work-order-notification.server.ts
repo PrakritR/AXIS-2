@@ -30,7 +30,7 @@ function workOrderSmsBody(
   switch (event) {
     case "created": {
       if (input.audience === "manager") {
-        const kindLabel = input.itemKind === "service-request" ? "Service request" : "Work order";
+        const kindLabel = input.itemKind === "service-request" ? "Add-on service" : "Work order";
         const reviewPath =
           input.itemKind === "service-request"
             ? "/portal/services/requests"
@@ -118,8 +118,8 @@ export async function notifyManagerOfResidentFiledItem(
   const managerUserId = input.managerUserId.trim();
   if (!managerUserId) return;
 
-  const kindLabel = input.kind === "service-request" ? "service request" : "work order";
-  const title = input.title.trim() || (input.kind === "service-request" ? "Service request" : "Work order");
+  const kindLabel = input.kind === "service-request" ? "add-on service" : "work order";
+  const title = input.title.trim() || (input.kind === "service-request" ? "Add-on service" : "Work order");
   const description =
     input.description?.trim() ||
     `A resident submitted a new ${kindLabel}: "${title}"${

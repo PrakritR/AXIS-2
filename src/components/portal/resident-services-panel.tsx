@@ -1134,7 +1134,7 @@ export function ResidentServicesPanel({
               setModalMode("service");
             }}
           >
-            Submit request
+            Request add-on service
           </Button>
         )
       }
@@ -1143,7 +1143,7 @@ export function ResidentServicesPanel({
           <TabNav
             activeId={activeTab}
             items={[
-              { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
+              { id: "requests", label: "Add-on services", href: `${basePath}/services/requests` },
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
             ]}
           />
@@ -1173,9 +1173,9 @@ export function ResidentServicesPanel({
           </div>
 
           {sortedRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No service requests yet." icon="service" />
+            <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
           ) : filteredRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
+            <PortalDataTableEmpty message="No add-on services in this status yet." icon="service" />
           ) : (
         <>
         <div className="space-y-2 lg:hidden">
@@ -1472,7 +1472,7 @@ export function ResidentServicesPanel({
       {/* Request modal */}
       <Modal
         open={modalMode === "service"}
-        title="Submit request"
+        title="Request add-on service"
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
       >
@@ -1496,7 +1496,7 @@ export function ResidentServicesPanel({
               <div className="mt-4 space-y-3">
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-muted">
-                    Request type <span className="text-rose-500">*</span>
+                    Add-on service type <span className="text-rose-500">*</span>
                   </p>
                   <Select
                     value={
@@ -1516,7 +1516,7 @@ export function ResidentServicesPanel({
                     disabled={serviceSubmitting}
                   >
                     {availableOffers.length > 0 ? (
-                      <option value="">Select request type</option>
+                      <option value="">Select an add-on service</option>
                     ) : null}
                     {availableOffers.map((offer) => (
                       <option key={offer.id} value={offer.id}>
@@ -1626,7 +1626,7 @@ export function ResidentServicesPanel({
       {/* Edit service request modal */}
       <Modal
         open={editingRequest !== null}
-        title="Edit request"
+        title="Edit add-on service"
         onClose={() => setEditingRequest(null)}
         panelClassName="max-w-lg"
       >

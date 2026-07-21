@@ -29,7 +29,7 @@ export const proPortal: PortalDefinition = {
       section: "services",
       label: "Services",
       tabs: [
-        { id: "requests", label: "Requests" },
+        { id: "requests", label: "Add-on services" },
         { id: "work-orders", label: "Work orders" },
         { id: "vendors", label: "Vendors" },
       ],

@@ -12,7 +12,7 @@ function managerCreatedSmsBody(input: {
 }): string {
   const title = input.title.trim() || "Work order";
   const at = input.propertyLabel?.trim() ? ` at ${input.propertyLabel.trim()}` : "";
-  const kindLabel = input.itemKind === "service-request" ? "service request" : "work order";
+  const kindLabel = input.itemKind === "service-request" ? "add-on service" : "work order";
   const reviewPath =
     input.itemKind === "service-request"
       ? "/portal/services/requests"
@@ -36,13 +36,13 @@ describe("manager create notification SMS", () => {
     expect(body).toContain("/portal/services/work-orders");
   });
 
-  it("points service requests at manager requests tab", () => {
+  it("points add-on service requests at manager requests tab", () => {
     const body = managerCreatedSmsBody({
       title: "Reserved parking spot",
       itemKind: "service-request",
       origin: "https://www.axis-seattle-housing.com",
     });
-    expect(body).toContain("service request");
+    expect(body).toContain("add-on service");
     expect(body).toContain("/portal/services/requests");
   });
 });

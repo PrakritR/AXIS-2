@@ -306,7 +306,7 @@ export async function POST(req: Request) {
     const managerUserId = record.manager_user_id;
     if (!preExisting && !actor.admin && role === "resident" && managerUserId) {
       // New resident-submitted request → Axis inbox + email + SMS to manager.
-      const title = stamped.offerName?.trim() || "Service request";
+      const title = stamped.offerName?.trim() || "Add-on service";
       const description = stamped.notes?.trim() || stamped.offerDescription?.trim();
       await notifyManagerOfResidentFiledItem(db, {
         kind: "service-request",

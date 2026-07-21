@@ -490,7 +490,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     const serviceItems = [
       ...pendingServiceRequests.map((r) => ({
         id: `sr-${r.id}`,
-        title: r.offerName || "Service request",
+        title: r.offerName || "Add-on service",
         subtitle: [r.residentName || r.residentEmail, r.price].filter(Boolean).join(" · ") || "—",
         status: "pending" as const,
         sortKey: new Date(r.requestedAt).getTime() || 0,
@@ -861,7 +861,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               ) : null
             }
             items={serviceItems}
-            emptyMessage="No pending service requests or work orders."
+            emptyMessage="No pending add-on services or work orders."
             keyForItem={(item) => item.id}
             renderRow={(item) => (
               <IssueRow
