@@ -341,18 +341,77 @@ export async function POST(req: Request) {
     }
 
     if (rentProfiles.length > 0) {
-      const rows = rentProfiles
-        .filter((p) => p.id)
-        .map((p) => ({
-          id: String(p.id),
-          manager_user_id: user.role === "admin" ? toUuid(p.managerUserId) ?? user.id : user.id,
+      const candidates = rentProfiles.filter((p) => p.id);
+
+      // Same mirror-trust problem as the charge rows above: the client sends its
+      // full recurring-rent profile list, so an id owned by another manager must
+      // never be reassigned to the caller. Look up the stored owner/property and
+      // require payments EDIT on the STORED property to touch a foreign row.
+      const profileOwnerById = new Map<string, string | null>();
+      const profilePropertyById = new Map<string, string | null>();
+      if (user.role !== "admin" && candidates.length > 0) {
+        const { data: existingProfiles, error: existingProfilesError } = await db
+          .from("portal_recurring_rent_profile_records")
+          .select("id, manager_user_id, property_id")
+          .in(
+            "id",
+            candidates.map((p) => String(p.id)),
+          );
+        if (existingProfilesError) {
+          return NextResponse.json({ error: existingProfilesError.message }, { status: 500 });
+        }
+        for (const row of existingProfiles ?? []) {
+          profileOwnerById.set(String(row.id), row.manager_user_id ? String(row.manager_user_id) : null);
+          profilePropertyById.set(String(row.id), row.property_id ? String(row.property_id) : null);
+        }
+      }
+
+      const editableProfileProperty = new Map<string, boolean>();
+      const canEditForeignProfile = async (propertyId: string | null): Promise<boolean> => {
+        const pid = (propertyId ?? "").trim();
+        if (!pid) return false;
+        if (editableProfileProperty.has(pid)) return editableProfileProperty.get(pid)!;
+        const ok = await managerHasCoManagerPermissionForProperty(db, user.id, pid, "payments", "edit");
+        editableProfileProperty.set(pid, ok);
+        return ok;
+      };
+
+      const rows: Array<{
+        id: string;
+        manager_user_id: string | null;
+        resident_user_id: string | null;
+        resident_email: string | null;
+        property_id: string | null;
+        active: boolean;
+        row_data: Record<string, unknown>;
+        updated_at: string;
+      }> = [];
+      for (const p of candidates) {
+        const id = String(p.id);
+        let managerUserId: string | null;
+        let propertyId = typeof p.propertyId === "string" ? p.propertyId : null;
+        const existingOwner = profileOwnerById.get(id) ?? null;
+        if (user.role === "admin") {
+          managerUserId = toUuid(p.managerUserId) ?? user.id;
+        } else if (existingOwner && existingOwner !== user.id) {
+          const storedProperty = profilePropertyById.get(id) ?? null;
+          if (!(await canEditForeignProfile(storedProperty))) continue;
+          managerUserId = existingOwner;
+          propertyId = storedProperty;
+        } else {
+          managerUserId = user.id;
+        }
+        rows.push({
+          id,
+          manager_user_id: managerUserId,
           resident_user_id: toUuid(p.residentUserId),
           resident_email: typeof p.residentEmail === "string" ? p.residentEmail.trim().toLowerCase() : null,
-          property_id: typeof p.propertyId === "string" ? p.propertyId : null,
+          property_id: propertyId,
           active: p.active !== false,
           row_data: p,
           updated_at: now,
-        }));
+        });
+      }
       if (rows.length > 0) {
         const { error } = await db.from("portal_recurring_rent_profile_records").upsert(rows, { onConflict: "id" });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });

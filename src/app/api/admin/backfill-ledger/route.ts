@@ -6,6 +6,8 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * One-time/historical repair: sweeps portal_household_charge_records into
  * ledger_entries. Never called automatically — run manually per environment
@@ -25,6 +27,9 @@ export async function POST(req: Request) {
 
     const body = (await req.json().catch(() => ({}))) as { managerUserId?: string };
     const managerUserId = body.managerUserId?.trim() || undefined;
+    if (managerUserId && !UUID_RE.test(managerUserId)) {
+      return NextResponse.json({ error: "managerUserId must be a uuid." }, { status: 400 });
+    }
 
     const db = createSupabaseServiceRoleClient();
     const result = await backfillLedgerFromCharges(db, managerUserId);

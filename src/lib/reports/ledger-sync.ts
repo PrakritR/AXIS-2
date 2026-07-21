@@ -85,7 +85,7 @@ async function removeDuplicateHouseholdChargeRecords(
 
 const CHARGE_SWEEP_PAGE_SIZE = 1000;
 
-type ChargeSweepRow = { manager_user_id: string | null; row_data: unknown };
+type ChargeSweepRow = { id: string; manager_user_id: string | null; row_data: unknown };
 
 /** Pages through every matching charge record so sweeps never silently truncate. */
 async function fetchAllChargeRecords(
@@ -96,7 +96,7 @@ async function fetchAllChargeRecords(
   for (let offset = 0; ; offset += CHARGE_SWEEP_PAGE_SIZE) {
     let query = db
       .from("portal_household_charge_records")
-      .select("manager_user_id, row_data")
+      .select("id, manager_user_id, row_data")
       .order("id", { ascending: true })
       .range(offset, offset + CHARGE_SWEEP_PAGE_SIZE - 1);
     if (managerUserId) query = query.eq("manager_user_id", managerUserId);
@@ -121,9 +121,12 @@ export async function reconcileDuplicateChargeList(
   db: SupabaseClient,
   charges: (HouseholdCharge | null)[],
   ownerUserId?: string,
+  allowedChargeIds?: Set<string>,
 ): Promise<{ removedChargeIds: string[] }> {
   const raw = charges.filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
-  const duplicateIds = duplicateHouseholdChargeIds(raw);
+  const duplicateIds = allowedChargeIds
+    ? duplicateHouseholdChargeIds(raw).filter((id) => allowedChargeIds.has(id))
+    : duplicateHouseholdChargeIds(raw);
   if (duplicateIds.length === 0) return { removedChargeIds: [] };
 
   await removeLedgerEntriesForChargeIds(db, duplicateIds, ownerUserId);
@@ -137,10 +140,14 @@ export async function reconcileDuplicateHouseholdChargeRecords(
   managerUserId?: string,
 ): Promise<{ removedChargeIds: string[] }> {
   const data = await fetchAllChargeRecords(db, managerUserId);
+  // `row_data.id` is attacker-influenced text, while the record's primary key is
+  // not. Only ever delete ids that actually exist as record ids in the swept
+  // scope, so a crafted duplicate pair cannot name an unrelated row.
   return reconcileDuplicateChargeList(
     db,
     data.map((row) => row.row_data as HouseholdCharge | null),
     managerUserId,
+    new Set(data.map((row) => String(row.id))),
   );
 }
 
@@ -221,13 +228,21 @@ function buildPaymentLedgerRow(
 async function upsertLedgerEntryRow(db: SupabaseClient, row: LedgerEntryRow): Promise<string | null> {
   const { data: existing } = await db
     .from("ledger_entries")
-    .select("id")
+    .select("id, stripe_checkout_session_id")
     .eq("source_charge_id", row.source_charge_id)
     .eq("entry_type", row.entry_type)
     .maybeSingle();
 
   if (existing?.id) {
-    const { error } = await db.from("ledger_entries").update(row).eq("id", existing.id);
+    // Most re-sync paths (charge edits, the backfill sweep) rebuild the row
+    // without a session id; blanking the stored one would lose the only link
+    // back to the Stripe Checkout session that settled the payment.
+    const update: LedgerEntryRow = {
+      ...row,
+      stripe_checkout_session_id:
+        row.stripe_checkout_session_id ?? existing.stripe_checkout_session_id ?? null,
+    };
+    const { error } = await db.from("ledger_entries").update(update).eq("id", existing.id);
     throwIfLedgerError(error);
     return String(existing.id);
   }
@@ -367,23 +382,37 @@ export async function syncDedupedCharges(
   if (desired.length === 0) return 0;
 
   const sourceIds = [...new Set(desired.map((r) => r.source_charge_id))];
-  const existingByKey = new Map<string, string>();
+  const existingByKey = new Map<string, { id: string; stripeCheckoutSessionId: string | null }>();
   for (let i = 0; i < sourceIds.length; i += 200) {
     const slice = sourceIds.slice(i, i + 200);
     const { data, error } = await db
       .from("ledger_entries")
-      .select("id, source_charge_id, entry_type")
+      .select("id, source_charge_id, entry_type, stripe_checkout_session_id")
       .in("source_charge_id", slice);
     if (error) throw new Error(error.message);
-    for (const row of data ?? []) existingByKey.set(`${row.source_charge_id}:${row.entry_type}`, row.id);
+    for (const row of data ?? []) {
+      existingByKey.set(`${row.source_charge_id}:${row.entry_type}`, {
+        id: row.id,
+        stripeCheckoutSessionId: row.stripe_checkout_session_id ?? null,
+      });
+    }
   }
 
   const toInsert: LedgerEntryRow[] = [];
   const toUpdate: (LedgerEntryRow & { id: string })[] = [];
   for (const row of desired) {
-    const id = existingByKey.get(`${row.source_charge_id}:${row.entry_type}`);
-    if (id) toUpdate.push({ ...row, id });
-    else toInsert.push(row);
+    const existing = existingByKey.get(`${row.source_charge_id}:${row.entry_type}`);
+    if (existing) {
+      // Same rule as upsertLedgerEntryRow: never blank a stored session id.
+      toUpdate.push({
+        ...row,
+        id: existing.id,
+        stripe_checkout_session_id:
+          row.stripe_checkout_session_id ?? existing.stripeCheckoutSessionId ?? null,
+      });
+    } else {
+      toInsert.push(row);
+    }
   }
 
   if (toInsert.length) {
