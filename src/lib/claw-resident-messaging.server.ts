@@ -98,6 +98,10 @@ export function clawManagerForwardPhonesFromEnv(): string[] {
     .filter((p): p is string => Boolean(p));
 }
 
+export function clawManagerDebounceBypassPhones(): string[] {
+  return [...new Set([...clawManagerForwardPhonesFromEnv(), DEFAULT_MANAGER_PHONE])];
+}
+
 /** Default resident phone for manager→resident relay when no thread is open. */
 export function clawDefaultResidentPhoneFromEnv(): string | null {
   const fromEnv = normalizeE164Us((process.env.CLAW_MESSENGER_DEFAULT_RESIDENT_PHONE ?? "").trim());
@@ -238,8 +242,9 @@ export async function resolveMappedManagerContacts(): Promise<
     const db = createSupabaseServiceRoleClient();
     const { data } = await db
       .from("profiles")
-      .select("id, email, full_name, phone, phone_verified_at")
-      .in("email", extraEmails);
+      .select("id, email, full_name, phone, phone_verified_at, role")
+      .in("email", extraEmails)
+      .in("role", ["manager", "pro", "admin", "owner"]);
     for (const row of data ?? []) {
       const email = String((row as { email?: unknown }).email ?? "").trim().toLowerCase();
       if (!email || isPortalSandboxEmail(email)) continue;
@@ -292,8 +297,9 @@ async function resolveManagerUserIdForPhone(managerPhone: string): Promise<strin
   const phone = normalizeE164Us(managerPhone);
   if (!phone) return null;
   const managers = await resolveMappedManagerContacts();
-  const byPhone = managers.find((m) => m.personalPhone === phone);
-  if (byPhone?.userId) return byPhone.userId;
+  const byPhone = managers.filter((m) => m.personalPhone === phone && m.userId);
+  if (byPhone.length > 1) return null;
+  if (byPhone.length === 1) return byPhone[0].userId;
   // Env-forwarded manager cell with no profile phone match → first manager
   // explicitly listed in CLAW_MESSENGER_MANAGER_EMAILS (trial scope only) —
   // never a DB-registered manager, whose residents the trial cell holder must
@@ -442,14 +448,14 @@ export async function resolveOrCreateThreadForManagerPhone(
   const phone = normalizeE164Us(managerPhone);
   if (!phone) return null;
 
-  const existing = await findLatestThreadForManagerPhone(phone);
+  const managerUserId = await resolveManagerUserIdForPhone(phone);
+  if (!managerUserId) return null;
+
+  const existing = await findLatestThreadForManagerPhone(phone, managerUserId);
   if (existing) return existing;
 
   const defaultResident = clawDefaultResidentPhoneFromEnv();
   if (!defaultResident || defaultResident === phone) return null;
-
-  const managerUserId = await resolveManagerUserIdForPhone(phone);
-  if (!managerUserId) return null;
 
   return openClawResidentThread({
     managerUserId,

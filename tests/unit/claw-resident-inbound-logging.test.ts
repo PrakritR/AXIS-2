@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const sendFromManager = vi.fn(async () => ({ ok: true, channel: "claw" as const, sid: "SM1" }));
-const logManagerSmsMessage = vi.fn(async () => undefined);
+const logManagerSmsMessage = vi.fn(async (): Promise<boolean> => true);
 
 vi.mock("@/lib/proplane-sms-transport.server", () => ({
   sendPropLaneSms: vi.fn(async () => ({ ok: true })),
@@ -90,7 +90,7 @@ describe("handleClawLeasingInbound — known resident thread", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sendFromManager.mockResolvedValue({ ok: true, channel: "claw", sid: "SM1" });
-    logManagerSmsMessage.mockResolvedValue(undefined);
+    logManagerSmsMessage.mockResolvedValue(true);
   });
 
   it("persists the resident's raw inbound text (direction=inbound) for the two-way portal thread", async () => {
@@ -104,8 +104,6 @@ describe("handleClawLeasingInbound — known resident thread", () => {
 
     expect(result.ok).toBe(true);
     expect(result.replied).toBe(true);
-    // The logging call is fire-and-forget (void IIFE) — flush the microtask queue.
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(logManagerSmsMessage).toHaveBeenCalledWith(
       expect.anything(),
@@ -128,5 +126,50 @@ describe("handleClawLeasingInbound — known resident thread", () => {
         text: "You're all caught up — nothing due right now.",
       }),
     );
+  });
+
+  it("dedupes every constituent ID from a merged debounce frame", async () => {
+    const { handleClawLeasingInbound } = await import("@/lib/claw-leasing-bot.server");
+    const merged = await handleClawLeasingInbound({
+      from: "+15105794001",
+      text: "first\nsecond",
+      messageId: "merged-log-test-2",
+      mergedMessageIds: ["merged-log-test-1", "merged-log-test-2"],
+      workNumber: "+12053690702",
+    });
+    const replayedConstituent = await handleClawLeasingInbound({
+      from: "+15105794001",
+      text: "first",
+      messageId: "merged-log-test-1",
+      workNumber: "+12053690702",
+    });
+
+    expect(merged.replied).toBe(true);
+    expect(replayedConstituent.replied).toBe(false);
+    expect(sendFromManager).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases idempotency when inbound persistence fails so delivery can retry before replying", async () => {
+    const { handleClawLeasingInbound } = await import("@/lib/claw-leasing-bot.server");
+    logManagerSmsMessage.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    const failed = await handleClawLeasingInbound({
+      from: "+15105794001",
+      text: "retry this",
+      messageId: "inbound-log-retry-test",
+      workNumber: "+12053690702",
+    });
+    expect(failed.ok).toBe(false);
+    expect(sendFromManager).not.toHaveBeenCalled();
+
+    const retried = await handleClawLeasingInbound({
+      from: "+15105794001",
+      text: "retry this",
+      messageId: "inbound-log-retry-test",
+      workNumber: "+12053690702",
+    });
+    expect(retried.ok).toBe(true);
+    expect(retried.replied).toBe(true);
+    expect(sendFromManager).toHaveBeenCalledTimes(1);
   });
 });

@@ -35,6 +35,7 @@ import {
   labelClawSmsFromResident,
   residentInboundAck,
   resolveMappedManagerContacts,
+  resolveOrCreateThreadForManagerPhone,
   resolveRegisteredClawManagers,
 } from "@/lib/claw-resident-messaging.server";
 
@@ -123,6 +124,7 @@ describe("resolveMappedManagerContacts", () => {
     });
     const contacts = await resolveMappedManagerContacts();
     expect(contacts.map((c) => c.email).sort()).toEqual(["ops@landlord.com", "real@landlord.com"]);
+    expect(inCalls).toContainEqual(["role", ["manager", "pro", "admin", "owner"]]);
   });
 
   it("never re-admits a sandbox email via the explicit env override", async () => {
@@ -142,6 +144,19 @@ describe("isMappedManagerPhone", () => {
   it("does not recognize an unrelated phone", async () => {
     queryQueue.push({ data: [profileRow()] });
     expect(await isMappedManagerPhone("+19995551234")).toBe(false);
+  });
+});
+
+describe("manager phone resolution", () => {
+  it("refuses to select a manager when a verified phone is shared by multiple profiles", async () => {
+    queryQueue.push({
+      data: [
+        profileRow({ id: "mgr-1", email: "one@landlord.com" }),
+        profileRow({ id: "mgr-2", email: "two@landlord.com" }),
+      ],
+    });
+
+    expect(await resolveOrCreateThreadForManagerPhone("+15105551234")).toBeNull();
   });
 });
 

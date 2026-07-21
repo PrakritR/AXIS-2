@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { clawMessengerApiKey, isClawMessengerConfigured } from "@/lib/claw-messenger.server";
-import { resolveMappedManagerContacts } from "@/lib/claw-resident-messaging.server";
+import {
+  clawManagerDebounceBypassPhones,
+  resolveMappedManagerContacts,
+} from "@/lib/claw-resident-messaging.server";
 
 export const runtime = "nodejs";
 
@@ -46,6 +49,7 @@ export async function GET(req: Request) {
       managers
         .map((m) => m.personalPhone)
         .filter((p): p is string => Boolean(p))
+        .concat(clawManagerDebounceBypassPhones())
         .map((p) => hashPhone(apiKey, p)),
     ),
   ];

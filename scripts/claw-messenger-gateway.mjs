@@ -72,6 +72,7 @@ const managerPhonesRefreshMs = (() => {
 
 let backoffMs = 1000;
 let sinceIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+let shuttingDown = false;
 const seen = new Set();
 
 /* Manager phones bypass the debounce entirely — a manager composing through
@@ -141,6 +142,7 @@ const debounceBuffers = new Map();
 /* Frames flushed out of a buffer but whose delivery hasn't succeeded yet —
  * their arrival time must keep bounding `sinceIso` just like buffered ones. */
 const inFlightDeliveries = new Set();
+const activeDeliveryPromises = new Set();
 
 /** Earliest arrival among buffered + in-flight frames; Infinity when none. */
 function oldestPendingArrivalMs() {
@@ -203,6 +205,13 @@ function flushDebounceBuffer(key) {
   return deliverWithRetry(merged, buf.firstFrameAtMs);
 }
 
+function frameMessageIds(frame) {
+  return [
+    frame.messageId,
+    ...(Array.isArray(frame.mergedMessageIds) ? frame.mergedMessageIds : []),
+  ].filter((id, index, ids) => typeof id === "string" && id && ids.indexOf(id) === index);
+}
+
 function bufferForDebounce(frame) {
   const key = debounceKey(frame);
   const buf = debounceBuffers.get(key) ?? { frames: [], timer: null, firstFrameAtMs: Date.now() };
@@ -221,7 +230,7 @@ function bufferForDebounce(frame) {
  * alone only starts the delivery, it doesn't wait for it. */
 async function flushAllDebounceBuffers() {
   const pending = [...debounceBuffers.keys()].map((key) => flushDebounceBuffer(key)).filter(Boolean);
-  await Promise.allSettled(pending);
+  await Promise.allSettled([...new Set([...pending, ...activeDeliveryPromises])]);
 }
 
 async function forward(frame) {
@@ -249,8 +258,8 @@ async function forward(frame) {
   if (!res.ok) return false;
 
   // Mark seen only once the webhook accepted it, so a failed POST can retry.
-  if (messageId) {
-    seen.add(messageId);
+  for (const id of frameMessageIds(frame)) {
+    seen.add(id);
     if (seen.size > 2000) {
       const first = seen.values().next().value;
       seen.delete(first);
@@ -259,7 +268,7 @@ async function forward(frame) {
   return true;
 }
 
-async function deliverWithRetry(frame, arrivalMs = null) {
+async function runDeliveryWithRetry(frame, arrivalMs = null) {
   const marker = arrivalMs != null ? { arrivalMs } : null;
   if (marker) inFlightDeliveries.add(marker);
   try {
@@ -286,6 +295,16 @@ async function deliverWithRetry(frame, arrivalMs = null) {
   }
 }
 
+function deliverWithRetry(frame, arrivalMs = null) {
+  const delivery = runDeliveryWithRetry(frame, arrivalMs);
+  activeDeliveryPromises.add(delivery);
+  void delivery.then(
+    () => activeDeliveryPromises.delete(delivery),
+    () => activeDeliveryPromises.delete(delivery),
+  );
+  return delivery;
+}
+
 function connect() {
   const url = `${wsBase}?key=${encodeURIComponent(apiKey)}`;
   console.log(`[claw-gateway] connecting → webhook ${webhookUrl}`);
@@ -304,6 +323,7 @@ function connect() {
   });
 
   ws.on("message", (data) => {
+    if (shuttingDown) return;
     let frame;
     try {
       frame = JSON.parse(String(data));
@@ -326,6 +346,7 @@ function connect() {
 
   ws.on("close", () => {
     clearInterval(pingTimer);
+    if (shuttingDown) return;
     console.warn(`[claw-gateway] closed — retry in ${backoffMs}ms`);
     setTimeout(connect, backoffMs);
     backoffMs = Math.min(30_000, backoffMs * 2);
@@ -349,12 +370,11 @@ if (isMainModule) {
   // actually leave the process before exiting. process.exit() does not drain
   // pending I/O, so firing the flush without awaiting it (or exiting
   // immediately after) would start the HTTP POST and then kill it mid-flight
-  // — a bounded wait (capped at 8s) is required, not just calling the flush.
+  // — await the retry loop rather than imposing a shorter shutdown deadline.
   const gracefulShutdown = async () => {
-    await Promise.race([
-      flushAllDebounceBuffers(),
-      new Promise((resolve) => setTimeout(resolve, 8_000)),
-    ]);
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await flushAllDebounceBuffers();
     process.exit(0);
   };
   process.on("SIGTERM", () => void gracefulShutdown());

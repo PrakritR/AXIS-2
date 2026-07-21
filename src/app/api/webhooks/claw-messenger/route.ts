@@ -71,6 +71,7 @@ export async function POST(req: Request) {
     from?: string;
     text?: string;
     messageId?: string;
+    mergedMessageIds?: string[];
     chatId?: string;
     service?: string;
     replay?: boolean;
@@ -102,6 +103,9 @@ export async function POST(req: Request) {
     from,
     text,
     messageId: body.messageId ?? null,
+    mergedMessageIds: Array.isArray(body.mergedMessageIds)
+      ? body.mergedMessageIds.filter((id): id is string => typeof id === "string")
+      : [],
     chatId: body.chatId ?? null,
     service: body.service ?? null,
     workNumber: clawLeasingAgentPhoneE164(),

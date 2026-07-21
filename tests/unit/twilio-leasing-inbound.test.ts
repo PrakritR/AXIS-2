@@ -45,6 +45,7 @@ vi.mock("@/lib/supabase/service", () => {
     c.in = self;
     c.order = self;
     c.limit = async () => ({ data: [] });
+    c.insert = async () => ({ error: null });
     c.maybeSingle = async () => ({
       data: { id: "mgr-1", email: "m@test.com", full_name: "M" },
     });

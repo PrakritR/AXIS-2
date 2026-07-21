@@ -8,6 +8,7 @@ type GatewayModule = {
   bufferForDebounce: (frame: Record<string, unknown>) => void;
   flushDebounceBuffer: (key: string) => void;
   flushAllDebounceBuffers: () => void;
+  deliverWithRetry: (frame: Record<string, unknown>) => Promise<void>;
   debounceBuffers: Map<string, { frames: Record<string, unknown>[]; timer: unknown }>;
   isManagerPhone: (from: string) => boolean;
   shouldBypassDebounce: (frame: Record<string, unknown>) => boolean;
@@ -73,6 +74,9 @@ describe("claw-messenger-gateway reply debounce", () => {
     expect(body.messageId).toBe("m2");
     expect(body.mergedCount).toBe(2);
     expect(body.mergedMessageIds).toEqual(["m1", "m2"]);
+
+    await gw.deliverWithRetry({ type: "message", from: "+12065551234", text: "hi", messageId: "m1" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("keys buffers per phone so two different prospects never merge", async () => {
@@ -145,6 +149,29 @@ describe("claw-messenger-gateway reply debounce", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+
+    resolveFetch?.();
+    await flush;
+    expect(settled).toBe(true);
+  });
+
+  it("flushAllDebounceBuffers also waits for a delivery already in flight", async () => {
+    const gw = await loadGateway({ CLAW_MESSENGER_DEBOUNCE_SECONDS: "150" });
+    let resolveFetch: (() => void) | null = null;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = () => resolve({ ok: true, status: 200, text: async () => "{}" });
+        }),
+    );
+
+    void gw.deliverWithRetry({ type: "message", from: "+12065551111", text: "hi", messageId: "a1" });
+    let settled = false;
+    const flush = gw.flushAllDebounceBuffers().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
     expect(settled).toBe(false);
 
     resolveFetch?.();

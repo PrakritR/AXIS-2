@@ -456,6 +456,46 @@ function markInboundMessageSeen(messageId: string): boolean {
   return true;
 }
 
+function releaseInboundMessageClaims(messageIds: string[]): void {
+  for (const messageId of messageIds) seenInboundMessageIds.delete(messageId);
+}
+
+async function persistClawInboundSms(args: {
+  managerUserId: string;
+  residentUserId?: string | null;
+  residentPhone: string;
+  body: string;
+  fromPhone: string;
+  toPhone: string;
+  messageId: string;
+}): Promise<boolean> {
+  const db = createSupabaseServiceRoleClient();
+  const { logManagerSmsMessage } = await import("@/lib/manager-sms-messages.server");
+  const managerMessageLogged = await logManagerSmsMessage(db, {
+    managerUserId: args.managerUserId,
+    residentUserId: args.residentUserId,
+    residentPhone: args.residentPhone,
+    direction: "inbound",
+    body: args.body,
+    fromPhone: args.fromPhone,
+    toPhone: args.toPhone,
+    messageSid: args.messageId || null,
+    source: "automated",
+  });
+  const { error } = await db.from("inbound_sms_log").insert({
+    manager_user_id: args.managerUserId,
+    from_phone: args.fromPhone,
+    to_phone: args.toPhone,
+    body: args.body,
+    message_sid: args.messageId || null,
+  });
+  const inboundLogStored = !error || error.code === "23505";
+  if (!inboundLogStored) {
+    console.error("claw inbound_sms_log insert failed", error.message);
+  }
+  return managerMessageLogged && inboundLogStored;
+}
+
 /** Run manager forwards / inbox mirrors after the reply is out the door.
  * after() needs a live request scope — outside one (tests) run inline. */
 function runAfterReply(task: () => Promise<unknown>): void {
@@ -478,6 +518,7 @@ export async function handleClawLeasingInbound(args: {
   from: string;
   text: string;
   messageId?: string | null;
+  mergedMessageIds?: string[];
   chatId?: string | null;
   service?: string | null;
   /** Owning manager when inbound hit their Twilio `sms_from_number`. */
@@ -496,9 +537,19 @@ export async function handleClawLeasingInbound(args: {
     return { ok: true, intent: "unknown", replied: false };
   }
 
-  const messageId = args.messageId?.trim() || "";
+  const messageIds = [
+    args.messageId,
+    ...(Array.isArray(args.mergedMessageIds) ? args.mergedMessageIds : []),
+  ]
+    .map((id) => id?.trim() || "")
+    .filter((id, index, ids) => Boolean(id) && ids.indexOf(id) === index);
+  const messageId = args.messageId?.trim() || messageIds[0] || "";
   if (messageId && !markInboundMessageSeen(messageId)) {
     return { ok: true, intent: "unknown", replied: false };
+  }
+  const claimedMessageIds = messageId ? [messageId] : [];
+  for (const id of messageIds) {
+    if (id !== messageId && markInboundMessageSeen(id)) claimedMessageIds.push(id);
   }
 
   const text = (args.text ?? "").trim();
@@ -590,33 +641,23 @@ export async function handleClawLeasingInbound(args: {
       // two-way replica of the Claw thread, not just the agent's outbound
       // replies — mirrors the logging already done for the leasing-prospect
       // path below. Outbound is logged for free inside replySms/sendFromManagerWorkNumber.
-      const dbForResidentLog = createSupabaseServiceRoleClient();
       const toLine = workNumber || clawLeasingAgentPhoneE164();
-      void (async () => {
-        try {
-          const { logManagerSmsMessage } = await import("@/lib/manager-sms-messages.server");
-          await logManagerSmsMessage(dbForResidentLog, {
-            managerUserId: thread.managerUserId,
-            residentUserId,
-            residentPhone: from,
-            direction: "inbound",
-            body: text,
-            fromPhone: from,
-            toPhone: toLine,
-            messageSid: messageId || null,
-            source: "automated",
-          });
-          await dbForResidentLog.from("inbound_sms_log").insert({
-            manager_user_id: thread.managerUserId,
-            from_phone: from,
-            to_phone: toLine,
-            body: text,
-            message_sid: messageId || null,
-          });
-        } catch (e) {
-          console.error("claw resident inbound log failed", e);
-        }
-      })();
+      const inboundLogged = await persistClawInboundSms({
+        managerUserId: thread.managerUserId,
+        residentUserId,
+        residentPhone: from,
+        body: text,
+        fromPhone: from,
+        toPhone: toLine,
+        messageId,
+      }).catch((e) => {
+        console.error("claw resident inbound log failed", e);
+        return false;
+      });
+      if (!inboundLogged) {
+        releaseInboundMessageClaims(claimedMessageIds);
+        return { ok: false, intent: "unknown", replied: false, error: "Inbound SMS logging failed." };
+      }
 
       const action = await runResidentSmsAction({
         text,
@@ -722,32 +763,22 @@ export async function handleClawLeasingInbound(args: {
   // Persist prospect inbound so Communication → SMS shows both sides of the
   // Claw thread (outbound already logs via sendFromManagerWorkNumber).
   if (landlordId) {
-    const dbForLog = createSupabaseServiceRoleClient();
     const toLine = workNumber || clawLeasingAgentPhoneE164();
-    void (async () => {
-      try {
-        const { logManagerSmsMessage } = await import("@/lib/manager-sms-messages.server");
-        await logManagerSmsMessage(dbForLog, {
-          managerUserId: landlordId,
-          residentPhone: from,
-          direction: "inbound",
-          body: text,
-          fromPhone: from,
-          toPhone: toLine,
-          messageSid: messageId || null,
-          source: "automated",
-        });
-        await dbForLog.from("inbound_sms_log").insert({
-          manager_user_id: landlordId,
-          from_phone: from,
-          to_phone: toLine,
-          body: text,
-          message_sid: messageId || null,
-        });
-      } catch (e) {
-        console.error("claw leasing inbound log failed", e);
-      }
-    })();
+    const inboundLogged = await persistClawInboundSms({
+      managerUserId: landlordId,
+      residentPhone: from,
+      body: text,
+      fromPhone: from,
+      toPhone: toLine,
+      messageId,
+    }).catch((e) => {
+      console.error("claw leasing inbound log failed", e);
+      return false;
+    });
+    if (!inboundLogged) {
+      releaseInboundMessageClaims(claimedMessageIds);
+      return { ok: false, intent, replied: false, error: "Inbound SMS logging failed." };
+    }
   }
 
   // Claude leasing agent on the manager's work number — grounds replies on live

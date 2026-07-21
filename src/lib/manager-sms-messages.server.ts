@@ -104,11 +104,11 @@ export async function logManagerSmsMessage(
     messageSid?: string | null;
     source?: "work_number" | "relay" | "automated";
   },
-): Promise<void> {
+): Promise<boolean> {
   const managerUserId = args.managerUserId.trim();
   const residentPhone = phoneKey(args.residentPhone);
   const toPhone = phoneKey(args.toPhone);
-  if (!managerUserId || !residentPhone || !toPhone) return;
+  if (!managerUserId || !residentPhone || !toPhone) return false;
 
   const row = {
     manager_user_id: managerUserId,
@@ -128,19 +128,21 @@ export async function logManagerSmsMessage(
       .select("id")
       .eq("message_sid", row.message_sid)
       .limit(1);
-    if ((existing ?? []).length > 0) return;
+    if ((existing ?? []).length > 0) return true;
   }
 
   const { error } = await db.from("manager_sms_messages").insert(row);
   if (error) {
     // Unique sid race — treat as already logged.
-    if (error.code === "23505") return;
+    if (error.code === "23505") return true;
     console.error("logManagerSmsMessage insert failed", error.message, {
       managerUserId,
       residentPhone,
       direction: row.direction,
     });
+    return false;
   }
+  return true;
 }
 
 type ResidentSeed = {

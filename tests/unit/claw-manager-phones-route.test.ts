@@ -51,6 +51,7 @@ beforeEach(() => {
   process.env.CLAW_MESSENGER_ENABLED = "1";
   process.env.CLAW_MESSENGER_API_KEY = API_KEY;
   delete process.env.CLAW_MESSENGER_MANAGER_EMAILS;
+  delete process.env.CLAW_MESSENGER_MANAGER_FORWARD_PHONES;
 });
 
 describe("GET /api/webhooks/claw-messenger/manager-phones", () => {
@@ -96,7 +97,10 @@ describe("GET /api/webhooks/claw-messenger/manager-phones", () => {
 
     const body = (await res.json()) as { phoneHashes: string[] };
     console.log("manager-phones 200 body:", JSON.stringify(body));
-    expect(body.phoneHashes).toEqual([expectedHash("+12065550111")]);
+    expect(body.phoneHashes).toEqual([
+      expectedHash("+12065550111"),
+      expectedHash("+15103098345"),
+    ]);
     expect(body.phoneHashes).not.toContain(expectedHash("+14255550222"));
     expect(body.phoneHashes).not.toContain(expectedHash("+13605550333"));
 
@@ -118,5 +122,18 @@ describe("GET /api/webhooks/claw-messenger/manager-phones", () => {
     const gatewayDigits = "+1 (206) 555-0111".replace(/\D/g, "");
     const gatewayHash = createHmac("sha256", API_KEY).update(gatewayDigits).digest("hex");
     expect(body.phoneHashes).toContain(gatewayHash);
+  });
+
+  it("includes trial and ops forward phones in the manager debounce bypass", async () => {
+    process.env.CLAW_MESSENGER_MANAGER_FORWARD_PHONES = "+1 (425) 555-0444";
+    queryQueue.push({ data: [] });
+
+    const res = await GET(
+      new Request(ROUTE_URL, { headers: { Authorization: `Bearer ${API_KEY}` } }),
+    );
+    const body = (await res.json()) as { phoneHashes: string[] };
+
+    expect(body.phoneHashes).toContain(expectedHash("+14255550444"));
+    expect(body.phoneHashes).toContain(expectedHash("+15103098345"));
   });
 });
