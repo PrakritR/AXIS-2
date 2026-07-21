@@ -284,6 +284,9 @@ export function PortalCalendarPanels({
   // same React batch on a fast click, so finishDragSelection would otherwise
   // read a stale `null` and the click would silently do nothing.
   const dragSelectionRef = useRef<DragSelection | null>(null);
+  // Vendor calendar: single-slot activation opens the add-work draft via
+  // openSlotDetails, so the block modal only opens for multi-slot drags there.
+  const isVendorCalendar = Boolean(vendorCalendarActions);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
@@ -835,9 +838,13 @@ export function PortalCalendarPanels({
     const pending = dragSelectionRef.current;
     if (!pending) return;
     dragSelectionRef.current = null;
-    prefillBlockModal(pending);
     setDragSelection(null);
-  }, [prefillBlockModal]);
+    // A single-slot press on the vendor calendar is a click, not a drag: let the
+    // click event reach openSlotDetails → onAddFromSlot so exactly one modal
+    // (the work draft) opens instead of stacking the block modal on top of it.
+    if (isVendorCalendar && pending.endSlotExclusive - pending.startSlot === 1) return;
+    prefillBlockModal(pending);
+  }, [isVendorCalendar, prefillBlockModal]);
 
   const cancelDragSelection = useCallback(() => {
     dragSelectionRef.current = null;
@@ -1309,8 +1316,9 @@ export function PortalCalendarPanels({
                     // Keyboard activation (Enter / Space) fires click without any
                     // mousedown/mouseup, so the drag-select path never runs. Open the
                     // block modal directly for an empty slot so the grid is usable
-                    // without a mouse.
-                    if (!readOnly && !meeting && !active && !coManagerOpen && e.detail === 0) {
+                    // without a mouse. On the vendor calendar an empty-slot activation
+                    // already works via openSlotDetails → onAddFromSlot instead.
+                    if (!isVendorCalendar && !readOnly && !meeting && !active && !coManagerOpen && e.detail === 0) {
                       openBlockModalForSlot(ds, mondayBasedDayIndex(new Date(`${ds}T12:00:00`)), slotIdx);
                       return;
                     }
@@ -1875,7 +1883,17 @@ export function PortalCalendarPanels({
                         if (active) return;
                         finishDragSelection();
                       }}
-                      onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget)}
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                        // Same keyboard-activation path as the schedule-card grid:
+                        // Enter / Space fires click alone, so open the block modal
+                        // directly for an empty slot (vendor mode routes through
+                        // openSlotDetails instead).
+                        if (!isVendorCalendar && !active && e.detail === 0) {
+                          openBlockModalForSlot(ds, weekday, slotIdx);
+                          return;
+                        }
+                        openSlotDetails(ds, slotIdx, e.currentTarget);
+                      }}
                       className={`flex min-h-10 items-center justify-between rounded-xl border px-3 text-left text-xs font-semibold transition ${
                         selected
                           ? "border-primary/40 bg-primary/[0.12] text-primary"
