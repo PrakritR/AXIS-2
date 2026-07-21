@@ -42,9 +42,13 @@ service-role.
 authenticated context, never the request body. `route.ts` = GET (list/filter by
 category/scope/property/search, excludes soft-deleted) + POST (multipart upload,
 validates MIME+size, sha256 checksum, rolls back the storage object if the row
-insert fails). `[id]/route.ts` = PATCH rename/recategorize + DELETE soft-delete.
-`[id]/signed-url/route.ts` = GET signed URL (`?download=1` for a download
-disposition). Shared types/constants/mappers live in
+insert fails). `[id]/route.ts` = PATCH rename/recategorize (a blank/whitespace `displayName`
+is a 400, never silently renamed to the "Untitled document" fallback) + DELETE
+soft-delete. `[id]/signed-url/route.ts` = GET signed URL, always JSON — never a
+302 redirect: with `?download=1` it adds a `resolveDownloadName`-derived
+`fileName` and the client fetches the signed URL and saves it as a blob
+(`triggerDocumentDownload`), because a 302 to storage opens a new tab in the
+Capacitor WebView instead of downloading. Shared types/constants/mappers live in
 `src/lib/documents/manager-documents.ts`.
 
 **UI** — new **Library** tab (the first tab, also the section's default landing)
