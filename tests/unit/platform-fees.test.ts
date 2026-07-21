@@ -33,8 +33,8 @@ describe("platform-fees", () => {
 });
 
 describe("resident payment fees", () => {
-  it("bank transfers are free to the resident; card keeps its pass-through", () => {
-    expect(residentProcessingFeeCents(10000, "ach")).toBe(0);
+  it("residents pay processing on every method; card keeps its pass-through", () => {
+    expect(residentProcessingFeeCents(10000, "ach")).toBe(80); // 0.8% of $100
     expect(residentProcessingFeeCents(10000, "card")).toBe(320);
   });
 

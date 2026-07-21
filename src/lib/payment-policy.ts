@@ -21,61 +21,78 @@ export const MANAGER_PAYMENT_PRESETS = [
 
 export type ManagerPaymentPresetId = (typeof MANAGER_PAYMENT_PRESETS)[number]["id"];
 
-/** @deprecated Bank transfers are free to residents — kept for legacy display call sites. */
-export const AXIS_ACH_FEE_PERCENT = 0;
+/** @deprecated ACH processing percent for legacy display — prefer residentProcessingFeeCents. */
+export const AXIS_ACH_FEE_PERCENT = 0.8;
 
 export type ResidentAxisPaymentMethod = "ach" | "card" | "link";
 
-const RESIDENT_PROCESSING_FEE_BPS: Record<ResidentAxisPaymentMethod, number> = {
-  // Bank transfers are FREE to the resident. Stripe's real ACH cost
-  // (0.8% capped at $5) is recouped from the manager's payout instead —
-  // see achPlatformRecoupCents + the Connect application_fee_amount.
-  ach: 0,
+// Stripe's real per-method processing cost, always passed through to the
+// resident as a visible service-fee line so the manager receives the charge
+// amount in full on EVERY method. ACH is 0.8% capped at $5 (a cap, so it is
+// computed by achProcessingFeeCents rather than a flat bps+fixed); card/Link
+// are 2.9% + $0.30.
+const RESIDENT_PROCESSING_FEE_BPS: Record<Exclude<ResidentAxisPaymentMethod, "ach">, number> = {
   card: 290,
   link: 290,
 };
 
-const RESIDENT_PROCESSING_FEE_FIXED_CENTS: Record<ResidentAxisPaymentMethod, number> = {
-  ach: 0,
+const RESIDENT_PROCESSING_FEE_FIXED_CENTS: Record<Exclude<ResidentAxisPaymentMethod, "ach">, number> = {
   card: 30,
   link: 30,
 };
 
+/**
+ * Stripe's actual ACH processing cost: 0.8% of the subtotal, capped at $5.00.
+ * The resident pays this as a service fee (like card processing) so the manager
+ * is kept whole; it is also the Connect application_fee_amount that recovers the
+ * pass-through from the checkout total. Never charge more than Stripe's real cost.
+ */
+export function achProcessingFeeCents(subtotalCents: number): number {
+  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
+  return Math.min(Math.round((subtotalCents * 80) / 10_000), 500);
+}
+
+/** @deprecated Renamed to achProcessingFeeCents — no longer recouped from the manager. */
+export const achPlatformRecoupCents = achProcessingFeeCents;
+
 /** Processing pass-through charged to the resident (before Axis tier fee). */
 export function residentProcessingFeeCents(subtotalCents: number, method: ResidentAxisPaymentMethod): number {
   if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
+  if (method === "ach") return achProcessingFeeCents(subtotalCents);
   const bps = RESIDENT_PROCESSING_FEE_BPS[method];
   const fixed = RESIDENT_PROCESSING_FEE_FIXED_CENTS[method];
   return Math.floor((subtotalCents * bps) / 10_000) + fixed;
-}
-
-/**
- * Stripe's actual ACH processing cost (0.8% capped at $5.00). The resident
- * never pays this — it is recouped from the manager's Connect payout via
- * application_fee_amount so the platform doesn't run bank payments at a loss.
- */
-export function achPlatformRecoupCents(subtotalCents: number): number {
-  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
-  return Math.min(Math.round((subtotalCents * 80) / 10_000), 500);
 }
 
 export function residentAxisPlatformFeeCents(subtotalCents: number, managerTier?: string | null): number {
   return platformFeeCents(subtotalCents, "rent", managerTier);
 }
 
-/** Total application fee retained by Axis on Connect destination charges. */
+/**
+ * Total application fee retained by Axis on Connect destination charges. This
+ * equals exactly what the resident pays on top of the subtotal (processing +
+ * tier fee) for the chosen method, so the manager's Connect payout is always the
+ * full subtotal regardless of method.
+ */
 export function residentConnectApplicationFeeCents(
   subtotalCents: number,
   method: ResidentAxisPaymentMethod,
   managerTier?: string | null,
 ): number {
-  const processing =
-    method === "ach" ? achPlatformRecoupCents(subtotalCents) : residentProcessingFeeCents(subtotalCents, method);
-  return processing + residentAxisPlatformFeeCents(subtotalCents, managerTier);
+  return residentProcessingFeeCents(subtotalCents, method) + residentAxisPlatformFeeCents(subtotalCents, managerTier);
+}
+
+/**
+ * Fee the MANAGER absorbs out of a resident payment. Residents cover the
+ * processing/service fee on every method (card AND ACH), so the manager is kept
+ * whole and this is always 0 — kept as a named function so reporting reads intent.
+ */
+export function managerAbsorbedPaymentFeeCents(): number {
+  return 0;
 }
 
 export function residentProcessingFeeDisplayLabel(method: ResidentAxisPaymentMethod): string {
-  if (method === "ach") return "Free";
+  if (method === "ach") return "0.8% bank processing (max $5.00)";
   if (method === "link") return "2.9% + $0.30 Link processing";
   return "2.9% + $0.30 card processing";
 }
@@ -124,7 +141,7 @@ export function axisPaymentsEnabledOnListing(sub: Pick<ManagerListingSubmissionV
 }
 
 export function axisAchFeeDisplayLabel(): string {
-  return "free bank transfer";
+  return "0.8% bank processing (max $5.00)";
 }
 
 export function residentPaymentMethodsSummary(
@@ -138,7 +155,7 @@ export function residentPaymentMethodsSummary(
   if (sub.zellePaymentsEnabled && sub.zelleContact?.trim()) methods.push(`Zelle (${sub.zelleContact.trim()})`);
   if (sub.venmoPaymentsEnabled && sub.venmoContact?.trim()) methods.push(`Venmo (${sub.venmoContact.trim()})`);
   if (axisPaymentsEnabledOnListing(sub)) {
-    methods.push("PropLane payments — free bank transfer; card/Link at standard processing");
+    methods.push("PropLane payments — bank (ACH), card, or Link at standard processing fees");
   }
   if (methods.length === 0) methods.push("Zelle, Venmo, ACH, or cash — your manager marks payments received.");
   return methods;

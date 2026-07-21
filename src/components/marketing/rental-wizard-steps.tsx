@@ -1871,7 +1871,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <span>
                   <span className="text-sm font-semibold text-foreground">Bank transfer (ACH)</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Pay securely via bank account — free, no processing fee. Clears in 3–5 business days.
+                    Pay securely via bank account — low 0.8% processing fee (max $5). Clears in 3–5 business days.
                   </span>
                 </span>
               </label>

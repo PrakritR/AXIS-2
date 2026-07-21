@@ -2932,13 +2932,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     data-attr="resident-payment-axis-ach-toggle"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Bank transfer — free for residents
+                    Bank transfer & card — you receive the full amount
                   </span>
                 </label>
                 {pmAxisPaymentsEnabled ? (
                   <p className="pl-7 text-xs leading-relaxed text-muted">
-                    Residents pay through Stripe Checkout with bank (ACH) or Link. Funds transfer to your connected payout
-                    account after checkout.
+                    Residents pay through Stripe Checkout with bank (ACH), card, or Link and cover the processing fee, so
+                    the full charge amount transfers to your connected payout account after checkout.
                     {pmConnectReady === false ? (
                       <>
                         {" "}
