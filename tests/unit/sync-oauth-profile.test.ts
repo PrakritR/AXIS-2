@@ -49,7 +49,7 @@ describe("syncOAuthProfile", () => {
     expect(supabase.update).toHaveBeenCalled();
   });
 
-  it("provisions primary admin when profile is missing", async () => {
+  it("provisions primary admin when profile is missing, admin role only", async () => {
     const supabase = mockSupabase(null);
 
     await syncOAuthProfile(supabase as never, {
@@ -59,6 +59,27 @@ describe("syncOAuthProfile", () => {
     } as never);
 
     expect(supabase.upsert).toHaveBeenCalled();
-    expect(supabase.profileRolesUpsert).toHaveBeenCalledTimes(2);
+    // Admin-ONLY: the ops admin must never also receive a manager role row.
+    expect(supabase.profileRolesUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-asserts admin and skips manager provisioning for an existing primary admin", async () => {
+    const supabase = mockSupabase({
+      id: "admin-1",
+      email: "founders@axis-seattle-housing.com",
+      full_name: "Axis Admin",
+      role: "admin",
+    });
+
+    await syncOAuthProfile(supabase as never, {
+      id: "admin-1",
+      email: "founders@axis-seattle-housing.com",
+      user_metadata: { full_name: "Axis Admin" },
+      identities: [{ provider: "google" }],
+      app_metadata: { provider: "google" },
+    } as never);
+
+    expect(supabase.update).toHaveBeenCalled();
+    expect(supabase.profileRolesUpsert).toHaveBeenCalledTimes(1);
   });
 });
