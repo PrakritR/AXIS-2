@@ -18,7 +18,6 @@ import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel"
 import { ResidentCommunication } from "@/components/portal/resident-communication";
 import { VendorCommunication } from "@/components/portal/vendor-communication";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
-import { ResidentFinancialsPanel } from "@/components/portal/resident-financials-panel";
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
 import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
@@ -57,6 +56,7 @@ import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId } fro
 import { loadResidentLeaseSignedStatus, loadResidentPortalAccessState, residentHasFullPortalAccess, residentPortalHomePath } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
+import { RESIDENT_PAYMENTS_LEGACY_TABS } from "@/lib/portals/resident-sections";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
@@ -200,10 +200,25 @@ function residentManagerTierGate(
   return <ResidentFreeTierFeatureNotice title={featureLabel} />;
 }
 
+export type PortalSearchParams = Record<string, string | string[] | undefined>;
+
+/** Re-serializes the incoming query string so a legacy redirect doesn't drop it. */
+function searchSuffix(searchParams?: PortalSearchParams, extra?: Record<string, string>): string {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
+    if (typeof value === "string") q.set(key, value);
+    else if (Array.isArray(value)) value.forEach((entry) => q.append(key, entry));
+  }
+  for (const [key, value] of Object.entries(extra ?? {})) q.set(key, value);
+  const qs = q.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export async function renderPortalSection(
   kind: PortalKind,
   section: string,
   tabParts?: string[],
+  searchParams?: PortalSearchParams,
 ) {
   const def = await getPortalDefinition(kind);
 
@@ -287,6 +302,20 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
     }
     redirect(`${def.basePath}/communication/email/${legacySuffix}`);
+  }
+
+  // Legacy path support: the resident "financials" section was merged into
+  // Payments tabs. Must run BEFORE findSection — "financials" is not a resident
+  // nav section, so findSection would notFound first.
+  if (kind === "resident" && section === "financials") {
+    const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[tabParts?.[0] ?? ""];
+    const target = legacy ?? { tab: tabParts?.[0] === "statements" ? "statements" : "summary" };
+    redirect(
+      `${def.basePath}/payments/${target.tab}${searchSuffix(
+        searchParams,
+        target.status ? { status: target.status } : undefined,
+      )}`,
+    );
   }
 
   const meta = findSection(def, section);
@@ -595,32 +624,30 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "payments") {
     const allowedTabs = meta.tabs.map((t) => t.id);
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/payments/pending`);
+      redirect(`${def.basePath}/payments/${allowedTabs[0] ?? "charges"}${searchSuffix(searchParams)}`);
     }
     if (tabParts.length > 1) notFound();
     const payTab = tabParts[0]!;
-    if (!allowedTabs.includes(payTab)) notFound();
-    if (payTab === "balance" || payTab === "statements") {
-      const financialTab = payTab === "balance" ? "summary" : "statements";
-      return (
-        <ResidentFinancialsPanel
-          tabId={financialTab}
-          basePath={`${def.basePath}/payments`}
-          tabs={[
-            { id: "pending", label: "Pending", href: `${def.basePath}/payments/pending` },
-            { id: "paid", label: "Paid", href: `${def.basePath}/payments/paid` },
-            { id: "balance", label: "Balance", href: `${def.basePath}/payments/balance` },
-            { id: "statements", label: "Statements", href: `${def.basePath}/payments/statements` },
-          ]}
-          activePaymentsTab={payTab}
-        />
+    // Pending / Paid / Balance were tabs before the financials merge; they are
+    // now a status pill (or the Summary tab) inside the consolidated panel.
+    const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[payTab];
+    if (legacy) {
+      redirect(
+        `${def.basePath}/payments/${legacy.tab}${searchSuffix(
+          searchParams,
+          legacy.status ? { status: legacy.status } : undefined,
+        )}`,
       );
     }
-    return <ResidentPaymentsPanel tabId={payTab} basePath={def.basePath} />;
-  }
-
-  if (kind === "resident" && section === "financials") {
-    redirect(`${def.basePath}/payments`);
+    if (!allowedTabs.includes(payTab)) notFound();
+    const statusParam = searchParams?.status;
+    return (
+      <ResidentPaymentsPanel
+        tabId={payTab}
+        basePath={def.basePath}
+        initialStatus={typeof statusParam === "string" ? statusParam : undefined}
+      />
+    );
   }
 
   if (kind === "resident" && section === "documents") {

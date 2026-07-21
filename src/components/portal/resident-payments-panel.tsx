@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
+import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
+import { ReportTable } from "@/components/portal/reports/report-table";
+import type { ReportResult } from "@/lib/reports/types";
 import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -115,12 +120,25 @@ function formatUsd(cents: number): string {
 
 type PaymentStatusBucket = "overdue" | "pending" | "paid";
 
+function isPaymentStatusBucket(value: string | undefined): value is PaymentStatusBucket {
+  return value === "overdue" || value === "pending" || value === "paid";
+}
+
+function defaultStatementRange() {
+  const now = new Date();
+  const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+}
+
 export function ResidentPaymentsPanel({
-  tabId = "pending",
+  tabId = "charges",
   basePath = "/resident",
+  initialStatus,
 }: {
   tabId?: string;
   basePath?: string;
+  /** Status pill preselected from a legacy `/payments/{pending|overdue|paid}` link. */
+  initialStatus?: string;
 }) {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
@@ -142,7 +160,7 @@ export function ResidentPaymentsPanel({
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bucket, setBucket] = useState<PaymentStatusBucket>(
-    tabId === "paid" ? "paid" : "pending",
+    isPaymentStatusBucket(initialStatus) ? initialStatus : "pending",
   );
   const [bucketTouched, setBucketTouched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -158,6 +176,13 @@ export function ResidentPaymentsPanel({
   const [setupCheckout, setSetupCheckout] = useState<{ kind: "card" | "ach"; clientSecret: string } | null>(null);
   const [setupLoading, setSetupLoading] = useState<"card" | "ach" | null>(null);
   const [leaseTick, setLeaseTick] = useState(0);
+  // Summary / Statements report state (merged in from the former
+  // ResidentFinancialsPanel — see AGENTS.md "Financials UI cleanup").
+  const [balanceReport, setBalanceReport] = useState<ReportResult | null>(null);
+  const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportGenerated, setReportGenerated] = useState(false);
+  const [statementRange, setStatementRange] = useState(defaultStatementRange);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
 
@@ -844,28 +869,69 @@ export function ResidentPaymentsPanel({
     return formatUsd(cents);
   }, [confirmCharges]);
 
-  useEffect(() => {
-    if (tabId === "paid" || tabId === "pending") {
-      setBucket(tabId === "paid" ? "paid" : "pending");
+  const loadBalanceSummary = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setReportLoading(false);
+      return;
     }
-  }, [tabId]);
+    setReportLoading(true);
+    try {
+      const res = await fetch("/api/reports/resident-balance");
+      const data = await res.json();
+      if (res.ok) {
+        setBalanceReport(data as ReportResult);
+        setReportGenerated(true);
+      }
+    } finally {
+      setReportLoading(false);
+    }
+  }, []);
+
+  const loadLedgerStatement = useCallback(async () => {
+    setReportLoading(true);
+    try {
+      const params = new URLSearchParams({ from: statementRange.from, to: statementRange.to });
+      const res = await fetch(`/api/reports/resident-ledger?${params}`);
+      const data = await res.json();
+      if (res.ok) {
+        setLedgerReport(data as ReportResult);
+        setReportGenerated(true);
+      }
+    } finally {
+      setReportLoading(false);
+    }
+  }, [statementRange.from, statementRange.to]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setBalanceReport(null);
+      setLedgerReport(null);
+      setReportGenerated(false);
+      if (tabId === "summary") void loadBalanceSummary();
+    });
+  }, [tabId]); // eslint-disable-line react-hooks/exhaustive-deps -- reload reports only when the tab changes
+
+  const ledgerQuery = useMemo(
+    () => new URLSearchParams({ from: statementRange.from, to: statementRange.to }).toString(),
+    [statementRange.from, statementRange.to],
+  );
 
   const paymentTabItems = useMemo(
     () => [
-      { id: "pending", label: "Pending", href: `${basePath}/payments/pending` },
-      { id: "paid", label: "Paid", href: `${basePath}/payments/paid` },
-      { id: "balance", label: "Balance", href: `${basePath}/payments/balance` },
+      { id: "charges", label: "Charges", href: `${basePath}/payments/charges` },
+      { id: "summary", label: "Summary", href: `${basePath}/payments/summary` },
       { id: "statements", label: "Statements", href: `${basePath}/payments/statements` },
     ],
     [basePath],
   );
+  const isChargesTab = tabId !== "summary" && tabId !== "statements";
 
   return (
     <>
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        !paymentsUnlocked ? (
+        !isChargesTab ? null : !paymentsUnlocked ? (
           <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
@@ -913,20 +979,103 @@ export function ResidentPaymentsPanel({
       }
       filterRow={
         <>
-          <TabNav activeId={tabId} items={paymentTabItems} />
-          <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills
-              tabs={[...statusTabs]}
-              activeId={bucket}
-              onChange={(id) => {
-                setBucketTouched(true);
-                setBucket(id as PaymentStatusBucket);
-              }}
-            />
-          </ManagerPortalFilterRow>
+          <TabNav activeId={isChargesTab ? "charges" : tabId} items={paymentTabItems} />
+          {isChargesTab ? (
+            <ManagerPortalFilterRow>
+              <ManagerPortalStatusPills
+                tabs={[...statusTabs]}
+                activeId={bucket}
+                onChange={(id) => {
+                  setBucketTouched(true);
+                  setBucket(id as PaymentStatusBucket);
+                }}
+              />
+            </ManagerPortalFilterRow>
+          ) : null}
         </>
       }
     >
+      {tabId === "summary" ? (
+        <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_HEADER_ACTION_BTN}
+              disabled={reportLoading}
+              data-attr="resident-payments-generate-summary"
+              onClick={() => void loadBalanceSummary()}
+            >
+              {reportLoading ? "Generating…" : reportGenerated ? "Refresh" : "Generate summary"}
+            </Button>
+          </div>
+          {reportLoading ? (
+            <ReportGeneratePrompt loading loadingTitle="Generating summary…" />
+          ) : !reportGenerated ? (
+            <ReportGeneratePrompt title="No balance summary yet." />
+          ) : balanceReport ? (
+            <FinancialReportDocumentView report={balanceReport} />
+          ) : (
+            <ReportTable report={balanceReport} loading={reportLoading} generated={reportGenerated} />
+          )}
+          {reportGenerated ? (
+            <Button asChild variant="primary" className={PORTAL_HEADER_ACTION_BTN}>
+              <Link href={`${basePath}/payments/charges`} data-attr="resident-payments-summary-pay-now">
+                Pay now
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tabId === "statements" ? (
+        <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                From
+                <input
+                  type="date"
+                  className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+                  value={statementRange.from}
+                  onChange={(e) => setStatementRange((r) => ({ ...r, from: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                To
+                <input
+                  type="date"
+                  className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+                  value={statementRange.to}
+                  onChange={(e) => setStatementRange((r) => ({ ...r, to: e.target.value }))}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                disabled={reportLoading}
+                data-attr="resident-payments-generate-statement"
+                onClick={() => void loadLedgerStatement()}
+              >
+                {reportLoading ? "Generating…" : "Generate statement"}
+              </Button>
+            </div>
+            {reportGenerated ? <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} /> : null}
+          </div>
+          {reportLoading ? (
+            <ReportGeneratePrompt loading loadingTitle="Generating statement…" />
+          ) : !reportGenerated ? (
+            <ReportGeneratePrompt title="No rent statement yet." />
+          ) : ledgerReport ? (
+            <FinancialReportDocumentView report={ledgerReport} />
+          ) : (
+            <ReportTable report={ledgerReport} loading={reportLoading} generated={reportGenerated} />
+          )}
+        </div>
+      ) : null}
+
+      {!isChargesTab ? null : <>
       {!paymentsUnlocked ? (
         <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
           <p className="font-medium text-foreground">Payments unlock after your lease is fully signed</p>
@@ -998,6 +1147,7 @@ export function ResidentPaymentsPanel({
           )}
         </>
       )}
+      </>}
     </ManagerPortalPageShell>
 
     <Modal

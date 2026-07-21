@@ -39,12 +39,24 @@ const DOCUMENTS_TABS = [
   { id: "other", label: "Other documents" },
 ] as const;
 
+/**
+ * URL-linked section tabs only. Pending / Overdue / Paid are in-section *status
+ * filters*, so they are `ManagerPortalStatusPills` inside the Charges tab rather
+ * than tabs here — see the tab/pill rule in `portal-list-section.tsx`.
+ */
 const PAYMENTS_TABS = [
-  { id: "pending", label: "Pending" },
-  { id: "paid", label: "Paid" },
-  { id: "balance", label: "Balance" },
+  { id: "charges", label: "Charges" },
+  { id: "summary", label: "Summary" },
   { id: "statements", label: "Statements" },
 ] as const;
+
+/** Legacy payments tab ids → { tab, status } on the consolidated Charges tab. */
+export const RESIDENT_PAYMENTS_LEGACY_TABS: Record<string, { tab: string; status?: string }> = {
+  pending: { tab: "charges", status: "pending" },
+  overdue: { tab: "charges", status: "overdue" },
+  paid: { tab: "charges", status: "paid" },
+  balance: { tab: "summary" },
+};
 
 /** Sidebar during application phase (before lease is approved): Application + Settings only. */
 export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
@@ -115,7 +127,7 @@ export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: `${RESIDENT_PORTAL_BASE_PATH}/dashboard` },
   { label: "Applications", path: `${RESIDENT_PORTAL_BASE_PATH}/applications` },
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
-  { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
+  { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments/charges` },
   { label: "House details", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
   { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/email/unopened` },
   { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/application` },

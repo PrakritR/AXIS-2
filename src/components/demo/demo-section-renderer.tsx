@@ -208,7 +208,10 @@ export function DemoSectionRenderer({
       // second shell would stack the header twice.
       return <ResidentLeasePanel />;
     case "payments":
-      return <ResidentPaymentsPanel />;
+      // Sub-tabs must be forwarded here too — the demo renders portal panels
+      // directly, not through renderPortalSection, so a TabNav click would
+      // otherwise always land back on the first tab.
+      return <ResidentPaymentsPanel tabId={tabId ?? "charges"} basePath={basePath} />;
     case "move-in":
       return <ResidentMoveInDemo />;
     case "services":

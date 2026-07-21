@@ -9,7 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/radix-button";
+import { Button } from "@/components/ui/button";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -94,8 +94,7 @@ export function Navbar1({
           {portalLink ? (
             <Button
               asChild
-              size="sm"
-              className="btn-brand-cta text-white hover:brightness-110"
+              className="btn-brand-cta h-9 min-h-0 px-4 text-[13px] text-white hover:brightness-110"
             >
               <Link href={portalLink.url}>{portalLink.text}</Link>
             </Button>
@@ -110,8 +109,7 @@ export function Navbar1({
               </Link>
               <Button
                 asChild
-                size="sm"
-                className="btn-brand-cta text-white hover:brightness-110"
+                className="btn-brand-cta h-9 min-h-0 px-4 text-[13px] text-white hover:brightness-110"
               >
                 <Link href={auth.signup.url}>{auth.signup.text}</Link>
               </Button>
@@ -125,7 +123,7 @@ export function Navbar1({
         {logoSlot}
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="outline" size="icon" aria-label="Open menu">
+            <Button variant="outline" className="h-10 w-10 min-h-0 px-0" aria-label="Open menu">
               <MenuIcon className="size-4" />
             </Button>
           </SheetTrigger>

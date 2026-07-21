@@ -427,3 +427,32 @@ their name and live in the separate `portal_work_order_records` model
 share only a "Services" nav section and a combined nav-count badge
 (`src/hooks/use-portal-nav-counts.ts`) — do not merge their tables, tabs, or
 counts when adding features to either.
+
+# Financials UI cleanup (Blue Steel consolidation)
+
+**Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
+`destructive` variant) was deleted — `src/components/ui/button.tsx` is the only Button, and it now
+supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop;
+translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
+`h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
+never reintroduce a filled-red destructive variant.
+
+**Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
+`resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both
+deleted. The financials panel's Balance Summary / Rent Statements content is now part of
+`ResidentPaymentsPanel` as `TabNav` sub-tabs — `charges` / `summary` / `statements`, routed at
+`/resident/payments/{tab}` — sitting above the Pending / Overdue / Paid
+`ManagerPortalStatusPills`, which stay pills because they are in-section *status filters*, not
+URL-linked section tabs. The pre-merge tab ids (`pending`, `paid`, `balance`) live on as redirects
+via `RESIDENT_PAYMENTS_LEGACY_TABS` in `src/lib/portals/resident-sections.ts`; `pending`/`paid`
+redirect to `/payments/charges?status=…`, which `renderPortalSection` reads and forwards as the
+panel's `initialStatus`, so old deep links still land on the right pill.
+
+Two routing gotchas this exposed, both of which silently break a section without failing a build:
+
+- **Legacy section redirects must run before `findSection`.** `financials` is not a resident nav
+  section, so a redirect placed after `findSection` is dead code — `notFound()` fires first.
+- **`/demo` renders portal panels directly**, not through `render-portal-section.tsx`, and
+  `src/components/demo/demo-section-renderer.tsx` has its own per-section prop list. When you add
+  sub-tabs to a section wired into the demo, forward `tabId`/`basePath` there too or the demo
+  always shows the first tab no matter which `TabNav` link is clicked.
