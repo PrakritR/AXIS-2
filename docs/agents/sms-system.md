@@ -45,10 +45,12 @@ agent line. A small trial cohort (`clawMappedManagerEmails()`, env
 `CLAW_MESSENGER_MANAGER_EMAILS`) shares that line; forwarding targets for
 their threads are the env `CLAW_MESSENGER_MANAGER_FORWARD_PHONES` list plus
 `resolveAdminForwardPhone()` — the Axis admin account's own `profiles.phone`
-(any profile with `role = "admin"`), NOT a hardcoded constant. Set the
-admin's phone from admin Settings (`/admin/profile`) to change where these
-forwards land; there is a hardcoded `+15103098345` fallback only for
-environments where no admin profile has a phone on file yet. Admin views
+(any account holding the admin role per `src/lib/auth/admin-role.ts`:
+`profile_roles`, legacy `profiles.role`, or the primary-admin email), NOT a
+hardcoded constant. Set the admin's phone from admin Settings
+(`/admin/profile`) to change where these forwards land; when no admin
+profile has a phone on file it falls back to the first env forward phone,
+then the hardcoded `+15103098345` trial default. Admin views
 these same threads read-only at `/admin/communication` → SMS
 (`fetchAdminSharedLineSmsConversation` in `manager-sms-messages.server.ts`,
 merging `inbound_sms_log` + `manager_sms_messages` across the mapped

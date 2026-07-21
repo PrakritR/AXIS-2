@@ -56,6 +56,37 @@ test.describe("Admin portal", () => {
     await expect(page.locator('[data-attr="admin-communication-tab-sms"]')).toBeVisible();
   });
 
+  test("communication email trash tab exposes Delete all trash and empties it", async ({ page }) => {
+    // Keep the compose flow from delivering to real recipient inboxes/push devices.
+    await page.route("**/api/portal/send-inbox-message", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) }),
+    );
+    const evidenceDir = process.env.E2E_EVIDENCE_DIR;
+
+    await page.goto("/admin/communication/email/unopened");
+    await page.getByRole("button", { name: "New message" }).click();
+    const subject = `E2E trash check ${Date.now()}`;
+    await page.getByRole("combobox", { name: "Recipient type" }).selectOption("all_managers");
+    await page.getByRole("textbox", { name: "Subject" }).fill(subject);
+    await page.getByRole("textbox", { name: /write your message/i }).fill("Automated trash-tab check.");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+
+    await page.getByRole("button", { name: /^Sent/ }).click();
+    await page.getByRole("cell", { name: subject }).click();
+    await page.getByRole("button", { name: "Move to trash" }).click();
+
+    await page.getByRole("button", { name: /^Trash/ }).click();
+    const deleteAll = page.getByRole("button", { name: "Delete all trash" });
+    await expect(deleteAll.first()).toBeVisible();
+    if (evidenceDir) await page.screenshot({ path: `${evidenceDir}/admin-trash-delete-button.png`, fullPage: true });
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await deleteAll.first().click();
+    await expect(page.getByText("No trash messages yet.")).toBeVisible();
+    await expect(deleteAll).toHaveCount(0);
+    if (evidenceDir) await page.screenshot({ path: `${evidenceDir}/admin-trash-emptied.png`, fullPage: true });
+  });
+
   test("legacy inbox URL redirects to communication email tab", async ({ page }) => {
     await page.goto("/admin/inbox/unopened");
     await expect(page).toHaveURL(/\/admin\/communication\/email\/unopened/);

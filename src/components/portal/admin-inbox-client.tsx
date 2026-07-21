@@ -445,7 +445,7 @@ export const AdminInboxClient = forwardRef<
   AdminInboxClientHandle,
   {
     tabId: string;
-    /** Base path for tab nav — defaults to the standalone `/admin/inbox` route. */
+    /** Base path for tab nav — defaults to the legacy `/admin/inbox` path (redirects to Communication → Email). */
     commBase?: string;
     embeddedInCommunication?: boolean;
     externalTitleActions?: boolean;
