@@ -5,12 +5,14 @@ ACH bank transfers are **only** for resident payments (rent, utilities, applicat
 ## Architecture
 
 ```
-Resident pays rent (ACH)
+Resident pays rent + processing/service fee (ACH: 0.8% capped at $5)
     → Stripe Checkout (us_bank_account)
-    → Platform fee (0.8%) retained by Axis
-    → Remainder transferred to manager Connect account (acct_…)
+    → Resident's fee add-on retained by Axis via application_fee_amount
+    → Full charge subtotal transferred to manager Connect account (acct_…)
     → Manager receives payout to their linked bank
 ```
+
+Fee model (who pays what): see [`docs/agents/resident-payments.md`](agents/resident-payments.md).
 
 Each manager gets a **Stripe Connect Express** account stored in `profiles.stripe_connect_account_id`.
 
