@@ -113,7 +113,7 @@ export type UnifiedItem =
   | { kind: "request"; req: ServiceRequest; sortKey: number }
   | { kind: "work-order"; row: DemoManagerWorkOrderRow; sortKey: number };
 
-// Service requests: pending while awaiting manager action; approved/returned → completed; denied → denied.
+// Add-on service requests: pending while awaiting manager action; approved/returned → completed; denied → denied.
 export function serviceRequestStatusBucket(req: ServiceRequest): RequestStatusBucket {
   if (req.status === "pending") return "pending";
   if (req.status === "denied") return "denied";
@@ -505,7 +505,7 @@ export function ResidentServicesPanel({
   const [mEntryNotes, setMEntryNotes] = useState("");
   const [mPhotos, setMPhotos] = useState<string[]>([]);
 
-  // service request form
+  // add-on service request form
   /** Catalog offer id, or CUSTOM_SERVICE_REQUEST_OFFER_ID for a free-form request. */
   const [requestTypeId, setRequestTypeId] = useState("");
   const [customTitle, setCustomTitle] = useState("");
@@ -626,7 +626,7 @@ export function ResidentServicesPanel({
       .then(() => syncLeasePipelineFromServer())
       // The resident/admin-scoped sync above never returns a resident's own
       // property (it's scoped to properties the caller manages), so hydrate
-      // it separately — needed for e.g. manager-offered service requests.
+      // it separately — needed for e.g. manager-offered add-on service requests.
       .then(() => loadResidentPropertyFromServer())
       .then((loaded) => {
         if (loaded) {
@@ -1155,7 +1155,7 @@ export function ResidentServicesPanel({
       {!servicesUnlocked ? (
         <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
           <p className="font-medium text-foreground">Services unlock after your lease is fully signed</p>
-          <p className="mt-1">Maintenance and service requests become available once you and your manager have both signed.</p>
+          <p className="mt-1">Maintenance and add-on service requests become available once you and your manager have both signed.</p>
         </div>
       ) : null}
 
@@ -1623,7 +1623,7 @@ export function ResidentServicesPanel({
         })()}
       </Modal>
 
-      {/* Edit service request modal */}
+      {/* Edit add-on service request modal */}
       <Modal
         open={editingRequest !== null}
         title="Edit add-on service"

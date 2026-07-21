@@ -99,7 +99,7 @@ export async function notifyWorkOrderEvent(
 }
 
 /**
- * Resident filed a work order or service request → manager gets Axis inbox,
+ * Resident filed a work order or add-on service request → manager gets Axis inbox,
  * email, and SMS (when the manager has a phone on file).
  */
 export async function notifyManagerOfResidentFiledItem(

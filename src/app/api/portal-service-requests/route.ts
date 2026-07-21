@@ -159,7 +159,7 @@ export async function GET() {
 
     return NextResponse.json({ rows });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to load service requests.";
+    const message = e instanceof Error ? e.message : "Failed to load add-on service requests.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -320,7 +320,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ ok: true, row: record.row_data });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to save service request.";
+    const message = e instanceof Error ? e.message : "Failed to save add-on service request.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

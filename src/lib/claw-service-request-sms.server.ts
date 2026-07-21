@@ -1,5 +1,5 @@
 /**
- * Create a pending amenity / custom service request from resident SMS.
+ * Create a pending amenity / custom add-on service request from resident SMS.
  */
 
 import type { ServiceRequest } from "@/lib/service-requests-storage";

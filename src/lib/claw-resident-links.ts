@@ -154,7 +154,7 @@ const LINK_LABEL: Record<ResidentSmsLinkKind, string> = {
   lease: "Sign / view lease",
   move_in: "House details",
   inbox: "Open inbox",
-  services: "Service requests",
+  services: "Add-on services",
   applications: "Applications",
   login: "Sign in",
   signup: "Create account",

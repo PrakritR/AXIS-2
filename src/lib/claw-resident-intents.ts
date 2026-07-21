@@ -119,7 +119,7 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
     return {
       intent: "service_request",
       domain: "Services",
-      wantsLabel: "submit a service / amenity request",
+      wantsLabel: "submit an add-on service request",
       managerPath: "/portal/services/requests",
       skipManagerBrief: false,
     };

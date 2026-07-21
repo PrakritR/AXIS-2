@@ -267,11 +267,11 @@ export async function runResidentSmsAction(args: {
         `Gotcha — mind trying again here?\n${residentPortalUrl("services")}`;
       if ("requestId" in sr && sr.requestId) {
         autoFiledNote = sr.created
-          ? `PropLane auto-filed service request ${sr.requestId} (${sr.title}).`
+          ? `PropLane auto-filed add-on service request ${sr.requestId} (${sr.title}).`
           : sr.alreadyOpen
-            ? `PropLane matched existing service request ${sr.requestId} (${sr.title}).`
+            ? `PropLane matched existing add-on service request ${sr.requestId} (${sr.title}).`
             : null;
-        wants = `submit service request (${sr.title})`;
+        wants = `submit add-on service request (${sr.title})`;
       }
       threadTopic = "maintenance";
       break;
