@@ -64,6 +64,7 @@ export function RentBrowsePageClient() {
             signInHref={residentSignInHref()}
             getStartedDataAttr="resident-browse-get-started"
             signInDataAttr="resident-browse-sign-in"
+            showSecondary={false}
           />
         ) : null}
       </div>

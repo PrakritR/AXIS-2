@@ -4,6 +4,13 @@ import {
   MANAGER_PLAN_TIERS,
   type ManagerPlanTierDefinition,
 } from "@/data/manager-plan-tiers";
+import { MarketingCtaPair } from "@/components/marketing/marketing-cta";
+import {
+  MarketingHero,
+  MarketingPageShell,
+  MarketingSection,
+} from "@/components/marketing/marketing-page-shell";
+import { MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -11,9 +18,8 @@ export const metadata: Metadata = {
     "PropLane pricing — start free, then Pro at $20/mo or Business at $200/mo. 14-day trial, no card required, and a live demo with no signup.",
 };
 
-const CTA_BASE = "/auth/create-account?mode=create&role=manager";
+const CTA_BASE = MANAGER_GET_STARTED_HREF;
 
-/** Per-tier CTA copy + tier param (mirrors the existing create-account tier pattern). */
 const TIER_CTA: Record<
   ManagerPlanTierDefinition["id"],
   { href: string; label: string; solid: boolean }
@@ -44,8 +50,8 @@ const FAQ: { q: string; a: string }[] = [
 
 function pillClass(active: boolean): string {
   return active
-    ? "relative inline-flex items-center gap-2 rounded-full bg-[var(--secondary)] px-4 py-1.5 text-[13px] font-medium text-foreground shadow-[inset_0_0_0_1px_var(--border)]"
-    : "relative inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[13px] font-medium text-muted transition-colors hover:text-foreground";
+    ? "relative inline-flex items-center gap-2 rounded-full bg-[var(--lp-surface-2)] px-4 py-1.5 text-[13px] font-medium text-[var(--lp-ink)] shadow-[inset_0_0_0_1px_var(--lp-line)]"
+    : "relative inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[13px] font-medium text-[var(--lp-muted)] transition-colors hover:text-[var(--lp-ink)]";
 }
 
 function CheckIcon() {
@@ -57,7 +63,7 @@ function CheckIcon() {
       strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-[15px] w-[15px] shrink-0 text-primary"
+      className="h-[15px] w-[15px] shrink-0 text-[var(--lp-blue)]"
       aria-hidden
     >
       <path d="M4 10.5l3.5 3.5L16 5.5" />
@@ -73,7 +79,7 @@ function DashIcon() {
       stroke="currentColor"
       strokeWidth="1.6"
       strokeLinecap="round"
-      className="h-[15px] w-[15px] shrink-0 text-muted/60"
+      className="h-[15px] w-[15px] shrink-0 text-[color-mix(in_srgb,var(--lp-muted)_55%,transparent)]"
       aria-hidden
     >
       <path d="M5 10h10" />
@@ -95,36 +101,36 @@ function PlanCard({
   return (
     <div
       className={
-        "relative flex flex-col rounded-xl border p-6 " +
+        "lp-page-card relative flex flex-col p-6 " +
         (featured
-          ? "border-primary/40 bg-primary/5 shadow-[var(--shadow-card)]"
-          : "border-border bg-card")
+          ? "border-[color-mix(in_srgb,var(--lp-blue)_40%,transparent)] bg-[color-mix(in_srgb,var(--lp-blue)_5%,var(--lp-card))]"
+          : "")
       }
     >
       {featured ? (
-        <span className="absolute -top-3 left-6 inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-[var(--secondary)] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.07em] text-primary">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_45%,transparent)]" />
+        <span className="absolute -top-3 left-6 inline-flex items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--lp-blue)_40%,transparent)] bg-[var(--lp-surface-2)] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.07em] text-[var(--lp-blue)]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--lp-blue)]" />
           Popular
         </span>
       ) : null}
 
-      <div className="text-[13px] font-medium uppercase tracking-[0.07em] text-muted">
+      <div className="text-[13px] font-medium uppercase tracking-[0.07em] text-[var(--lp-muted)]">
         {tier.label}
       </div>
 
       <div className="mt-4 flex items-end gap-1.5">
-        <span className="text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-foreground">
+        <span className="text-[2.6rem] font-semibold leading-none tracking-[-0.03em] text-[var(--lp-ink)]">
           {price.headline}
         </span>
         {price.period ? (
-          <span className="pb-1 text-[14px] text-muted">{price.period}</span>
+          <span className="pb-1 text-[14px] text-[var(--lp-muted)]">{price.period}</span>
         ) : null}
       </div>
-      <div className="mt-1.5 h-4 text-[12px] text-muted/60">
+      <div className="mt-1.5 h-4 text-[12px] text-[color-mix(in_srgb,var(--lp-muted)_70%,transparent)]">
         {price.period ? (annual ? "billed annually" : "billed monthly") : "no card required"}
       </div>
 
-      <p className="mt-4 min-h-[60px] text-[13.5px] leading-relaxed text-muted">
+      <p className="mt-4 min-h-[60px] text-[13.5px] leading-relaxed text-[var(--lp-muted)]">
         {price.sub}
       </p>
 
@@ -132,16 +138,14 @@ function PlanCard({
         href={cta.href}
         data-attr={`pricing-plan-${tier.id}-cta`}
         className={
-          "mt-5 inline-flex min-h-[44px] items-center justify-center rounded-[7px] px-5 text-[14px] font-medium transition active:scale-[0.99] " +
-          (cta.solid
-            ? "border border-border bg-primary text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] hover:brightness-110"
-            : "border border-border bg-transparent text-foreground hover:border-foreground/20 hover:bg-[var(--secondary)]")
+          "mt-5 " +
+          (cta.solid ? "lp-btn lp-btn-blue w-full" : "lp-btn lp-btn-ghost w-full")
         }
       >
         {cta.label}
       </Link>
 
-      <div className="mt-6 h-px w-full bg-[var(--border)]" />
+      <div className="mt-6 h-px w-full bg-[var(--lp-line)]" />
 
       <ul className="mt-5 flex flex-col gap-3">
         {tier.features.map((feature) => (
@@ -150,7 +154,9 @@ function PlanCard({
             <span
               className={
                 "text-[13.5px] leading-snug " +
-                (feature.included ? "text-foreground" : "text-muted/60")
+                (feature.included
+                  ? "text-[var(--lp-ink)]"
+                  : "text-[color-mix(in_srgb,var(--lp-muted)_60%,transparent)]")
               }
             >
               {feature.text}
@@ -171,45 +177,25 @@ export default async function PricingPage({
   const annual = params.billing === "annual";
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      {/* Subtle indigo glow behind the hero. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] max-w-[130%] -translate-x-1/2 opacity-70"
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--primary) 12%, transparent), color-mix(in srgb, var(--primary) 5%, transparent) 42%, transparent 70%)",
-          filter: "blur(44px)",
-        }}
-      />
-
-      {/* Hero + toggle */}
-      <section className="relative mx-auto max-w-6xl px-5 pt-20 text-center sm:px-6">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-[var(--secondary)] px-3 py-1 text-[12px] font-medium tracking-[0.06em] text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_45%,transparent)]" />
-          PROPLANE · PRICING
-        </span>
-        <h1 className="mx-auto mt-6 max-w-3xl text-[2.6rem] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[3.4rem]">
-          Simple pricing.
-          <br />
-          <span className="text-muted/60">Free to start.</span>
-        </h1>
-        <p className="mx-auto mt-6 max-w-xl text-[15.5px] leading-relaxed text-muted">
-          One platform for managers, residents, and vendors — applications and leases, rent
-          collection, work orders, and real double-entry books. Start free, upgrade when it
-          earns its keep.
+    <MarketingPageShell>
+      <MarketingHero
+        eyebrow="PropLane · Pricing"
+        title={
+          <>
+            Simple pricing.
+            <br />
+            <span className="text-[color-mix(in_srgb,var(--lp-muted)_75%,transparent)]">
+              Free to start.
+            </span>
+          </>
+        }
+        subtitle="One platform for managers, residents, and vendors. Start free, upgrade when it earns its keep."
+      >
+        <p className="mt-4 text-[12.5px] text-[color-mix(in_srgb,var(--lp-muted)_75%,transparent)]">
+          14-day trial · no card required · book a demo anytime
         </p>
-        <p className="mt-5 text-[12.5px] text-muted/60">
-          14-day trial · no card required · live demo with no signup
-        </p>
-
-        <div className="mt-9 inline-flex items-center gap-1 rounded-full border border-border bg-card p-1">
-          <Link
-            href="/pricing"
-            scroll={false}
-            data-attr="pricing-billing-monthly"
-            className={pillClass(!annual)}
-          >
+        <div className="mt-8 inline-flex items-center gap-1 rounded-full border border-[var(--lp-line)] bg-[var(--lp-card)] p-1">
+          <Link href="/pricing" scroll={false} data-attr="pricing-billing-monthly" className={pillClass(!annual)}>
             Monthly
           </Link>
           <Link
@@ -224,71 +210,43 @@ export default async function PricingPage({
             </span>
           </Link>
         </div>
-      </section>
+      </MarketingHero>
 
-      {/* Plan cards */}
-      <section className="relative mx-auto mt-12 max-w-6xl px-5 sm:px-6">
-        <div className="grid gap-5 md:grid-cols-3">
+      <section className="pb-4">
+        <div className="lp-w-wide grid gap-5 md:grid-cols-3">
           {MANAGER_PLAN_TIERS.map((tier) => (
             <PlanCard key={tier.id} tier={tier} annual={annual} />
           ))}
         </div>
       </section>
 
-      {/* FAQ */}
-      <section className="relative mx-auto mt-16 max-w-3xl px-5 sm:px-6">
-        <h2 className="text-[22px] font-semibold tracking-[-0.02em]">
-          Questions, answered
-        </h2>
-        <div className="mt-6 divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-border bg-card">
+      <MarketingSection narrow>
+        <h2>Questions, answered</h2>
+        <div className="lp-page-card mt-6 divide-y divide-[var(--lp-line)] overflow-hidden">
           {FAQ.map((item) => (
             <div key={item.q} className="px-6 py-5">
-              <div className="text-[15px] font-medium tracking-[-0.01em] text-foreground">
+              <div className="text-[15px] font-medium tracking-[-0.01em] text-[var(--lp-ink)]">
                 {item.q}
               </div>
-              <p className="mt-2 text-[13.5px] leading-relaxed text-muted">{item.a}</p>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--lp-muted)]">{item.a}</p>
             </div>
           ))}
         </div>
-      </section>
+      </MarketingSection>
 
-      {/* Closing CTA */}
-      <section className="relative mx-auto mt-16 max-w-4xl px-5 pb-24 sm:px-6">
-        <div className="relative overflow-hidden rounded-2xl border border-border bg-card px-6 py-12 text-center sm:px-10">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -top-24 left-1/2 h-[300px] w-[600px] -translate-x-1/2 opacity-70"
-            style={{
-              background:
-                "radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 68%)",
-              filter: "blur(42px)",
-            }}
+      <div className="lp-page-cta-band">
+        <div className="lp-w">
+          <h2>Try it before you pay.</h2>
+          <p>Start on the free tier, or book a walkthrough with the team — no card required.</p>
+          <MarketingCtaPair
+            primaryHref={`${CTA_BASE}&tier=free`}
+            primaryLabel="Get started free"
+            primaryAttr="pricing-final-get-started"
+            secondaryAttr="pricing-final-book-demo"
+            large
           />
-          <h2 className="relative text-[26px] font-semibold tracking-[-0.025em] sm:text-[30px]">
-            Try it before you pay.
-          </h2>
-          <p className="relative mx-auto mt-4 max-w-lg text-[14.5px] leading-relaxed text-muted">
-            Start on the free tier, or click through the live product with sample data — no
-            signup, no card.
-          </p>
-          <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href={`${CTA_BASE}&tier=free`}
-              data-attr="pricing-final-get-started"
-              className="inline-flex min-h-[46px] items-center justify-center rounded-[7px] border border-border bg-primary px-6 text-[14.5px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition hover:brightness-110 active:scale-[0.99]"
-            >
-              Get started free
-            </Link>
-            <Link
-              href="/demo"
-              data-attr="pricing-final-demo"
-              className="inline-flex min-h-[46px] items-center justify-center rounded-[7px] border border-border bg-transparent px-6 text-[14.5px] font-medium text-foreground transition hover:border-foreground/20 hover:bg-[var(--secondary)]"
-            >
-              Launch the live demo
-            </Link>
-          </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </MarketingPageShell>
   );
 }

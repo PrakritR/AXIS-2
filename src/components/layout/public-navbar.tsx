@@ -3,6 +3,8 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
+import { MANAGER_PLAN_TIERS } from "@/data/manager-plan-tiers";
+import { MANAGER_TIER_MONTHLY_USD } from "@/lib/manager-access";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
@@ -12,6 +14,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const AUTH_STORAGE_KEY = "axis:signed_in";
+
+const PLAN_LABELS = MANAGER_PLAN_TIERS.map((tier) => tier.label);
+const PRICING_NAV_DESCRIPTION = `${PLAN_LABELS.slice(0, -1).join(", ")}, and ${
+  PLAN_LABELS[PLAN_LABELS.length - 1]
+} — start at $${Math.min(...Object.values(MANAGER_TIER_MONTHLY_USD))}`;
 
 function readSignedInFromStorage(): boolean {
   try {
@@ -84,7 +91,11 @@ export function PublicNavbar() {
   );
   const contactActive = useMemo(() => pathname === "/contact" || pathname === "/support", [pathname]);
   const docsActive = useMemo(
-    () => pathname.startsWith("/docs") || pathname.startsWith("/why-proplane"),
+    () =>
+      pathname.startsWith("/docs") ||
+      pathname.startsWith("/why-proplane") ||
+      pathname.startsWith("/pricing") ||
+      pathname.startsWith("/about"),
     [pathname],
   );
   const productActive = useMemo(
@@ -150,6 +161,20 @@ export function PublicNavbar() {
               active: pathname.startsWith("/docs"),
               dataAttr: "nav-resources-docs",
             },
+            {
+              title: "Pricing",
+              url: "/pricing",
+              description: PRICING_NAV_DESCRIPTION,
+              active: pathname.startsWith("/pricing"),
+              dataAttr: "nav-resources-pricing",
+            },
+            {
+              title: "About us",
+              url: "/about",
+              description: "Built by managers who use PropLane daily",
+              active: pathname.startsWith("/about"),
+              dataAttr: "nav-resources-about",
+            },
           ],
         },
         {
@@ -185,7 +210,7 @@ export function PublicNavbar() {
         menu={menu}
         auth={{
           login: { text: "Log in", url: "/auth/sign-in" },
-          signup: { text: "Get started", url: "/auth/create-account?mode=create&role=resident" },
+          signup: { text: "Get started", url: "/auth/create-account?mode=create&role=manager" },
         }}
         portalLink={portalLink}
         actionsSlot={<ThemeToggle />}

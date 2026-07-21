@@ -86,6 +86,7 @@ function WeekRoadmapSection() {
         <div className="lp-intro">
           <h2>Your week, one pipeline</h2>
           <p>You approve. PropLane advances the rest.</p>
+          <CtaPair primaryAttr="home-roadmap-start" secondaryAttr="home-roadmap-book-demo" />
         </div>
         <div className="lp-split-feat">
           <div className="lp-copy">

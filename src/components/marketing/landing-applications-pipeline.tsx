@@ -1,80 +1,80 @@
 /**
- * Presentational crop of manager Applications (`ManagerApplications`):
- * title + Edit/Invite, Pending/Approved/Rejected pills, Linear-style rows
- * with inline expand chevron, status Badge, and detail actions.
- *
- * Keep portal-faithful — do not invent Lease-draft / URL-bar chrome.
+ * Homepage week-band mock: focused Applications → lease-approve moment.
+ * Marketing composition (not a 1:1 portal clone): pending + lease draft approve.
  */
+import "./landing-applications-pipeline.css";
+
 export function ApplicationsPipelinePanel() {
   return (
     <div className="lp-pipe-frame" aria-hidden>
       <div className="lp-pipe">
         <div className="lp-pipe-chrome">
-          <span className="lp-pipe-nav">Manager · Applications</span>
+          <span className="lp-pipe-dots">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="lp-pipe-url">proplane.app/applications</span>
+          <span className="lp-pipe-live">2 need review</span>
         </div>
 
         <div className="lp-pipe-body">
           <div className="lp-pipe-head">
-            <h3 className="lp-pipe-title">Applications</h3>
-            <div className="lp-pipe-actions">
-              <span className="lp-pipe-hdr-btn">
-                Edit
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
-                  <path
-                    d="M4 6l4 4 4-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              <span className="lp-pipe-hdr-btn">Invite</span>
+            <div>
+              <p className="lp-pipe-kicker">Applications</p>
+              <p className="lp-pipe-heading">Manager pipeline</p>
             </div>
+            <span className="lp-pipe-live lp-pipe-live-inline">Lease ready</span>
           </div>
 
-          <div className="lp-pipe-filters">
-            <div className="lp-pipe-pills" role="presentation">
-              <span className="lp-pipe-pill lp-pipe-pill-on">
-                Pending
-                <span className="lp-pipe-count">2</span>
-              </span>
-              <span className="lp-pipe-pill">
-                Approved
-                <span className="lp-pipe-count">1</span>
-              </span>
-              <span className="lp-pipe-pill">
-                Rejected
-                <span className="lp-pipe-count">0</span>
-              </span>
-            </div>
-            <span className="lp-pipe-prop">All your properties</span>
+          <div className="lp-pipe-toolbar">
+            <span className="lp-pipe-pill">Pending · 1</span>
+            <span className="lp-pipe-pill lp-pipe-pill-on">Lease draft · 1</span>
+            <span className="lp-pipe-pill">All</span>
           </div>
 
-          <div className="lp-pipe-list">
+          <div className="lp-pipe-table">
+            <div className="lp-pipe-thead">
+              <span>Applicant</span>
+              <span>Unit</span>
+              <span>Status</span>
+              <span>Next</span>
+            </div>
+
             <PipeRow
-              initials="MC"
               name="Maya Chen"
-              subtitle="Cascade Lofts · 4B"
-              status="Screening"
+              meta="Income verified"
+              unit="Cascade 4B"
+              status="Pending"
               statusTone="pending"
+              next="Review"
             />
             <PipeRow
-              initials="PN"
               name="Priya Nair"
-              subtitle="Cascade Lofts · 4B"
-              status="New"
-              statusTone="info"
-              expanded
+              meta="Screening clear"
+              unit="Cascade 4B"
+              status="Approved"
+              statusTone="success"
+              next="Approve lease"
+              highlight
             />
-            <PipeRow
-              initials="JL"
-              name="Jordan Lee"
-              subtitle="Ballard Commons · 2A"
-              status="In progress"
-              statusTone="neutral"
-            />
+          </div>
+
+          <div className="lp-pipe-lease">
+            <div className="lp-pipe-lease-head">
+              <span className="lp-pipe-lease-mark" aria-hidden>
+                ✦
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="lp-pipe-lease-title">Lease draft · Priya Nair</p>
+                <p className="lp-pipe-lease-sub">Cascade 4B · 12 mo · $2,450</p>
+              </div>
+              <span className="lp-pipe-badge lp-pipe-badge-approve">Needs approval</span>
+            </div>
+            <div className="lp-pipe-lease-actions">
+              <span className="lp-pipe-action lp-pipe-action-ghost">Edit terms</span>
+              <span className="lp-pipe-action lp-pipe-action-primary">Approve &amp; send</span>
+            </div>
           </div>
         </div>
       </div>
@@ -83,79 +83,42 @@ export function ApplicationsPipelinePanel() {
 }
 
 function PipeRow({
-  initials,
   name,
-  subtitle,
+  meta,
+  unit,
   status,
   statusTone,
-  expanded,
+  next,
+  highlight,
 }: {
-  initials: string;
   name: string;
-  subtitle: string;
+  meta: string;
+  unit: string;
   status: string;
-  statusTone: "pending" | "info" | "neutral" | "confirmed";
-  expanded?: boolean;
+  statusTone: "pending" | "success" | "info";
+  next: string;
+  highlight?: boolean;
 }) {
-  return (
-    <div className={`lp-pipe-item${expanded ? " lp-pipe-item-open" : ""}`}>
-      <div className="lp-pipe-row">
-        <span className="lp-pipe-avatar">{initials}</span>
-        <div className="lp-pipe-applicant">
-          <span className="lp-pipe-name">
-            {name}
-            <svg className="lp-pipe-chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-              {expanded ? (
-                <path
-                  d="M4 6l4 4 4-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ) : (
-                <path
-                  d="M6 4l4 4-4 4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
-            </svg>
-          </span>
-          <span className="lp-pipe-meta">{subtitle}</span>
-        </div>
-        <span className={`lp-pipe-badge lp-pipe-badge-${statusTone}`}>{status}</span>
-      </div>
+  const initials = name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2);
 
-      {expanded ? (
-        <div className="lp-pipe-detail">
-          <div className="lp-pipe-detail-actions">
-            <span className="lp-pipe-action lp-pipe-action-primary">Approve</span>
-            <span className="lp-pipe-action lp-pipe-action-ghost">Reject</span>
-            <span className="lp-pipe-action lp-pipe-action-danger">Delete</span>
-          </div>
-          <div className="lp-pipe-section">
-            <span className="lp-pipe-section-title">
-              Application
-              <svg className="lp-pipe-chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-                <path
-                  d="M6 4l4 4-4 4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            <span className="lp-pipe-section-hint">PDF preview</span>
-          </div>
+  return (
+    <div className={`lp-pipe-row${highlight ? " lp-pipe-row-hl" : ""}`}>
+      <div className="lp-pipe-applicant">
+        <span className="lp-pipe-avatar" aria-hidden>
+          {initials}
+        </span>
+        <div className="min-w-0">
+          <span className="lp-pipe-name">{name}</span>
+          <span className="lp-pipe-meta">{meta}</span>
         </div>
-      ) : null}
+      </div>
+      <span className="lp-pipe-unit">{unit}</span>
+      <span className={`lp-pipe-badge lp-pipe-badge-${statusTone}`}>{status}</span>
+      <span className="lp-pipe-next lp-pipe-next-you">{next}</span>
     </div>
   );
 }

@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
-import { RevealOnView } from "@/components/motion/reveal-on-view";
+import { MarketingCtaPair } from "@/components/marketing/marketing-cta";
+import {
+  MarketingHero,
+  MarketingPageShell,
+  MarketingSection,
+} from "@/components/marketing/marketing-page-shell";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 
 export const metadata: Metadata = {
@@ -65,198 +69,155 @@ const PRICING_TIERS = [
 
 export default function WhyPropLanePage() {
   return (
-    <div>
-      <section className="hero-chrome-scene relative overflow-hidden pb-14 pt-14 sm:pb-16 sm:pt-20">
-        <ChromeSubstrate variant="full" />
-        <div className="relative mx-auto max-w-6xl px-4 text-center sm:px-5">
-          <RevealOnView>
-            <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-primary">Why PropLane</p>
-            <h1 className="hero-title mx-auto mt-4 max-w-[16ch] text-[2.4rem] font-semibold leading-[1.06] tracking-[-0.035em] sm:text-[3.4rem] md:text-[3.75rem]">
-              Property ops that wait for your OK
-            </h1>
-            <p className="hero-subtitle mx-auto mt-5 max-w-[42ch] text-base leading-relaxed sm:text-lg">
-              Tours. Texts. Rent. Approvals. One platform — AI drafts, you confirm.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                href="/auth/create-account?mode=create&role=manager"
-                data-attr="why-proplane-hero-get-started"
-                className="btn-metallic hero-cta-metallic inline-flex min-h-[46px] w-full items-center justify-center rounded-full px-8 text-sm font-semibold sm:w-auto"
-              >
-                Get started free
-              </Link>
-              <Link
-                href="/pricing"
-                data-attr="why-proplane-hero-pricing"
-                className="hero-cta-outline inline-flex min-h-[46px] w-full items-center justify-center rounded-full border px-8 text-sm font-semibold sm:w-auto"
-              >
-                See pricing
-              </Link>
-            </div>
-          </RevealOnView>
-        </div>
-      </section>
+    <MarketingPageShell>
+      <MarketingHero
+        eyebrow="Why PropLane"
+        title="Property ops that wait for your OK"
+        subtitle="Tours. Texts. Rent. Approvals. One platform — AI drafts, you confirm."
+      >
+        <MarketingCtaPair
+          primaryLabel="Get started free"
+          primaryAttr="why-proplane-hero-get-started"
+          secondaryHref="/pricing"
+          secondaryLabel="See pricing"
+          secondaryAttr="why-proplane-hero-pricing"
+        />
+      </MarketingHero>
 
-      <section className="relative overflow-hidden border-t border-border py-16 sm:py-20">
-        <ChromeSubstrate variant="quiet" />
-        <div className="relative mx-auto max-w-6xl space-y-20 px-4 sm:px-5 lg:space-y-24">
-          {PILLARS.map((pillar, i) => (
-            <div
-              key={pillar.title}
-              className={`grid items-start gap-10 lg:grid-cols-2 lg:gap-16 ${i % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}
-            >
-              <RevealOnView>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">{pillar.eyebrow}</p>
-                <h2 className="mt-3 max-w-[14ch] text-[1.75rem] font-semibold leading-[1.12] tracking-[-0.03em] text-foreground sm:text-[2.25rem]">
-                  {pillar.title}
-                </h2>
-                <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted">{pillar.body}</p>
-              </RevealOnView>
-              <RevealOnView delayMs={60}>
-                <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
-                  {pillar.points.map(([label, copy], idx) => (
-                    <div
-                      key={label}
-                      className={`px-5 py-4 ${idx > 0 ? "border-t border-border" : ""}`}
-                    >
-                      <div className="text-[14px] font-semibold text-foreground">{label}</div>
-                      <p className="mt-1 text-[13.5px] leading-relaxed text-muted">{copy}</p>
-                    </div>
-                  ))}
+      {PILLARS.map((pillar) => (
+        <MarketingSection key={pillar.title}>
+          <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-16">
+            <div>
+              <p className="lp-page-kicker">{pillar.eyebrow}</p>
+              <h2 className="mt-2 max-w-[14ch]">{pillar.title}</h2>
+              <p className="lp-section-lede">{pillar.body}</p>
+            </div>
+            <div className="lp-page-card overflow-hidden">
+              {pillar.points.map(([label, copy], idx) => (
+                <div
+                  key={label}
+                  className={`lp-page-card-pad ${idx > 0 ? "border-t border-[var(--lp-line)]" : ""}`}
+                >
+                  <h3>{label}</h3>
+                  <p>{copy}</p>
                 </div>
-              </RevealOnView>
+              ))}
+            </div>
+          </div>
+        </MarketingSection>
+      ))}
+
+      <MarketingSection>
+        <h2 className="text-center">Old way vs PropLane</h2>
+        <div className="lp-page-grid-2">
+          <div className="lp-page-card lp-page-card-pad">
+            <h3 className="text-[var(--lp-muted)]">Old way</h3>
+            <ul className="lp-page-list">
+              {OLD_WAY.map((item) => (
+                <li key={item}>
+                  <span className="lp-mark lp-mark-muted" aria-hidden>
+                    ✕
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="lp-page-card lp-page-card-pad border-[color-mix(in_srgb,var(--lp-blue)_28%,transparent)]">
+            <h3>PropLane</h3>
+            <ul className="lp-page-list">
+              {PROPLANE_WAY.map((item) => (
+                <li key={item}>
+                  <span className="lp-mark" aria-hidden>
+                    ✓
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </MarketingSection>
+
+      <MarketingSection>
+        <h2 className="text-center">Start where you fit</h2>
+        <div className="lp-page-grid-3">
+          {[
+            {
+              href: "/partner",
+              title: "Managers",
+              body: "Run the portfolio with AI approvals.",
+              cta: "For managers",
+              attr: "why-role-managers",
+            },
+            {
+              href: RESIDENT_BROWSE_PATH,
+              title: "Residents",
+              body: "Browse, apply, pay, and message.",
+              cta: "For residents",
+              attr: "why-role-residents",
+            },
+            {
+              href: "/vendors",
+              title: "Vendors",
+              body: "Jobs, bids, and payouts.",
+              cta: "For vendors",
+              attr: "why-role-vendors",
+            },
+          ].map((card) => (
+            <Link
+              key={card.href}
+              href={card.href}
+              data-attr={card.attr}
+              className="lp-page-card lp-page-card-pad flex h-full flex-col transition hover:border-[color-mix(in_srgb,var(--lp-blue)_35%,transparent)]"
+            >
+              <h3>{card.title}</h3>
+              <p className="flex-1">{card.body}</p>
+              <span className="mt-5 text-[13px] font-semibold text-[var(--lp-blue)]">
+                {card.cta} →
+              </span>
+            </Link>
+          ))}
+        </div>
+      </MarketingSection>
+
+      <MarketingSection>
+        <h2 className="text-center">Honest pricing</h2>
+        <p className="lp-section-lede lp-center">Three plans. No sales wall.</p>
+        <div className="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-3">
+          {PRICING_TIERS.map((tier) => (
+            <div key={tier.name} className="lp-page-card lp-page-card-pad text-center">
+              <div className="lp-page-kicker">{tier.name}</div>
+              <div className="mt-2 text-3xl font-semibold tracking-tight text-[var(--lp-ink)]">
+                {tier.price}
+                <span className="text-sm font-medium text-[var(--lp-muted)]"> {tier.cadence}</span>
+              </div>
+              <p className="mt-2">{tier.detail}</p>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="relative overflow-hidden border-t border-border py-16 sm:py-20">
-        <ChromeSubstrate variant="quiet" />
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-5">
-          <RevealOnView>
-            <h2 className="mx-auto max-w-xl text-center text-[2rem] font-semibold tracking-[-0.03em] text-foreground sm:text-[2.4rem]">
-              Old way vs PropLane
-            </h2>
-          </RevealOnView>
-          <div className="mt-10 grid gap-4 lg:grid-cols-2">
-            <RevealOnView>
-              <div className="h-full rounded-2xl border border-border bg-card p-7">
-                <h3 className="text-[15px] font-semibold text-muted">Old way</h3>
-                <ul className="mt-5 space-y-4 text-[14px] leading-relaxed text-muted">
-                  {OLD_WAY.map((item) => (
-                    <li key={item} className="flex gap-3">
-                      <span className="mt-0.5 text-muted/50" aria-hidden>
-                        ✕
-                      </span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </RevealOnView>
-            <RevealOnView delayMs={50}>
-              <div className="h-full rounded-2xl border border-primary/25 bg-card p-7 shadow-[var(--shadow-card)]">
-                <h3 className="text-[15px] font-semibold text-foreground">PropLane</h3>
-                <ul className="mt-5 space-y-4 text-[14px] leading-relaxed text-muted">
-                  {PROPLANE_WAY.map((item) => (
-                    <li key={item} className="flex gap-3">
-                      <span className="mt-0.5 font-semibold text-primary" aria-hidden>
-                        ✓
-                      </span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </RevealOnView>
-          </div>
+        <div className="mt-8 text-center">
+          <Link
+            href="/pricing"
+            data-attr="why-proplane-pricing-link"
+            className="text-sm font-semibold text-[var(--lp-blue)]"
+          >
+            Full pricing →
+          </Link>
         </div>
-      </section>
+      </MarketingSection>
 
-      <section className="relative overflow-hidden border-t border-border py-16 sm:py-20">
-        <ChromeSubstrate variant="quiet" />
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-5">
-          <RevealOnView>
-            <h2 className="text-center text-[2rem] font-semibold tracking-[-0.03em] sm:text-[2.4rem]">Start where you fit</h2>
-          </RevealOnView>
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            {[
-              { href: "/partner", title: "Managers", body: "Run the portfolio with AI approvals.", cta: "For managers", attr: "why-role-managers" },
-              { href: RESIDENT_BROWSE_PATH, title: "Residents", body: "Browse, apply, pay, and message.", cta: "For residents", attr: "why-role-residents" },
-              { href: "/vendors", title: "Vendors", body: "Jobs, bids, and payouts.", cta: "For vendors", attr: "why-role-vendors" },
-            ].map((card, i) => (
-              <RevealOnView key={card.href} delayMs={i * 40}>
-                <Link
-                  href={card.href}
-                  data-attr={card.attr}
-                  className="flex h-full flex-col rounded-2xl border border-border bg-card p-6 transition hover:border-primary/30 hover:shadow-[var(--shadow-card-hover)]"
-                >
-                  <h3 className="text-[15px] font-semibold text-foreground">{card.title}</h3>
-                  <p className="mt-2 flex-1 text-[13.5px] text-muted">{card.body}</p>
-                  <span className="mt-5 text-[13px] font-semibold text-primary">{card.cta} →</span>
-                </Link>
-              </RevealOnView>
-            ))}
-          </div>
+      <div className="lp-page-cta-band">
+        <div className="lp-w">
+          <h2>Start free</h2>
+          <p>14-day Pro trial. No card required.</p>
+          <MarketingCtaPair
+            primaryAttr="why-proplane-cta-get-started"
+            secondaryAttr="why-proplane-cta-contact"
+            large
+          />
         </div>
-      </section>
-
-      <section className="relative overflow-hidden border-t border-border py-16 sm:py-20">
-        <ChromeSubstrate variant="quiet" />
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-5">
-          <RevealOnView>
-            <h2 className="text-center text-[2rem] font-semibold tracking-[-0.03em] sm:text-[2.4rem]">Honest pricing</h2>
-            <p className="mx-auto mt-3 max-w-md text-center text-[14.5px] text-muted">Three plans. No sales wall.</p>
-          </RevealOnView>
-          <div className="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-3">
-            {PRICING_TIERS.map((tier, i) => (
-              <RevealOnView key={tier.name} delayMs={i * 40}>
-                <div className="rounded-2xl border border-border bg-card p-6 text-center">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">{tier.name}</div>
-                  <div className="mt-3 text-3xl font-semibold tracking-tight">
-                    {tier.price}
-                    <span className="text-sm font-medium text-muted"> {tier.cadence}</span>
-                  </div>
-                  <p className="mt-3 text-[13px] text-muted">{tier.detail}</p>
-                </div>
-              </RevealOnView>
-            ))}
-          </div>
-          <RevealOnView delayMs={120}>
-            <div className="mt-8 text-center">
-              <Link href="/pricing" data-attr="why-proplane-pricing-link" className="text-sm font-semibold text-primary">
-                Full pricing →
-              </Link>
-            </div>
-          </RevealOnView>
-        </div>
-      </section>
-
-      <section className="hero-chrome-scene relative overflow-hidden border-t border-border py-16 sm:py-20">
-        <ChromeSubstrate variant="quiet" />
-        <div className="relative mx-auto max-w-6xl px-4 text-center sm:px-5">
-          <RevealOnView>
-            <h2 className="hero-title text-[2rem] font-semibold tracking-[-0.03em] sm:text-[2.4rem]">Start free</h2>
-            <p className="hero-subtitle mx-auto mt-3 max-w-md text-[14.5px]">14-day Pro trial. No card required.</p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                href="/auth/create-account?mode=create&role=manager"
-                data-attr="why-proplane-cta-get-started"
-                className="btn-metallic hero-cta-metallic inline-flex min-h-[46px] w-full items-center justify-center rounded-full px-8 text-sm font-semibold sm:w-auto"
-              >
-                Get started
-              </Link>
-              <Link
-                href="/contact"
-                data-attr="why-proplane-cta-contact"
-                className="hero-cta-outline inline-flex min-h-[46px] w-full items-center justify-center rounded-full border px-8 text-sm font-semibold sm:w-auto"
-              >
-                Talk to us
-              </Link>
-            </div>
-          </RevealOnView>
-        </div>
-      </section>
-    </div>
+      </div>
+    </MarketingPageShell>
   );
 }

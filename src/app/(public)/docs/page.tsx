@@ -362,16 +362,16 @@ export default function DocsPage() {
               <Link
                 href="/auth/create-account?mode=create&role=manager"
                 data-attr="docs-demo-get-started"
-                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[7px] border border-border bg-primary px-6 text-[14px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition hover:brightness-110 active:scale-[0.99]"
+                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-[10px] bg-[var(--pl-brand)] px-6 text-[14.5px] font-medium text-white shadow-[0_4px_14px_color-mix(in_srgb,var(--pl-brand)_28%,transparent)] transition hover:brightness-110"
               >
                 Get started for free
               </Link>
               <Link
-                href="/demo"
-                data-attr="docs-demo-open-demo"
-                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[7px] border border-border bg-transparent px-6 text-[14px] font-medium text-foreground transition hover:border-foreground/20 hover:bg-[var(--secondary)]"
+                href="/contact"
+                data-attr="docs-demo-book-demo"
+                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-[10px] border border-[var(--pl-line)] bg-[var(--pl-surface-raised)] px-6 text-[14.5px] font-medium text-foreground transition hover:border-foreground/20"
               >
-                Open the live demo
+                Book a demo
               </Link>
             </div>
           </DocSection>
