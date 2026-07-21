@@ -30,9 +30,16 @@ describe("manager financials write tools", () => {
     for (const tool of writeTools) expect(tool.kind).toBe("write");
   });
 
-  it("keeps write tools OUT of the model-facing manager registry", () => {
+  it("exposes every financial write tool in the manager registry so chat can propose it", () => {
+    // These were registry-only (and therefore unreachable from the assistant)
+    // until each grew a preview. Being IN agentRegistry is what gives the
+    // landlord the capability; the preview/confirm gate is what keeps it safe.
     const managerNames = new Set([...agentRegistry.values()].map((t) => t.name));
-    for (const tool of writeTools) expect(managerNames.has(tool.name)).toBe(false);
+    for (const tool of writeTools) expect(managerNames.has(tool.name)).toBe(true);
+  });
+
+  it("gives every financial write tool a preview, so nothing can execute unseen", () => {
+    for (const tool of writeTools) expect(typeof tool.preview).toBe("function");
   });
 
   it("exposes no write tool to the model loop (readOnly filter is empty)", () => {

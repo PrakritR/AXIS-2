@@ -39,6 +39,10 @@ import {
   listLiveListingsTool,
 } from "./domains/leasing-sms";
 import { managerFinancialsWriteTools } from "./domains/financials-write";
+import { listDocumentsTool, listPromotionsTool } from "./domains/documents";
+import { managerServicesWriteTools } from "./domains/services-write";
+import { residentPortalTools } from "./domains/resident-portal";
+import { vendorPortalTools } from "./domains/vendor-portal";
 
 export const agentRegistry = buildRegistry([
   getOverdueChargesTool,
@@ -55,6 +59,8 @@ export const agentRegistry = buildRegistry([
   listCalendarEventsTool,
   listScheduledMessagesTool,
   listServiceRequestsTool,
+  listDocumentsTool,
+  listPromotionsTool,
   // Write tools: previewed from the model loop, executed only via the gated
   // confirm endpoint after explicit user confirmation.
   sendRentRemindersTool,
@@ -62,6 +68,12 @@ export const agentRegistry = buildRegistry([
   createChargeTool,
   createLeaseDraftTool,
   updateLeaseDraftTool,
+  ...managerServicesWriteTools,
+  // The accounting writes (bills, budgets, deposit dispositions, owner
+  // distributions, bank reconciliation). They were previously registry-only and
+  // unreachable from chat; each now carries a preview, which is what makes it
+  // safe to expose — the model can propose, only the landlord can execute.
+  ...managerFinancialsWriteTools,
 ]);
 
 /**
@@ -71,10 +83,19 @@ export const agentRegistry = buildRegistry([
  * `vendor_user_id = ctx.userId`. No W-9 / TIN-bearing tool appears in either map.
  */
 export const vendorAgentRegistry = buildRegistry([
+  ...vendorPortalTools,
   listVendorInvoicesTool,
   submitVendorInvoiceTool,
   listVendorPayoutsTool,
 ]);
+
+/**
+ * Resident-portal assistant registry. Kept separate from every other map so the
+ * resident agent can never see a manager, vendor, or leasing tool. Each tool
+ * pins itself to `ctx.residentScope` (built from the authenticated session), so
+ * one resident can never reach another resident's charges, jobs, or documents.
+ */
+export const residentAgentRegistry = buildRegistry([...residentPortalTools]);
 
 /**
  * The 24/7 vendor work-order agent's registry: three reads pinned to ONE work
@@ -103,11 +124,17 @@ export const leasingSmsAgentRegistry = buildRegistry([
 ]);
 
 /**
- * Gated manager-financials WRITE tools (plan §7). Kept OUT of `agentRegistry` so
- * the model loop (read-only) never receives them — they run only behind the
- * explicit preview/confirm step, per the AGENTS.md write-gating contract. This
- * registry exists so the write layer has a single typed source of truth.
+ * The manager-financials WRITE tools on their own, for tests and for any caller
+ * that needs just the accounting writes. These are ALSO part of `agentRegistry`
+ * now: every one carries a preview, so the model can propose them and only the
+ * landlord's explicit confirmation executes them — the same gate every other
+ * write tool goes through.
  */
 export const managerWriteRegistry = buildRegistry([...managerFinancialsWriteTools]);
 
-export { resolveAgentContext, type AgentContext } from "./context";
+export {
+  resolveAgentContext,
+  resolveResidentAgentContext,
+  resolveVendorAgentContext,
+  type AgentContext,
+} from "./context";

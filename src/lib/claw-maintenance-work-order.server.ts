@@ -135,6 +135,14 @@ export async function createWorkOrderFromResidentSms(args: {
   residentEmail: string;
   text: string;
   senderUserId?: string | null;
+  /**
+   * Skip the "does this text look like maintenance?" heuristic. Inbound SMS
+   * must keep it (an arbitrary text must not silently open a work order), but
+   * an authenticated resident who explicitly confirmed "file this repair" in
+   * the portal or the assistant has already stated the intent — the heuristic
+   * would only produce false negatives there.
+   */
+  skipIntentCheck?: boolean;
 }): Promise<CreateWorkOrderFromResidentSmsResult> {
   const managerUserId = args.managerUserId.trim();
   const residentEmail = args.residentEmail.trim().toLowerCase();
@@ -142,7 +150,7 @@ export async function createWorkOrderFromResidentSms(args: {
   if (!managerUserId || !residentEmail || !text) {
     return { created: false, error: "missing_context" };
   }
-  if (!looksLikeMaintenanceRequest(text)) {
+  if (!args.skipIntentCheck && !looksLikeMaintenanceRequest(text)) {
     return { created: false, error: "not_maintenance" };
   }
 

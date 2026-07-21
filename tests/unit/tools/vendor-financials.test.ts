@@ -53,9 +53,18 @@ describe("vendor-financials tool map safety", () => {
     }
   });
 
-  it("registers the three vendor-financials tools separately from the manager map", () => {
+  it("registers the vendor-portal tools separately from the manager map", () => {
     const vendorNames = new Set([...vendorAgentRegistry.values()].map((t) => t.name));
-    expect(vendorNames).toEqual(new Set(["list_vendor_invoices", "submit_vendor_invoice", "list_vendor_payouts"]));
+    expect(vendorNames).toEqual(
+      new Set([
+        "list_my_jobs",
+        "list_my_bids",
+        "list_my_schedule",
+        "list_vendor_invoices",
+        "submit_vendor_invoice",
+        "list_vendor_payouts",
+      ]),
+    );
     // The manager map must not inherit the vendor-scoped tools.
     const managerNames = new Set([...agentRegistry.values()].map((t) => t.name));
     for (const n of vendorNames) expect(managerNames.has(n)).toBe(false);

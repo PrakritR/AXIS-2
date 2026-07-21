@@ -622,8 +622,11 @@ export function AxisAssistant({
   children,
 }: {
   managerName?: string | null;
-  /** Chat backend to target. Defaults to the auth-gated `/api/agent/chat`; the
-   * public demo passes the sandboxed `/api/agent/demo-chat`. */
+  /** Chat backend to target. Defaults to the auth-gated manager
+   * `/api/agent/chat`. Each portal MUST pass its own role-scoped endpoint —
+   * `/api/agent/resident-chat`, `/api/agent/vendor-chat` — because the manager
+   * context resolver rejects non-managers; the public demo passes the sandboxed
+   * `/api/agent/demo-chat`. */
   endpoint?: string;
   children: ReactNode;
 }) {

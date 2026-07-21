@@ -130,7 +130,7 @@ export async function prepareDispatch(db: Db, workOrderId: string): Promise<void
       actor: {
         userId: managerUserId,
         email: ((managerProfile?.email as string | null) ?? "").trim().toLowerCase(),
-        fullName: "Axis Assistant",
+        fullName: "PropLane Assistant",
       },
       decidedBy: "auto",
     });
