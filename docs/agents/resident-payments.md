@@ -21,6 +21,16 @@ route a Stripe fee back onto the manager's payout. (ACH fee math and the
 "manager kept whole on every method" invariant are locked by
 `tests/unit/resident-processing-fees.test.ts`.)
 
+**Every pre-Stripe confirmation MUST disclose the fee and the real total.**
+Because the resident pays the processing fee on top of the subtotal, any surface
+that states an amount before handing off to Stripe has to show the processing
+fee line and the resulting total due — not the bare sum of charge balances.
+A QA sweep (2026-07-21) found the resident Payments "Continue to Stripe?" dialog
+showing only the subtotal, understating a $17,781.61 card payment by $515.96.
+When adding a new pay entry point, derive the disclosure from
+`residentProcessingFeeCents` / `residentProcessingFeeDisplayLabel` rather than
+re-deriving the amount, so it can never drift from what checkout collects.
+
 While an ACH debit clears (3–5 business days) the charge status is
 `"processing"` (persisted by the webhook's `checkout.session.completed`
 unpaid branch and the verify route). Everything that keys on
