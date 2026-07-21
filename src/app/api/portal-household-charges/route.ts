@@ -229,10 +229,13 @@ export async function POST(req: Request) {
       const existingOwnerById = new Map<string, string | null>();
       const existingPropertyById = new Map<string, string | null>();
       if (chargeIds.length > 0) {
-        const { data: existingRows } = await db
+        const { data: existingRows, error: existingRowsError } = await db
           .from("portal_household_charge_records")
           .select("id, status, manager_user_id, property_id")
           .in("id", chargeIds);
+        if (existingRowsError) {
+          return NextResponse.json({ error: existingRowsError.message }, { status: 500 });
+        }
         for (const row of existingRows ?? []) {
           previousStatusById.set(String(row.id), typeof row.status === "string" ? row.status : null);
           existingOwnerById.set(String(row.id), row.manager_user_id ? String(row.manager_user_id) : null);
