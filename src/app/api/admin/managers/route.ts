@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { backfillOrphanGoogleOAuthManagers } from "@/lib/auth/provision-free-manager-oauth";
-import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
+import { deleteManagerAccount } from "@/lib/auth/delete-portal-account";
 import { normalizeManagerSkuTier, pickBestManagerPurchaseRow } from "@/lib/manager-access";
 import { setManagerPurchaseTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -198,7 +198,7 @@ export async function DELETE(req: Request) {
     }
 
     const supabase = createSupabaseServiceRoleClient();
-    const result = await deletePortalAccountCompletely(supabase, id);
+    const result = await deleteManagerAccount(supabase, id);
     return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
