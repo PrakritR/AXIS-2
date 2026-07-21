@@ -273,7 +273,7 @@ export async function runResidentSmsAction(args: {
             : null;
         wants = `submit add-on service request (${sr.title})`;
       }
-      threadTopic = "maintenance";
+      threadTopic = "services";
       break;
     }
     case "balance":

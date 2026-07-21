@@ -132,7 +132,8 @@ export function smsLinkKindForThreadTopic(
     | "move_in"
     | "general"
     | "applications"
-    | "maintenance",
+    | "maintenance"
+    | "services",
 ): ResidentSmsLinkKind {
   switch (topic) {
     case "payment":
@@ -147,6 +148,8 @@ export function smsLinkKindForThreadTopic(
       return "applications";
     case "maintenance":
       return "services_work_orders";
+    case "services":
+      return "services";
     default:
       return "inbox";
   }
