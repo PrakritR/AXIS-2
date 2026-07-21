@@ -1907,4 +1907,8 @@
   .lp-page-field-row {
     grid-template-columns: 1fr 1fr;
   }
+
+  .lp-page-field-row > .lp-page-field + .lp-page-field {
+    margin-top: 0;
+  }
 }
