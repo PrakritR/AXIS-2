@@ -291,6 +291,7 @@ describe("joinPropertyAndUnitLabel", () => {
   it("does not repeat a unit the label already ends with", () => {
     expect(joinPropertyAndUnitLabel("The Pioneer · 12A", "12A")).toBe("The Pioneer · 12A");
     expect(joinPropertyAndUnitLabel("The Pioneer · 12a", "12A")).toBe("The Pioneer · 12a");
+    expect(joinPropertyAndUnitLabel("The Pioneer · Unit 12A", "12A")).toBe("The Pioneer · Unit 12A");
   });
 
   it("still appends when the tail is a different unit", () => {
