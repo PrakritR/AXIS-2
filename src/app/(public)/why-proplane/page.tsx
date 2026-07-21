@@ -112,7 +112,7 @@ export default function WhyPropLanePage() {
         <div className="lp-page-grid-2">
           <div className="lp-page-card lp-page-card-pad">
             <h3 className="text-[var(--lp-muted)]">Old way</h3>
-            <ul className="lp-page-list mt-5">
+            <ul className="lp-page-list">
               {OLD_WAY.map((item) => (
                 <li key={item}>
                   <span className="lp-mark lp-mark-muted" aria-hidden>
@@ -125,7 +125,7 @@ export default function WhyPropLanePage() {
           </div>
           <div className="lp-page-card lp-page-card-pad border-[color-mix(in_srgb,var(--lp-blue)_28%,transparent)]">
             <h3>PropLane</h3>
-            <ul className="lp-page-list mt-5">
+            <ul className="lp-page-list">
               {PROPLANE_WAY.map((item) => (
                 <li key={item}>
                   <span className="lp-mark" aria-hidden>

@@ -1870,6 +1870,10 @@
   gap: 14px;
 }
 
+.lp-page-card .lp-page-list {
+  margin-top: 20px;
+}
+
 .lp-page-list li {
   display: flex;
   gap: 10px;
