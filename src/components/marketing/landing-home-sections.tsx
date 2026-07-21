@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ApplicationsPipelinePanel } from "@/components/marketing/landing-applications-pipeline";
 import { LandingDashboardChatDemo } from "@/components/marketing/landing-dashboard-chat-demo";
@@ -57,14 +58,30 @@ function LearnSection() {
               <div className="lp-lab">Guide 01</div>
               <h3>How to automate messages</h3>
             </div>
-            <div className="lp-art lp-art-messages" />
+            <div className="lp-art lp-art-messages">
+              <Image
+                src="/marketing/guide-messages.webp"
+                alt="PropLane Communication schedule showing automated messages queued on upcoming send dates"
+                fill
+                sizes="(max-width: 700px) 100vw, 420px"
+                className="lp-art-img"
+              />
+            </div>
           </article>
           <article className="lp-chapter">
             <div className="lp-cap">
               <div className="lp-lab">Guide 02</div>
               <h3>How to automate tours</h3>
             </div>
-            <div className="lp-art lp-art-tours" />
+            <div className="lp-art lp-art-tours">
+              <Image
+                src="/marketing/guide-tours.webp"
+                alt="PropLane Calendar showing open self-scheduling tour slots for a property, ready for prospects to book"
+                fill
+                sizes="(max-width: 700px) 100vw, 420px"
+                className="lp-art-img"
+              />
+            </div>
           </article>
           <div className="lp-frost">
             <div className="lp-bar">
@@ -105,6 +122,28 @@ function WeekRoadmapSection() {
   );
 }
 
+const PORTFOLIO_BUILDINGS = ["Cascade Lofts", "Ballard Commons", "Cascade Court"] as const;
+
+function BuildingIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
+      <path
+        d="M3.5 13.5V3.75a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 .75.75V13.5M9.5 13.5V6.75a.75.75 0 0 1 .75-.75h1.75a.75.75 0 0 1 .75.75v6.75M2.5 13.5h11.5"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 5.25h1M5 7.5h1M5 9.75h1"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function OpsSkySection() {
   return (
     <section className="lp-ops-sky">
@@ -114,16 +153,6 @@ function OpsSkySection() {
           <span className="lp-p2" />
           <span className="lp-p3" />
           <span className="lp-p4" />
-        </div>
-        <div className="lp-cityscape">
-          <div className="lp-b lp-b1" />
-          <div className="lp-b lp-b2" />
-          <div className="lp-b lp-b3" />
-          <div className="lp-b lp-b4" />
-          <div className="lp-b lp-b5" />
-          <div className="lp-b lp-b6" />
-          <div className="lp-b lp-b7" />
-          <div className="lp-b lp-b8" />
         </div>
       </div>
       <h2>All the tools your portfolio needs</h2>
@@ -139,6 +168,14 @@ function OpsSkySection() {
         <TaskFloatRow status="review" label="Ready to review" title="Lease packet · Cascade 4B" agent="Leasing" />
         <TaskFloatRow status="run" label="Running" title="Rent reminder · April overdue" agent="Rent" />
         <TaskFloatRow status="done" label="Completed" title="Work order #142 · bids collected" agent="Vendors" />
+      </div>
+      <div className="lp-portfolio-strip" aria-hidden>
+        {PORTFOLIO_BUILDINGS.map((name) => (
+          <span key={name} className="lp-portfolio-chip">
+            <BuildingIcon />
+            {name}
+          </span>
+        ))}
       </div>
     </section>
   );
@@ -171,7 +208,8 @@ function ClosingCta() {
     <section className="lp-end">
       <h2>Start managing with PropLane</h2>
       <p>
-        Free to begin. Built for the managers behind <b>10 properties</b> and <b>30 residents</b>.
+        Free to begin with your first listing. Scales up to a <b>20-property</b> portfolio with residents,
+        leases, and a full team as you grow.
       </p>
       <CtaPair
         primaryAttr="home-closing-get-started"

@@ -272,6 +272,15 @@
   background-size: 24px 24px;
 }
 
+/* Dark: give otherwise-flat black bands an ambient purple undercurrent for depth. */
+[data-theme="dark"] .lp-blueprint {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px),
+    radial-gradient(ellipse 70% 55% at 50% -8%, color-mix(in srgb, var(--pl-purple) 14%, transparent) 0%, transparent 65%);
+  background-size: 24px 24px, 24px 24px, 100% 100%;
+}
+
 /* Product stage */
 .lp-stage-shell {
   margin: 32px auto 0;
@@ -743,87 +752,15 @@
   opacity: 0.55;
 }
 
-/* Guide art — automate messages (chat bubbles) */
-.lp-art-messages {
-  background:
-    radial-gradient(ellipse at 20% 30%, rgba(47, 107, 255, 0.12), transparent 55%),
-    linear-gradient(160deg, #eef2fb 0%, #e8edf8 100%);
-}
-
-.lp-art-messages::before,
-.lp-art-messages::after {
-  content: "";
-  position: absolute;
-  border-radius: 14px;
-  border: 2px solid var(--lp-blue);
-  opacity: 0.72;
-}
-
-.lp-art-messages::before {
-  left: 14%;
-  top: 28%;
-  width: 46%;
-  height: 28%;
-  background: rgba(255, 255, 255, 0.75);
-}
-
-.lp-art-messages::after {
-  right: 14%;
-  bottom: 18%;
-  width: 40%;
-  height: 24%;
-  background: color-mix(in srgb, var(--lp-blue) 14%, var(--pl-white));
-  border-radius: 14px 14px 4px 14px;
-}
-
-/* Guide art — automate tours (calendar + pin) */
+/* Guide art — real portal screenshots (Communication schedule / Calendar) */
+.lp-art-messages,
 .lp-art-tours {
-  background:
-    radial-gradient(ellipse at 70% 40%, rgba(47, 107, 255, 0.14), transparent 50%),
-    linear-gradient(165deg, #f0f4ff 0%, #e6ecf8 100%);
+  background: linear-gradient(160deg, #eef2fb 0%, #e8edf8 100%);
 }
 
-.lp-art-tours::before {
-  content: "";
-  position: absolute;
-  left: 18%;
-  top: 20%;
-  width: 54%;
-  height: 58%;
-  border: 2px solid var(--lp-blue);
-  border-radius: 8px;
-  background:
-    linear-gradient(var(--lp-blue) 0 0) 0 22% / 100% 2px no-repeat,
-    repeating-linear-gradient(
-      90deg,
-      transparent 0,
-      transparent calc(25% - 1px),
-      rgba(47, 107, 255, 0.2) calc(25% - 1px),
-      rgba(47, 107, 255, 0.2) 25%
-    ),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent calc(28% - 1px),
-      rgba(47, 107, 255, 0.15) calc(28% - 1px),
-      rgba(47, 107, 255, 0.15) 28%
-    ),
-    rgba(255, 255, 255, 0.65);
-  opacity: 0.85;
-}
-
-.lp-art-tours::after {
-  content: "";
-  position: absolute;
-  right: 22%;
-  top: 42%;
-  width: 14px;
-  height: 14px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--lp-blue);
-  box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.2);
-  opacity: 0.85;
+.lp-art-img {
+  object-fit: cover;
+  object-position: top left;
 }
 
 .lp-frost {
@@ -884,6 +821,13 @@
 .lp-feature-band {
   padding: 56px 0 68px;
   min-width: 0;
+}
+
+[data-theme="dark"] .lp-feature-band {
+  background:
+    radial-gradient(ellipse 55% 45% at 88% 12%, color-mix(in srgb, var(--pl-purple) 12%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 40% at 6% 88%, color-mix(in srgb, var(--pl-purple-deep) 12%, transparent) 0%, transparent 60%),
+    var(--pl-black);
 }
 
 .lp-feature-band .lp-intro {
@@ -998,42 +942,6 @@
   );
 }
 
-[data-theme="dark"] .lp-art-messages {
-  background:
-    radial-gradient(ellipse at 20% 30%, color-mix(in srgb, var(--pl-purple) 16%, transparent), transparent 55%),
-    linear-gradient(160deg, color-mix(in srgb, var(--pl-purple) 8%, var(--lp-surface-2)) 0%, var(--lp-surface) 100%);
-}
-
-[data-theme="dark"] .lp-art-tours {
-  background:
-    radial-gradient(ellipse at 70% 40%, color-mix(in srgb, var(--pl-purple) 16%, transparent), transparent 50%),
-    linear-gradient(165deg, color-mix(in srgb, var(--pl-purple) 8%, var(--lp-surface-2)) 0%, var(--lp-surface) 100%);
-}
-
-[data-theme="dark"] .lp-art-tours::before {
-  background:
-    linear-gradient(var(--lp-blue) 0 0) 0 22% / 100% 2px no-repeat,
-    repeating-linear-gradient(
-      90deg,
-      transparent 0,
-      transparent calc(25% - 1px),
-      color-mix(in srgb, var(--pl-purple) 28%, transparent) calc(25% - 1px),
-      color-mix(in srgb, var(--pl-purple) 28%, transparent) 25%
-    ),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent calc(28% - 1px),
-      color-mix(in srgb, var(--pl-purple) 22%, transparent) calc(28% - 1px),
-      color-mix(in srgb, var(--pl-purple) 22%, transparent) 28%
-    ),
-    color-mix(in srgb, var(--lp-surface-raised) 65%, transparent);
-}
-
-[data-theme="dark"] .lp-art-tours::after {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pl-purple) 22%, transparent);
-}
-
 /* Quirky bottom: blueprint city (NO trees).
  * Light: brand blue billboard. Dark: near-black + purple accents (no blue). */
 .lp-ops-sky {
@@ -1144,46 +1052,6 @@
   font-weight: 600;
 }
 
-.lp-cityscape {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 100px;
-  z-index: 1;
-  pointer-events: none;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10%;
-  opacity: 0.35;
-}
-
-.lp-cityscape .lp-b {
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 2px 2px 0 0;
-  flex-shrink: 0;
-}
-
-.lp-cityscape .lp-b1 { width: 28px; height: 48px; }
-.lp-cityscape .lp-b2 { width: 40px; height: 72px; }
-.lp-cityscape .lp-b3 { width: 24px; height: 40px; }
-.lp-cityscape .lp-b4 { width: 52px; height: 88px; }
-.lp-cityscape .lp-b5 { width: 32px; height: 56px; }
-.lp-cityscape .lp-b6 { width: 44px; height: 64px; }
-.lp-cityscape .lp-b7 { width: 22px; height: 36px; }
-.lp-cityscape .lp-b8 { width: 36px; height: 80px; }
-
-.lp-cityscape .lp-b2,
-.lp-cityscape .lp-b4,
-.lp-cityscape .lp-b6,
-.lp-cityscape .lp-b8 {
-  background-image: radial-gradient(circle, rgba(30, 58, 110, 0.45) 1.5px, transparent 2px);
-  background-size: 8px 10px;
-  background-position: 4px 6px;
-}
-
 .lp-pins {
   position: absolute;
   inset: 0;
@@ -1227,17 +1095,6 @@
     0 0 0 1px color-mix(in srgb, var(--pl-purple) 18%, transparent);
 }
 
-[data-theme="dark"] .lp-ops-sky .lp-cityscape .lp-b2,
-[data-theme="dark"] .lp-ops-sky .lp-cityscape .lp-b4,
-[data-theme="dark"] .lp-ops-sky .lp-cityscape .lp-b6,
-[data-theme="dark"] .lp-ops-sky .lp-cityscape .lp-b8 {
-  background-image: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--pl-purple-soft) 45%, transparent) 1.5px,
-    transparent 2px
-  );
-}
-
 .lp-task-float .lp-row {
   display: flex;
   align-items: center;
@@ -1274,11 +1131,43 @@
   flex-shrink: 0;
 }
 
+.lp-portfolio-strip {
+  position: relative;
+  z-index: 3;
+  width: min(520px, calc(100% - 24px));
+  margin: 14px auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.lp-portfolio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
 .lp-end {
   padding: 56px 20px 72px;
   text-align: center;
   background: var(--lp-surface);
   min-width: 0;
+}
+
+[data-theme="dark"] .lp-end {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 100%, color-mix(in srgb, var(--pl-purple) 14%, transparent) 0%, transparent 65%),
+    var(--pl-black);
 }
 
 .lp-end h2 {
