@@ -56,7 +56,7 @@ Do **not** add a second preferred-order list for native. When reordering tabs, u
 
 **Pro/manager (Free tier UX):** free operational sections first (`dashboard` … `payments`), then a contiguous paid block (`documents` … `relationships`), then account items (`plan`, `bugs-feedback`), then `profile` (Settings). Only `properties`, `calendar`, `residents`, `documents`, and `inbox` get primary-bar slots; `services` and everything else in the paid block is reachable via the "more" sheet.
 
-**Resident:** free sections first (`dashboard` … `move-in`), then locked sections (`inbox`, `documents`, `financials`, and `services` when approved), then `bugs-feedback` and `profile`.
+**Resident:** free sections first (`dashboard` … `move-in`), then locked sections (`communication`, `documents`, and `services` when approved), then `bugs-feedback` and `profile`.
 
 Tier locking (`manager-access.ts`) does not reorder nav — lock icons render inline at registry positions.
 
