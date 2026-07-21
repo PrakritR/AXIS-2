@@ -53,7 +53,7 @@ export default function SupportPage() {
 
       <MarketingSection narrow>
         <h2>Still need help?</h2>
-        <p className="lp-section-lede mt-3 max-w-none">
+        <p className="lp-section-lede lp-full">
           Email{" "}
           <a
             href={`mailto:${PUBLIC_SUPPORT_EMAIL}`}

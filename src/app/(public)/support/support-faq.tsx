@@ -7,6 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Link from "next/link";
+import { PUBLIC_SUPPORT_EMAIL } from "@/lib/marketing/public-contact";
 
 type FaqItem = {
   q: string;
@@ -34,8 +35,8 @@ const RESIDENT_FAQS: FaqItem[] = [
         </Link>
         . If you were invited by a property manager and never finished setup, ask them to resend your invitation, or
         email us at{" "}
-        <a href="mailto:info@axis-seattle-housing.com" className="font-medium text-[var(--pl-brand)] hover:opacity-90">
-          info@axis-seattle-housing.com
+        <a href={`mailto:${PUBLIC_SUPPORT_EMAIL}`} className="font-medium text-[var(--pl-brand)] hover:opacity-90">
+          {PUBLIC_SUPPORT_EMAIL}
         </a>
         .
       </>

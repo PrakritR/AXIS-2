@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingCtaPair } from "@/components/marketing/marketing-cta";
+import { MANAGER_PLAN_TIERS, type PlanTierId } from "@/data/manager-plan-tiers";
+import { MANAGER_TIER_MONTHLY_USD } from "@/lib/manager-access";
 import {
   MarketingHero,
   MarketingPageShell,
@@ -32,6 +34,17 @@ const CAPABILITIES = [
   },
 ] as const;
 
+const TIER_BLURBS: Record<PlanTierId, string> = {
+  free: "1 listing · try the core flow",
+  pro: "Residents, leases, inbox, co-managers",
+  business: "Scale listings · 0% payment fee",
+};
+
+function tierMonthlyPrice(id: PlanTierId): string {
+  const usd = MANAGER_TIER_MONTHLY_USD[id];
+  return usd === 0 ? "$0" : `$${usd}/mo`;
+}
+
 export default function PartnerLandingPage() {
   return (
     <MarketingPageShell>
@@ -48,8 +61,8 @@ export default function PartnerLandingPage() {
       </MarketingHero>
 
       <MarketingSection>
-        <h2 className="text-center max-w-[18ch] mx-auto">Built for how managers actually work</h2>
-        <p className="lp-section-lede mx-auto text-center">
+        <h2 className="lp-center max-w-[18ch]">Built for how managers actually work</h2>
+        <p className="lp-section-lede lp-center">
           One account for leasing, rent, maintenance, inbox, and books — on web and iOS.
         </p>
         <div className="lp-page-grid-2">
@@ -81,20 +94,18 @@ export default function PartnerLandingPage() {
             </div>
           </div>
           <div className="lp-page-card overflow-hidden">
-            {[
-              ["Free", "$0", "1 listing · try the core flow"],
-              ["Pro", "$20/mo", "Residents, leases, inbox, co-managers"],
-              ["Business", "$200/mo", "Scale listings · 0% payment fee"],
-            ].map(([name, price, detail], i) => (
+            {MANAGER_PLAN_TIERS.map((tier, i) => (
               <div
-                key={name}
+                key={tier.id}
                 className={`lp-page-card-pad flex items-baseline justify-between gap-4 ${i > 0 ? "border-t border-[var(--lp-line)]" : ""}`}
               >
                 <div>
-                  <h3>{name}</h3>
-                  <p>{detail}</p>
+                  <h3>{tier.label}</h3>
+                  <p>{TIER_BLURBS[tier.id]}</p>
                 </div>
-                <span className="shrink-0 text-[15px] font-semibold text-[var(--lp-ink)]">{price}</span>
+                <span className="shrink-0 text-[15px] font-semibold text-[var(--lp-ink)]">
+                  {tierMonthlyPrice(tier.id)}
+                </span>
               </div>
             ))}
           </div>

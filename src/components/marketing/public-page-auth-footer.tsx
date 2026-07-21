@@ -28,7 +28,7 @@ export function PublicPageAuthFooter({
   showSecondary = true,
 }: PublicPageAuthFooterProps) {
   return (
-    <div className="lp-root mx-auto mt-12 max-w-md space-y-4 pb-6 text-center sm:mt-14 sm:pb-8">
+    <div className="lp-root lp-auth-footer mx-auto max-w-md space-y-4 pb-6 text-center sm:pb-8">
       <div className="lp-cta-row flex flex-col gap-2.5 sm:flex-row sm:justify-center">
         <Link
           href={getStartedHref}

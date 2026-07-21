@@ -51,7 +51,7 @@ function ContactInner() {
       <header className="lp-page-hero">
         <div className="lp-w max-w-[560px]">
           <MarketingEyebrow>Contact</MarketingEyebrow>
-          <h1 className="lp-page-title mt-5 max-w-none">Connect with the PropLane team</h1>
+          <h1 className="lp-page-title lp-page-title-wide">Connect with the PropLane team</h1>
           <p className="lp-page-lede">
             Schedule a demo or send a message — whatever works best for you.
           </p>

@@ -87,7 +87,7 @@ export function ManagerStartPage() {
             <span aria-hidden className="lp-page-eyebrow-dot" />
             Manager plans
           </p>
-          <h1 className="lp-page-title max-w-[14ch]">Start with PropLane.</h1>
+          <h1 className="lp-page-title lp-page-title-tight">Start with PropLane.</h1>
           <div className="mt-8 inline-flex items-center gap-1 rounded-full border border-[var(--lp-line)] bg-[var(--lp-card)] p-1">
             <button
               type="button"

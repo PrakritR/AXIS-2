@@ -35,7 +35,7 @@ export function MarketingCtaPair({
 }: CtaPairProps) {
   return (
     <div
-      className={`lp-cta-row flex flex-wrap items-center gap-3 ${align === "start" ? "justify-start" : "justify-center"}`}
+      className={`lp-cta-row${align === "start" ? " lp-cta-row-start" : ""}`}
     >
       <Link href={primaryHref} data-attr={primaryAttr} className={large ? primaryLg : primaryCls}>
         {primaryLabel}

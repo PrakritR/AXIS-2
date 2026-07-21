@@ -183,7 +183,7 @@ export default function WhyPropLanePage() {
 
       <MarketingSection>
         <h2 className="text-center">Honest pricing</h2>
-        <p className="lp-section-lede mx-auto text-center">Three plans. No sales wall.</p>
+        <p className="lp-section-lede lp-center">Three plans. No sales wall.</p>
         <div className="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-3">
           {PRICING_TIERS.map((tier) => (
             <div key={tier.name} className="lp-page-card lp-page-card-pad text-center">
