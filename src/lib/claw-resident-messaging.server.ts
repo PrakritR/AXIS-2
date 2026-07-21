@@ -3,6 +3,7 @@
  * via the shared agent line (payment / lease / move-in / leasing).
  */
 
+import { listAdminUserIds } from "@/lib/auth/admin-role";
 import {
   clawLeasingAgentPhoneE164,
   normalizeE164Us,
@@ -44,29 +45,47 @@ function threadId(managerUserId: string, residentPhone: string): string {
 
 /**
  * Admin ops cell for shared-line trial forwarding — DB-backed on the Axis
- * admin account's own profile (role = "admin", the same account identified
- * by `userHoldsAdminRole` in auth/admin-role.ts) so updating Settings → Phone
- * re-points every forward without an env/redeploy. Falls back to the
- * configured env phone / hardcoded trial default when no admin profile has a
- * phone on file yet.
+ * admin account's own profile (any account identified by admin-role.ts:
+ * `profile_roles`, legacy `profiles.role`, or the primary-admin email) so
+ * updating Settings → Phone re-points every forward without an env/redeploy.
+ * Falls back to the configured env phone / hardcoded trial default when no
+ * admin profile has a phone on file yet. Cached for a few seconds because a
+ * single inbound SMS resolves it several times.
  */
+const ADMIN_FORWARD_PHONE_TTL_MS = 5000;
+let adminForwardPhoneCache: { phone: string; expiresAt: number } | null = null;
+
 async function resolveAdminForwardPhone(): Promise<string> {
+  const now = Date.now();
+  if (adminForwardPhoneCache && adminForwardPhoneCache.expiresAt > now) {
+    return adminForwardPhoneCache.phone;
+  }
+  let resolved: string | null = null;
   try {
     const db = createSupabaseServiceRoleClient();
-    const { data } = await db
-      .from("profiles")
-      .select("phone")
-      .eq("role", "admin")
-      .not("phone", "is", null)
-      .limit(1)
-      .maybeSingle();
-    const phone = normalizeE164Us(String((data as { phone?: unknown } | null)?.phone ?? ""));
-    if (phone) return phone;
+    const adminIds = await listAdminUserIds(db);
+    if (adminIds.length > 0) {
+      const { data } = await db
+        .from("profiles")
+        .select("id, phone")
+        .in("id", adminIds)
+        .not("phone", "is", null)
+        .order("id");
+      for (const row of (data ?? []) as { phone?: unknown }[]) {
+        const phone = normalizeE164Us(String(row.phone ?? ""));
+        if (phone) {
+          resolved = phone;
+          break;
+        }
+      }
+    }
   } catch {
     /* fall through to env / hardcoded default */
   }
   const env = clawManagerForwardPhonesFromEnv();
-  return env[0] ?? DEFAULT_MANAGER_PHONE;
+  const phone = resolved ?? env[0] ?? DEFAULT_MANAGER_PHONE;
+  adminForwardPhoneCache = { phone, expiresAt: now + ADMIN_FORWARD_PHONE_TTL_MS };
+  return phone;
 }
 
 export function clawManagerForwardPhonesFromEnv(): string[] {
