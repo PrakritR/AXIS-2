@@ -1,11 +1,9 @@
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import type { HouseholdCharge } from "@/lib/household-charges";
 import { enrichOutgoingRowWithVendorPayments, managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
 import { parseMoneyAmount } from "@/lib/parse-money";
-import { residentConnectApplicationFeeCents } from "@/lib/payment-policy";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
 export type ManagerExpenseSnapshot = {
@@ -183,7 +181,6 @@ export function buildManagerOutgoingPaymentRows(input: {
   managerUserId: string | null;
   expenses: ManagerExpenseSnapshot[];
   workOrders?: DemoManagerWorkOrderRow[];
-  paidCharges?: HouseholdCharge[];
   propertyLabelById?: Map<string, string>;
   vendorNameById?: Map<string, string>;
   vendorById?: Map<string, ManagerVendorRow>;
@@ -193,7 +190,6 @@ export function buildManagerOutgoingPaymentRows(input: {
   const vendorNameById = input.vendorNameById ?? new Map<string, string>();
   const vendorById = input.vendorById ?? new Map<string, ManagerVendorRow>();
   const workOrders = input.workOrders ?? readManagerWorkOrderRows();
-  const paidCharges = input.paidCharges ?? [];
   const workOrderById = new Map(workOrders.map((workOrder) => [workOrder.id, workOrder]));
   const workOrderExpenseIds = new Set(
     input.expenses.map((expense) => expense.sourceWorkOrderId).filter((id): id is string => Boolean(id)),
@@ -287,26 +283,9 @@ export function buildManagerOutgoingPaymentRows(input: {
     rows.push(enrichOutgoingRowWithVendorPayments(baseRow, vendor));
   }
 
-  for (const charge of paidCharges) {
-    if (input.managerUserId && charge.managerUserId && charge.managerUserId !== input.managerUserId) continue;
-    if (charge.status !== "paid" || !charge.axisPaymentsEnabledSnapshot) continue;
-    const subtotalCents = parseCents(charge.amountLabel);
-    const feeCents = residentConnectApplicationFeeCents(subtotalCents, "ach");
-    if (feeCents <= 0) continue;
-    rows.push({
-      id: `axis-fee-${charge.id}`,
-      propertyName: charge.propertyLabel,
-      categoryLabel: "PropLane payment cost",
-      payeeLabel: "PropLane",
-      chargeTitle: `Processing fee — ${charge.title}`,
-      amountLabel: formatMoney(feeCents),
-      dueDate: dueDateLabelFromIso(charge.paidAt),
-      dueDateSortMs: dueDateMsFromIso(charge.paidAt),
-      bucket: "paid",
-      statusLabel: "Paid",
-      fromAxisFee: true,
-    });
-  }
+  // No manager-side processing-cost rows: residents cover the processing/service
+  // fee on every method (see managerAbsorbedPaymentFeeCents === 0), so the manager
+  // receives the full charge amount and has no PropLane payment cost to report.
 
   return rows.sort((a, b) => {
     const bucketOrder: Record<ManagerPaymentBucket, number> = { overdue: 0, pending: 1, paid: 2 };

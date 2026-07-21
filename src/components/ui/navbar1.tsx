@@ -95,7 +95,7 @@ export function Navbar1({
             <Button
               asChild
               size="sm"
-              className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+              className="btn-brand-cta text-white hover:brightness-110"
             >
               <Link href={portalLink.url}>{portalLink.text}</Link>
             </Button>
@@ -111,7 +111,7 @@ export function Navbar1({
               <Button
                 asChild
                 size="sm"
-                className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+                className="btn-brand-cta text-white hover:brightness-110"
               >
                 <Link href={auth.signup.url}>{auth.signup.text}</Link>
               </Button>
@@ -145,7 +145,7 @@ export function Navbar1({
               {portalLink ? (
                 <Button
                   asChild
-                  className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+                  className="btn-brand-cta text-white hover:brightness-110"
                 >
                   <Link href={portalLink.url}>{portalLink.text}</Link>
                 </Button>
@@ -156,7 +156,7 @@ export function Navbar1({
                   </Button>
                   <Button
                     asChild
-                    className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+                    className="btn-brand-cta text-white hover:brightness-110"
                   >
                     <Link href={auth.signup.url}>{auth.signup.text}</Link>
                   </Button>

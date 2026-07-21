@@ -23,6 +23,7 @@ import {
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
+import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import {
@@ -1810,9 +1811,16 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 12) {
     const prop = form.propertyId ? getPropertyById(form.propertyId) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
-    const appFeeLabel = sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
+    const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
+    const appFeeProcessingCents = !applicationFeeGate.paid && channels.ach && isAchApplicationFeeChannel(payChannel)
+      ? residentProcessingFeeCents(appFeeSubtotalCents, "ach")
+      : 0;
+    const appFeeLabel =
+      appFeeProcessingCents > 0
+        ? `$${((appFeeSubtotalCents + appFeeProcessingCents) / 100).toFixed(2)}`
+        : sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
     const enabledChannels = [
       channels.ach ? ("ach" as const) : null,
       channels.zelle ? ("zelle" as const) : null,
@@ -1841,8 +1849,15 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
         {applicationFeeGate.needsFee ? (
           <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Application fee</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
+              {appFeeProcessingCents > 0 ? "Total due" : "Application fee"}
+            </p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
+            {appFeeProcessingCents > 0 ? (
+              <p className="mt-1 text-xs text-muted">
+                Includes ${(appFeeProcessingCents / 100).toFixed(2)} bank processing fee.
+              </p>
+            ) : null}
             {applicationFeeGate.paid ? (
               <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
                 Paid
@@ -1871,7 +1886,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <span>
                   <span className="text-sm font-semibold text-foreground">Bank transfer (ACH)</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Pay securely via bank account — free, no processing fee. Clears in 3–5 business days.
+                    Pay securely via bank account — low 0.8% processing fee (max $5). Clears in 3–5 business days.
                   </span>
                 </span>
               </label>

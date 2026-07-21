@@ -328,7 +328,6 @@ export function ManagerPayments() {
       managerUserId: userId,
       expenses: readManagerOutgoingExpenses(),
       workOrders: readManagerWorkOrderRows(),
-      paidCharges: readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") }).filter((charge) => charge.status === "paid"),
       propertyLabelById,
       vendorNameById,
       vendorById,

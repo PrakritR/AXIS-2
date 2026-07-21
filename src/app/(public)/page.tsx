@@ -1,23 +1,16 @@
-import { LandingAudienceGrid } from "@/components/marketing/landing-audience-grid";
 import { LandingDemoHero } from "@/components/marketing/landing-demo-hero";
-import { LandingHero } from "@/components/marketing/landing-hero";
-import { isPublicDemoSurfaceEnabled } from "@/lib/public-demo-access";
+import { LandingHomeSections } from "@/components/marketing/landing-home-sections";
+import "@/components/marketing/landing-proplane.css";
 
 export default function HomePage() {
-  // Demo-first landing. If the public demo surface is disabled for this
-  // deployment, fall back to the classic hero + audience grid.
-  if (!isPublicDemoSurfaceEnabled()) {
-    return (
-      <div className="relative min-h-0 flex-1">
-        <LandingHero />
-        <LandingAudienceGrid />
-      </div>
-    );
-  }
-
   return (
     <div className="relative min-h-0 flex-1">
+      {/* Theme-aware hero — light blue / dark purple brand split */}
       <LandingDemoHero />
+      {/* Full-flow sections: cool white (light) / near-black (dark); brand via --pl-brand */}
+      <div className="lp-root">
+        <LandingHomeSections />
+      </div>
     </div>
   );
 }

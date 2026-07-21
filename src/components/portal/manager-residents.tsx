@@ -32,7 +32,6 @@ import {
   PortalTableDetailActions,
   PortalTableInlineExpand,
   PortalTableExpandCell,
-  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -89,7 +88,6 @@ import {
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,
-  hasAnyLeaseSignature,
   leaseGenerationSupportedForRow,
   managerSignLease,
   leaseAllowsManagerDocumentEdits,
@@ -121,7 +119,7 @@ import {
   deleteServiceRequestsForResident,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
-import type { DemoApplicantRow, DemoManagerWorkOrderRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
+import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
 import {
   invalidatePersistedInboxCache,
@@ -140,7 +138,6 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import { Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
@@ -248,16 +245,6 @@ function shortDateLabel(iso: string): string {
 const AR_LEASE_TERM_CUSTOM = "__custom__";
 const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 months"] as const;
 
-function centsFromLabel(label: string): number {
-  const n = Number(label.replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? Math.round(n * 100) : 0;
-}
-
-function previewLine(body: string, max = 120) {
-  const normalized = body.trim().replace(/\s+/g, " ");
-  if (normalized.length <= max) return normalized;
-  return `${normalized.slice(0, max)}…`;
-}
 
 export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
@@ -2932,13 +2919,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     data-attr="resident-payment-axis-ach-toggle"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Bank transfer — free for residents
+                    Bank transfer & card — you receive the full amount
                   </span>
                 </label>
                 {pmAxisPaymentsEnabled ? (
                   <p className="pl-7 text-xs leading-relaxed text-muted">
-                    Residents pay through Stripe Checkout with bank (ACH) or Link. Funds transfer to your connected payout
-                    account after checkout.
+                    Residents pay through Stripe Checkout with bank (ACH), card, or Link and cover the processing fee, so
+                    the full charge amount transfers to your connected payout account after checkout.
                     {pmConnectReady === false ? (
                       <>
                         {" "}

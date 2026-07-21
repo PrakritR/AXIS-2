@@ -82,30 +82,86 @@ export function PublicNavbar() {
       pathname.startsWith("/rent/apply"),
     [pathname],
   );
-  const contactActive = useMemo(() => pathname === "/contact", [pathname]);
-  const pricingActive = useMemo(() => pathname === "/pricing", [pathname]);
-  const docsActive = useMemo(() => pathname.startsWith("/docs"), [pathname]);
+  const contactActive = useMemo(() => pathname === "/contact" || pathname === "/support", [pathname]);
+  const docsActive = useMemo(
+    () => pathname.startsWith("/docs") || pathname.startsWith("/why-proplane"),
+    [pathname],
+  );
+  const productActive = useMemo(
+    () =>
+      residentActive ||
+      pathname.startsWith("/partner") ||
+      pathname.startsWith("/vendors") ||
+      pathname === "/",
+    [pathname, residentActive],
+  );
 
   const menu: NavbarMenuItem[] = useMemo(
     () => {
-      // Slim marketing nav: Browse homes · Pricing · Docs · Contact. Manager/
-      // vendor entry points live in the hero CTAs and footer; no "Demo" item —
-      // the landing page embeds the demo above the fold. /partner, /vendors,
-      // /demo stay routable.
+      // Product · Resources · Contact — Product is role entry only (manager /
+      // resident / vendor), each with a short description.
       const items: NavbarMenuItem[] = [
         {
-          title: "Browse homes",
-          url: RESIDENT_BROWSE_PATH,
-          active: residentActive,
-          dataAttr: "nav-resident",
+          title: "Product",
+          url: "/#product",
+          active: productActive && !docsActive && !contactActive,
+          dataAttr: "nav-product",
+          items: [
+            {
+              title: "For managers",
+              url: "/partner",
+              description: "AI leasing, rent, vendors, and approvals",
+              active: pathname.startsWith("/partner"),
+              dataAttr: "nav-product-managers",
+            },
+            {
+              title: "For residents",
+              url: RESIDENT_BROWSE_PATH,
+              description: "Browse homes, apply, pay rent, and message",
+              active: residentActive,
+              dataAttr: "nav-product-residents",
+            },
+            {
+              title: "For vendors",
+              url: "/vendors",
+              description: "Jobs, bids, and payouts",
+              active: pathname.startsWith("/vendors"),
+              dataAttr: "nav-product-vendors",
+            },
+          ],
         },
-        { title: "Pricing", url: "/pricing", active: pricingActive, dataAttr: "nav-pricing" },
-        { title: "Docs", url: "/docs", active: docsActive, dataAttr: "nav-docs" },
-        { title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" },
+        {
+          title: "Resources",
+          url: "/why-proplane",
+          active: docsActive,
+          dataAttr: "nav-resources",
+          items: [
+            {
+              title: "Why PropLane",
+              url: "/why-proplane",
+              description: "AI, portals, and books — what makes it different",
+              active: pathname.startsWith("/why-proplane"),
+              dataAttr: "nav-resources-why",
+            },
+            {
+              title: "Documentation",
+              url: "/docs",
+              description: "Guides for managers, residents, and vendors",
+              active: pathname.startsWith("/docs"),
+              dataAttr: "nav-resources-docs",
+            },
+          ],
+        },
+        {
+          title: "Contact",
+          url: "/contact",
+          active: contactActive,
+          dataAttr: "nav-contact",
+        },
       ];
       return items;
     },
-    [residentActive, pricingActive, docsActive, contactActive],
+    [contactActive, docsActive, pathname, productActive, residentActive],
   );
 
   const portalLink = useMemo(() => {
