@@ -20,11 +20,10 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalTableDetailActions,
-  PortalTableExpandCell,
   PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
@@ -381,9 +380,6 @@ export function VendorDocumentsPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Document</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>File</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -400,7 +396,9 @@ export function VendorDocumentsPanel({
                           )}
                         >
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            <p className="font-medium text-foreground">{VENDOR_DOCUMENT_LABELS[kind]}</p>
+                            <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
+                              {VENDOR_DOCUMENT_LABELS[kind]}
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 line-clamp-2 text-xs text-muted">{VENDOR_DOCUMENT_HINTS[kind]}</p>
                           </td>
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
@@ -422,11 +420,10 @@ export function VendorDocumentsPanel({
                               <p className="text-muted">No file on file</p>
                             )}
                           </td>
-                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowActions(kind, doc)}
                             </td>
                           </tr>

@@ -278,7 +278,10 @@ export async function renderPortalSection(
 
   // Legacy path support: Inbox became Communication. Old deep links (push
   // notifications, bookmarks, post-send navigation) must keep resolving.
-  if (section === "inbox") {
+  // Only for portals that actually have a Communication section — the admin
+  // portal still ships Inbox as a real section, so redirecting it would send
+  // /admin/inbox/* to a section that does not exist (notFound).
+  if (section === "inbox" && findSection(def, "communication")) {
     const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
     if (kind === "manager" || kind === "pro") {
       redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
