@@ -1,12 +1,14 @@
 "use client";
 
 import { PartnerMeetingScheduler } from "@/components/partner/partner-meeting-scheduler";
+import { MarketingEyebrow } from "@/components/marketing/marketing-cta";
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
+import { PUBLIC_SUPPORT_EMAIL } from "@/lib/marketing/public-contact";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-
-const SUPPORT_EMAIL = "info@axis-seattle-housing.com";
+import "@/components/marketing/landing-proplane.css";
 
 const TOPICS = [
   "General question",
@@ -20,11 +22,9 @@ export default function ContactPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-background px-4 py-16 sm:py-20">
-          <div className="mx-auto max-w-2xl rounded-xl border border-border bg-card p-8">
-            <p className="text-center text-sm text-muted">Loading…</p>
-          </div>
-        </div>
+        <MarketingPageShell>
+          <div className="lp-w py-20 text-center text-sm text-[var(--lp-muted)]">Loading…</div>
+        </MarketingPageShell>
       }
     >
       <ContactInner />
@@ -47,37 +47,36 @@ function ContactInner() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen bg-background px-4 py-16 sm:py-20">
-      <div className="mx-auto max-w-2xl">
-        <div className="rounded-xl border border-border bg-card p-8 shadow-[var(--shadow-card)]">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-[var(--secondary)] px-3 py-1 text-[12px] font-medium tracking-[0.06em] text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)] shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_50%,transparent)]" />
-            CONTACT
-          </span>
-          <h1 className="mt-6 text-2xl font-semibold tracking-[-0.02em] text-foreground">Connect with PropLane Team</h1>
-          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-            Schedule a meeting with our team or send us a message — whatever works best for you.
+    <MarketingPageShell>
+      <header className="lp-page-hero">
+        <div className="lp-w max-w-[560px]">
+          <MarketingEyebrow>Contact</MarketingEyebrow>
+          <h1 className="lp-page-title mt-5 max-w-none">Connect with the PropLane team</h1>
+          <p className="lp-page-lede">
+            Schedule a demo or send a message — whatever works best for you.
           </p>
 
-          <div className="mt-5">
+          <div className="mt-6">
             <SegmentedTwo
               value={tab}
               onChange={setTab}
-              left={{ id: "schedule", label: "Schedule meeting" }}
+              left={{ id: "schedule", label: "Book a demo" }}
               right={{ id: "message", label: "Send message" }}
             />
           </div>
 
-          <div key={tab} className="animate-fade-in">
+          <div key={tab} className="animate-fade-in text-left">
             {tab === "message" ? (
               <ContactMessageForm showToast={showToast} />
             ) : (
-              <PartnerMeetingScheduler showToast={showToast} />
+              <div className="mt-6">
+                <PartnerMeetingScheduler showToast={showToast} />
+              </div>
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </header>
+    </MarketingPageShell>
   );
 }
 
@@ -114,7 +113,7 @@ function ContactMessageForm({ showToast }: { showToast: (m: string) => void }) {
         body: JSON.stringify({ name: n, email: em, topic: tp, body: msg }),
       });
       if (!res.ok) {
-        showToast(`Could not send your message. Please try again or email ${SUPPORT_EMAIL}.`);
+        showToast(`Could not send your message. Please try again or email ${PUBLIC_SUPPORT_EMAIL}.`);
         return;
       }
       showToast("Message sent. Our team will get back to you soon.");
@@ -123,63 +122,68 @@ function ContactMessageForm({ showToast }: { showToast: (m: string) => void }) {
       setTopic("");
       setBody("");
     } catch {
-      showToast(`Could not send your message. Please try again or email ${SUPPORT_EMAIL}.`);
+      showToast(`Could not send your message. Please try again or email ${PUBLIC_SUPPORT_EMAIL}.`);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="mt-6 space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name *">
-          <input type="text" placeholder="Jane Smith" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Email *">
-          <input type="email" placeholder="jane@company.com" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
-        </Field>
+    <div className="lp-page-form space-y-4">
+      <div className="lp-page-field-row">
+        <div className="lp-page-field">
+          <label htmlFor="contact-name">Name *</label>
+          <input
+            id="contact-name"
+            type="text"
+            placeholder="Jane Smith"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="lp-page-field">
+          <label htmlFor="contact-email">Email *</label>
+          <input
+            id="contact-email"
+            type="email"
+            placeholder="jane@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
       </div>
 
-      <Field label="Topic *">
-        <select className={inputCls} value={topic} onChange={(e) => setTopic(e.target.value)}>
+      <div className="lp-page-field">
+        <label htmlFor="contact-topic">Topic *</label>
+        <select id="contact-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
           <option value="">Select…</option>
           {TOPICS.map((t) => (
             <option key={t}>{t}</option>
           ))}
         </select>
-      </Field>
+      </div>
 
-      <Field label="Message *">
+      <div className="lp-page-field">
+        <label htmlFor="contact-body">Message *</label>
         <textarea
-          rows={10}
+          id="contact-body"
+          rows={8}
           placeholder="What can we help you with?"
-          className={`${inputCls} min-h-[220px] resize-y leading-relaxed`}
+          className="min-h-[180px] resize-y leading-relaxed"
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
-      </Field>
+      </div>
 
       <button
         type="button"
         data-attr="contact-us-submit"
         onClick={submit}
         disabled={submitting}
-        className="mt-2 inline-flex w-full items-center justify-center rounded-[7px] border border-border bg-primary py-3.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+        className="lp-btn lp-btn-blue lp-lg mt-2 w-full disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Sending…" : "Send message"}
       </button>
     </div>
   );
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="mb-1.5 text-[12px] font-medium uppercase tracking-[0.06em] text-muted">{label}</p>
-      {children}
-    </div>
-  );
-}
-
-const inputCls =
-  "w-full rounded-[7px] border border-border bg-[var(--secondary)] px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/25 hover:border-foreground/20";

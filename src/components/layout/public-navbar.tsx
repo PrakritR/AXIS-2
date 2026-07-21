@@ -84,7 +84,11 @@ export function PublicNavbar() {
   );
   const contactActive = useMemo(() => pathname === "/contact" || pathname === "/support", [pathname]);
   const docsActive = useMemo(
-    () => pathname.startsWith("/docs") || pathname.startsWith("/why-proplane"),
+    () =>
+      pathname.startsWith("/docs") ||
+      pathname.startsWith("/why-proplane") ||
+      pathname.startsWith("/pricing") ||
+      pathname.startsWith("/about"),
     [pathname],
   );
   const productActive = useMemo(
@@ -150,6 +154,20 @@ export function PublicNavbar() {
               active: pathname.startsWith("/docs"),
               dataAttr: "nav-resources-docs",
             },
+            {
+              title: "Pricing",
+              url: "/pricing",
+              description: "Free, Pro, and Business — start at $0",
+              active: pathname.startsWith("/pricing"),
+              dataAttr: "nav-resources-pricing",
+            },
+            {
+              title: "About us",
+              url: "/about",
+              description: "Built by managers who use PropLane daily",
+              active: pathname.startsWith("/about"),
+              dataAttr: "nav-resources-about",
+            },
           ],
         },
         {
@@ -185,7 +203,7 @@ export function PublicNavbar() {
         menu={menu}
         auth={{
           login: { text: "Log in", url: "/auth/sign-in" },
-          signup: { text: "Get started", url: "/auth/create-account?mode=create&role=resident" },
+          signup: { text: "Get started", url: "/auth/create-account?mode=create&role=manager" },
         }}
         portalLink={portalLink}
         actionsSlot={<ThemeToggle />}

@@ -34,7 +34,7 @@ const RESIDENT_FAQS: FaqItem[] = [
         </Link>
         . If you were invited by a property manager and never finished setup, ask them to resend your invitation, or
         email us at{" "}
-        <a href="mailto:info@axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
+        <a href="mailto:info@axis-seattle-housing.com" className="font-medium text-[var(--pl-brand)] hover:opacity-90">
           info@axis-seattle-housing.com
         </a>
         .
