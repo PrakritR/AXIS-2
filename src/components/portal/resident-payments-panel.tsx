@@ -43,6 +43,7 @@ import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts"
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
 import {
   residentPaymentMethodLabel,
+  residentProcessingFeeCents,
   residentProcessingFeeDisplayLabel,
   type ResidentAxisPaymentMethod,
 } from "@/lib/payment-policy";
@@ -839,10 +840,29 @@ export function ResidentPaymentsPanel({
       .filter((c): c is HouseholdCharge => Boolean(c));
   }, [charges, payConfirm]);
 
-  const confirmTotalLabel = useMemo(() => {
-    const cents = confirmCharges.reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0);
-    return formatUsd(cents);
-  }, [confirmCharges]);
+  const confirmSubtotalCents = useMemo(
+    () => confirmCharges.reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0),
+    [confirmCharges],
+  );
+
+  const confirmTotalLabel = useMemo(() => formatUsd(confirmSubtotalCents), [confirmSubtotalCents]);
+
+  /**
+   * The resident pays the processing fee on every Stripe method, so the amount
+   * Stripe collects is more than the charge subtotal. Disclose it here — showing
+   * the bare subtotal understated a card payment by 2.9% + $0.30.
+   */
+  const confirmStripeFee = useMemo(() => {
+    if (!payConfirm || !isStripeResidentPayMethod(payConfirm.method)) return null;
+    const method = payConfirm.method as ResidentAxisPaymentMethod;
+    const feeCents = residentProcessingFeeCents(confirmSubtotalCents, method);
+    if (feeCents <= 0) return null;
+    return {
+      feeLabel: formatUsd(feeCents),
+      totalLabel: formatUsd(confirmSubtotalCents + feeCents),
+      methodFeeLabel: residentProcessingFeeDisplayLabel(method),
+    };
+  }, [payConfirm, confirmSubtotalCents]);
 
   useEffect(() => {
     if (tabId === "paid" || tabId === "pending") {
@@ -1148,6 +1168,18 @@ export function ResidentPaymentsPanel({
                 {confirmCharges.length === 1 ? "Amount" : `${confirmCharges.length} charges`}:{" "}
                 <span className="font-semibold tabular-nums">{confirmTotalLabel}</span>
               </p>
+              {confirmStripeFee ? (
+                <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+                  <p className="flex items-center justify-between gap-3 text-muted">
+                    <span>{confirmStripeFee.methodFeeLabel}</span>
+                    <span className="tabular-nums">{confirmStripeFee.feeLabel}</span>
+                  </p>
+                  <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
+                    <span>Total due</span>
+                    <span className="tabular-nums">{confirmStripeFee.totalLabel}</span>
+                  </p>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
