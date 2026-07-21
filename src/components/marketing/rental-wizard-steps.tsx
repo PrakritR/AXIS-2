@@ -1814,7 +1814,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
-    const appFeeProcessingCents = isAchApplicationFeeChannel(payChannel)
+    const appFeeProcessingCents = !applicationFeeGate.paid && channels.ach && isAchApplicationFeeChannel(payChannel)
       ? residentProcessingFeeCents(appFeeSubtotalCents, "ach")
       : 0;
     const appFeeLabel =
