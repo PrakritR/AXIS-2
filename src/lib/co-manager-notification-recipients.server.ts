@@ -1,6 +1,7 @@
 import "server-only";
 
 import { asStringArray, readPropertyPermissionsFromRow } from "@/app/api/pro/account-links/route";
+import { normalizeE164Us } from "@/lib/claw-messenger.server";
 import {
   hasCoManagerPermissionForProperty,
   type CoManagerPermissionId,
@@ -81,23 +82,25 @@ export async function resolvePropertyLeadRecipientIds(
   return [...new Set([...inboxIds, ...calendarIds])];
 }
 
-/** Resolve manager profile emails for inbox/email delivery fan-out. */
+/** Resolve manager profile emails (+ SMS forward phone) for inbox/email/SMS delivery fan-out. */
 export async function resolveManagerRecipientProfiles(
   db: ServiceClient,
   userIds: string[],
-): Promise<Array<{ userId: string; email: string; fullName: string | null }>> {
+): Promise<Array<{ userId: string; email: string; fullName: string | null; phone: string | null }>> {
   const ids = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
   if (ids.length === 0) return [];
-  const { data } = await db.from("profiles").select("id, email, full_name").in("id", ids);
-  const out: Array<{ userId: string; email: string; fullName: string | null }> = [];
+  const { data } = await db.from("profiles").select("id, email, full_name, phone, sms_forward_inbound").in("id", ids);
+  const out: Array<{ userId: string; email: string; fullName: string | null; phone: string | null }> = [];
   for (const row of data ?? []) {
     const userId = String(row.id ?? "").trim();
     const email = String(row.email ?? "").trim().toLowerCase();
     if (!userId || !email.includes("@")) continue;
+    const forwardOptedOut = (row as { sms_forward_inbound?: unknown }).sms_forward_inbound === false;
     out.push({
       userId,
       email,
       fullName: String(row.full_name ?? "").trim() || null,
+      phone: forwardOptedOut ? null : normalizeE164Us(String((row as { phone?: unknown }).phone ?? "")),
     });
   }
   return out;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   INBOX_TAB_DEFS,
@@ -428,7 +428,33 @@ function ComposeModal({
   );
 }
 
-export function AdminInboxClient({ tabId }: { tabId: string }) {
+export type AdminInboxClientHandle = {
+  openCompose: () => void;
+  emptyTrash: () => void;
+};
+
+export type AdminInboxTabCounts = {
+  unopened: number;
+  opened: number;
+  schedule: number;
+  sent: number;
+  trash: number;
+};
+
+export const AdminInboxClient = forwardRef<
+  AdminInboxClientHandle,
+  {
+    tabId: string;
+    /** Base path for tab nav — defaults to the legacy `/admin/inbox` path (redirects to Communication → Email). */
+    commBase?: string;
+    embeddedInCommunication?: boolean;
+    externalTitleActions?: boolean;
+    onTabCountsChange?: (counts: AdminInboxTabCounts) => void;
+  }
+>(function AdminInboxClient(
+  { tabId, commBase = "/admin/inbox", embeddedInCommunication = false, externalTitleActions = false, onTabCountsChange },
+  ref,
+) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const [tick, setTick] = useState(0);
@@ -542,6 +568,37 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   );
 
   useEffect(() => {
+    if (embeddedInCommunication) onTabCountsChange?.(folderCounts);
+  }, [embeddedInCommunication, onTabCountsChange, folderCounts]);
+
+  const emptyTrash = useCallback(() => {
+    const trashCount = folderCounts.trash;
+    if (trashCount === 0) return;
+    if (!window.confirm(`Delete all ${trashCount} trash message${trashCount === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    void emptyAdminInboxTrash().then((ok) => {
+      if (ok) {
+        showToast("Trash cleared.");
+        setExpandedId(null);
+        setTick((t) => t + 1);
+      } else {
+        showToast("Could not clear trash.");
+      }
+    });
+  }, [folderCounts.trash, showToast]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCompose: () => {
+        setComposeInitialSchedule(false);
+        setComposeOpen(true);
+      },
+      emptyTrash,
+    }),
+    [emptyTrash],
+  );
+
+  useEffect(() => {
     if (expandedId && !rows.some((r) => r.id === expandedId)) {
       queueMicrotask(() => setExpandedId(null));
     }
@@ -578,54 +635,37 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     return m;
   }, [rows]);
 
-  return (
-    <ManagerPortalPageShell
-      title="Inbox"
-      titleAside={
-        <>
-          <Button
-            type="button"
-            variant="primary"
-            className="shrink-0 rounded-full"
-            onClick={() => {
-              setComposeInitialSchedule(false);
-              setComposeOpen(true);
-            }}
-          >
-            New message
-          </Button>
-          {tabId === "trash" && folderCounts.trash > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-              onClick={() => {
-                if (!window.confirm(`Delete all ${folderCounts.trash} trash message${folderCounts.trash === 1 ? "" : "s"}? This cannot be undone.`)) return;
-                void emptyAdminInboxTrash().then((ok) => {
-                  if (ok) {
-                    showToast("Trash cleared.");
-                    setExpandedId(null);
-                    setTick((t) => t + 1);
-                  } else {
-                    showToast("Could not clear trash.");
-                  }
-                });
-              }}
-            >
-              Delete all trash
-            </Button>
-          ) : null}
-        </>
-      }
-      filterRow={
-        <ManagerPortalStatusPills
-          activeTone="primary"
-          tabs={inboxTabs}
-          activeId={tabId}
-          onChange={(id) => navigate(`/admin/inbox/${id}`)}
-        />
-      }
-    >
+  const titleAside = (
+    <>
+      <Button
+        type="button"
+        variant="primary"
+        className="shrink-0 rounded-full"
+        onClick={() => {
+          setComposeInitialSchedule(false);
+          setComposeOpen(true);
+        }}
+      >
+        New message
+      </Button>
+      {tabId === "trash" && folderCounts.trash > 0 ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+          onClick={emptyTrash}
+        >
+          Delete all trash
+        </Button>
+      ) : null}
+    </>
+  );
+
+  const inboxBody = (
+    <>
+      {embeddedInCommunication && !externalTitleActions ? (
+        <div className="mb-4 flex flex-wrap justify-end gap-2">{titleAside}</div>
+      ) : null}
       <div className="space-y-5">
         <ComposeModal
           open={composeOpen}
@@ -759,6 +799,25 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           />
         )}
       </div>
+    </>
+  );
+
+  if (embeddedInCommunication) return inboxBody;
+
+  return (
+    <ManagerPortalPageShell
+      title="Inbox"
+      titleAside={titleAside}
+      filterRow={
+        <ManagerPortalStatusPills
+          activeTone="primary"
+          tabs={inboxTabs}
+          activeId={tabId}
+          onChange={(id) => navigate(`${commBase}/${id}`)}
+        />
+      }
+    >
+      {inboxBody}
     </ManagerPortalPageShell>
   );
-}
+});

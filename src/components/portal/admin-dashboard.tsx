@@ -336,7 +336,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
             <KpiTile
               label="Unread inbox"
               value={inboxUnread}
-              href="/admin/inbox/unopened"
+              href="/admin/communication/email/unopened"
               dataAttr="admin-dashboard-kpi-inbox"
             />
             <KpiTile
@@ -397,14 +397,14 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
 
           <AttentionGroup
             title="Inbox"
-            href="/admin/inbox/unopened"
+            href="/admin/communication/email/unopened"
             linkLabel="Inbox →"
             items={inboxPreview}
             emptyMessage="No unread messages — inbox is clear."
             keyForItem={(message) => message.id}
             renderRow={(message) => (
               <IssueRow
-                href="/admin/inbox/unopened"
+                href="/admin/communication/email/unopened"
                 dot={DOT_INFO}
                 title={message.name || message.email}
                 subtitle={message.topic || message.body.slice(0, 80)}

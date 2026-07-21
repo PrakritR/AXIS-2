@@ -85,7 +85,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const openFeedback = readBugFeedbackRows().filter((r) => r.status === "open" || r.status === "in_progress").length;
       return {
         events: pendingMeetings + pendingTours,
-        inbox: inboxUnread,
+        communication: inboxUnread,
         "bugs-feedback": openFeedback,
       };
     }

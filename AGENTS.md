@@ -148,9 +148,9 @@ hand-rolled markup:
   `createPortalRowExpandClick`) plus `MANAGER_TABLE_TH` from
   `portal-metrics.tsx`.
 
-Feedback (`admin-bug-feedback-client.tsx`) and Inbox (`admin-inbox-client.tsx`)
-are the reference implementations — copy their structure rather than
-reinventing table/filter markup per tab.
+Feedback (`admin-bug-feedback-client.tsx`) and Communication → Email
+(`admin-inbox-client.tsx`) are the reference implementations — copy their
+structure rather than reinventing table/filter markup per tab.
 
 ## Listing images: never fabricate a photo
 

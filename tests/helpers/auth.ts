@@ -4,8 +4,9 @@ import { E2E_ACCOUNTS } from "../fixtures";
 export async function signIn(page: Page, email: string, password: string, next = "/portal/dashboard") {
   const nextPath = next.split("?")[0] ?? next;
   await page.goto(`/auth/sign-in?next=${encodeURIComponent(next)}`);
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
+  // The unified auth hub renders label-less inputs (placeholder only).
+  await page.getByPlaceholder("Email").fill(email);
+  await page.getByPlaceholder("Password").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
   await page.waitForURL(
     (url) => url.pathname === nextPath || url.pathname.startsWith(`${nextPath}/`),
