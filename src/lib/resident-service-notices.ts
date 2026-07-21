@@ -9,12 +9,12 @@ export function buildServiceRequestApprovedNotice(input: {
   propertyLabel?: string;
 }): { subject: string; body: string } {
   const name = input.residentName.trim() || "there";
-  const offer = input.offerName.trim() || "your service request";
-  const subject = `Service request approved: ${offer}`;
+  const offer = input.offerName.trim() || "your add-on service";
+  const subject = `Add-on service approved: ${offer}`;
   const lines = [
     `Hi ${name},`,
     "",
-    `Your service request "${offer}" has been approved.`,
+    `Your add-on service "${offer}" has been approved.`,
   ];
   if (input.propertyLabel?.trim()) lines.push(`Property: ${input.propertyLabel.trim()}`);
   if (input.price?.trim()) lines.push(`Charges: ${input.price.trim()}`);
@@ -39,12 +39,12 @@ export function buildServiceRequestDeniedNotice(input: {
   propertyLabel?: string;
 }): { subject: string; body: string } {
   const name = input.residentName.trim() || "there";
-  const offer = input.offerName.trim() || "your service request";
-  const subject = `Service request update: ${offer}`;
+  const offer = input.offerName.trim() || "your add-on service";
+  const subject = `Add-on service update: ${offer}`;
   const lines = [
     `Hi ${name},`,
     "",
-    `We're writing about your service request "${offer}".`,
+    `We're writing about your add-on service "${offer}".`,
     "Unfortunately we can't approve this request at this time.",
   ];
   if (input.propertyLabel?.trim()) lines.push(`Property: ${input.propertyLabel.trim()}`);

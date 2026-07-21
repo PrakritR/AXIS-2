@@ -229,7 +229,7 @@ export function ServiceRequestCard({
     deleteServiceRequest(req.id);
     setDeleteOpen(false);
     onDelete();
-    showToast("Request deleted.");
+    showToast("Add-on service deleted.");
   }
 
   const feePaid = isServiceRequestFeePaid(req);
@@ -314,7 +314,7 @@ export function ServiceRequestCard({
             data-attr="resident-service-request-edit"
             onClick={onEdit}
           >
-            Edit request
+            Edit add-on service
           </Button>
         ) : null}
         <Button
@@ -323,15 +323,15 @@ export function ServiceRequestCard({
           className={PORTAL_DETAIL_BTN}
           onClick={() => setDeleteOpen(true)}
         >
-          Delete request
+          Delete add-on service
         </Button>
       </PortalTableDetailActions>
 
       <ConfirmDeleteModal
         open={deleteOpen}
-        title="Delete request"
+        title="Delete add-on service"
         description={`Delete “${req.offerName}”?`}
-        confirmLabel="Delete request"
+        confirmLabel="Delete add-on service"
         dataAttr="resident-service-request-delete-confirm"
         onClose={() => setDeleteOpen(false)}
         onConfirm={removeRequest}
@@ -732,7 +732,7 @@ export function ResidentServicesPanel({
     });
     setEditingRequest(null);
     reloadServiceRequests();
-    showToast("Request updated.");
+    showToast("Add-on service updated.");
   }
 
   function openWorkOrderEdit(row: DemoManagerWorkOrderRow) {

@@ -353,7 +353,7 @@ export function ManagerServiceRequestDetail({
 
       <PortalNotificationPreviewModal
         open={decisionKind !== null && decisionDraft !== null}
-        title={decisionKind === "deny" ? "Deny service request" : "Approve service request"}
+        title={decisionKind === "deny" ? "Deny add-on service" : "Approve add-on service"}
         onClose={() => {
           if (decisionBusy) return;
           setDecisionKind(null);
@@ -379,9 +379,9 @@ export function ManagerServiceRequestDetail({
 
       <ConfirmDeleteModal
         open={deleteOpen}
-        title="Delete request"
+        title="Delete add-on service"
         description={`Delete “${req.offerName}”?`}
-        confirmLabel="Delete request"
+        confirmLabel="Delete add-on service"
         dataAttr="service-request-delete-confirm"
         onClose={() => setDeleteOpen(false)}
         onConfirm={() => {
@@ -389,7 +389,7 @@ export function ManagerServiceRequestDetail({
           setDeleteOpen(false);
           onUpdated();
           onCollapsed?.();
-          showToast("Request deleted.");
+          showToast("Add-on service deleted.");
         }}
       />
     </>
