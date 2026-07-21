@@ -296,15 +296,29 @@ function looksLikeRawPropertyId(value: string, id: string): boolean {
 }
 
 /**
+ * True when a title is the auto-generated placeholder used for listings created
+ * without a building name — `${buildingName || "Property"} · ${unitLabel}`, e.g.
+ * "Property · 2 rooms". Every such listing renders the SAME label, so a manager
+ * with two of them cannot tell them apart in a picker. Deprioritized in favour
+ * of the address, which is always distinct.
+ */
+function looksLikeGenericPropertyTitle(value: string): boolean {
+  return /^property\s*(?:·|-|—)/i.test(value.trim());
+}
+
+/**
  * First human-friendly candidate that is not a raw id / seed token. Falls back
  * to any non-id candidate, then a generic label — never the bare id. Shared by
  * every property picker so labels stay consistent and clean across surfaces.
  */
 export function safePropertyOptionLabel(candidates: Array<string | null | undefined>, id: string): string {
-  for (const c of candidates) {
-    const v = (c ?? "").trim();
-    if (v && !looksLikeRawPropertyId(v, id)) return v;
-  }
+  const usable = candidates
+    .map((c) => (c ?? "").trim())
+    .filter((v) => v && !looksLikeRawPropertyId(v, id));
+  // Prefer a distinctive name over the "Property · N rooms" placeholder.
+  const distinctive = usable.find((v) => !looksLikeGenericPropertyTitle(v));
+  if (distinctive) return distinctive;
+  if (usable.length > 0) return usable[0];
   for (const c of candidates) {
     const v = (c ?? "").trim();
     if (v && v !== id.trim()) return v;

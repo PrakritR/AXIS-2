@@ -212,10 +212,11 @@ export function ManagerProperties() {
         variant="outline"
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         disabled={shareableProperties.length === 0}
-        title={shareableProperties.length === 0 ? "No listed properties to share yet" : undefined}
+        title={shareableProperties.length === 0 ? "No listed properties to share yet" : "Share a listing link"}
+        data-attr="manager-properties-share"
         onClick={() => openShareListing()}
       >
-        Send
+        Share
       </Button>
       <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="manager-properties-create" onClick={tryOpenAdd}>
         Create
