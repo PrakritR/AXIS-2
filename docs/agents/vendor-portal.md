@@ -128,13 +128,15 @@ false`) bypassing the client mirror (the manager's browser picks it up on its
 next `syncManagerWorkOrdersFromServer`), and notifies the winner (and,
 best-effort, each declined vendor) via `deliverPortalInboxMessage`.
 
-**RLS** (`work_order_bids_vendor_owner` / `work_order_bids_manager_read`)
-follows the `vendor_tax_profiles_owner` / `..._vendor_read` split from Phase
-1: vendor is `FOR ALL` owner of their own bid rows (`vendor_user_id =
-auth.uid()`), manager gets `FOR SELECT` only (`manager_user_id = auth.uid()`,
-denormalized onto the bid row at submit time so no join is needed) —
-defense-in-depth only, since real writes go through the service-role API
-exactly like every other portal table in this codebase.
+**RLS** (`work_order_bids_vendor_read` / `work_order_bids_manager_read`):
+BOTH sides are `FOR SELECT` only — vendor by `vendor_user_id = auth.uid()`,
+manager by `manager_user_id = auth.uid()` (denormalized onto the bid row at
+submit time so no join is needed). The original vendor `FOR ALL` owner policy
+was replaced by `20260705120000_work_order_bids_vendor_select_only.sql`
+because it let a vendor's own client INSERT bids on arbitrary work orders,
+bypassing the service-role API's work-order-access + `biddingOpen` checks.
+All real writes go through the service-role API exactly like every other
+portal table in this codebase.
 
 # Vendor portal (Phase 3: Stripe Connect payouts + invoices)
 

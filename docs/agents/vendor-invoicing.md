@@ -29,12 +29,15 @@ Phase 3 already generalized Connect via `profiles.stripe_connect_account_id` +
 `ensureVendorConnectAccountId` + `vendor_payouts`; a parallel table would be
 duplicate infrastructure. Reuse the shipped pattern.
 
-**Routes.** Vendor: `GET/POST /api/vendor/invoices` (list own / submit — total
+**Routes.** Vendor: `GET/POST /api/vendor/invoices` (list own / submit).
+Submit validation is ONE shared implementation — `prepareVendorInvoiceSubmission`
+in `src/lib/vendor-invoice-submit.server.ts`, used by both the POST route and
+the `submit_vendor_invoice` agent tool so the two paths cannot drift: the total
 is recomputed server-side from line items via `sumLineItemsCents`, never trusted
-from the body; a supplied `workOrderId` must resolve to a
+from the body, and a supplied `workOrderId` must resolve to a
 `portal_work_order_records` row owned by the billed manager AND assigned to the
 submitting vendor, else the submit is a 400 — same never-trust-client-ids rule
-as the bids route). Manager: `PATCH /api/vendor/invoices/[id]/decision`
+as the bids route. Manager: `PATCH /api/vendor/invoices/[id]/decision`
 (approve/reject/schedule/paid, scoped to invoices billed to `auth.userId`).
 The decision route enforces the status flow via
 `canTransitionVendorInvoice` (`src/lib/vendor-invoices.ts`): `submitted →
