@@ -313,6 +313,27 @@ Never point a local `.env` at production. Schema parity between the two projects
 is maintained with the Supabase CLI (`npm run db:push`), not the SQL Editor. Full
 model and workflow: [`docs/database-environments.md`](docs/database-environments.md).
 
+# Portal routing precedence (a section can be silently unreachable)
+
+A portal section is only reachable if **both** layers above it let the request
+through. Two classes of bug have shipped here, each making a live nav item dead
+while the section's component still compiled and its tests still passed:
+
+1. **`next.config.ts` `redirects()` outranks the app router.** A legacy entry
+   whose `source` later became a real section shadows it before
+   `renderPortalSection` ever runs. Before adding a section, grep
+   `next.config.ts` for its path; when deleting a section, delete its redirect
+   with it.
+2. **Legacy redirects in `renderPortalSection` must be gated on `kind`.** The
+   rewrites near the top of `src/lib/render-portal-section.tsx` run before
+   `findSection`, so an ungated `section === "..."` rule fires for *every*
+   portal. Gate on the capability, not a kind allowlist — e.g. the Inbox →
+   Communication rewrite checks `findSection(def, "communication")`, so the
+   admin portal (which still ships Inbox as a real section) is unaffected.
+
+Neither layer is covered by the unit suite. After adding or renaming a section,
+load its URL in the browser — a passing build is not evidence it resolves.
+
 # Feature architecture notes (mandatory pre-reads)
 
 The deep per-feature history lives in `docs/agents/` — one file per area.
