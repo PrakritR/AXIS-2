@@ -227,7 +227,7 @@ describe("submit_vendor_invoice preview/confirm gate", () => {
             id: "wo-1",
             manager_user_id: "manager_a",
             vendor_user_id: "vendor_a",
-            row_data: {},
+            row_data: { title: "Kitchen faucet leak" },
           } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
         ],
       },
@@ -240,11 +240,35 @@ describe("submit_vendor_invoice preview/confirm gate", () => {
     });
     expect(preview.kind).toBe("submit_vendor_invoice");
     const byLabel = new Map(preview.fields.map((f) => [f.label, f.value]));
-    expect(byLabel.get("Work order")).toBe("wo-1");
+    expect(byLabel.get("Work order")).toBe("Kitchen faucet leak (wo-1)");
     expect(byLabel.get("Tax")).toBe(formatInvoiceMoney(1000));
     expect(byLabel.get("Total")).toBe(formatInvoiceMoney(21000));
     expect(byLabel.get("Bill to")).toBe("your property manager");
     expect(byLabel.get("Labor")).toContain(formatInvoiceMoney(15000));
+  });
+
+  it("preview falls back to the bare work-order id when the title is missing or blank", async () => {
+    for (const rowData of [{}, { title: "   " }, { title: 42 }]) {
+      const ctx = makeManagerRowsCtx(
+        {
+          manager_vendor_records: [
+            vendorLink as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+          ],
+          portal_work_order_records: [
+            {
+              id: "wo-1",
+              manager_user_id: "manager_a",
+              vendor_user_id: "vendor_a",
+              row_data: rowData,
+            } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+          ],
+        },
+        { userId: "vendor_a", roles: ["vendor"] },
+      );
+      const preview = await submitVendorInvoiceTool.preview!(ctx, { workOrderId: "wo-1", lineItems });
+      const byLabel = new Map(preview.fields.map((f) => [f.label, f.value]));
+      expect(byLabel.get("Work order")).toBe("wo-1");
+    }
   });
 
   it("preview refuses to guess between multiple linked managers", async () => {

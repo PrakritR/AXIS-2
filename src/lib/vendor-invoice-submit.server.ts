@@ -54,6 +54,8 @@ export type VendorInvoiceSubmitInput = {
 export type PreparedVendorInvoiceSubmission = {
   target: OwnVendorRecord;
   workOrderId: string | null;
+  /** Untrusted manager/vendor-entered job title — display as plain data only. */
+  workOrderTitle: string | null;
   lineItems: VendorInvoiceLineItem[];
   subtotalCents: number;
   taxCents: number;
@@ -90,10 +92,11 @@ export async function prepareVendorInvoiceSubmission(
   // manager and assigned to this vendor — never trust a supplied id to link an
   // invoice to another manager's job.
   const workOrderId = input.workOrderId?.trim() || null;
+  let workOrderTitle: string | null = null;
   if (workOrderId) {
     const { data: workOrder, error } = await db
       .from("portal_work_order_records")
-      .select("id")
+      .select("id, row_data")
       .eq("id", workOrderId)
       .eq("manager_user_id", target.managerUserId)
       .eq("vendor_user_id", vendorUserId)
@@ -110,6 +113,10 @@ export async function prepareVendorInvoiceSubmission(
         "Work order not found — it must be one of your own work orders for this manager.",
       );
     }
+    const rowData = (workOrder as { row_data?: unknown }).row_data;
+    const title =
+      rowData && typeof rowData === "object" ? (rowData as { title?: unknown }).title : null;
+    workOrderTitle = typeof title === "string" && title.trim() ? title.trim() : null;
   }
 
   const lineItems = normalizeLineItems(input.lineItems);
@@ -118,7 +125,15 @@ export async function prepareVendorInvoiceSubmission(
   }
   const subtotalCents = sumLineItemsCents(lineItems);
   const taxCents = Math.max(0, Math.round(Number(input.taxCents ?? 0) || 0));
-  return { target, workOrderId, lineItems, subtotalCents, taxCents, totalCents: subtotalCents + taxCents };
+  return {
+    target,
+    workOrderId,
+    workOrderTitle,
+    lineItems,
+    subtotalCents,
+    taxCents,
+    totalCents: subtotalCents + taxCents,
+  };
 }
 
 export function insertVendorInvoiceRow(

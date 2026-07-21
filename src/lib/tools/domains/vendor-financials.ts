@@ -128,7 +128,16 @@ export const submitVendorInvoiceTool = defineWriteTool<
       fields: [
         { label: "Bill to", value: managerName },
         ...(input.invoiceNumber?.trim() ? [{ label: "Invoice number", value: input.invoiceNumber.trim() }] : []),
-        ...(prepared.workOrderId ? [{ label: "Work order", value: prepared.workOrderId }] : []),
+        ...(prepared.workOrderId
+          ? [
+              {
+                label: "Work order",
+                value: prepared.workOrderTitle
+                  ? `${prepared.workOrderTitle} (${prepared.workOrderId})`
+                  : prepared.workOrderId,
+              },
+            ]
+          : []),
         ...prepared.lineItems.map((item) => ({
           label: item.description || "Line item",
           value: `${item.quantity} × ${formatInvoiceMoney(item.unitAmountCents)} = ${formatInvoiceMoney(item.amountCents)}`,
