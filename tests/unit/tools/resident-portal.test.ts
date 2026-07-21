@@ -122,20 +122,37 @@ describe("resident scope enforcement", () => {
 
   it("de-duplicates a row matched by both user id and email", async () => {
     const ctx = residentCtx({
-      portal_work_order_records: [
-        residentRow("resident_a", "a@example.com", { id: "w1", title: "Leak", bucket: "open" }),
+      portal_household_charge_records: [
+        residentRow("resident_a", "a@example.com", { id: "c1", title: "Rent", status: "pending" }),
       ],
     });
-    const res = (await listMyWorkOrdersTool.handler(ctx, {})) as { count: number };
+    const res = (await listMyChargesTool.handler(ctx, {})) as { count: number };
     expect(res.count).toBe(1);
+  });
+
+  it("matches work orders on resident_email only — that table has no resident_user_id", async () => {
+    // Regression: querying resident_user_id on portal_work_order_records /
+    // portal_service_request_records errors, because neither table has the
+    // column. Both are email-keyed; charges and leases carry both.
+    const ctx = residentCtx({
+      portal_work_order_records: [
+        { id: "w1", resident_email: "a@example.com", row_data: { id: "w1", title: "Leak", bucket: "open" } },
+        { id: "w2", resident_email: "b@example.com", row_data: { id: "w2", title: "Theirs", bucket: "open" } },
+      ],
+    });
+    const res = (await listMyWorkOrdersTool.handler(ctx, {})) as {
+      count: number;
+      workOrders: { id: string }[];
+    };
+    expect(res.workOrders.map((w) => w.id)).toEqual(["w1"]);
   });
 
   it("list_my_service_requests scopes to the resident and filters by status", async () => {
     const ctx = residentCtx({
       portal_service_request_records: [
-        residentRow("resident_a", "a@example.com", { id: "s1", offerName: "Parking", status: "pending" }),
-        residentRow("resident_a", "a@example.com", { id: "s2", offerName: "Storage", status: "approved" }),
-        residentRow("resident_b", "b@example.com", { id: "s3", offerName: "Theirs", status: "pending" }),
+        { id: "s1", resident_email: "a@example.com", row_data: { id: "s1", offerName: "Parking", status: "pending" } },
+        { id: "s2", resident_email: "a@example.com", row_data: { id: "s2", offerName: "Storage", status: "approved" } },
+        { id: "s3", resident_email: "b@example.com", row_data: { id: "s3", offerName: "Theirs", status: "pending" } },
       ],
     });
     const all = (await listMyServiceRequestsTool.handler(ctx, {})) as { count: number };

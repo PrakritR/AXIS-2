@@ -47,10 +47,23 @@ function requireLinkedManager(scope: ResidentAgentScope): string {
 }
 
 /**
- * Load a resident-owned portal table. Two `.eq()` passes (user id, then email)
- * rather than one `.or()`: the resident's identity columns are populated
- * inconsistently across the app's history, and an explicit pair keeps the
- * ownership filter obvious and testable. Results are de-duplicated by row id.
+ * Which identity columns each portal table actually has. This is NOT uniform:
+ * charges and leases carry both `resident_user_id` and `resident_email`, but
+ * work orders and service requests only ever got `resident_email`. Querying a
+ * column a table doesn't have fails the whole request, so the set is explicit
+ * per table rather than assumed.
+ */
+const RESIDENT_IDENTITY_COLUMNS: Record<string, readonly ("resident_user_id" | "resident_email")[]> = {
+  portal_household_charge_records: ["resident_user_id", "resident_email"],
+  portal_lease_pipeline_records: ["resident_user_id", "resident_email"],
+  portal_work_order_records: ["resident_email"],
+  portal_service_request_records: ["resident_email"],
+};
+
+/**
+ * Load a resident-owned portal table. One `.eq()` pass per identity column the
+ * table has, rather than a single `.or()`: an explicit pair keeps the ownership
+ * filter obvious and testable. Results are de-duplicated by row id.
  */
 async function loadResidentRows<T>(
   ctx: AgentContext,
@@ -58,11 +71,11 @@ async function loadResidentRows<T>(
   table: string,
   map: (rowData: unknown) => T,
 ): Promise<T[]> {
+  const columns = RESIDENT_IDENTITY_COLUMNS[table];
+  if (!columns) throw new Error(`No resident identity columns declared for ${table}.`);
   const byId = new Map<string, T>();
-  for (const [column, value] of [
-    ["resident_user_id", scope.residentUserId],
-    ["resident_email", scope.residentEmail],
-  ] as const) {
+  for (const column of columns) {
+    const value = column === "resident_user_id" ? scope.residentUserId : scope.residentEmail;
     for (let from = 0; ; from += PAGE_SIZE) {
       const { data, error } = await ctx.db
         .from(table)
@@ -215,18 +228,24 @@ export const listMyLeaseTool = defineTool({
     const scope = requireResidentScope(ctx);
     const leases = (
       await loadResidentRows(ctx, scope, "portal_lease_pipeline_records", (r) => r as Record<string, unknown>)
-    ).map((l) => ({
-      id: String(l.id ?? "") || null,
-      property: String(l.propertyName ?? l.property ?? "") || null,
-      unit: String(l.unit ?? "") || null,
-      status: String(l.status ?? "") || null,
-      stage: String(l.stage ?? l.bucket ?? "") || null,
-      startDate: String(l.startDate ?? l.leaseStart ?? "") || null,
-      endDate: String(l.endDate ?? l.leaseEnd ?? "") || null,
-      monthlyRent: typeof l.monthlyRent === "number" ? l.monthlyRent : null,
-      residentSigned: Boolean(l.residentSignedAt ?? l.residentSigned),
-      managerSigned: Boolean(l.managerSignedAt ?? l.managerSigned),
-    }));
+    ).map((l) => {
+      // Term dates live on the nested application (the wizard form state), not
+      // at the top level of the lease row — the pipeline row carries stage and
+      // signature state, the application carries the agreed term.
+      const application = (l.application ?? {}) as Record<string, unknown>;
+      return {
+        id: String(l.id ?? "") || null,
+        // `unit` already reads "The Pioneer · 12A" on these rows.
+        unit: String(l.unit ?? "") || null,
+        stage: String(l.stageLabel ?? l.status ?? l.bucket ?? "") || null,
+        startDate: String(application.leaseStart ?? "") || null,
+        endDate: String(application.leaseEnd ?? "") || null,
+        monthlyRent: String(l.signedRentLabel ?? "") || null,
+        residentSigned: Boolean(l.residentSignedAt),
+        managerSigned: Boolean(l.managerSignedAt),
+        fullySignedAt: String(l.fullySignedAt ?? "") || null,
+      };
+    });
     return { count: leases.length, leases };
   },
 });
