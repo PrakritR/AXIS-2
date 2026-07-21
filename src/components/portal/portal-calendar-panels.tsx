@@ -63,7 +63,11 @@ const SLOT_ROW_START = 0;
 const SLOT_ROW_END = SLOTS_PER_DAY - 1;
 const DEFAULT_VISIBLE_START_SLOT = 16;
 const DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE = 40;
-const COMPACT_BLOCK_DAYS = 5;
+// A scheduling block is a full Mon–Sun week. Desktop renders all seven columns;
+// narrow screens still page one day at a time via mobileDayIndex. This was 5,
+// which hid Sat/Sun entirely on web across the admin, manager, and vendor
+// calendars — availability on a weekend was unreachable.
+const COMPACT_BLOCK_DAYS = 7;
 const WEEKDAY_OPTIONS = [
   { value: 0, label: "Mon" },
   { value: 1, label: "Tue" },
