@@ -78,7 +78,7 @@ export const GUIDED_STEPS_PAYMENTS: SegmentStepDef[] = [
 ];
 
 export const GUIDED_STEPS_WORK_ORDERS: SegmentStepDef[] = [
-  { step: 1, title: "Resident maintenance request", hint: "Resident submits a service request.", role: "resident", section: "services", tab: "requests" },
+  { step: 1, title: "Resident maintenance request", hint: "Resident submits a maintenance request.", role: "resident", section: "services", tab: "work-orders" },
   { step: 2, title: "Manager work order", hint: "Manager reviews the open work order.", role: "manager", section: "services", tab: "work-orders" },
   { step: 3, title: "Vendor submits bid", hint: "Vendor quotes labor and materials.", role: "vendor", section: "work-orders" },
   { step: 4, title: "Accept vendor bid", hint: "Manager accepts the winning bid.", role: "manager", section: "services", tab: "work-orders" },

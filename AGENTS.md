@@ -350,3 +350,18 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
+
+## Add-on services vs. work orders
+
+Parking, storage, and other resident-purchasable offerings are **"Add-on
+services"** in every UI surface and in agent copy — never "work orders". They
+were already a separate data model before that rename: `ServiceRequest` rows in
+`portal_service_request_records` (`src/lib/service-requests-storage.ts`), edited
+via `manager-create-service-request-modal.tsx` / `resident-services-panel.tsx`
+("Add-on services" tab) and read by the `list_service_requests` agent tool
+(`src/lib/tools/domains/services.ts`). Real maintenance/repair work orders keep
+their name and live in the separate `portal_work_order_records` model
+(`src/lib/manager-work-orders-storage.ts`, `list_work_orders` tool). The two
+share only a "Services" nav section and a combined nav-count badge
+(`src/hooks/use-portal-nav-counts.ts`) — do not merge their tables, tabs, or
+counts when adding features to either.

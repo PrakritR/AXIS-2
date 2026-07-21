@@ -738,7 +738,7 @@ export function ResidentDashboard({
                   ) : null}
                   {pendingRequestCount > 0 ? (
                     <StatusPill tone="pending">
-                      {pendingRequestCount} request{pendingRequestCount === 1 ? "" : "s"}
+                      {pendingRequestCount} add-on service{pendingRequestCount === 1 ? "" : "s"}
                     </StatusPill>
                   ) : null}
                 </span>
@@ -747,7 +747,7 @@ export function ResidentDashboard({
             items={canUseFullPortal ? serviceItems : []}
             emptyMessage={
               canUseFullPortal
-                ? "No open work orders or pending requests."
+                ? "No open work orders or pending add-on services."
                 : "Available after your application is approved."
             }
             keyForItem={(item) => item.id}
@@ -759,8 +759,8 @@ export function ResidentDashboard({
                   <IssueRow
                     href={servicesHref}
                     dot={approved ? DOT_CONFIRMED : DOT_PENDING}
-                    title={item.row.offerName?.trim() || "Service request"}
-                    subtitle={propertyName || "Request"}
+                    title={item.row.offerName?.trim() || "Add-on service"}
+                    subtitle={propertyName || "Add-on service"}
                     pill={
                       <StatusPill tone={approved ? "success" : "pending"}>
                         {approved ? "Approved" : "Pending"}

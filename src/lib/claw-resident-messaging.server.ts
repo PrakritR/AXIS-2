@@ -20,7 +20,8 @@ export type ClawThreadTopic =
   | "move_in"
   | "general"
   | "applications"
-  | "maintenance";
+  | "maintenance"
+  | "services";
 
 export type ClawMessagingThread = {
   id: string;

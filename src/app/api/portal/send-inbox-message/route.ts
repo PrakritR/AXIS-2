@@ -558,7 +558,7 @@ export async function POST(req: Request) {
               : eventCategory === "payments"
                 ? "payments"
                 : eventCategory === "maintenance"
-                  ? "services"
+                  ? "services_work_orders"
                   : eventCategory === "applications"
                     ? "applications"
                     : eventCategory

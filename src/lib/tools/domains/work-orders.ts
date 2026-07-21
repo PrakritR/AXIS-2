@@ -81,7 +81,7 @@ function summarizeWorkOrder(r: DemoManagerWorkOrderRow) {
 export const listWorkOrdersTool = defineTool({
   name: "list_work_orders",
   description:
-    "List the current landlord's maintenance work orders with status, priority, property/unit, resident, scheduled date, cost, and assigned vendor. Use to answer questions like 'what work orders are open', 'which maintenance is scheduled', or 'how many work orders are completed'.",
+    "List the current landlord's maintenance/repair work orders with status, priority, property/unit, resident, scheduled date, cost, and assigned vendor. Maintenance work orders only — parking and storage are add-on services, use list_service_requests for those. Use to answer questions like 'what work orders are open', 'which maintenance is scheduled', or 'how many work orders are completed'.",
   kind: "read",
   inputSchema: z
     .object({

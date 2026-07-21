@@ -87,7 +87,7 @@ export function buildResidentWelcomeEmailHtml(params: {
 <p style="margin:0 0 12px 0">Welcome to PropLane. Your rental application has been approved.</p>
 <p style="margin:0 0 8px 0"><strong>Your PropLane ID:</strong> ${id}</p>
 ${ctaButton}
-<p style="margin:0 0 12px 0">You can use the portal for lease signing, payments, maintenance and service requests, and move-in details your property shares with you.</p>
+<p style="margin:0 0 12px 0">You can use the portal for lease signing, payments, maintenance and add-on service requests, and move-in details your property shares with you.</p>
 <p style="margin:0 0 12px 0">Use the same email address you used on your rental application when you create your account.</p>
 <p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— PropLane</p>
 </div>

@@ -11,6 +11,7 @@ export type ResidentSmsLinkKind =
   | "move_in"
   | "inbox"
   | "services"
+  | "services_work_orders"
   | "applications"
   | "login"
   | "signup"
@@ -41,6 +42,8 @@ export function residentPortalPath(
       return "/resident/communication/email/unopened";
     case "services":
       return "/resident/services/requests";
+    case "services_work_orders":
+      return "/resident/services/work-orders";
     case "applications":
       return "/resident/applications";
     case "login":
@@ -129,7 +132,8 @@ export function smsLinkKindForThreadTopic(
     | "move_in"
     | "general"
     | "applications"
-    | "maintenance",
+    | "maintenance"
+    | "services",
 ): ResidentSmsLinkKind {
   switch (topic) {
     case "payment":
@@ -143,6 +147,8 @@ export function smsLinkKindForThreadTopic(
     case "applications":
       return "applications";
     case "maintenance":
+      return "services_work_orders";
+    case "services":
       return "services";
     default:
       return "inbox";
@@ -154,7 +160,8 @@ const LINK_LABEL: Record<ResidentSmsLinkKind, string> = {
   lease: "Sign / view lease",
   move_in: "House details",
   inbox: "Open inbox",
-  services: "Service requests",
+  services: "Add-on services",
+  services_work_orders: "Work orders",
   applications: "Applications",
   login: "Sign in",
   signup: "Create account",
