@@ -293,7 +293,7 @@ export async function runManagerAgentCommand(args: {
     };
   }
 
-  const thread = await findLatestThreadForManagerPhone(from);
+  const thread = await findLatestThreadForManagerPhone(from, managerUserId);
 
   if (classification.intent === "help") {
     return { classification, reply: managerAgentHelpMenuText() };

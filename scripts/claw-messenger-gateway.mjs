@@ -73,6 +73,7 @@ const managerPhonesRefreshMs = (() => {
 let backoffMs = 1000;
 let sinceIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 let shuttingDown = false;
+let activeSocket = null;
 const seen = new Set();
 
 /* Manager phones bypass the debounce entirely — a manager composing through
@@ -306,9 +307,11 @@ function deliverWithRetry(frame, arrivalMs = null) {
 }
 
 function connect() {
+  if (shuttingDown) return;
   const url = `${wsBase}?key=${encodeURIComponent(apiKey)}`;
   console.log(`[claw-gateway] connecting → webhook ${webhookUrl}`);
   const ws = new WebSocket(url);
+  activeSocket = ws;
 
   const pingTimer = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
@@ -323,7 +326,6 @@ function connect() {
   });
 
   ws.on("message", (data) => {
-    if (shuttingDown) return;
     let frame;
     try {
       frame = JSON.parse(String(data));
@@ -336,7 +338,7 @@ function connect() {
       return;
     }
     if (frame.type === "message") {
-      if (shouldBypassDebounce(frame)) {
+      if (shuttingDown || shouldBypassDebounce(frame)) {
         void deliverWithRetry(frame);
       } else {
         bufferForDebounce(frame);
@@ -346,6 +348,7 @@ function connect() {
 
   ws.on("close", () => {
     clearInterval(pingTimer);
+    if (activeSocket === ws) activeSocket = null;
     if (shuttingDown) return;
     console.warn(`[claw-gateway] closed — retry in ${backoffMs}ms`);
     setTimeout(connect, backoffMs);
@@ -374,6 +377,15 @@ if (isMainModule) {
   const gracefulShutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    const ws = activeSocket;
+    let socketClosed = Promise.resolve();
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+      socketClosed = new Promise((resolve) => {
+        ws.once("close", resolve);
+        ws.close();
+      });
+    }
+    await Promise.all([socketClosed, flushAllDebounceBuffers()]);
     await flushAllDebounceBuffers();
     process.exit(0);
   };
