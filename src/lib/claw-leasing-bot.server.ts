@@ -612,6 +612,11 @@ export async function handleClawLeasingInbound(args: {
       residentProfile = null;
       thread = null;
     }
+    // The shared line can have stale threads for the same phone under another
+    // landlord; the resident profile's current manager is authoritative.
+    if (thread && residentProfile?.managerUserId && thread.managerUserId !== residentProfile.managerUserId) {
+      thread = null;
+    }
     // Prospect listing CTAs always hit the leasing assistant.
     // Leasing-topic threads stay on the leasing path for follow-ups (do not
     // hand off to the resident payment/lease hub after the first auto-reply).
@@ -632,6 +637,10 @@ export async function handleClawLeasingInbound(args: {
         residentEmail: residentProfile?.email,
         topic: "general",
       });
+      if (!thread) {
+        releaseInboundMessageClaims(claimedMessageIds);
+        return { ok: false, intent: "unknown", replied: false, error: "Resident SMS thread resolution failed." };
+      }
     }
     if (thread) {
       const residentEmail = thread.residentEmail || residentProfile?.email || "";

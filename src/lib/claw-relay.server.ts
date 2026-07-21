@@ -26,6 +26,7 @@ import {
   normalizeE164Us,
 } from "@/lib/claw-messenger.server";
 import {
+  clawMappedManagerEmails,
   clawManagerForwardPhonesFromEnv,
   isMappedManagerPhone,
   openClawResidentThread,
@@ -56,15 +57,17 @@ export async function forwardClawInboundToManagers(args: {
   }
 
   const managers = await resolveMappedManagerContacts();
-  const envPhones = clawManagerForwardPhonesFromEnv();
   const targets = new Set<string>();
 
-  // Always include configured forward phones (trial / ops cell).
-  for (const p of envPhones) targets.add(p);
+  const owner = args.managerUserId
+    ? managers.find((m) => m.userId === args.managerUserId)
+    : null;
+  if (owner && clawMappedManagerEmails().includes(owner.email)) {
+    for (const p of clawManagerForwardPhonesFromEnv()) targets.add(p);
+  }
 
   // Owning manager's personal phone (Twilio work-number or mapped Claw landlord).
   if (args.managerUserId) {
-    const owner = managers.find((m) => m.userId === args.managerUserId);
     if (owner?.personalPhone) targets.add(owner.personalPhone);
     try {
       const { createSupabaseServiceRoleClient } = await import("@/lib/supabase/service");

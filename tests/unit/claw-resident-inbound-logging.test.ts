@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sendFromManager = vi.fn(async () => ({ ok: true, channel: "claw" as const, sid: "SM1" }));
 const logManagerSmsMessage = vi.fn(async (): Promise<boolean> => true);
+const findResidentProfileByPhone = vi.fn();
+const findThreadByResidentPhone = vi.fn();
+const openClawResidentThread = vi.fn();
 
 vi.mock("@/lib/proplane-sms-transport.server", () => ({
   sendPropLaneSms: vi.fn(async () => ({ ok: true })),
@@ -31,24 +34,11 @@ vi.mock("@/lib/claw-resident-messaging.server", () => ({
   clawMappedManagerEmails: () => [],
   resolveMappedManagerContacts: vi.fn(async () => []),
   resolveRegisteredClawManagers: vi.fn(async () => []),
-  findResidentProfileByPhone: vi.fn(async () => ({
-    userId: "res-1",
-    email: "res@example.com",
-    managerUserId: "mgr-1",
-  })),
-  findThreadByResidentPhone: vi.fn(async () => ({
-    id: "thread-1",
-    managerUserId: "mgr-1",
-    managerPhone: "+15105551111",
-    residentPhone: "+15105794001",
-    residentUserId: "res-1",
-    residentEmail: "res@example.com",
-    topic: "general",
-    lastMessageAt: new Date(0).toISOString(),
-  })),
+  findResidentProfileByPhone: (...args: unknown[]) => findResidentProfileByPhone(...args),
+  findThreadByResidentPhone: (...args: unknown[]) => findThreadByResidentPhone(...args),
   forwardResidentMessageToManagers: vi.fn(async () => ({ forwardedTo: [] })),
   mirrorResidentTextToManagerInbox: vi.fn(async () => undefined),
-  openClawResidentThread: vi.fn(async () => null),
+  openClawResidentThread: (...args: unknown[]) => openClawResidentThread(...args),
 }));
 
 vi.mock("@/lib/claw-resident-actions.server", () => ({
@@ -91,6 +81,22 @@ describe("handleClawLeasingInbound — known resident thread", () => {
     vi.clearAllMocks();
     sendFromManager.mockResolvedValue({ ok: true, channel: "claw", sid: "SM1" });
     logManagerSmsMessage.mockResolvedValue(true);
+    findResidentProfileByPhone.mockResolvedValue({
+      userId: "res-1",
+      email: "res@example.com",
+      managerUserId: "mgr-1",
+    });
+    findThreadByResidentPhone.mockResolvedValue({
+      id: "thread-1",
+      managerUserId: "mgr-1",
+      managerPhone: "+15105551111",
+      residentPhone: "+15105794001",
+      residentUserId: "res-1",
+      residentEmail: "res@example.com",
+      topic: "general",
+      lastMessageAt: new Date(0).toISOString(),
+    });
+    openClawResidentThread.mockResolvedValue(null);
   });
 
   it("persists the resident's raw inbound text (direction=inbound) for the two-way portal thread", async () => {
@@ -126,6 +132,77 @@ describe("handleClawLeasingInbound — known resident thread", () => {
         text: "You're all caught up — nothing due right now.",
       }),
     );
+  });
+
+  it("replaces a shared-line thread owned by a different manager before logging inbound", async () => {
+    findThreadByResidentPhone.mockResolvedValue({
+      id: "stale-thread",
+      managerUserId: "mgr-2",
+      managerPhone: "+15105552222",
+      residentPhone: "+15105794001",
+      residentUserId: "res-1",
+      residentEmail: "res@example.com",
+      topic: "general",
+      lastMessageAt: new Date().toISOString(),
+    });
+    openClawResidentThread.mockResolvedValue({
+      id: "correct-thread",
+      managerUserId: "mgr-1",
+      managerPhone: "+15105551111",
+      residentPhone: "+15105794001",
+      residentUserId: "res-1",
+      residentEmail: "res@example.com",
+      topic: "general",
+      lastMessageAt: new Date().toISOString(),
+    });
+
+    const { handleClawLeasingInbound } = await import("@/lib/claw-leasing-bot.server");
+    const result = await handleClawLeasingInbound({
+      from: "+15105794001",
+      text: "route this to my manager",
+      messageId: "inbound-manager-scope-test",
+      workNumber: "+12053690702",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(openClawResidentThread).toHaveBeenCalledWith(
+      expect.objectContaining({ managerUserId: "mgr-1" }),
+    );
+    expect(logManagerSmsMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ managerUserId: "mgr-1" }),
+    );
+    expect(sendFromManager).toHaveBeenCalledWith(
+      expect.objectContaining({ managerUserId: "mgr-1" }),
+    );
+  });
+
+  it("does not fall through to another landlord when the correct thread cannot open", async () => {
+    findThreadByResidentPhone.mockResolvedValue({
+      id: "stale-thread",
+      managerUserId: "mgr-2",
+      managerPhone: "+15105552222",
+      residentPhone: "+15105794001",
+      residentUserId: "res-1",
+      residentEmail: "res@example.com",
+      topic: "general",
+      lastMessageAt: new Date().toISOString(),
+    });
+
+    const { handleClawLeasingInbound } = await import("@/lib/claw-leasing-bot.server");
+    const result = await handleClawLeasingInbound({
+      from: "+15105794001",
+      text: "do not misroute this",
+      messageId: "inbound-manager-scope-failure-test",
+      workNumber: "+12053690702",
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Resident SMS thread resolution failed.",
+    });
+    expect(logManagerSmsMessage).not.toHaveBeenCalled();
+    expect(sendFromManager).not.toHaveBeenCalled();
   });
 
   it("dedupes every constituent ID from a merged debounce frame", async () => {
