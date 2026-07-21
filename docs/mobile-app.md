@@ -166,6 +166,42 @@ Run `npm run cap:dev` with `npm run dev` running, then rebuild in Xcode.
 `feat/mobile-app-shell` (or `feat/*`). Xcode Cloud builds the native shell only;
 it does not run your local `npm run dev`.
 
+### Xcode Cloud: “package at node_modules/@capacitor/… doesn’t exist in file system”
+
+`ios/App/CapApp-SPM/Package.swift` pulls every Capacitor plugin from
+`node_modules` by relative path (`../../../node_modules/@capacitor/app`, …). A
+fresh Xcode Cloud clone has **no `node_modules`** — Xcode Cloud runs `xcodebuild`
+directly and nothing runs `npm ci` — so SPM can’t resolve any of those packages
+and the build dies with:
+
+```
+Could not resolve package dependencies: the package at
+'/Volumes/workspace/repository/node_modules/@capacitor/push-notifications'
+cannot be accessed (doesn't exist in file system)
+```
+
+The fix is **[`ci_scripts/ci_post_clone.sh`](../ci_scripts/ci_post_clone.sh)** at
+the repo root. Xcode Cloud runs it automatically after clone (by exact
+name/location; it must stay executable, committed with the exec bit) **before**
+package resolution. It:
+
+1. Installs **Node 22** via Homebrew — Xcode Cloud runners ship no Node, and
+   `package.json` `engines` require 22.x (`brew install node@22`, PATH-added
+   since versioned formulae are keg-only).
+2. Runs **`npm ci`** (lockfile-exact, never `npm install`).
+3. Runs **`npx cap sync ios`** at the **production** `CAP_SERVER_URL` — Xcode
+   Cloud builds Release, whose WebView must load the live site (same as
+   `npm run cap:prod`).
+4. **Verifies** all seven SPM-referenced packages landed in `node_modules` and
+   **fails loudly** otherwise — a silent partial install reproduces the exact
+   error above, just later and more opaquely inside `xcodebuild`.
+
+This mirrors the `npm ci` + `npx cap sync ios` steps in
+[`.github/workflows/ios-testflight.yml`](../.github/workflows/ios-testflight.yml)
+so the Xcode Cloud and GitHub pipelines build the same thing. The script writes
+only `node_modules` and the Capacitor-generated iOS config; it never commits into
+`ios/App/Pods` or other generated output.
+
 ---
 
 ## Push notifications
