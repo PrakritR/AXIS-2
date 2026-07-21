@@ -596,7 +596,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     serviceItems,
     pendingServiceCount,
     tours,
-    livePropertyCount,
     activeResidents,
     paymentsByMonth,
     expensesByMonth,

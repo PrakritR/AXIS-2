@@ -1,6 +1,6 @@
 import { residentPortalUrl } from "@/lib/claw-resident-links";
 
-/** Default resident notice when a manager approves a service / amenity request. */
+/** Default resident notice when a manager approves an add-on service request. */
 export function buildServiceRequestApprovedNotice(input: {
   residentName: string;
   offerName: string;
@@ -32,7 +32,7 @@ export function buildServiceRequestApprovedNotice(input: {
   return { subject, body: lines.join("\n") };
 }
 
-/** Default resident notice when a manager denies a service / amenity request. */
+/** Default resident notice when a manager denies an add-on service request. */
 export function buildServiceRequestDeniedNotice(input: {
   residentName: string;
   offerName: string;
