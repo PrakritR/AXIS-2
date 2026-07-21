@@ -88,8 +88,10 @@ const nextConfig: NextConfig = {
       { source: "/admin/leasing/:path*", destination: "/admin/dashboard", permanent: false },
       { source: "/admin/leases", destination: "/admin/dashboard", permanent: false },
       { source: "/admin/leases/:path*", destination: "/admin/dashboard", permanent: false },
-      { source: "/admin/bugs-feedback", destination: "/admin/profile", permanent: false },
-      { source: "/admin/bugs-feedback/:path*", destination: "/admin/profile", permanent: false },
+      // NOTE: do NOT redirect /admin/bugs-feedback — "Feedback" is a live admin nav
+      // section (portals/admin.ts) rendered by AdminBugFeedbackClient. A legacy
+      // redirect here shadows the route before it ever reaches the app router.
+      { source: "/admin/bugs-feedback/:path+", destination: "/admin/bugs-feedback", permanent: false },
       { source: "/resident/home", destination: "/resident/properties", permanent: false },
       { source: "/resident/home/:path*", destination: "/resident/properties", permanent: false },
       // /resident/lease is the standalone interactive Lease section (resident-sections.ts,
