@@ -234,8 +234,13 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
   // destroys anything shown before it. Rendered until they dismiss it: it is a
   // standing fact about their account plus an action they have to take, not a
   // confirmation that can auto-expire out from under them.
+  //
+  // The read is destructive, so only ever overwrite state when it yields a
+  // message: StrictMode double-invokes this effect with state preserved, and an
+  // unconditional assign let the second (empty) pass wipe what the first read.
   useEffect(() => {
-    setSignupNotice(takePendingNotice(window.location.pathname));
+    const pending = takePendingNotice(window.location.pathname);
+    if (pending) setSignupNotice(pending);
   }, []);
 
   useEffect(() => {

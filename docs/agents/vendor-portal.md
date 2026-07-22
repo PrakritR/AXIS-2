@@ -54,6 +54,32 @@ route stamps. Never reintroduce an expiry-optional path — a NULL expiry
 previously skipped the TTL check entirely. Coverage:
 `tests/unit/vendor-invite-redemption-ttl.test.ts`.
 
+**Unlinked-signup notice — DELIVERY-driven today, should become STATE-driven
+(follow-up, not done).** A signup that finishes with no linked manager reports
+why: `provisionVendorAccountByEmail` returns `unlinkedReason`
+(`"invite_expired"` | `"invite_revoked"` | `null`), the vendor-register routes
+turn it into copy via `vendorUnlinkedNotice(reason, { confirmed })`, and the
+message is handed across the post-signup `window.location.replace` through
+`src/lib/pending-notice.ts` (sessionStorage, TTL + `/vendor` destination guard,
+atomic read-and-clear) for `vendor-dashboard.tsx` to render as a dismissible
+banner. That banner is driven by DELIVERY — it appears only when a notice was
+queued during this signup — and it should instead be driven by STATE: rendered
+whenever the vendor's `linkedManagerId` is null, with the queued message merely
+supplying the specific reason when one exists. Two concrete gaps remain until
+then:
+
+- The brand-new self-serve path never queues. `registerSelfServe`'s
+  `confirmed === false` branch returns early after setting the inline notice on
+  the "check your email" screen, so a vendor who clicks the emailed link and
+  lands in the portal gets no banner — that journey still ends silently
+  unlinked.
+- The sessionStorage read is destructive, so a reload or a navigation before
+  the vendor clicks Dismiss consumes the notice permanently. "Stays until
+  acknowledged" only holds within one uninterrupted page view.
+
+Going state-driven would make `pending-notice.ts` — the queue, its TTL and its
+destination guard — redundant.
+
 **Row-level isolation.** `manager_vendor_records`, `portal_work_order_records`,
 and `vendor_tax_profiles` all gained a `vendor_user_id` column (nullable,
 populated once the vendor signs up) plus a `..._vendor_read` RLS SELECT policy
