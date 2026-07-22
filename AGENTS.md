@@ -315,9 +315,19 @@ cannot show an `Approved` badge, because that row lives on another tab.
 (≈1.96:1) to match the `.lp-chapter .lp-art` box (`min-height: 200px`,
 `object-fit: cover`, `object-position: top left`), so the whole screenshot
 lands in the card instead of a tight crop that reads as texture. Regenerate with
-`node scripts/generate-marketing-guide-art.mjs`, which composes the portal's
-real markup and tokens at 900×460 and captures at 2× — a portrait crop of a live
-portal screenshot does not fit this box.
+`node scripts/generate-marketing-guide-art.mjs`, which renders each board at
+900×460 and captures at 2× — a portrait crop of a live portal screenshot does not
+fit this box.
+
+That script does **not** import from `src/`. It hand-authors a standalone HTML
+replica whose colours are literal hexes and whose labels are copied strings, so a
+portal rename or a token retune leaves the art silently stale. Re-verify the copy
+against its source component every time you regenerate:
+
+| Board | Copied from |
+| --- | --- |
+| `guide-tours.webp` | `portal-calendar-panels.tsx` — the availability week: `Copy previous week` / `Create block` / `Clear week` / `Update to houses`, the `Time` + weekday header cells, the `Open` slot, the `N open` week badge |
+| `guide-messages.webp` | `manager-inbox-schedule-panel.tsx` — columns `Send date & time` / `Source` / `Recipient` / `Topic` / `Subject` / `Status`, the `Automated` source chip; tab names and order from `INBOX_TAB_DEFS` in `portal-inbox-ui.tsx` |
 
 Every count a board prints (the calendar's per-day "N open" headers and week
 total, the inbox tab badges) is **derived in that script from the rows and cells

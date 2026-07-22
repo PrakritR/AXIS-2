@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 /**
- * Regenerates the homepage guide art in `public/marketing/` from the portal's
- * own markup and tokens.
+ * Regenerates the homepage guide art in `public/marketing/`.
  *
  * Both boards are authored at 900x460 CSS px and captured at 2x, so the files
  * land at the 1800x920 the `.lp-chapter .lp-art` box expects (see AGENTS.md,
  * "Marketing mocks must use portal-accurate copy").
+ *
+ * THIS SCRIPT DOES NOT IMPORT FROM `src/`. It hand-authors a standalone HTML
+ * replica of two portal screens: every colour below is a literal hex copied from
+ * the light-theme tokens, and every label is a copied string. A portal rename or
+ * a token retune therefore leaves this art silently stale — re-check the copied
+ * labels (see `TOURS_LABELS` / `SCHEDULE_LABELS`) against their source component
+ * whenever you regenerate.
  *
  * Every count rendered on a board is DERIVED from the rows/cells the board
  * actually draws — the per-day "N open" headers and the week total come from
@@ -26,6 +32,7 @@ const WIDTH = 900;
 const HEIGHT = 460;
 const SCALE = 2;
 const QUALITY = 92;
+const COMMAND_TIMEOUT_MS = 30_000;
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -36,6 +43,28 @@ const CHROME_CANDIDATES = [
 ].filter(Boolean);
 
 /* ---------------------------------------------------------------- content */
+
+/** Copied verbatim from the availability week in `portal-calendar-panels.tsx`. */
+const TOURS_LABELS = {
+  eyebrow: "Your availability",
+  timeColumn: "Time",
+  openSlot: "Open",
+  weekBadge: (count) => `${count} open`,
+  dayCount: (count) => `${count} open`,
+  actions: ["Copy previous week", "Create block", "Clear week", "Update to houses"],
+};
+
+/**
+ * Copied verbatim from `manager-inbox-schedule-panel.tsx` (columns + source
+ * chip) and `INBOX_TAB_DEFS` in `portal-inbox-ui.tsx` (tab names and order).
+ */
+const SCHEDULE_LABELS = {
+  title: "Communication",
+  columns: ["Send date & time", "Source", "Recipient", "Topic", "Subject", "Status"],
+  automatedSource: "Automated",
+  scheduledStatus: "Scheduled",
+  tabs: ["Unopened", "Opened", "Schedule", "Sent", "Trash"],
+};
 
 /**
  * Calendar → availability week. `slots[i]` is the cell drawn at `TOUR_TIMES[i]`:
@@ -91,14 +120,13 @@ const SCHEDULE_ROWS = [
   },
 ];
 
-/** `INBOX_TAB_DEFS` order; Schedule's badge is the row count this board draws. */
-const INBOX_TABS = [
-  { label: "Unopened", count: 2 },
-  { label: "Opened", count: 0 },
-  { label: "Schedule", count: SCHEDULE_ROWS.length, active: true },
-  { label: "Sent", count: 1 },
-  { label: "Trash", count: 0 },
-];
+const OTHER_TAB_COUNTS = { Unopened: 2, Opened: 0, Sent: 1, Trash: 0 };
+
+const INBOX_TABS = SCHEDULE_LABELS.tabs.map((label) => ({
+  label,
+  active: label === "Schedule",
+  count: label === "Schedule" ? SCHEDULE_ROWS.length : OTHER_TAB_COUNTS[label],
+}));
 
 /* ------------------------------------------------------------------ markup */
 
@@ -137,7 +165,7 @@ function toursHtml() {
       <div class="hc day">
         <p class="wd">${escapeHtml(day.weekday)}</p>
         <p class="dt">${escapeHtml(day.date)}</p>
-        <p class="oc">${openSlotCount(day)} open</p>
+        <p class="oc">${escapeHtml(TOURS_LABELS.dayCount(openSlotCount(day)))}</p>
       </div>`,
   ).join("");
 
@@ -145,7 +173,8 @@ function toursHtml() {
     const edge = rowIdx === 0 ? "" : " ln";
     const cells = TOUR_DAYS.map((day) => {
       const slot = day.slots[rowIdx];
-      if (slot === "open") return `<div class="sc${edge}"><span class="slot open">Open</span></div>`;
+      if (slot === "open")
+        return `<div class="sc${edge}"><span class="slot open">${escapeHtml(TOURS_LABELS.openSlot)}</span></div>`;
       if (slot && slot.tour)
         return `<div class="sc${edge}"><span class="slot tour">Tour · ${escapeHtml(slot.tour)}</span></div>`;
       return `<div class="sc${edge}"></div>`;
@@ -191,29 +220,32 @@ function toursHtml() {
     <div class="top">
       <span class="nav">←</span>
       <div class="week">
-        <p class="lab">Your availability</p>
+        <p class="lab">${escapeHtml(TOURS_LABELS.eyebrow)}</p>
         <p class="rng">Jul 21 – Jul 25, 2026</p>
         <p class="scope">Calendar · Ballard Commons</p>
       </div>
       <span class="nav">→</span>
       <span class="spacer"></span>
-      <span class="badge-success">${WEEK_OPEN_COUNT} open</span>
+      <span class="badge-success">${escapeHtml(TOURS_LABELS.weekBadge(WEEK_OPEN_COUNT))}</span>
     </div>
     <div class="actions">
-      <span class="pill-btn">Copy previous week</span>
-      <span class="pill-btn">Create block</span>
-      <span class="pill-btn">Clear week</span>
-      <span class="pill-btn">Update to houses</span>
+      ${TOURS_LABELS.actions.map((action) => `<span class="pill-btn">${escapeHtml(action)}</span>`).join("")}
     </div>
     <div class="card grid">
-      <div class="hc time">Time</div>
+      <div class="hc time">${escapeHtml(TOURS_LABELS.timeColumn)}</div>
       ${headerCells}
       ${bodyRows}
     </div>
   </div></body></html>`;
 }
 
+const SCHEDULE_COLUMN_WIDTHS = ["17%", "13%", "21%", "21%", "18%", "14%"];
+
 function messagesHtml() {
+  const columnHeads = SCHEDULE_LABELS.columns
+    .map((column, idx) => `<th style="width: ${SCHEDULE_COLUMN_WIDTHS[idx]}">${escapeHtml(column)}</th>`)
+    .join("");
+
   const tabs = INBOX_TABS.map(
     (tab) => `
       <span class="tab${tab.active ? " on" : ""}">
@@ -225,11 +257,11 @@ function messagesHtml() {
     (row) => `
       <tr>
         <td class="when">${escapeHtml(row.sendAt)}</td>
-        <td><span class="src">Automated</span></td>
+        <td><span class="src">${escapeHtml(SCHEDULE_LABELS.automatedSource)}</span></td>
         <td><p class="nm">${escapeHtml(row.name)}</p><p class="sub">${escapeHtml(row.email)}</p></td>
         <td><p class="tp">${escapeHtml(row.topic)}</p><p class="sub">${escapeHtml(row.unit)}</p></td>
         <td class="subj">${escapeHtml(row.subject)} <span class="chev">›</span></td>
-        <td><span class="status">Scheduled</span></td>
+        <td><span class="status">${escapeHtml(SCHEDULE_LABELS.scheduledStatus)}</span></td>
       </tr>`,
   ).join("");
 
@@ -255,18 +287,11 @@ function messagesHtml() {
     .chev { color: #8a8f98; }
     .status { display: inline-flex; border-radius: 999px; background: #e7edff; padding: 3px 10px; font-size: 11.5px; font-weight: 700; color: #3b5ce0; }
   </style></head><body><div class="board">
-    <h1>Communication</h1>
+    <h1>${escapeHtml(SCHEDULE_LABELS.title)}</h1>
     <div class="tabs">${tabs}</div>
     <div class="rule"></div>
     <div class="card"><table>
-      <thead><tr>
-        <th style="width: 17%">Send date &amp; time</th>
-        <th style="width: 13%">Source</th>
-        <th style="width: 21%">Recipient</th>
-        <th style="width: 21%">Topic</th>
-        <th style="width: 18%">Subject</th>
-        <th style="width: 14%">Status</th>
-      </tr></thead>
+      <thead><tr>${columnHeads}</tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div></body></html>`;
@@ -281,9 +306,10 @@ function resolveChrome() {
 }
 
 async function withChrome(run) {
+  const chromePath = resolveChrome();
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "proplane-guide-art-"));
   const chrome = spawn(
-    resolveChrome(),
+    chromePath,
     [
       "--headless=new",
       "--disable-gpu",
@@ -298,10 +324,30 @@ async function withChrome(run) {
     { stdio: "ignore" },
   );
 
+  const chromeExited = new Promise((resolve) => {
+    chrome.once("exit", resolve);
+    chrome.once("close", resolve);
+  });
+  const waitForExit = (ms) =>
+    Promise.race([chromeExited, new Promise((resolve) => setTimeout(resolve, ms))]);
+
+  let chromeDead = null;
+  const chromeDeadListeners = [];
+  const markChromeDead = (reason) => {
+    if (chromeDead) return;
+    chromeDead = reason;
+    for (const listener of chromeDeadListeners) listener(reason);
+  };
+  chrome.once("error", (error) => markChromeDead(new Error(`Chrome failed to start: ${error.message}`)));
+  chrome.once("exit", (code, signal) =>
+    markChromeDead(new Error(`Chrome exited before the capture finished (code ${code}, signal ${signal}).`)),
+  );
+
   try {
     const portFile = path.join(userDataDir, "DevToolsActivePort");
     let port = null;
     for (let attempt = 0; attempt < 200 && port === null; attempt += 1) {
+      if (chromeDead) throw chromeDead;
       if (fs.existsSync(portFile)) {
         const first = fs.readFileSync(portFile, "utf8").split("\n")[0]?.trim();
         if (first) port = first;
@@ -314,33 +360,66 @@ async function withChrome(run) {
     const socket = new WebSocket(version.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       socket.addEventListener("open", resolve, { once: true });
-      socket.addEventListener("error", () => reject(new Error("DevTools socket failed")), { once: true });
+      socket.addEventListener("error", () => reject(new Error("DevTools socket failed to open.")), { once: true });
+      socket.addEventListener("close", () => reject(new Error("DevTools socket closed before opening.")), { once: true });
+      chromeDeadListeners.push(reject);
     });
 
     let nextId = 0;
+    let failure = null;
     const pending = new Map();
+
+    const failAll = (reason) => {
+      failure ??= reason;
+      for (const entry of pending.values()) {
+        clearTimeout(entry.timer);
+        entry.reject(reason);
+      }
+      pending.clear();
+    };
+    socket.addEventListener("close", () => failAll(new Error("DevTools socket closed mid-command.")), { once: true });
+    socket.addEventListener("error", () => failAll(new Error("DevTools socket errored mid-command.")), { once: true });
+    chromeDeadListeners.push(failAll);
+    if (chromeDead) failAll(chromeDead);
+
     socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data);
       if (!message.id || !pending.has(message.id)) return;
-      const { resolve, reject } = pending.get(message.id);
+      const { resolve, reject, timer } = pending.get(message.id);
       pending.delete(message.id);
+      clearTimeout(timer);
       if (message.error) reject(new Error(JSON.stringify(message.error)));
       else resolve(message.result);
     });
+
     const send = (method, params = {}, sessionId) =>
       new Promise((resolve, reject) => {
+        if (failure) {
+          reject(failure);
+          return;
+        }
         const id = (nextId += 1);
-        pending.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+          if (!pending.delete(id)) return;
+          reject(new Error(`DevTools command timed out after ${COMMAND_TIMEOUT_MS}ms: ${method}`));
+        }, COMMAND_TIMEOUT_MS);
+        pending.set(id, { resolve, reject, timer });
         socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
       });
 
     try {
       return await run(send);
     } finally {
+      failAll(new Error("DevTools session closed."));
       socket.close();
     }
   } finally {
     chrome.kill();
+    await waitForExit(5_000);
+    if (chrome.exitCode === null && chrome.signalCode === null) {
+      chrome.kill("SIGKILL");
+      await waitForExit(2_000);
+    }
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 }
