@@ -48,11 +48,11 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Axis uses the camera to attach photos to lease documents and work orders.</string>
+	<string>PropLane uses the camera to attach photos to lease documents and work orders.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Axis lets you choose photos to attach to documents.</string>
+	<string>PropLane lets you choose photos to attach to documents.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Axis can save document photos to your library when you choose to.</string>
+	<string>PropLane can save document photos to your library when you choose to.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>

@@ -101,16 +101,30 @@ npx cap add android
 ```
 
 This scaffolds `ios/` and `android/` (committed to git; build artifacts are
-git-ignored). Then generate app icons and splash screens from the Axis mark:
+git-ignored). App icons and splash screens are generated from the **PropLane**
+paper-plane mark:
 
 ```bash
-# Default sources are committed in resources/ (regenerate the Axis-mark
-# defaults anytime: python3 scripts/generate-app-icons.py). Swap in designer
-# artwork at resources/icon.png (1024×1024) + resources/splash.png (2732×2732)
-# when ready, then copy into assets/ and run:
-mkdir -p assets && cp resources/icon.png assets/icon.png && cp resources/splash.png assets/splash.png
-npx @capacitor/assets generate --iconBackgroundColor '#ffffff' --splashBackgroundColor '#080b14'
+# Regenerate the PropLane defaults anytime (sharp is a repo dependency):
+node scripts/generate-ios-brand-assets.mjs
 ```
+
+That script is the source of truth. It reproduces the web brand mark
+(`src/components/brand/axis-logo.tsx` — plane body + fold line) in the PropLane
+steel/blue palette (`src/app/globals.css`) and writes, in one pass:
+
+- `resources/icon.png` (1024×1024) + `resources/splash.png` (2732×2732) — the
+  `@capacitor/assets` sources.
+- `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` — the
+  shipped iOS marketing icon (full-bleed steel/blue gradient + white plane).
+- `ios/App/App/Assets.xcassets/Splash.imageset/` — the launch image referenced
+  by `Base.lproj/LaunchScreen.storyboard` (dark `#080b14` bg + centered brand
+  tile + white plane).
+
+To swap in designer artwork instead, replace `resources/icon.png` +
+`resources/splash.png` and run `npx @capacitor/assets generate
+--splashBackgroundColor '#080b14'` to fan them out to every derived size.
+Never ship the legacy "AX" mark — anything user-visible is PropLane.
 
 ---
 
