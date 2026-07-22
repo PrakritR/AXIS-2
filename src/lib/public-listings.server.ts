@@ -1,7 +1,10 @@
 import "server-only";
 import type { MockProperty } from "@/data/types";
-import { managerContactSmsPhoneForPublicCta, isClawSharedLineBridgeEnabled } from "@/lib/claw-leasing-links";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
+import {
+  resolveListingCtaSmsPhone,
+  type ListingCtaManagerProfile,
+} from "@/lib/listing-cta-phone.server";
 import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -38,17 +41,20 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     ),
   ];
   const managerEmailByUserId = new Map<string, string | null>();
-  const managerSmsByUserId = new Map<string, string | null>();
+  const managerProfileByUserId = new Map<string, ListingCtaManagerProfile>();
   if (managerIds.length > 0) {
     const { data: profiles, error: profileError } = await db
       .from("profiles")
-      .select("id, email, sms_from_number")
+      .select("id, email, phone, phone_verified_at, sms_from_number")
       .in("id", managerIds);
     if (profileError) throw new Error(profileError.message);
     for (const profile of profiles ?? []) {
       managerEmailByUserId.set(profile.id, profile.email ?? null);
-      const sms = managerContactSmsPhoneForPublicCta(String(profile.sms_from_number ?? "").trim() || null);
-      managerSmsByUserId.set(profile.id, sms);
+      managerProfileByUserId.set(profile.id, {
+        phone: profile.phone ?? null,
+        phone_verified_at: profile.phone_verified_at ?? null,
+        sms_from_number: profile.sms_from_number ?? null,
+      });
     }
   }
 
@@ -59,17 +65,20 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     // `status = live` is the source of truth in Supabase; older rows may omit the flag in JSON.
     const live = property.adminPublishLive === true ? property : { ...property, adminPublishLive: true as const };
     if (!isPropertyActiveForLeads(live)) continue;
+    // Resolved from THIS row's owning manager, never a catalog-wide default, so
+    // a multi-manager fleet cannot cross-route a prospect to the wrong phone.
+    // Deliberately ignores any `contactSmsPhone` baked into the stored property
+    // JSON — that blob is manager-editable and could point anywhere.
     const contactSmsPhone =
-      (isClawSharedLineBridgeEnabled()
-        ? managerContactSmsPhoneForPublicCta(null)
-        : null) ||
-      (row.manager_user_id ? managerSmsByUserId.get(row.manager_user_id) : null) ||
-      managerContactSmsPhoneForPublicCta(live.contactSmsPhone) ||
-      undefined;
-    const withOwner = {
+      resolveListingCtaSmsPhone(
+        row.manager_user_id ? managerProfileByUserId.get(row.manager_user_id) ?? null : null,
+      ) ?? undefined;
+    const withOwner: MockProperty = {
       ...live,
       ...(row.manager_user_id && !live.managerUserId ? { managerUserId: row.manager_user_id } : {}),
-      ...(contactSmsPhone ? { contactSmsPhone } : {}),
+      // Always overwrite (never merely default) so an unresolved manager drops
+      // the stored number rather than publishing a stale one.
+      contactSmsPhone,
     };
     const dedupeKey = `${withOwner.buildingName}::${withOwner.address}`.trim().toLowerCase();
     byKey.set(dedupeKey, withOwner);

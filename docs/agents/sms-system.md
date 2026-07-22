@@ -215,6 +215,34 @@ a new inbound entry point that skips it will silently render as a one-sided
 ("outbound only") thread in the portal, which is exactly the bug this system
 was built to fix.
 
+**Public listing CTAs split by environment (interim, until A2P clears).** The
+Twilio A2P campaign is still in carrier review, so the shared Claw line cannot
+reliably carry production leasing traffic. `resolveListingCtaSmsPhone`
+(`src/lib/listing-cta-phone.server.ts`) is the ONE place that branch is made,
+keyed on the existing `isProductionRuntime()`:
+
+- **production** → that listing's OWN manager's `profiles.phone`, and only when
+  `phone_verified_at` is set (an unverified phone is user-editable and
+  forgeable — same rule as `resolveRegisteredClawManagers`). Resolved per row
+  from the owning `manager_user_id`, never a catalog-wide default, so a
+  multi-manager fleet cannot cross-route a prospect to the wrong manager.
+- **localhost / preview / test** → the shared Claw leasing line, unchanged, so
+  the leasing-agent flow stays exercisable in development.
+
+Everything downstream just carries the resolved number: `getPublicListings()`
+and `/api/public/property-lead` stamp it onto `contactSmsPhone` (overwriting,
+never defaulting — the stored property JSON's own `contactSmsPhone` is
+manager-editable and is deliberately ignored), `/api/manager/phone` returns it
+as `listingCtaPhone` for manager-side previews, and the browser's
+`listingCtaSmsPhone` only normalizes/rejects. The browser must NEVER substitute
+a number of its own: `null` means render the "Schedule a tour" / "Apply online"
+web links that already sit under those buttons, not an `sms:` to the shared
+line. Note `managerContactSmsPhoneForPublicCta` still collapses everything onto
+the Claw line — it backs the SEND transport (`proplane-sms-transport.server.ts`)
+and work-number UI, not CTAs. Coverage:
+`tests/unit/listing-cta-manager-phone.test.ts`,
+`tests/unit/public-listings-cta-phone.test.ts`.
+
 **Defensive catalog filter.** `getPublicListings()`
 (`src/lib/public-listings.server.ts`) already drops sandbox/demo listings from
 the public catalog in production via `filterSandboxFromPublicCatalog`; the

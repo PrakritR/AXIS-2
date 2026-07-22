@@ -496,7 +496,7 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Documents module | `docs/agents/documents-module.md` | `manager-documents` bucket is PRIVATE — bytes only via server-minted signed URLs after an ownership check. |
 | Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. |
 | Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
-| SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. |
+| SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 
 ## Add-on services vs. work orders
