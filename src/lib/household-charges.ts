@@ -1601,6 +1601,11 @@ export function upsertRecurringRentProfile(input: {
   roomLabel: string;
   managerUserId: string | null;
   monthlyRent: number;
+  /**
+   * Headline daily rate when the room is priced by the day. Pass an explicit `0`
+   * to CLEAR a previously daily-priced profile (a room switched back to monthly);
+   * omit the field entirely to leave whatever the profile already has.
+   */
   dailyRentPrice?: number;
   monthlyUtilities?: number;
   dueDay?: number;
@@ -1628,9 +1633,12 @@ export function upsertRecurringRentProfile(input: {
     roomLabel: input.roomLabel,
     managerUserId: input.managerUserId,
     monthlyRent: input.monthlyRent,
+    // An explicit number is authoritative — including 0, which clears a stale daily
+    // rate so a room switched back to monthly stops billing per day. Only an omitted
+    // field inherits the existing value.
     dailyRentPrice:
-      input.dailyRentPrice !== undefined && Number.isFinite(input.dailyRentPrice) && input.dailyRentPrice > 0
-        ? Number(input.dailyRentPrice)
+      input.dailyRentPrice !== undefined && Number.isFinite(input.dailyRentPrice)
+        ? (input.dailyRentPrice > 0 ? Number(input.dailyRentPrice) : undefined)
         : existing?.dailyRentPrice,
     monthlyUtilities,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
@@ -2234,7 +2242,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         roomLabel,
         managerUserId: effectiveManagerUserId,
         monthlyRent: rentAmount,
-        dailyRentPrice: dailyBasisRate && dailyBasisRate > 0 ? dailyBasisRate : undefined,
+        // Always explicit: 0 when the room is monthly, so re-approving a room that was
+        // switched daily -> monthly clears the old daily rate instead of inheriting it.
+        dailyRentPrice: dailyBasisRate && dailyBasisRate > 0 ? dailyBasisRate : 0,
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
         dueDay: resolveRentDueDayForMonth(dueDayMode, computedStartMonth),
         dueDayMode,
