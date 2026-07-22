@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { demoOnlyBrowseCardPlaceholderImage, type PropertyBrowseCard } from "@/lib/room-listings-catalog";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { formatRoomPriceAmount } from "@/lib/room-pricing";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 
 const SWIPE_THRESHOLD_PX = 72;
@@ -14,7 +15,7 @@ const EXIT_ANIM_MS = 280;
 function formatRent(card: PropertyBrowseCard): string {
   const display = card.headlineRent ?? card.rentNumeric;
   if (display !== null) {
-    return `$${display.toLocaleString("en-US")}`;
+    return formatRoomPriceAmount(display);
   }
   const stripped = card.priceLabel.replace(/\/month/i, "").replace(/\/day/i, "").trim();
   return stripped || "—";

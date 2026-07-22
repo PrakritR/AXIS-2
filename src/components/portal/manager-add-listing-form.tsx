@@ -112,6 +112,7 @@ import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
+  listingRoomDailyRentKey,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
@@ -594,12 +595,16 @@ function RoomDailyPricingFields({
   rentBasis,
   dailyRentPrice,
   monthlyRent,
+  fieldKey,
+  error,
   onToggle,
   onDailyPrice,
 }: {
   rentBasis?: "monthly" | "daily";
   dailyRentPrice?: number;
   monthlyRent: number;
+  fieldKey: string;
+  error?: string;
   onToggle: (daily: boolean) => void;
   onDailyPrice: (n: number | undefined) => void;
 }) {
@@ -626,15 +631,16 @@ function RoomDailyPricingFields({
           <FieldLabel hint="Every rent charge bills billable days × this rate using the real number of days in each month.">
             Daily rent rate *
           </FieldLabel>
-          <div className="relative">
+          <div className="relative" data-wizard-field={fieldKey}>
             <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
             <Input
               inputMode="decimal"
-              className="pl-8"
+              className={wizardFieldErrorClass(Boolean(error), "pl-8")}
               value={dailyRentPrice ?? ""}
               onChange={(e) => onDailyPrice(parseOptionalSanitizedMoneyNumber(e.target.value))}
               placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "40"}
             />
+            <StepFieldError msg={error} />
           </div>
           {dailyRentPrice && dailyRentPrice > 0 ? (
             <p className="mt-1 text-xs text-muted">
@@ -2722,10 +2728,12 @@ export function ManagerAddListingForm({
                     {sub.rooms.map((room, i) => {
                       const roomRentKey = listingRoomRentKey(room.id);
                       const roomRentErr = stepFieldErrors[roomRentKey];
+                      const roomDailyRentKey = listingRoomDailyRentKey(room.id);
+                      const roomDailyRentErr = stepFieldErrors[roomDailyRentKey];
                       return (
                       <div
                         key={room.id}
-                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
+                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
                       >
                         <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2789,8 +2797,11 @@ export function ManagerAddListingForm({
                               rentBasis={room.rentBasis}
                               dailyRentPrice={room.dailyRentPrice}
                               monthlyRent={room.monthlyRent}
+                              fieldKey={roomDailyRentKey}
+                              error={roomDailyRentErr}
                               onToggle={(daily) => {
                                 clearListingFieldError(roomRentKey);
+                                clearListingFieldError(roomDailyRentKey);
                                 setRoom(
                                   i,
                                   daily
@@ -2805,6 +2816,7 @@ export function ManagerAddListingForm({
                               }}
                               onDailyPrice={(n) => {
                                 clearListingFieldError(roomRentKey);
+                                clearListingFieldError(roomDailyRentKey);
                                 setRoom(i, { dailyRentPrice: n });
                               }}
                             />

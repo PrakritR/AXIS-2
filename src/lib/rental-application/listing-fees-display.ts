@@ -3,7 +3,7 @@ import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submissio
 import { normalizeManagerListingSubmissionV1, PAYMENT_AT_SIGNING_OPTIONS, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { utilitiesListingSummaryLabel } from "@/lib/listing-utilities-payment";
-import { roomDailyRentPrice, roomMonthlyEquivalent } from "@/lib/room-pricing";
+import { roomDailyRentPrice, roomIsDailyPriced, roomMonthlyEquivalent } from "@/lib/room-pricing";
 
 export type ListingSigningComputationInput = ManagerListingSubmissionV1 | undefined;
 
@@ -65,7 +65,16 @@ export function formatListingFeeDisplay(raw: string): string {
   return t;
 }
 
-/** Price label for “Payment due at signing” from selected charge types. */
+/**
+ * Price label for “Payment due at signing” from selected charge types.
+ *
+ * This value is NOT display-only — `submissionAmount()` in household-charges parses
+ * it into a real, lease-blocking charge. So the first-month-rent component must only
+ * ever use exact monthly figures; a daily-priced room's rent depends on the actual
+ * day count of the month the lease starts in and is quoted in the detail copy
+ * (see {@link paymentAtSigningDetailBody}) rather than folded into this number as a
+ * 30-day approximation.
+ */
 export function paymentAtSigningPriceLabel(sub: ListingSigningComputationInput): string {
   if (!sub?.v) return "—";
   const n = normalizeManagerListingSubmissionV1(sub);
@@ -78,7 +87,7 @@ export function paymentAtSigningPriceLabel(sub: ListingSigningComputationInput):
   if (includes.includes("first_month_rent")) {
     const rents = isEntireHomeListing(n)
       ? [entireHomeMonthlyRentAmount(n)].filter((x) => x > 0)
-      : n.rooms.map((r) => roomMonthlyEquivalent(r)).filter((x) => x > 0);
+      : n.rooms.filter((r) => !roomIsDailyPriced(r)).map((r) => r.monthlyRent).filter((x) => x > 0);
     if (rents.length) sum += Math.min(...rents);
   }
   if (includes.includes("first_month_utilities")) {
@@ -107,7 +116,7 @@ export function paymentAtSigningDetailBody(sub: ListingSigningComputationInput):
   if (includes.includes("first_month_rent")) {
     const rents = isEntireHomeListing(n)
       ? [entireHomeMonthlyRentAmount(n)].filter((x) => x > 0)
-      : n.rooms.map((r) => roomMonthlyEquivalent(r)).filter((x) => x > 0);
+      : n.rooms.filter((r) => !roomIsDailyPriced(r)).map((r) => r.monthlyRent).filter((x) => x > 0);
     parts.push(
       rents.length
         ? isEntireHomeListing(n)
@@ -117,6 +126,14 @@ export function paymentAtSigningDetailBody(sub: ListingSigningComputationInput):
           ? "First month rent (set the entire-home rent on the listing)."
           : "First month rent (set room rent amounts on the listing).",
     );
+    // Daily-priced rooms are quoted by their rate: the first month's amount depends on
+    // how many days that month actually has, so it is never a fixed listing figure.
+    const dailyRates = n.rooms.map((r) => roomDailyRentPrice(r)).filter((x): x is number => x !== undefined);
+    if (dailyRates.length && !isEntireHomeListing(n)) {
+      parts.push(
+        `Rooms priced by the day bill from $${Math.min(...dailyRates).toFixed(2)} / day × the number of days in the first month.`,
+      );
+    }
   }
   if (includes.includes("first_month_utilities")) {
     const u = n.rooms.map((r) => parseMoneyAmount(r.utilitiesEstimate ?? "")).filter((x) => x > 0);

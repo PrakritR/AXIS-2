@@ -93,7 +93,12 @@ import type {
   ListingRoomRow,
   ListingSharedRow,
 } from "@/data/listing-rich-content";
-import { roomDailyRentPrice, roomIsDailyPriced, roomMonthlyEquivalent } from "@/lib/room-pricing";
+import {
+  roomHeadlineAmount,
+  roomHeadlinePriceLabel,
+  roomIsDailyPriced,
+  roomMonthlyEquivalent,
+} from "@/lib/room-pricing";
 
 /**
  * Rent value for AGGREGATE labels (rent ranges, "starting at", estimated totals):
@@ -258,12 +263,13 @@ function buildListingFloorCard(
       detail: roomListingTableSubtitle(r),
       utilitiesEstimate: utilDisplay,
       price: roomIsDailyPriced(r)
-        ? `$${roomDailyRentPrice(r)}/day`
+        ? roomHeadlinePriceLabel(r)
         : entireHome
           ? (r.monthlyRent > 0 ? `$${r.monthlyRent}` : "Included")
           : `$${r.monthlyRent}`,
       pricePeriod: roomIsDailyPriced(r) ? "day" : "month",
       priceMonthlyEquivalent: roomIsDailyPriced(r) ? roomMonthlyEquivalent(r) : undefined,
+      priceHeadlineAmount: roomHeadlineAmount(r) ?? undefined,
       availability: "Available now",
       bathroomShareCount: bathroomShareCountForRoom(r.id, sub),
       modal: {
@@ -904,9 +910,11 @@ export function listingRichFromManagerSubmission(
       : rooms
           .filter((r) => aggregateRoomRentValue(r) > 0)
           .map((r) => {
+            // Only a room with an actual utilities estimate contributes: this figure is
+            // rendered as "Estimated monthly (rent + utilities estimate)", so a room
+            // without one must stay out rather than pass its bare rent off as a total.
             const utilities = parseMoneyAmount(r.utilitiesEstimate ?? "");
-            const base = aggregateRoomRentValue(r);
-            return utilities > 0 ? base + utilities : base > 0 ? base : null;
+            return utilities > 0 ? aggregateRoomRentValue(r) + utilities : null;
           })
           .filter((n): n is number => n !== null);
 

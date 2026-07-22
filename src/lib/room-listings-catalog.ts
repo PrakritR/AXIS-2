@@ -8,7 +8,12 @@ import {
   propertyMatchesZipRadius,
 } from "@/lib/listings-search";
 import { isRoomChoiceAvailable, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
-import { roomHeadlinePriceLabel, roomIsDailyPriced, roomMonthlyEquivalent } from "@/lib/room-pricing";
+import {
+  roomHeadlineAmount,
+  roomHeadlinePriceLabel,
+  roomIsDailyPriced,
+  roomMonthlyEquivalent,
+} from "@/lib/room-pricing";
 
 export type RoomListingSlide = {
   roomName: string;
@@ -296,6 +301,7 @@ function browseRoomEntries(
               : property.rentLabel || "—",
           pricePeriod: roomIsDailyPriced(r) ? "day" : "month",
           priceMonthlyEquivalent: roomIsDailyPriced(r) ? roomMonthlyEquivalent(r) : undefined,
+          priceHeadlineAmount: roomHeadlineAmount(r) ?? undefined,
           availability: "Available now",
           modal: BROWSE_ROOM_MODAL_STUB,
         };
@@ -396,8 +402,14 @@ export function filterRoomListings(
         priceLabel: room.price,
         rentNumeric,
         pricePeriod: room.pricePeriod === "day" ? "day" : "month",
+        // Carried through as an exact number: re-parsing the formatted label would
+        // truncate cents (a $39.50/day room would read "$39 / day" on the card).
         headlineRent:
-          room.pricePeriod === "day" ? parseMonthlyRent(room.price.replace("/day", "")) : rentNumeric,
+          typeof room.priceHeadlineAmount === "number" && room.priceHeadlineAmount > 0
+            ? room.priceHeadlineAmount
+            : room.pricePeriod === "day"
+              ? parseMonthlyRent(room.price.replace("/day", ""))
+              : rentNumeric,
         availabilityLabel: availabilityLabel(room),
         bathroomHint: bathroomHintFromRoom(room),
         zip: p.zip,

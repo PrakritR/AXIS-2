@@ -12,6 +12,11 @@ export function listingRoomRentKey(roomId: string): string {
   return `room-${roomId}-rent`;
 }
 
+/** Separate key from {@link listingRoomRentKey} so the error lands on the daily rate input, not monthly rent. */
+export function listingRoomDailyRentKey(roomId: string): string {
+  return `room-${roomId}-daily-rent`;
+}
+
 export function listingBathroomNameKey(bathId: string): string {
   return `bathroom-${bathId}-name`;
 }
@@ -83,7 +88,7 @@ export function validateListingWizardStep(
       // A room switched to daily pricing must carry a positive daily rate.
       for (const room of sub.rooms) {
         if (room.rentBasis === "daily" && !((room.dailyRentPrice ?? 0) > 0)) {
-          errs[listingRoomRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
+          errs[listingRoomDailyRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
         }
       }
     }
@@ -135,7 +140,7 @@ export function buildListingStepFieldOrder(stepIndex: number, sub: ManagerListin
     return [...sub.sharedSpaces.map((s) => listingSharedSpaceNameKey(s.id)), "sharedSpaces"];
   }
   if (stepIndex === 4 && !isEntireHomeListing(sub)) {
-    const rentKeys = sub.rooms.map((r) => listingRoomRentKey(r.id));
+    const rentKeys = sub.rooms.flatMap((r) => [listingRoomRentKey(r.id), listingRoomDailyRentKey(r.id)]);
     const monthlyIdx = base.indexOf("monthlyRent");
     if (monthlyIdx === -1) return [...rentKeys, ...base];
     return [...base.slice(0, monthlyIdx + 1), ...rentKeys, ...base.slice(monthlyIdx + 1)];

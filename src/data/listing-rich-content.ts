@@ -39,6 +39,8 @@ export type ListingRoomRow = {
   pricePeriod?: "day" | "month";
   /** Comparable monthly-equivalent rent (daily × ~30) used for sorting/budget filters when priced daily. */
   priceMonthlyEquivalent?: number;
+  /** Exact headline number behind `price` (daily rate for daily rooms, monthly rent otherwise) — never re-parse `price`. */
+  priceHeadlineAmount?: number;
   availability: string;
   modal: ListingRoomModal;
   /**
