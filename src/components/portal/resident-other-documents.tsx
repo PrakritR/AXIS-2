@@ -33,8 +33,10 @@ const UPLOAD_ACCEPT = "application/pdf,image/*,.doc,.docx,.txt,.csv";
 // `URL.createObjectURL()` returns a `blob:` URL, while Capacitor camera previews
 // may be custom schemes or WebView-local `http(s)://localhost` file URLs.
 // Reject anything else before it reaches the live upload preview's <img src>,
-// so this can never become a sink for an untrusted/remote URL.
-const SAFE_PREVIEW_URL_RE = /^(?:(?:blob|capacitor|file):|https?:\/\/localhost(?::\d+)?(?:[/?#]|$))/i;
+// so this can never become a sink for an untrusted/remote URL. Validated with
+// explicit `startsWith` prefix checks (inlined at each guard below) rather than
+// a regexp so the allowlist reads as a barrier on the exact value handed to the
+// sink.
 
 /** Trigger a browser download without opening a blank tab. */
 export function triggerDocumentDownload(href: string, fileName?: string): void {
@@ -196,7 +198,13 @@ export function ResidentAddDocumentModal({
       return;
     }
     const objectUrl = URL.createObjectURL(next);
-    if (!SAFE_PREVIEW_URL_RE.test(objectUrl)) {
+    if (
+      !objectUrl.startsWith("blob:") &&
+      !objectUrl.startsWith("capacitor:") &&
+      !objectUrl.startsWith("file:") &&
+      !objectUrl.startsWith("http://localhost") &&
+      !objectUrl.startsWith("https://localhost")
+    ) {
       setPreviewUrl(null);
       return;
     }
@@ -212,11 +220,18 @@ export function ResidentAddDocumentModal({
         return;
       }
       setFile(photo.file);
-      if (!SAFE_PREVIEW_URL_RE.test(photo.previewUrl)) {
+      const photoPreviewUrl = photo.previewUrl;
+      if (
+        !photoPreviewUrl.startsWith("blob:") &&
+        !photoPreviewUrl.startsWith("capacitor:") &&
+        !photoPreviewUrl.startsWith("file:") &&
+        !photoPreviewUrl.startsWith("http://localhost") &&
+        !photoPreviewUrl.startsWith("https://localhost")
+      ) {
         setPreviewUrl(null);
         return;
       }
-      setPreviewUrl(photo.previewUrl);
+      setPreviewUrl(photoPreviewUrl);
     } catch {
       showToast("Could not capture photo.");
     }
