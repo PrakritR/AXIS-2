@@ -674,7 +674,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </WizardFieldGate>
 
         {shortTermAllowed && showWizardField("rentalType") ? (
-          <div className="space-y-3 rounded-2xl border p-5 portal-banner-info">
+          <div className="space-y-3 rounded-2xl border border-border bg-accent/30 p-5">
             <Label required>Application type</Label>
             <div className={pillWrap}>
               {[
@@ -698,14 +698,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               ))}
             </div>
             {form.rentalType === "short_term" ? (
-              <div className="rounded-xl border border-blue-100 bg-card p-3 text-sm leading-6 text-blue-950">
+              <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
                 <p>
                   Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
                   {" · "}
                   Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
                 </p>
                 {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
-                  <p className="mt-1 text-blue-900/80">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
+                  <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
                 ) : null}
               </div>
             ) : null}
