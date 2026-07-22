@@ -6,9 +6,17 @@
  * land at the 1800x920 the `.lp-chapter .lp-art` box expects (see AGENTS.md,
  * "Marketing mocks must use portal-accurate copy").
  *
+ * Each board is rendered in BOTH themes: `guide-messages.webp` /
+ * `guide-tours.webp` (light) and `guide-messages-dark.webp` /
+ * `guide-tours-dark.webp` (dark). The homepage swaps which pair it shows based on
+ * `data-theme` (see `landing-home-sections.tsx`), so the site's default dark
+ * theme gets dark portal mocks instead of light ones.
+ *
  * THIS SCRIPT DOES NOT IMPORT FROM `src/`. It hand-authors a standalone HTML
- * replica of two portal screens: every colour below is a literal hex copied from
- * the light-theme tokens, and every label is a copied string. A portal rename or
+ * replica of two portal screens: every colour is a literal value copied from the
+ * theme tokens (`PALETTES.light` from the light tokens, `PALETTES.dark` from the
+ * `[data-theme="dark"]` `--pl-*` + `.portal-calendar-*` / `.portal-table-th`
+ * rules in `globals.css`), and every label is a copied string. A portal rename or
  * a token retune therefore leaves this art silently stale — re-check the copied
  * labels (see `TOURS_LABELS` / `SCHEDULE_LABELS`) against their source component
  * whenever you regenerate.
@@ -128,6 +136,134 @@ const INBOX_TABS = SCHEDULE_LABELS.tabs.map((label) => ({
   count: label === "Schedule" ? SCHEDULE_ROWS.length : OTHER_TAB_COUNTS[label],
 }));
 
+/* ------------------------------------------------------------------ themes */
+
+/**
+ * Two palettes, one markup. Every colour on both boards is a `var(--g-*)` whose
+ * value comes from the palette below. LIGHT values are the literal light-theme
+ * hexes this script always used; DARK values are copied from the portal dark
+ * tokens in `src/app/globals.css` — the `--pl-*` dark block plus the
+ * `[data-theme="dark"] .portal-calendar-*` / `.portal-table-th` rules — so the
+ * dark art matches the real dark portal surfaces rather than an inverted guess.
+ */
+const PALETTES = {
+  light: {
+    bodyBg: "#fdfdfd",
+    bodyFg: "#17181a",
+    pillBorder: "#e4e6ea",
+    pillBg: "#fff",
+    pillFg: "#17181a",
+    badgeSuccessBg: "rgb(209 250 229)",
+    badgeSuccessFg: "rgb(6 95 70)",
+    badgeSuccessBorder: "transparent",
+    cardBorder: "#e8e8e8",
+    cardBg: "#fff",
+    navBg: "#fff",
+    navFg: "#17181a",
+    weekLab: "#5c6068",
+    weekRng: "#17181a",
+    weekScope: "#2f6bff",
+    hcBg: "#e7edff",
+    hcWd: "#5c6068",
+    hcDt: "#17181a",
+    hcOc: "#15794a",
+    tcFg: "#5c6068",
+    ln: "#ededed",
+    slotOpenBg: "#d9fbe6",
+    slotOpenFg: "#15794a",
+    slotOpenRing: "#b3e0c3",
+    slotTourBg: "#e7edff",
+    slotTourFg: "#4a6fd6",
+    slotTourRing: "#d3ddfb",
+    tabsBg: "#ebf0fc",
+    tabFg: "#4a4f57",
+    tabOnBg: "#fff",
+    tabOnFg: "#17181a",
+    tabOnShadow: "0 1px 2px rgba(8, 9, 11, 0.1)",
+    chipBg: "#e3e8f2",
+    chipFg: "#4a4f57",
+    chipOnBg: "#e7edff",
+    chipOnFg: "#3b5ce0",
+    rule: "#ececec",
+    thBg: "#eff3ff",
+    thFg: "#5c6068",
+    tdLine: "#efefef",
+    whenFg: "#17181a",
+    srcBorder: "#e2e8f8",
+    srcBg: "#eff4fd",
+    srcFg: "#4a4f57",
+    nmFg: "#17181a",
+    tpFg: "#17181a",
+    subFg: "#8a8f98",
+    subjFg: "#17181a",
+    chevFg: "#8a8f98",
+    statusBg: "#e7edff",
+    statusFg: "#3b5ce0",
+  },
+  dark: {
+    // Portal shell = --pl-surface-raised (#0f1011); text = --pl-ink (#f7f8f8).
+    bodyBg: "#0f1011",
+    bodyFg: "#f7f8f8",
+    pillBorder: "rgba(255, 255, 255, 0.14)", // --pl-line-strong
+    pillBg: "#16181b", // --pl-surface-muted
+    pillFg: "#f7f8f8",
+    badgeSuccessBg: "rgba(22, 163, 74, 0.24)", // .portal-calendar-badge-success
+    badgeSuccessFg: "#bbf7d0",
+    badgeSuccessBorder: "rgba(74, 222, 128, 0.38)",
+    cardBorder: "rgba(255, 255, 255, 0.08)", // --pl-line
+    cardBg: "#0f1011",
+    navBg: "#16181b",
+    navFg: "#f7f8f8",
+    weekLab: "#8a8f98", // --pl-muted-fg
+    weekRng: "#f7f8f8",
+    weekScope: "#9a9cf5", // --pl-purple-soft (dark brand = purple, never blue)
+    hcBg: "rgba(255, 255, 255, 0.09)", // .portal-calendar-header-cell
+    hcWd: "rgba(255, 255, 255, 0.84)",
+    hcDt: "#f7f8f8",
+    hcOc: "#86efac", // .portal-calendar-open-count
+    tcFg: "rgba(255, 255, 255, 0.8)", // .portal-calendar-time-cell
+    ln: "rgba(255, 255, 255, 0.08)",
+    slotOpenBg: "rgba(22, 163, 74, 0.34)", // .portal-calendar-open-slot
+    slotOpenFg: "#ecfdf5",
+    slotOpenRing: "rgba(74, 222, 128, 0.5)",
+    slotTourBg: "rgba(56, 189, 248, 0.28)", // .portal-calendar-meeting-confirmed
+    slotTourFg: "#f0f9ff",
+    slotTourRing: "rgba(125, 211, 252, 0.55)",
+    tabsBg: "rgba(255, 255, 255, 0.06)",
+    tabFg: "#8a8f98",
+    tabOnBg: "#16181b",
+    tabOnFg: "#f7f8f8",
+    tabOnShadow: "0 1px 2px rgba(0, 0, 0, 0.4)",
+    chipBg: "rgba(255, 255, 255, 0.1)",
+    chipFg: "#8a8f98",
+    chipOnBg: "rgba(124, 127, 242, 0.18)", // --status-approved-bg (dark)
+    chipOnFg: "#b8baf6", // --status-approved-fg (dark)
+    rule: "rgba(255, 255, 255, 0.08)",
+    thBg: "#16181b",
+    thFg: "rgba(255, 255, 255, 0.82)", // .portal-table-th (dark)
+    tdLine: "rgba(255, 255, 255, 0.08)",
+    whenFg: "#f7f8f8",
+    srcBorder: "rgba(255, 255, 255, 0.14)",
+    srcBg: "rgba(255, 255, 255, 0.06)",
+    srcFg: "#8a8f98",
+    nmFg: "#f7f8f8",
+    tpFg: "#f7f8f8",
+    subFg: "#8a8f98",
+    subjFg: "#f7f8f8",
+    chevFg: "#8a8f98",
+    statusBg: "rgba(124, 127, 242, 0.18)", // --status-approved-bg (dark)
+    statusFg: "#b8baf6", // --status-approved-fg (dark)
+  },
+};
+
+/** Emit the palette as `:root` custom properties the shared CSS reads. */
+const themeVars = (theme) => {
+  const p = PALETTES[theme];
+  return `:root{${Object.entries(p)
+    .map(([key, value]) => `--g-${key}:${value};`)
+    .join("")}}`;
+};
+
 /* ------------------------------------------------------------------ markup */
 
 const BASE_CSS = `
@@ -137,8 +273,8 @@ const BASE_CSS = `
     width: ${WIDTH}px;
     height: ${HEIGHT}px;
     overflow: hidden;
-    background: #fdfdfd;
-    color: #17181a;
+    background: var(--g-bodyBg);
+    color: var(--g-bodyFg);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
     line-height: 1.4;
     -webkit-font-smoothing: antialiased;
@@ -146,20 +282,21 @@ const BASE_CSS = `
   .board { padding: 24px 26px; }
   .pill-btn {
     display: inline-flex; align-items: center;
-    border: 1px solid #e4e6ea; background: #fff; border-radius: 999px;
-    padding: 7px 17px; font-size: 13px; font-weight: 600; color: #17181a;
+    border: 1px solid var(--g-pillBorder); background: var(--g-pillBg); border-radius: 999px;
+    padding: 7px 17px; font-size: 13px; font-weight: 600; color: var(--g-pillFg);
   }
   .badge-success {
-    border-radius: 999px; background: rgb(209 250 229); color: rgb(6 95 70);
+    border-radius: 999px; background: var(--g-badgeSuccessBg); color: var(--g-badgeSuccessFg);
+    border: 1px solid var(--g-badgeSuccessBorder);
     padding: 5px 13px; font-size: 13px; font-weight: 700;
   }
-  .card { border: 1px solid #e8e8e8; border-radius: 14px; background: #fff; overflow: hidden; }
+  .card { border: 1px solid var(--g-cardBorder); border-radius: 14px; background: var(--g-cardBg); overflow: hidden; }
 `;
 
 const escapeHtml = (value) =>
   String(value).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-function toursHtml() {
+function toursHtml(theme) {
   const headerCells = TOUR_DAYS.map(
     (day) => `
       <div class="hc day">
@@ -182,17 +319,17 @@ function toursHtml() {
     return `<div class="tc${edge}">${escapeHtml(time)}</div>${cells}`;
   }).join("");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${themeVars(theme)}${BASE_CSS}
     .top { display: flex; align-items: center; gap: 11px; }
     .nav {
       display: flex; align-items: center; justify-content: center;
-      height: 31px; width: 31px; border-radius: 999px; border: 1px solid #e8e8e8;
-      background: #fff; font-size: 14px; color: #17181a;
+      height: 31px; width: 31px; border-radius: 999px; border: 1px solid var(--g-cardBorder);
+      background: var(--g-navBg); font-size: 14px; color: var(--g-navFg);
     }
-    .week { border: 1px solid #e8e8e8; border-radius: 14px; background: #fff; padding: 7px 17px; }
-    .week .lab { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #5c6068; }
-    .week .rng { margin: 1px 0 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
-    .week .scope { margin: 1px 0 0; font-size: 11px; font-weight: 600; color: #2f6bff; }
+    .week { border: 1px solid var(--g-cardBorder); border-radius: 14px; background: var(--g-cardBg); padding: 7px 17px; }
+    .week .lab { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--g-weekLab); }
+    .week .rng { margin: 1px 0 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--g-weekRng); }
+    .week .scope { margin: 1px 0 0; font-size: 11px; font-weight: 600; color: var(--g-weekScope); }
     .week p { margin: 0; }
     .spacer { flex: 1; }
     .actions { display: flex; gap: 10px; margin-top: 15px; }
@@ -200,22 +337,22 @@ function toursHtml() {
       display: grid; grid-template-columns: 84px repeat(5, 1fr);
       margin-top: 17px; font-size: 12px;
     }
-    .hc { background: #e7edff; padding: 7px 6px; }
-    .hc.time { display: flex; align-items: center; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5c6068; padding-left: 12px; }
+    .hc { background: var(--g-hcBg); padding: 7px 6px; }
+    .hc.time { display: flex; align-items: center; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-hcWd); padding-left: 12px; }
     .hc.day { text-align: center; }
     .hc p { margin: 0; }
-    .hc .wd { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5c6068; }
-    .hc .dt { margin-top: 1px; font-size: 12px; font-weight: 700; color: #17181a; }
-    .hc .oc { margin-top: 1px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #15794a; }
-    .tc { display: flex; align-items: center; height: 36px; padding-left: 12px; font-size: 12px; font-weight: 600; color: #5c6068; }
+    .hc .wd { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-hcWd); }
+    .hc .dt { margin-top: 1px; font-size: 12px; font-weight: 700; color: var(--g-hcDt); }
+    .hc .oc { margin-top: 1px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--g-hcOc); }
+    .tc { display: flex; align-items: center; height: 36px; padding-left: 12px; font-size: 12px; font-weight: 600; color: var(--g-tcFg); }
     .sc { display: flex; align-items: center; height: 36px; padding: 0 7px; }
-    .ln { border-top: 1px solid #ededed; }
+    .ln { border-top: 1px solid var(--g-ln); }
     .slot {
       display: flex; align-items: center; justify-content: center;
       width: 100%; height: 26px; border-radius: 8px; font-size: 12px; font-weight: 600;
     }
-    .slot.open { background: #d9fbe6; color: #15794a; box-shadow: inset 0 0 0 1px #b3e0c3; }
-    .slot.tour { background: #e7edff; color: #4a6fd6; box-shadow: inset 0 0 0 1px #d3ddfb; }
+    .slot.open { background: var(--g-slotOpenBg); color: var(--g-slotOpenFg); box-shadow: inset 0 0 0 1px var(--g-slotOpenRing); }
+    .slot.tour { background: var(--g-slotTourBg); color: var(--g-slotTourFg); box-shadow: inset 0 0 0 1px var(--g-slotTourRing); }
   </style></head><body><div class="board">
     <div class="top">
       <span class="nav">←</span>
@@ -241,7 +378,7 @@ function toursHtml() {
 
 const SCHEDULE_COLUMN_WIDTHS = ["17%", "13%", "21%", "21%", "18%", "14%"];
 
-function messagesHtml() {
+function messagesHtml(theme) {
   const columnHeads = SCHEDULE_LABELS.columns
     .map((column, idx) => `<th style="width: ${SCHEDULE_COLUMN_WIDTHS[idx]}">${escapeHtml(column)}</th>`)
     .join("");
@@ -265,27 +402,27 @@ function messagesHtml() {
       </tr>`,
   ).join("");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${themeVars(theme)}${BASE_CSS}
     h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
-    .tabs { display: inline-flex; align-items: center; gap: 2px; margin-top: 14px; background: #ebf0fc; border-radius: 999px; padding: 5px; }
-    .tab { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 15px; font-size: 13.5px; font-weight: 600; color: #4a4f57; }
-    .tab.on { background: #fff; color: #17181a; box-shadow: 0 1px 2px rgba(8, 9, 11, 0.1); }
-    .chip { margin-left: 7px; border-radius: 999px; background: #e3e8f2; padding: 0 6px; font-size: 11px; font-weight: 700; color: #4a4f57; }
-    .tab.on .chip { background: #e7edff; color: #3b5ce0; }
-    .rule { margin-top: 14px; border-top: 1px solid #ececec; }
+    .tabs { display: inline-flex; align-items: center; gap: 2px; margin-top: 14px; background: var(--g-tabsBg); border-radius: 999px; padding: 5px; }
+    .tab { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 15px; font-size: 13.5px; font-weight: 600; color: var(--g-tabFg); }
+    .tab.on { background: var(--g-tabOnBg); color: var(--g-tabOnFg); box-shadow: var(--g-tabOnShadow); }
+    .chip { margin-left: 7px; border-radius: 999px; background: var(--g-chipBg); padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--g-chipFg); }
+    .tab.on .chip { background: var(--g-chipOnBg); color: var(--g-chipOnFg); }
+    .rule { margin-top: 14px; border-top: 1px solid var(--g-rule); }
     table { width: 100%; margin-top: 16px; border-collapse: collapse; table-layout: fixed; }
-    th { background: #eff3ff; padding: 11px 13px; text-align: left; font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #5c6068; }
-    td { padding: 11px 13px; border-top: 1px solid #efefef; vertical-align: middle; }
+    th { background: var(--g-thBg); padding: 11px 13px; text-align: left; font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--g-thFg); }
+    td { padding: 11px 13px; border-top: 1px solid var(--g-tdLine); vertical-align: middle; }
     tr:first-child td { border-top: 0; }
     td p { margin: 0; }
-    .when { font-size: 12.5px; font-weight: 600; color: #17181a; }
-    .src { display: inline-flex; border: 1px solid #e2e8f8; border-radius: 999px; background: #eff4fd; padding: 2px 9px; font-size: 11px; font-weight: 600; color: #4a4f57; }
-    .nm { font-size: 13.5px; font-weight: 700; color: #17181a; }
-    .tp { font-size: 12.5px; color: #17181a; }
-    .sub { font-size: 11px; color: #8a8f98; }
-    .subj { font-size: 12.5px; font-weight: 600; color: #17181a; }
-    .chev { color: #8a8f98; }
-    .status { display: inline-flex; border-radius: 999px; background: #e7edff; padding: 3px 10px; font-size: 11.5px; font-weight: 700; color: #3b5ce0; }
+    .when { font-size: 12.5px; font-weight: 600; color: var(--g-whenFg); }
+    .src { display: inline-flex; border: 1px solid var(--g-srcBorder); border-radius: 999px; background: var(--g-srcBg); padding: 2px 9px; font-size: 11px; font-weight: 600; color: var(--g-srcFg); }
+    .nm { font-size: 13.5px; font-weight: 700; color: var(--g-nmFg); }
+    .tp { font-size: 12.5px; color: var(--g-tpFg); }
+    .sub { font-size: 11px; color: var(--g-subFg); }
+    .subj { font-size: 12.5px; font-weight: 600; color: var(--g-subjFg); }
+    .chev { color: var(--g-chevFg); }
+    .status { display: inline-flex; border-radius: 999px; background: var(--g-statusBg); padding: 3px 10px; font-size: 11.5px; font-weight: 700; color: var(--g-statusFg); }
   </style></head><body><div class="board">
     <h1>${escapeHtml(SCHEDULE_LABELS.title)}</h1>
     <div class="tabs">${tabs}</div>
@@ -452,8 +589,10 @@ async function capture(send, html) {
 /* -------------------------------------------------------------------- main */
 
 const boards = [
-  { file: "guide-messages.webp", html: messagesHtml() },
-  { file: "guide-tours.webp", html: toursHtml() },
+  { file: "guide-messages.webp", html: messagesHtml("light") },
+  { file: "guide-tours.webp", html: toursHtml("light") },
+  { file: "guide-messages-dark.webp", html: messagesHtml("dark") },
+  { file: "guide-tours-dark.webp", html: toursHtml("dark") },
 ];
 
 await withChrome(async (send) => {
