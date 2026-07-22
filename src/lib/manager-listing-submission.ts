@@ -10,6 +10,7 @@ import {
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
+import { roomIsDailyPriced } from "@/lib/room-pricing";
 import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
@@ -1303,7 +1304,7 @@ export function isRoomSlotRemovable(room: ManagerRoomSubmission): boolean {
   return (
     (defaultName || name.length === 0) &&
     room.monthlyRent === 0 &&
-    !((room.dailyRentPrice ?? 0) > 0) &&
+    !roomIsDailyPriced(room) &&
     room.photoDataUrls.length === 0 &&
     !room.videoDataUrl &&
     !room.detail.trim() &&
