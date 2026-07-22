@@ -13,9 +13,11 @@ Visual design reference for the Axis Housing platform. This document synthesizes
 - A rotating **chrome substrate** (conic gradients, gloss, legibility wash) on marquee moments
 - **Frosted glass** cards, nav, and inputs with hairline borders and inset highlights
 - A single **cobalt accent** (`#2f6bff` → `#5a8cff`) — never a second hue for role or surface differentiation
-- The **AX mark**: a balanced “A” in foreground stroke plus a brighter gradient “X” in steel-light / sky / cobalt
+- The **PropLane mark**: a paper-plane glyph in a solid foreground stroke with the fold line picked out in primary (light) / steel-light (dark) — no gradient or glow. The legacy “AX” letters are retired everywhere, including the browser tab icon.
 
-**Logo tile:** 44–56px rounded square (13–18px radius), frosted gradient fill, white hairline border, inset top highlight. Wordmark: **Axis** (17px semibold, −0.035em tracking) + **Housing** (10px uppercase, 0.22em tracking, muted).
+**Logo tile:** 40–56px rounded square (14–20px radius), frosted gradient fill, white hairline border, inset top highlight. Wordmark: **PropLane** (17px semibold, −0.035em tracking; 15px in the `compact` size).
+
+Where each brand surface lives — and the rule that `src/app/icon.svg` and `src/app/favicon.ico` must be regenerated together — is in AGENTS.md, “Brand assets (PropLane)”.
 
 ---
 
@@ -41,8 +43,8 @@ Tokens live in `:root` / `[data-theme="light"]` and `[data-theme="dark"]`, surfa
 |-------|-------|------|-------|
 | `--primary` | `#2f6bff` | `#2f6bff` | Links, active states, primary buttons |
 | `--primary-alt` / `--sky` | `#5a8cff` | `#5a8cff` | Gradients, secondary accent strokes |
-| `--cobalt-deep` | `#1e4fd6` | `#1e4fd6` | Code, deep accent, logo X stroke (light) |
-| `--steel-light` | `#bcd4ff` | `#bcd4ff` | Eyebrows, logo glow, dark-theme approved status |
+| `--cobalt-deep` | `#1e4fd6` | `#1e4fd6` | Code, deep accent |
+| `--steel-light` | `#bcd4ff` | `#bcd4ff` | Eyebrows, dark-theme logo fold stroke, dark-theme approved status |
 | `--foreground` | `#0b1b3a` (navy) | `#ffffff` | Body and headings |
 | `--muted` | `#4a5878` | `rgba(255,255,255,0.62)` | Secondary text, captions |
 | `--background-solid` | `#f7f9fd` | `#080b14` | Page base |
@@ -360,7 +362,7 @@ Inherits portal shell. Differentiators:
 
 ## Layout & spacing
 
-- **Max content width:** `max-w-6xl` (1152px) for marketing nav/footer and hero content
+- **Max content width:** `max-w-6xl` (1152px) for marketing nav and hero content. The full `PublicFooter` is the deliberate exception — it runs full-bleed (`max-w-[1600px]` with page-chrome gutters) so its link columns align with the page edges; the `compact` footer stays `max-w-6xl`.
 - **Page frame:** `.axis-page-frame` — light gradient stack or dark solid
 - **Portal sidebar:** 266px fixed; content scrolls independently
 - **Border radius scale:** 14px nav/cards, 18px cards/photo, 24px auth card, 9999px pills/buttons
