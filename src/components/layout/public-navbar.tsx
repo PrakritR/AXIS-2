@@ -3,8 +3,6 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
-import { MANAGER_PLAN_TIERS } from "@/data/manager-plan-tiers";
-import { MANAGER_TIER_MONTHLY_USD } from "@/lib/manager-access";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
@@ -14,11 +12,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const AUTH_STORAGE_KEY = "axis:signed_in";
-
-const PLAN_LABELS = MANAGER_PLAN_TIERS.map((tier) => tier.label);
-const PRICING_NAV_DESCRIPTION = `${PLAN_LABELS.slice(0, -1).join(", ")}, and ${
-  PLAN_LABELS[PLAN_LABELS.length - 1]
-} — start at $${Math.min(...Object.values(MANAGER_TIER_MONTHLY_USD))}`;
 
 function readSignedInFromStorage(): boolean {
   try {
@@ -94,6 +87,9 @@ export function PublicNavbar() {
     () =>
       pathname.startsWith("/docs") ||
       pathname.startsWith("/why-proplane") ||
+      // /pricing is deliberately still highlighted here even though it is no
+      // longer a Resources dropdown entry — the page stays live and is linked
+      // from elsewhere, so the tab should light up when a visitor lands on it.
       pathname.startsWith("/pricing") ||
       pathname.startsWith("/about"),
     [pathname],
@@ -160,13 +156,6 @@ export function PublicNavbar() {
               description: "Guides for managers, residents, and vendors",
               active: pathname.startsWith("/docs"),
               dataAttr: "nav-resources-docs",
-            },
-            {
-              title: "Pricing",
-              url: "/pricing",
-              description: PRICING_NAV_DESCRIPTION,
-              active: pathname.startsWith("/pricing"),
-              dataAttr: "nav-resources-pricing",
             },
             {
               title: "About us",
