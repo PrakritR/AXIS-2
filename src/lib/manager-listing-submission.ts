@@ -1293,6 +1293,7 @@ export function isRoomSlotRemovable(room: ManagerRoomSubmission): boolean {
   return (
     (defaultName || name.length === 0) &&
     room.monthlyRent === 0 &&
+    !((room.dailyRentPrice ?? 0) > 0) &&
     room.photoDataUrls.length === 0 &&
     !room.videoDataUrl &&
     !room.detail.trim() &&

@@ -113,6 +113,7 @@ import {
   firstInvalidListingStep,
   listingBathroomNameKey,
   listingRoomDailyRentKey,
+  listingRoomHasRent,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
@@ -2096,7 +2097,7 @@ export function ManagerAddListingForm({
     }));
     const roomsOk = isEntireHomeListing(submission)
       ? entireHomeMonthlyRentAmount(submission) > 0 && submission.rooms.some((r) => r.name.trim())
-      : submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
+      : submission.rooms.some((r) => r.name.trim() && listingRoomHasRent(r));
     if (!submission.address.trim() || !submission.zip.trim()) {
       showToast("Fill in address and ZIP.");
       return;
@@ -2105,7 +2106,7 @@ export function ManagerAddListingForm({
       showToast(
         isEntireHomeListing(submission)
           ? "Add at least one bedroom and the monthly rent for the entire home."
-          : "Add at least one room with a name and monthly rent.",
+          : "Add at least one room with a name and a monthly or daily rent.",
       );
       return;
     }
