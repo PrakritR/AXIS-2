@@ -85,6 +85,13 @@ export function buildConversationKey(args: {
  * counterparty is a linked Axis account, their tenancy status, and the Claw
  * thread topic. Kept deliberately conservative — an unknown stays `unknown`
  * rather than being guessed into `resident` (which would over-merge threads).
+ *
+ * ORDER IS AN INVARIANT: the counterparty's own account linkage and tenancy are
+ * per-person facts and are tested BEFORE the Claw thread topic, which is a
+ * single mutable row per (manager, phone) overwritten on every thread touch.
+ * Topic-first re-labels a current resident as `prospect` the moment their
+ * latest thread is a leasing one, and the read path refuses to fold a prospect
+ * thread into a named resident — so their history silently leaves the thread.
  */
 export function deriveCounterpartyRole(args: {
   hasResidentUserId?: boolean;
@@ -92,10 +99,10 @@ export function deriveCounterpartyRole(args: {
   threadTopic?: string | null;
 }): SmsCounterpartyRole {
   const topic = String(args.threadTopic ?? "").trim().toLowerCase();
-  if (topic === "leasing") return "prospect";
   if (args.tenancyStatus === "applicant") return "applicant";
   if (args.tenancyStatus === "resident") return "resident";
   if (args.hasResidentUserId) return "resident";
+  if (topic === "leasing") return "prospect";
   if (topic && topic !== "general") return "resident";
   return "unknown";
 }

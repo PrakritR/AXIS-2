@@ -400,9 +400,16 @@ export const ManagerSmsPanel = forwardRef<
           // The key, not the phone, identifies which of the two threads to drop.
           body: JSON.stringify({ phone, conversationKey: resident.conversationKey ?? null }),
         });
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        const body = (await res.json().catch(() => ({}))) as { error?: string; partial?: boolean };
         if (!res.ok) {
           showToast(body.error ?? "Could not delete conversation.");
+          return;
+        }
+        if (body.partial) {
+          // Part of the thread is already gone but part remains — hiding the
+          // row would claim a completeness the server did not deliver.
+          showToast(body.error ?? "Some texts could not be deleted. Try again.");
+          void load();
           return;
         }
         setHiddenConversationIds((prev) => {

@@ -57,18 +57,36 @@ export async function resolveSmsScopeManagerIds(
  * delete would destroy the other role's correspondence as collateral while the
  * confirm dialog named only one thread.
  *
- * `conversationKey` is therefore the primary filter. The phone-variant match
+ * The conversation keys are therefore the primary filter — plural, because a
+ * conversation on screen is a MERGE of every key the read path folded into it
+ * (`memberKeys`), and deleting only the canonical key leaves the rest of the
+ * thread in the database behind an "ok" response. The phone-variant match
  * survives only for LEGACY rows written before `conversation_key` existed
  * (those cannot be split by role anyway), and as the whole-phone fallback when
  * no key is supplied at all.
  */
 export async function deleteManagerSmsConversation(
   db: SupabaseClient,
-  args: { managerUserId: string; phone: string; conversationKey?: string | null },
-): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  args: {
+    managerUserId: string;
+    phone: string;
+    conversationKey?: string | null;
+    /** Every key merged into the conversation on screen — see `memberKeys`. */
+    conversationKeys?: string[] | null;
+  },
+): Promise<
+  | { ok: true; deleted: number; partial?: boolean; error?: string }
+  | { ok: false; error: string }
+> {
   const managerUserId = args.managerUserId.trim();
   const phone = phoneKey(args.phone);
-  const conversationKey = args.conversationKey?.trim() || "";
+  const conversationKeys = [
+    ...new Set(
+      [...(args.conversationKeys ?? []), args.conversationKey ?? ""]
+        .map((k) => String(k ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
   if (!managerUserId || !phone) return { ok: false, error: "invalid_phone" };
 
   const digits = phone.replace(/\D/g, "");
@@ -86,50 +104,90 @@ export async function deleteManagerSmsConversation(
   }
 
   let deleted = 0;
+  let partialError = "";
   const variants = [...phoneVariants];
+  const keySet = new Set(conversationKeys);
+
+  const TABLES: { table: "manager_sms_messages" | "inbound_sms_log"; phoneColumn: "resident_phone" | "from_phone" }[] =
+    [
+      { table: "manager_sms_messages", phoneColumn: "resident_phone" },
+      { table: "inbound_sms_log", phoneColumn: "from_phone" },
+    ];
+
+  /**
+   * Does this phone host a thread OTHER than the one being deleted? Rows that
+   * predate `conversation_key` carry no role, so they can only be matched by
+   * phone — and matching by phone while another role's thread shares that
+   * number is the exact cross-role collateral deletion this scoping exists to
+   * prevent. When the phone is ambiguous, the unattributable legacy rows are
+   * left alone (under-deleting is recoverable; a hard delete is not).
+   */
+  const phoneHostsAnotherThread = async (): Promise<boolean> => {
+    for (const { table, phoneColumn } of TABLES) {
+      const { data, error } = await db
+        .from(table)
+        .select("conversation_key")
+        .eq("manager_user_id", managerUserId)
+        .in(phoneColumn, variants)
+        .limit(500);
+      // Fail closed: if we cannot tell, do not sweep by phone.
+      if (error) return true;
+      for (const row of data ?? []) {
+        const key = String((row as { conversation_key?: unknown }).conversation_key ?? "").trim();
+        if (key && !keySet.has(key)) return true;
+      }
+    }
+    return false;
+  };
 
   const deleteFrom = async (
     table: "manager_sms_messages" | "inbound_sms_log",
     phoneColumn: "resident_phone" | "from_phone",
+    sweepLegacy: boolean,
   ): Promise<{ ok: boolean; count: number; error?: string }> => {
     const run = async (scope: "key" | "legacy" | "phone") => {
       let q = db.from(table).delete().eq("manager_user_id", managerUserId);
-      if (scope === "key") q = q.eq("conversation_key", conversationKey);
-      // Legacy rows predate the column, so they carry no role and can only be
-      // matched by phone — bounded to null keys so a keyed sibling is safe.
+      if (scope === "key") q = q.in("conversation_key", conversationKeys);
       else if (scope === "legacy") q = q.is("conversation_key", null).in(phoneColumn, variants);
       else q = q.in(phoneColumn, variants);
       const { data, error } = await q.select("id");
       return { rows: data?.length ?? 0, error };
     };
 
-    if (!conversationKey) {
+    if (conversationKeys.length === 0) {
       const { rows, error } = await run("phone");
       return error ? { ok: false, count: 0, error: error.message } : { ok: true, count: rows };
     }
     const keyed = await run("key");
     if (keyed.error) return { ok: false, count: 0, error: keyed.error.message };
+    if (!sweepLegacy) return { ok: true, count: keyed.rows };
     const legacy = await run("legacy");
     if (legacy.error) return { ok: false, count: keyed.rows, error: legacy.error.message };
     return { ok: true, count: keyed.rows + legacy.rows };
   };
 
-  const sms = await deleteFrom("manager_sms_messages", "resident_phone");
+  const sweepLegacy = conversationKeys.length > 0 ? !(await phoneHostsAnotherThread()) : true;
+
+  const sms = await deleteFrom("manager_sms_messages", "resident_phone", sweepLegacy);
+  deleted += sms.count;
   if (!sms.ok) {
     console.error("deleteManagerSmsConversation sms failed", sms.error);
-    return { ok: false, error: sms.error ?? "delete_failed" };
+    partialError = sms.error ?? "delete_failed";
   }
-  deleted += sms.count;
 
   // Also clear inbound log rows for this counterparty.
-  const inbound = await deleteFrom("inbound_sms_log", "from_phone");
+  const inbound = await deleteFrom("inbound_sms_log", "from_phone", sweepLegacy);
+  deleted += inbound.count;
   if (!inbound.ok) {
     console.error("deleteManagerSmsConversation inbound failed", inbound.error);
-  } else {
-    deleted += inbound.count;
+    partialError = partialError || (inbound.error ?? "delete_failed");
   }
 
-  return { ok: true, deleted };
+  // Rows already hard-deleted cannot be restored, so a later failure is a
+  // PARTIAL delete, not a no-op — reporting it as a flat failure invites a
+  // retry against history that is already gone.
+  if (partialError && deleted === 0) return { ok: false, error: partialError };
+  return partialError ? { ok: true, deleted, partial: true, error: partialError } : { ok: true, deleted };
 }
 
 
@@ -620,12 +678,17 @@ export async function fetchManagerSmsConversations(
       counterpartyPhone: resident.phone,
     });
     const merged: ManagerSmsMessageRow[] = [];
+    // Every key folded in here is part of THIS conversation on screen, so a
+    // delete has to cover all of them — the canonical key alone would leave the
+    // rest of the thread stored and still visible elsewhere.
+    const memberKeys = new Set<string>([canonicalKey]);
     for (const [key, meta] of [...metaByKey.entries()]) {
       if (meta.ownerId !== ownerId) continue;
       if (meta.role === "prospect") continue;
       const idMatch = Boolean(resident.residentUserId) && meta.counterpartyUserId === resident.residentUserId;
       const phoneMatch = Boolean(phoneRef) && meta.phoneRef === phoneRef;
       if (!idMatch && !phoneMatch) continue;
+      memberKeys.add(key);
       merged.push(...takeMessages(key));
     }
     merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -638,6 +701,7 @@ export async function fetchManagerSmsConversations(
       tenancyStatus: resident.tenancyStatus,
       counterpartyRole: role,
       conversationKey: canonicalKey,
+      memberKeys: [...memberKeys],
       ownerManagerUserId: ownerId,
       messages: merged,
     });
@@ -658,6 +722,7 @@ export async function fetchManagerSmsConversations(
       tenancyStatus: meta.role === "resident" ? "resident" : "applicant",
       counterpartyRole: meta.role,
       conversationKey: key,
+      memberKeys: [key],
       ownerManagerUserId: meta.ownerId,
       messages,
     });

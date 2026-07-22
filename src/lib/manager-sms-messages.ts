@@ -33,6 +33,13 @@ export type ManagerSmsResidentConversation = {
    */
   conversationKey?: string;
   /**
+   * EVERY stored conversation key folded into this thread. A directory
+   * resident's conversation merges the keys that match them by account id or
+   * phone, so this is a superset of {@link conversationKey} — and it is what a
+   * delete must cover, or part of the thread survives behind an "ok".
+   */
+  memberKeys?: string[];
+  /**
    * Work-number owner for this thread. Own account or linked owner when the
    * viewer is a co-manager with Communication (inbox) access.
    */
@@ -105,6 +112,9 @@ export function normalizeManagerSmsConversationsPayload(
         tenancyStatus: resident?.tenancyStatus === "applicant" ? ("applicant" as const) : ("resident" as const),
         counterpartyRole: resident?.counterpartyRole,
         conversationKey: resident?.conversationKey,
+        memberKeys: Array.isArray(resident?.memberKeys)
+          ? resident.memberKeys.filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+          : undefined,
         ownerManagerUserId: resident?.ownerManagerUserId ?? null,
         messages: Array.isArray(resident?.messages) ? resident.messages : [],
       }))

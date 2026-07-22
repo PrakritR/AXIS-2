@@ -142,10 +142,15 @@ function makeDeleteSpyDb(rowsByTable: Record<string, { id: string; conversation_
       return chain;
     };
     chain.select = () => chain;
+    chain.limit = () => chain;
     chain.then = (resolve: (v: unknown) => unknown) => {
-      if (!deleting) return Promise.resolve({ data: [], error: null }).then(resolve);
+      // A plain select — this is the "does another thread share this phone?"
+      // probe, so it has to see the rows actually stored.
+      if (!deleting) return Promise.resolve({ data: rowsByTable[table] ?? [], error: null }).then(resolve);
       const matched = (rowsByTable[table] ?? []).filter((row) => {
-        if ("conversation_key" in filters && row.conversation_key !== filters.conversation_key) return false;
+        const keys = filters.conversation_key;
+        if (Array.isArray(keys) && !keys.includes(row.conversation_key as string)) return false;
+        if (typeof keys === "string" && row.conversation_key !== keys) return false;
         if ("conversation_key:is" in filters && row.conversation_key !== null) return false;
         const phones = filters[phoneColumn];
         if (Array.isArray(phones) && !phones.includes(row.phone)) return false;
@@ -190,22 +195,63 @@ describe("deleteManagerSmsConversation scope", () => {
     }
   });
 
-  it("still sweeps legacy rows that predate the conversation_key column", async () => {
-    const rows = {
+  it("deletes EVERY key merged into the conversation, not just the canonical one", async () => {
+    // A directory resident's thread is a merge: id-keyed rows, phone-keyed rows
+    // from before her account was linked, and unknown-role rows from the
+    // webhook. Deleting only the canonical key leaves the rest stored and still
+    // visible to a co-manager behind an `ok: true`.
+    const phoneResidentKey = `${MGR}:resident:${PHONE}`;
+    const unknownKey = `${MGR}:unknown:${PHONE}`;
+    const spy = makeDeleteSpyDb({
       manager_sms_messages: [
-        { id: "m-legacy", conversation_key: null, phone: PHONE },
-        { id: "m-resident", conversation_key: residentKey, phone: PHONE },
+        { id: "m-canonical", conversation_key: residentKey, phone: PHONE },
+        { id: "m-phone-keyed", conversation_key: phoneResidentKey, phone: PHONE },
       ],
+      inbound_sms_log: [{ id: "i-unknown", conversation_key: unknownKey, phone: PHONE }],
+    });
+    const result = await deleteManagerSmsConversation(spy.db, {
+      managerUserId: MGR,
+      phone: PHONE,
+      conversationKey: residentKey,
+      conversationKeys: [residentKey, phoneResidentKey, unknownKey],
+    });
+    expect(result).toMatchObject({ ok: true, deleted: 3 });
+    expect(spy.rowsByTable.manager_sms_messages).toEqual([]);
+    expect(spy.rowsByTable.inbound_sms_log).toEqual([]);
+  });
+
+  it("still sweeps legacy rows that predate the conversation_key column", async () => {
+    const spy = makeDeleteSpyDb({
+      manager_sms_messages: [{ id: "m-legacy", conversation_key: null, phone: PHONE }],
       inbound_sms_log: [{ id: "i-legacy", conversation_key: null, phone: PHONE }],
-    };
-    const spy = makeDeleteSpyDb(rows);
+    });
     await deleteManagerSmsConversation(spy.db, {
       managerUserId: MGR,
       phone: PHONE,
       conversationKey: prospectKey,
     });
-    expect(spy.rowsByTable.manager_sms_messages.map((r) => r.id)).toEqual(["m-resident"]);
+    expect(spy.rowsByTable.manager_sms_messages).toEqual([]);
     expect(spy.rowsByTable.inbound_sms_log).toEqual([]);
+  });
+
+  it("leaves unattributable legacy rows alone when another thread shares the phone", async () => {
+    // A null-key row carries no role, so on a phone that hosts two threads it
+    // cannot be attributed — and a hard delete has no undo.
+    const spy = makeDeleteSpyDb({
+      manager_sms_messages: [
+        { id: "m-legacy", conversation_key: null, phone: PHONE },
+        { id: "m-resident", conversation_key: residentKey, phone: PHONE },
+        { id: "m-prospect", conversation_key: prospectKey, phone: PHONE },
+      ],
+      inbound_sms_log: [{ id: "i-legacy", conversation_key: null, phone: PHONE }],
+    });
+    await deleteManagerSmsConversation(spy.db, {
+      managerUserId: MGR,
+      phone: PHONE,
+      conversationKey: prospectKey,
+    });
+    expect(spy.rowsByTable.manager_sms_messages.map((r) => r.id)).toEqual(["m-legacy", "m-resident"]);
+    expect(spy.rowsByTable.inbound_sms_log.map((r) => r.id)).toEqual(["i-legacy"]);
   });
 
   it("falls back to the phone-wide delete only when no conversation key is supplied", async () => {

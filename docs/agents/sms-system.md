@@ -71,6 +71,20 @@ survives only for legacy rows with a NULL key, and as the fallback when no key
 is supplied. The panel's local "hidden" set is keyed on the conversation id
 (`axis_manager_sms_hidden_v2`) for the same reason.
 
+Scope by the thread's `memberKeys`, NOT its `conversationKey` alone. A directory
+resident's conversation is a MERGE of every non-prospect key matching that owner
+by account id or phone, surfaced under one canonical key — so deleting only the
+canonical key leaves the phone-keyed and unknown-role halves stored and still
+rendering for a co-manager behind an `ok: true`. `fetchManagerSmsConversations`
+publishes `memberKeys` for exactly this, and the route forwards it.
+
+Two consequences of the delete being irreversible: legacy NULL-key rows are
+swept by phone only when that phone hosts no OTHER thread (a null key carries no
+role and cannot be attributed, and under-deleting is recoverable where a hard
+delete is not); and once any row is gone, a later failing pass is reported as
+`partial: true` with the count, never as a flat failure the manager would retry
+against history that no longer exists.
+
 **Admin can message a resident or a manager.** `POST /api/admin/sms-conversations`
 routes by recipient phone only (never model input): it logs into the owning
 manager's thread and sends a COPY to the admin oversight phone

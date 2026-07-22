@@ -66,8 +66,12 @@ export async function DELETE(req: Request) {
   };
   // A key must resolve to a real conversation the viewer can see, so it can
   // never be used to reach rows outside the scope this GET already authorizes.
+  // A member key resolves too: the thread the client is looking at may have
+  // been keyed under any of the keys the read path merged into it.
   const match = requestedKey
-    ? conversations.residents.find((r) => r.conversationKey === requestedKey)
+    ? conversations.residents.find(
+        (r) => r.conversationKey === requestedKey || (r.memberKeys ?? []).includes(requestedKey),
+      )
     : conversations.residents.find(phoneMatches);
   if (!match) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
@@ -87,9 +91,22 @@ export async function DELETE(req: Request) {
     managerUserId: ownerManagerUserId,
     phone: match.phone?.trim() || phone,
     conversationKey: match.conversationKey ?? null,
+    // The thread on screen is a merge of these keys — all of them are the
+    // conversation the manager just confirmed deleting.
+    conversationKeys: match.memberKeys ?? null,
   });
   if (!result.ok) {
     return NextResponse.json({ error: "Could not delete conversation." }, { status: 500 });
+  }
+  if (result.partial) {
+    // Some texts are already irreversibly gone — say so instead of reporting a
+    // clean success the manager would trust, or a failure they would retry.
+    return NextResponse.json({
+      ok: true,
+      deleted: result.deleted,
+      partial: true,
+      error: "Some texts in this conversation could not be deleted. Try again.",
+    });
   }
   return NextResponse.json({ ok: true, deleted: result.deleted });
 }
