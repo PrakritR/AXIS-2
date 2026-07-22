@@ -162,6 +162,40 @@ export function subscribeManagerPromotions(cb: () => void) {
 }
 
 /**
+ * Ceiling on a promotion copy request. The route is an LLM call that the
+ * platform lets run for minutes; without this a stalled request or a dropped
+ * mobile connection would leave the caller's "generating" flag set forever.
+ */
+const PROMOTION_GENERATE_TIMEOUT_MS = 60_000;
+
+/**
+ * Signal that aborts when the caller cancels OR when the request outlives
+ * {@link PROMOTION_GENERATE_TIMEOUT_MS}. Wired by hand rather than with
+ * `AbortSignal.any` so older WebViews are covered. Always `release()`.
+ */
+function promotionGenerateSignal(external?: AbortSignal): {
+  signal: AbortSignal;
+  release: () => void;
+} {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (external?.aborted) controller.abort();
+  else external?.addEventListener("abort", onAbort);
+  const timer = setTimeout(onAbort, PROMOTION_GENERATE_TIMEOUT_MS);
+  return {
+    signal: controller.signal,
+    release: () => {
+      clearTimeout(timer);
+      external?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+/** Source of a generated copy. `cancelled` means the caller aborted — unlike
+ *  `fallback` it carries no usable copy and must NOT be persisted. */
+export type PromotionCopySource = "ai" | "fallback" | "forbidden" | "cancelled";
+
+/**
  * Generate flyer copy. Calls the server AI route (which keeps the Anthropic key
  * server-side, traces the call, and guards cost); on any failure — demo mode,
  * offline, missing API key, or 401 — it degrades to deterministic local copy so
@@ -170,13 +204,14 @@ export function subscribeManagerPromotions(cb: () => void) {
 export async function generateFlyerCopy(
   inputs: PromotionInputs,
   propertyLabel: string,
-  opts?: { propertyId?: string | null; extraInstructions?: string },
-): Promise<{ copy: FlyerCopy; source: "ai" | "fallback" | "forbidden" }> {
+  opts?: { propertyId?: string | null; extraInstructions?: string; signal?: AbortSignal },
+): Promise<{ copy: FlyerCopy; source: PromotionCopySource }> {
   const propertyId = opts?.propertyId ?? null;
   const extraInstructions = opts?.extraInstructions ?? "";
   if (isDemoModeActive() || typeof window === "undefined") {
     return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "fallback" };
   }
+  const abort = promotionGenerateSignal(opts?.signal);
   try {
     // Uploaded photos are embedded into the flyer HTML client-side; never ship
     // the (large) data URLs to the copy-generation route.
@@ -186,6 +221,7 @@ export async function generateFlyerCopy(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
+      signal: abort.signal,
       body: JSON.stringify({
         inputs: textInputs,
         propertyLabel,
@@ -204,7 +240,12 @@ export async function generateFlyerCopy(
     }
     return { copy: body.copy, source: "ai" };
   } catch {
+    if (opts?.signal?.aborted) {
+      return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "cancelled" };
+    }
     return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "fallback" };
+  } finally {
+    abort.release();
   }
 }
 
@@ -215,11 +256,12 @@ export async function generatePromotionTextCopy(
   inputs: PromotionInputs,
   propertyLabel: string,
   format: PromotionTextFormat,
-  opts?: { propertyId?: string | null; extraInstructions?: string },
-): Promise<{ copy: PromotionTextCopy; source: "ai" | "fallback" | "forbidden" }> {
+  opts?: { propertyId?: string | null; extraInstructions?: string; signal?: AbortSignal },
+): Promise<{ copy: PromotionTextCopy; source: PromotionCopySource }> {
   if (isDemoModeActive() || typeof window === "undefined") {
     return { copy: composeFallbackPromotionText(inputs, propertyLabel, format), source: "fallback" };
   }
+  const abort = promotionGenerateSignal(opts?.signal);
   try {
     const textInputs = { ...inputs };
     delete textInputs.images;
@@ -227,6 +269,7 @@ export async function generatePromotionTextCopy(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
+      signal: abort.signal,
       body: JSON.stringify({
         inputs: textInputs,
         propertyLabel,
@@ -247,6 +290,11 @@ export async function generatePromotionTextCopy(
     }
     return { copy: { ...body.copy, format }, source: "ai" };
   } catch {
+    if (opts?.signal?.aborted) {
+      return { copy: composeFallbackPromotionText(inputs, propertyLabel, format), source: "cancelled" };
+    }
     return { copy: composeFallbackPromotionText(inputs, propertyLabel, format), source: "fallback" };
+  } finally {
+    abort.release();
   }
 }
