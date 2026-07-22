@@ -71,8 +71,10 @@ import {
 import {
   PortalPreviewOverflowLink,
   PortalTableExpandChevron,
+  isPortalRowClickIgnored,
   usePortalPreviewSlice,
 } from "@/components/portal/portal-data-table";
+import type { DashboardSectionId } from "@/lib/dashboard-preferences";
 import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
 import { useDashboardVisibility } from "@/hooks/use-dashboard-visibility";
 import { SlidersHorizontal } from "lucide-react";
@@ -203,12 +205,11 @@ function IssueRow({
  * Collapse behaviour is what makes the dashboard survive a phone: a group opens
  * by default only when it has items, so the wall of "nothing here" empty states
  * collapses to one-line headers. The manager can tap any header to override.
- * `linkLabel` is kept in the prop set for call-site parity but the section link
- * now lives in the header as a compact arrow.
  */
 function AttentionGroup<T>({
   title,
   href,
+  sectionId,
   badge,
   items,
   emptyMessage,
@@ -217,7 +218,7 @@ function AttentionGroup<T>({
 }: {
   title: string;
   href: string;
-  linkLabel?: string;
+  sectionId: DashboardSectionId;
   badge?: ReactNode;
   items: T[];
   emptyMessage: string;
@@ -239,9 +240,10 @@ function AttentionGroup<T>({
         role="button"
         tabIndex={0}
         aria-expanded={open}
-        data-attr="dashboard-attention-toggle"
+        data-attr={`dashboard-attention-toggle-${sectionId}`}
         onClick={() => setOverride(!open)}
         onKeyDown={(e) => {
+          if (isPortalRowClickIgnored(e.target)) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setOverride(!open);
@@ -807,7 +809,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Tour requests"
               href={`${BASE}/calendar`}
-              linkLabel="Calendar →"
+              sectionId="tours"
               items={pendingTours}
               emptyMessage="No pending tour requests right now."
               keyForItem={(tour) => tour.id}
@@ -829,7 +831,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Applications"
               href={`${BASE}/applications`}
-              linkLabel="Applications →"
+              sectionId="applications"
               items={pendingApps}
               emptyMessage="No pending applications — you're all caught up."
               keyForItem={(app) => app.id}
@@ -850,7 +852,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Leases pending signature"
               href={`${BASE}/leases`}
-              linkLabel="Leases →"
+              sectionId="leases"
               items={pendingLeaseRows}
               emptyMessage="No leases waiting for a signature."
               keyForItem={(lease) => lease.id}
@@ -879,7 +881,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Residents"
               href={`${BASE}/residents/current`}
-              linkLabel="Residents →"
+              sectionId="residents"
               items={activeResidents}
               emptyMessage="No current residents yet."
               keyForItem={(lease) => lease.id}
@@ -901,7 +903,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Pending & overdue payments"
               href={`${BASE}/payments`}
-              linkLabel="Payments →"
+              sectionId="payments"
               badge={
                 overdueChargeCount > 0 ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
@@ -943,7 +945,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Services"
               href={`${BASE}/services/requests`}
-              linkLabel="Services →"
+              sectionId="services"
               badge={
                 pendingServiceCount > 0 ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
@@ -972,7 +974,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <AttentionGroup
               title="Inbox"
               href={`${BASE}/communication/inbox/unopened`}
-              linkLabel="Inbox →"
+              sectionId="inbox"
               items={inboxThreads}
               emptyMessage="No unread messages — inbox is clear."
               keyForItem={(thread) => thread.id}
