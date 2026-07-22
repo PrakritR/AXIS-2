@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeCamera } from "@/lib/native/use-native-camera";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import type { ManagerDocumentDTO } from "@/lib/documents/manager-documents";
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
@@ -19,6 +23,12 @@ import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
 const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
+
+// Accepted upload types — unchanged from the previous "Add document" flow, which
+// already accepted images (`image/*`). Merging the old "Add photo" + "Add
+// document" buttons into one "Add" must NOT widen this set: the union of both
+// old flows is exactly this list (photos were always allowed here).
+const UPLOAD_ACCEPT = "application/pdf,image/*,.doc,.docx,.txt,.csv";
 
 // `URL.createObjectURL()` returns a `blob:` URL, while Capacitor camera previews
 // may be custom schemes or WebView-local `http(s)://localhost` file URLs.
@@ -130,33 +140,38 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Human-readable kind derived from the stored data URL's mime type. */
-export function uploadedDocumentKind(row: UploadedOwnLease): string {
-  const mime = /^data:([^;,]+)/.exec(row.dataUrl)?.[1] ?? "";
+/** Human-readable kind derived from a mime type. */
+export function documentKindFromMime(mime: string): string {
   if (mime.startsWith("image/")) return "Photo";
   if (mime === "application/pdf") return "PDF";
   return "Document";
 }
 
-export type AddDocumentMode = "photo" | "document";
+/** Human-readable kind derived from the stored data URL's mime type. */
+export function uploadedDocumentKind(row: UploadedOwnLease): string {
+  return documentKindFromMime(/^data:([^;,]+)/.exec(row.dataUrl)?.[1] ?? "");
+}
 
 /**
- * Popup for the Documents page's top-right "Add photo" / "Add document"
- * actions. Saves into the same per-resident uploads store as the legacy
- * "Document photos" card, so older photo uploads keep appearing in the
- * Other documents table.
+ * Popup for the Documents page's top-right "Add" action. One form accepts any
+ * supported file — a photo, PDF, or document — with the type inferred from what
+ * the user picks (`documentKindFromMime`), never chosen up front. Saves into the
+ * same per-resident uploads store as the legacy "Document photos" card, so older
+ * photo uploads keep appearing in the Other documents table. "Take photo" keeps
+ * the native camera capability; both inputs feed the same {@link UPLOAD_ACCEPT}
+ * set, so the merge does not widen accepted types.
  *
- * Render with a `key` derived from `mode` so each open starts from a fresh
- * form (there is no internal reset).
+ * Render with a `key` derived from `open` so each open starts from a fresh form
+ * (there is no internal reset).
  */
 export function ResidentAddDocumentModal({
-  mode,
+  open,
   email,
   onClose,
   onAdded,
 }: {
-  /** null keeps the modal closed. */
-  mode: AddDocumentMode | null;
+  /** false keeps the modal closed. */
+  open: boolean;
   email: string;
   onClose: () => void;
   onAdded: (row: UploadedOwnLease) => void;
@@ -168,8 +183,6 @@ export function ResidentAddDocumentModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
-
-  const isPhoto = mode === "photo";
 
   const pickFile = (next: File | null | undefined) => {
     if (!next) return;
@@ -211,7 +224,7 @@ export function ResidentAddDocumentModal({
 
   const onSave = async () => {
     if (!file) {
-      showToast(isPhoto ? "Add a photo first." : "Choose a file first.");
+      showToast("Choose a file first.");
       return;
     }
     if (!email) {
@@ -231,7 +244,7 @@ export function ResidentAddDocumentModal({
         showToast("Could not save document.");
         return;
       }
-      showToast(isPhoto ? "Photo added to Other documents." : "Document added to Other documents.");
+      showToast("Added to Other documents.");
       onAdded(row);
       onClose();
     } catch {
@@ -242,24 +255,20 @@ export function ResidentAddDocumentModal({
   };
 
   return (
-    <Modal open={mode !== null} title={isPhoto ? "Add photo" : "Add document"} onClose={onClose}>
+    <Modal open={open} title="Add to documents" onClose={onClose}>
       <div className="space-y-4">
-        {!isPhoto ? (
-          <p className="text-sm leading-relaxed text-muted">
-            Upload a PDF or file you want to keep with your housing records. It appears in the Other documents tab.
-          </p>
-        ) : null}
+        <p className="text-sm leading-relaxed text-muted">
+          Upload a photo, PDF, or file you want to keep with your housing records. It appears in the Other documents tab.
+        </p>
 
-        {!isPhoto ? (
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,image/*,.doc,.docx,.txt,.csv"
-            className="sr-only"
-            aria-hidden
-            onChange={(e) => pickFile(e.target.files?.[0])}
-          />
-        ) : null}
+        <input
+          ref={fileRef}
+          type="file"
+          accept={UPLOAD_ACCEPT}
+          className="sr-only"
+          aria-hidden
+          onChange={(e) => pickFile(e.target.files?.[0])}
+        />
 
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -267,9 +276,18 @@ export function ResidentAddDocumentModal({
             variant="outline"
             className="rounded-full"
             disabled={busy}
-            onClick={() => (isPhoto ? void onCapturePhoto() : fileRef.current?.click())}
+            onClick={() => fileRef.current?.click()}
           >
-            {file ? (isPhoto ? "Retake photo" : "Choose a different file") : isPhoto ? "Take or choose photo" : "Choose file"}
+            {file ? "Choose a different file" : "Choose file"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            disabled={busy}
+            onClick={() => void onCapturePhoto()}
+          >
+            Take photo
           </Button>
           {file ? (
             <p className="min-w-0 truncate text-sm text-muted" title={file.name}>
@@ -289,7 +307,7 @@ export function ResidentAddDocumentModal({
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder={isPhoto ? "e.g. Move-in photos — bedroom" : "e.g. Renter's insurance policy"}
+            placeholder="e.g. Renter's insurance policy"
             className="mt-1.5 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/25"
           />
         </label>
@@ -326,57 +344,233 @@ function decodeDataUrlText(dataUrl: string): string | null {
   }
 }
 
-/** Documents › Other documents — table of the resident's own uploads; clicking a row opens it inline below. */
+const SHARED_DOCUMENTS_LIST_URL = "/api/resident/shared-documents";
+const SHARED_DOCUMENTS_SIGNED_URL_BASE = "/api/resident/shared-documents";
+
+/** One row in the merged Other-documents table — a resident's own upload or a manager-shared document. */
+type CombinedDocRow =
+  | { source: "own"; id: string; name: string; kind: string; dateIso: string; upload: UploadedOwnLease }
+  | { source: "shared"; id: string; name: string; kind: string; dateIso: string; doc: ManagerDocumentDTO };
+
+/**
+ * Documents › Other documents — the resident's own uploads AND documents a
+ * manager shared with them, in ONE table (the former "Shared with you" tab was
+ * folded in here). The Source column keeps the two apart ("You" vs "Shared")
+ * without a second tab; clicking a row opens it inline below.
+ *
+ * Shared rows come from the exact same endpoint + signed-URL preview the
+ * standalone tab used, so this merge is presentation only — it changes nothing
+ * about which documents the resident can see.
+ */
 export function ResidentOtherDocumentsTable({
   uploads,
   loading,
   onRemove,
-  emptyMessage = "No documents yet — use Add photo or Add document above.",
+  demo = false,
+  emptyMessage = "No documents yet. Use Add above to upload one — anything your manager shares with you will appear here too.",
 }: {
   uploads: UploadedOwnLease[];
   loading: boolean;
   onRemove: (id: string) => void;
+  demo?: boolean;
   emptyMessage?: string;
 }) {
+  const { showToast } = useAppUi();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sharedDocs, setSharedDocs] = useState<ManagerDocumentDTO[]>([]);
+  const [sharedLoading, setSharedLoading] = useState(!demo);
+
+  // Documents a manager shared with this resident — the same list the standalone
+  // "Shared with you" tab used to fetch. Skipped in the /demo sandbox, where the
+  // initial state (empty list, not loading) is already the right answer.
+  useEffect(() => {
+    if (demo) return;
+    let cancelled = false;
+    setSharedLoading(true);
+    void fetch(SHARED_DOCUMENTS_LIST_URL, { credentials: "include" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Failed to load shared documents.");
+        if (!cancelled) setSharedDocs((data.documents as ManagerDocumentDTO[]) ?? []);
+      })
+      .catch((e) => {
+        if (!cancelled) showToast(e instanceof Error ? e.message : "Failed to load shared documents.");
+      })
+      .finally(() => {
+        if (!cancelled) setSharedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, showToast]);
+
+  const rows = useMemo<CombinedDocRow[]>(() => {
+    const own: CombinedDocRow[] = uploads.map((u) => ({
+      source: "own",
+      id: `own:${u.id}`,
+      name: u.fileName,
+      kind: uploadedDocumentKind(u),
+      dateIso: u.uploadedAt,
+      upload: u,
+    }));
+    const shared: CombinedDocRow[] = sharedDocs.map((d) => ({
+      source: "shared",
+      id: `shared:${d.id}`,
+      name: d.displayName,
+      kind: documentKindFromMime(d.mimeType),
+      dateIso: d.createdAt,
+      doc: d,
+    }));
+    return [...own, ...shared].sort((a, b) => String(b.dateIso).localeCompare(String(a.dateIso)));
+  }, [uploads, sharedDocs]);
+
   const selected = useMemo(
-    () => (selectedId ? uploads.find((row) => row.id === selectedId) ?? null : null),
-    [uploads, selectedId],
+    () => (selectedId ? rows.find((row) => row.id === selectedId) ?? null : null),
+    [rows, selectedId],
   );
+
+  // Shared docs are private storage objects — fetch a fresh signed URL when one
+  // is opened, exactly like the old Shared-with-you preview. Own uploads carry
+  // their bytes inline (data URL) and need no fetch.
+  const selectedSharedId = selected?.source === "shared" ? selected.doc.id : null;
+  const [sharedUrl, setSharedUrl] = useState<string | null>(null);
+  const [sharedUrlLoading, setSharedUrlLoading] = useState(false);
+  useEffect(() => {
+    if (!selectedSharedId) {
+      setSharedUrl(null);
+      setSharedUrlLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSharedUrl(null);
+    setSharedUrlLoading(true);
+    void fetch(`${SHARED_DOCUMENTS_SIGNED_URL_BASE}/${selectedSharedId}/signed-url`, { credentials: "include" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Could not load preview.");
+        if (!cancelled) setSharedUrl(String(data.url ?? ""));
+      })
+      .catch((e) => {
+        if (!cancelled) showToast(e instanceof Error ? e.message : "Could not load preview.");
+      })
+      .finally(() => {
+        if (!cancelled) setSharedUrlLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSharedId, showToast]);
 
   const toggleRow = (id: string) => setSelectedId((cur) => (cur === id ? null : id));
 
-  if (loading) {
-    return (
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading documents…</div>
-      </div>
-    );
-  }
-  if (uploads.length === 0) {
+  if (rows.length === 0) {
+    if (loading || sharedLoading) {
+      return (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading documents…</div>
+        </div>
+      );
+    }
     return <PortalDataTableEmpty icon="default" message={emptyMessage} />;
   }
 
-  const selectedMime = selected ? uploadedMimeType(selected) : "";
-  const selectedIsImage = selectedMime.startsWith("image/");
-  const selectedIsPdf = selectedMime === "application/pdf";
+  const sourceBadge = (row: CombinedDocRow) =>
+    row.source === "own" ? <Badge tone="neutral">You</Badge> : <Badge tone="info">Shared</Badge>;
+
+  // Own-upload preview vars (only meaningful when an own row is open).
+  const ownMime = selected?.source === "own" ? uploadedMimeType(selected.upload) : "";
+  const ownIsImage = ownMime.startsWith("image/");
+  const ownIsPdf = ownMime === "application/pdf";
   // Plain-text previews are rendered as escaped text (never framed as HTML) —
   // an uploaded file's declared mime type is attacker-controlled, so a
   // "text/html" upload must never reach an iframe `src`/`srcDoc`.
-  const selectedIsText = selectedMime.startsWith("text/");
-  const selectedText = selected && selectedIsText ? decodeDataUrlText(selected.dataUrl) : null;
+  const ownIsText = ownMime.startsWith("text/");
+  const ownText = selected?.source === "own" && ownIsText ? decodeDataUrlText(selected.upload.dataUrl) : null;
+
+  // Shared-doc preview vars.
+  const sharedMime = selected?.source === "shared" ? selected.doc.mimeType : "";
+  const sharedIsImage = sharedMime.startsWith("image/");
+  const sharedIsPdf = sharedMime === "application/pdf";
+
+  // Inline detail for the OPEN row — own upload (bytes inline) or shared doc
+  // (signed URL). Rendered directly beneath its row/card, never below the table.
+  const detailNode: ReactNode =
+    selected == null ? null : selected.source === "own" ? (
+      <DocumentInlineViewer
+        embedded
+        title={selected.name}
+        src={ownIsPdf ? selected.upload.dataUrl : null}
+        onDownload={() => triggerDocumentDownload(selected.upload.dataUrl, selected.name)}
+        extraActions={
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full text-danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedId(null);
+              onRemove(selected.upload.id);
+            }}
+          >
+            Remove
+          </Button>
+        }
+      >
+        {ownIsImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={selected.upload.dataUrl}
+            alt={selected.name}
+            className="max-h-[720px] w-full bg-white object-contain"
+          />
+        ) : ownIsText ? (
+          <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap break-words bg-white p-4 text-sm text-foreground">
+            {ownText ?? "Preview isn't available for this file — use Download to open it."}
+          </pre>
+        ) : ownIsPdf ? null : (
+          <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
+            Preview isn&apos;t available for this file type — use Download to open it.
+          </div>
+        )}
+      </DocumentInlineViewer>
+    ) : (
+      <DocumentInlineViewer
+        embedded
+        title={selected.name}
+        src={!sharedUrlLoading && sharedIsPdf ? sharedUrl : null}
+        downloadAttr="resident-shared-document-download"
+        onDownload={() =>
+          triggerDocumentDownload(`${SHARED_DOCUMENTS_SIGNED_URL_BASE}/${selected.doc.id}/signed-url?download=1`)
+        }
+      >
+        {sharedUrlLoading ? (
+          <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
+            Loading preview…
+          </div>
+        ) : sharedIsImage && sharedUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={sharedUrl} alt={selected.name} className="max-h-[720px] w-full bg-white object-contain" />
+        ) : sharedIsPdf ? null : (
+          <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
+            Preview isn&apos;t available for this file type — use Download to open it.
+          </div>
+        )}
+      </DocumentInlineViewer>
+    );
 
   return (
     <>
       <div className="space-y-2 lg:hidden">
-        {uploads.map((row) => (
-          <PortalMobileSummaryCard
-            key={row.id}
-            title={row.fileName}
-            subtitle={`${uploadedDocumentKind(row)} · added ${safeFormatDateTime(row.uploadedAt)}`}
-            expanded={selectedId === row.id}
-            onClick={() => toggleRow(row.id)}
-          />
+        {rows.map((row) => (
+          <Fragment key={row.id}>
+            <PortalMobileSummaryCard
+              title={row.name}
+              subtitle={`${row.source === "own" ? "You" : "Shared"} · ${row.kind} · ${safeFormatDateTime(row.dateIso)}`}
+              expanded={selectedId === row.id}
+              onClick={() => toggleRow(row.id)}
+            />
+            {selectedId === row.id ? detailNode : null}
+          </Fragment>
         ))}
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
@@ -385,69 +579,41 @@ export function ResidentOtherDocumentsTable({
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Source</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date added</th>
               </tr>
             </thead>
             <tbody>
-              {uploads.map((row) => (
-                <tr
-                  key={row.id}
-                  className={PORTAL_TABLE_TR_EXPANDABLE}
-                  aria-expanded={selectedId === row.id}
-                  onClick={() => toggleRow(row.id)}
-                >
-                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                    <PortalTableInlineExpand expanded={selectedId === row.id} className="min-w-0 truncate font-medium text-foreground">
-                      <span title={row.fileName}>{row.fileName}</span>
-                    </PortalTableInlineExpand>
-                  </td>
-                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{uploadedDocumentKind(row)}</td>
-                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(row.uploadedAt)}</td>
-                </tr>
+              {rows.map((row) => (
+                <Fragment key={row.id}>
+                  <tr
+                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                    aria-expanded={selectedId === row.id}
+                    onClick={() => toggleRow(row.id)}
+                  >
+                    <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                      <PortalTableInlineExpand expanded={selectedId === row.id} className="min-w-0 truncate font-medium text-foreground">
+                        <span title={row.name}>{row.name}</span>
+                      </PortalTableInlineExpand>
+                    </td>
+                    <td className={`${PORTAL_TABLE_TD} align-middle`}>{sourceBadge(row)}</td>
+                    <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.kind}</td>
+                    <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(row.dateIso)}</td>
+                  </tr>
+                  {selectedId === row.id ? (
+                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                        {detailNode}
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      {selected ? (
-        <DocumentInlineViewer
-          title={selected.fileName}
-          src={selectedIsPdf ? selected.dataUrl : null}
-          onDownload={() => triggerDocumentDownload(selected.dataUrl, selected.fileName)}
-          extraActions={
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full text-danger"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedId(null);
-                onRemove(selected.id);
-              }}
-            >
-              Remove
-            </Button>
-          }
-        >
-          {selectedIsImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={selected.dataUrl}
-              alt={selected.fileName}
-              className="max-h-[720px] w-full bg-white object-contain"
-            />
-          ) : selectedIsText ? (
-            <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap break-words bg-white p-4 text-sm text-foreground">
-              {selectedText ?? "Preview isn't available for this file — use Download to open it."}
-            </pre>
-          ) : selectedIsPdf ? null : (
-            <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
-              Preview isn&apos;t available for this file type — use Download to open it.
-            </div>
-          )}
-        </DocumentInlineViewer>
-      ) : null}
     </>
   );
 }
