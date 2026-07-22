@@ -798,14 +798,13 @@ never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both
-deleted. The financials panel's Balance Summary / Rent Statements content is now part of
-`ResidentPaymentsPanel` as `TabNav` sub-tabs — `charges` / `summary` / `statements`, routed at
-`/resident/payments/{tab}` — sitting above the Pending / Overdue / Paid
-`ManagerPortalStatusPills`, which stay pills because they are in-section *status filters*, not
-URL-linked section tabs. The pre-merge tab ids (`pending`, `paid`, `balance`) live on as redirects
-via `RESIDENT_PAYMENTS_LEGACY_TABS` in `src/lib/portals/resident-sections.ts`; `pending`/`paid`
-redirect to `/payments/charges?status=…`, which `renderPortalSection` reads and forwards as the
-panel's `initialStatus`, so old deep links still land on the right pill.
+deleted. Resident **Payments is Charges-only** — one screen at the bare `/resident/payments`
+with no `TabNav` switcher, both resident section registries declaring `tabs: []`, and every
+legacy sub-path redirecting there (an unknown sub-path must still `notFound()`). The
+Pending / Overdue / Paid `ManagerPortalStatusPills` stay, because they are in-section *status
+filters*, not URL-linked section tabs. The legacy-path map, the report routes deliberately left
+in place, and the rest of the detail live in
+[`docs/agents/resident-payments.md`](docs/agents/resident-payments.md).
 
 Two routing gotchas this exposed, both of which silently break a section without failing a build:
 

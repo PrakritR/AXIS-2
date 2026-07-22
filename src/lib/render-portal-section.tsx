@@ -309,12 +309,14 @@ export async function renderPortalSection(
   // Payments tabs. Must run BEFORE findSection — "financials" is not a resident
   // nav section, so findSection would notFound first.
   if (kind === "resident" && section === "financials") {
+    // The former "financials" section merged into Payments, which is now
+    // Charges-only. Any old financials sub-path lands on the bare `/payments`
+    // URL, keeping a status pill where the legacy tab mapped to one.
     const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[tabParts?.[0] ?? ""];
-    const target = legacy ?? { tab: tabParts?.[0] === "statements" ? "statements" : "summary" };
     redirect(
-      `${def.basePath}/payments/${target.tab}${searchSuffix(
+      `${def.basePath}/payments${searchSuffix(
         searchParams,
-        target.status ? { status: target.status } : undefined,
+        legacy?.status ? { status: legacy.status } : undefined,
       )}`,
     );
   }
@@ -626,29 +628,26 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "payments") {
-    const allowedTabs = meta.tabs.map((t) => t.id);
-    if (!tabParts?.length) {
-      redirect(`${def.basePath}/payments/${allowedTabs[0] ?? "charges"}${searchSuffix(searchParams)}`);
-    }
-    if (tabParts.length > 1) notFound();
-    const payTab = tabParts[0]!;
-    // Pending / Paid / Balance were tabs before the financials merge; they are
-    // now a status pill (or the Summary tab) inside the consolidated panel.
-    const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[payTab];
-    if (legacy) {
+    if (tabParts && tabParts.length > 1) notFound();
+    // Payments is Charges-only — the Summary/Statements tabs and the tab switcher
+    // were removed. Any legacy sub-path (charges/summary/statements or the old
+    // pending/overdue/paid/balance status tabs) redirects to the bare
+    // `/payments` URL, preserving a status pill where one existed so old deep
+    // links land on the right filter instead of 404ing.
+    const payTab = tabParts?.[0];
+    if (payTab) {
+      const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[payTab];
+      if (!legacy) notFound();
       redirect(
-        `${def.basePath}/payments/${legacy.tab}${searchSuffix(
+        `${def.basePath}/payments${searchSuffix(
           searchParams,
           legacy.status ? { status: legacy.status } : undefined,
         )}`,
       );
     }
-    if (!allowedTabs.includes(payTab)) notFound();
     const statusParam = searchParams?.status;
     return (
       <ResidentPaymentsPanel
-        tabId={payTab}
-        basePath={def.basePath}
         initialStatus={typeof statusParam === "string" ? statusParam : undefined}
       />
     );

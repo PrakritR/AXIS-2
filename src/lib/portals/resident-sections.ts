@@ -40,23 +40,30 @@ const DOCUMENTS_TABS = [
 ] as const;
 
 /**
- * URL-linked section tabs only. Pending / Overdue / Paid are in-section *status
- * filters*, so they are `ManagerPortalStatusPills` inside the Charges tab rather
- * than tabs here — see the tab/pill rule in `portal-list-section.tsx`.
+ * Payments is Charges-only — there is no tab switcher, so its section entries
+ * carry `tabs: []`. Pending / Overdue / Paid are in-section *status filters*
+ * (`ManagerPortalStatusPills`) inside the panel, not URL-linked tabs. Summary
+ * and Statements were removed from the resident portal; every legacy payments
+ * sub-path below redirects to the bare Charges view, carrying an optional
+ * status pill (see the payments + financials handlers in
+ * render-portal-section). Balance / Summary / Statements / Charges land on
+ * Charges with no status; Pending / Overdue / Paid preselect the matching pill.
+ *
+ * Null-prototype on purpose: a plain object literal would resolve inherited
+ * `Object.prototype` members, so `/resident/payments/toString` (also
+ * `constructor`, `valueOf`, `hasOwnProperty`, `__proto__`) would look like a
+ * known legacy tab and soft-redirect instead of 404ing.
  */
-const PAYMENTS_TABS = [
-  { id: "charges", label: "Charges" },
-  { id: "summary", label: "Summary" },
-  { id: "statements", label: "Statements" },
-] as const;
-
-/** Legacy payments tab ids → { tab, status } on the consolidated Charges tab. */
-export const RESIDENT_PAYMENTS_LEGACY_TABS: Record<string, { tab: string; status?: string }> = {
-  pending: { tab: "charges", status: "pending" },
-  overdue: { tab: "charges", status: "overdue" },
-  paid: { tab: "charges", status: "paid" },
-  balance: { tab: "summary" },
-};
+export const RESIDENT_PAYMENTS_LEGACY_TABS: Record<string, { status?: string } | undefined> =
+  Object.assign(Object.create(null) as Record<string, { status?: string } | undefined>, {
+    pending: { status: "pending" },
+    overdue: { status: "overdue" },
+    paid: { status: "paid" },
+    balance: {},
+    summary: {},
+    statements: {},
+    charges: {},
+  });
 
 /** Sidebar during application phase (before lease is approved): Application + Settings only. */
 export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
@@ -72,7 +79,7 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [...PAYMENTS_TABS] },
+  { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "House details", tabs: [] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
@@ -84,7 +91,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [...PAYMENTS_TABS] },
+  { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "House details", tabs: [] },
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
@@ -127,7 +134,7 @@ export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: `${RESIDENT_PORTAL_BASE_PATH}/dashboard` },
   { label: "Applications", path: `${RESIDENT_PORTAL_BASE_PATH}/applications` },
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
-  { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments/charges` },
+  { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
   { label: "House details", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
   { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/email/unopened` },
   { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/application` },

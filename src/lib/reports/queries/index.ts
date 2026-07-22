@@ -897,6 +897,12 @@ export async function query1099Candidates(
   };
 }
 
+/**
+ * ORPHANED — no UI caller. Its only consumer was the resident portal
+ * Payments > Summary tab, removed when Payments was simplified to Charges-only.
+ * Intentionally left in place (removing it risks the shared reporting infra);
+ * a separate task tracks proper removal. Do not treat this as live wiring.
+ */
 export async function queryResidentBalance(
   db: SupabaseClient,
   residentUserId: string,
