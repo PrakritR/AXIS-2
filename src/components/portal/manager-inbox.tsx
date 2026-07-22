@@ -61,6 +61,10 @@ type InboxThread = {
   unread: boolean;
 };
 
+/** Search deliberately skips the trash folder; say so rather than letting a
+ *  manager conclude a trashed message no longer exists. */
+const SEARCH_SKIPS_TRASH_NOTE = "Trash isn’t searched — open the Trash tab to browse it.";
+
 function previewLine(body: string, max = 100) {
   const t = body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
@@ -284,9 +288,12 @@ export const ManagerInbox = forwardRef<
     return [...filtered].sort((a, b) => threadTimestamp(b) - threadTimestamp(a));
   }, [emailThreads, tabId, retainedIds, searchActive, searchQuery]);
 
-  // Returning to Unopened (or refreshing) shows the true unread set.
+  // Returning to Unopened (or refreshing) shows the true unread set. Search
+  // spans folders and overrides the tab, so picking a tab also ends the search
+  // rather than leaving the pill highlighted over an unchanged result list.
   useEffect(() => {
     setRetainedIds(new Set());
+    setQuery("");
   }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
@@ -551,7 +558,7 @@ export const ManagerInbox = forwardRef<
             : "No messages yet.";
 
   const bulkMarkRead = () => {
-    for (const id of threadSelection.selectedIds) markRead(id);
+    for (const id of threadSelection.selectedIds) markReadIfUnreadInbox(id);
     threadSelection.clearSelection();
   };
 
@@ -658,30 +665,28 @@ export const ManagerInbox = forwardRef<
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : rowsForTab.length === 0 ? (
-        <PortalInboxEmptyState
-          title={searchActive ? `No messages match “${query.trim()}”.` : emptyCopy}
-        />
+        <div className="space-y-2">
+          <PortalInboxEmptyState
+            title={searchActive ? `No messages match “${query.trim()}”.` : emptyCopy}
+          />
+          {searchActive ? <p className="text-center text-sm text-muted">{SEARCH_SKIPS_TRASH_NOTE}</p> : null}
+        </div>
       ) : (
         <div className="space-y-3">
           {searchActive ? (
             <p className="text-sm text-muted">
               {rowsForTab.length} message{rowsForTab.length === 1 ? "" : "s"} matching{" "}
               <span className="font-medium text-foreground">“{query.trim()}”</span> — best matches
-              first.
+              first. {SEARCH_SKIPS_TRASH_NOTE}
             </p>
           ) : null}
           <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
-            {!searchActive && tabId === "unopened" ? (
-              <>
-                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
-                  Mark read
-                </Button>
-                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                  Trash
-                </Button>
-              </>
+            {searchActive || tabId === "unopened" ? (
+              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
+                Mark read
+              </Button>
             ) : null}
-            {searchActive || tabId === "opened" || tabId === "sent" ? (
+            {searchActive || tabId === "unopened" || tabId === "opened" || tabId === "sent" ? (
               <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
                 Trash
               </Button>

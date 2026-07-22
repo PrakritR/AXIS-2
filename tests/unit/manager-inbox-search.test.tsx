@@ -176,6 +176,30 @@ describe("manager inbox search", () => {
     expect(screen.getAllByRole("button", { name: "Delete" }).length).toBeGreaterThan(0);
   });
 
+  it("says trash is excluded rather than letting a trashed message look gone", () => {
+    render(<ManagerInbox tabId="trash" embeddedInCommunication externalTitleActions suppressCompose />);
+    fireEvent.change(searchBox(), { target: { value: "roof" } });
+    expect(screen.getAllByText(/Trash isn’t searched/).length).toBeGreaterThan(0);
+
+    // Even with zero hits — the empty state alone would read as "no such message".
+    fireEvent.change(searchBox(), { target: { value: "flyer" } });
+    expect(screen.getAllByText(/No messages match/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Trash isn’t searched/).length).toBeGreaterThan(0);
+  });
+
+  it("ends the search when a tab is picked, so the pills are never inert", () => {
+    const { rerender } = render(
+      <ManagerInbox tabId="unopened" embeddedInCommunication externalTitleActions suppressCompose />,
+    );
+    fireEvent.change(searchBox(), { target: { value: "roof" } });
+    expect(screen.getAllByText(/messages matching/).length).toBeGreaterThan(0);
+
+    rerender(<ManagerInbox tabId="sent" embeddedInCommunication externalTitleActions suppressCompose />);
+    expect(screen.queryByText(/messages matching/)).toBeNull();
+    expect(screen.getAllByText("Re: roof repair scheduled").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Roof leak in unit 2")).toBeNull();
+  });
+
   it("clears back to the plain tab list", () => {
     render(<ManagerInbox tabId="unopened" embeddedInCommunication externalTitleActions suppressCompose />);
     fireEvent.change(searchBox(), { target: { value: "roof" } });
