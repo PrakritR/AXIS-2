@@ -798,14 +798,25 @@ never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both
-deleted. The financials panel's Balance Summary / Rent Statements content is now part of
-`ResidentPaymentsPanel` as `TabNav` sub-tabs — `charges` / `summary` / `statements`, routed at
-`/resident/payments/{tab}` — sitting above the Pending / Overdue / Paid
-`ManagerPortalStatusPills`, which stay pills because they are in-section *status filters*, not
-URL-linked section tabs. The pre-merge tab ids (`pending`, `paid`, `balance`) live on as redirects
-via `RESIDENT_PAYMENTS_LEGACY_TABS` in `src/lib/portals/resident-sections.ts`; `pending`/`paid`
-redirect to `/payments/charges?status=…`, which `renderPortalSection` reads and forwards as the
-panel's `initialStatus`, so old deep links still land on the right pill.
+deleted. The financials panel's Balance Summary / Rent Statements content was first merged into
+`ResidentPaymentsPanel` as `TabNav` sub-tabs, and has since been **removed from the resident
+portal entirely**: resident Payments is **Charges-only** — one screen at the bare
+`/resident/payments`, no `TabNav` switcher, no `tabId`/`basePath` props (the panel takes only
+`initialStatus`). `PAYMENTS_TABS` is gone and both resident section registries declare
+`tabs: []`, so the sidebar links straight to `/resident/payments`. The Pending / Overdue / Paid
+`ManagerPortalStatusPills` stay, because they are in-section *status filters*, not URL-linked
+section tabs. `RESIDENT_PAYMENTS_LEGACY_TABS` in `src/lib/portals/resident-sections.ts` is now a
+`{ status?: string }` map covering every old sub-path (`charges`, `summary`, `statements`,
+`balance`, `pending`, `overdue`, `paid`); `renderPortalSection` redirects all of them to
+`/resident/payments`, forwarding `?status=` for the three that map to a pill so old deep links
+still land on the right filter. It is a **null-prototype** object on purpose — as a plain literal
+its inherited `Object.prototype` members made `/resident/payments/toString` (and `constructor`,
+`__proto__`, `hasOwnProperty`) look like known legacy tabs and soft-redirect instead of 404ing.
+Unknown sub-paths must `notFound()`.
+
+Shared reporting was deliberately left in place: `/api/reports/resident-ledger` still backs
+resident Documents → Rent receipts, and `/api/reports/resident-balance` is now orphaned but
+intentionally kept (see the comments on its query and route branch).
 
 Two routing gotchas this exposed, both of which silently break a section without failing a build:
 
