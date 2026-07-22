@@ -63,17 +63,15 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
-  resolveEntireHomeUtilitiesPaymentModel,
-  resolveListingUtilitiesPaymentModel,
-  resolveRoomUtilitiesPaymentModel,
+  resolveAggregateUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
 import {
   LEASE_UTILITY_KIND_OPTIONS,
   LEASE_UTILITY_PARTY_OPTIONS,
   LEASE_UTILITY_PAYMENT_OPTIONS,
+  createLeaseUtilityLine,
   defaultLeaseUtilities,
-  leaseUtilityDefaultsFor,
   type LeaseUtilityKind,
   type LeaseUtilityLine,
   type LeaseUtilityPayment,
@@ -522,14 +520,14 @@ function LeaseUtilitiesEditor({
   onChange: (next: LeaseUtilityLine[]) => void;
 }) {
   const lines = value ?? [];
-  const update = (i: number, patch: Partial<LeaseUtilityLine>) =>
-    onChange(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const remove = (i: number) => onChange(lines.filter((_, idx) => idx !== i));
+  const update = (id: string, patch: Partial<LeaseUtilityLine>) =>
+    onChange(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const remove = (id: string) => onChange(lines.filter((l) => l.id !== id));
   const add = () => {
     const used = new Set(lines.map((l) => l.kind));
     const nextKind =
       LEASE_UTILITY_KIND_OPTIONS.find((o) => o.id !== "other" && !used.has(o.id))?.id ?? "other";
-    onChange([...lines, { kind: nextKind, ...leaseUtilityDefaultsFor(aggregateModel) }]);
+    onChange([...lines, createLeaseUtilityLine(nextKind, aggregateModel)]);
   };
 
   if (!lines.length) {
@@ -555,7 +553,7 @@ function LeaseUtilitiesEditor({
   return (
     <div className="space-y-3">
       {lines.map((line, i) => (
-        <div key={i} className="rounded-xl border border-border bg-card p-4">
+        <div key={line.id} className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm font-semibold text-foreground">
               {line.kind === "other"
@@ -566,7 +564,7 @@ function LeaseUtilitiesEditor({
               type="button"
               variant="outline"
               className={LISTING_WIZARD_REMOVE_BTN}
-              onClick={() => remove(i)}
+              onClick={() => remove(line.id)}
             >
               Remove
             </Button>
@@ -578,7 +576,7 @@ function LeaseUtilitiesEditor({
                 aria-label={`Utility ${i + 1} type`}
                 className={selectInputCls}
                 value={line.kind}
-                onChange={(e) => update(i, { kind: e.target.value as LeaseUtilityKind })}
+                onChange={(e) => update(line.id, { kind: e.target.value as LeaseUtilityKind })}
               >
                 {LEASE_UTILITY_KIND_OPTIONS.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -592,7 +590,7 @@ function LeaseUtilitiesEditor({
                 <FieldLabel>Custom name</FieldLabel>
                 <Input
                   value={line.label ?? ""}
-                  onChange={(e) => update(i, { label: e.target.value })}
+                  onChange={(e) => update(line.id, { label: e.target.value })}
                   placeholder="e.g. Landscaping"
                 />
               </GridField>
@@ -606,7 +604,7 @@ function LeaseUtilitiesEditor({
                 className={selectInputCls}
                 value={line.paidBy}
                 onChange={(e) =>
-                  update(i, {
+                  update(line.id, {
                     paidBy: e.target.value as LeaseUtilityPayment,
                     ...(e.target.value === "included_in_rent" ? {} : { allowance: undefined }),
                   })
@@ -625,7 +623,7 @@ function LeaseUtilitiesEditor({
                 aria-label={`Utility ${i + 1} account set up by`}
                 className={selectInputCls}
                 value={line.setUpBy}
-                onChange={(e) => update(i, { setUpBy: e.target.value as LeaseUtilityResponsibleParty })}
+                onChange={(e) => update(line.id, { setUpBy: e.target.value as LeaseUtilityResponsibleParty })}
               >
                 {LEASE_UTILITY_PARTY_OPTIONS.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -641,7 +639,7 @@ function LeaseUtilitiesEditor({
                 </FieldLabel>
                 <Input
                   value={line.allowance ?? ""}
-                  onChange={(e) => update(i, { allowance: e.target.value })}
+                  onChange={(e) => update(line.id, { allowance: e.target.value })}
                   placeholder="e.g. $50/mo"
                 />
               </GridField>
@@ -650,7 +648,7 @@ function LeaseUtilitiesEditor({
               <FieldLabel>Notes (optional)</FieldLabel>
               <Input
                 value={line.notes ?? ""}
-                onChange={(e) => update(i, { notes: e.target.value })}
+                onChange={(e) => update(line.id, { notes: e.target.value })}
                 placeholder="Provider, split arrangement, etc."
               />
             </div>
@@ -1307,12 +1305,7 @@ export function ManagerAddListingForm({
 
   const isEntireHome = isEntireHomeListing(sub);
   const entireHomeRent = entireHomeMonthlyRentAmount(sub);
-  const leaseUtilitiesAggregateModel: UtilitiesPaymentModel = (() => {
-    if (isEntireHome) return resolveEntireHomeUtilitiesPaymentModel(sub);
-    const rooms = sub.rooms.filter((r) => r.name.trim());
-    const models = [...new Set(rooms.map((r) => resolveRoomUtilitiesPaymentModel(r)))];
-    return models.length === 1 ? models[0]! : resolveListingUtilitiesPaymentModel(sub);
-  })();
+  const leaseUtilitiesAggregateModel = useMemo(() => resolveAggregateUtilitiesPaymentModel(sub), [sub]);
 
   const clearListingFieldError = (key: string) => {
     setStepFieldErrors((prev) => {

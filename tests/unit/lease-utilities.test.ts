@@ -40,9 +40,24 @@ describe("lease-utilities", () => {
     ];
     const out = normalizeLeaseUtilities(raw)!;
     expect(out).toHaveLength(3);
-    expect(out[0]).toEqual({ kind: "electricity", paidBy: "resident", setUpBy: "resident" });
-    expect(out[1]).toEqual({ kind: "water", paidBy: "included_in_rent", setUpBy: "manager", allowance: "$50/mo" });
-    expect(out[2]).toEqual({ kind: "other", paidBy: "manager", setUpBy: "manager", label: "Landscaping", notes: "weekly" });
+    expect(out[0]).toMatchObject({ kind: "electricity", paidBy: "resident", setUpBy: "resident" });
+    expect(out[1]).toMatchObject({ kind: "water", paidBy: "included_in_rent", setUpBy: "manager", allowance: "$50/mo" });
+    expect(out[2]).toMatchObject({ kind: "other", paidBy: "manager", setUpBy: "manager", label: "Landscaping", notes: "weekly" });
+  });
+
+  it("gives every row a stable identity, preserving persisted ids and minting missing ones", () => {
+    const seeded = defaultLeaseUtilities("manager_billed");
+    expect(new Set(seeded.map((l) => l.id)).size).toBe(seeded.length);
+
+    const roundTripped = normalizeLeaseUtilities(seeded)!;
+    expect(roundTripped.map((l) => l.id)).toEqual(seeded.map((l) => l.id));
+
+    const minted = normalizeLeaseUtilities([
+      { kind: "gas", paidBy: "resident", setUpBy: "resident" },
+      { kind: "water", paidBy: "resident", setUpBy: "resident", id: "   " },
+    ])!;
+    expect(minted.every((l) => Boolean(l.id))).toBe(true);
+    expect(minted[0]!.id).not.toBe(minted[1]!.id);
   });
 
   it("drops allowance when the utility is not included in rent", () => {
@@ -60,6 +75,7 @@ describe("lease-utilities", () => {
 
   it("formats display labels for the lease document", () => {
     const included: LeaseUtilityLine = {
+      id: "u-1",
       kind: "water",
       paidBy: "included_in_rent",
       setUpBy: "manager",
@@ -71,7 +87,7 @@ describe("lease-utilities", () => {
     expect(leaseUtilitySetUpByLabel(included)).toBe("Landlord");
     expect(leaseUtilityAllowanceNote(included)).toBe("Included up to $50/mo — shared meter");
 
-    const other: LeaseUtilityLine = { kind: "other", paidBy: "resident", setUpBy: "resident" };
+    const other: LeaseUtilityLine = { id: "u-2", kind: "other", paidBy: "resident", setUpBy: "resident" };
     expect(leaseUtilityKindLabel(other)).toBe("Other utility / service");
     expect(leaseUtilityPaidByLabel(other)).toBe("Resident pays");
     expect(leaseUtilitySetUpByLabel(other)).toBe("Resident");

@@ -82,6 +82,32 @@ export function resolveListingUtilitiesPaymentModel(
   return "manager_billed";
 }
 
+/**
+ * The single utilities model shared by every listed room, or null when the listing
+ * has no named rooms or its rooms disagree.
+ */
+export function resolveUniformRoomUtilitiesPaymentModel(
+  sub: Pick<ManagerListingSubmissionV1, "rooms">,
+): UtilitiesPaymentModel | null {
+  const rooms = sub.rooms.filter((r) => r.name.trim());
+  if (!rooms.length) return null;
+  const models = [...new Set(rooms.map((r) => resolveRoomUtilitiesPaymentModel(r)))];
+  return models.length === 1 ? models[0]! : null;
+}
+
+/**
+ * One utilities model for the listing as a whole — the entire-home model, the model
+ * every room agrees on, or the listing-level fallback when rooms differ. Shared by the
+ * listing summary label and the lease utilities defaults so the two cannot drift.
+ */
+export function resolveAggregateUtilitiesPaymentModel(
+  sub: ManagerListingSubmissionV1 | undefined,
+): UtilitiesPaymentModel {
+  if (!sub) return "manager_billed";
+  if (isEntireHomeListing(sub)) return resolveEntireHomeUtilitiesPaymentModel(sub);
+  return resolveUniformRoomUtilitiesPaymentModel(sub) ?? resolveListingUtilitiesPaymentModel(sub);
+}
+
 /** Monthly utilities amount billable through the manager portal (0 when tenant pays directly or included). */
 export function utilitiesBillableMonthlyAmount(
   sub: ManagerListingSubmissionV1 | undefined,
@@ -105,9 +131,8 @@ export function utilitiesListingSummaryLabel(sub: ManagerListingSubmissionV1 | u
   }
   const rooms = sub.rooms.filter((r) => r.name.trim());
   if (!rooms.length) return "—";
-  const models = [...new Set(rooms.map((r) => resolveRoomUtilitiesPaymentModel(r)))];
-  if (models.length === 1) {
-    const model = models[0]!;
+  const model = resolveUniformRoomUtilitiesPaymentModel(sub);
+  if (model) {
     if (model === "manager_billed") {
       const vals = rooms
         .map((r) => parseMoneyAmount(r.utilitiesEstimate ?? ""))
