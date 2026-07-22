@@ -47,6 +47,7 @@ import {
 import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   PROPERTY_PIPELINE_EVENT,
+  countManagerManagedPropertiesForUser,
   mirrorLocalPropertyPipelineToServer,
   readExtraListingsForUser,
 } from "@/lib/demo-property-pipeline";
@@ -154,6 +155,8 @@ function ManagerPropertyInlineDetails({
   onUpdated,
   showToast,
   managerUserId,
+  skuTier,
+  propCount,
   onSendToProspect,
 }: {
   bucket: AdminPropertyBucketIndex;
@@ -161,6 +164,8 @@ function ManagerPropertyInlineDetails({
   onUpdated: () => void;
   showToast: (m: string) => void;
   managerUserId: string | null;
+  skuTier: string | null;
+  propCount: number;
   onSendToProspect?: (listingId: string) => void;
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
@@ -317,8 +322,8 @@ function ManagerPropertyInlineDetails({
           onUpdated();
         },
         showToast,
-        skuTier: null as string | null,
-        propCountBeforeSubmit: 0,
+        skuTier,
+        propCountBeforeSubmit: propCount,
         initialSubmission: portalSub.sub,
         noteKey,
         editPendingId: null,
@@ -340,8 +345,8 @@ function ManagerPropertyInlineDetails({
           },
           onSaved: onUpdated,
           showToast,
-          skuTier: null as string | null,
-          propCountBeforeSubmit: 0,
+          skuTier,
+          propCountBeforeSubmit: propCount,
           initialSubmission: managerSubmission,
           noteKey,
           editDraftId: row.adminRefId,
@@ -625,6 +630,29 @@ export function ManagerHousePropertiesPanel({
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [skuTier, setSkuTier] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/manager/subscription", { credentials: "include" });
+        const body = (await res.json()) as { tier?: string | null };
+        if (res.ok && !cancelled) setSkuTier(body.tier ?? null);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const propCount = useMemo(() => {
+    void tick;
+    return countManagerManagedPropertiesForUser(scopeUserId);
+  }, [tick, scopeUserId]);
 
   useEffect(() => {
     if (!scopeUserId) return;
@@ -685,6 +713,8 @@ export function ManagerHousePropertiesPanel({
       onUpdated={() => setTick((t) => t + 1)}
       showToast={showToast}
       managerUserId={managerUserId}
+      skuTier={skuTier}
+      propCount={propCount}
       onSendToProspect={onSendToProspect}
     />
   );

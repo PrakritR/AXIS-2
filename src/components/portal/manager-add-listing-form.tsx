@@ -1132,6 +1132,43 @@ async function uploadVideoFile(file: File): Promise<string> {
   return uploadToBucket(file);
 }
 
+function isUnresolvedMediaUrl(url: string | null | undefined): boolean {
+  return Boolean(url && (url.startsWith("data:") || url.startsWith("blob:")));
+}
+
+function stripUnresolvedSubmissionMedia(
+  sub: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1,
+): import("@/lib/manager-listing-submission").ManagerListingSubmissionV1 {
+  const keepUrls = (urls: string[] | undefined) => (urls ?? []).filter((u) => !isUnresolvedMediaUrl(u));
+  const keepUrl = (url: string | null | undefined) => (isUnresolvedMediaUrl(url) ? null : url ?? null);
+  const floorPlanEntries = Object.entries(sub.floorPlanByLabel ?? {}).filter(
+    ([, url]) => !isUnresolvedMediaUrl(url),
+  );
+  return {
+    ...sub,
+    housePhotoDataUrls: keepUrls(sub.housePhotoDataUrls),
+    houseVideoDataUrl: keepUrl(sub.houseVideoDataUrl),
+    leaseTemplateDocUrl: keepUrl(sub.leaseTemplateDocUrl),
+    propertyFloorPlanDataUrl: keepUrl(sub.propertyFloorPlanDataUrl),
+    floorPlanByLabel: floorPlanEntries.length > 0 ? Object.fromEntries(floorPlanEntries) : undefined,
+    rooms: sub.rooms.map((r) => ({
+      ...r,
+      photoDataUrls: keepUrls(r.photoDataUrls),
+      videoDataUrl: keepUrl(r.videoDataUrl),
+    })),
+    bathrooms: sub.bathrooms.map((b) => ({
+      ...b,
+      photoDataUrls: keepUrls(b.photoDataUrls),
+      videoDataUrl: keepUrl(b.videoDataUrl),
+    })),
+    sharedSpaces: sub.sharedSpaces.map((s) => ({
+      ...s,
+      photoDataUrls: keepUrls(s.photoDataUrls),
+      videoDataUrl: keepUrl(s.videoDataUrl),
+    })),
+  };
+}
+
 function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
   return (
     <div className="mb-1.5">
@@ -2307,6 +2344,7 @@ export function ManagerAddListingForm({
         payload = await uploadSubmissionMedia(payload);
       } catch (err) {
         console.error("manager-add-listing-form: draft media upload failed", err);
+        payload = stripUnresolvedSubmissionMedia(payload);
         showToast("Saved your text — photos couldn't upload. Reopen the draft to retry.");
       }
       const id = await saveManagerPropertyDraftToServer(payload, userId, draftIdRef.current ?? undefined);
