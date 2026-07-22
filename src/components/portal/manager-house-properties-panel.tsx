@@ -35,6 +35,7 @@ import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-ses
 import {
   adminPropertyRentDisplayLabel,
   deleteManagerLiveListing,
+  deleteManagerPropertyDraft,
   deleteUnlistedManagerProperty,
   listAdminRow,
   readAdminPropertyRows,
@@ -130,6 +131,7 @@ function deferCatalogMutation(fn: () => void) {
 const MANAGER_STAGES = [
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
+  { key: "drafts", label: "Drafts", buckets: [5] as AdminPropertyBucketIndex[] },
 ] as const;
 
 export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
@@ -137,6 +139,7 @@ export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
   listed: "No listed properties.",
   unlisted: "No unlisted properties.",
+  drafts: "No saved drafts. Start a new property and tap Save draft to finish it later.",
 };
 
 export function managerStageFromParam(raw: string | null): ManagerStageKey {
@@ -252,6 +255,7 @@ function ManagerPropertyInlineDetails({
   const displaySub = portalSub?.sub ?? null;
   const [previewEditorOpen, setPreviewEditorOpen] = useState(false);
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
+  const [draftEditorOpen, setDraftEditorOpen] = useState(false);
 
   const managerSubmission = useMemo(
     () => (row ? displaySub ?? submissionForAdminRow(row) : null),
@@ -323,6 +327,26 @@ function ManagerPropertyInlineDetails({
         editListingOwnerUserId: portalSub.ownerUserId ?? null,
       }
     : null;
+
+  // Resume a saved draft in the full wizard. On final submit the wizard publishes
+  // this draft in place (draft → live) and removes it from the drafts bucket.
+  const draftFormProps =
+    bucket === 5 && managerUserId
+      ? {
+          onClose: () => setDraftEditorOpen(false),
+          onSubmitted: () => {
+            setDraftEditorOpen(false);
+            onUpdated();
+          },
+          onSaved: onUpdated,
+          showToast,
+          skuTier: null as string | null,
+          propCountBeforeSubmit: 0,
+          initialSubmission: managerSubmission,
+          noteKey,
+          editDraftId: row.adminRefId,
+        }
+      : null;
 
   const footer = (
     <div className="flex flex-col gap-3">
@@ -473,6 +497,32 @@ function ManagerPropertyInlineDetails({
           )}
         </div>
       ) : null}
+
+      {bucket === 5 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            className={actionBtnClass}
+            data-attr="draft-continue-editing"
+            onClick={() => setDraftEditorOpen(true)}
+          >
+            Continue editing
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${actionBtnClass} ml-auto border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            data-attr="draft-delete"
+            onClick={() => {
+              if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
+              deferCatalogMutation(() => run("Draft deleted.", deleteManagerPropertyDraft(row.adminRefId, managerUserId)));
+            }}
+          >
+            Delete draft
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -513,14 +563,16 @@ function ManagerPropertyInlineDetails({
         ) : null}
       </PortalCollapsibleSection>
 
-      <ManagerPropertyHouseDetailsPanel
-        noteKey={noteKey}
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-      />
+      {bucket !== 5 ? (
+        <ManagerPropertyHouseDetailsPanel
+          noteKey={noteKey}
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          onUpdated={onUpdated}
+          showToast={showToast}
+        />
+      ) : null}
 
       <ManagerPropertyApplicationQuestionsPanel
         sub={managerSubmission}
@@ -550,6 +602,10 @@ function ManagerPropertyInlineDetails({
 
       {listingEditorOpen && listingFormProps ? (
         <ManagerAddListingForm {...listingFormProps} wizardScope="full" />
+      ) : null}
+
+      {draftEditorOpen && draftFormProps ? (
+        <ManagerAddListingForm {...draftFormProps} wizardScope="full" />
       ) : null}
     </div>
   );

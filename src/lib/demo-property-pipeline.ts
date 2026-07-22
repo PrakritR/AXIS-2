@@ -184,7 +184,7 @@ function mirrorPropertyRecord(input: {
   }).catch(() => {});
 }
 
-async function upsertPropertyRecordToServer(input: {
+export async function upsertPropertyRecordToServer(input: {
   id: string;
   managerUserId: string | null;
   status: ManagerPropertyRecordStatus;
@@ -599,7 +599,7 @@ function slugPart(s: string | undefined | null) {
     .slice(0, 32);
 }
 
-function deriveLegacyFields(sub: ManagerListingSubmissionV1): Omit<ManagerPendingPropertyRow, "id" | "submittedAt" | "submission" | "submittedByUserId"> {
+export function deriveLegacyFields(sub: ManagerListingSubmissionV1): Omit<ManagerPendingPropertyRow, "id" | "submittedAt" | "submission" | "submittedByUserId"> {
   const rooms = sub.rooms.filter((r) => r.name.trim().length > 0);
   const rents = rooms.map((r) => r.monthlyRent).filter((n) => Number.isFinite(n) && n > 0);
   const minRent = rents.length ? Math.min(...rents) : 0;

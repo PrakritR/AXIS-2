@@ -5,6 +5,7 @@ import {
   buildMockPropertyFromAdminRow,
   buildMockPropertyFromDraft,
   deleteMirroredPropertyRecord,
+  deriveLegacyFields,
   LEGACY_MANAGER_SCOPE_USER_ID,
   PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
@@ -14,7 +15,9 @@ import {
   readPendingManagerPropertiesForUser,
   removeExtraListing,
   submitManagerPendingProperty,
+  syncPropertyPipelineFromServer,
   takePendingManagerProperty,
+  upsertPropertyRecordToServer,
   type ManagerPendingPropertyRow,
   type ManagerPropertyDraftInput,
 } from "@/lib/demo-property-pipeline";
@@ -44,7 +47,8 @@ function adminListingRejectAllowed(): boolean {
   return window.location.pathname.startsWith("/admin");
 }
 
-export type AdminPropertyBucketIndex = 0 | 1 | 2 | 3 | 4;
+// 0 pending · 1 request_change · 2 live · 3 unlisted · 4 rejected · 5 draft.
+export type AdminPropertyBucketIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
 export type AdminPropertyRow = {
   adminRefId: string;
@@ -73,6 +77,8 @@ type SideBuckets = {
   requestChange: AdminPropertyRow[];
   unlisted: AdminPropertyRow[];
   rejected: AdminPropertyRow[];
+  /** In-progress "add property" wizards the manager saved to finish later. */
+  drafts: AdminPropertyRow[];
 };
 
 function isBrowser() {
@@ -134,12 +140,13 @@ function mirrorAdminPropertyRecord(input: {
 function readSide(forManagerUserId?: string | null): SideBuckets {
   const raw = readJson<Partial<SideBuckets> | null>(sideKey(forManagerUserId), null);
   if (!raw || typeof raw !== "object") {
-    return { requestChange: [], unlisted: [], rejected: [] };
+    return { requestChange: [], unlisted: [], rejected: [], drafts: [] };
   }
   return {
     requestChange: Array.isArray(raw.requestChange) ? raw.requestChange : [],
     unlisted: Array.isArray(raw.unlisted) ? raw.unlisted : [],
     rejected: Array.isArray(raw.rejected) ? raw.rejected : [],
+    drafts: Array.isArray(raw.drafts) ? raw.drafts : [],
   };
 }
 
@@ -307,8 +314,14 @@ function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, user
   return rows.map((row) => normalizeAdminPropertyRow(row));
 }
 
-/** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (property portal). */
-export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
+/**
+ * When `forManagerUserId` is set, counts only that manager’s pipeline + side
+ * buckets (property portal). Tuple indices mirror AdminPropertyBucketIndex:
+ * [pending, request_change, live, unlisted, rejected, draft].
+ */
+export function adminKpiCounts(
+  forManagerUserId?: string | null,
+): [number, number, number, number, number, number] {
   try {
     const scopeUserId = resolveManagerScopeUserId(forManagerUserId ?? null);
     if (scopeUserId) {
@@ -321,13 +334,14 @@ export function adminKpiCounts(forManagerUserId?: string | null): [number, numbe
         listed + linkedAdminPropertyRowsForBucket(2, scopeUserId).length,
         side.unlisted.length + linkedAdminPropertyRowsForBucket(3, scopeUserId).length,
         0,
+        side.drafts.length,
       ];
     }
     const side = readSide();
     const listed = readAllExtraListings().filter((p) => p?.adminPublishLive === true).length;
-    return [0, 0, listed, side.unlisted.length, 0];
+    return [0, 0, listed, side.unlisted.length, 0, side.drafts.length];
   } catch {
-    return [0, 0, 0, 0, 0];
+    return [0, 0, 0, 0, 0, 0];
   }
 }
 
@@ -351,6 +365,11 @@ export function readAdminPropertyRows(
       ...side.unlisted.map((r) => normalizeAdminPropertyRow(r)),
       ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(3, forManagerUserId) : []),
     ]);
+  }
+  if (bucket === 5) {
+    // Drafts are private to their owner — never surfaced to co-managers, so no
+    // linked-bucket merge here.
+    return dedupeAdminPropertyRows(side.drafts.map((r) => normalizeAdminPropertyRow(r)));
   }
   return [];
 }
@@ -517,6 +536,120 @@ export function listAdminRow(row: AdminPropertyRow, forManagerUserId?: string | 
   writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
   deleteMirroredPropertyRecord(row.adminRefId);
   return listingId;
+}
+
+/**
+ * Build the draft list-row (summary fields + the full submission for resume)
+ * from an in-progress wizard submission. Never publishes anything.
+ */
+function submissionToDraftAdminRow(
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+  listingId: string,
+): AdminPropertyRow {
+  const legacy = deriveLegacyFields(input);
+  const pendingLike: ManagerPendingPropertyRow = {
+    ...legacy,
+    id: listingId,
+    submittedAt: new Date().toISOString(),
+    submission: input,
+    submittedByUserId: managerUserId,
+  };
+  const prop = buildMockPropertyFromDraft(pendingLike, listingId);
+  return {
+    ...mockToAdminRow(prop, listingId),
+    adminRefId: listingId,
+    listingId,
+    managerUserId,
+    submission: normalizeManagerListingSubmissionV1(input),
+  };
+}
+
+/**
+ * Save (or update) an in-progress "add property" wizard as a private draft. The
+ * DB record id doubles as the eventual live listingId, so publishing a draft
+ * (see publishManagerPropertyDraftToServer) reuses the same id and simply flips
+ * the status live. Returns the draft/listing id, or null on failure.
+ */
+export async function saveManagerPropertyDraftToServer(
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+  existingDraftId?: string | null,
+): Promise<string | null> {
+  if (!managerUserId.trim()) return null;
+  const legacy = deriveLegacyFields(input);
+  const listingId =
+    existingDraftId?.trim() ||
+    `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${Date.now().toString(36).slice(-6)}`;
+  const row = submissionToDraftAdminRow(input, managerUserId, listingId);
+  const ok = await upsertPropertyRecordToServer({
+    id: listingId,
+    managerUserId,
+    status: "draft",
+    rowData: row,
+  });
+  if (!ok) return null;
+  const side = readSide(managerUserId);
+  const idx = side.drafts.findIndex((r) => r.adminRefId === listingId);
+  if (idx === -1) side.drafts = [...side.drafts, row];
+  else side.drafts = side.drafts.map((r, i) => (i === idx ? row : r));
+  writeSideStorage(side, managerUserId);
+  await syncPropertyPipelineFromServer({ force: true });
+  return listingId;
+}
+
+/**
+ * Publish a saved draft: promote it to a live listing (same id) and drop it from
+ * the drafts bucket. Callers must enforce the plan property limit BEFORE calling
+ * — a draft does not count toward the limit until it is published.
+ */
+export async function publishManagerPropertyDraftToServer(
+  draftId: string,
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+): Promise<string | null> {
+  if (!managerUserId.trim() || !draftId.trim()) return null;
+  const legacy = deriveLegacyFields(input);
+  const listingId = draftId.trim();
+  const pendingLike: ManagerPendingPropertyRow = {
+    ...legacy,
+    id: listingId,
+    submittedAt: new Date().toISOString(),
+    submission: input,
+    submittedByUserId: managerUserId,
+  };
+  const prop: MockProperty = {
+    ...buildMockPropertyFromDraft(pendingLike, listingId),
+    adminPublishLive: true,
+    managerUserId,
+  };
+  const ok = await upsertPropertyRecordToServer({
+    id: listingId,
+    managerUserId,
+    status: "live",
+    propertyData: prop,
+    rowData: { ...legacy, adminRefId: listingId, listingId, managerUserId },
+  });
+  if (!ok) return null;
+  appendExtraListing(prop, managerUserId);
+  const side = readSide(managerUserId);
+  const nextDrafts = side.drafts.filter((r) => r.adminRefId !== listingId);
+  if (nextDrafts.length !== side.drafts.length) {
+    writeSideStorage({ ...side, drafts: nextDrafts }, managerUserId);
+  }
+  await syncPropertyPipelineFromServer({ force: true });
+  return listingId;
+}
+
+/** Permanently delete a saved draft (owner-only). */
+export function deleteManagerPropertyDraft(draftId: string, forManagerUserId?: string | null): boolean {
+  const side = readSide(forManagerUserId);
+  const idx = side.drafts.findIndex((r) => r.adminRefId === draftId);
+  if (idx === -1) return false;
+  const nextDrafts = [...side.drafts.slice(0, idx), ...side.drafts.slice(idx + 1)];
+  writeSideStorage({ ...side, drafts: nextDrafts }, forManagerUserId);
+  deleteMirroredPropertyRecord(draftId);
+  return true;
 }
 
 export function moveListedToRequestChange(

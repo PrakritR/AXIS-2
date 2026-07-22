@@ -147,6 +147,7 @@ export function ManagerProperties() {
     return {
       listed: kpiValues[2],
       unlisted: kpiValues[3],
+      drafts: kpiValues[5],
     };
   }, [portfolioTick, scopeUserId]);
 

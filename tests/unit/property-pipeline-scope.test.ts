@@ -17,7 +17,7 @@ describe("scopePropertyPipelineSnapshotForViewer", () => {
         demo: [{ id: "pend-demo", submittedAt: "2026-01-01T00:00:00.000Z", buildingName: "Demo", address: "4 D", zip: "1", neighborhood: "N", unitLabel: "D", beds: 1, baths: 1, monthlyRent: 1000, petFriendly: false, tagline: "t" }],
       },
       extrasByUser: {},
-      sideGlobal: { requestChange: [], unlisted: [], rejected: [] },
+      sideGlobal: { requestChange: [], unlisted: [], rejected: [], drafts: [] },
       sideByUser: {},
     };
 
@@ -41,7 +41,7 @@ describe("scopePropertyPipelineSnapshotForViewer", () => {
         viewer: [{ id: "mgr-owned", title: "Owned", buildingName: "8th", address: "4709B", managerUserId: "stale-other" } as never],
         ambika: [{ id: "mgr-brooklyn", title: "Brooklyn", buildingName: "Brooklyn", address: "5259", managerUserId: "ambika" } as never],
       },
-      sideGlobal: { requestChange: [], unlisted: [], rejected: [] },
+      sideGlobal: { requestChange: [], unlisted: [], rejected: [], drafts: [] },
       sideByUser: {},
     };
     const wiped = scopePropertyPipelineSnapshotForViewer(snapshot, "viewer", []);

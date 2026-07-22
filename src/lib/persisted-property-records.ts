@@ -2,7 +2,16 @@ import type { MockProperty } from "@/data/types";
 import type { AdminPropertyRow, AdminPropertyBucketIndex } from "@/lib/demo-admin-property-inventory";
 import type { ManagerPendingPropertyRow } from "@/lib/demo-property-pipeline";
 
-export type ManagerPropertyRecordStatus = "pending" | "live" | "review" | "request_change" | "unlisted" | "rejected";
+export type ManagerPropertyRecordStatus =
+  | "pending"
+  | "live"
+  | "review"
+  | "request_change"
+  | "unlisted"
+  | "rejected"
+  // Manager saved an in-progress "add property" wizard to finish later. Private
+  // to the owner (RLS `select_own`), never published, never in public listings.
+  | "draft";
 
 export type ManagerPropertyRecord = {
   id: string;
@@ -20,6 +29,7 @@ export type PropertyPipelineSnapshot = {
     requestChange: AdminPropertyRow[];
     unlisted: AdminPropertyRow[];
     rejected: AdminPropertyRow[];
+    drafts: AdminPropertyRow[];
   };
   sideByUser: Record<
     string,
@@ -27,6 +37,7 @@ export type PropertyPipelineSnapshot = {
       requestChange: AdminPropertyRow[];
       unlisted: AdminPropertyRow[];
       rejected: AdminPropertyRow[];
+      drafts: AdminPropertyRow[];
     }
   >;
 };
@@ -40,7 +51,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
 }
 
 export function emptyPropertyPipelineSnapshot(): PropertyPipelineSnapshot {
-  return { pendingByUser: {}, extrasByUser: {}, sideGlobal: { requestChange: [], unlisted: [], rejected: [] }, sideByUser: {} };
+  return { pendingByUser: {}, extrasByUser: {}, sideGlobal: { requestChange: [], unlisted: [], rejected: [], drafts: [] }, sideByUser: {} };
 }
 
 function filterSideRows(rows: AdminPropertyRow[], linkedPropertyIds: Set<string>, ownerUserId: string, viewerUserId: string) {
@@ -87,8 +98,14 @@ export function scopePropertyPipelineSnapshotForViewer(
       requestChange: filterSideRows(side.requestChange, linked, ownerId, viewer),
       unlisted: filterSideRows(side.unlisted, linked, ownerId, viewer),
       rejected: filterSideRows(side.rejected, linked, ownerId, viewer),
+      // Drafts are private to the owner. A co-manager never has a draft in their
+      // linked-id set, so filterSideRows drops them for non-owner viewers.
+      drafts: filterSideRows(side.drafts ?? [], linked, ownerId, viewer),
     };
-    if (ownerId === viewer || next.requestChange.length + next.unlisted.length + next.rejected.length > 0) {
+    if (
+      ownerId === viewer ||
+      next.requestChange.length + next.unlisted.length + next.rejected.length + next.drafts.length > 0
+    ) {
       sideByUser[ownerId] = next;
     }
   }
@@ -96,7 +113,7 @@ export function scopePropertyPipelineSnapshotForViewer(
   return {
     pendingByUser,
     extrasByUser,
-    sideGlobal: { requestChange: [], unlisted: [], rejected: [] },
+    sideGlobal: { requestChange: [], unlisted: [], rejected: [], drafts: [] },
     sideByUser,
   };
 }
@@ -139,10 +156,10 @@ export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): Proper
       ...(row as unknown as AdminPropertyRow),
       ...(record.edit_request_note?.trim() ? { editRequestNote: record.edit_request_note.trim() } : {}),
     };
-    const key = record.status === "request_change" ? "requestChange" : record.status;
-    if (key !== "requestChange" && key !== "unlisted" && key !== "rejected") continue;
+    const key = record.status === "request_change" ? "requestChange" : record.status === "draft" ? "drafts" : record.status;
+    if (key !== "requestChange" && key !== "unlisted" && key !== "rejected" && key !== "drafts") continue;
     snapshot.sideGlobal[key].push(adminRow);
-    const side = (snapshot.sideByUser[uid] ??= { requestChange: [], unlisted: [], rejected: [] });
+    const side = (snapshot.sideByUser[uid] ??= { requestChange: [], unlisted: [], rejected: [], drafts: [] });
     side[key].push(adminRow);
   }
   return snapshot;
@@ -153,5 +170,6 @@ export function statusForBucket(bucket: AdminPropertyBucketIndex): ManagerProper
   if (bucket === 2) return "live";
   if (bucket === 3) return "unlisted";
   if (bucket === 4) return "rejected";
+  if (bucket === 5) return "draft";
   return "pending";
 }

@@ -19,7 +19,11 @@ import {
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
-import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import {
+  publishManagerPropertyDraftToServer,
+  saveManagerPropertyDraftToServer,
+  updateRequestChangeProperty,
+} from "@/lib/demo-admin-property-inventory";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
@@ -1218,6 +1222,8 @@ export function ManagerAddListingForm({
   editListingId = null,
   editListingOwnerUserId = null,
   editRequestChangeId = null,
+  editDraftId = null,
+  onSaved,
   initialSubmission = null,
   noteKey = null,
   wizardScope = "full",
@@ -1233,6 +1239,10 @@ export function ManagerAddListingForm({
   editListingOwnerUserId?: string | null;
   /** adminRefId of a "request change" (edits requested by admin) row to save back to. */
   editRequestChangeId?: string | null;
+  /** Draft (in-progress wizard) id being resumed. On final submit the draft is published and removed. */
+  editDraftId?: string | null;
+  /** Fired after a draft is saved (Save draft) so the caller can refresh the drafts list. */
+  onSaved?: () => void;
   initialSubmission?: ManagerListingSubmissionV1 | null;
   /** Stable key for legacy localStorage house-detail notes, used to backfill houseRulesText if empty on the submission. */
   noteKey?: string | null;
@@ -1307,14 +1317,32 @@ export function ManagerAddListingForm({
   const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
   const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
 
+  // A draft (in-progress wizard) publishes like a NEW listing on submit — full
+  // validation + plan-limit gate apply — so it is deliberately NOT part of
+  // isEditMode. The only draft-specific behaviour is the Save-draft button and
+  // publishing (instead of creating) the record on final submit.
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
+  // Remembers the draft id across saves so re-saving (or submitting) updates the
+  // same record instead of spawning duplicates — seeded from a resumed draft.
+  const draftIdRef = useRef<string | null>(editDraftId);
+  const isDraftMode = Boolean(editDraftId);
+  const [savingDraft, setSavingDraft] = useState(false);
+  // "Save draft" is only meaningful while creating a property (new or resumed
+  // draft); an existing pending/listing/request-change edit is already persisted.
+  const canSaveDraft = wizardScope !== "preview" && !isEditMode;
   const wizardSteps = useMemo(() => listingWizardStepIndices(wizardScope), [wizardScope]);
   const lastStepIndex = wizardSteps[wizardSteps.length - 1] ?? LISTING_STEP_COUNT - 1;
   const visibleStepPosition = Math.max(0, wizardSteps.indexOf(stepIndex));
   const visibleStepCount = wizardSteps.length;
   const isFinalStep = stepIndex === lastStepIndex;
   const isPreviewWizard = wizardScope === "preview";
-  const wizardTitlePrefix = isPreviewWizard ? "Edit preview" : isEditMode ? "Edit listing" : "New listing";
+  const wizardTitlePrefix = isPreviewWizard
+    ? "Edit preview"
+    : isDraftMode
+      ? "Continue draft"
+      : isEditMode
+        ? "Edit listing"
+        : "New listing";
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
@@ -2234,30 +2262,9 @@ export function ManagerAddListingForm({
     return out;
   };
 
-  const submitListing = async () => {
-    const invalid = (() => {
-      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
-      for (const i of wizardSteps) {
-        const errors = validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
-        if (Object.keys(errors).length > 0) return { stepIndex: i, errors };
-      }
-      return null;
-    })();
-    if (invalid) {
-      setStepIndex(invalid.stepIndex);
-      setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
-      setStepFieldErrors(invalid.errors);
-      showToast("Please fix the highlighted fields before submitting.");
-      queueMicrotask(() =>
-        scrollToFirstWizardFieldError(
-          buildListingStepFieldOrder(invalid.stepIndex, sub),
-          invalid.errors,
-          scrollRef.current,
-        ),
-      );
-      return;
-    }
-
+  // Assemble + normalize the current wizard state into a submission payload.
+  // Shared by submit (validated) and Save-draft (unvalidated, partial-friendly).
+  const buildSubmissionPayload = (): ManagerListingSubmissionV1 => {
     const submission: ManagerListingSubmissionV1 = {
       ...sub,
       serviceRequestOptions: serviceOffers,
@@ -2282,6 +2289,64 @@ export function ManagerAddListingForm({
       ...bath,
       name: bath.name.trim() || emptyBathroom(i).name,
     }));
+    return submission;
+  };
+
+  // Save the in-progress wizard as a private draft without validation, so a
+  // manager can leave from any step and return later. Best-effort media upload:
+  // if it fails we still save the text so no typing is lost.
+  const saveDraft = async () => {
+    if (!authReady || !userId) {
+      showToast("Sign in to save a draft.");
+      return;
+    }
+    setSavingDraft(true);
+    try {
+      let payload = buildSubmissionPayload();
+      try {
+        payload = await uploadSubmissionMedia(payload);
+      } catch (err) {
+        console.error("manager-add-listing-form: draft media upload failed", err);
+        showToast("Saved your text — photos couldn't upload. Reopen the draft to retry.");
+      }
+      const id = await saveManagerPropertyDraftToServer(payload, userId, draftIdRef.current ?? undefined);
+      if (!id) {
+        showToast("Could not save draft. Check your connection and try again.");
+        return;
+      }
+      draftIdRef.current = id;
+      showToast("Draft saved. Continue anytime from Properties → Drafts.");
+      onSaved?.();
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const submitListing = async () => {
+    const invalid = (() => {
+      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
+      for (const i of wizardSteps) {
+        const errors = validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
+        if (Object.keys(errors).length > 0) return { stepIndex: i, errors };
+      }
+      return null;
+    })();
+    if (invalid) {
+      setStepIndex(invalid.stepIndex);
+      setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
+      setStepFieldErrors(invalid.errors);
+      showToast("Please fix the highlighted fields before submitting.");
+      queueMicrotask(() =>
+        scrollToFirstWizardFieldError(
+          buildListingStepFieldOrder(invalid.stepIndex, sub),
+          invalid.errors,
+          scrollRef.current,
+        ),
+      );
+      return;
+    }
+
+    const submission = buildSubmissionPayload();
     const roomsOk = isEntireHomeListing(submission)
       ? entireHomeMonthlyRentAmount(submission) > 0 && submission.rooms.some((r) => r.name.trim())
       : submission.rooms.some((r) => r.name.trim() && listingRoomHasRent(r));
@@ -2360,11 +2425,18 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
-      const id = await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
+      // If this wizard is (or became, via Save draft) a draft, publish that
+      // draft record in place — same id flips draft → live — and remove it from
+      // the drafts bucket, rather than creating a second listing.
+      const existingDraftId = draftIdRef.current;
+      const id = existingDraftId
+        ? await publishManagerPropertyDraftToServer(existingDraftId, uploadedSubmission, userId)
+        : await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
       if (!id) {
         showToast("Could not submit listing.");
         return;
       }
+      draftIdRef.current = null;
       if (isDemoModeActive()) {
         window.dispatchEvent(new CustomEvent(DEMO_LISTING_SUBMITTED_EVENT, { detail: { id } }));
       }
@@ -4680,7 +4752,9 @@ export function ManagerAddListingForm({
                 <p className="mt-1 text-sm leading-6 text-muted">
                   {isEditMode
                     ? "Review each step, then submit your changes when the listing is ready for review."
-                    : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete — it will go live on Rent with PropLane right away."}
+                    : canSaveDraft
+                      ? "Not ready to go live? Tap Save draft to store your progress and finish later from Properties → Drafts. Or click Submit listing when it’s complete — it will go live on Rent with PropLane right away."
+                      : "Click Submit listing below when the listing is complete — it will go live on Rent with PropLane right away."}
                 </p>
               </div>
             </div>
@@ -4691,12 +4765,24 @@ export function ManagerAddListingForm({
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy}>
+              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy || savingDraft}>
                 Close
               </Button>
               {visibleStepPosition > 0 ? (
-                <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>
+                <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy || savingDraft}>
                   Back
+                </Button>
+              ) : null}
+              {canSaveDraft ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
+                  data-attr="listing-wizard-save-draft"
+                  onClick={() => void saveDraft()}
+                  disabled={busy || savingDraft}
+                >
+                  {savingDraft ? "Saving draft…" : "Save draft"}
                 </Button>
               ) : null}
             </div>
