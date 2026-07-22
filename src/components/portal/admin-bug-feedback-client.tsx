@@ -57,7 +57,7 @@ const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
 ];
 
 type StatusFilter = BugFeedbackStatus;
-type SortFilter = "newest" | "oldest" | "status";
+type SortFilter = "newest" | "oldest";
 type PortalFilter = "all" | "managers" | "residents" | "vendors" | "admin";
 
 /** Map a reporter role to the portal it came from (for the source filter). */
@@ -85,14 +85,6 @@ function sortFeedbackRows(rows: PortalBugFeedbackRow[], sort: SortFilter): Porta
   const next = [...rows];
   if (sort === "oldest") {
     return next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  }
-  if (sort === "status") {
-    const rank: Record<BugFeedbackStatus, number> = { open: 0, in_progress: 1, completed: 2 };
-    return next.sort((a, b) => {
-      const byStatus = rank[a.status] - rank[b.status];
-      if (byStatus !== 0) return byStatus;
-      return b.createdAt.localeCompare(a.createdAt);
-    });
   }
   return next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -286,7 +278,6 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
         options={[
           { value: "newest", label: "Newest first" },
           { value: "oldest", label: "Oldest first" },
-          { value: "status", label: "Status" },
         ]}
         ariaLabel="Sort feedback"
       />
