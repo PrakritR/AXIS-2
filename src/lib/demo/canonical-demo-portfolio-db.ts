@@ -2,6 +2,12 @@
  * Writes the idle `/demo` portfolio (`buildDemoIdleSnapshot`) into the canonical
  * sandbox accounts' real DB rows — the data the `/demo` read mirror serves.
  *
+ * `buildDemoIdleSnapshot()` currently returns an EMPTY snapshot by design (see
+ * `docs/agents/demo-sandbox.md`), so unless a caller passes its own
+ * `opts.snapshot` this provisions the accounts/profiles with NO portfolio rows.
+ * That is intentional, not a failed seed: fill in the snapshot — or put real
+ * data on the canonical accounts — to give it something to write.
+ *
  * ONE implementation shared by:
  * - `tests/helpers/seed-canonical-demo-portfolio.ts` (test-DB seed CLI)
  * - `POST /api/admin/provision-sandbox-accounts` (per-environment provisioning)

@@ -44,7 +44,7 @@ npm run test:cleanup -- <testRunId>
 
 ### Canonical demo portal accounts (`@test.axis.local`)
 
-`npm run test:seed` provisions the sandbox accounts that mirror the idle `/demo` portfolio (from `src/lib/demo/demo-data.ts`):
+`npm run test:seed` provisions the sandbox accounts below. It seeds them with **no portfolio rows**: the shared portfolio seed sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose — there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch.
 
 | Role | Email | Password (default) |
 |------|-------|---------------------|
@@ -56,8 +56,8 @@ npm run test:cleanup -- <testRunId>
 | All portals | `testeverything@test.axis.local` | `TestEverything123!` |
 
 - **Signed-in portal** (`/portal`, `/resident`, `/vendor`) reads and writes these rows in the test Supabase project.
-- **`/demo`** loads the same data read-only via `/api/demo/portal-snapshot` (changes in demo stay in the browser; a refresh re-seeds from the mirror; portal edits persist to the DB and show up in demo — never the reverse).
-- **`testeverything@`** holds every role (sign-in shows the portal picker) and is the guided "Run demo" tour's data source (`/api/demo/portal-snapshot?scope=guided`): its portal edits appear in the tour; an empty account = the tour's blank slate.
+- **`/demo`** loads the same data read-only via `/api/demo/portal-snapshot` (changes in demo stay in the browser; a refresh re-seeds from the mirror; portal edits persist to the DB and show up in demo — never the reverse). That mirror is currently switched OFF at `DEMO_PORTAL_MIRROR_ENABLED` (`src/lib/demo/demo-mirror-flag.ts`), so `/demo` renders empty states regardless of what these accounts hold.
+- **`testeverything@`** holds every role (sign-in shows the portal picker) and was the guided "Run demo" tour's data source (`/api/demo/portal-snapshot?scope=guided`); with the mirror off the tour always starts from a blank slate and builds its own data.
 - Local `.env` should point at the **same test Supabase project** as `.env.test` so the demo mirror works on `localhost`.
 - Re-run `npm run test:seed` after schema changes or when demo portfolio data drifts.
 - Production gets the same accounts (minus `admin@` and `manager2@`) via the admin-gated `POST /api/admin/provision-sandbox-accounts` — same shared implementation (`src/lib/demo/canonical-demo-portfolio-db.ts`), run once per environment.

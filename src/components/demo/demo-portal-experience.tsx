@@ -17,10 +17,10 @@ export function DemoPortalExperience() {
           The real manager, resident, and vendor portals, running on an empty sandbox — no login required.
           Switch roles and click through every tab, or hit{" "}
           <span className="font-medium text-foreground">Run demo</span> for a guided walkthrough that lists a
-          property, takes an application, and signs a lease in front of you. Ask the in-portal{" "}
-          <span className="font-medium text-primary">PropLane Assistant</span> (✦, bottom-right of the demo) about
-          what you have created, or the <span className="font-medium text-foreground">Ask PropLane AI</span> button
-          for general questions.
+          property, takes an application, and signs a lease in front of you. The{" "}
+          <span className="font-medium text-foreground">Ask PropLane AI</span> button and the in-portal{" "}
+          <span className="font-medium text-primary">PropLane Assistant</span> (✦, bottom-right of the demo) both
+          answer questions about how PropLane works.
         </p>
       </section>
       {/* The in-demo, portal-scoped assistant is mounted INSIDE the frame by

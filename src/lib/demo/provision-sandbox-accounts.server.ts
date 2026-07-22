@@ -20,6 +20,11 @@ import { seedCanonicalDemoPortfolio } from "@/lib/demo/canonical-demo-portfolio-
  * sandbox accounts + `/demo` mirror stay identical across environments without
  * ever moving credentials between them.
  *
+ * The accounts are provisioned with an EMPTY portfolio by design: the shared
+ * `seedCanonicalDemoPortfolio` sources `buildDemoIdleSnapshot()`, which now
+ * ships empty (see `docs/agents/demo-sandbox.md`). This route creates and
+ * repairs the logins; it no longer plants portfolio rows behind them.
+ *
  * Keep the account set and passwords in lockstep with
  * tests/helpers/seed-test-db.mjs (the test-DB seed also prunes non-canonical
  * accounts; this route never deletes anything).

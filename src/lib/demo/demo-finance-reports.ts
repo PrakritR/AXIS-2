@@ -14,7 +14,7 @@ import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports
 import { joinPropertyAndUnitLabel, readChargesForManager } from "@/lib/household-charges";
 import { readManagerOutgoingExpenses } from "@/lib/manager-outgoing-payments";
 import { centsToUsd } from "@/lib/reports/money";
-import { DEMO_MANAGER_USER_ID, DEMO_MANAGER_NAME, resolveDemoManagerScopeUserId } from "@/lib/demo/demo-session";
+import { DEMO_MANAGER_NAME, resolveDemoPortfolioScopeUserId } from "@/lib/demo/demo-session";
 import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 
@@ -30,7 +30,7 @@ function chargeCategoryLabel(kind: string): string {
 }
 
 function demoIncomeReport(propertyId?: string): ReportResult {
-  const rows = readChargesForManager(DEMO_MANAGER_USER_ID)
+  const rows = readChargesForManager(resolveDemoPortfolioScopeUserId())
     .filter((charge) => charge.status === "paid" && charge.paidAt)
     .filter((charge) => !propertyId || charge.propertyId === propertyId)
     .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
@@ -137,7 +137,7 @@ function daysBetween(fromIso: string, toIso: string): number {
  * overlap of the tenancy with the year-to-date window.
  */
 function demoProperties(): MockProperty[] {
-  return readExtraListingsForUser(resolveDemoManagerScopeUserId());
+  return readExtraListingsForUser(resolveDemoPortfolioScopeUserId());
 }
 
 /** Building name + unit, without doubling a unit the name already carries. */
@@ -187,7 +187,7 @@ function demoTenancies(): DemoTenancy[] {
 
 function paidCentsByProperty(propertyId?: string): Map<string, { cents: number; count: number }> {
   const byProperty = new Map<string, { cents: number; count: number }>();
-  for (const charge of readChargesForManager(DEMO_MANAGER_USER_ID)) {
+  for (const charge of readChargesForManager(resolveDemoPortfolioScopeUserId())) {
     if (charge.status !== "paid" || !charge.paidAt) continue;
     if (propertyId && charge.propertyId !== propertyId) continue;
     const entry = byProperty.get(charge.propertyId) ?? { cents: 0, count: 0 };

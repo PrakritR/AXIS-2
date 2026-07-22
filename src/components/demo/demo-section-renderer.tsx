@@ -26,7 +26,7 @@ import {
   DEMO_VENDOR_NAME,
   demoSessionForRole,
   getDemoRole,
-  resolveDemoManagerScopeUserId,
+  resolveDemoPortfolioScopeUserId,
   subscribeDemoRole,
 } from "@/lib/demo/demo-session";
 import type { PortalSection } from "@/lib/portal-types";
@@ -239,7 +239,7 @@ export function DemoSectionRenderer({
 function ResidentMoveInDemo() {
   const resolved = useMemo(() => {
     const propertiesById = Object.fromEntries(
-      readExtraListingsForUser(resolveDemoManagerScopeUserId()).map((p) => [p.id, p]),
+      readExtraListingsForUser(resolveDemoPortfolioScopeUserId()).map((p) => [p.id, p]),
     );
     return resolveResidentMoveInFromApplications(
       DEMO_RESIDENT_EMAIL,

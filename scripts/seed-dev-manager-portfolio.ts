@@ -1,9 +1,16 @@
 #!/usr/bin/env npx tsx
 /**
- * Seed ANY dev/test manager account with a full, id-namespaced copy of the
- * demo portfolio — properties, applications, charges, leases, vendors, work
- * orders (incl. bids/offers/payouts), service requests, inbox threads, and
- * calendar events — without touching the canonical sandbox accounts' rows.
+ * Seed ANY dev/test manager account with an id-namespaced copy of the demo
+ * portfolio — properties, applications, charges, leases, vendors, work orders
+ * (incl. bids/offers/payouts), service requests, inbox threads, and calendar
+ * events — without touching the canonical sandbox accounts' rows.
+ *
+ * CURRENTLY INERT: it copies `buildDemoIdleSnapshot()`
+ * (`src/lib/demo/demo-guided-data.ts`), which now ships EMPTY, so it creates the
+ * accounts and prints honest "properties 0" counts until a demo portfolio
+ * exists again. That snapshot is the seam; `DEMO_PORTAL_MIRROR_ENABLED`
+ * (`src/lib/demo/demo-mirror-flag.ts`) is the switch that puts the canonical
+ * accounts' rows back in front of `/demo`. The script is kept for that day.
  *
  *   npx tsx scripts/seed-dev-manager-portfolio.ts <manager-email> [prefix]
  *
