@@ -156,6 +156,7 @@ export const ManagerInbox = forwardRef<
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [contactTick, setContactTick] = useState(0);
+  const [query, setQuery] = useState("");
   // Threads marked read while viewing "Unopened" stay listed until the tab is
   // switched or the page is refreshed; they only move to "Opened" on reset.
   const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
@@ -234,7 +235,34 @@ export const ManagerInbox = forwardRef<
     return match ? parseInt(match[1]!, 10) : 0;
   }
 
+  /**
+   * Relevance score for message search: sender name/email matches rank above
+   * subject matches, which rank above body matches. 0 = no match.
+   */
+  function searchScore(t: InboxThread, q: string): number {
+    const has = (s: string | undefined) => Boolean(s && s.toLowerCase().includes(q));
+    if (has(t.from) || has(t.email)) return 3;
+    if (has(t.subject)) return 2;
+    if (has(t.body) || has(t.preview)) return 1;
+    return 0;
+  }
+
+  const searchQuery = query.trim().toLowerCase();
+  const searchActive = searchQuery.length > 0;
+
   const rowsForTab = useMemo(() => {
+    // Search mode: match across every folder except trash (a resident's or
+    // applicant's messages regardless of read state), best matches first,
+    // newest first within the same relevance.
+    if (searchActive) {
+      return emailThreads
+        .filter((t) => t.folder !== "trash")
+        .map((t) => ({ t, score: searchScore(t, searchQuery) }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || threadTimestamp(b.t) - threadTimestamp(a.t))
+        .map((x) => x.t);
+    }
+
     let filtered: InboxThread[];
     if (tabId === "unopened")
       filtered = emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
@@ -244,7 +272,7 @@ export const ManagerInbox = forwardRef<
     else filtered = [];
 
     return [...filtered].sort((a, b) => threadTimestamp(b) - threadTimestamp(a));
-  }, [emailThreads, tabId, retainedIds]);
+  }, [emailThreads, tabId, retainedIds, searchActive, searchQuery]);
 
   // Returning to Unopened (or refreshing) shows the true unread set.
   useEffect(() => {
@@ -566,12 +594,21 @@ export const ManagerInbox = forwardRef<
         />
       ) : null}
 
-      {tabId === "schedule" ? (
+      {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : rowsForTab.length === 0 ? (
-        <PortalInboxEmptyState title={emptyCopy} />
+        <PortalInboxEmptyState
+          title={searchActive ? `No messages match “${query.trim()}”.` : emptyCopy}
+        />
       ) : (
         <div className="space-y-3">
+          {searchActive ? (
+            <p className="text-sm text-muted">
+              {rowsForTab.length} message{rowsForTab.length === 1 ? "" : "s"} matching{" "}
+              <span className="font-medium text-foreground">“{query.trim()}”</span> — best matches
+              first.
+            </p>
+          ) : null}
           <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
             {tabId === "unopened" ? (
               <>
@@ -677,6 +714,43 @@ export const ManagerInbox = forwardRef<
             activeId={tabId}
             onChange={(id) => navigate(`${inboxBase}/${id}`)}
           />
+          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+            <svg
+              viewBox="0 0 24 24"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="m21 21-4.3-4.3M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search messages…"
+              aria-label="Search messages by sender, subject, or content"
+              data-attr="inbox-message-search"
+              className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-8 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            />
+            {searchActive ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:bg-foreground/5 hover:text-foreground"
+              >
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
         </ManagerPortalFilterRow>
       }
     >
