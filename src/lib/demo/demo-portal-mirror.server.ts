@@ -27,8 +27,9 @@ import {
   buildDemoBlankSnapshot,
   buildDemoIdleSnapshot,
   type DemoDataSnapshot,
+  type DemoScheduleSeed,
 } from "@/lib/demo/demo-guided-data";
-import type { DemoScheduleSeed } from "@/lib/demo/demo-data";
+import { DEMO_PORTAL_MIRROR_ENABLED } from "@/lib/demo/demo-mirror-flag";
 import type { PartnerInquiry, PlannedEvent } from "@/lib/demo-admin-scheduling";
 import {
   MANAGER_INBOX_SCOPE,
@@ -297,6 +298,7 @@ function mergeWithStaticFallback(mirror: Partial<DemoDataSnapshot>): DemoDataSna
  * Rewrites scope ids to the synthetic demo session keys the UI expects.
  */
 export async function fetchDemoPortalMirrorSnapshot(): Promise<DemoDataSnapshot | null> {
+  if (!DEMO_PORTAL_MIRROR_ENABLED) return null;
   const db = createSupabaseServiceRoleClient();
   const ids = await resolveProfileIds(db);
   if (!ids.managerUserId) return null;
@@ -380,6 +382,7 @@ export function buildStaticDemoPortalSnapshot(): DemoDataSnapshot {
  * `/demo` ever writes back.
  */
 export async function fetchDemoGuidedMirrorSnapshot(): Promise<DemoDataSnapshot | null> {
+  if (!DEMO_PORTAL_MIRROR_ENABLED) return null;
   const db = createSupabaseServiceRoleClient();
   const { data, error } = await db
     .from("profiles")

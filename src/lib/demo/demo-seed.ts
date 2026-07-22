@@ -2,10 +2,11 @@
  * Seeds the browser-local demo stores for the public `/demo` sandbox.
  *
  * Two modes (see `demo-guided.ts`):
- * - **idle** — rich portfolio (`buildDemoIdleSnapshot`), optionally overlaid from
- *   the canonical test accounts via `/api/demo/portal-snapshot`.
- * - **guided** — `testeverything@`'s mirrored data (`seedDemoGuidedBaseData`),
- *   blank slate when that account has none; autoplay creates data on top.
+ * - **idle** — the static snapshot (`buildDemoIdleSnapshot`, currently empty),
+ *   optionally overlaid from the canonical test accounts via
+ *   `/api/demo/portal-snapshot` when `DEMO_PORTAL_MIRROR_ENABLED` is on.
+ * - **guided** — blank slate; autoplay creates data on top through the real
+ *   wizards. Mirrors `testeverything@` instead when the mirror is enabled.
  *
  * Everything is written into each store's `seedDemo…` helper (never the server),
  * scoped to synthetic demo manager/resident ids. Real portal routes never call
@@ -46,6 +47,7 @@ import {
   isGuidedDemoActive,
 } from "@/lib/demo/demo-guided";
 import { isDemoSignedIn } from "@/lib/demo/demo-client-teardown";
+import { DEMO_PORTAL_MIRROR_ENABLED } from "@/lib/demo/demo-mirror-flag";
 import {
   buildDemoBlankSnapshot,
   buildDemoGuidedSnapshot,
@@ -112,7 +114,7 @@ export function reseedDemoPortalForGuidedStep(): void {
   applyDemoSnapshot(buildDemoGuidedSnapshot(getDemoGuidedState().step));
 }
 
-/** Force idle rich portfolio (exiting guided tour). */
+/** Force the idle snapshot back on (exiting guided tour). */
 export function seedDemoIdleData(): void {
   if (typeof window === "undefined" || !isDemoModeActive()) return;
   applyDemoSnapshot(buildDemoIdleSnapshot());
@@ -146,7 +148,8 @@ function shouldSkipHomepageDemoSeed(): boolean {
 }
 
 /**
- * Idle `/demo` mount: prefer DB mirror when available, else static demo-data.
+ * Idle `/demo` mount: prefer the DB mirror when it is enabled and available,
+ * else the static snapshot (`buildDemoIdleSnapshot`, currently empty).
  */
 export async function seedDemoPortalIdleData(): Promise<void> {
   if (typeof window === "undefined" || !isDemoModeActive()) return;
@@ -170,6 +173,10 @@ export async function seedDemoPortalIdleData(): Promise<void> {
  */
 export async function seedDemoGuidedBaseData(): Promise<void> {
   if (typeof window === "undefined" || !isDemoModeActive()) return;
+  if (!DEMO_PORTAL_MIRROR_ENABLED) {
+    applyDemoSnapshot(buildDemoBlankSnapshot());
+    return;
+  }
   try {
     const res = await fetch("/api/demo/portal-snapshot?scope=guided", { credentials: "same-origin" });
     if (res.ok) {
@@ -220,6 +227,7 @@ async function fetchIdleMirrorSnapshot(): Promise<DemoDataSnapshot | null> {
  */
 export async function seedDemoPortalDataFromMirror(): Promise<boolean> {
   if (typeof window === "undefined" || !isDemoModeActive()) return false;
+  if (!DEMO_PORTAL_MIRROR_ENABLED) return false;
   if (shouldSkipHomepageDemoSeed()) return false;
   hydrateDemoGuidedState();
   if (isGuidedDemoActive()) return false;

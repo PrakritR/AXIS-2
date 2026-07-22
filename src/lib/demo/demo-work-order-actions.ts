@@ -5,11 +5,7 @@ import {
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import {
-  DEMO_GUIDED_USER_ID,
-  DEMO_VENDOR_USER_ID,
-  resolveDemoManagerScopeUserId,
-} from "@/lib/demo/demo-session";
+import { DEMO_VENDOR_USER_ID, resolveDemoManagerScopeUserId } from "@/lib/demo/demo-session";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -39,7 +35,7 @@ export function ensureDemoVendorDirectory(): ManagerVendorRow {
   if (existing) return existing;
 
   const vendor: ManagerVendorRow = {
-    id: "demo-vendor-cascade",
+    id: "demo-vendor-1",
     name: CANONICAL_DEMO_VENDOR_NAME,
     email: CANONICAL_DEMO_VENDOR_EMAIL,
     phone: "(206) 555-0188",
@@ -85,7 +81,7 @@ export function createDemoMaintenanceWorkOrder(propertyId: string): string {
 
   const row: DemoManagerWorkOrderRow = {
     id: DEMO_GUIDED_WORK_ORDER_ID,
-    propertyName: app?.property?.trim() || "Harbor View House",
+    propertyName: app?.property?.trim() || "Demo Property",
     propertyId: pid,
     assignedPropertyId: pid,
     unit: "Room A",

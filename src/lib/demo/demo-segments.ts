@@ -30,6 +30,25 @@ export const DEMO_SEGMENT_LABELS: Record<DemoSegment, string> = {
   work_orders: "Work orders",
 };
 
+/**
+ * Segments offered in the `/demo` "Run demo" picker, in order.
+ *
+ * The sandbox ships with no seeded portfolio (`demo-guided-data.ts`), so only
+ * the self-building segments are offered — each one lists its own property and
+ * drives the real wizards from there (`prepareDemoSegment`). `communication`
+ * and `payments` narrate operations on rows that must already exist (an unread
+ * thread, an outstanding charge); with an empty sandbox they would play out
+ * over blank screens, so they stay out of the picker until a curated portfolio
+ * is mirrored in. Their step defs and playback scripts are kept intact.
+ */
+export const DEMO_SEGMENT_OPTIONS: DemoSegment[] = [
+  "overall",
+  "applications",
+  "leasing",
+  "promotion",
+  "work_orders",
+];
+
 export const GUIDED_STEPS_OVERALL: SegmentStepDef[] = [
   { step: 1, title: "Create a property", hint: "Listing wizard fills in and submits.", role: "manager", section: "properties" },
   { step: 2, title: "Submit an application", hint: "Resident starts a new application and submits.", role: "resident", section: "applications" },

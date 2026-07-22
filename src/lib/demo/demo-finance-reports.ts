@@ -2,18 +2,21 @@
  * Client-built `ReportResult`s for the manager Finances tab in the `/demo`
  * sandbox. The real tab fetches `/api/reports/*` (Supabase `ledger_entries` /
  * `manager_expense_entries`), which requires auth the demo doesn't have — so
- * the demo derives the same shapes locally: income from the seeded household
- * charges (it stays live if a visitor marks a charge paid), expenses from the
- * static demo register. Date-range filters are ignored on purpose: the demo
- * dataset is relative to "now" and should always render populated.
+ * the demo derives the same shapes locally, entirely from the browser-local
+ * demo stores: properties, applications, charges, and the expense register are
+ * all read live, so a report reflects whatever the visitor (or the "Run demo"
+ * autoplay) has created. The sandbox ships empty, so every report starts empty
+ * and fills in as the visitor works. Date-range filters are ignored on purpose.
  */
+import type { MockProperty } from "@/data/types";
 import type { ReportResult } from "@/lib/reports/types";
 import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
-import { readChargesForManager } from "@/lib/household-charges";
+import { joinPropertyAndUnitLabel, readChargesForManager } from "@/lib/household-charges";
 import { readManagerOutgoingExpenses } from "@/lib/manager-outgoing-payments";
 import { centsToUsd } from "@/lib/reports/money";
-import { DEMO_MANAGER_USER_ID } from "@/lib/demo/demo-session";
-import { demoApplications, demoProperties, PROP_LABEL } from "@/lib/demo/demo-data";
+import { DEMO_MANAGER_NAME, resolveDemoPortfolioScopeUserId } from "@/lib/demo/demo-session";
+import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
+import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 
 function amountToCents(label: string): number {
   const n = Number.parseFloat(label.replace(/[^0-9.]/g, ""));
@@ -27,7 +30,7 @@ function chargeCategoryLabel(kind: string): string {
 }
 
 function demoIncomeReport(propertyId?: string): ReportResult {
-  const rows = readChargesForManager(DEMO_MANAGER_USER_ID)
+  const rows = readChargesForManager(resolveDemoPortfolioScopeUserId())
     .filter((charge) => charge.status === "paid" && charge.paidAt)
     .filter((charge) => !propertyId || charge.propertyId === propertyId)
     .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
@@ -57,7 +60,7 @@ function demoIncomeReport(propertyId?: string): ReportResult {
 }
 
 function demoExpensesReport(propertyId?: string): ReportResult {
-  const propertyLabel = propertyId ? PROP_LABEL[propertyId] : undefined;
+  const propertyLabel = propertyId ? demoPropertyLabel(propertyId) : undefined;
   const rows = readManagerOutgoingExpenses()
     .filter((row) => !propertyLabel || row.propertyName === propertyLabel)
     .map((row) => ({
@@ -110,8 +113,8 @@ type DemoTenancy = {
   occupied: boolean;
 };
 
-const DEMO_LANDLORD_NAME = "Alex Morgan — PropLane Housing Management";
-const DEMO_LANDLORD_ADDRESS = "5259 Brooklyn Ave NE, Seattle, WA 98105";
+const DEMO_LANDLORD_NAME = DEMO_MANAGER_NAME;
+const DEMO_LANDLORD_ADDRESS = "";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -133,9 +136,26 @@ function daysBetween(fromIso: string, toIso: string): number {
  * applications (each demo listing has a single unit). Days rented are the
  * overlap of the tenancy with the year-to-date window.
  */
+function demoProperties(): MockProperty[] {
+  return readExtraListingsForUser(resolveDemoPortfolioScopeUserId());
+}
+
+/** Building name + unit, without doubling a unit the name already carries. */
+function managerPropertyLabel(property: MockProperty): string {
+  return joinPropertyAndUnitLabel(
+    property.buildingName?.trim() || property.title,
+    property.unitLabel?.trim() ?? "",
+  );
+}
+
+function demoPropertyLabel(propertyId: string): string | undefined {
+  const property = demoProperties().find((p) => p.id === propertyId);
+  return property ? managerPropertyLabel(property) : undefined;
+}
+
 function demoTenancies(): DemoTenancy[] {
   const apps = new Map(
-    demoApplications()
+    readManagerApplicationRows()
       .filter((a) => a.bucket === "approved" && a.assignedPropertyId)
       .map((a) => [a.assignedPropertyId as string, a]),
   );
@@ -152,7 +172,7 @@ function demoTenancies(): DemoTenancy[] {
     const daysRented = started && startIso ? Math.min(daysAvailable, daysBetween(startIso < from ? from : startIso, to)) : 0;
     return {
       propertyId: property.id,
-      propertyLabel: PROP_LABEL[property.id] ?? property.title,
+      propertyLabel: managerPropertyLabel(property),
       unit: property.unitLabel ?? "Unit",
       resident: app?.name ?? "",
       residentEmail: app?.email ?? "",
@@ -167,7 +187,7 @@ function demoTenancies(): DemoTenancy[] {
 
 function paidCentsByProperty(propertyId?: string): Map<string, { cents: number; count: number }> {
   const byProperty = new Map<string, { cents: number; count: number }>();
-  for (const charge of readChargesForManager(DEMO_MANAGER_USER_ID)) {
+  for (const charge of readChargesForManager(resolveDemoPortfolioScopeUserId())) {
     if (charge.status !== "paid" || !charge.paidAt) continue;
     if (propertyId && charge.propertyId !== propertyId) continue;
     const entry = byProperty.get(charge.propertyId) ?? { cents: 0, count: 0 };
@@ -303,7 +323,7 @@ export function buildDemoTaxSummaryReport(propertyId?: string): ReportResult {
   const expenseCentsByLabel = new Map<string, number>();
   let deductibleCents = 0;
   const expenseRows = ([] as Array<{ property: string; amount: string }>).filter(
-    (row) => !propertyId || row.property === (PROP_LABEL[propertyId] ?? ""),
+    (row) => !propertyId || row.property === (demoPropertyLabel(propertyId) ?? ""),
   );
   for (const row of expenseRows) {
     const cents = amountToCents(row.amount);

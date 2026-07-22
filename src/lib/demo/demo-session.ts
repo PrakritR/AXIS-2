@@ -131,6 +131,18 @@ export function resolveDemoManagerScopeUserId(): string {
   return getDemoSessionSnapshot().userId ?? DEMO_MANAGER_USER_ID;
 }
 
+/**
+ * Scope key for the demo PORTFOLIO — the listings, charges and tenancies the
+ * manager owns. Unlike `resolveDemoManagerScopeUserId()` this does NOT vary with
+ * the role the visitor is currently viewing: those rows are only ever written
+ * under the manager scope (`demo-manager` idle, the guided id during a tour), so
+ * a resident- or vendor-scoped read of them always finds nothing. Use this for
+ * any read of manager-owned data from a surface that can render in another role.
+ */
+export function resolveDemoPortfolioScopeUserId(): string {
+  return isGuidedDemoActive() ? DEMO_GUIDED_USER_ID : DEMO_MANAGER_USER_ID;
+}
+
 /** Current demo session snapshot (role-aware). */
 export function getDemoSessionSnapshot(): DemoSessionSnapshot {
   return demoSessionForRole(role);

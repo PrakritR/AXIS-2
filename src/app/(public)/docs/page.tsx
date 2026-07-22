@@ -149,7 +149,7 @@ export default function DocsPage() {
               >
                 live demo
               </Link>{" "}
-              — the real product on sample data, no account needed.
+              — the real product in a sandbox you can click through, no account needed.
             </p>
           </DocSection>
 
@@ -346,9 +346,9 @@ export default function DocsPage() {
 
           <DocSection id="demo" kicker="Platform" title="The live demo">
             <p>
-              Not ready to sign up? The live demo runs the real product on sample data with no
-              account. Open all three portals — manager, resident, and vendor — and click through
-              applications, leases, rent, and work orders at <Chip>/demo</Chip>.
+              Not ready to sign up? The live demo runs the real product in a sandbox you can click
+              through with no account. Open all three portals — manager, resident, and vendor — and
+              click through applications, leases, rent, and work orders at <Chip>/demo</Chip>.
             </p>
             <p>
               Anything you change in the demo is sandboxed to your browser and reset on refresh, so
