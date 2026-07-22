@@ -5,11 +5,7 @@ import {
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import {
-  DEMO_GUIDED_USER_ID,
-  DEMO_VENDOR_USER_ID,
-  resolveDemoManagerScopeUserId,
-} from "@/lib/demo/demo-session";
+import { DEMO_VENDOR_USER_ID, resolveDemoManagerScopeUserId } from "@/lib/demo/demo-session";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import {
   MANAGER_WORK_ORDERS_EVENT,

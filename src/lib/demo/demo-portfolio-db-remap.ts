@@ -1,24 +1,15 @@
 import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { MockProperty } from "@/data/types";
-import type { HouseholdCharge, RecurringRentProfile } from "@/lib/household-charges";
-import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import type { HouseholdCharge } from "@/lib/household-charges";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
-import type { ManagerPromotionRow } from "@/lib/promotion-flyer";
-import type { ServiceRequest } from "@/lib/service-requests-storage";
-import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import type { WorkOrderBid } from "@/lib/work-order-bids";
-import type { VendorPayout } from "@/lib/vendor-payouts";
 import {
   CANONICAL_DEMO_RESIDENT_EMAIL,
   CANONICAL_DEMO_VENDOR_EMAIL,
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
 import type { DemoDataSnapshot, DemoScheduleSeed } from "@/lib/demo/demo-guided-data";
-import {
-  DEMO_MANAGER_USER_ID,
-  DEMO_RESIDENT_USER_ID,
-  DEMO_VENDOR_USER_ID,
-} from "@/lib/demo/demo-session";
+import { DEMO_MANAGER_USER_ID, DEMO_VENDOR_USER_ID } from "@/lib/demo/demo-session";
 import type { PartnerInquiry, PlannedEvent } from "@/lib/demo-admin-scheduling";
 
 /**
