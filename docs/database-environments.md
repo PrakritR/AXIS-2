@@ -136,17 +136,14 @@ a repo file named `20260721210000_…` can be recorded remotely as
 
 #### Release note: `--include-all` required for the vendor-invoice RLS migration
 
-Production (project `qahnczmilgptcedaqype`) records applied migrations under
-**apply-time versions, not their repo filenames** — e.g. repo
-`20260721130000_claw_thread_topic_services.sql` is recorded on prod as version
-`20260721200505`. At this deploy the production migration head was
-`20260721200505`, so the pending local migrations `20260721140000` and
-`20260721141000` sort **before** it. Plain `supabase db push` (`npm run
+A worked example of the rule above, on production (project
+`qahnczmilgptcedaqype`). At this deploy the production migration head was
+`20260721200505` — repo `20260721130000_claw_thread_topic_services.sql`,
+recorded under its apply time — so the pending local migrations `20260721140000`
+and `20260721141000` sort **before** it. Plain `supabase db push` (`npm run
 db:push`) therefore refuses them as out-of-order; push this release with
 `supabase db push --include-all` instead (both migrations are idempotent, so
-`--include-all` is safe). Do not fix this by re-timestamping repo files —
-prod's apply-time versioning means repo timestamps don't map to the remote
-head.
+`--include-all` is safe). Do not fix this by re-timestamping repo files.
 
 > Note: `supabase db push/diff/baseline` act on whichever project is currently
 > **linked**. Keep dev/test linked by default; only link production for a
