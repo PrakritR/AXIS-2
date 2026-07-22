@@ -14,13 +14,13 @@ export function DemoPortalExperience() {
           Try the live product
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-[15px] leading-relaxed text-muted sm:text-[15.5px]">
-          A fully-loaded manager, resident, and vendor portal with realistic data — no login required.
+          The real manager, resident, and vendor portals, running on an empty sandbox — no login required.
           Switch roles and click through every tab, or hit{" "}
-          <span className="font-medium text-foreground">Run demo</span> for a guided walkthrough that builds the
-          portfolio step by step. Ask the in-portal{" "}
+          <span className="font-medium text-foreground">Run demo</span> for a guided walkthrough that lists a
+          property, takes an application, and signs a lease in front of you. Ask the in-portal{" "}
           <span className="font-medium text-primary">PropLane Assistant</span> (✦, bottom-right of the demo) about
-          this portfolio, or the <span className="font-medium text-foreground">Ask PropLane AI</span> button for
-          general questions.
+          what you have created, or the <span className="font-medium text-foreground">Ask PropLane AI</span> button
+          for general questions.
         </p>
       </section>
       {/* The in-demo, portal-scoped assistant is mounted INSIDE the frame by

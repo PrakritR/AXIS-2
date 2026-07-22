@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDemoIdleSnapshot } from "@/lib/demo/demo-guided-data";
+import { buildDemoIdleSnapshot, type DemoDataSnapshot } from "@/lib/demo/demo-guided-data";
 import {
   DEMO_CANONICAL_RESIDENT_APP_DEMO_ID,
   DEMO_CANONICAL_RESIDENT_CHARGE_APP_REF,
@@ -21,13 +21,102 @@ const ctx = {
   residentAxisId: "AXIS-TESTRSID",
 };
 
+/**
+ * The `/demo` sandbox ships with an EMPTY idle snapshot, so the remap rules are
+ * exercised against a hand-built snapshot shaped like a curated portfolio would
+ * be — same synthetic demo scope ids the seeder has to rewrite.
+ */
+function fixtureSnapshot(): DemoDataSnapshot {
+  const base = buildDemoIdleSnapshot();
+  return {
+    ...base,
+    properties: [
+      {
+        id: "mgr-fixture-1",
+        title: "Fixture House",
+        address: "1 Fixture St",
+        zip: "98101",
+        neighborhood: "Fixture",
+        beds: 2,
+        baths: 1,
+        rentLabel: "$2,000/mo",
+        available: "Now",
+        managerUserId: DEMO_MANAGER_USER_ID,
+      },
+    ],
+    applications: [
+      {
+        id: DEMO_CANONICAL_RESIDENT_APP_DEMO_ID,
+        name: "Fixture Resident",
+        email: CANONICAL_DEMO_RESIDENT_EMAIL,
+        property: "Fixture House",
+        propertyId: "mgr-fixture-1",
+        assignedPropertyId: "mgr-fixture-1",
+        stage: "Approved",
+        bucket: "approved",
+        detail: "",
+        managerUserId: DEMO_MANAGER_USER_ID,
+      },
+    ],
+    charges: [
+      {
+        id: "fixture-charge-1",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        residentEmail: CANONICAL_DEMO_RESIDENT_EMAIL,
+        residentName: "Fixture Resident",
+        residentUserId: DEMO_RESIDENT_USER_ID,
+        propertyId: "mgr-fixture-1",
+        propertyLabel: "Fixture House",
+        managerUserId: DEMO_MANAGER_USER_ID,
+        kind: "first_month_rent",
+        title: "First month rent",
+        amountLabel: "$2,000.00",
+        balanceLabel: "$2,000.00",
+        status: "pending",
+        blocksLeaseUntilPaid: false,
+        applicationId: DEMO_CANONICAL_RESIDENT_CHARGE_APP_REF,
+      },
+    ],
+    vendors: [
+      {
+        id: "demo-vendor-1",
+        name: "Fixture Vendor",
+        email: "stale@example.com",
+        phone: "",
+        trade: "HVAC",
+        notes: "",
+        active: true,
+        managerUserId: DEMO_MANAGER_USER_ID,
+        vendorUserId: DEMO_VENDOR_USER_ID,
+      },
+    ],
+    workOrderBids: [
+      {
+        id: "fixture-bid-1",
+        workOrderId: "fixture-wo-1",
+        vendorUserId: DEMO_VENDOR_USER_ID,
+        vendorDirectoryId: "demo-vendor-1",
+        quoteMode: "upfront",
+        consultationVisitAt: null,
+        amountCents: 10_000,
+        materialsCents: 0,
+        proposedTime: "2026-08-01T12:00:00.000Z",
+        note: null,
+        status: "submitted",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      },
+    ],
+  } as DemoDataSnapshot;
+}
+
 describe("remapDemoSnapshotForDb", () => {
   it("rewrites synthetic demo scope ids to real auth UUIDs", () => {
-    const snapshot = remapDemoSnapshotForDb(buildDemoIdleSnapshot(), ctx);
+    const snapshot = remapDemoSnapshotForDb(fixtureSnapshot(), ctx);
     expect(snapshot.properties.every((p) => p.managerUserId === ctx.managerUserId)).toBe(true);
     expect(snapshot.applications.every((a) => a.managerUserId === ctx.managerUserId)).toBe(true);
-    const alexApp = snapshot.applications.find((a) => a.email === ctx.residentEmail);
-    expect(alexApp?.id).toBe(ctx.residentAxisId);
+    const residentApp = snapshot.applications.find((a) => a.email === ctx.residentEmail);
+    expect(residentApp?.id).toBe(ctx.residentAxisId);
     expect(snapshot.charges.some((c) => c.applicationId === ctx.residentAxisId)).toBe(true);
     expect(
       snapshot.charges
@@ -41,10 +130,10 @@ describe("remapDemoSnapshotForDb", () => {
   });
 
   it("maps canonical resident application refs from demo ids", () => {
-    const idle = buildDemoIdleSnapshot();
-    expect(idle.applications.some((a) => a.id === DEMO_CANONICAL_RESIDENT_APP_DEMO_ID)).toBe(true);
-    expect(idle.charges.some((c) => c.applicationId === DEMO_CANONICAL_RESIDENT_CHARGE_APP_REF)).toBe(true);
-    const snapshot = remapDemoSnapshotForDb(idle, ctx);
+    const fixture = fixtureSnapshot();
+    expect(fixture.applications.some((a) => a.id === DEMO_CANONICAL_RESIDENT_APP_DEMO_ID)).toBe(true);
+    expect(fixture.charges.some((c) => c.applicationId === DEMO_CANONICAL_RESIDENT_CHARGE_APP_REF)).toBe(true);
+    const snapshot = remapDemoSnapshotForDb(fixture, ctx);
     expect(snapshot.applications.some((a) => a.id === DEMO_CANONICAL_RESIDENT_APP_DEMO_ID)).toBe(false);
     expect(snapshot.applications.some((a) => a.id === ctx.residentAxisId)).toBe(true);
     expect(snapshot.charges.some((c) => c.applicationId === DEMO_CANONICAL_RESIDENT_CHARGE_APP_REF)).toBe(false);
@@ -52,10 +141,17 @@ describe("remapDemoSnapshotForDb", () => {
   });
 
   it("does not leak demo session ids on manager-scoped rows", () => {
-    const snapshot = remapDemoSnapshotForDb(buildDemoIdleSnapshot(), ctx);
+    const snapshot = remapDemoSnapshotForDb(fixtureSnapshot(), ctx);
     const json = JSON.stringify(snapshot);
     expect(json.includes(`"${DEMO_MANAGER_USER_ID}"`)).toBe(false);
     expect(json.includes(`"${DEMO_RESIDENT_USER_ID}"`)).toBe(false);
     expect(json.includes(`"${DEMO_VENDOR_USER_ID}"`)).toBe(false);
+  });
+
+  it("passes the shipped (empty) idle snapshot through without error", () => {
+    const snapshot = remapDemoSnapshotForDb(buildDemoIdleSnapshot(), ctx);
+    expect(snapshot.properties).toEqual([]);
+    expect(snapshot.applications).toEqual([]);
+    expect(snapshot.charges).toEqual([]);
   });
 });

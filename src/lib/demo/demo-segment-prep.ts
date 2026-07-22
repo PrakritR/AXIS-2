@@ -1,5 +1,5 @@
 import { buildDemoPropertyCreationSubmission } from "@/lib/demo/demo-listing-autofill";
-import { buildDemoIdleSnapshot } from "@/lib/demo/demo-guided-data";
+import { buildDemoBlankSnapshot } from "@/lib/demo/demo-guided-data";
 import type { DemoSegment } from "@/lib/demo/demo-segments";
 import {
   approvePendingManagerProperty,
@@ -25,32 +25,30 @@ export async function prepareDemoListedProperty(): Promise<string | null> {
 }
 
 /**
- * Seed starting data for a segment before autoplay. Every segment starts from
- * the SAME rich idle portfolio the interactive demo shows — so the tour, the
- * idle demo, and the post-tour state all display one consistent dataset — plus
- * a freshly listed property for the flows that need one to operate on.
+ * Seed starting data for a segment before autoplay. Every segment starts from a
+ * BLANK sandbox — there is no static fictional portfolio (see
+ * `demo-guided-data.ts`) — and then builds exactly what its story needs through
+ * the same code paths the real portal uses. That is also why the offered
+ * segments (`DEMO_SEGMENT_LABELS`) are only the self-building ones: a
+ * walkthrough that operates on pre-existing rows would have nothing to click.
  */
 export async function prepareDemoSegment(segment: DemoSegment): Promise<{ propertyId: string | null }> {
   if (!isDemoModeActive()) return { propertyId: null };
 
-  const idle = buildDemoIdleSnapshot();
-  applyDemoSnapshotForSegment(idle);
-  const fallbackPropertyId = idle.properties[0]?.id ?? null;
+  applyDemoSnapshotForSegment(buildDemoBlankSnapshot());
 
   if (segment === "leasing" || segment === "applications" || segment === "promotion") {
-    const propertyId = await prepareDemoListedProperty();
-    return { propertyId: propertyId ?? fallbackPropertyId };
+    return { propertyId: await prepareDemoListedProperty() };
   }
 
   if (segment === "work_orders") {
-    const propertyId = (await prepareDemoListedProperty()) ?? fallbackPropertyId;
+    const propertyId = await prepareDemoListedProperty();
     if (propertyId) {
       createDemoMaintenanceWorkOrder(propertyId);
     }
     return { propertyId };
   }
 
-  // overall / inbox / payments run directly on the idle portfolio; the
-  // overall script creates its own property through the listing wizard.
-  return { propertyId: fallbackPropertyId };
+  // `overall` creates its own property through the listing wizard on step 1.
+  return { propertyId: null };
 }

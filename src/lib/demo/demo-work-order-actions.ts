@@ -39,7 +39,7 @@ export function ensureDemoVendorDirectory(): ManagerVendorRow {
   if (existing) return existing;
 
   const vendor: ManagerVendorRow = {
-    id: "demo-vendor-cascade",
+    id: "demo-vendor-1",
     name: CANONICAL_DEMO_VENDOR_NAME,
     email: CANONICAL_DEMO_VENDOR_EMAIL,
     phone: "(206) 555-0188",
@@ -85,7 +85,7 @@ export function createDemoMaintenanceWorkOrder(propertyId: string): string {
 
   const row: DemoManagerWorkOrderRow = {
     id: DEMO_GUIDED_WORK_ORDER_ID,
-    propertyName: app?.property?.trim() || "Harbor View House",
+    propertyName: app?.property?.trim() || "Demo Property",
     propertyId: pid,
     assignedPropertyId: pid,
     unit: "Room A",
