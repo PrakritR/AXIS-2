@@ -438,7 +438,7 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
       {scopedIds ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3">
           <p className="text-sm font-semibold text-foreground">
-            Showing {scopedIds.length} home{scopedIds.length === 1 ? "" : "s"} shared with you
+            Showing {cards.length} home{cards.length === 1 ? "" : "s"} shared with you
           </p>
           <a
             href="/rent/browse"

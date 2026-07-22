@@ -25,6 +25,10 @@ export const runtime = "nodejs";
 // attacker-controlled input.
 const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
+// Each requested id costs one Supabase authorization lookup, so bound the
+// fan-out to keep a single request from triggering unbounded parallel queries.
+const MAX_PROPERTY_IDS = 100;
+
 function canSendLeadInvite(role: string | null | undefined): boolean {
   return role === "admin" || role === "manager" || role === "owner" || role === "pro";
 }
@@ -87,6 +91,12 @@ export async function POST(req: Request) {
     }
     if (requestedIds.length === 0) {
       return NextResponse.json({ error: "propertyId is required." }, { status: 400 });
+    }
+    if (requestedIds.length > MAX_PROPERTY_IDS) {
+      return NextResponse.json(
+        { error: `You can share at most ${MAX_PROPERTY_IDS} properties in one send.` },
+        { status: 400 },
+      );
     }
     // Only a listing send fans out to several properties; apply/tour collapse to
     // the first requested id so their single-property semantics are preserved.
