@@ -76,9 +76,15 @@ export function isPlaceholderManagerWorkNumber(phone: string | null | undefined)
 }
 
 /**
- * Shared PropLane messaging number for public "Text to tour/apply" CTAs and
- * work-number display. When Claw is primary, ALWAYS the single agent line —
- * one phone runs the entire messaging system.
+ * Shared PropLane messaging number for the SEND transport
+ * (`proplane-sms-transport.server.ts`) and work-number display. When Claw is
+ * primary, ALWAYS the single agent line — one phone runs the entire messaging
+ * system.
+ *
+ * NOT the public listing CTA number any more: that is `listingCtaSmsPhone`
+ * below, fed by `resolveListingCtaSmsPhone`, which routes production prospects
+ * to the listing's own manager. This helper only backs the dev/preview branch
+ * of that split.
  */
 export function managerContactSmsPhoneForPublicCta(phone: string | null | undefined): string | null {
   if (isClawSharedLineBridgeEnabled()) {
