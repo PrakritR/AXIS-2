@@ -553,6 +553,38 @@ share only a "Services" nav section and a combined nav-count badge
 (`src/hooks/use-portal-nav-counts.ts`) — do not merge their tables, tabs, or
 counts when adding features to either.
 
+# Property drafts (save add-property progress)
+
+A manager can save an in-progress "add property" wizard and finish it later. This
+is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
+(`src/lib/persisted-property-records.ts`) — **NOT** a parallel drafts store, and
+**NOT** `"unlisted"` (which means a previously-live listing the manager took
+*down*; a draft has never been published). Key invariants:
+
+- **Drafts never reach a prospect surface.** They have `status = "draft"` (never
+  `"live"`) and no `property_data`, so `getPublicListings()`
+  (`src/lib/public-listings.server.ts`, filters `status = "live"`) and the browse
+  /search components exclude them with zero extra code. The record's RLS
+  `select_own` policy keeps a draft private to its owner; co-managers never see
+  another manager's drafts (they carry no linked-property grant).
+- **Storage = the existing side-bucket pattern.** A draft is an `AdminPropertyRow`
+  (carrying the full `submission` for resume) in a new `drafts` side bucket
+  (`PropertyPipelineSnapshot`, `SideBuckets`, `AdminPropertyBucketIndex` 5). Save
+  /publish/delete live in `demo-admin-property-inventory.ts`
+  (`saveManagerPropertyDraftToServer` / `publishManagerPropertyDraftToServer` /
+  `deleteManagerPropertyDraft`).
+- **The draft's record id IS the eventual live `mgr-…` listing id.** Publishing
+  (final "Submit listing") re-upserts the SAME id `draft → live` and drops it
+  from the drafts bucket — no orphaned duplicate. A brand-new wizard that used
+  "Save draft" mid-way also publishes-in-place via the remembered id (`draftIdRef`
+  in `manager-add-listing-form.tsx`), never a second row.
+- **Save draft is unvalidated** (partial-friendly, on every step) and does NOT
+  count toward the plan property limit; **publishing** runs full validation +
+  the limit gate like any new listing. The list surface is the "Drafts" stage in
+  `MANAGER_STAGES` (`manager-house-properties-panel.tsx`) with Continue editing /
+  Delete draft. Migration: `…_manager_property_records_draft_status.sql` adds
+  `'draft'` to the status CHECK.
+
 # Financials UI cleanup (Blue Steel consolidation)
 
 **Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
