@@ -302,7 +302,7 @@ export function PortalDashboardTile({
   );
 }
 
-/** Section title row with optional link (manager / resident dashboards). */
+/** Section title row with optional link (resident / vendor / admin dashboards). */
 export function PortalDashboardSectionHeader({
   title,
   href,
