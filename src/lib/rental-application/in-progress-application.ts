@@ -3,6 +3,7 @@ import {
   readManagerApplicationRows,
   replaceManagerApplicationRowInCache,
   upsertApplicationRowToServer,
+  wouldDowngradeSubmittedApplication,
 } from "@/lib/manager-applications-storage";
 import { getPropertyById } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -57,10 +58,13 @@ export function syncInProgressApplicationRow(input: {
   form: RentalWizardFormState;
   residentEmail: string;
 }): void {
-  const existing = readManagerApplicationRows().find((row) => row.id === input.axisId);
-  if (existing && !isInProgressApplicationRow(existing)) return;
-
   const row = buildInProgressApplicationRow(input);
+  // Never walk a submitted application back to a draft. The server enforces this
+  // too (a draft POST can still be in flight when submit lands); this keeps the
+  // local cache honest and avoids issuing the doomed write at all.
+  const existing = readManagerApplicationRows().find((cached) => cached.id === row.id);
+  if (wouldDowngradeSubmittedApplication(existing, row)) return;
+
   replaceManagerApplicationRowInCache(row);
   upsertApplicationRowToServer(row);
 }

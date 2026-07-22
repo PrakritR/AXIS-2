@@ -6,7 +6,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
-import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { normalizeApplicationAxisId, wouldDowngradeSubmittedApplication } from "@/lib/manager-applications-storage";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -40,6 +40,19 @@ function idVariants(id: string): string[] {
 }
 
 async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceRoleClient>, oldId: string, row: DemoApplicantRow) {
+  // Draft syncs are fired unawaited by the wizard, so one can still be in flight
+  // when the submit write lands and would otherwise revert a submitted
+  // application to a draft nobody sees. Re-read immediately before the upsert so
+  // the check reflects the newest stored state, and drop the downgrade.
+  if (row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress") {
+    const { data: current } = await db
+      .from("manager_application_records")
+      .select("row_data")
+      .in("id", idVariants(row.id))
+      .limit(1);
+    const stored = current?.[0]?.row_data as DemoApplicantRow | undefined;
+    if (wouldDowngradeSubmittedApplication(stored, row)) return;
+  }
   if (oldId !== row.id) {
     await db.from("manager_application_records").delete().eq("id", oldId);
   }

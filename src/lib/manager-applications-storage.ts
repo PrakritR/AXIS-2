@@ -137,6 +137,30 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
   return JSON.stringify(normalizeApplicationRows(a)) !== JSON.stringify(normalizeApplicationRows(b));
 }
 
+/** A pending row still being filled in by the applicant (not yet submitted). */
+function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
+  return row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress";
+}
+
+/**
+ * True when writing `incoming` over `existing` would revert an application that
+ * is already submitted back to an unsubmitted draft.
+ *
+ * The wizard fires an unawaited draft sync on every form change, so one of those
+ * writes is routinely still in flight when the submit write lands. Both carry the
+ * same axis id and both succeed, so whichever lands last wins — and when the
+ * draft wins, the manager never sees the application and the resident is left
+ * looking at a draft. Nothing legitimately moves an application backwards into
+ * "In progress", so the draft write is the one to drop.
+ */
+export function wouldDowngradeSubmittedApplication(
+  existing: Pick<DemoApplicantRow, "bucket" | "stage"> | null | undefined,
+  incoming: Pick<DemoApplicantRow, "bucket" | "stage">,
+): boolean {
+  if (!existing) return false;
+  return isDraftApplicationRow(incoming) && !isDraftApplicationRow(existing);
+}
+
 function chooseString(primary: string | undefined, fallback: string | undefined): string | undefined {
   const p = primary?.trim();
   if (p) return primary;

@@ -4,17 +4,25 @@ import {
   inProgressApplicationResumeUrl,
   isInProgressApplicationRow,
   isSubmittedPendingApplicationRow,
+  syncInProgressApplicationRow,
   IN_PROGRESS_APPLICATION_STAGE,
 } from "@/lib/rental-application/in-progress-application";
 import { residentApplicationSubmitBlocked } from "@/lib/rental-application/application-policy";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 
-vi.mock("@/lib/manager-applications-storage", () => ({
-  MANAGER_APPLICATIONS_EVENT: "axis:manager-applications",
-  readManagerApplicationRows: vi.fn(() => []),
-  replaceManagerApplicationRowInCache: vi.fn(),
-  upsertApplicationRowToServer: vi.fn(),
-}));
+vi.mock("@/lib/manager-applications-storage", async () => {
+  // The downgrade rule itself is the thing under test — keep the real one.
+  const actual = await vi.importActual<typeof import("@/lib/manager-applications-storage")>(
+    "@/lib/manager-applications-storage",
+  );
+  return {
+    MANAGER_APPLICATIONS_EVENT: "axis:manager-applications",
+    wouldDowngradeSubmittedApplication: actual.wouldDowngradeSubmittedApplication,
+    readManagerApplicationRows: vi.fn(() => []),
+    replaceManagerApplicationRowInCache: vi.fn(),
+    upsertApplicationRowToServer: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/rental-application/data", () => ({
   getPropertyById: vi.fn((id: string) => ({
@@ -28,7 +36,11 @@ vi.mock("@/lib/rental-application/data", () => ({
   })),
 }));
 
-import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  readManagerApplicationRows,
+  replaceManagerApplicationRowInCache,
+  upsertApplicationRowToServer,
+} from "@/lib/manager-applications-storage";
 
 describe("in-progress-application", () => {
   it("detects in-progress pending rows", () => {
@@ -91,6 +103,62 @@ describe("in-progress-application", () => {
     expect(row.bucket).toBe("pending");
     expect(row.propertyId).toBe("prop-1");
     expect(row.email).toBe("jane@test.com");
+  });
+});
+
+describe("syncInProgressApplicationRow never downgrades a submitted application", () => {
+  const AXIS_ID = "PROPLANE-DRAFT001";
+  const form = { ...createInitialRentalWizardState(), propertyId: "prop-1", fullLegalName: "Jane Doe" };
+
+  beforeEach(() => {
+    vi.mocked(replaceManagerApplicationRowInCache).mockClear();
+    vi.mocked(upsertApplicationRowToServer).mockClear();
+    vi.mocked(readManagerApplicationRows).mockReturnValue([]);
+  });
+
+  it("drops a trailing draft sync once the row is submitted", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: AXIS_ID,
+        name: "Jane Doe",
+        property: "P",
+        propertyId: "prop-1",
+        bucket: "pending",
+        stage: "Submitted",
+        detail: "",
+        email: "jane@test.com",
+      },
+    ]);
+
+    syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+
+    expect(replaceManagerApplicationRowInCache).not.toHaveBeenCalled();
+    expect(upsertApplicationRowToServer).not.toHaveBeenCalled();
+  });
+
+  it("still writes a draft that has not been submitted yet", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: AXIS_ID,
+        name: "Jane",
+        property: "P",
+        propertyId: "prop-1",
+        bucket: "pending",
+        stage: IN_PROGRESS_APPLICATION_STAGE,
+        detail: "",
+        email: "jane@test.com",
+      },
+    ]);
+
+    syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+
+    expect(upsertApplicationRowToServer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(upsertApplicationRowToServer).mock.calls[0][0].stage).toBe(IN_PROGRESS_APPLICATION_STAGE);
+  });
+
+  it("still writes the first draft when no row exists yet", () => {
+    syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+    expect(upsertApplicationRowToServer).toHaveBeenCalledTimes(1);
   });
 });
 
