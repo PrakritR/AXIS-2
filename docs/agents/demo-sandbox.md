@@ -39,7 +39,16 @@ lights up all three at once.
 
 Because the mirror is a separate source, **emptying the code does not empty a
 deployed `/demo`** — rows already sitting on the canonical accounts keep being
-served. Purging those rows is a live-DB operation, separate from any code change.
+served, and purging those rows is a live-DB operation, separate from any code
+change. So the mirror is currently switched OFF at
+`DEMO_PORTAL_MIRROR_ENABLED` (`src/lib/demo/demo-mirror-flag.ts`), which forces
+source 2 everywhere and guarantees a clean sandbox in every environment without
+touching a database. Both the server route (`fetchDemoPortalMirrorSnapshot` /
+`fetchDemoGuidedMirrorSnapshot` return `null`) and the client seeder
+(`seedDemoPortalDataFromMirror` / `seedDemoGuidedBaseData` skip the fetch) read
+that one constant. **It is meant to be turned back on** once the leftover
+fictional rows are purged — the mirror code underneath is untouched. Flip the
+constant; do not delete the mirror.
 
 **The guided "Run demo" tour builds its own data from a blank slate.**
 `prepareDemoSegment` (`src/lib/demo/demo-segment-prep.ts`) seeds
