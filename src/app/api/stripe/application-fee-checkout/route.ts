@@ -86,7 +86,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           code: "AXIS_PAYMENTS_DISABLED",
-          error: "Bank (ACH) payments are not enabled for this property. Use Zelle or Venmo if available.",
+          error: "Online card payments are not enabled for this property. Use Zelle or Venmo if available.",
         },
         { status: 422 },
       );
@@ -141,7 +141,10 @@ export async function POST(req: Request) {
       mode: "hosted",
       destinationAccountId: connect.accountId,
       managerTier,
-      paymentMethod: "ach",
+      // Card method-class → Stripe Checkout surfaces Apple Pay / Google Pay on
+      // eligible devices with a card-entry fallback. A one-time application fee
+      // is a far cleaner mobile pay than an ACH bank-login handshake.
+      paymentMethod: "card",
       successUrl: `${appUrl}${returnPath}?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}${returnPath}?fee_checkout=cancel`,
     });
