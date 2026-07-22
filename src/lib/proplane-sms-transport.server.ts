@@ -36,6 +36,7 @@ async function logOutboundIfNeeded(args: {
     residentUserId?: string | null;
     residentPhone?: string | null;
     source?: "work_number" | "relay" | "automated";
+    counterpartyRole?: import("@/lib/sms-conversation-identity").SmsCounterpartyRole;
   } | null;
   to: string;
   text: string;
@@ -56,6 +57,7 @@ async function logOutboundIfNeeded(args: {
       toPhone: args.to,
       messageSid: args.messageSid ?? null,
       source: args.log.source ?? "work_number",
+      counterpartyRole: args.log.counterpartyRole,
     });
   } catch (e) {
     console.error("logOutboundIfNeeded failed", e instanceof Error ? e.message : e);
@@ -84,6 +86,7 @@ export async function sendPropLaneSms(args: {
     residentUserId?: string | null;
     residentPhone?: string | null;
     source?: "work_number" | "relay" | "automated";
+    counterpartyRole?: import("@/lib/sms-conversation-identity").SmsCounterpartyRole;
   } | null;
 }): Promise<PropLaneSmsResult> {
   const text = args.text.trim();
@@ -145,6 +148,9 @@ export async function sendFromManagerWorkNumber(args: {
   fromNumber?: string | null;
   residentUserId?: string | null;
   source?: "work_number" | "relay" | "automated";
+  /** The recipient's capacity, so outbound threads under the same
+   * conversation identity as their inbound (resident vs prospect). */
+  counterpartyRole?: import("@/lib/sms-conversation-identity").SmsCounterpartyRole;
   /** Skip Communication → SMS Sent logging (manager mirror copies). */
   skipLog?: boolean;
 }): Promise<PropLaneSmsResult> {
@@ -188,6 +194,7 @@ export async function sendFromManagerWorkNumber(args: {
           residentUserId: args.residentUserId,
           residentPhone: args.to,
           source: args.source ?? "work_number",
+          counterpartyRole: args.counterpartyRole,
         },
   });
 }

@@ -58,7 +58,7 @@ function threadId(managerUserId: string, residentPhone: string): string {
 const ADMIN_FORWARD_PHONE_TTL_MS = 5000;
 let adminForwardPhoneCache: { phone: string; expiresAt: number } | null = null;
 
-async function resolveAdminForwardPhone(): Promise<string> {
+export async function resolveAdminForwardPhone(): Promise<string> {
   const now = Date.now();
   if (adminForwardPhoneCache && adminForwardPhoneCache.expiresAt > now) {
     return adminForwardPhoneCache.phone;
@@ -293,7 +293,7 @@ async function resolveManagerPersonalPhone(managerUserId: string): Promise<strin
   return resolveAdminForwardPhone();
 }
 
-async function resolveManagerUserIdForPhone(managerPhone: string): Promise<string | null> {
+export async function resolveManagerUserIdForPhone(managerPhone: string): Promise<string | null> {
   const phone = normalizeE164Us(managerPhone);
   if (!phone) return null;
   const managers = await resolveMappedManagerContacts();

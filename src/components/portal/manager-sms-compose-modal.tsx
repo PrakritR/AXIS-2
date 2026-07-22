@@ -48,11 +48,14 @@ export function ManagerSmsComposeModal({
   onClose,
   residents,
   onSent,
+  endpoint = "/api/manager/sms-conversations",
 }: {
   open: boolean;
   onClose: () => void;
   residents: ManagerSmsResidentConversation[];
   onSent?: () => void;
+  /** Send endpoint. Admin oversight passes its admin-scoped route. */
+  endpoint?: string;
 }) {
   const { showToast } = useAppUi();
   const withPhone = useMemo(
@@ -169,7 +172,7 @@ export function ManagerSmsComposeModal({
         return;
       }
       for (const recipient of targets) {
-        const res = await fetch("/api/manager/sms-conversations", {
+        const res = await fetch(endpoint, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },

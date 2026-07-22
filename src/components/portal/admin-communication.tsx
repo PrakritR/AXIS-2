@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AdminInboxClient, type AdminInboxClientHandle, type AdminInboxTabCounts } from "@/components/portal/admin-inbox-client";
-import { RoleSmsPanel, RESIDENT_SMS_TAB_DEFS } from "@/components/portal/role-sms-panel";
+import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
@@ -19,14 +19,16 @@ const ADMIN_COMM_BASE = "/admin/communication";
 export function AdminCommunication({
   channel,
   emailTabId = "unopened",
-  smsTabId = "all",
 }: {
   channel: AdminCommunicationChannel;
   emailTabId?: AdminEmailTabId;
+  /** Retained for route compatibility (`/admin/communication/sms/:tab`); the
+   * threaded SMS panel manages its own view state and ignores it. */
   smsTabId?: ManagerSmsBucketId;
 }) {
   const navigate = usePortalNavigate();
   const inboxRef = useRef<AdminInboxClientHandle>(null);
+  const smsRef = useRef<ManagerSmsPanelHandle>(null);
   const [emailTabCounts, setEmailTabCounts] = useState<AdminInboxTabCounts>({
     unopened: 0,
     opened: 0,
@@ -34,20 +36,12 @@ export function AdminCommunication({
     sent: 0,
     trash: 0,
   });
-  const [smsBucketCounts, setSmsBucketCounts] = useState<Record<ManagerSmsBucketId, number>>({
-    all: 0,
-    unopened: 0,
-    opened: 0,
-    schedule: 0,
-    sent: 0,
-  });
   const handleEmailTabCountsChange = useCallback((counts: AdminInboxTabCounts) => {
     setEmailTabCounts(counts);
   }, []);
-  const handleSmsBucketCountsChange = useCallback((counts: Record<ManagerSmsBucketId, number>) => {
-    setSmsBucketCounts(counts);
-  }, []);
 
+  // SMS uses the threaded panel's own search / sort / unread controls, so it
+  // has no status-pill folders (unlike Email).
   const statusPills =
     channel === "email" ? (
       <ManagerPortalStatusPills
@@ -60,18 +54,7 @@ export function AdminCommunication({
         activeId={emailTabId}
         onChange={(id) => navigate(`${ADMIN_COMM_BASE}/email/${id}`)}
       />
-    ) : (
-      <ManagerPortalStatusPills
-        activeTone="primary"
-        tabs={RESIDENT_SMS_TAB_DEFS.map(({ id, label }) => ({
-          id,
-          label,
-          count: smsBucketCounts[id],
-        }))}
-        activeId={smsTabId}
-        onChange={(id) => navigate(`${ADMIN_COMM_BASE}/sms/${id}`)}
-      />
-    );
+    ) : undefined;
 
   const titleAside =
     channel === "email" ? (
@@ -95,7 +78,17 @@ export function AdminCommunication({
           New message
         </Button>
       </>
-    ) : null;
+    ) : (
+      <Button
+        type="button"
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => smsRef.current?.openCompose()}
+        data-attr="admin-sms-new-message"
+      >
+        New message
+      </Button>
+    );
 
   return (
     <PortalCommunicationShell
@@ -122,11 +115,12 @@ export function AdminCommunication({
           onTabCountsChange={handleEmailTabCountsChange}
         />
       ) : (
-        <RoleSmsPanel
-          apiPath="/api/admin/sms-conversations"
-          storageScope="admin"
-          tabId={smsTabId}
-          onBucketCountsChange={handleSmsBucketCountsChange}
+        <ManagerSmsPanel
+          ref={smsRef}
+          endpoint="/api/admin/sms-conversations"
+          // Admin has no separate shell compose modal — let the panel own its
+          // own SMS compose, opened from the header New message button.
+          allowInlineCompose
         />
       )}
     </PortalCommunicationShell>

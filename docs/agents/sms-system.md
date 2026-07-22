@@ -3,6 +3,56 @@
 
 # SMS / phone system (Twilio)
 
+## Conversation identity is per-counterparty, NOT the phone pair (read this first)
+
+A conversation used to be derived from the phone-number pair on the wire
+(`sms_from_number` = To, `profiles.phone` = From). On the shared agent line
+that pair collapses — every manager shares one `To`, so distinct people/roles
+folded into one thread and admin saw one flat stream. Conversation identity is
+now **explicit and durable**, tied to the counterparty (person + role):
+
+```
+conversation_key = <owner_manager_user_id>:<counterparty_role>:<person_ref>
+```
+
+- `person_ref` = the counterparty's Axis `user id` when they have an account,
+  else their normalized phone (`conversationPhoneRef`). Two different people on
+  one shared line therefore ALWAYS get different keys — this is the tenant-
+  isolation guarantee, covered by `tests/unit/sms-conversation-identity.test.ts`.
+- `counterparty_role` ∈ `resident | applicant | prospect | vendor | manager |
+  admin | unknown`. The SAME phone in two roles (a leasing prospect who later
+  becomes a resident) is two threads, by design.
+- Pure helpers live in `src/lib/sms-conversation-identity.ts`
+  (`buildConversationKey`, `conversationPhoneRef`, `deriveCounterpartyRole`);
+  the SQL twin is `public.axis_sms_phone_ref()` in
+  `supabase/migrations/20260721210000_sms_conversation_identity.sql`, which adds
+  `counterparty_role` + `conversation_key` to `manager_sms_messages` and
+  `inbound_sms_log` and backfills existing history.
+
+**Writes must stamp the role.** `logManagerSmsMessage` takes `counterpartyRole`
+and computes `conversation_key`; `persistClawInboundSms` passes `"resident"`
+from the known-resident hub and `"prospect"` from the leasing responder;
+`sendFromManagerWorkNumber`/`sendPropLaneSms` thread it so outbound lands in the
+SAME thread as the counterparty's inbound. Inbound `inbound_sms_log` rows use
+`inboundLogIdentityFields(...)`. A write that omits the role degrades to a
+conservative derivation (`unknown` → phone-grouped), never a wrong merge.
+
+**Reads group by `conversation_key`.** `fetchManagerSmsConversations` folds a
+directory resident's non-prospect threads (matched by owner + account id OR
+phone) into one conversation and keeps prospect threads separate. It accepts a
+`scopeManagerIdsOverride` so admin oversight (`fetchAdminSmsConversations`)
+threads the same way across the mapped-manager cohort instead of returning one
+flat feed. The manager/admin SMS UI keys rows on `conversationKey` and sorts via
+`sortSmsConversationRows` (Newest / Oldest / Name A–Z / House).
+
+**Admin can message a resident or a manager.** `POST /api/admin/sms-conversations`
+routes by recipient phone only (never model input): it logs into the owning
+manager's thread and sends a COPY to the admin oversight phone
+(`resolveAdminForwardPhone`, the admin profile's own number — `+15103098345` on
+the test/prod admin account, resolved from `admin-role.ts`, never hardcoded).
+The admin SMS surface reuses `ManagerSmsPanel` with `endpoint="/api/admin/…"`.
+
+
 **Design: outbound sends from a per-manager work number; replies land in Axis.**
 Carriers do not allow sending SMS *from* a personal number — do not fake it.
 - Outbound: `sendSms` (`src/lib/twilio.ts`; optional `mediaUrls` for MMS) via

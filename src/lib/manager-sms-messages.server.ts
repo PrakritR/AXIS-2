@@ -7,6 +7,13 @@ import type {
   ManagerSmsMessageRow,
   ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
+import {
+  buildConversationKey,
+  coerceCounterpartyRole,
+  conversationPhoneRef,
+  deriveCounterpartyRole,
+  type SmsCounterpartyRole,
+} from "@/lib/sms-conversation-identity";
 import { normalizeE164 } from "@/lib/twilio";
 import { resolveManagerWorkNumber } from "@/lib/twilio-provisioning";
 
@@ -91,6 +98,32 @@ export async function deleteManagerSmsConversation(
 }
 
 
+/**
+ * The explicit conversation-identity columns for an `inbound_sms_log` insert.
+ * Spread into the insert so every inbound row threads by (owner, role, person)
+ * exactly like `manager_sms_messages`, keeping the two logs in one thread.
+ */
+export function inboundLogIdentityFields(args: {
+  managerUserId: string | null;
+  counterpartyRole?: SmsCounterpartyRole;
+  counterpartyUserId?: string | null;
+  fromPhone: string;
+}): { counterparty_role: SmsCounterpartyRole; conversation_key: string } {
+  const counterpartyUserId = args.counterpartyUserId?.trim() || null;
+  const role =
+    args.counterpartyRole ??
+    deriveCounterpartyRole({ hasResidentUserId: Boolean(counterpartyUserId) });
+  return {
+    counterparty_role: role,
+    conversation_key: buildConversationKey({
+      ownerManagerUserId: args.managerUserId,
+      role,
+      counterpartyUserId,
+      counterpartyPhone: args.fromPhone,
+    }),
+  };
+}
+
 export async function logManagerSmsMessage(
   db: SupabaseClient,
   args: {
@@ -103,6 +136,12 @@ export async function logManagerSmsMessage(
     toPhone: string;
     messageSid?: string | null;
     source?: "work_number" | "relay" | "automated";
+    /**
+     * The counterparty's capacity in this thread. On a shared line the role is
+     * what separates a prospect from a resident on the SAME phone, so pass it
+     * from the routing classification. Defaults to a conservative derivation.
+     */
+    counterpartyRole?: SmsCounterpartyRole;
   },
 ): Promise<boolean> {
   const managerUserId = args.managerUserId.trim();
@@ -110,9 +149,20 @@ export async function logManagerSmsMessage(
   const toPhone = phoneKey(args.toPhone);
   if (!managerUserId || !residentPhone || !toPhone) return false;
 
+  const residentUserId = args.residentUserId?.trim() || null;
+  const counterpartyRole =
+    args.counterpartyRole ??
+    deriveCounterpartyRole({ hasResidentUserId: Boolean(residentUserId) });
+  const conversationKey = buildConversationKey({
+    ownerManagerUserId: managerUserId,
+    role: counterpartyRole,
+    counterpartyUserId: residentUserId,
+    counterpartyPhone: residentPhone,
+  });
+
   const row = {
     manager_user_id: managerUserId,
-    resident_user_id: args.residentUserId?.trim() || null,
+    resident_user_id: residentUserId,
     resident_phone: residentPhone,
     direction: args.direction,
     body: args.body.trim().slice(0, 1600),
@@ -120,6 +170,8 @@ export async function logManagerSmsMessage(
     to_phone: toPhone,
     message_sid: args.messageSid?.trim() || null,
     source: args.source ?? "work_number",
+    counterparty_role: counterpartyRole,
+    conversation_key: conversationKey,
   };
 
   if (row.message_sid) {
@@ -224,24 +276,22 @@ async function listManagerResidents(db: SupabaseClient, managerUserId: string): 
   return [...seeds.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function pushMessage(
-  bucket: Map<string, ManagerSmsMessageRow[]>,
-  phone: string,
-  msg: ManagerSmsMessageRow,
-): void {
-  const key = phoneKey(phone);
-  if (!key) return;
-  const list = bucket.get(key) ?? [];
-  if (msg.messageSid && list.some((m) => m.messageSid === msg.messageSid)) return;
-  list.push(msg);
-  bucket.set(key, list);
-}
-
 export async function fetchManagerSmsConversations(
   db: SupabaseClient,
   managerUserId: string,
+  /**
+   * Admin oversight passes an explicit set of manager ids (the mapped
+   * shared-line cohort) instead of the co-manager scope. When set, every
+   * conversation is threaded across those managers exactly as each manager
+   * sees their own — so admin can pick a specific counterparty on the shared
+   * line rather than reading one flat stream.
+   */
+  options?: { scopeManagerIdsOverride?: string[] },
 ): Promise<ManagerSmsConversationsPayload> {
-  const scopeManagerIds = await resolveSmsScopeManagerIds(db, managerUserId);
+  const scopeManagerIds =
+    options?.scopeManagerIdsOverride && options.scopeManagerIdsOverride.length > 0
+      ? [...new Set(options.scopeManagerIdsOverride.map((id) => id.trim()).filter(Boolean))]
+      : await resolveSmsScopeManagerIds(db, managerUserId);
   const workNumber =
     (await resolveManagerWorkNumber(db, managerUserId)) ||
     (await (async () => {
@@ -259,23 +309,45 @@ export async function fetchManagerSmsConversations(
     .eq("id", managerUserId)
     .maybeSingle();
 
-  const residents: ResidentSeed[] = [];
+  const residents: (ResidentSeed & { ownerManagerUserId: string })[] = [];
   const seenResidentKeys = new Set<string>();
   for (const ownerId of scopeManagerIds) {
     for (const seed of await listManagerResidents(db, ownerId)) {
       const key = seed.residentUserId || seed.residentEmail || seed.phone || seed.name;
       if (seenResidentKeys.has(key)) continue;
       seenResidentKeys.add(key);
-      residents.push(seed);
+      residents.push({ ...seed, ownerManagerUserId: ownerId });
     }
   }
 
-  const messagesByPhone = new Map<string, ManagerSmsMessageRow[]>();
-  const ownerByPhone = new Map<string, string>();
+  // Group every stored message under its explicit conversation identity
+  // (owner + counterparty role + person ref), NOT the phone number. This is
+  // what keeps two different people on one shared line in two threads, and the
+  // same person in two roles (prospect vs resident) in two threads.
+  type GroupMeta = {
+    ownerId: string;
+    role: SmsCounterpartyRole;
+    counterpartyUserId: string | null;
+    phoneRef: string;
+    phoneDisplay: string;
+  };
+  const messagesByKey = new Map<string, ManagerSmsMessageRow[]>();
+  const metaByKey = new Map<string, GroupMeta>();
+
+  const pushToKey = (key: string, meta: GroupMeta, msg: ManagerSmsMessageRow): void => {
+    if (!key) return;
+    const list = messagesByKey.get(key) ?? [];
+    if (msg.messageSid && list.some((m) => m.messageSid === msg.messageSid)) return;
+    list.push(msg);
+    messagesByKey.set(key, list);
+    if (!metaByKey.has(key)) metaByKey.set(key, meta);
+  };
 
   const { data: inbound } = await db
     .from("inbound_sms_log")
-    .select("id, manager_user_id, from_phone, to_phone, body, message_sid, matched_sender_user_id, created_at")
+    .select(
+      "id, manager_user_id, from_phone, to_phone, body, message_sid, matched_sender_user_id, counterparty_role, conversation_key, created_at",
+    )
     .in("manager_user_id", scopeManagerIds)
     .order("created_at", { ascending: false })
     .limit(2000);
@@ -284,24 +356,33 @@ export async function fetchManagerSmsConversations(
     const from = String(row.from_phone ?? "").trim();
     if (!from) continue;
     const ownerId = String(row.manager_user_id ?? "").trim() || managerUserId;
-    const key = phoneKey(from);
-    if (key && !ownerByPhone.has(key)) ownerByPhone.set(key, ownerId);
-    pushMessage(messagesByPhone, from, {
-      id: String(row.id),
-      direction: "inbound",
-      body: String(row.body ?? ""),
-      fromPhone: from,
-      toPhone: String(row.to_phone ?? ""),
-      messageSid: row.message_sid ? String(row.message_sid) : null,
-      source: "work_number",
-      createdAt: String(row.created_at),
-    });
+    const counterpartyUserId = String(row.matched_sender_user_id ?? "").trim() || null;
+    const role = coerceCounterpartyRole(
+      row.counterparty_role ?? deriveCounterpartyRole({ hasResidentUserId: Boolean(counterpartyUserId) }),
+    );
+    const key =
+      String(row.conversation_key ?? "").trim() ||
+      buildConversationKey({ ownerManagerUserId: ownerId, role, counterpartyUserId, counterpartyPhone: from });
+    pushToKey(
+      key,
+      { ownerId, role, counterpartyUserId, phoneRef: conversationPhoneRef(from), phoneDisplay: from },
+      {
+        id: String(row.id),
+        direction: "inbound",
+        body: String(row.body ?? ""),
+        fromPhone: from,
+        toPhone: String(row.to_phone ?? ""),
+        messageSid: row.message_sid ? String(row.message_sid) : null,
+        source: "work_number",
+        createdAt: String(row.created_at),
+      },
+    );
   }
 
   const { data: outbound } = await db
     .from("manager_sms_messages")
     .select(
-      "id, manager_user_id, resident_phone, body, from_phone, to_phone, message_sid, source, created_at, direction",
+      "id, manager_user_id, resident_user_id, resident_phone, body, from_phone, to_phone, message_sid, source, created_at, direction, counterparty_role, conversation_key",
     )
     .in("manager_user_id", scopeManagerIds)
     .order("created_at", { ascending: false })
@@ -311,18 +392,27 @@ export async function fetchManagerSmsConversations(
     const phone = String(row.resident_phone ?? "").trim();
     if (!phone) continue;
     const ownerId = String(row.manager_user_id ?? "").trim() || managerUserId;
-    const key = phoneKey(phone);
-    if (key && !ownerByPhone.has(key)) ownerByPhone.set(key, ownerId);
-    pushMessage(messagesByPhone, phone, {
-      id: String(row.id),
-      direction: row.direction === "inbound" ? "inbound" : "outbound",
-      body: String(row.body ?? ""),
-      fromPhone: row.from_phone ? String(row.from_phone) : null,
-      toPhone: String(row.to_phone ?? ""),
-      messageSid: row.message_sid ? String(row.message_sid) : null,
-      source: (row.source as ManagerSmsMessageRow["source"]) ?? "work_number",
-      createdAt: String(row.created_at),
-    });
+    const counterpartyUserId = String(row.resident_user_id ?? "").trim() || null;
+    const role = coerceCounterpartyRole(
+      row.counterparty_role ?? deriveCounterpartyRole({ hasResidentUserId: Boolean(counterpartyUserId) }),
+    );
+    const key =
+      String(row.conversation_key ?? "").trim() ||
+      buildConversationKey({ ownerManagerUserId: ownerId, role, counterpartyUserId, counterpartyPhone: phone });
+    pushToKey(
+      key,
+      { ownerId, role, counterpartyUserId, phoneRef: conversationPhoneRef(phone), phoneDisplay: phone },
+      {
+        id: String(row.id),
+        direction: row.direction === "inbound" ? "inbound" : "outbound",
+        body: String(row.body ?? ""),
+        fromPhone: row.from_phone ? String(row.from_phone) : null,
+        toPhone: String(row.to_phone ?? ""),
+        messageSid: row.message_sid ? String(row.message_sid) : null,
+        source: (row.source as ManagerSmsMessageRow["source"]) ?? "work_number",
+        createdAt: String(row.created_at),
+      },
+    );
   }
 
   const { data: relayThreads } = await db
@@ -331,6 +421,7 @@ export async function fetchManagerSmsConversations(
     .in("manager_user_id", scopeManagerIds)
     .limit(400);
 
+  const relayCounterpartyByKey = new Map<string, { userId: string | null; name: string | null }>();
   const threadIds = (relayThreads ?? []).map((t) => String(t.id));
   if (threadIds.length > 0) {
     const { data: relayMsgs } = await db
@@ -358,58 +449,105 @@ export async function fetchManagerSmsConversations(
       const thread = threadById.get(threadId);
       const phone = residentPhoneByThread.get(threadId) ?? "";
       if (!phone) continue;
-      const role = String(msg.sender_role ?? "");
+      const senderRole = String(msg.sender_role ?? "");
       const ownerId = String(thread?.manager_user_id ?? "").trim() || managerUserId;
-      const key = phoneKey(phone);
-      if (key && !ownerByPhone.has(key)) ownerByPhone.set(key, ownerId);
-      pushMessage(messagesByPhone, phone, {
-        id: String(msg.id),
-        direction: role === "resident" ? "inbound" : "outbound",
-        body: String(msg.body ?? ""),
-        fromPhone: null,
-        toPhone: phone,
-        messageSid: msg.twilio_sid ? String(msg.twilio_sid) : null,
-        source: "relay",
-        createdAt: String(msg.created_at),
+      // Relay counterparties are always a known resident (bound proxy pair).
+      const counterpartyUserId = String(thread?.counterparty_user_id ?? "").trim() || null;
+      const key = buildConversationKey({
+        ownerManagerUserId: ownerId,
+        role: "resident",
+        counterpartyUserId,
+        counterpartyPhone: phone,
       });
-      if (
-        thread?.counterparty_user_id &&
-        !residents.some((r) => r.residentUserId === String(thread.counterparty_user_id))
-      ) {
-        residents.push({
-          residentUserId: String(thread.counterparty_user_id),
-          residentEmail: null,
-          name: String(thread.counterparty_name ?? "Resident").trim() || "Resident",
-          phone,
-          propertyLabel: null,
-          tenancyStatus: "resident",
-        });
-      }
+      relayCounterpartyByKey.set(key, {
+        userId: counterpartyUserId,
+        name: String(thread?.counterparty_name ?? "").trim() || null,
+      });
+      pushToKey(
+        key,
+        {
+          ownerId,
+          role: "resident",
+          counterpartyUserId,
+          phoneRef: conversationPhoneRef(phone),
+          phoneDisplay: phone,
+        },
+        {
+          id: String(msg.id),
+          direction: senderRole === "resident" ? "inbound" : "outbound",
+          body: String(msg.body ?? ""),
+          fromPhone: null,
+          toPhone: phone,
+          messageSid: msg.twilio_sid ? String(msg.twilio_sid) : null,
+          source: "relay",
+          createdAt: String(msg.created_at),
+        },
+      );
     }
   }
 
-  const conversations: ManagerSmsResidentConversation[] = residents.map((resident) => {
-    const phone = resident.phone ? phoneKey(resident.phone) : "";
-    const messages = phone ? (messagesByPhone.get(phone) ?? []) : [];
+  const takeMessages = (key: string): ManagerSmsMessageRow[] => {
+    const messages = messagesByKey.get(key) ?? [];
+    messagesByKey.delete(key);
     messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    return {
-      ...resident,
-      ownerManagerUserId: phone ? ownerByPhone.get(phone) ?? managerUserId : managerUserId,
-      messages,
-    };
-  });
+    return messages;
+  };
 
-  for (const [phone, messages] of messagesByPhone.entries()) {
-    if (conversations.some((c) => c.phone && phoneKey(c.phone) === phone)) continue;
-    messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const conversations: ManagerSmsResidentConversation[] = [];
+
+  // Directory residents/applicants: attach every non-prospect thread that
+  // belongs to the SAME owner and matches this person (by account id or phone).
+  // A leasing-prospect thread on the same phone stays a separate conversation.
+  for (const resident of residents) {
+    const ownerId = resident.ownerManagerUserId;
+    const role: SmsCounterpartyRole = resident.tenancyStatus === "applicant" ? "applicant" : "resident";
+    const phoneRef = conversationPhoneRef(resident.phone);
+    const canonicalKey = buildConversationKey({
+      ownerManagerUserId: ownerId,
+      role,
+      counterpartyUserId: resident.residentUserId,
+      counterpartyPhone: resident.phone,
+    });
+    const merged: ManagerSmsMessageRow[] = [];
+    for (const [key, meta] of [...metaByKey.entries()]) {
+      if (meta.ownerId !== ownerId) continue;
+      if (meta.role === "prospect") continue;
+      const idMatch = Boolean(resident.residentUserId) && meta.counterpartyUserId === resident.residentUserId;
+      const phoneMatch = Boolean(phoneRef) && meta.phoneRef === phoneRef;
+      if (!idMatch && !phoneMatch) continue;
+      merged.push(...takeMessages(key));
+    }
+    merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     conversations.push({
-      residentUserId: null,
+      residentUserId: resident.residentUserId,
+      residentEmail: resident.residentEmail,
+      name: resident.name,
+      phone: resident.phone,
+      propertyLabel: resident.propertyLabel,
+      tenancyStatus: resident.tenancyStatus,
+      counterpartyRole: role,
+      conversationKey: canonicalKey,
+      ownerManagerUserId: ownerId,
+      messages: merged,
+    });
+  }
+
+  // Remaining keys have no directory entry — leasing prospects, unknowns, or
+  // relay-only counterparties. Each is its own conversation.
+  for (const [key, meta] of metaByKey.entries()) {
+    if (!messagesByKey.has(key)) continue;
+    const messages = takeMessages(key);
+    const relayInfo = relayCounterpartyByKey.get(key);
+    conversations.push({
+      residentUserId: meta.counterpartyUserId ?? relayInfo?.userId ?? null,
       residentEmail: null,
-      name: phone,
-      phone,
+      name: relayInfo?.name || meta.phoneDisplay || key,
+      phone: meta.phoneDisplay || null,
       propertyLabel: null,
-      tenancyStatus: "applicant",
-      ownerManagerUserId: ownerByPhone.get(phone) ?? managerUserId,
+      tenancyStatus: meta.role === "resident" ? "resident" : "applicant",
+      counterpartyRole: meta.role,
+      conversationKey: key,
+      ownerManagerUserId: meta.ownerId,
       messages,
     });
   }
@@ -561,62 +699,31 @@ export async function fetchVendorSmsConversation(
  * underlying rows those managers see in their own SMS tab, merged into one
  * read-only feed for admin oversight.
  */
-export async function fetchAdminSharedLineSmsConversation(
+/**
+ * Admin Communication → SMS, GROUPED per counterparty across the mapped-manager
+ * shared-line cohort. Unlike the flat feed below, this lets admin choose a
+ * specific conversation on the shared line (the whole point of explicit
+ * conversation identity) and reply/compose into it.
+ */
+export async function fetchAdminSmsConversations(
   db: SupabaseClient,
-): Promise<RoleSmsConversationPayload> {
+): Promise<ManagerSmsConversationsPayload> {
   const { resolveMappedManagerContacts } = await import("@/lib/claw-resident-messaging.server");
-  const managerIds = (await resolveMappedManagerContacts()).map((m) => m.userId).filter(Boolean);
+  const managerIds = [
+    ...new Set(
+      (await resolveMappedManagerContacts()).map((m) => String(m.userId ?? "").trim()).filter(Boolean),
+    ),
+  ];
   const smsConfigured = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
-  if (managerIds.length === 0) return { messages: [], smsConfigured };
-
-  const messages: ManagerSmsMessageRow[] = [];
-  const seenSids = new Set<string>();
-  const addMessage = (row: ManagerSmsMessageRow) => {
-    if (row.messageSid) {
-      if (seenSids.has(row.messageSid)) return;
-      seenSids.add(row.messageSid);
-    }
-    messages.push(row);
-  };
-
-  const { data: inbound } = await db
-    .from("inbound_sms_log")
-    .select("id, from_phone, to_phone, body, message_sid, created_at")
-    .in("manager_user_id", managerIds)
-    .order("created_at", { ascending: false })
-    .limit(1000);
-  for (const row of inbound ?? []) {
-    addMessage({
-      id: String(row.id),
-      direction: "inbound",
-      body: String(row.body ?? ""),
-      fromPhone: row.from_phone ? String(row.from_phone) : null,
-      toPhone: String(row.to_phone ?? ""),
-      messageSid: row.message_sid ? String(row.message_sid) : null,
-      source: "work_number",
-      createdAt: String(row.created_at),
-    });
+  if (managerIds.length === 0) {
+    return {
+      workNumber: null,
+      personalPhone: null,
+      phoneVerified: false,
+      forwardInbound: true,
+      smsConfigured,
+      residents: [],
+    };
   }
-
-  const { data: outbound } = await db
-    .from("manager_sms_messages")
-    .select("id, body, from_phone, to_phone, message_sid, source, created_at, direction")
-    .in("manager_user_id", managerIds)
-    .order("created_at", { ascending: false })
-    .limit(1000);
-  for (const row of outbound ?? []) {
-    addMessage({
-      id: String(row.id),
-      direction: row.direction === "inbound" ? "inbound" : "outbound",
-      body: String(row.body ?? ""),
-      fromPhone: row.from_phone ? String(row.from_phone) : null,
-      toPhone: String(row.to_phone ?? ""),
-      messageSid: row.message_sid ? String(row.message_sid) : null,
-      source: (row.source as ManagerSmsMessageRow["source"]) ?? "work_number",
-      createdAt: String(row.created_at),
-    });
-  }
-
-  messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  return { messages, smsConfigured };
+  return fetchManagerSmsConversations(db, managerIds[0], { scopeManagerIdsOverride: managerIds });
 }

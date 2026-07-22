@@ -134,6 +134,9 @@ export async function POST(req: Request) {
     fromNumber: workNumber,
     residentUserId: match?.residentUserId ?? body.residentUserId ?? null,
     source: "work_number",
+    // Thread the reply into the SAME conversation the manager is looking at
+    // (a prospect stays a prospect, a resident a resident).
+    counterpartyRole: match?.counterpartyRole,
   });
 
   if (!result.ok) {

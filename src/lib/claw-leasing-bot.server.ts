@@ -40,6 +40,7 @@ import {
 } from "@/lib/claw-resident-messaging.server";
 import { buildManagerResidentBrief, runResidentSmsAction } from "@/lib/claw-resident-actions.server";
 import { sendFromManagerWorkNumber, sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
+import type { SmsCounterpartyRole } from "@/lib/sms-conversation-identity";
 import { upsertManagerInboxNotice } from "@/lib/sms-inbox-notice.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164 } from "@/lib/twilio";
@@ -468,9 +469,14 @@ async function persistClawInboundSms(args: {
   fromPhone: string;
   toPhone: string;
   messageId: string;
+  /** The sender's capacity — 'resident' from the resident hub, 'prospect' from
+   * the leasing responder. Splits prospect vs resident threads on one line. */
+  counterpartyRole?: SmsCounterpartyRole;
 }): Promise<boolean> {
   const db = createSupabaseServiceRoleClient();
-  const { logManagerSmsMessage } = await import("@/lib/manager-sms-messages.server");
+  const { logManagerSmsMessage, inboundLogIdentityFields } = await import(
+    "@/lib/manager-sms-messages.server"
+  );
   const managerMessageLogged = await logManagerSmsMessage(db, {
     managerUserId: args.managerUserId,
     residentUserId: args.residentUserId,
@@ -481,6 +487,7 @@ async function persistClawInboundSms(args: {
     toPhone: args.toPhone,
     messageSid: args.messageId || null,
     source: "automated",
+    counterpartyRole: args.counterpartyRole,
   });
   const { error } = await db.from("inbound_sms_log").insert({
     manager_user_id: args.managerUserId,
@@ -488,6 +495,13 @@ async function persistClawInboundSms(args: {
     to_phone: args.toPhone,
     body: args.body,
     message_sid: args.messageId || null,
+    matched_sender_user_id: args.residentUserId?.trim() || null,
+    ...inboundLogIdentityFields({
+      managerUserId: args.managerUserId,
+      counterpartyRole: args.counterpartyRole,
+      counterpartyUserId: args.residentUserId,
+      fromPhone: args.fromPhone,
+    }),
   });
   const inboundLogStored = !error || error.code === "23505";
   if (!inboundLogStored) {
@@ -668,6 +682,7 @@ export async function handleClawLeasingInbound(args: {
         fromPhone: from,
         toPhone: toLine,
         messageId,
+        counterpartyRole: "resident",
       }).catch((e) => {
         console.error("claw resident inbound log failed", e);
         return false;
@@ -794,6 +809,7 @@ export async function handleClawLeasingInbound(args: {
       fromPhone: from,
       toPhone: toLine,
       messageId,
+      counterpartyRole: "prospect",
     }).catch((e) => {
       console.error("claw leasing inbound log failed", e);
       return false;

@@ -4,6 +4,7 @@ import { handleClawLeasingInbound } from "@/lib/claw-leasing-bot.server";
 import { rateLimit } from "@/lib/rate-limit";
 import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { twilioMediaUrls } from "@/lib/sms-media.server";
+import { inboundLogIdentityFields } from "@/lib/manager-sms-messages.server";
 import { relayInboundSms } from "@/lib/sms-relay.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164 } from "@/lib/twilio";
@@ -131,6 +132,13 @@ export async function POST(req: Request) {
         matched_sender_user_id: relay.senderUserId ?? null,
         body,
         message_sid: messageSid,
+        // Proxy-pair relay is always a bound resident ↔ manager thread.
+        ...inboundLogIdentityFields({
+          managerUserId: relay.managerUserId ?? null,
+          counterpartyRole: "resident",
+          counterpartyUserId: relay.senderUserId ?? null,
+          fromPhone,
+        }),
       })
       .then(() => undefined, () => undefined);
     return twimlOk(relay.reply);
@@ -146,7 +154,13 @@ export async function POST(req: Request) {
   if (!managerId) {
     await db
       .from("inbound_sms_log")
-      .insert({ from_phone: fromPhone, to_phone: toPhone, body, message_sid: messageSid })
+      .insert({
+        from_phone: fromPhone,
+        to_phone: toPhone,
+        body,
+        message_sid: messageSid,
+        ...inboundLogIdentityFields({ managerUserId: null, counterpartyRole: "unknown", fromPhone }),
+      })
       .then(() => undefined, () => undefined);
     return twimlOk();
   }
@@ -167,6 +181,9 @@ export async function POST(req: Request) {
     return twimlOk();
   }
 
+  // Belt-and-suspenders: the leasing handler already logs inbound with its
+  // resolved role (this insert dedups on the unique message_sid). Populate the
+  // identity fields anyway for the rare path where the handler logged nothing.
   await db
     .from("inbound_sms_log")
     .insert({
@@ -176,6 +193,7 @@ export async function POST(req: Request) {
       matched_sender_user_id: null,
       body,
       message_sid: messageSid,
+      ...inboundLogIdentityFields({ managerUserId: managerId, fromPhone }),
     })
     .then(() => undefined, () => undefined);
 

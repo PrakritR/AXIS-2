@@ -37,6 +37,19 @@ vi.mock("@/lib/proplane-sms-transport.server", () => ({
 
 vi.mock("@/lib/manager-sms-messages.server", () => ({
   logManagerSmsMessage: (...args: unknown[]) => logManagerSmsMessage(...(args as [unknown, unknown])),
+  // Real implementation is pure; used by persistClawInboundSms for the
+  // inbound_sms_log identity columns.
+  inboundLogIdentityFields: (args: {
+    managerUserId: string | null;
+    counterpartyRole?: string;
+    counterpartyUserId?: string | null;
+    fromPhone: string;
+  }) => ({
+    counterparty_role: args.counterpartyRole ?? "unknown",
+    conversation_key: `${args.managerUserId ?? ""}:${args.counterpartyRole ?? "unknown"}:${
+      args.counterpartyUserId ?? args.fromPhone
+    }`,
+  }),
 }));
 
 vi.mock("@/lib/claw-relay.server", () => ({

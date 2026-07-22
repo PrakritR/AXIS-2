@@ -14,12 +14,14 @@ import { ChevronLeft, Search, Trash2 } from "lucide-react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerSmsComposeModal } from "@/components/portal/manager-sms-compose-modal";
 import {
+  MANAGER_SMS_SORT_OPTIONS,
   normalizeManagerSmsConversationsPayload,
   sortSmsConversationRows,
   smsThreadHasUnread,
   type ManagerSmsConversationsPayload,
   type ManagerSmsMessageRow,
   type ManagerSmsResidentConversation,
+  type ManagerSmsSortId,
 } from "@/lib/manager-sms-messages";
 import {
   threadPassesCommunicationFilters,
@@ -53,7 +55,16 @@ function formatPhoneDisplay(phone: string | null): string {
 }
 
 function conversationId(resident: ManagerSmsResidentConversation): string {
-  return resident.phone ?? resident.residentUserId ?? resident.residentEmail ?? resident.name;
+  // The explicit conversation key separates two people on one shared line and
+  // the same person across roles — prefer it over the phone so those threads
+  // never collapse into one row.
+  return (
+    resident.conversationKey ??
+    resident.phone ??
+    resident.residentUserId ??
+    resident.residentEmail ??
+    resident.name
+  );
 }
 
 function initials(name: string): string {
@@ -151,6 +162,12 @@ export const ManagerSmsPanel = forwardRef<
      * When true (e.g. resident detail), keep an inline compose modal via openCompose().
      */
     allowInlineCompose?: boolean;
+    /**
+     * Conversations API base (GET grouped / POST send / DELETE). Defaults to the
+     * manager route; admin oversight passes its own admin-scoped endpoint, which
+     * also copies every send to the admin phone.
+     */
+    endpoint?: string;
   }
 >(function ManagerSmsPanel(
   {
@@ -161,6 +178,7 @@ export const ManagerSmsPanel = forwardRef<
     onUnreadCountChange,
     onSentNavigate,
     allowInlineCompose = true,
+    endpoint = "/api/manager/sms-conversations",
   },
   ref,
 ) {
@@ -172,6 +190,7 @@ export const ManagerSmsPanel = forwardRef<
   const [hiddenPhones, setHiddenPhones] = useState<Set<string>>(() => loadHiddenPhones());
   const [composeOpen, setComposeOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<ManagerSmsSortId>("newest");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -182,7 +201,7 @@ export const ManagerSmsPanel = forwardRef<
     if (!opts?.quiet) setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/manager/sms-conversations", { credentials: "include", cache: "no-store" });
+      const res = await fetch(endpoint, { credentials: "include", cache: "no-store" });
       const body = (await res.json()) as ManagerSmsConversationsPayload & { error?: string };
       if (!res.ok) throw new Error(body.error ?? "Could not load SMS.");
       setData(normalizeManagerSmsConversationsPayload(body));
@@ -191,7 +210,7 @@ export const ManagerSmsPanel = forwardRef<
     } finally {
       if (!opts?.quiet) setLoading(false);
     }
-  }, []);
+  }, [endpoint]);
 
   useEffect(() => {
     void load();
@@ -293,8 +312,8 @@ export const ManagerSmsPanel = forwardRef<
           return hay.includes(q);
         })
       : rows;
-    return sortSmsConversationRows(filtered, "newest");
-  }, [rows, search]);
+    return sortSmsConversationRows(filtered, sort);
+  }, [rows, search, sort]);
 
   const active = useMemo(
     () => visibleRows.find((r) => r.rowId === activeId) ?? rows.find((r) => r.rowId === activeId) ?? null,
@@ -354,7 +373,7 @@ export const ManagerSmsPanel = forwardRef<
       if (!ok) return;
       setDeletingId(conversationId(resident));
       try {
-        const res = await fetch("/api/manager/sms-conversations", {
+        const res = await fetch(endpoint, {
           method: "DELETE",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -380,7 +399,7 @@ export const ManagerSmsPanel = forwardRef<
         setDeletingId(null);
       }
     },
-    [activeId, load, showToast],
+    [activeId, endpoint, load, showToast],
   );
 
   async function sendReply() {
@@ -389,7 +408,7 @@ export const ManagerSmsPanel = forwardRef<
     if (!text) return;
     setSending(true);
     try {
-      const res = await fetch("/api/manager/sms-conversations", {
+      const res = await fetch(endpoint, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -432,6 +451,7 @@ export const ManagerSmsPanel = forwardRef<
           onClose={() => setComposeOpen(false)}
           residents={composeResidents}
           onSent={handleSmsSent}
+          endpoint={endpoint}
         />
       ) : null}
 
@@ -465,8 +485,8 @@ export const ManagerSmsPanel = forwardRef<
               <h2 className="text-[17px] font-semibold tracking-tight text-white">Messages</h2>
             </header>
 
-            <div className="px-3 pb-2">
-              <label className="relative block">
+            <div className="flex items-center gap-2 px-3 pb-2">
+              <label className="relative block min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                 <input
                   type="search"
@@ -478,6 +498,23 @@ export const ManagerSmsPanel = forwardRef<
                   data-attr="sms-messages-search"
                 />
               </label>
+              <label className="sr-only" htmlFor="sms-sort">
+                Sort conversations
+              </label>
+              <select
+                id="sms-sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as ManagerSmsSortId)}
+                className="h-10 shrink-0 rounded-[10px] border-0 bg-white/[0.12] px-2 text-[13px] text-white outline-none sm:h-9"
+                data-attr="sms-messages-sort"
+                aria-label="Sort conversations"
+              >
+                {MANAGER_SMS_SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-neutral-900 text-white">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">

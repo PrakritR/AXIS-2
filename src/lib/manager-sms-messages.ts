@@ -1,5 +1,7 @@
 /** Client-safe types for manager Communication → SMS. */
 
+import type { SmsCounterpartyRole } from "@/lib/sms-conversation-identity";
+
 export type ManagerSmsMessageRow = {
   id: string;
   direction: "inbound" | "outbound";
@@ -19,6 +21,17 @@ export type ManagerSmsResidentConversation = {
   propertyLabel: string | null;
   /** Approved resident vs pending applicant for a house. */
   tenancyStatus?: "resident" | "applicant";
+  /**
+   * The counterparty's capacity in this thread. Distinguishes a leasing
+   * prospect from a resident on the SAME phone/shared line.
+   */
+  counterpartyRole?: SmsCounterpartyRole;
+  /**
+   * Explicit conversation identity: `<owner>:<role>:<personRef>`. Two people on
+   * one shared line always differ here, so this is the stable thread id the UI
+   * should key on rather than the phone number.
+   */
+  conversationKey?: string;
   /**
    * Work-number owner for this thread. Own account or linked owner when the
    * viewer is a co-manager with Communication (inbox) access.
@@ -90,6 +103,8 @@ export function normalizeManagerSmsConversationsPayload(
         phone: resident?.phone ?? null,
         propertyLabel: resident?.propertyLabel ?? null,
         tenancyStatus: resident?.tenancyStatus === "applicant" ? ("applicant" as const) : ("resident" as const),
+        counterpartyRole: resident?.counterpartyRole,
+        conversationKey: resident?.conversationKey,
         ownerManagerUserId: resident?.ownerManagerUserId ?? null,
         messages: Array.isArray(resident?.messages) ? resident.messages : [],
       }))
