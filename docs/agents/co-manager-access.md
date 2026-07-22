@@ -12,6 +12,19 @@ form is `{ read, edit, delete }` (`edit`/`delete` imply `read`). Model + level
 helpers live in `src/lib/co-manager-permissions.ts`
 (`hasCoManagerPermissionLevel[ForProperty]`).
 
+**`assigned_property_ids` is authorization, not a request field.** Because an
+empty permissions object is a FULL grant, the assigned list alone decides what a
+co-manager reaches. Every route that sets it validates it against real ownership
+with `findPropertyIdsNotOwnedByManager`
+(`src/lib/auth/co-manager-invite-scope.ts`) and rejects the whole request (403)
+if any id is not the inviter's — a non-existent id counts as unowned, and a
+lookup failure fails closed. This applies on `POST /api/pro/account-links` and
+on the post-accept `PATCH`, where the property scope is additionally
+**inviter-only** (the invitee may still edit the payout split, but widening
+their own scope was a self-service takeover of any publicly-listed property id).
+Coverage: `tests/unit/co-manager-invite-scope.test.ts`,
+`tests/integration/portal/co-manager-invite-property-scope.test.ts`.
+
 **Server scoping** — `src/lib/auth/co-manager-module-scope.ts`:
 `linkedPropertyIdsForModule` (property-keyed tables),
 `linkedOwnerScopeForModule` (owner-keyed tables like the vendor directory),

@@ -91,6 +91,16 @@ routes by recipient phone only (never model input): it logs into the owning
 manager's thread and sends a COPY to the admin oversight phone
 (`resolveAdminForwardPhone`, the admin profile's own number — `+15103098345` on
 the test/prod admin account, resolved from `admin-role.ts`, never hardcoded).
+"Phone only" is literal: the recipient number selects the candidate threads, and
+`conversationKey` may only disambiguate *within* that set (one shared-line phone
+can be both a prospect and a resident thread). A body `residentUserId` never
+picks the thread — it is accepted solely as log attribution, and only when it
+names a resident in the cohort belonging to the resolved owning manager;
+otherwise it is dropped. Letting either field select the thread lets the caller
+choose the `ownerManagerUserId` a message is sent *as*, and threads it under an
+unrelated resident's `conversation_key`. Coverage:
+`tests/integration/admin/sms-conversations-attribution.test.ts`.
+
 The admin SMS surface reuses `ManagerSmsPanel` with `endpoint="/api/admin/…"`
 and `allowDelete={false}`: the admin route has no `DELETE` handler, and the
 panel's swipe/trash affordances would otherwise confirm a destructive dialog and

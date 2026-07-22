@@ -499,8 +499,10 @@ perfectly. `profile_roles_insert_self` had the same shape. Closed in
   (`createSupabaseServerClient`), not just the browser — that client is
   `authenticated` too. Self-service writes belong in a route that authorizes the
   session and then writes with `createSupabaseServiceRoleClient()` pinned to
-  `user.id`. `PATCH /api/profile` is the reference implementation and is now the
-  only self-service write path onto `profiles`.
+  `user.id`. `PATCH /api/profile` is the reference implementation — it is the
+  browser's only write path onto `profiles` (the resident Settings save now
+  posts to it instead of using the browser client). `/api/manager/phone` is the
+  other self-service writer and already followed this shape.
 - **Trust columns are wider than `role`.** `filterAdminUserIds` also grants
   admin on `profiles.email = PRIMARY_ADMIN_EMAIL`, and that column carries no
   unique constraint — self-writable `email` was an independent route to admin.
@@ -521,13 +523,10 @@ the dev project — run it after touching policies or grants:
 node --env-file=.env scripts/verify-role-escalation-closed.mjs   # dev/test only
 ```
 
-**Migration versions are apply-time, not filenames.** Supabase records the
-timestamp at which a migration was applied, so a repo file named
-`20260721210000_…` can be recorded as `20260722023635`. A new migration filename
-must sort after the *recorded* remote head or `db push` refuses the whole batch
-(`npm run db:status` to read it) — and because names and recorded versions drift
-apart, migrations get replayed by `db push --include-all`. **Write every
-migration idempotently** (`drop policy if exists` before `create policy`, etc.).
+**Write every migration idempotently** (`drop policy if exists` before `create
+policy`, etc.). Supabase records migrations under apply-time versions rather
+than repo filenames, so they get replayed by `db push --include-all` — see
+[`docs/database-environments.md`](docs/database-environments.md#migration-versions-are-apply-time-not-filenames).
 
 # Working in a git worktree
 

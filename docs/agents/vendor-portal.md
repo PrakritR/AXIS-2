@@ -42,6 +42,18 @@ sets its `vendor_user_id`, and marks the invite accepted. A vendor CAN also
 self-serve signup from the public marketing CTA with no invite at all — they
 just land with no linked manager until one exists.
 
+**Invites are server-issued and always expire.** `vendor_invites` is
+`SELECT`-only for `anon`/`authenticated` (owner-scoped read;
+`20260722120000_lock_role_grant_surface.sql`) — only the service-role issuing
+route writes one. Redemption turns an invite into a **pre-confirmed** account on
+its `vendor_email`, so both lookup paths in `provision-vendor-account.ts` (by
+token and by email) go through `redeemableInvite`, which fails closed on a
+missing/unparseable/elapsed `expires_at`. `expires_at` is `NOT NULL` and
+defaults to `now() + 7 days`, matching the `VENDOR_INVITE_TTL_MS` the issuing
+route stamps. Never reintroduce an expiry-optional path — a NULL expiry
+previously skipped the TTL check entirely. Coverage:
+`tests/unit/vendor-invite-redemption-ttl.test.ts`.
+
 **Row-level isolation.** `manager_vendor_records`, `portal_work_order_records`,
 and `vendor_tax_profiles` all gained a `vendor_user_id` column (nullable,
 populated once the vendor signs up) plus a `..._vendor_read` RLS SELECT policy

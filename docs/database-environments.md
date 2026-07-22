@@ -122,7 +122,19 @@ npm run db:link:dev                                 # ALWAYS relink back to dev/
 Because the same migration files are pushed to both projects, the schemas stay
 mirrored.
 
-### Release note: `--include-all` required for the vendor-invoice RLS migration
+### Migration versions are apply-time, not filenames
+
+Supabase records a migration under the timestamp at which it was **applied**, so
+a repo file named `20260721210000_…` can be recorded remotely as
+`20260722023635`. Two standing consequences:
+
+- A new migration's filename must sort after the *recorded* remote head (`npm
+  run db:status` reads it) or `db push` refuses the whole batch.
+- Because names and recorded versions drift apart, migrations get replayed by
+  `db push --include-all`. **Write every migration idempotently** — `drop policy
+  if exists` before `create policy`, `create table if not exists`, and so on.
+
+#### Release note: `--include-all` required for the vendor-invoice RLS migration
 
 Production (project `qahnczmilgptcedaqype`) records applied migrations under
 **apply-time versions, not their repo filenames** — e.g. repo
