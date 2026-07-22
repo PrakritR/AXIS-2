@@ -1827,7 +1827,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
     const appFeeProcessingCents = !applicationFeeGate.paid && channels.ach && isAchApplicationFeeChannel(payChannel)
-      ? residentProcessingFeeCents(appFeeSubtotalCents, "ach")
+      ? residentProcessingFeeCents(appFeeSubtotalCents, "card")
       : 0;
     const appFeeLabel =
       appFeeProcessingCents > 0
@@ -1846,7 +1846,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const singleChannelLabel =
       enabledChannels.length === 1
         ? enabledChannels[0] === "ach"
-          ? "Bank transfer (ACH)"
+          ? "Card or Apple Pay"
           : enabledChannels[0] === "zelle"
             ? "Zelle"
             : enabledChannels[0] === "venmo"
@@ -1867,7 +1867,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
             {appFeeProcessingCents > 0 ? (
               <p className="mt-1 text-xs text-muted">
-                Includes ${(appFeeProcessingCents / 100).toFixed(2)} bank processing fee.
+                Includes ${(appFeeProcessingCents / 100).toFixed(2)} card processing fee.
               </p>
             ) : null}
             {applicationFeeGate.paid ? (
@@ -1896,9 +1896,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={() => patch({ applicationFeePayChannel: "ach", applicationFeeZelleSentConfirmed: false })}
                 />
                 <span>
-                  <span className="text-sm font-semibold text-foreground">Bank transfer (ACH)</span>
+                  <span className="text-sm font-semibold text-foreground">Card or Apple Pay</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Pay securely via bank account — low 0.8% processing fee (max $5). Clears in 3–5 business days.
+                    Pay instantly with Apple Pay, Google Pay, or any debit/credit card. Standard 2.9% + $0.30 card processing.
                   </span>
                 </span>
               </label>
@@ -1963,8 +1963,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         ) : null}
         {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
           <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
-            Pay by bank transfer (ACH). Your application submits after payment is authorized; the fee is marked paid when
-            the transfer clears (usually 3–5 business days).
+            Pay securely with Apple Pay, Google Pay, or card on the next screen. Your application submits as soon as the
+            payment is confirmed.
           </div>
         ) : null}
         {showZelleInstructions ? (

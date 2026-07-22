@@ -70,15 +70,39 @@ export function axisAchCheckoutProcessing(session: Stripe.Checkout.Session): boo
   return session.status === "complete" && session.payment_status === "unpaid";
 }
 
-function paymentMethodStripeConfig(method: ResidentAxisPaymentMethod): {
-  payment_method_types: ("card" | "link" | "us_bank_account")[];
-  payment_method_options?: {
-    us_bank_account?: {
-      financial_connections: { permissions: ["payment_method"] };
-      verification_method: "automatic";
-    };
-  };
-} {
+/**
+ * Stripe payment-method selection for a resident/applicant Checkout session.
+ *
+ * Returns EITHER an explicit `payment_method_types` allowlist OR a
+ * `payment_method_configuration` (dynamic payment methods) — never both, since
+ * Stripe rejects a session that sets the two together.
+ *
+ * Apple Pay / Google Pay are card wallets: they only ride on the `card`
+ * method-class sessions, whose processing fee (2.9% + $0.30) is identical for a
+ * plain card, Apple Pay, or Google Pay — so the fee line item baked before the
+ * session (see below) is correct no matter which the buyer taps. When
+ * `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION` names a card-scoped PMC we
+ * use dynamic payment methods (Stripe's recommended path for surfacing wallets,
+ * matching the subscription flow in `subscription-checkout-session.ts`); the
+ * PMC must exclude bank/ACH so a card session never surfaces a method with a
+ * different fee. Without the env we fall back to an explicit `["card"]` type,
+ * which still surfaces Apple Pay on one-time (`mode: "payment"`) Checkout once
+ * the domain is registered, and never leaks a wrong-fee method.
+ *
+ * `ach` stays an explicit `us_bank_account` session (its own lower fee); `link`
+ * keeps its explicit Link+card allowlist.
+ */
+function paymentMethodStripeConfig(method: ResidentAxisPaymentMethod):
+  | {
+      payment_method_types: ("card" | "link" | "us_bank_account")[];
+      payment_method_options?: {
+        us_bank_account?: {
+          financial_connections: { permissions: ["payment_method"] };
+          verification_method: "automatic";
+        };
+      };
+    }
+  | { payment_method_configuration: string } {
   if (method === "ach") {
     return {
       payment_method_types: ["us_bank_account"],
@@ -92,6 +116,10 @@ function paymentMethodStripeConfig(method: ResidentAxisPaymentMethod): {
   }
   if (method === "link") {
     return { payment_method_types: ["link", "card"] };
+  }
+  const cardPmc = process.env.STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION?.trim();
+  if (cardPmc) {
+    return { payment_method_configuration: cardPmc };
   }
   return { payment_method_types: ["card"] };
 }
@@ -183,13 +211,12 @@ export async function createAxisAchCheckoutSession(
   }
 
   const totalCents = subtotalCents + processingFeeCents + axisFeeCents;
-  const { payment_method_types, payment_method_options } = paymentMethodStripeConfig(paymentMethod);
+  const paymentMethodConfig = paymentMethodStripeConfig(paymentMethod);
 
   const sessionBase = {
     mode: "payment" as const,
     customer_email: residentEmail,
-    payment_method_types,
-    ...(payment_method_options ? { payment_method_options } : {}),
+    ...paymentMethodConfig,
     line_items: stripeLineItems,
     metadata: {
       ...input.metadata,

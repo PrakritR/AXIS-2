@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 /**
- * Register production domains with Stripe for Apple Pay on Checkout (subscriptions).
+ * Register production domains with Stripe for Apple Pay on Checkout.
+ *
+ * A domain is registered ONCE and Stripe applies it to every wallet payment
+ * method — so this covers BOTH manager subscriptions AND resident rent /
+ * rental-application-fee payments. See docs/stripe-apple-pay-subscriptions.md
+ * and docs/stripe-apple-pay-payments.md.
  *
  * Usage:
  *   node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs
  *   node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs --validate-only
  *
  * Requires STRIPE_SECRET_KEY and NEXT_PUBLIC_APP_URL (and optionally
- * NEXT_PUBLIC_CANONICAL_APP_URL). See docs/stripe-apple-pay-subscriptions.md.
+ * NEXT_PUBLIC_CANONICAL_APP_URL).
  */
 
 import Stripe from "stripe";

@@ -719,7 +719,7 @@ function RentalApplicationWizardInner({
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     if (isAchApplicationFeeChannel(payChannel)) {
-      return checkoutBusy ? "Opening bank checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay with bank (ACH)";
+      return checkoutBusy ? "Opening secure checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay application fee";
     }
     if (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other") {
       return "Submit application";
@@ -886,7 +886,7 @@ function RentalApplicationWizardInner({
             };
 
             if (!res.ok) {
-              showToast(typeof payload.error === "string" ? payload.error : "Could not start bank payment.");
+              showToast(typeof payload.error === "string" ? payload.error : "Could not start card payment.");
               return;
             }
 
