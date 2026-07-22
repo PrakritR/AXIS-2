@@ -202,11 +202,10 @@ export function PromotionTextGenerateModal({
       open={open}
       title="Generate promotion text"
       onClose={onClose}
-      busy={busy}
       panelClassName="max-w-lg"
       dense
       footer={
-        <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
       }

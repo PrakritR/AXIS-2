@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
@@ -96,6 +96,8 @@ export function ManagerPropertyPromotionPanel({
   onUpdated?: () => void;
 }) {
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
+  // Aborts the copy request owned by whichever compose modal is open.
+  const generateAbortRef = useRef<AbortController | null>(null);
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [showNewModal, setShowNewModal] = useState(false);
@@ -165,8 +167,10 @@ export function ManagerPropertyPromotionPanel({
 
   // Closes every promotion compose surface — the unified new modal, the
   // edit-flyer modal and the standalone text modal — so no caller can leave one
-  // of them open after a write.
+  // of them open after a write. Dismissing also aborts an in-flight generate, so
+  // a cancelled request can never land a row behind the closed modal.
   const closeForm = useCallback(() => {
+    generateAbortRef.current?.abort();
     setShowForm(false);
     setShowNewModal(false);
     setTextModalAssetId(null);
@@ -183,6 +187,8 @@ export function ManagerPropertyPromotionPanel({
       return;
     }
     const editingRow = editingRowId ? readManagerPromotionRows().find((p) => p.id === editingRowId) ?? null : null;
+    const abort = new AbortController();
+    generateAbortRef.current = abort;
     setGenerating(true);
     if (editingRow) {
       track("promotion_regenerated", { theme: draft.theme, template: draft.template });
@@ -199,7 +205,9 @@ export function ManagerPropertyPromotionPanel({
       const { copy, source } = await generateFlyerCopy(inputs, label, {
         propertyId,
         extraInstructions: draft.aiPrompt,
+        signal: abort.signal,
       });
+      if (source === "cancelled") return;
       if (source === "forbidden") {
         showToast("You can only create flyers for your own properties.");
         return;
@@ -263,6 +271,7 @@ export function ManagerPropertyPromotionPanel({
     } catch {
       showToast(editingRow ? "Could not update the flyer. Try again." : "Could not generate the flyer. Try again.");
     } finally {
+      if (generateAbortRef.current === abort) generateAbortRef.current = null;
       setGenerating(false);
     }
   }
@@ -271,6 +280,8 @@ export function ManagerPropertyPromotionPanel({
     opts: { format: PromotionTextFormat; tone: string; extraInstructions: string; images: string[] },
     asset: PromotionAsset | null,
   ) {
+    const abort = new AbortController();
+    generateAbortRef.current = abort;
     if (asset?.textEntry) {
       setGeneratingTextId(asset.textEntry.id);
       try {
@@ -283,8 +294,13 @@ export function ManagerPropertyPromotionPanel({
           inputs,
           asset.row.propertyLabel,
           opts.format,
-          { propertyId: asset.row.propertyId, extraInstructions: opts.extraInstructions },
+          {
+            propertyId: asset.row.propertyId,
+            extraInstructions: opts.extraInstructions,
+            signal: abort.signal,
+          },
         );
+        if (source === "cancelled") return;
         if (source === "forbidden") {
           showToast("You can only create promotions for your own properties.");
           return;
@@ -302,6 +318,7 @@ export function ManagerPropertyPromotionPanel({
       } catch {
         showToast("Could not generate promotion text.");
       } finally {
+        if (generateAbortRef.current === abort) generateAbortRef.current = null;
         setGeneratingTextId(null);
       }
       return;
@@ -320,7 +337,9 @@ export function ManagerPropertyPromotionPanel({
       const { copy, source } = await generatePromotionTextCopy(inputs, label, opts.format, {
         propertyId,
         extraInstructions: opts.extraInstructions,
+        signal: abort.signal,
       });
+      if (source === "cancelled") return;
       if (source === "forbidden") {
         showToast("You can only create promotions for your own properties.");
         return;
@@ -353,6 +372,7 @@ export function ManagerPropertyPromotionPanel({
     } catch {
       showToast("Could not generate promotion text.");
     } finally {
+      if (generateAbortRef.current === abort) generateAbortRef.current = null;
       setGeneratingTextId(null);
     }
   }
@@ -493,10 +513,7 @@ export function ManagerPropertyPromotionPanel({
       {/* Edit an existing text promotion (create-new lives in PromotionNewModal). */}
       <PromotionTextGenerateModal
         open={textModalAssetId !== null}
-        onClose={() => {
-          setTextModalAssetId(null);
-        }}
-        busy={generatingTextId !== null}
+        onClose={closeForm}
         initialFormat={textModalAsset?.textEntry?.copy.format}
         initialTone={textModalAsset?.row.inputs.tone}
         initialImages={textModalAsset?.row.inputs.images}
@@ -510,14 +527,13 @@ export function ManagerPropertyPromotionPanel({
         open={showForm}
         title="Edit flyer"
         onClose={closeForm}
-        busy={generating}
         panelClassName="max-w-2xl"
         footer={
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
               {generating ? "Updating…" : "Update flyer"}
             </Button>
-            <Button type="button" variant="outline" onClick={closeForm} disabled={generating}>
+            <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
             </Button>
           </div>

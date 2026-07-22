@@ -159,7 +159,6 @@ export function PromotionNewModal({
       open={open}
       title="New promotion"
       onClose={onClose}
-      busy={flyerBusy || textBusy}
       panelClassName="max-w-2xl"
       footer={
         kind === "flyer" ? (
@@ -172,13 +171,13 @@ export function PromotionNewModal({
             >
               {flyerBusy ? "Generating…" : "Generate flyer"}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} disabled={flyerBusy}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={textBusy}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
           </div>
