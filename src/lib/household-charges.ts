@@ -1097,7 +1097,14 @@ function selectedRoom(row: DemoApplicantRow) {
   return findRoomInSub(sub, choice, row.signedMonthlyRent);
 }
 
-function selectedRoomRentAmount(row: DemoApplicantRow): number {
+/**
+ * True when this resident has a negotiated monthly rent of their own (a manager
+ * override or a signed/renewed rent). It already beats the room's listing monthly
+ * rent in {@link selectedRoomRentAmount}, so it must also beat the room's daily
+ * basis — otherwise a forced regeneration (e.g. a signed lease renewal) would
+ * discard the negotiated figure and re-bill the listing's daily rate.
+ */
+function residentNegotiatedMonthlyRent(row: DemoApplicantRow): number {
   const override = row.application?.managerRentOverride?.trim();
   if (override) {
     const amount = parseMoneyAmount(override);
@@ -1105,6 +1112,12 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   }
   const signedRent = Number(row.signedMonthlyRent ?? 0);
   if (Number.isFinite(signedRent) && signedRent > 0) return signedRent;
+  return 0;
+}
+
+function selectedRoomRentAmount(row: DemoApplicantRow): number {
+  const negotiated = residentNegotiatedMonthlyRent(row);
+  if (negotiated > 0) return negotiated;
   if (row.manuallyAdded) return 0;
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
@@ -2135,8 +2148,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
   const dailyRentRate = room?.dailyRentRate;
   const dailyUtilitiesRate = room?.dailyUtilitiesRate;
-  // When the room is priced by the day, rent (not utilities) bills per-day every period.
-  const dailyBasisRate = roomDailyRentPrice(room);
+  // When the room is priced by the day, rent (not utilities) bills per-day every period —
+  // unless this resident has their own negotiated monthly rent, which wins exactly as it
+  // does over the room's listing monthly rent.
+  const dailyBasisRate =
+    residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
 
   const rentAmount = selectedRoomRentAmount(row);
   if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {

@@ -17,6 +17,7 @@ import {
 import { residentPortalUrl } from "@/lib/claw-resident-links";
 import { getPublicListings } from "@/lib/public-listings.server";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { roomDailyRentPrice, roomHeadlinePriceLabel, roomIsDailyPriced } from "@/lib/room-pricing";
 
 export const LEASING_ESCALATE_TOOL_NAME = "escalate_to_manager";
 
@@ -71,19 +72,27 @@ function summarizeRooms(src: Record<string, unknown> | null) {
       name: string;
       floor: string | null;
       monthlyRent: number | null;
+      rentBasis: "monthly" | "daily";
+      dailyRentPrice: number | null;
+      priceLabel: string | null;
       availability: string | null;
       moveInAvailableDate: string | null;
     }>;
   }
   try {
     const sub = normalizeManagerListingSubmissionV1(subRaw as never);
+    // A daily-priced room may leave monthlyRent at 0 — it still has a real price, so it
+    // must survive the filter and carry its rate as a tool-grounded fact for the agent.
     return sub.rooms
-      .filter((r) => r.name.trim() || r.monthlyRent > 0)
+      .filter((r) => r.name.trim() || r.monthlyRent > 0 || roomIsDailyPriced(r))
       .map((r, index) => ({
         id: r.id,
         name: r.name.trim() || `Room ${index + 1}`,
         floor: r.floor?.trim() || null,
         monthlyRent: r.monthlyRent > 0 ? r.monthlyRent : null,
+        rentBasis: roomIsDailyPriced(r) ? ("daily" as const) : ("monthly" as const),
+        dailyRentPrice: roomDailyRentPrice(r) ?? null,
+        priceLabel: roomHeadlinePriceLabel(r, "") || null,
         availability: r.availability?.trim() || null,
         moveInAvailableDate: r.moveInAvailableDate?.trim() || null,
       }));
@@ -236,6 +245,9 @@ export function summarizeListingRecord(rec: RawPropertyRecord) {
       id: r.id,
       name: r.name,
       monthlyRent: r.monthlyRent,
+      rentBasis: r.rentBasis,
+      dailyRentPrice: r.dailyRentPrice,
+      priceLabel: r.priceLabel,
       availability: r.availability,
     })),
     bundles: summarizeBundles(src),

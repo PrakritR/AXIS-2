@@ -23,6 +23,7 @@ import {
   type PropertyBrowseCard,
 } from "@/lib/room-listings-catalog";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { formatRoomPriceAmount } from "@/lib/room-pricing";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 
 const SORT_OPTIONS: { id: BrowseSortId; label: string }[] = [
@@ -39,7 +40,7 @@ function clampBudget(n: number) {
 function formatRent(card: PropertyBrowseCard): string {
   const display = card.headlineRent ?? card.rentNumeric;
   if (display !== null) {
-    return `$${display.toLocaleString("en-US")}`;
+    return formatRoomPriceAmount(display);
   }
   const stripped = card.priceLabel.replace(/\/month/i, "").replace(/\/day/i, "").trim();
   return stripped || "—";

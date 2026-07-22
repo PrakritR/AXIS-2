@@ -12,6 +12,7 @@ import {
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { isEntireHomeListing, normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
 import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption } from "@/lib/rental-application/lease-terms";
+import { roomDailyRentPrice } from "@/lib/room-pricing";
 
 export { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption };
 
@@ -305,7 +306,8 @@ export function getRoomChoiceLabel(roomChoiceValue: string): string {
     const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
     const room = sub.rooms.find((r) => r.id === listingRoomId);
     if (!room) return prop.title;
-    const rent = room.monthlyRent > 0 ? `$${room.monthlyRent}/mo` : "";
+    const daily = roomDailyRentPrice(room);
+    const rent = daily !== undefined ? `$${daily}/day` : room.monthlyRent > 0 ? `$${room.monthlyRent}/mo` : "";
     const parts = [room.name.trim(), normFloorLabel(room.floor), rent].filter(Boolean);
     return parts.length ? parts.join(" · ") : room.name.trim();
   }
@@ -365,7 +367,8 @@ export function getRoomOptionsForProperty(propertyId: string, options: RoomAvail
     );
     if (roomRows.length > 0) {
       return roomRows.map((r) => {
-        const rent = r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : "Rent TBD";
+        const daily = roomDailyRentPrice(r);
+        const rent = daily !== undefined ? `$${daily}/day` : r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : "Rent TBD";
         const floor = normFloorLabel(r.floor);
         const label = [r.name.trim(), floor, rent].filter(Boolean).join(" · ");
         return { value: `${selected.id}${LISTING_ROOM_CHOICE_SEP}${r.id}`, label };

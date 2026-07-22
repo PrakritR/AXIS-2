@@ -80,9 +80,15 @@ export function roomHeadlineAmount(room: RoomPricingLike | null | undefined): nu
   return monthly ?? null;
 }
 
-function formatUsd(amount: number): string {
+/**
+ * Formats a headline rent amount: whole dollars stay bare ("$1,200"), fractional
+ * amounts always show cents ("$39.50") so a $39.50/day room never renders "$39.5".
+ */
+export function formatRoomPriceAmount(amount: number): string {
   return Number.isInteger(amount) ? `$${amount.toLocaleString("en-US")}` : `$${amount.toFixed(2)}`;
 }
+
+const formatUsd = formatRoomPriceAmount;
 
 /**
  * The room's headline price label, e.g. "$40/day" or "$825/mo". Returns
