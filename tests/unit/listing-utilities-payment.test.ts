@@ -114,6 +114,22 @@ describe("listing-utilities-payment", () => {
       expect(leaseUtilitiesBillingConflictAmount(baseSub({ rooms, leaseUtilities: allIncluded }))).toBe(0);
     });
 
+    it("stays silent when rooms disagree, since mixed rooms are not uniformly manager-billed", () => {
+      const rooms = [
+        { ...baseSub().rooms[0]!, id: "r1", name: "Room A", utilitiesPaymentModel: "tenant_direct" as const, utilitiesEstimate: "200" },
+        { ...baseSub().rooms[0]!, id: "r2", name: "Room B", utilitiesPaymentModel: "included_in_rent" as const, utilitiesEstimate: "" },
+      ];
+      expect(leaseUtilitiesBillingConflictAmount(baseSub({ rooms, leaseUtilities: allIncluded }))).toBe(0);
+    });
+
+    it("quotes the largest estimate across uniformly manager-billed rooms", () => {
+      const rooms = [
+        { ...baseSub().rooms[0]!, id: "r1", name: "Room A", utilitiesEstimate: "150" },
+        { ...baseSub().rooms[0]!, id: "r2", name: "Room B", utilitiesEstimate: "200" },
+      ];
+      expect(leaseUtilitiesBillingConflictAmount(baseSub({ rooms, leaseUtilities: allIncluded }))).toBe(200);
+    });
+
     it("uses the entire-home estimate for whole-unit listings", () => {
       const sub = baseSub({
         listingPlaceCategoryId: "entire_home",
