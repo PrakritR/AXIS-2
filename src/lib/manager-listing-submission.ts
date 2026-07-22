@@ -65,6 +65,24 @@ export type ManagerRoomSubmission = {
   dailyRentRate?: number;
   /** Daily utilities rate used when prorateMethod is "daily_rate". */
   dailyUtilitiesRate?: number;
+  /**
+   * Which rate is this room's HEADLINE price and billing basis. Absent or "monthly"
+   * → the room is priced monthly and behaves exactly as it always has (monthlyRent
+   * drives display and every charge). "daily" → the room is priced by the day at
+   * {@link dailyRentPrice}: the listing shows "$X/day" and every rent charge (first
+   * month, each recurring month, and the last month) is billed as billable-days ×
+   * dailyRentPrice using the room's actual day counts.
+   *
+   * This is DISTINCT from {@link prorateMethod}/{@link dailyRentRate} (which only
+   * prorate the partial edge months of a monthly-priced room) and from
+   * shortTermDailyCost (nightly short-term stays). A room may store both a monthly
+   * rent and a daily price; rentBasis is the single tiebreaker for which one is
+   * active. Daily NEVER overrides monthly unless the manager explicitly sets
+   * rentBasis = "daily", so no existing (monthly) room is affected.
+   */
+  rentBasis?: "monthly" | "daily";
+  /** Headline daily rent rate (USD dollars) used when rentBasis is "daily". */
+  dailyRentPrice?: number;
 };
 
 /** Sidebar “Quick facts” rows on the public listing; when empty, facts are auto-derived from the submission. */
@@ -737,6 +755,19 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         const v = legacyRoom.dailyUtilitiesRate;
         const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
         return Number.isFinite(n) && n > 0 ? n : undefined;
+      })(),
+      dailyRentPrice: (() => {
+        const v = (legacyRoom as ManagerRoomSubmission).dailyRentPrice;
+        const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      })(),
+      // Only honor an explicit "daily" basis backed by a positive daily price; anything
+      // else (including absent) normalizes to monthly so existing rooms are untouched.
+      rentBasis: (() => {
+        const v = (legacyRoom as ManagerRoomSubmission).rentBasis;
+        const price = (legacyRoom as ManagerRoomSubmission).dailyRentPrice;
+        const priceN = typeof price === "number" ? price : typeof price === "string" ? parseFloat(price) : NaN;
+        return v === "daily" && Number.isFinite(priceN) && priceN > 0 ? "daily" : "monthly";
       })(),
       manualUnavailableRanges: (() => {
         const raw = (legacyRoom as ManagerRoomSubmission & { manualUnavailableRanges?: unknown }).manualUnavailableRanges;

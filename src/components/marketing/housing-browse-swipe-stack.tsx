@@ -12,10 +12,11 @@ const TAP_THRESHOLD_PX = 12;
 const EXIT_ANIM_MS = 280;
 
 function formatRent(card: PropertyBrowseCard): string {
-  if (card.rentNumeric !== null) {
-    return `$${card.rentNumeric.toLocaleString("en-US")}`;
+  const display = card.headlineRent ?? card.rentNumeric;
+  if (display !== null) {
+    return `$${display.toLocaleString("en-US")}`;
   }
-  const stripped = card.priceLabel.replace(/\/month/i, "").trim();
+  const stripped = card.priceLabel.replace(/\/month/i, "").replace(/\/day/i, "").trim();
   return stripped || "—";
 }
 
@@ -56,7 +57,7 @@ function SwipeCardFace({
           <p className="text-sm font-semibold text-white/90">{card.neighborhood}</p>
           <p className="mt-0.5 text-xl font-bold tracking-tight text-white">{card.headlineAddress}</p>
           <p className="mt-2 text-2xl font-bold tracking-tight text-white">{rent}</p>
-          <p className="text-xs font-medium text-white/75">{" / month"}</p>
+          <p className="text-xs font-medium text-white/75">{card.pricePeriod === "day" ? " / day" : " / month"}</p>
           {card.petFriendly ? (
             <span className="mt-3 inline-block rounded-full bg-black/45 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
               Pets OK

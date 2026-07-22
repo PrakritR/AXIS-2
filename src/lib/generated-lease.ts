@@ -19,6 +19,7 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { leaseCss } from "@/lib/lease-templates/types";
+import { roomDailyRentPrice } from "@/lib/room-pricing";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
@@ -93,7 +94,11 @@ function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, uni
     if (!rn) return false;
     return rn.includes(u) || u.includes(rn);
   });
-  if (hit && hit.monthlyRent > 0) return `$${hit.monthlyRent.toFixed(2)} / month`;
+  if (hit) {
+    const daily = roomDailyRentPrice(hit);
+    if (daily !== undefined) return `$${daily.toFixed(2)} / day`;
+    if (hit.monthlyRent > 0) return `$${hit.monthlyRent.toFixed(2)} / month`;
+  }
   return undefined;
 }
 
@@ -106,7 +111,10 @@ function submissionRoomRentFromChoice(
   if (!listingRoomId) return undefined;
   const normalized = normalizeManagerListingSubmissionV1(sub);
   const hit = normalized.rooms.find((r) => r.id === listingRoomId);
-  if (!hit || hit.monthlyRent <= 0) return undefined;
+  if (!hit) return undefined;
+  const daily = roomDailyRentPrice(hit);
+  if (daily !== undefined) return `$${daily.toFixed(2)} / day`;
+  if (hit.monthlyRent <= 0) return undefined;
   return `$${hit.monthlyRent.toFixed(2)} / month`;
 }
 

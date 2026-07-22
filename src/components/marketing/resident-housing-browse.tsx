@@ -37,11 +37,16 @@ function clampBudget(n: number) {
 }
 
 function formatRent(card: PropertyBrowseCard): string {
-  if (card.rentNumeric !== null) {
-    return `$${card.rentNumeric.toLocaleString("en-US")}`;
+  const display = card.headlineRent ?? card.rentNumeric;
+  if (display !== null) {
+    return `$${display.toLocaleString("en-US")}`;
   }
-  const stripped = card.priceLabel.replace(/\/month/i, "").trim();
+  const stripped = card.priceLabel.replace(/\/month/i, "").replace(/\/day/i, "").trim();
   return stripped || "—";
+}
+
+function periodSuffix(card: PropertyBrowseCard): string {
+  return card.pricePeriod === "day" ? " / day" : " / month";
 }
 
 function sortLabel(sort: BrowseSortId): string {
@@ -116,7 +121,7 @@ function HousingBrowseCard({
           <p className={`font-bold tracking-tight text-white ${isCarousel ? "mt-2 text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
             {rent}
           </p>
-          <p className="text-[11px] font-medium text-white/75 sm:text-xs">{" / month"}</p>
+          <p className="text-[11px] font-medium text-white/75 sm:text-xs">{periodSuffix(card)}</p>
         </div>
         {card.petFriendly ? (
           <span className="absolute left-2.5 top-2.5 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
@@ -125,7 +130,7 @@ function HousingBrowseCard({
         ) : null}
       </div>
       <div className="sr-only">
-        {card.headlineAddress}, {card.neighborhood}, {rent} per month
+        {card.headlineAddress}, {card.neighborhood}, {rent}{card.pricePeriod === "day" ? " per day" : " per month"}
       </div>
     </Link>
   );

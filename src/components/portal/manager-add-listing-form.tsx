@@ -586,6 +586,67 @@ function ProrationMethodFields({
   );
 }
 
+/**
+ * Opt-in daily pricing for a single room. Off by default (monthly). When on, the
+ * room is billed by the day at the entered rate and the listing shows "$X/day".
+ */
+function RoomDailyPricingFields({
+  rentBasis,
+  dailyRentPrice,
+  monthlyRent,
+  onToggle,
+  onDailyPrice,
+}: {
+  rentBasis?: "monthly" | "daily";
+  dailyRentPrice?: number;
+  monthlyRent: number;
+  onToggle: (daily: boolean) => void;
+  onDailyPrice: (n: number | undefined) => void;
+}) {
+  const daily = rentBasis === "daily";
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-accent/10 p-3">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={daily}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-primary"
+          data-attr="room-price-by-day-toggle"
+        />
+        <span>
+          <span className="block text-sm font-semibold text-foreground">Price this room by the day</span>
+          <span className="mt-0.5 block text-xs text-muted">
+            Rent is billed per day and the listing shows “/day”. Leave off for standard monthly rent.
+          </span>
+        </span>
+      </label>
+      {daily ? (
+        <GridField>
+          <FieldLabel hint="Every rent charge bills billable days × this rate using the real number of days in each month.">
+            Daily rent rate *
+          </FieldLabel>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+            <Input
+              inputMode="decimal"
+              className="pl-8"
+              value={dailyRentPrice ?? ""}
+              onChange={(e) => onDailyPrice(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "40"}
+            />
+          </div>
+          {dailyRentPrice && dailyRentPrice > 0 ? (
+            <p className="mt-1 text-xs text-muted">
+              ≈ ${(dailyRentPrice * 30).toLocaleString("en-US")} / month (30-day estimate; actual charges use each month’s real day count)
+            </p>
+          ) : null}
+        </GridField>
+      ) : null}
+    </div>
+  );
+}
+
 const SHARED_SPACE_TEMPLATES = [
   {
     label: "Kitchen & dining",
@@ -2669,7 +2730,9 @@ export function ManagerAddListingForm({
                         <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <GridField>
-                            <FieldLabel>Monthly rent *</FieldLabel>
+                            <FieldLabel hint={room.rentBasis === "daily" ? "Optional when this room is priced by the day — shown only as an estimate." : undefined}>
+                              {room.rentBasis === "daily" ? "Monthly rent (optional)" : "Monthly rent *"}
+                            </FieldLabel>
                             <div className="relative" data-wizard-field={roomRentKey}>
                               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                               <Input
@@ -2722,16 +2785,43 @@ export function ManagerAddListingForm({
                             />
                           </div>
                           <div className="sm:col-span-2">
-                            <ProrationMethodFields
-                              prorateMethod={room.prorateMethod ?? "auto"}
+                            <RoomDailyPricingFields
+                              rentBasis={room.rentBasis}
+                              dailyRentPrice={room.dailyRentPrice}
                               monthlyRent={room.monthlyRent}
-                              dailyRentRate={room.dailyRentRate}
-                              dailyUtilitiesRate={room.dailyUtilitiesRate}
-                              onMethod={(m) => setRoom(i, { prorateMethod: m })}
-                              onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
-                              onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
+                              onToggle={(daily) => {
+                                clearListingFieldError(roomRentKey);
+                                setRoom(
+                                  i,
+                                  daily
+                                    ? {
+                                        rentBasis: "daily",
+                                        dailyRentPrice:
+                                          room.dailyRentPrice ??
+                                          (room.monthlyRent > 0 ? Math.ceil(room.monthlyRent / 30) : undefined),
+                                      }
+                                    : { rentBasis: "monthly" },
+                                );
+                              }}
+                              onDailyPrice={(n) => {
+                                clearListingFieldError(roomRentKey);
+                                setRoom(i, { dailyRentPrice: n });
+                              }}
                             />
                           </div>
+                          {room.rentBasis === "daily" ? null : (
+                            <div className="sm:col-span-2">
+                              <ProrationMethodFields
+                                prorateMethod={room.prorateMethod ?? "auto"}
+                                monthlyRent={room.monthlyRent}
+                                dailyRentRate={room.dailyRentRate}
+                                dailyUtilitiesRate={room.dailyUtilitiesRate}
+                                onMethod={(m) => setRoom(i, { prorateMethod: m })}
+                                onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                                onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                       );

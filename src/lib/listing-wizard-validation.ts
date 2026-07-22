@@ -1,5 +1,5 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
-import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
@@ -74,9 +74,17 @@ export function validateListingWizardStep(
       errs.monthlyRent = "Enter the monthly rent for the entire home.";
     }
     if (!isEntireHome) {
-      const anyRent = sub.rooms.some((room) => room.monthlyRent > 0);
+      const roomHasRent = (room: ManagerRoomSubmission) =>
+        room.monthlyRent > 0 || (room.rentBasis === "daily" && (room.dailyRentPrice ?? 0) > 0);
+      const anyRent = sub.rooms.some(roomHasRent);
       if (!anyRent && sub.rooms.length > 0) {
         errs.monthlyRent = "Set monthly rent for at least one room (leave others at 0 if not offered).";
+      }
+      // A room switched to daily pricing must carry a positive daily rate.
+      for (const room of sub.rooms) {
+        if (room.rentBasis === "daily" && !((room.dailyRentPrice ?? 0) > 0)) {
+          errs[listingRoomRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
+        }
       }
     }
     const allowedTerms = resolveAllowedLeaseTerms(sub);

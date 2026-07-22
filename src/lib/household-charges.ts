@@ -8,6 +8,7 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { DAILY_RENT_MONTH_ESTIMATE_DAYS, roomDailyRentPrice } from "@/lib/room-pricing";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
@@ -118,6 +119,13 @@ export type RecurringRentProfile = {
   roomLabel: string;
   managerUserId: string | null;
   monthlyRent: number;
+  /**
+   * Headline daily rent rate (USD dollars) when the room is priced by the day.
+   * When set (> 0), each recurring rent charge bills days-in-month × dailyRentPrice
+   * instead of the flat monthlyRent, and the partial last month bills its billable
+   * days × dailyRentPrice. Absent → the profile bills monthly exactly as before.
+   */
+  dailyRentPrice?: number;
   /** Full monthly utilities/RUBS from listing or manager override — billed each month with rent. */
   monthlyUtilities?: number;
   dueDay: number;
@@ -946,6 +954,8 @@ function firstMonthRentChargeForLeaseStart(
   leaseStart: string | undefined,
   prorateMethod?: "auto" | "daily_rate",
   dailyRentRate?: number,
+  /** Headline daily rate when the room is priced by the day — bills EVERY first month (full or partial) per day. */
+  dailyBasisRate?: number,
 ): {
   kind: HouseholdChargeKind;
   amount: number;
@@ -953,6 +963,25 @@ function firstMonthRentChargeForLeaseStart(
   proration: ReturnType<typeof leaseStartProration>;
 } {
   const proration = leaseStartProration(leaseStart);
+  // Room priced by the day: the first month bills its billable days × daily rate
+  // whether it is a full or partial month (billableDays is daysInMonth for a full month).
+  if (dailyBasisRate && dailyBasisRate > 0) {
+    const days =
+      proration.billableDays > 0
+        ? proration.billableDays
+        : proration.daysInMonth > 0
+          ? proration.daysInMonth
+          : DAILY_RENT_MONTH_ESTIMATE_DAYS;
+    const amount = Number((days * dailyBasisRate).toFixed(2));
+    return {
+      kind: proration.prorated ? "prorated_rent" : "first_month_rent",
+      amount,
+      title: proration.prorated
+        ? `Prorated first month's rent (${days} days × $${dailyBasisRate}/day)`
+        : `First month's rent (${days} days × $${dailyBasisRate}/day)`,
+      proration,
+    };
+  }
   let amount: number;
   if (proration.prorated && prorateMethod === "daily_rate" && dailyRentRate && dailyRentRate > 0) {
     amount = Number((proration.billableDays * dailyRentRate).toFixed(2));
@@ -977,6 +1006,8 @@ function lastMonthChargeForLeaseEnd(
   chargeLabel: "rent" | "utilities",
   prorateMethod?: "auto" | "daily_rate",
   dailyRate?: number,
+  /** Headline daily rate when the room is priced by the day — bills the partial last month per day. */
+  dailyBasisRate?: number,
 ): {
   kind: HouseholdChargeKind;
   amount: number;
@@ -985,16 +1016,20 @@ function lastMonthChargeForLeaseEnd(
 } | null {
   const proration = leaseEndProration(leaseEnd);
   if (!proration.prorated) return null;
-  const useDailyRate = prorateMethod === "daily_rate" && dailyRate != null && dailyRate > 0;
+  // A daily-priced room bills its partial last month per day regardless of prorateMethod.
+  const effectiveDailyRate = dailyBasisRate && dailyBasisRate > 0 ? dailyBasisRate : dailyRate;
+  const useDailyRate =
+    (dailyBasisRate != null && dailyBasisRate > 0) ||
+    (prorateMethod === "daily_rate" && dailyRate != null && dailyRate > 0);
   const amount = useDailyRate
-    ? Number((proration.billableDays * dailyRate).toFixed(2))
+    ? Number((proration.billableDays * (effectiveDailyRate ?? 0)).toFixed(2))
     : Number((monthlyAmount * proration.factor).toFixed(2));
   const title = chargeLabel === "rent"
     ? useDailyRate
-      ? `Prorated last month's rent (${proration.billableDays} days × $${dailyRate}/day)`
+      ? `Prorated last month's rent (${proration.billableDays} days × $${effectiveDailyRate}/day)`
       : "Prorated last month's rent"
     : useDailyRate
-      ? `Prorated last month's utilities (${proration.billableDays} days × $${dailyRate}/day)`
+      ? `Prorated last month's utilities (${proration.billableDays} days × $${effectiveDailyRate}/day)`
       : "Prorated last month's utilities";
   return {
     kind: chargeLabel === "rent" ? "prorated_last_month_rent" : "prorated_last_month_utilities",
@@ -1325,7 +1360,9 @@ export function recordWorkOrderResidentCharge(input: {
 function syncAllRecurringRentCharges(): boolean {
   if (!isBrowser()) return false;
   backfillMonthlyUtilitiesOnRentProfiles();
-  const profiles = readRentProfiles().filter((p) => p.active && (p.monthlyRent > 0 || (p.monthlyUtilities ?? 0) > 0));
+  const profiles = readRentProfiles().filter(
+    (p) => p.active && (p.monthlyRent > 0 || (p.dailyRentPrice ?? 0) > 0 || (p.monthlyUtilities ?? 0) > 0),
+  );
   if (profiles.length === 0) return false;
 
   const now = new Date();
@@ -1391,14 +1428,27 @@ function syncAllRecurringRentCharges(): boolean {
       const hasUpfrontLastUtil =
         isPartialLastMonth && hasUpfrontProratedLastCharge(profile.residentEmail, profile.propertyId, "prorated_last_month_utilities");
 
-      if (profile.monthlyRent > 0 && !hasUpfrontLastRent) {
+      const profileDailyRate =
+        typeof profile.dailyRentPrice === "number" && profile.dailyRentPrice > 0 ? profile.dailyRentPrice : 0;
+      if ((profile.monthlyRent > 0 || profileDailyRate > 0) && !hasUpfrontLastRent) {
         const chargeKey = `rent|${emailLower}|${profile.propertyId}|${rentMonth}`;
         const alreadyExists =
           existing.some((c) => chargeBusinessKey(c) === chargeKey) ||
           newCharges.some((c) => chargeBusinessKey(c) === chargeKey);
         if (!alreadyExists) {
-          const amount = Number((profile.monthlyRent * proratedFactor).toFixed(2));
-          const titlePrefix = isPartialLastMonth ? "Prorated rent" : "Rent";
+          // Daily-priced rooms bill actual days-in-month × daily rate (partial last month
+          // bills leaseEndDay × rate); monthly rooms keep the flat monthlyRent × factor.
+          const daysBilled = isPartialLastMonth ? leaseEndDay! : daysInCandidateMonth;
+          const amount =
+            profileDailyRate > 0
+              ? Number((daysBilled * profileDailyRate).toFixed(2))
+              : Number((profile.monthlyRent * proratedFactor).toFixed(2));
+          const titlePrefix =
+            profileDailyRate > 0
+              ? `${isPartialLastMonth ? "Prorated rent" : "Rent"} (${daysBilled} days × $${profileDailyRate}/day)`
+              : isPartialLastMonth
+                ? "Prorated rent"
+                : "Rent";
           newCharges.push({
             id: `hc_rent_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
             createdAt: new Date().toISOString(),
@@ -1551,6 +1601,7 @@ export function upsertRecurringRentProfile(input: {
   roomLabel: string;
   managerUserId: string | null;
   monthlyRent: number;
+  dailyRentPrice?: number;
   monthlyUtilities?: number;
   dueDay?: number;
   dueDayMode?: RentDueDayMode;
@@ -1577,6 +1628,10 @@ export function upsertRecurringRentProfile(input: {
     roomLabel: input.roomLabel,
     managerUserId: input.managerUserId,
     monthlyRent: input.monthlyRent,
+    dailyRentPrice:
+      input.dailyRentPrice !== undefined && Number.isFinite(input.dailyRentPrice) && input.dailyRentPrice > 0
+        ? Number(input.dailyRentPrice)
+        : existing?.dailyRentPrice,
     monthlyUtilities,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
     dueDayMode: input.dueDayMode ?? existing?.dueDayMode ?? "first_of_month",
@@ -2072,10 +2127,12 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
   const dailyRentRate = room?.dailyRentRate;
   const dailyUtilitiesRate = room?.dailyUtilitiesRate;
+  // When the room is priced by the day, rent (not utilities) bills per-day every period.
+  const dailyBasisRate = roomDailyRentPrice(room);
 
   const rentAmount = selectedRoomRentAmount(row);
-  if (rentAmount > 0) {
-    const rentCharge = firstMonthRentChargeForLeaseStart(rentAmount, leaseStart, prorateMethod, dailyRentRate);
+  if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {
+    const rentCharge = firstMonthRentChargeForLeaseStart(rentAmount, leaseStart, prorateMethod, dailyRentRate, dailyBasisRate);
     pushCharge(rentCharge.kind, rentCharge.amount, rentCharge.title, true, moveInDue);
   }
 
@@ -2101,8 +2158,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   }
 
   const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
-  const lastMonthRentCharge = rentAmount > 0
-    ? lastMonthChargeForLeaseEnd(rentAmount, leaseEnd, "rent", prorateMethod, dailyRentRate)
+  const lastMonthRentCharge = (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0))
+    ? lastMonthChargeForLeaseEnd(rentAmount, leaseEnd, "rent", prorateMethod, dailyRentRate, dailyBasisRate)
     : null;
   if (lastMonthRentCharge) {
     pushCharge(
@@ -2159,7 +2216,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   // Set up recurring monthly rent (+ utilities) starting the month after move-in.
   // The move-in month itself is always covered by the upfront first-month/prorated charges above.
   let computedStartMonth: string | undefined;
-  if (leaseStart && (rentAmount > 0 || utilities.amount > 0)) {
+  if (leaseStart && (rentAmount > 0 || utilities.amount > 0 || (dailyBasisRate && dailyBasisRate > 0))) {
     const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
     if (leaseYearRaw && leaseMonthRaw) {
       computedStartMonth = firstRecurringMonthAfterLeaseStart(leaseStart);
@@ -2177,6 +2234,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         roomLabel,
         managerUserId: effectiveManagerUserId,
         monthlyRent: rentAmount,
+        dailyRentPrice: dailyBasisRate && dailyBasisRate > 0 ? dailyBasisRate : undefined,
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
         dueDay: resolveRentDueDayForMonth(dueDayMode, computedStartMonth),
         dueDayMode,

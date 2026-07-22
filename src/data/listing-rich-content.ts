@@ -35,6 +35,10 @@ export type ListingRoomRow = {
   /** Monthly utilities estimate label from submission (shown in modal). */
   utilitiesEstimate?: string;
   price: string;
+  /** "day" when the room is priced by the day (headline "$X/day"); "month" (default) otherwise. */
+  pricePeriod?: "day" | "month";
+  /** Comparable monthly-equivalent rent (daily × ~30) used for sorting/budget filters when priced daily. */
+  priceMonthlyEquivalent?: number;
   availability: string;
   modal: ListingRoomModal;
   /**

@@ -3,6 +3,7 @@ import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submissio
 import { normalizeManagerListingSubmissionV1, PAYMENT_AT_SIGNING_OPTIONS, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { utilitiesListingSummaryLabel } from "@/lib/listing-utilities-payment";
+import { roomDailyRentPrice, roomMonthlyEquivalent } from "@/lib/room-pricing";
 
 export type ListingSigningComputationInput = ManagerListingSubmissionV1 | undefined;
 
@@ -14,7 +15,8 @@ export function monthlyRentListingLabel(sub: ListingSigningComputationInput): st
     const rent = entireHomeMonthlyRentAmount(n);
     return rent > 0 ? `$${rent.toFixed(2)}/mo` : "—";
   }
-  const rents = n.rooms.filter((r) => r.name.trim()).map((r) => r.monthlyRent).filter((x) => x > 0);
+  // Daily-priced rooms contribute their monthly-equivalent so the range stays coherent as "/mo".
+  const rents = n.rooms.filter((r) => r.name.trim()).map((r) => roomMonthlyEquivalent(r)).filter((x) => x > 0);
   if (!rents.length) return "—";
   const lo = Math.min(...rents);
   const hi = Math.max(...rents);
@@ -32,7 +34,11 @@ export function applicantFirstChoiceRentLabel(sub: ListingSigningComputationInpu
   if (v.includes(sep)) {
     const roomId = v.slice(v.indexOf(sep) + sep.length);
     const room = n.rooms.find((r) => r.id === roomId);
-    if (room && room.monthlyRent > 0) return `$${room.monthlyRent.toFixed(2)}/mo`;
+    if (room) {
+      const daily = roomDailyRentPrice(room);
+      if (daily !== undefined) return `$${daily.toFixed(2)}/day`;
+      if (room.monthlyRent > 0) return `$${room.monthlyRent.toFixed(2)}/mo`;
+    }
   }
   return monthlyRentListingLabel(sub);
 }
@@ -72,7 +78,7 @@ export function paymentAtSigningPriceLabel(sub: ListingSigningComputationInput):
   if (includes.includes("first_month_rent")) {
     const rents = isEntireHomeListing(n)
       ? [entireHomeMonthlyRentAmount(n)].filter((x) => x > 0)
-      : n.rooms.map((r) => r.monthlyRent).filter((x) => x > 0);
+      : n.rooms.map((r) => roomMonthlyEquivalent(r)).filter((x) => x > 0);
     if (rents.length) sum += Math.min(...rents);
   }
   if (includes.includes("first_month_utilities")) {
@@ -101,7 +107,7 @@ export function paymentAtSigningDetailBody(sub: ListingSigningComputationInput):
   if (includes.includes("first_month_rent")) {
     const rents = isEntireHomeListing(n)
       ? [entireHomeMonthlyRentAmount(n)].filter((x) => x > 0)
-      : n.rooms.map((r) => r.monthlyRent).filter((x) => x > 0);
+      : n.rooms.map((r) => roomMonthlyEquivalent(r)).filter((x) => x > 0);
     parts.push(
       rents.length
         ? isEntireHomeListing(n)
