@@ -37,7 +37,6 @@ import {
   deleteManagerLiveListing,
   deleteUnlistedManagerProperty,
   listAdminRow,
-  managerPropertyRowsForStage,
   readAdminPropertyRows,
   resolveAdminPropertyRowPreview,
   unlistManagerListing,
@@ -325,20 +324,6 @@ function ManagerPropertyInlineDetails({
       }
     : null;
 
-  const editDeleteGroup = canEditAction ? (
-    <div className="ml-auto flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        className={actionBtnClass}
-        data-attr="listing-edit-full"
-        onClick={openFullListingEditor}
-      >
-        Edit
-      </Button>
-    </div>
-  ) : null;
-
   const footer = (
     <div className="flex flex-col gap-3">
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Actions</p>
@@ -573,7 +558,6 @@ function ManagerPropertyInlineDetails({
 export function ManagerHousePropertiesPanel({
   showToast,
   activeStage,
-  onStageChange,
   onSendToProspect,
 }: {
   showToast: (m: string) => void;
@@ -611,17 +595,6 @@ export function ManagerHousePropertiesPanel({
     };
   }, [scopeUserId]);
 
-
-  const stageCounts = useMemo(() => {
-    void tick;
-    if (!scopeUserId) {
-      return { listed: 0, unlisted: 0 };
-    }
-    return {
-      listed: managerPropertyRowsForStage([2], scopeUserId).length,
-      unlisted: managerPropertyRowsForStage([3], scopeUserId).length,
-    };
-  }, [tick, scopeUserId]);
 
   const rows = useMemo(() => {
     void tick;

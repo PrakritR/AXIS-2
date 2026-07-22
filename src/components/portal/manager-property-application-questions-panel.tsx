@@ -15,7 +15,6 @@ import {
 } from "@/lib/manager-listing-submission";
 import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 import {
-  listingApplicationIsCustomized,
   removeListingApplicationField,
   resolveListingApplicationFields,
   type ResolvedApplicationField,
