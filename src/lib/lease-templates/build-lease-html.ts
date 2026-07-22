@@ -76,13 +76,6 @@ ${body}
 }
 
 /**
- * What every "monthly utilities estimate" cell shows once the breakdown table has said no
- * utility is the Resident's to pay. Deliberately non-numeric so amount parsing (prorated
- * first month, total monthly) treats it as no charge rather than a figure to bill.
- */
-const NO_SEPARATE_UTILITIES_CHARGE = "None — included in rent or paid by Landlord";
-
-/**
  * Structured "which utility is included vs. paid separately, who sets it up, and any
  * included allowance" table for the lease's Utilities section. Empty string when the
  * manager configured no breakdown (the lease then falls back to its standard prose).
@@ -332,20 +325,14 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     monthToMonthSurcharge > 0 ? rentLabelWithMonthlySurcharge(monthlyRentBaseStr, monthToMonthSurcharge) : monthlyRentBaseStr;
 
   const rentNum = parseAmount(monthlyRentStr);
-  const leaseUtilityLines = normalizeLeaseUtilities(subNorm?.leaseUtilities);
-  const utilitiesBreakdown = utilitiesResponsibilityHtml(leaseUtilityLines);
-  const residentOwesUtilitiesEstimate = !utilitiesBreakdown || hasResidentPaidLeaseUtility(leaseUtilityLines ?? []);
   const utilitiesModel = resolveListingUtilitiesPaymentModel(sub ?? undefined, specificRoom ?? undefined);
   const utilitiesBase =
     formatUtilitiesListingLine(utilitiesModel, specificRoom?.utilitiesEstimate?.trim()) ||
     (sub ? utilitiesListingEstimateLabel(sub) : "") ||
     "—";
-  const utilitiesStr = residentOwesUtilitiesEstimate
-    ? escapeHtml(overrideFeeLabel(a.managerUtilitiesOverride, utilitiesBase))
-    : NO_SEPARATE_UTILITIES_CHARGE;
-  const utilitiesNum = !residentOwesUtilitiesEstimate
-    ? 0
-    : utilitiesModel === "manager_billed" && !a.managerUtilitiesOverride?.trim()
+  const utilitiesStr = escapeHtml(overrideFeeLabel(a.managerUtilitiesOverride, utilitiesBase));
+  const utilitiesNum =
+    utilitiesModel === "manager_billed" && !a.managerUtilitiesOverride?.trim()
       ? parseAmount(specificRoom?.utilitiesEstimate?.trim() || utilitiesBase)
       : a.managerUtilitiesOverride?.trim()
         ? parseAmount(a.managerUtilitiesOverride)
@@ -380,13 +367,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const leaseTermsBody = escapeHtml(sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.");
   const houseOverview = escapeHtml(sub?.houseOverview?.trim() || list?.tagline || "Shared co-living housing as described on the listing.");
   const sharedSpacesText = sharedSpacesLeaseParagraph(sub);
-  const utilitiesParagraph = residentOwesUtilitiesEstimate
-    ? `The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${
-        utilitiesBreakdown
-          ? "This estimate reflects the utilities the Resident is responsible for above."
-          : "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property."
-      } The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.`
-    : `All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown, and no separate monthly utilities / RUBS charge is due from Resident. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill usage above any allowance shown directly to Resident with 30 days' advance written notice of a change in the utility structure.`;
+  const leaseUtilityLines = normalizeLeaseUtilities(subNorm?.leaseUtilities);
+  const utilitiesBreakdown = utilitiesResponsibilityHtml(leaseUtilityLines);
+  const utilitiesEstimateSentence = !utilitiesBreakdown
+    ? "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property."
+    : hasResidentPaidLeaseUtility(leaseUtilityLines ?? [])
+      ? "This estimate reflects the utilities the Resident is responsible for above."
+      : "All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown.";
   const amenities = escapeHtml(sub?.amenitiesText?.trim() || "See listing amenities.");
   const houseRules = escapeHtml(sub?.houseRulesText?.trim() || "");
   const petPolicy = (room?.petFriendly ?? list?.petFriendly)
@@ -408,7 +395,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", {
     method: specificRoom?.prorateMethod,
     dailyRentRate: specificRoom?.dailyRentRate,
-    dailyUtilitiesRate: residentOwesUtilitiesEstimate ? specificRoom?.dailyUtilitiesRate : 0,
+    dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
   });
 
   if (a.rentalType === "short_term") {
@@ -553,7 +540,7 @@ ${proratedSection || ""}
 
 <h2>${proratedSection ? "8" : "7"}. Utilities &amp; Services</h2>
 ${utilitiesBreakdown}
-<p>${utilitiesParagraph}</p>
+<p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesEstimateSentence} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
 
 <h2>${proratedSection ? "9" : "8"}. Use, Occupancy &amp; Guest Policy</h2>
 <p>The Premises shall be used exclusively as a private residence. The only authorized occupant(s) are: <strong>${tenantName}</strong> and <strong>${occupancy}</strong> additional authorized occupant(s) listed in writing at signing.</p>

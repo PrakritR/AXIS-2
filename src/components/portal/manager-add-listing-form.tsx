@@ -63,6 +63,7 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
+  leaseUtilitiesBillingConflictAmount,
   resolveAggregateUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
@@ -513,10 +514,12 @@ function UtilitiesPaymentModelPicker({
 function LeaseUtilitiesEditor({
   value,
   aggregateModel,
+  billingConflictAmount,
   onChange,
 }: {
   value: LeaseUtilityLine[] | undefined;
   aggregateModel: UtilitiesPaymentModel;
+  billingConflictAmount: number;
   onChange: (next: LeaseUtilityLine[]) => void;
 }) {
   const lines = value ?? [];
@@ -552,6 +555,21 @@ function LeaseUtilitiesEditor({
 
   return (
     <div className="space-y-3">
+      {billingConflictAmount > 0 ? (
+        <div
+          role="status"
+          data-attr="lease-utilities-billing-conflict"
+          className="rounded-xl border border-[color-mix(in_srgb,var(--status-pending-fg)_30%,transparent)] bg-[var(--status-pending-bg)] px-4 py-3 text-[13px] leading-relaxed text-[var(--status-pending-fg)]"
+        >
+          <p className="font-semibold">This breakdown disagrees with how utilities are billed.</p>
+          <p className="mt-1">
+            No utility below is marked resident-paid, but rooms on this listing are billed through the manager at{" "}
+            {`$${Number.isInteger(billingConflictAmount) ? billingConflictAmount : billingConflictAmount.toFixed(2)}`}
+            /mo. The generated lease still shows that monthly estimate, and the portal still charges it. Reconcile the
+            per-room utilities model or this breakdown so the lease and the resident&apos;s charges agree.
+          </p>
+        </div>
+      ) : null}
       {lines.map((line, i) => (
         <div key={line.id} className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
@@ -1306,6 +1324,7 @@ export function ManagerAddListingForm({
   const isEntireHome = isEntireHomeListing(sub);
   const entireHomeRent = entireHomeMonthlyRentAmount(sub);
   const leaseUtilitiesAggregateModel = useMemo(() => resolveAggregateUtilitiesPaymentModel(sub), [sub]);
+  const leaseUtilitiesBillingConflict = useMemo(() => leaseUtilitiesBillingConflictAmount(sub), [sub]);
 
   const clearListingFieldError = (key: string) => {
     setStepFieldErrors((prev) => {
@@ -2955,6 +2974,7 @@ export function ManagerAddListingForm({
                 <LeaseUtilitiesEditor
                   value={sub.leaseUtilities}
                   aggregateModel={leaseUtilitiesAggregateModel}
+                  billingConflictAmount={leaseUtilitiesBillingConflict}
                   onChange={(next) => setSub((s) => ({ ...s, leaseUtilities: next }))}
                 />
               </ListingSubsection>
