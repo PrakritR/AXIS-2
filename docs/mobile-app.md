@@ -30,7 +30,7 @@ Rent in the app always uses ACH (`src/lib/platform/resident-payments.ts`). Subsc
 
 | Path | Purpose |
 | --- | --- |
-| `capacitor.config.ts` | App id `com.axisseattlehousing.app`, name **Axis**, points the WebView at production. |
+| `capacitor.config.ts` | App id `com.axisseattlehousing.app`, name **PropLane**, points the WebView at production. |
 | `native-shell/index.html` | Branded "you're offline" fallback (Capacitor's required `webDir`). |
 | `src/components/native/native-bridge.tsx` | Mounted in the root layout. On native only: hides splash, styles the status bar, registers push, opens deep links. No-ops on the web. |
 | `src/app/api/native/register-push-token/route.ts` | Stores a device token for the signed-in user. |
@@ -238,6 +238,30 @@ so the Xcode Cloud and GitHub pipelines build the same thing. The script writes
 only `node_modules` and the Capacitor-generated iOS config; it never commits into
 `ios/App/Pods` or other generated output.
 
+### “‘apple-sign-in’ depends on ‘capacitor-swift-pm’ 7.0.0..&lt;8.0.0”
+
+Once `node_modules` exists, SPM hits a second conflict: the latest release of
+`@capacitor-community/apple-sign-in` (7.1.0 — there is no Capacitor 8 build)
+hard-pins `capacitor-swift-pm` to 7.x in its own `Package.swift`, while
+`ios/App/CapApp-SPM/Package.swift` pins `exact: "8.4.1"` for the Capacitor 8
+core plugins. `xcodebuild -resolvePackageDependencies` cannot satisfy both.
+
+The fix is **[`patches/@capacitor-community+apple-sign-in+7.1.0.patch`](../patches/@capacitor-community+apple-sign-in+7.1.0.patch)**,
+which widens that one dependency range to `"7.0.0"..<"9.0.0"`. The root
+`postinstall` script runs `patch-package`, so **every `npm ci` re-applies it** —
+Xcode Cloud (`ci_post_clone.sh`) and GitHub Actions included — and a fresh clone
+is never left with the unpatched plugin. The plugin's Swift source only uses
+stable `CAPPlugin` / `CAPBridgedPlugin` APIs that exist in capacitor-swift-pm 8,
+so widening the range is compile-safe.
+
+Do **not** hand-edit `ios/App/CapApp-SPM/Package.swift` to work around this — it
+is Capacitor-managed and `npx cap sync ios` regenerates it. Dropping the plugin
+is also not an option: native Sign in with Apple uses it
+(`src/lib/auth/native-apple-sign-in.ts`, see
+[`docs/apple-sign-in-setup.md`](apple-sign-in-setup.md)). When the plugin
+publishes a Capacitor 8 release, upgrade and delete the patch; bumping it to any
+other 7.x means regenerating the patch under the new version-stamped filename.
+
 ---
 
 ## Push notifications
@@ -337,9 +361,10 @@ const shot = await capture();      // native picker in-app, file input on web
 if (shot) await upload(shot.file); // shot.previewUrl for an <img> preview
 ```
 
-On iOS add an `NSCameraUsageDescription` (and
-`NSPhotoLibraryUsageDescription`) string to `ios/App/App/Info.plist`, e.g.
-"Axis uses the camera to attach photos to applications and work orders."
+The iOS permission prompts (`NSCameraUsageDescription`,
+`NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription`) are
+already committed in `ios/App/App/Info.plist` — edit them there. They are
+user-visible at the permission prompt, so they must read **PropLane**.
 
 ---
 
