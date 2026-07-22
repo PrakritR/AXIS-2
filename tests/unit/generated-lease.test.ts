@@ -128,10 +128,17 @@ describe("generated-lease", () => {
   const NO_BREAKDOWN_SENTENCE =
     "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property.";
   const ALL_INCLUDED_SENTENCE =
-    "All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown.";
+    "All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown, and no separate monthly utilities / RUBS charge is due from Resident.";
 
-  function leaseHtmlWithUtilities(leaseUtilities?: unknown[]): string {
-    const ctx = leaseContextFromApplication(snapshotJordanLee());
+  const UTILITIES_FIGURE = "$175.00";
+  const NO_SEPARATE_CHARGE = "None — included in rent or paid by Landlord";
+
+  function leaseHtmlWithUtilities(leaseUtilities?: unknown[], appOverrides?: Record<string, unknown>): string {
+    const ctx = leaseContextFromApplication({
+      ...snapshotJordanLee(),
+      managerUtilitiesOverride: UTILITIES_FIGURE,
+      ...(appOverrides ?? {}),
+    });
     const submission = {
       ...(ctx.submission ?? { v: 1, rooms: [], bundles: [], bathrooms: [] }),
       v: 1,
@@ -164,6 +171,8 @@ describe("generated-lease", () => {
     expect(html).toContain("Landlord pays");
     expect(html).toContain(RESIDENT_RESPONSIBLE_SENTENCE);
     expect(html).not.toContain(ALL_INCLUDED_SENTENCE);
+    expect(html).toContain(UTILITIES_FIGURE);
+    expect(html).not.toContain(NO_SEPARATE_CHARGE);
   });
 
   it("keeps the standard utilities prose when no breakdown is configured", () => {
@@ -171,6 +180,8 @@ describe("generated-lease", () => {
     expect(html).toContain(NO_BREAKDOWN_SENTENCE);
     expect(html).not.toContain(RESIDENT_RESPONSIBLE_SENTENCE);
     expect(html).not.toContain("Account set up by");
+    expect(html).toContain(UTILITIES_FIGURE);
+    expect(html).not.toContain(NO_SEPARATE_CHARGE);
   });
 
   it("does not claim the resident is responsible when no utility is resident-paid", () => {
@@ -183,6 +194,28 @@ describe("generated-lease", () => {
     expect(html).toContain(ALL_INCLUDED_SENTENCE);
     expect(html).not.toContain(RESIDENT_RESPONSIBLE_SENTENCE);
     expect(html).not.toContain(NO_BREAKDOWN_SENTENCE);
+    expect(html).not.toContain(UTILITIES_FIGURE);
+    expect(html).not.toContain("estimated monthly utilities / RUBS charge");
+    expect(html.match(new RegExp(NO_SEPARATE_CHARGE, "g"))?.length).toBe(2);
+  });
+
+  it("does not prorate a utilities estimate the breakdown says is included in rent", () => {
+    const allIncluded = [
+      { kind: "electricity", paidBy: "included_in_rent", setUpBy: "manager" },
+      { kind: "water", paidBy: "included_in_rent", setUpBy: "manager" },
+    ];
+    const residentPaid = [
+      { kind: "electricity", paidBy: "resident", setUpBy: "resident" },
+      { kind: "water", paidBy: "included_in_rent", setUpBy: "manager" },
+    ];
+    const midMonth = { leaseStart: "2026-06-15", managerRentOverride: "$1800" };
+    const withResidentPaid = leaseHtmlWithUtilities(residentPaid, midMonth);
+    expect(withResidentPaid).toContain("Prorated First Month");
+    expect(withResidentPaid).toContain("<td>Utilities estimate</td>");
+
+    const withNoneResidentPaid = leaseHtmlWithUtilities(allIncluded, midMonth);
+    expect(withNoneResidentPaid).toContain("Prorated First Month");
+    expect(withNoneResidentPaid).not.toContain("<td>Utilities estimate</td>");
   });
 
   it("renders entire-home premises and rent for whole-house applications", () => {
