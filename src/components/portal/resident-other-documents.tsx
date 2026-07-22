@@ -311,7 +311,12 @@ export function ResidentAddDocumentModal({
           ) : null}
         </div>
 
-        {previewUrl ? (
+        {previewUrl && previewUrl.startsWith("blob:") ? (
+          // `previewUrl` is always a locally-minted `blob:` object URL
+          // (`URL.createObjectURL`, both here and in `useNativeCamera`). Re-check
+          // the exact `blob:` prefix on the value that reaches this <img src>, so
+          // the allowlist sits directly on the sink and no other-scheme string can
+          // ever be rendered as an image source.
           // eslint-disable-next-line @next/next/no-img-element
           <img src={previewUrl} alt="Preview" className="max-h-56 w-full rounded-xl border border-border object-contain" />
         ) : null}
