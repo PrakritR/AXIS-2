@@ -136,6 +136,7 @@ export async function seedCanonicalDemoPortfolio(
       },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(db.from("manager_property_records").upsert(rows, { onConflict: "id" }), "manager_property_records");
   }
 
@@ -153,6 +154,7 @@ export async function seedCanonicalDemoPortfolio(
       },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(
       db.from("manager_application_records").upsert(rows, { onConflict: "id" }),
       "manager_application_records",
@@ -171,6 +173,7 @@ export async function seedCanonicalDemoPortfolio(
       row_data: { ...charge, managerUserId: ctx.managerUserId },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(
       db.from("portal_household_charge_records").upsert(rows, { onConflict: "id" }),
       "portal_household_charge_records",
@@ -187,6 +190,7 @@ export async function seedCanonicalDemoPortfolio(
       row_data: { ...profile, managerUserId: ctx.managerUserId },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(
       db.from("portal_recurring_rent_profile_records").upsert(rows, { onConflict: "id" }),
       "portal_recurring_rent_profile_records",
@@ -204,6 +208,7 @@ export async function seedCanonicalDemoPortfolio(
       row_data: { ...lease, managerUserId: ctx.managerUserId },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(
       db.from("portal_lease_pipeline_records").upsert(rows, { onConflict: "id" }),
       "portal_lease_pipeline_records",
@@ -226,6 +231,7 @@ export async function seedCanonicalDemoPortfolio(
       },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(db.from("portal_work_order_records").upsert(rows, { onConflict: "id" }), "portal_work_order_records");
   }
 
@@ -241,6 +247,7 @@ export async function seedCanonicalDemoPortfolio(
       },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(db.from("manager_vendor_records").upsert(rows, { onConflict: "id" }), "manager_vendor_records");
   }
 
@@ -251,6 +258,7 @@ export async function seedCanonicalDemoPortfolio(
       row_data: { ...promo, managerUserId: ctx.managerUserId },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(db.from("manager_promotion_records").upsert(rows, { onConflict: "id" }), "manager_promotion_records");
   }
 
@@ -263,6 +271,7 @@ export async function seedCanonicalDemoPortfolio(
       row_data: { ...req, managerUserId: ctx.managerUserId },
       updated_at: new Date().toISOString(),
     }));
+    if (rows.length === 0) return;
     await must(
       db.from("portal_service_request_records").upsert(rows, { onConflict: "id" }),
       "portal_service_request_records",
@@ -291,7 +300,16 @@ export async function seedCanonicalDemoPortfolio(
     const now = new Date().toISOString();
     const records: Array<Record<string, unknown>> = [];
 
-    if (!opts.skipGlobalScheduleSingletons) {
+    // The two singleton ids below are ONE row per database, and the live
+    // `/api/public/partner-inquiries` route appends real prospect tour requests
+    // to `axis_admin_partner_inquiries_v1`. Upserting them with an empty payload
+    // would delete that data, so seeding nothing must be a no-op here — only
+    // write them when the snapshot actually carries schedule data. Keep this
+    // guard if `buildDemoIdleSnapshot()` is ever refilled.
+    const hasScheduleSingletonData =
+      schedule.plannedEvents.length > 0 || schedule.partnerInquiries.length > 0;
+
+    if (!opts.skipGlobalScheduleSingletons && hasScheduleSingletonData) {
       records.push({
         id: "axis_admin_planned_events_v1",
         manager_user_id: ctx.managerUserId,
@@ -369,6 +387,7 @@ export async function seedCanonicalDemoPortfolio(
       });
     }
 
+    if (records.length === 0) return;
     await must(db.from("portal_schedule_records").upsert(records, { onConflict: "id" }), "portal_schedule_records");
   }
 

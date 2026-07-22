@@ -25,6 +25,12 @@ import { seedCanonicalDemoPortfolio } from "@/lib/demo/canonical-demo-portfolio-
  * ships empty (see `docs/agents/demo-sandbox.md`). This route creates and
  * repairs the logins; it no longer plants portfolio rows behind them.
  *
+ * It is still a write against whatever database the runtime points at, not a
+ * read-only check. `seedPortfolio` defaults to true, and once that snapshot is
+ * refilled the seed also writes the two DEPLOYMENT-WIDE schedule singletons
+ * (`axis_admin_planned_events_v1` / `axis_admin_partner_inquiries_v1`), which
+ * hold real prospect tour requests in production.
+ *
  * Keep the account set and passwords in lockstep with
  * tests/helpers/seed-test-db.mjs (the test-DB seed also prunes non-canonical
  * accounts; this route never deletes anything).
