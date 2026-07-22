@@ -56,8 +56,9 @@ moment their latest Claw thread happened to be a leasing one — and because the
 read path deliberately refuses to fold a prospect thread into a directory
 resident, that history vanished from the named conversation with nothing in the
 UI disclosing the loss (it resurfaced as an unnamed raw phone number, and the
-resident detail page's SMS tab went blank). `20260721220000_sms_conversation_
-identity_role_repair.sql` corrects databases that applied the bad version.
+resident detail page's SMS tab went blank).
+`20260721220000_sms_conversation_identity_role_repair.sql` corrects databases
+that applied the bad version.
 Regression coverage: `tests/unit/sms-conversation-identity-backfill.test.ts`
 evaluates the migration's `case` branches as a decision table. Any future
 role-derivation change must keep account linkage ahead of thread topic.
