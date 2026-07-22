@@ -260,6 +260,26 @@ resident, vendor, and admin portals:
 Reference: resident detail sections in `manager-residents.tsx`; inbox table in
 `portal-inbox-ui.tsx`.
 
+### Manager dashboard sections are customizable + mobile-collapsible
+
+The manager dashboard (`manager-dashboard.tsx`) renders a fixed catalog of
+sections (cash-flow chart + the "Needs attention" groups). Two invariants:
+
+- **Per-user visibility.** The section catalog is `MANAGER_DASHBOARD_SECTIONS`
+  in `src/lib/dashboard-preferences.ts`; visibility is read via
+  `useDashboardVisibility(userId)` (localStorage, per user, override-only store
+  + `DASHBOARD_PREFS_EVENT`). When you ADD a dashboard section, add it to the
+  catalog AND gate its render on `visibility.<id>`, or it silently bypasses the
+  Customize modal. The KPI stat row is deliberately NOT in the catalog — it is
+  the always-on at-a-glance layer.
+- **Collapse to survive a phone.** Each `AttentionGroup` is a collapsible card
+  that opens by default only when it has items (`open = override ?? !isEmpty`),
+  so empty groups collapse to a one-line header instead of stacking a wall of
+  empty states. Keep new groups on that pattern.
+
+The same list-density problem exists on the **resident** dashboard
+(`resident-dashboard.tsx`, same `AttentionGroup` shape) — not yet migrated.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
