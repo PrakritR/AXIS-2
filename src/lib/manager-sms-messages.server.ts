@@ -123,19 +123,22 @@ export async function deleteManagerSmsConversation(
    * left alone (under-deleting is recoverable; a hard delete is not).
    */
   const phoneHostsAnotherThread = async (): Promise<boolean> => {
+    // Asked as a filter, not a scan: paging rows and looking for a stranger key
+    // in the page silently answers "no" once the phone has more history than
+    // the page holds, which is precisely when collateral deletion hurts most.
+    const excluded = `(${[...keySet].map((k) => `"${k.replace(/(["\\])/g, "\\$1")}"`).join(",")})`;
     for (const { table, phoneColumn } of TABLES) {
       const { data, error } = await db
         .from(table)
         .select("conversation_key")
         .eq("manager_user_id", managerUserId)
         .in(phoneColumn, variants)
-        .limit(500);
+        .not("conversation_key", "is", null)
+        .not("conversation_key", "in", excluded)
+        .limit(1);
       // Fail closed: if we cannot tell, do not sweep by phone.
       if (error) return true;
-      for (const row of data ?? []) {
-        const key = String((row as { conversation_key?: unknown }).conversation_key ?? "").trim();
-        if (key && !keySet.has(key)) return true;
-      }
+      if ((data ?? []).length > 0) return true;
     }
     return false;
   };
@@ -173,6 +176,9 @@ export async function deleteManagerSmsConversation(
   if (!sms.ok) {
     console.error("deleteManagerSmsConversation sms failed", sms.error);
     partialError = sms.error ?? "delete_failed";
+    // Nothing is gone yet, so stop before the second table: a clean failure the
+    // manager can retry beats half a thread destroyed on a transient error.
+    if (deleted === 0) return { ok: false, error: partialError };
   }
 
   // Also clear inbound log rows for this counterparty.

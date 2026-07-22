@@ -117,7 +117,10 @@ describe("manager SMS conversation grouping", () => {
 });
 
 /** Captures the filter chain of every `.delete()` issued against the stub. */
-function makeDeleteSpyDb(rowsByTable: Record<string, { id: string; conversation_key: string | null; phone: string }[]>) {
+function makeDeleteSpyDb(
+  rowsByTable: Record<string, { id: string; conversation_key: string | null; phone: string }[]>,
+  opts: { failDeleteOn?: string } = {},
+) {
   const calls: { table: string; filters: Record<string, unknown> }[] = [];
   const from = (table: string) => {
     const filters: Record<string, unknown> = {};
@@ -141,12 +144,40 @@ function makeDeleteSpyDb(rowsByTable: Record<string, { id: string; conversation_
       filters[`${col}:is`] = val;
       return chain;
     };
+    // The "does another thread share this phone?" probe asks the DB directly
+    // with negated filters rather than paging rows, so the stub has to honour
+    // them or the probe would look like it always finds a stranger key.
+    const negations: { col: string; op: string; val: unknown }[] = [];
+    chain.not = (col: string, op: string, val: unknown) => {
+      negations.push({ col, op, val });
+      return chain;
+    };
+    const parseInList = (raw: string): string[] =>
+      raw
+        .replace(/^\(/, "")
+        .replace(/\)$/, "")
+        .split(",")
+        .map((v) => v.trim().replace(/^"|"$/g, "").replace(/\\(["\\])/g, "$1"))
+        .filter(Boolean);
+    const passesNegations = (row: { conversation_key: string | null }): boolean =>
+      negations.every(({ col, op, val }) => {
+        if (col !== "conversation_key") return true;
+        if (op === "is" && val === null) return row.conversation_key !== null;
+        if (op === "in") return !parseInList(String(val)).includes(row.conversation_key ?? "");
+        return true;
+      });
     chain.select = () => chain;
     chain.limit = () => chain;
     chain.then = (resolve: (v: unknown) => unknown) => {
       // A plain select — this is the "does another thread share this phone?"
       // probe, so it has to see the rows actually stored.
-      if (!deleting) return Promise.resolve({ data: rowsByTable[table] ?? [], error: null }).then(resolve);
+      if (!deleting) {
+        const visible = (rowsByTable[table] ?? []).filter(passesNegations);
+        return Promise.resolve({ data: visible, error: null }).then(resolve);
+      }
+      if (opts.failDeleteOn === table) {
+        return Promise.resolve({ data: null, error: { message: "statement timeout" } }).then(resolve);
+      }
       const matched = (rowsByTable[table] ?? []).filter((row) => {
         const keys = filters.conversation_key;
         if (Array.isArray(keys) && !keys.includes(row.conversation_key as string)) return false;
@@ -252,6 +283,20 @@ describe("deleteManagerSmsConversation scope", () => {
     });
     expect(spy.rowsByTable.manager_sms_messages.map((r) => r.id)).toEqual(["m-legacy", "m-resident"]);
     expect(spy.rowsByTable.inbound_sms_log.map((r) => r.id)).toEqual(["i-legacy"]);
+  });
+
+  it("leaves the inbound log untouched when the first table fails before anything is gone", async () => {
+    // Nothing has been destroyed yet at that point, so the whole delete stays
+    // retryable rather than half-applied across the two tables.
+    const spy = makeDeleteSpyDb(seedRows(), { failDeleteOn: "manager_sms_messages" });
+    const result = await deleteManagerSmsConversation(spy.db, {
+      managerUserId: MGR,
+      phone: PHONE,
+      conversationKey: prospectKey,
+    });
+    expect(result).toMatchObject({ ok: false });
+    expect(spy.rowsByTable.manager_sms_messages.map((r) => r.id)).toEqual(["m-prospect", "m-resident"]);
+    expect(spy.rowsByTable.inbound_sms_log.map((r) => r.id)).toEqual(["i-prospect", "i-resident"]);
   });
 
   it("falls back to the phone-wide delete only when no conversation key is supplied", async () => {
