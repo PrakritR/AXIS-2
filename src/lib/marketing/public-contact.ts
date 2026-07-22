@@ -17,11 +17,13 @@ export const BOOK_DEMO_HREF = "/contact?tab=schedule";
 /**
  * Public social profiles, rendered as the footer icon row.
  *
- * The handles below are the intended PropLane profiles; each one is
- * env-overridable (`NEXT_PUBLIC_SOCIAL_*`) so a profile can be repointed
- * without a code change, and a network we do not hold yet can be blanked out
- * — an empty value drops that icon from the footer entirely rather than
- * shipping a link that 404s.
+ * Every default below is deliberately EMPTY: we do not hold a confirmed handle
+ * on any of these networks yet, and a public footer link to an unclaimed handle
+ * either 404s or hands a squatter our brand. An empty href drops that icon from
+ * the footer entirely, so the row only ever renders profiles someone has
+ * confirmed by setting `NEXT_PUBLIC_SOCIAL_*` in the environment. Do not
+ * hardcode a URL here to "fill in" a network — supply it via env once the
+ * account actually exists.
  */
 export type PublicSocialId = "instagram" | "x" | "linkedin" | "facebook";
 
@@ -33,10 +35,10 @@ export type PublicSocialLink = {
 };
 
 const SOCIAL_DEFAULTS: Record<PublicSocialId, { label: string; href: string }> = {
-  instagram: { label: "PropLane on Instagram", href: "https://www.instagram.com/proplaneapp" },
-  x: { label: "PropLane on X", href: "https://x.com/proplaneapp" },
-  linkedin: { label: "PropLane on LinkedIn", href: "https://www.linkedin.com/company/proplaneapp" },
-  facebook: { label: "PropLane on Facebook", href: "https://www.facebook.com/proplaneapp" },
+  instagram: { label: "PropLane on Instagram", href: "" },
+  x: { label: "PropLane on X", href: "" },
+  linkedin: { label: "PropLane on LinkedIn", href: "" },
+  facebook: { label: "PropLane on Facebook", href: "" },
 };
 
 const SOCIAL_ENV: Record<PublicSocialId, string | undefined> = {
