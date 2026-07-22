@@ -18,7 +18,7 @@ import {
   PromotionTextAssetDetail,
   PromotionTextHeaderActions,
 } from "@/components/portal/promotion-asset-detail";
-import { PromotionNewChooserModal } from "@/components/portal/promotion-new-chooser-modal";
+import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
@@ -40,7 +40,6 @@ import {
   nextPromotionAssetDefaultTitle,
   sortPromotionAssets,
   type PromotionAsset,
-  type PromotionAssetKind,
 } from "@/lib/promotion-assets";
 import {
   FLYER_IMAGE_LIMIT,
@@ -98,7 +97,7 @@ export function ManagerPropertyPromotionPanel({
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [showChooser, setShowChooser] = useState(false);
+  const [showNewModal, setShowNewModal] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -142,11 +141,13 @@ export function ManagerPropertyPromotionPanel({
     return sortPromotionAssets(flattenPromotionAssets(rows), "newest");
   }, [propertyId, tick]);
 
-  const openFlyerForm = useCallback(() => {
+  // Open the unified "New promotion" modal (type dropdown + inline form, no
+  // separate "Continue" step) seeded to this property.
+  const openNewPromotion = useCallback(() => {
     setEditingRowId(null);
     setEditingEntryId(null);
     setDraft(draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts));
-    setShowForm(true);
+    setShowNewModal(true);
   }, [listings, propertyId, autofillOpts]);
 
   const openEditFlyer = useCallback(
@@ -163,19 +164,11 @@ export function ManagerPropertyPromotionPanel({
 
   const closeForm = useCallback(() => {
     setShowForm(false);
+    setShowNewModal(false);
     setEditingRowId(null);
     setEditingEntryId(null);
     setDraft(EMPTY_DRAFT);
   }, []);
-
-  function onChooseNewKind(kind: PromotionAssetKind) {
-    setShowChooser(false);
-    if (kind === "flyer") {
-      openFlyerForm();
-      return;
-    }
-    setTextModalAssetId("__new__");
-  }
 
   async function generate() {
     const label = draft.propertyLabel.trim();
@@ -347,7 +340,7 @@ export function ManagerPropertyPromotionPanel({
         updatedAt: now,
       });
       upsertManagerPromotion(row);
-      setTextModalAssetId(null);
+      closeForm();
       setExpandedId(makePromotionAssetId(row.id, "text", entry.id));
       setTick((n) => n + 1);
       onUpdated?.();
@@ -459,7 +452,7 @@ export function ManagerPropertyPromotionPanel({
             type="button"
             variant="outline"
             className="h-8 rounded-full px-3 text-xs"
-            onClick={() => setShowChooser(true)}
+            onClick={openNewPromotion}
             data-attr="manager-property-new-promotion"
           >
             New promotion
@@ -478,12 +471,21 @@ export function ManagerPropertyPromotionPanel({
         />
       </PortalCollapsibleSection>
 
-      <PromotionNewChooserModal
-        open={showChooser}
-        onClose={() => setShowChooser(false)}
-        onChoose={onChooseNewKind}
+      <PromotionNewModal
+        open={showNewModal}
+        onClose={closeForm}
+        draft={draft}
+        setDraft={setDraft}
+        listings={listings}
+        onSelectProperty={() => {}}
+        hidePropertyPicker
+        onGenerateFlyer={() => void generate()}
+        flyerBusy={generating}
+        onGenerateText={(opts) => void createOrRegenerateText(opts, null)}
+        textBusy={generatingTextId !== null}
       />
 
+      {/* Edit an existing text promotion (create-new lives in PromotionNewModal). */}
       <PromotionTextGenerateModal
         open={textModalAssetId !== null}
         onClose={() => {
@@ -491,28 +493,23 @@ export function ManagerPropertyPromotionPanel({
         }}
         busy={generatingTextId !== null}
         initialFormat={textModalAsset?.textEntry?.copy.format}
-        initialTone={
-          textModalAsset?.row.inputs.tone ??
-          draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts).tone
-        }
-        initialImages={
-          textModalAsset?.row.inputs.images ??
-          draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts).images
-        }
+        initialTone={textModalAsset?.row.inputs.tone}
+        initialImages={textModalAsset?.row.inputs.images}
         onGenerate={(opts) => {
           void createOrRegenerateText(opts, textModalAsset);
         }}
       />
 
+      {/* Edit an existing flyer (create-new lives in PromotionNewModal above). */}
       <Modal
         open={showForm}
-        title={editingEntryId ? "Edit flyer" : "New flyer"}
+        title="Edit flyer"
         onClose={closeForm}
         panelClassName="max-w-2xl"
         footer={
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Generating…" : editingEntryId ? "Update flyer" : "Generate flyer"}
+              {generating ? "Updating…" : "Update flyer"}
             </Button>
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
