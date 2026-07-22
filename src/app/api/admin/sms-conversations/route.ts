@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     toPhone?: string;
     text?: string;
     residentUserId?: string | null;
+    conversationKey?: string | null;
   };
   const text = String(body.text ?? "").trim();
   if (!text) return NextResponse.json({ error: "Enter a message." }, { status: 400 });
@@ -70,12 +71,17 @@ export async function POST(req: Request) {
   // treat the recipient as a manager (by phone). Owner is who the SMS logs to.
   const conversations = await fetchAdminSmsConversations(auth.db);
   const toDigits = toPhone.replace(/\D/g, "");
-  const match = conversations.residents.find((r) => {
-    const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
-    if (phoneDigits && (phoneDigits === toDigits || phoneDigits.endsWith(toDigits.slice(-10)))) return true;
-    if (body.residentUserId && r.residentUserId === body.residentUserId) return true;
-    return false;
-  });
+  const replyKey = String(body.conversationKey ?? "").trim();
+  // Prefer the thread the admin is actually looking at — one phone on the
+  // shared line can be both a prospect and a resident conversation.
+  const match =
+    (replyKey ? conversations.residents.find((r) => r.conversationKey === replyKey) : null) ??
+    conversations.residents.find((r) => {
+      const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
+      if (phoneDigits && (phoneDigits === toDigits || phoneDigits.endsWith(toDigits.slice(-10)))) return true;
+      if (body.residentUserId && r.residentUserId === body.residentUserId) return true;
+      return false;
+    });
 
   let ownerManagerUserId = String(match?.ownerManagerUserId ?? "").trim();
   let counterpartyRole = match?.counterpartyRole;

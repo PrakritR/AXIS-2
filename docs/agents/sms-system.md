@@ -45,12 +45,52 @@ threads the same way across the mapped-manager cohort instead of returning one
 flat feed. The manager/admin SMS UI keys rows on `conversationKey` and sorts via
 `sortSmsConversationRows` (Newest / Oldest / Name A–Z / House).
 
+**The backfill orders IDENTITY before TOPIC — never the other way round.**
+`claw_messaging_threads` holds exactly ONE mutable row per (manager, phone)
+(`unique (manager_user_id, resident_phone)`) and `topic` is overwritten on every
+thread touch, so it describes the thread *today*, not what any given message
+was. The row's own `resident_user_id` / `matched_sender_user_id` is the
+per-message fact. The first version of the backfill tested `topic = 'leasing'`
+first, which re-stamped a current resident's ENTIRE history as `prospect` the
+moment their latest Claw thread happened to be a leasing one — and because the
+read path deliberately refuses to fold a prospect thread into a directory
+resident, that history vanished from the named conversation with nothing in the
+UI disclosing the loss (it resurfaced as an unnamed raw phone number, and the
+resident detail page's SMS tab went blank). `20260721220000_sms_conversation_
+identity_role_repair.sql` corrects databases that applied the bad version.
+Regression coverage: `tests/unit/sms-conversation-identity-backfill.test.ts`
+evaluates the migration's `case` branches as a decision table. Any future
+role-derivation change must keep account linkage ahead of thread topic.
+
+**Deletes and replies are scoped by `conversation_key`, not the phone.** One
+phone is now potentially two threads, and `deleteManagerSmsConversation` is an
+irreversible hard DELETE of both tables — scoping it to the phone destroyed the
+other role's correspondence while the confirm dialog named only one thread. The
+client sends `conversationKey` on DELETE and POST; the phone-variant match
+survives only for legacy rows with a NULL key, and as the fallback when no key
+is supplied. The panel's local "hidden" set is keyed on the conversation id
+(`axis_manager_sms_hidden_v2`) for the same reason.
+
 **Admin can message a resident or a manager.** `POST /api/admin/sms-conversations`
 routes by recipient phone only (never model input): it logs into the owning
 manager's thread and sends a COPY to the admin oversight phone
 (`resolveAdminForwardPhone`, the admin profile's own number — `+15103098345` on
 the test/prod admin account, resolved from `admin-role.ts`, never hardcoded).
-The admin SMS surface reuses `ManagerSmsPanel` with `endpoint="/api/admin/…"`.
+The admin SMS surface reuses `ManagerSmsPanel` with `endpoint="/api/admin/…"`
+and `allowDelete={false}`: the admin route has no `DELETE` handler, and the
+panel's swipe/trash affordances would otherwise confirm a destructive dialog and
+then always 405 behind a generic toast. Mounting `ManagerSmsPanel` on a new
+endpoint means checking BOTH — does it implement DELETE, and should that
+surface be able to delete at all.
+
+**Admin oversight must never PROVISION a number.** `fetchAdminSmsConversations`
+passes `managerIds[0]` as the "viewer", which is a threading anchor, not the
+person at the keyboard — and `resolveManagerWorkNumber` falls through to
+`ensureManagerSmsNumber`, a paid Twilio purchase. It therefore passes
+`provisionWorkNumber: false`, and the display number is resolved read-only (the
+shared line constant, else `profiles.sms_from_number` already on file). Only a
+manager loading their OWN tab may provision on demand. Guarded by
+`tests/unit/admin-sms-no-provisioning.test.ts`.
 
 
 **Design: outbound sends from a per-manager work number; replies land in Axis.**

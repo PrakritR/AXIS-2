@@ -43,21 +43,32 @@ export async function GET() {
   }
 }
 
-/** Delete a conversation (all stored texts) for one phone number. */
+/**
+ * Delete ONE conversation's stored texts. The client sends the conversation
+ * key alongside the phone: one phone can be two threads (prospect + resident)
+ * and this is an irreversible hard delete, so the key — not the number — picks
+ * the victim.
+ */
 export async function DELETE(req: Request) {
   const auth = await requireManager();
   if ("error" in auth) return auth.error;
 
-  const body = (await req.json().catch(() => ({}))) as { phone?: string };
+  const body = (await req.json().catch(() => ({}))) as { phone?: string; conversationKey?: string };
   const phone = normalizeE164(String(body.phone ?? "").trim());
+  const requestedKey = String(body.conversationKey ?? "").trim();
   if (!phone) return NextResponse.json({ error: "Enter a valid phone number." }, { status: 400 });
 
   const conversations = await fetchManagerSmsConversations(auth.db, auth.user.id);
   const digits = phone.replace(/\D/g, "");
-  const match = conversations.residents.find((r) => {
+  const phoneMatches = (r: (typeof conversations.residents)[number]) => {
     const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
     return Boolean(phoneDigits && (phoneDigits === digits || phoneDigits.endsWith(digits.slice(-10))));
-  });
+  };
+  // A key must resolve to a real conversation the viewer can see, so it can
+  // never be used to reach rows outside the scope this GET already authorizes.
+  const match = requestedKey
+    ? conversations.residents.find((r) => r.conversationKey === requestedKey)
+    : conversations.residents.find(phoneMatches);
   if (!match) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
   }
@@ -74,7 +85,8 @@ export async function DELETE(req: Request) {
 
   const result = await deleteManagerSmsConversation(auth.db, {
     managerUserId: ownerManagerUserId,
-    phone,
+    phone: match.phone?.trim() || phone,
+    conversationKey: match.conversationKey ?? null,
   });
   if (!result.ok) {
     return NextResponse.json({ error: "Could not delete conversation." }, { status: 500 });
@@ -91,6 +103,7 @@ export async function POST(req: Request) {
     toPhone?: string;
     text?: string;
     residentUserId?: string | null;
+    conversationKey?: string | null;
   };
   const text = String(body.text ?? "").trim();
   if (!text) return NextResponse.json({ error: "Enter a message." }, { status: 400 });
@@ -103,12 +116,18 @@ export async function POST(req: Request) {
 
   const conversations = await fetchManagerSmsConversations(auth.db, auth.user.id);
   const toDigits = toPhone.replace(/\D/g, "");
-  const match = conversations.residents.find((r) => {
-    const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
-    if (phoneDigits && (phoneDigits === toDigits || phoneDigits.endsWith(toDigits.slice(-10)))) return true;
-    if (body.residentUserId && r.residentUserId === body.residentUserId) return true;
-    return false;
-  });
+  const replyKey = String(body.conversationKey ?? "").trim();
+  // One phone can be two threads. When the client says which one it is replying
+  // into, honour that — otherwise a reply typed in the prospect thread gets
+  // stamped `resident` (or vice versa) and lands in the other conversation.
+  const match =
+    (replyKey ? conversations.residents.find((r) => r.conversationKey === replyKey) : null) ??
+    conversations.residents.find((r) => {
+      const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
+      if (phoneDigits && (phoneDigits === toDigits || phoneDigits.endsWith(toDigits.slice(-10)))) return true;
+      if (body.residentUserId && r.residentUserId === body.residentUserId) return true;
+      return false;
+    });
 
   // Directory match is preferred for co-manager owner resolution; cold outreach
   // to any E.164 (Other chip / new prospect) is allowed and logs a new thread.

@@ -43,16 +43,28 @@ alter table public.manager_sms_messages
       ('resident', 'applicant', 'prospect', 'vendor', 'manager', 'admin', 'unknown')),
   add column if not exists conversation_key text;
 
--- Backfill role from Claw thread topic + resident linkage.
+-- Backfill role from resident linkage + Claw thread topic, IN THAT ORDER.
+--
+-- The row's own account linkage is a per-MESSAGE fact recorded when the text
+-- was stored. `claw_messaging_threads.topic` is not: there is exactly one
+-- mutable row per (manager, phone) — `unique (manager_user_id, resident_phone)`
+-- — and `topic` is overwritten on every thread touch. Testing the topic first
+-- would retroactively apply TODAY's topic to ALL history for that phone, so a
+-- current resident whose latest Claw thread happens to be `leasing` would have
+-- every message re-labelled `prospect`. `fetchManagerSmsConversations`
+-- deliberately refuses to fold a prospect thread into a directory resident's
+-- conversation, so that stamp silently empties the named resident's thread and
+-- resurfaces the history as an unnamed phone number. Linkage first.
+-- Regression coverage: tests/unit/sms-conversation-identity-backfill.test.ts.
 update public.manager_sms_messages m
 set counterparty_role = case
+  when m.resident_user_id is not null then 'resident'
   when exists (
     select 1 from public.claw_messaging_threads ct
     where ct.manager_user_id = m.manager_user_id
       and public.axis_sms_phone_ref(ct.resident_phone) = public.axis_sms_phone_ref(m.resident_phone)
       and ct.topic = 'leasing'
   ) then 'prospect'
-  when m.resident_user_id is not null then 'resident'
   when exists (
     select 1 from public.claw_messaging_threads ct
     where ct.manager_user_id = m.manager_user_id
@@ -78,15 +90,17 @@ alter table public.inbound_sms_log
       ('resident', 'applicant', 'prospect', 'vendor', 'manager', 'admin', 'unknown')),
   add column if not exists conversation_key text;
 
+-- Same ordering rule as above: the row's own account linkage beats the
+-- mutable, per-phone Claw thread topic.
 update public.inbound_sms_log l
 set counterparty_role = case
+  when l.matched_sender_user_id is not null then 'resident'
   when exists (
     select 1 from public.claw_messaging_threads ct
     where ct.manager_user_id = l.manager_user_id
       and public.axis_sms_phone_ref(ct.resident_phone) = public.axis_sms_phone_ref(l.from_phone)
       and ct.topic = 'leasing'
   ) then 'prospect'
-  when l.matched_sender_user_id is not null then 'resident'
   when exists (
     select 1 from public.claw_messaging_threads ct
     where ct.manager_user_id = l.manager_user_id

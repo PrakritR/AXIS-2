@@ -14,7 +14,11 @@ import {
   deriveCounterpartyRole,
   type SmsCounterpartyRole,
 } from "@/lib/sms-conversation-identity";
-import { isPlaceholderManagerWorkNumber } from "@/lib/claw-leasing-links";
+import {
+  clawLeasingAgentPhoneE164,
+  isClawSharedLineBridgeEnabled,
+  isPlaceholderManagerWorkNumber,
+} from "@/lib/claw-leasing-links";
 import { normalizeE164 } from "@/lib/twilio";
 import { resolveManagerWorkNumber } from "@/lib/twilio-provisioning";
 
@@ -45,12 +49,26 @@ export async function resolveSmsScopeManagerIds(
   return [...ids];
 }
 
+/**
+ * Hard-delete one conversation's stored texts. There is no soft-delete and no
+ * restore, so the SCOPE has to be the conversation identity, not the phone:
+ * since conversation identity became explicit, one phone can be two threads
+ * (a leasing prospect and a resident) shown as two rows, and a phone-scoped
+ * delete would destroy the other role's correspondence as collateral while the
+ * confirm dialog named only one thread.
+ *
+ * `conversationKey` is therefore the primary filter. The phone-variant match
+ * survives only for LEGACY rows written before `conversation_key` existed
+ * (those cannot be split by role anyway), and as the whole-phone fallback when
+ * no key is supplied at all.
+ */
 export async function deleteManagerSmsConversation(
   db: SupabaseClient,
-  args: { managerUserId: string; phone: string },
+  args: { managerUserId: string; phone: string; conversationKey?: string | null },
 ): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
   const managerUserId = args.managerUserId.trim();
   const phone = phoneKey(args.phone);
+  const conversationKey = args.conversationKey?.trim() || "";
   if (!managerUserId || !phone) return { ok: false, error: "invalid_phone" };
 
   const digits = phone.replace(/\D/g, "");
@@ -70,29 +88,45 @@ export async function deleteManagerSmsConversation(
   let deleted = 0;
   const variants = [...phoneVariants];
 
-  const { data: smsRows, error: smsErr } = await db
-    .from("manager_sms_messages")
-    .delete()
-    .eq("manager_user_id", managerUserId)
-    .in("resident_phone", variants)
-    .select("id");
-  if (smsErr) {
-    console.error("deleteManagerSmsConversation sms failed", smsErr.message);
-    return { ok: false, error: smsErr.message };
+  const deleteFrom = async (
+    table: "manager_sms_messages" | "inbound_sms_log",
+    phoneColumn: "resident_phone" | "from_phone",
+  ): Promise<{ ok: boolean; count: number; error?: string }> => {
+    const run = async (scope: "key" | "legacy" | "phone") => {
+      let q = db.from(table).delete().eq("manager_user_id", managerUserId);
+      if (scope === "key") q = q.eq("conversation_key", conversationKey);
+      // Legacy rows predate the column, so they carry no role and can only be
+      // matched by phone — bounded to null keys so a keyed sibling is safe.
+      else if (scope === "legacy") q = q.is("conversation_key", null).in(phoneColumn, variants);
+      else q = q.in(phoneColumn, variants);
+      const { data, error } = await q.select("id");
+      return { rows: data?.length ?? 0, error };
+    };
+
+    if (!conversationKey) {
+      const { rows, error } = await run("phone");
+      return error ? { ok: false, count: 0, error: error.message } : { ok: true, count: rows };
+    }
+    const keyed = await run("key");
+    if (keyed.error) return { ok: false, count: 0, error: keyed.error.message };
+    const legacy = await run("legacy");
+    if (legacy.error) return { ok: false, count: keyed.rows, error: legacy.error.message };
+    return { ok: true, count: keyed.rows + legacy.rows };
+  };
+
+  const sms = await deleteFrom("manager_sms_messages", "resident_phone");
+  if (!sms.ok) {
+    console.error("deleteManagerSmsConversation sms failed", sms.error);
+    return { ok: false, error: sms.error ?? "delete_failed" };
   }
-  deleted += smsRows?.length ?? 0;
+  deleted += sms.count;
 
   // Also clear inbound log rows for this counterparty.
-  const { data: inboundRows, error: inboundErr } = await db
-    .from("inbound_sms_log")
-    .delete()
-    .eq("manager_user_id", managerUserId)
-    .in("from_phone", variants)
-    .select("id");
-  if (inboundErr) {
-    console.error("deleteManagerSmsConversation inbound failed", inboundErr.message);
+  const inbound = await deleteFrom("inbound_sms_log", "from_phone");
+  if (!inbound.ok) {
+    console.error("deleteManagerSmsConversation inbound failed", inbound.error);
   } else {
-    deleted += inboundRows?.length ?? 0;
+    deleted += inbound.count;
   }
 
   return { ok: true, deleted };
@@ -332,34 +366,52 @@ export async function fetchManagerSmsConversations(
    * sees their own — so admin can pick a specific counterparty on the shared
    * line rather than reading one flat stream.
    */
-  options?: { scopeManagerIdsOverride?: string[] },
+  options?: {
+    scopeManagerIdsOverride?: string[];
+    /**
+     * Whether `managerUserId`'s work number may be PURCHASED on demand.
+     * `resolveManagerWorkNumber` falls through to `ensureManagerSmsNumber`,
+     * which buys a Twilio number — fine when the viewer is the account holder
+     * loading their own SMS tab, never fine on the admin oversight path, where
+     * `managerUserId` is just whichever manager sorts first in the shared-line
+     * cohort. Buying a number for an arbitrary manager as a side effect of a
+     * GET spends real money on a page view, so admin passes false.
+     */
+    provisionWorkNumber?: boolean;
+  },
 ): Promise<ManagerSmsConversationsPayload> {
   const scopeManagerIds =
     options?.scopeManagerIdsOverride && options.scopeManagerIdsOverride.length > 0
       ? [...new Set(options.scopeManagerIdsOverride.map((id) => id.trim()).filter(Boolean))]
       : await resolveSmsScopeManagerIds(db, managerUserId);
-  // Only the VIEWER's own work number may be provisioned on demand
-  // (`resolveManagerWorkNumber` can fall through to `ensureManagerSmsNumber`).
-  // The in-scope fallback is a single batched read of numbers already on file:
-  // calling the provisioning-capable resolver once per scope manager was both
-  // O(N) round-trips and a side effect — admin opening this page could mint
-  // Twilio numbers for every manager on the shared line.
+  const mayProvision = options?.provisionWorkNumber !== false;
+  // Only the VIEWER's own work number may be provisioned on demand, and only
+  // when the caller opted in. The in-scope fallback is a single batched read of
+  // numbers already on file: calling the provisioning-capable resolver once per
+  // scope manager was both O(N) round-trips and a side effect — admin opening
+  // this page could mint Twilio numbers for every manager on the shared line.
+  const readNumbersOnFile = async (ids: string[]): Promise<string | null> => {
+    if (ids.length === 0) return null;
+    const { data } = await db.from("profiles").select("id, sms_from_number").in("id", ids);
+    const numberById = new Map(
+      (data ?? []).map((r) => [String(r.id ?? "").trim(), String(r.sms_from_number ?? "").trim()] as const),
+    );
+    // Scope order decides, so the fallback stays deterministic.
+    for (const id of ids) {
+      const n = numberById.get(id);
+      if (n && !isPlaceholderManagerWorkNumber(n)) return n;
+    }
+    return null;
+  };
+  const ownNumber = mayProvision
+    ? await resolveManagerWorkNumber(db, managerUserId)
+    : // Read-only twin of resolveManagerWorkNumber: the shared agent line is a
+      // constant, and anything else must already be on file.
+      (isClawSharedLineBridgeEnabled()
+        ? clawLeasingAgentPhoneE164()
+        : await readNumbersOnFile([managerUserId]));
   const workNumber =
-    (await resolveManagerWorkNumber(db, managerUserId)) ||
-    (await (async () => {
-      const others = scopeManagerIds.filter((id) => id !== managerUserId);
-      if (others.length === 0) return null;
-      const { data } = await db.from("profiles").select("id, sms_from_number").in("id", others);
-      const numberById = new Map(
-        (data ?? []).map((r) => [String(r.id ?? "").trim(), String(r.sms_from_number ?? "").trim()] as const),
-      );
-      // Scope order decides, so the fallback stays deterministic.
-      for (const id of others) {
-        const n = numberById.get(id);
-        if (n && !isPlaceholderManagerWorkNumber(n)) return n;
-      }
-      return null;
-    })());
+    ownNumber || (await readNumbersOnFile(scopeManagerIds.filter((id) => id !== managerUserId)));
 
   const { data: profile } = await db
     .from("profiles")
@@ -784,5 +836,10 @@ export async function fetchAdminSmsConversations(
       residents: [],
     };
   }
-  return fetchManagerSmsConversations(db, managerIds[0], { scopeManagerIdsOverride: managerIds });
+  // `managerIds[0]` is only a threading anchor, NOT the person at the keyboard,
+  // so it must never be treated as a viewer who consented to buying a number.
+  return fetchManagerSmsConversations(db, managerIds[0], {
+    scopeManagerIdsOverride: managerIds,
+    provisionWorkNumber: false,
+  });
 }

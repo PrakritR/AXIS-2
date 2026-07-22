@@ -121,6 +121,11 @@ export function AdminCommunication({
           // Admin has no separate shell compose modal — let the panel own its
           // own SMS compose, opened from the header New message button.
           allowInlineCompose
+          // Admin oversight is read + send only. The admin route has no DELETE
+          // handler, and deleting another manager's SMS history from an
+          // oversight surface is not a capability we want — so the affordance
+          // is off rather than a button that always 405s after a confirm.
+          allowDelete={false}
         />
       )}
     </PortalCommunicationShell>

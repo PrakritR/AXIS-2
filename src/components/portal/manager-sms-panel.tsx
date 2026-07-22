@@ -27,12 +27,16 @@ import {
   threadPassesCommunicationFilters,
   type CommunicationThreadFilters,
 } from "@/lib/communication-thread-filters";
+import { counterpartyRoleLabel } from "@/lib/sms-conversation-identity";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { formatPacificDate } from "@/lib/pacific-time";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 
 const SMS_OPENED_STORAGE_KEY = "axis_manager_sms_opened_v1";
-const SMS_HIDDEN_STORAGE_KEY = "axis_manager_sms_hidden_v1";
+// v2 stores CONVERSATION IDs, not phones: since one phone can be two threads
+// (prospect + resident), hiding by phone made deleting one thread visually
+// erase the other as well.
+const SMS_HIDDEN_STORAGE_KEY = "axis_manager_sms_hidden_v2";
 
 /** iOS Messages blue (outbound bubbles / accents). */
 const IOS_BLUE = "#0A84FF";
@@ -111,7 +115,7 @@ function persistOpenedIds(ids: Set<string>): void {
   window.localStorage.setItem(SMS_OPENED_STORAGE_KEY, JSON.stringify([...ids]));
 }
 
-function loadHiddenPhones(): Set<string> {
+function loadHiddenConversationIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
     const raw = window.localStorage.getItem(SMS_HIDDEN_STORAGE_KEY);
@@ -124,7 +128,7 @@ function loadHiddenPhones(): Set<string> {
   }
 }
 
-function persistHiddenPhones(ids: Set<string>): void {
+function persistHiddenConversationIds(ids: Set<string>): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SMS_HIDDEN_STORAGE_KEY, JSON.stringify([...ids]));
 }
@@ -168,6 +172,13 @@ export const ManagerSmsPanel = forwardRef<
      * also copies every send to the admin phone.
      */
     endpoint?: string;
+    /**
+     * Whether this surface may DELETE conversations. Must be false for any
+     * endpoint without a DELETE handler — otherwise the swipe/trash actions
+     * confirm a destructive dialog and then always fail with a 405 that the
+     * generic toast hides. Admin oversight is read/send only.
+     */
+    allowDelete?: boolean;
   }
 >(function ManagerSmsPanel(
   {
@@ -179,6 +190,7 @@ export const ManagerSmsPanel = forwardRef<
     onSentNavigate,
     allowInlineCompose = true,
     endpoint = "/api/manager/sms-conversations",
+    allowDelete = true,
   },
   ref,
 ) {
@@ -187,7 +199,9 @@ export const ManagerSmsPanel = forwardRef<
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openedSmsIds, setOpenedSmsIds] = useState<Set<string>>(() => loadOpenedIds());
-  const [hiddenPhones, setHiddenPhones] = useState<Set<string>>(() => loadHiddenPhones());
+  const [hiddenConversationIds, setHiddenConversationIds] = useState<Set<string>>(() =>
+    loadHiddenConversationIds(),
+  );
   const [composeOpen, setComposeOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<ManagerSmsSortId>("newest");
@@ -275,19 +289,19 @@ export const ManagerSmsPanel = forwardRef<
       .map((resident) => {
         const messages = Array.isArray(resident.messages) ? resident.messages : [];
         const lastMessage = messages[messages.length - 1] ?? null;
-        const phone = resident.phone?.trim() ?? "";
+        const rowId = conversationId(resident);
         return {
           resident,
           messages,
           lastMessage,
-          rowId: conversationId(resident),
+          rowId,
           unread: smsThreadHasUnread(messages, openedSmsIds),
-          hidden: phone ? hiddenPhones.has(phone) : false,
+          hidden: hiddenConversationIds.has(rowId),
         };
       })
       // iOS Messages: only threads with texts (or not locally deleted).
       .filter((row) => row.lastMessage && !row.hidden);
-  }, [hiddenPhones, openedSmsIds, residents]);
+  }, [hiddenConversationIds, openedSmsIds, residents]);
 
   const unreadCount = useMemo(() => rows.filter((r) => r.unread).length, [rows]);
 
@@ -367,30 +381,37 @@ export const ManagerSmsPanel = forwardRef<
         showToast("No phone on this conversation.");
         return;
       }
+      const rowId = conversationId(resident);
+      // One phone can be two threads (prospect + resident). Name the role so
+      // the confirm matches what is actually about to be destroyed.
+      const roleLabel = resident.counterpartyRole
+        ? `${counterpartyRoleLabel(resident.counterpartyRole).toLowerCase()} conversation`
+        : "conversation";
       const ok = window.confirm(
-        `Delete conversation with ${resident.name}?\n\nThis removes the texts from Messages on this account.`,
+        `Delete the ${roleLabel} with ${resident.name}?\n\nThis removes only this thread's texts from Messages on this account.`,
       );
       if (!ok) return;
-      setDeletingId(conversationId(resident));
+      setDeletingId(rowId);
       try {
         const res = await fetch(endpoint, {
           method: "DELETE",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone }),
+          // The key, not the phone, identifies which of the two threads to drop.
+          body: JSON.stringify({ phone, conversationKey: resident.conversationKey ?? null }),
         });
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
           showToast(body.error ?? "Could not delete conversation.");
           return;
         }
-        setHiddenPhones((prev) => {
+        setHiddenConversationIds((prev) => {
           const next = new Set(prev);
-          next.add(phone);
-          persistHiddenPhones(next);
+          next.add(rowId);
+          persistHiddenConversationIds(next);
           return next;
         });
-        if (activeId === conversationId(resident)) setActiveId(null);
+        if (activeId === rowId) setActiveId(null);
         showToast("Conversation deleted.");
         void load();
       } catch {
@@ -416,6 +437,8 @@ export const ManagerSmsPanel = forwardRef<
           toPhone: active.resident.phone,
           text,
           residentUserId: active.resident.residentUserId,
+          // Which of this phone's threads the reply belongs to.
+          conversationKey: active.resident.conversationKey ?? null,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -425,11 +448,11 @@ export const ManagerSmsPanel = forwardRef<
       }
       setDraft("");
       // Un-hide if previously deleted locally and a new text was sent.
-      setHiddenPhones((prev) => {
-        if (!active.resident.phone || !prev.has(active.resident.phone)) return prev;
+      setHiddenConversationIds((prev) => {
+        if (!prev.has(active.rowId)) return prev;
         const next = new Set(prev);
-        next.delete(active.resident.phone);
-        persistHiddenPhones(next);
+        next.delete(active.rowId);
+        persistHiddenConversationIds(next);
         return next;
       });
       await load();
@@ -566,7 +589,7 @@ export const ManagerSmsPanel = forwardRef<
                     deleting={deletingId === row.rowId}
                     selected={activeId === row.rowId}
                     onOpen={() => openThread(row.rowId, row.messages)}
-                    onDelete={() => void deleteConversation(row.resident)}
+                    onDelete={allowDelete ? () => void deleteConversation(row.resident) : undefined}
                   />
                 ))}
               </ul>
@@ -614,17 +637,21 @@ export const ManagerSmsPanel = forwardRef<
                         " "}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-lg active:opacity-60"
-                    style={{ color: IOS_BLUE }}
-                    aria-label="Delete conversation"
-                    data-attr="sms-messages-thread-delete"
-                    disabled={deletingId === active.rowId}
-                    onClick={() => void deleteConversation(active.resident)}
-                  >
-                    <Trash2 className="h-5 w-5" strokeWidth={1.75} />
-                  </button>
+                  {allowDelete ? (
+                    <button
+                      type="button"
+                      className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-lg active:opacity-60"
+                      style={{ color: IOS_BLUE }}
+                      aria-label="Delete conversation"
+                      data-attr="sms-messages-thread-delete"
+                      disabled={deletingId === active.rowId}
+                      onClick={() => void deleteConversation(active.resident)}
+                    >
+                      <Trash2 className="h-5 w-5" strokeWidth={1.75} />
+                    </button>
+                  ) : (
+                    <span className="min-h-11 min-w-11" aria-hidden />
+                  )}
                 </header>
 
                 <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch] sm:space-y-2 sm:py-4">
@@ -726,9 +753,11 @@ function ConversationRow({
   deleting: boolean;
   selected: boolean;
   onOpen: () => void;
-  onDelete: () => void;
+  /** Omitted on surfaces whose endpoint has no DELETE handler — see `allowDelete`. */
+  onDelete?: () => void;
 }) {
-  const DELETE_W = 76;
+  const canDelete = Boolean(onDelete);
+  const DELETE_W = canDelete ? 76 : 0;
   const [offset, setOffset] = useState(0);
   const [armed, setArmed] = useState(false);
   const startX = useRef<number | null>(null);
@@ -765,26 +794,28 @@ function ConversationRow({
   return (
     <li className="relative isolate overflow-hidden" style={{ backgroundColor: IOS_LIST_BG }}>
       {/* Delete action sits under the row — only visible when slid open */}
-      <div
-        className="absolute inset-y-0 right-0 flex items-stretch"
-        style={{ width: DELETE_W }}
-        aria-hidden={reveal === 0}
-      >
-        <button
-          type="button"
-          className="flex w-full touch-manipulation items-center justify-center text-[15px] font-medium text-white active:brightness-90"
-          style={{ backgroundColor: IOS_DELETE }}
-          data-attr="sms-messages-swipe-delete"
-          disabled={deleting || reveal === 0}
-          tabIndex={reveal === 0 ? -1 : 0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
+      {canDelete ? (
+        <div
+          className="absolute inset-y-0 right-0 flex items-stretch"
+          style={{ width: DELETE_W }}
+          aria-hidden={reveal === 0}
         >
-          {deleting ? "…" : "Delete"}
-        </button>
-      </div>
+          <button
+            type="button"
+            className="flex w-full touch-manipulation items-center justify-center text-[15px] font-medium text-white active:brightness-90"
+            style={{ backgroundColor: IOS_DELETE }}
+            data-attr="sms-messages-swipe-delete"
+            disabled={deleting || reveal === 0}
+            tabIndex={reveal === 0 ? -1 : 0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.();
+            }}
+          >
+            {deleting ? "…" : "Delete"}
+          </button>
+        </div>
+      ) : null}
 
       <div
         className={[
@@ -817,7 +848,7 @@ function ConversationRow({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        {editing ? (
+        {editing && canDelete ? (
           <button
             type="button"
             className="flex h-6 w-6 shrink-0 touch-manipulation items-center justify-center rounded-full text-white"
