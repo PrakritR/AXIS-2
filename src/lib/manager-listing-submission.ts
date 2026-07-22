@@ -14,6 +14,8 @@ import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/applica
 import { parseMoneyAmount } from "@/lib/parse-money";
 import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
+import type { LeaseUtilityLine } from "@/lib/lease-utilities";
+import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -309,6 +311,13 @@ export type ManagerListingSubmissionV1 = {
   leaseCustomKind?: "terms" | "document";
   /** Manager-authored clauses merged into the Axis generated lease as an Additional Provisions addendum. */
   customLeaseTerms?: string;
+  /**
+   * Per-utility responsibility breakdown rendered in the generated lease's
+   * "Utilities & Services" section (which utilities are included in rent vs. paid
+   * separately, who sets up each account, and any included allowance). Absent =
+   * the lease falls back to its standard utilities prose. See `@/lib/lease-utilities`.
+   */
+  leaseUtilities?: LeaseUtilityLine[];
   /** Uploaded lease template (PDF) — data URL while editing, storage URL once submitted. */
   leaseTemplateDocUrl?: string | null;
   /** Original filename of the uploaded lease template. */
@@ -1069,6 +1078,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       sub.leaseConfigMode === "standard" || sub.leaseConfigMode === "custom" ? sub.leaseConfigMode : undefined,
     leaseCustomKind: sub.leaseCustomKind === "document" ? "document" : sub.leaseCustomKind === "terms" ? "terms" : undefined,
     customLeaseTerms: typeof sub.customLeaseTerms === "string" ? sub.customLeaseTerms : "",
+    leaseUtilities: normalizeLeaseUtilities((sub as { leaseUtilities?: unknown }).leaseUtilities),
     leaseTemplateDocUrl: typeof sub.leaseTemplateDocUrl === "string" ? sub.leaseTemplateDocUrl || null : null,
     leaseTemplateDocName: typeof sub.leaseTemplateDocName === "string" ? sub.leaseTemplateDocName : "",
     applicationFeeStripeEnabled,

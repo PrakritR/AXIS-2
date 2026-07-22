@@ -124,6 +124,33 @@ describe("generated-lease", () => {
     expect(html).toContain("$2,150/mo");
   });
 
+  it("renders the per-utility responsibility breakdown in the lease when configured", () => {
+    const app = snapshotJordanLee();
+    const ctx = leaseContextFromApplication(app);
+    const submission = {
+      ...(ctx.submission ?? { v: 1, rooms: [], bundles: [], bathrooms: [] }),
+      v: 1,
+      leaseUtilities: [
+        { kind: "electricity", paidBy: "resident", setUpBy: "resident" },
+        { kind: "water", paidBy: "included_in_rent", setUpBy: "manager", allowance: "$60/mo" },
+        { kind: "other", paidBy: "manager", setUpBy: "manager", label: "Landscaping", notes: "weekly service" },
+      ],
+    } as unknown as NonNullable<typeof ctx.submission>;
+    const withSeattle = {
+      ...ctx,
+      submission,
+      leasedRoom: undefined,
+      listingProperty: ctx.listingProperty
+        ? { ...ctx.listingProperty, address: "5259 Brooklyn Ave NE, Seattle, WA", neighborhood: "Seattle", listingSubmission: submission }
+        : ctx.listingProperty,
+    };
+    const html = buildAiGeneratedLeaseHtml(withSeattle);
+    expect(html).toContain("Account set up by");
+    expect(html).toContain("Included up to $60/mo");
+    expect(html).toContain("Landscaping");
+    expect(html).toContain("Landlord pays");
+  });
+
   it("renders entire-home premises and rent for whole-house applications", () => {
     const app = { ...snapshotJordanLee(), bundleId: "", roomChoice1: "some-property-id", roomChoice2: "", roomChoice3: "" };
     const ctx = leaseContextFromApplication(app);
