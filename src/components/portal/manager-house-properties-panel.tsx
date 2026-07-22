@@ -9,6 +9,8 @@ import { ListingPreviewScrollShell } from "@/components/marketing/listing-previe
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
+import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
+import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -171,7 +173,7 @@ function ManagerPropertyInlineDetails({
   );
   const rich = useMemo(() => (previewProperty ? getListingRichContent(previewProperty) : null), [previewProperty]);
   const hasPreview = Boolean(previewProperty && rich);
-  const [previewExpanded, setPreviewExpanded] = useState(true);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -267,6 +269,14 @@ function ManagerPropertyInlineDetails({
       listingId,
     });
   }, [portalSub, bucket, row, listingId]);
+
+  const leasePropertyHint = useMemo(
+    () =>
+      row
+        ? { buildingName: row.buildingName, unitLabel: row.unitLabel, rentLabel: row.rentRangeLabel }
+        : undefined,
+    [row],
+  );
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
     if (!ok) {
@@ -525,6 +535,24 @@ function ManagerPropertyInlineDetails({
         managerUserId={managerUserId}
         onUpdated={onUpdated}
         showToast={showToast}
+      />
+
+      <ManagerPropertyApplicationQuestionsPanel
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
+      <ManagerPropertyLeasePanel
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+        propertyHint={leasePropertyHint}
+        demoMode={isDemoModeActive()}
       />
 
       {bucket === 2 && listingId ? (

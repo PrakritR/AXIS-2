@@ -70,7 +70,7 @@ export function ManagerPropertyHouseDetailsPanel({
 }) {
   const [notesTick, setNotesTick] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState<PortalListingNote>({});
 
   const portalNote = useMemo(

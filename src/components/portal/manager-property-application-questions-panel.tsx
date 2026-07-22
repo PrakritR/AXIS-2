@@ -113,7 +113,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
             data-attr="application-questions-add"
             onClick={() => setListModalOpen(true)}
           >
-            Edit application
+            Edit
           </Button>
         }
         contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
