@@ -3,6 +3,7 @@ import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import {
   findPendingVendorInviteByToken,
   provisionVendorAccountByEmail,
+  VENDOR_INVITE_EXPIRED_NOTICE,
   type VendorInviteRow,
 } from "@/lib/auth/provision-vendor-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
@@ -138,6 +139,10 @@ async function registerSelfServe(
       confirmed: true,
       axisId: provisioned.axisId,
       linkedManagerId: provisioned.linkedManagerId,
+      // A stale invite never blocks an otherwise-legitimate sign-in; it is
+      // reported so the vendor knows why no manager is attached.
+      inviteExpired: provisioned.inviteExpired,
+      ...(provisioned.inviteExpired ? { inviteNotice: VENDOR_INVITE_EXPIRED_NOTICE } : {}),
       redirectTo: "/vendor/dashboard",
     });
   }
@@ -222,7 +227,13 @@ async function registerSelfServe(
     return emailDeliveryFailure("Could not send the confirmation email.", 502);
   }
 
-  return NextResponse.json({ ok: true, confirmed: false, emailDeliveryConfigured: true });
+  return NextResponse.json({
+    ok: true,
+    confirmed: false,
+    emailDeliveryConfigured: true,
+    inviteExpired: provisioned.inviteExpired,
+    ...(provisioned.inviteExpired ? { inviteNotice: VENDOR_INVITE_EXPIRED_NOTICE } : {}),
+  });
 }
 
 /** Shared create-or-link for the invite path, where the email is server-resolved and trusted. */

@@ -20,6 +20,9 @@ type RegisterResponse = {
   confirmed?: boolean;
   emailDeliveryConfigured?: boolean;
   confirmLinkLoggedLocally?: boolean;
+  /** Signup succeeded but a stale invite could not be redeemed — say why. */
+  inviteExpired?: boolean;
+  inviteNotice?: string;
 };
 
 /** Vendor account creation — Google or email/password; reused in auth hub, invite page, and public marketing. */
@@ -49,6 +52,7 @@ export function VendorSignupForm({
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [localDevConfirmHint, setLocalDevConfirmHint] = useState(false);
+  const [inviteNotice, setInviteNotice] = useState<string | null>(null);
 
   const compact = variant === "compact";
   const locked = disabled || busy;
@@ -86,11 +90,16 @@ export function VendorSignupForm({
         return;
       }
 
+      const expiryNotice = body.inviteExpired ? (body.inviteNotice ?? null) : null;
+
       if (body.confirmed === false) {
         setPendingConfirmation(true);
         setLocalDevConfirmHint(false);
+        setInviteNotice(expiryNotice);
         return;
       }
+
+      if (expiryNotice) showToast(expiryNotice);
 
       const supabase = createSupabaseBrowserClient();
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -119,6 +128,7 @@ export function VendorSignupForm({
           We sent a confirmation link to <strong>{email.trim()}</strong>. Click it to finish creating your vendor
           account.
         </p>
+        {inviteNotice ? <p className="mt-3 text-sm text-muted">{inviteNotice}</p> : null}
       </div>
     );
   }

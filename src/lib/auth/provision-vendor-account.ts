@@ -62,8 +62,8 @@ export async function findPendingVendorInviteByEmail(
   return redeemableInvite((data as VendorInviteRow | null) ?? null);
 }
 
-export const VENDOR_INVITE_EXPIRED_ERROR =
-  "This vendor invite has expired. Ask the manager who invited you to send a new invite.";
+export const VENDOR_INVITE_EXPIRED_NOTICE =
+  "That invite link has expired — ask your manager to send a new one. Your account was created, but it is not linked to them yet.";
 
 export type VendorInviteEmailLookup =
   | { kind: "none" }
@@ -132,7 +132,7 @@ async function directoryBelongsToManager(
 }
 
 export type ProvisionVendorResult =
-  | { ok: true; axisId: string; linkedManagerId: string | null }
+  | { ok: true; axisId: string; linkedManagerId: string | null; inviteExpired: boolean }
   | { ok: false; status: number; error: string };
 
 /**
@@ -162,15 +162,16 @@ export async function provisionVendorAccountByEmail(
   }
 
   let invite: VendorInviteRow | null;
+  let inviteExpired = false;
   if (opts.invite !== undefined) {
     invite = opts.invite;
   } else {
     const lookup = await lookupVendorInviteByEmail(supabase, normalEmail);
-    // Never redeem an expired invite — but say so rather than provisioning an
-    // unlinked vendor account the manager cannot see and the vendor cannot fix.
-    if (lookup.kind === "expired") {
-      return { ok: false, status: 410, error: VENDOR_INVITE_EXPIRED_ERROR };
-    }
+    // An expired invite is never redeemed, but it must not fail the signup
+    // either: the caller has already created the auth user by this point, so
+    // refusing here deletes the account and every retry fails identically.
+    // Provision unlinked and report it, so the vendor is told why.
+    inviteExpired = lookup.kind === "expired";
     invite = lookup.kind === "redeemable" ? lookup.invite : null;
   }
 
@@ -265,5 +266,5 @@ export async function provisionVendorAccountByEmail(
       .eq("id", invite.id);
   }
 
-  return { ok: true, axisId, linkedManagerId };
+  return { ok: true, axisId, linkedManagerId, inviteExpired };
 }

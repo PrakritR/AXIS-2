@@ -32,51 +32,14 @@ export async function findPropertyIdsNotOwnedByManager(
     .in("id", unique);
 
   // Fail closed: if ownership cannot be established, no id is treated as owned.
-  if (error) return { ok: false, error: error.message };
+  // Log it — the caller turns this into a 403/500, and a transient failure here
+  // otherwise reads as "co-manager invites mysteriously stopped working" with
+  // nothing to correlate against.
+  if (error) {
+    console.error("Co-manager property ownership lookup failed:", error.message);
+    return { ok: false, error: error.message };
+  }
 
   const owned = new Set((data ?? []).map((row) => String((row as { id: unknown }).id)));
   return { ok: true, unowned: unique.filter((id) => !owned.has(id)) };
-}
-
-export type InviteAssignment = { inviterUserId: string; propertyIds: string[] };
-
-/**
- * The consumption-side half of the same gate. Validating on write only closes
- * the hole for rows created afterwards: an invite forged before the gate landed
- * is still sitting in `account_link_invites`, and a property legitimately
- * assigned once may since have been transferred to a different manager. So the
- * scope resolvers re-derive "the inviter still owns this" every time they turn
- * an accepted link into access.
- *
- * Resolves the whole set in ONE batched query and returns a predicate, so a
- * caller holding many links does not issue a query per property.
- *
- * Fails closed: a lookup error, a missing property row, or an owner that is not
- * the inviter all resolve to "not owned".
- */
-export async function resolveInviterOwnedProperties(
-  db: SupabaseClient,
-  assignments: InviteAssignment[],
-): Promise<(inviterUserId: string, propertyId: string) => boolean> {
-  const deny = () => false;
-  const ids = [
-    ...new Set(assignments.flatMap((a) => a.propertyIds.map((id) => String(id).trim()).filter(Boolean))),
-  ];
-  if (ids.length === 0) return deny;
-
-  const { data, error } = await db.from("manager_property_records").select("id, manager_user_id").in("id", ids);
-  if (error) return deny;
-
-  const ownerByPropertyId = new Map<string, string>();
-  for (const row of data ?? []) {
-    const id = String((row as { id?: unknown }).id ?? "").trim();
-    const owner = String((row as { manager_user_id?: unknown }).manager_user_id ?? "").trim();
-    if (id && owner) ownerByPropertyId.set(id, owner);
-  }
-
-  return (inviterUserId, propertyId) => {
-    const inviter = String(inviterUserId ?? "").trim();
-    const owner = ownerByPropertyId.get(String(propertyId ?? "").trim());
-    return Boolean(inviter) && owner === inviter;
-  };
 }

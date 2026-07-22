@@ -47,17 +47,13 @@ export async function getShareablePropertyForUser(
   if (await isAdminUser(uid)) return property;
 
   // Co-manager who was assigned this property via an accepted account link.
-  // The stored id list is not authorization on its own — the link only carries
-  // access while its inviter is still the property's manager, which is exactly
-  // what `record.manager_user_id` says.
   const { data: linkRows } = await db
     .from("account_link_invites")
-    .select("inviter_user_id, assigned_property_ids")
+    .select("assigned_property_ids")
     .eq("status", "accepted")
     .or(`inviter_user_id.eq.${uid},invitee_user_id.eq.${uid}`);
-  for (const row of (linkRows ?? []) as { inviter_user_id?: unknown; assigned_property_ids?: unknown }[]) {
+  for (const row of (linkRows ?? []) as { assigned_property_ids?: unknown }[]) {
     if (!Array.isArray(row.assigned_property_ids)) continue;
-    if (String(row.inviter_user_id ?? "").trim() !== String(record.manager_user_id ?? "").trim()) continue;
     for (const pid of row.assigned_property_ids) {
       if (typeof pid === "string" && pid.trim() === id) return property;
     }

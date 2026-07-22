@@ -66,21 +66,13 @@ export async function GET() {
       }
     }
 
-    // Keep the inviter alongside each assigned id: a stored assignment only
-    // grants access while the inviter is still the property's manager, so the
-    // fetched rows are re-checked against it below.
-    const invitersByPropertyId = new Map<string, Set<string>>();
+    const linkedPropertyIds = new Set<string>();
     for (const row of linkRows ?? []) {
       const inviterId = String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim();
-      if (!inviterId) continue;
       const inviterEmail = inviterEmailById.get(inviterId) ?? "";
       if (isCrossSandboxPortalPair(viewerEmail, inviterEmail)) continue;
       for (const id of asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids)) {
-        const pid = id.trim();
-        if (!pid) continue;
-        const inviters = invitersByPropertyId.get(pid) ?? new Set<string>();
-        inviters.add(inviterId);
-        invitersByPropertyId.set(pid, inviters);
+        if (id.trim()) linkedPropertyIds.add(id.trim());
       }
     }
 
@@ -88,24 +80,17 @@ export async function GET() {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     let rows = ownedRows ?? [];
-    const linkedPropertyIds = new Set<string>();
-    if (invitersByPropertyId.size > 0) {
+    if (linkedPropertyIds.size > 0) {
       const { data: linkedRows, error: linkedError } = await db
         .from("manager_property_records")
         .select("id, manager_user_id, status, row_data, property_data, edit_request_note")
-        .in("id", [...invitersByPropertyId.keys()])
+        .in("id", [...linkedPropertyIds])
         .order("updated_at", { ascending: false });
 
       if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
 
       const seen = new Set(rows.map((row) => row.id));
-      const authorized = (linkedRows ?? []).filter((row) => {
-        const pid = String(row.id ?? "").trim();
-        const owner = String(row.manager_user_id ?? "").trim();
-        return Boolean(owner) && (invitersByPropertyId.get(pid)?.has(owner) ?? false);
-      });
-      for (const row of authorized) linkedPropertyIds.add(String(row.id));
-      rows = [...rows, ...authorized.filter((row) => !seen.has(row.id))];
+      rows = [...rows, ...((linkedRows ?? []).filter((row) => !seen.has(row.id)))];
     }
 
     // Return authoritative linked ids from the same invite query so the client

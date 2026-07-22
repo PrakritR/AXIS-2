@@ -4,7 +4,7 @@ import {
   findPendingVendorInviteByToken,
   lookupVendorInviteByEmail,
   provisionVendorAccountByEmail,
-  VENDOR_INVITE_EXPIRED_ERROR,
+  VENDOR_INVITE_EXPIRED_NOTICE,
 } from "@/lib/auth/provision-vendor-account";
 
 /**
@@ -167,24 +167,88 @@ describe("lookupVendorInviteByEmail — expired and never-invited are different 
   });
 });
 
-describe("provisionVendorAccountByEmail — self-serve path surfaces expiry", () => {
-  // The stub exposes only `from`, so returning here at all proves the handler
-  // bailed before any provisioning write (which needs `auth.admin`).
-  it("refuses instead of quietly creating an unlinked vendor account", async () => {
-    const db = dbForEmailLookup({ redeemable: null, anyPending: { id: "inv-1" } });
+/**
+ * Signalling expiry must not become a wall. The caller creates the auth user
+ * BEFORE provisioning, so failing here deletes the account and — because the
+ * stale row stays `pending` — every retry fails identically. Signup succeeds
+ * unlinked and reports `inviteExpired`, so the state self-heals and the vendor
+ * is told why no manager is attached.
+ */
+function provisioningDb(anyPending: Record<string, unknown> | null) {
+  const writes: { table: string; op: "upsert" | "update" }[] = [];
+
+  const vendorInviteSelect = (columns: string) => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: columns.trim() === "id" ? anyPending : null,
+      error: null,
+    });
+    const order = vi.fn(() => ({ limit: vi.fn(() => ({ maybeSingle })) }));
+    return { eq: vi.fn(() => ({ eq: vi.fn(() => ({ order, gt: vi.fn(() => ({ order })) })) })) };
+  };
+
+  const from = vi.fn((table: string) => ({
+    select: vi.fn((columns = "*") =>
+      table === "vendor_invites"
+        ? vendorInviteSelect(columns)
+        : { eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })) },
+    ),
+    upsert: vi.fn(async () => {
+      writes.push({ table, op: "upsert" });
+      return { error: null };
+    }),
+    update: vi.fn(() => ({
+      eq: vi.fn(async () => {
+        writes.push({ table, op: "update" });
+        return { error: null };
+      }),
+    })),
+  }));
+
+  const client = {
+    from,
+    auth: {
+      admin: {
+        getUserById: vi.fn().mockResolvedValue({ data: { user: { user_metadata: {} } } }),
+        updateUserById: vi.fn().mockResolvedValue({ data: null, error: null }),
+        listUsers: vi.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+      },
+    },
+  };
+  return { db: client as never, writes };
+}
+
+describe("provisionVendorAccountByEmail — an expired invite reports, never blocks", () => {
+  it("still creates the account, unlinked, and flags the expiry", async () => {
+    const { db } = provisioningDb({ id: "inv-1" });
     await expect(
       provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" }),
-    ).resolves.toEqual({ ok: false, status: 410, error: VENDOR_INVITE_EXPIRED_ERROR });
+    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, inviteExpired: true });
+  });
+
+  it("never redeems the stale invite", async () => {
+    const { db, writes } = provisioningDb({ id: "inv-1" });
+    await provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" });
+    expect(writes.filter((w) => w.table === "vendor_invites")).toEqual([]);
+  });
+
+  it("reports no expiry when there was simply never an invite", async () => {
+    const { db } = provisioningDb(null);
+    await expect(
+      provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" }),
+    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, inviteExpired: false });
   });
 
   it("leaves the explicit-invite paths (token / OAuth) untouched", async () => {
-    const db = dbForEmailLookup({ redeemable: null, anyPending: { id: "inv-1" } });
+    const { db } = provisioningDb({ id: "inv-1" });
     const from = (db as unknown as { from: ReturnType<typeof vi.fn> }).from;
-    await provisionVendorAccountByEmail(db, {
-      userId: "user-1",
-      email: "vendor@example.com",
-      invite: null,
-    }).catch(() => null);
+    await expect(
+      provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com", invite: null }),
+    ).resolves.toMatchObject({ ok: true, inviteExpired: false });
     expect(from).not.toHaveBeenCalledWith("vendor_invites");
+  });
+
+  it("carries the user-facing reason so the vendor is not left guessing", () => {
+    expect(VENDOR_INVITE_EXPIRED_NOTICE).toMatch(/expired/i);
+    expect(VENDOR_INVITE_EXPIRED_NOTICE).toMatch(/new one/i);
   });
 });

@@ -1,7 +1,6 @@
 import "server-only";
 
 import { asStringArray, readPropertyPermissionsFromRow } from "@/app/api/pro/account-links/route";
-import { resolveInviterOwnedProperties, type InviteAssignment } from "@/lib/auth/co-manager-invite-scope";
 import {
   hasCoManagerPermissionLevelForProperty,
   permissionsForProperty,
@@ -55,22 +54,12 @@ export async function collectLinkedPropertyIdsForUser(db: ServiceClient, userId:
       }
     }
 
-    const assignments: InviteAssignment[] = [];
     for (const row of linkRows ?? []) {
       const inviterId = String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim();
       if (isCrossSandboxPortalPair(viewerEmail, inviterEmailById.get(inviterId) ?? "")) continue;
-      const propertyIds = asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids)
-        .map((id) => id.trim())
-        .filter(Boolean);
-      if (propertyIds.length > 0) assignments.push({ inviterUserId: inviterId, propertyIds });
-    }
-
-    // A link grants only what its inviter still owns — the stored id list is not
-    // authorization on its own (see co-manager-invite-scope).
-    const inviterOwns = await resolveInviterOwnedProperties(db, assignments);
-    for (const { inviterUserId, propertyIds } of assignments) {
-      for (const id of propertyIds) {
-        if (inviterOwns(inviterUserId, id)) linkedPropertyIds.add(id);
+      if (!Array.isArray((row as { assigned_property_ids?: unknown }).assigned_property_ids)) continue;
+      for (const id of (row as { assigned_property_ids: unknown[] }).assigned_property_ids) {
+        if (typeof id === "string" && id.trim()) linkedPropertyIds.add(id.trim());
       }
     }
   } catch {
@@ -94,19 +83,8 @@ export async function collectLinkedPropertyPermissionsForUser(
     if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
       return byProperty;
     }
-    const inviterOwns = await resolveInviterOwnedProperties(
-      db,
-      (linkRows ?? []).map((row) => ({
-        inviterUserId: String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim(),
-        propertyIds: asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids),
-      })),
-    );
-
     for (const row of linkRows ?? []) {
-      const inviterId = String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim();
-      const assigned = asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids).filter((id) =>
-        inviterOwns(inviterId, id),
-      );
+      const assigned = asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids);
       const perms = readPropertyPermissionsFromRow(row as Parameters<typeof readPropertyPermissionsFromRow>[0]);
       for (const propertyId of assigned) {
         const existing = byProperty.get(propertyId) ?? {};
