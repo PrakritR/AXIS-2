@@ -106,7 +106,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       return NextResponse.json({ ok: true, invite: serializeInvite(updated as InviteRow, user.id) });
     }
 
-    /** After accept: both workspaces can edit split and property scope; only inviter updates co-manager permissions. */
+    /** After accept: both workspaces can edit the payout split; only the inviter changes property scope or co-manager permissions. */
     if (!actionNorm && (patchProps || patchPay || patchPerms)) {
       if (invite.status !== "accepted") {
         return NextResponse.json({ error: "Only accepted links can be updated this way." }, { status: 409 });

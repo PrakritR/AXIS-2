@@ -24,10 +24,27 @@ export type VendorInviteRow = {
 const VENDOR_INVITE_COLUMNS = "id, manager_user_id, vendor_directory_id, vendor_email, vendor_name, expires_at";
 
 /**
+ * Fail closed on the TTL, for every lookup. This was `if (invite.expires_at && …)`
+ * on the token path only, so a NULL expiry skipped the check entirely — and
+ * `vendor_invites` was directly INSERT-able by any authenticated user, who could
+ * therefore mint a never-expiring invite for an email they do not control and
+ * redeem it into a pre-confirmed account. The grant is revoked in
+ * 20260722120000_lock_role_grant_surface.sql and `expires_at` is now NOT NULL;
+ * this keeps redemption safe regardless, and expiry is a revocation signal that
+ * must hold on the self-serve email path too.
+ */
+function redeemableInvite(invite: VendorInviteRow | null): VendorInviteRow | null {
+  if (!invite) return null;
+  const expiresAt = invite.expires_at ? new Date(invite.expires_at).getTime() : Number.NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
+  return invite;
+}
+
+/**
  * Exact-match only — an `ilike` pattern here would let a signup email containing
  * `%`/`_` wildcard characters match (and hijack) an unrelated pending invite.
  */
-async function findPendingVendorInviteByEmail(
+export async function findPendingVendorInviteByEmail(
   supabase: SupabaseClient,
   email: string,
 ): Promise<VendorInviteRow | null> {
@@ -36,12 +53,13 @@ async function findPendingVendorInviteByEmail(
     .select(VENDOR_INVITE_COLUMNS)
     .eq("status", "pending")
     .eq("vendor_email", email)
+    .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return (data as VendorInviteRow | null) ?? null;
+  return redeemableInvite((data as VendorInviteRow | null) ?? null);
 }
 
 /** Resolves an invite from its emailed single-use token — never trust a client-supplied email instead. */
@@ -60,18 +78,7 @@ export async function findPendingVendorInviteByToken(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  const invite = (data as VendorInviteRow | null) ?? null;
-  if (!invite) return null;
-  // Fail closed on the TTL. This was `if (invite.expires_at && …)`, so a NULL
-  // expiry skipped the check entirely — and `vendor_invites` was directly
-  // INSERT-able by any authenticated user, who could therefore mint a
-  // never-expiring invite for an email they do not control and redeem it into a
-  // pre-confirmed account. The grant is revoked in
-  // 20260722120000_lock_role_grant_surface.sql and `expires_at` is now NOT
-  // NULL; this keeps redemption safe regardless.
-  const expiresAt = invite.expires_at ? new Date(invite.expires_at).getTime() : Number.NaN;
-  if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
-  return invite;
+  return redeemableInvite((data as VendorInviteRow | null) ?? null);
 }
 
 /** Defense in depth: a directory row's owning manager must match the invite that names it. */

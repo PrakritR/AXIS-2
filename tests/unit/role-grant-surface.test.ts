@@ -52,6 +52,36 @@ function loadStatements(): Statement[] {
 
 const STATEMENTS = loadStatements();
 
+const WRITE_PRIVILEGES = ["INSERT", "UPDATE", "DELETE"] as const;
+
+type GrantStatement = {
+  verb: "grant" | "revoke";
+  /** Write privileges this statement moves, expanded from `ALL`. */
+  writes: string[];
+  grantees: string[];
+  targetsTable: (table: string) => boolean;
+};
+
+/** Parses a GRANT/REVOKE into the pieces both the replay and the revoke-present checks need. */
+function parseGrantStatement(sql: string): GrantStatement | null {
+  const m = /^(grant|revoke)\s+(.+?)\s+(?:on|ON)\s+(.+?)\s+(?:to|TO|from|FROM)\s+(.+)$/i.exec(sql);
+  if (!m) return null;
+  const [, verbRaw, privsRaw, targetRaw, granteesRaw] = m;
+
+  const target = targetRaw.toLowerCase().replace(/\btable\b/g, "").replace(/public\./g, "").trim();
+  const targetNames = target.split(/\s*,\s*/).map((t) => t.trim());
+  // `GRANT ... ON ALL TABLES IN SCHEMA public` also lands on every trust table.
+  const targetsAllTables = /all\s+tables\s+in\s+schema\s+public/i.test(targetRaw);
+  const privs = privsRaw.toUpperCase();
+
+  return {
+    verb: verbRaw.toLowerCase() as "grant" | "revoke",
+    writes: WRITE_PRIVILEGES.filter((p) => privs.includes(p) || /\ball\b/i.test(privsRaw)),
+    grantees: granteesRaw.toLowerCase().split(/\s*,\s*/).map((g) => g.trim().replace(/[";]/g, "")),
+    targetsTable: (table) => targetsAllTables || target === table || targetNames.includes(table),
+  };
+}
+
 describe("role-grant surface on trust tables", () => {
   it("reads the migration directory", () => {
     expect(STATEMENTS.length).toBeGreaterThan(100);
@@ -64,27 +94,13 @@ describe("role-grant surface on trust tables", () => {
         const held = new Map<string, Set<string>>(CLIENT_ROLES.map((r) => [r, new Set<string>()]));
 
         for (const { sql } of STATEMENTS) {
-          const m = /^(grant|revoke)\s+(.+?)\s+(?:on|ON)\s+(.+?)\s+(?:to|TO|from|FROM)\s+(.+)$/i.exec(sql);
-          if (!m) continue;
-          const [, verb, privsRaw, targetRaw, granteesRaw] = m;
-
-          const target = targetRaw.toLowerCase().replace(/\btable\b/g, "").replace(/public\./g, "").trim();
-          const targetsThisTable =
-            target === table || target.split(/\s*,\s*/).map((t) => t.trim()).includes(table);
-          // `GRANT ... ON ALL TABLES IN SCHEMA public` also lands on this table.
-          const targetsAllTables = /all\s+tables\s+in\s+schema\s+public/i.test(targetRaw);
-          if (!targetsThisTable && !targetsAllTables) continue;
-
-          const grantees = granteesRaw.toLowerCase().split(/\s*,\s*/).map((g) => g.trim().replace(/[";]/g, ""));
-          const privs = privsRaw.toUpperCase();
-          const writes = ["INSERT", "UPDATE", "DELETE"].filter(
-            (p) => privs.includes(p) || /\ball\b/i.test(privsRaw),
-          );
+          const stmt = parseGrantStatement(sql);
+          if (!stmt || !stmt.targetsTable(table)) continue;
 
           for (const role of CLIENT_ROLES) {
-            if (!grantees.includes(role)) continue;
-            for (const p of writes) {
-              if (verb.toLowerCase() === "grant") held.get(role)!.add(p);
+            if (!stmt.grantees.includes(role)) continue;
+            for (const p of stmt.writes) {
+              if (stmt.verb === "grant") held.get(role)!.add(p);
               else held.get(role)!.delete(p);
             }
           }
@@ -95,6 +111,31 @@ describe("role-grant surface on trust tables", () => {
             [...held.get(role)!].sort(),
             `${role} must hold no write privilege on ${table} — a self-service write here is a self-service admin grant`,
           ).toEqual([]);
+        }
+      });
+
+      // The replay above starts from an empty privilege set because the DML that
+      // made the escalation reachable came from Supabase's platform-level default
+      // privileges, which live outside supabase/migrations. So deleting the
+      // REVOKEs would leave the replay green while reopening the hole in the real
+      // database. Assert the REVOKEs themselves are still present.
+      it("explicitly revokes INSERT, UPDATE and DELETE from anon and authenticated", () => {
+        const revoked = new Map<string, Set<string>>(CLIENT_ROLES.map((r) => [r, new Set<string>()]));
+
+        for (const { sql } of STATEMENTS) {
+          const stmt = parseGrantStatement(sql);
+          if (!stmt || stmt.verb !== "revoke" || !stmt.targetsTable(table)) continue;
+          for (const role of CLIENT_ROLES) {
+            if (!stmt.grantees.includes(role)) continue;
+            for (const p of stmt.writes) revoked.get(role)!.add(p);
+          }
+        }
+
+        for (const role of CLIENT_ROLES) {
+          expect(
+            [...revoked.get(role)!].sort(),
+            `${table} must keep an explicit REVOKE of INSERT/UPDATE/DELETE from ${role} — PostgREST inherits Supabase's platform default grants, so the absence of a GRANT in this repo is not the absence of the privilege`,
+          ).toEqual([...WRITE_PRIVILEGES].sort());
         }
       });
 
