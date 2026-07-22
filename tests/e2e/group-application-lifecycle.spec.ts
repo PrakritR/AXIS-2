@@ -336,29 +336,10 @@ async function reEditApplication(page: Page, applicantName: string) {
   await expect(page.getByRole("button", { name: /Save application/i })).toHaveCount(0, { timeout: 30_000 });
 }
 
-/**
- * The portal submit path intermittently loses a submission: the wizard clears and the
- * row reverts to "In progress" with nothing stored server-side (observed ~1 in 3 runs,
- * on code untouched by this change). Re-walk the wizard rather than fail the run.
- */
-async function submitApplicationWithRetry(
-  page: Page,
-  applicant: { email: string; password: string; name: string },
-  group: { role: "first"; size: string } | { role: "joining"; groupId: string },
-  label: string,
-  mode: "portal" | "guest" = "portal",
-) {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await submitApplication(page, applicant, group, label, mode);
-      return;
-    } catch (error) {
-      if (attempt === 3) throw error;
-      // eslint-disable-next-line no-console
-      console.warn(`submit for ${applicant.email} did not persist (attempt ${attempt}); retrying`);
-    }
-  }
-}
+// A submit that does not reach the server is a lost application, not a flake: the
+// wizard clears, the resident sees a draft and the manager sees nothing. One walk
+// of the wizard must persist one submitted row, so `submitApplication` throws
+// rather than re-walking — that failure is the signal the write race is back.
 
 test.describe.configure({ mode: "serial", timeout: 600_000 });
 
@@ -398,7 +379,7 @@ test.describe("Group applications end to end", () => {
 
   test("organizer submits as first applicant — Group ID minted and persisted", async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    await submitApplicationWithRetry(page, ORGANIZER, { role: "first", size: "2" }, "organizer");
+    await submitApplication(page, ORGANIZER, { role: "first", size: "2" }, "organizer");
 
     const rows = await readPersistedApplications();
     const organizerRow = rows.find((r) => r.email === ORGANIZER.email);
@@ -467,7 +448,7 @@ test.describe("Group applications end to end", () => {
   test("joining roommate pastes the Group ID into their own application", async ({ page }) => {
     const groupId = fs.readFileSync(GROUP_ID_FILE, "utf8").trim();
     await page.setViewportSize(DESKTOP);
-    await submitApplicationWithRetry(page, JOINER, { role: "joining", groupId }, "joiner");
+    await submitApplication(page, JOINER, { role: "joining", groupId }, "joiner");
 
     const rows = await readPersistedApplications();
     const joinerRow = rows.find((r) => r.email === JOINER.email);
@@ -512,7 +493,7 @@ test.describe("Group applications end to end", () => {
   test("guest applicant joining the same group sees the shared finish-screen callout", async ({ page }) => {
     const groupId = fs.readFileSync(GROUP_ID_FILE, "utf8").trim();
     await page.setViewportSize(DESKTOP);
-    await submitApplicationWithRetry(page, GUEST, { role: "joining", groupId }, "guest", "guest");
+    await submitApplication(page, GUEST, { role: "joining", groupId }, "guest", "guest");
     await expect(txt(page, /You joined a group application/i)).toBeVisible();
     await expect(txt(page, groupId)).toBeVisible();
     await shot(page, "guest-03-finish-panel-desktop-1440");
