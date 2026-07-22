@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { AuthRole } from "@/components/auth/portal-switcher";
-import { getPortalAccessContext } from "@/lib/auth/portal-access";
+import { getPortalAccessContext, reachablePortalRoles } from "@/lib/auth/portal-access";
 
 export const runtime = "nodejs";
 
@@ -10,8 +10,11 @@ export async function GET() {
     if (!ctx.user) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
+    // Only expose portals the account may actually enter in this runtime, so the
+    // portal switch and choose-portal chooser never offer a blocked crossing
+    // (e.g. a production admin identity into the manager/property portal).
     return NextResponse.json({
-      roles: ctx.roles as AuthRole[],
+      roles: reachablePortalRoles(ctx) as AuthRole[],
       effectiveRole: ctx.effectiveRole,
     });
   } catch (e) {

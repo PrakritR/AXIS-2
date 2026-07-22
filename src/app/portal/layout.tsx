@@ -8,6 +8,7 @@ import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
+import { assertPropertyPortalAccess } from "@/lib/auth/portal-access";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import {
   PORTAL_MAIN_CONTENT_CLASS,
@@ -19,6 +20,10 @@ import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
+  // A production admin (founder/ops) identity must not cross into the property
+  // portal even by typing the URL — hiding the switch is not access control.
+  await assertPropertyPortalAccess();
+
   const [nav, { profile }, sidebarCollapsed] = await Promise.all([
     buildProPortalDefinition(),
     getServerSessionProfile(),

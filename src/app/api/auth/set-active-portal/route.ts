@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AuthRole } from "@/components/auth/portal-switcher";
 import { PREVIEW_PORTAL_COOKIE, PREVIEW_UID_COOKIE } from "@/lib/auth/admin-preview";
-import { ACTIVE_PORTAL_COOKIE, getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
+import { ACTIVE_PORTAL_COOKIE, getPortalAccessContext, isPortalRoleReachable } from "@/lib/auth/portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -26,7 +26,9 @@ export async function POST(req: Request) {
     }
 
     const ctx = await getPortalAccessContext();
-    if (!hasRole(ctx, role)) {
+    // Reachability, not bare membership: a production admin identity holds the
+    // manager role but must not be able to switch into the property portal.
+    if (!isPortalRoleReachable(ctx, role)) {
       return NextResponse.json({ error: "You do not have access to this portal." }, { status: 403 });
     }
 
