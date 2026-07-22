@@ -93,8 +93,9 @@ vi.mock("@/lib/portal-base-path-client", () => ({
   usePaidPortalBasePath: () => "/portal",
 }));
 
+const showToast = vi.fn();
 vi.mock("@/components/providers/app-ui-provider", () => ({
-  useAppUi: () => ({ showToast: () => {} }),
+  useAppUi: () => ({ showToast: (msg: string) => showToast(msg) }),
 }));
 
 vi.mock("@/components/portal/payment-schedule-ui", () => ({
@@ -115,7 +116,10 @@ vi.mock("@/lib/demo/demo-session", () => ({
 
 import { ManagerInbox } from "@/components/portal/manager-inbox";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  showToast.mockClear();
+});
 
 function searchBox() {
   return screen.getByLabelText("Search messages by sender, subject, or content");
@@ -185,6 +189,44 @@ describe("manager inbox search", () => {
     fireEvent.change(searchBox(), { target: { value: "flyer" } });
     expect(screen.getAllByText(/No messages match/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Trash isn’t searched/).length).toBeGreaterThan(0);
+  });
+
+  it("names an escape hatch that works from the tab the reader is on", () => {
+    // Re-clicking the already-active Trash pill leaves `tabId` unchanged, so
+    // "open the Trash tab" would be a dead instruction exactly here.
+    render(<ManagerInbox tabId="trash" embeddedInCommunication externalTitleActions suppressCompose />);
+    fireEvent.change(searchBox(), { target: { value: "roof" } });
+    expect(screen.getAllByText(/clear the search to browse it/).length).toBeGreaterThan(0);
+
+    cleanup();
+    render(<ManagerInbox tabId="unopened" embeddedInCommunication externalTitleActions suppressCompose />);
+    fireEvent.change(searchBox(), { target: { value: "roof" } });
+    expect(screen.getAllByText(/clear the search, then open the Trash tab/).length).toBeGreaterThan(0);
+  });
+
+  it("says so instead of silently doing nothing when no selected row is unread", () => {
+    render(<ManagerInbox tabId="unopened" embeddedInCommunication externalTitleActions suppressCompose />);
+    fireEvent.change(searchBox(), { target: { value: "roof" } });
+
+    // The sent thread is already read, so bulk mark-read has nothing to do.
+    fireEvent.click(screen.getAllByLabelText("Select message Re: roof repair scheduled")[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Mark read" })[0]!);
+
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/Nothing to mark read/));
+    // The selection survives so the manager can correct it.
+    expect(screen.getAllByRole("button", { name: "Mark read" }).length).toBeGreaterThan(0);
+  });
+
+  it("marks only the unread inbox rows of a mixed selection", () => {
+    render(<ManagerInbox tabId="unopened" embeddedInCommunication externalTitleActions suppressCompose />);
+    fireEvent.change(searchBox(), { target: { value: "roof" } });
+
+    fireEvent.click(screen.getAllByLabelText("Select message Re: roof repair scheduled")[0]!);
+    fireEvent.click(screen.getAllByLabelText("Select message Roof leak in unit 2")[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Mark read" })[0]!);
+
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/Marked as read/));
+    expect(showToast).not.toHaveBeenCalledWith(expect.stringMatching(/Nothing to mark read/));
   });
 
   it("ends the search when a tab is picked, so the pills are never inert", () => {
