@@ -2,7 +2,7 @@ import type { AdminPropertyRow } from "@/lib/demo-admin-property-inventory";
 import type { MockProperty } from "@/data/types";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { readExtraListingsForUser, readScopedExtraListings } from "@/lib/demo-property-pipeline";
+import { readScopedExtraListings } from "@/lib/demo-property-pipeline";
 import { readLinkedListingsForUser, safePropertyOptionLabel, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export type ManagerApplyLinkParams = {
