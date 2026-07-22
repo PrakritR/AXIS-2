@@ -8,13 +8,11 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRo
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
-import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
   deleteInboxThreadIds,
   invalidatePersistedInboxCache,
-  inboxMutationInFlight,
   loadPersistedInbox,
   persistInbox,
   persistInboxAwait,
@@ -26,11 +24,18 @@ import {
   appendReplyToInboxThread,
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
-import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 import {
-  PortalInboxSelectionToolbar,
-  useInboxRowSelection,
-} from "@/components/portal/portal-inbox-selection";
+  INBOX_TAB_DEFS,
+  INBOX_LIST_SCROLL,
+  InboxComposer,
+  InboxConversationRow,
+  InboxThreadEmpty,
+  InboxThreadView,
+  InboxTwoPane,
+  PortalInboxEmptyState,
+  type InboxBubbleMessage,
+} from "./portal-inbox-ui";
+import { useInboxRowSelection } from "@/components/portal/portal-inbox-selection";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
@@ -76,27 +81,6 @@ function previewLine(body: string, max = 100) {
   const t = body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return `${t.slice(0, max)}…`;
-}
-
-/**
- * `perRowFolder` is for lists that span folders (search results): "is this a
- * sent message?" then has to be answered per row, because the active tab no
- * longer describes what the row is. Such a list also gets the recipient marked
- * "To:" so a sent thread is never read as one the recipient sent us.
- */
-function toRows(list: InboxThread[], tabId: string, perRowFolder = false): PortalInboxTableRow[] {
-  return list.map((t) => {
-    const sentSemantics = perRowFolder ? t.folder === "sent" : tabId === "sent";
-    const recipientLabel = t.email || "Unknown recipient";
-    return {
-      id: t.id,
-      name: sentSemantics ? (perRowFolder ? `To: ${recipientLabel}` : recipientLabel) : t.from,
-      email: sentSemantics ? (t.from ? `From ${t.from}` : "") : t.email,
-      subject: t.subject,
-      whenLabel: t.time,
-      read: !t.unread,
-    };
-  });
 }
 
 function countThreads(threads: InboxThread[], scheduleCount: number) {
@@ -301,14 +285,24 @@ export const ManagerInbox = forwardRef<
   useEffect(() => {
     setRetainedIds(new Set());
     setQuery("");
+    // Switching folders closes the open thread — its row no longer belongs to
+    // the visible list, so keeping it selected would strand the right pane.
+    setExpandedId(null);
   }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
   const threadSelection = useInboxRowSelection(threadRowIds);
 
-  const markRead = (id: string) => {
+  // Mark an unread inbox thread read without a toast — used when a thread is
+  // opened in the two-pane view (kept listed under Unopened until refresh via
+  // `retainedIds`, matching the explicit "Mark read" behaviour).
+  const markReadSilent = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
     setRetainedIds((prev) => new Set(prev).add(id));
+  };
+
+  const markRead = (id: string) => {
+    markReadSilent(id);
     showToast("Marked as read — moves to Opened after refresh.");
   };
 
@@ -316,16 +310,6 @@ export const ManagerInbox = forwardRef<
     const thread = local.find((t) => t.id === id);
     return Boolean(thread && thread.folder === "inbox" && thread.unread);
   };
-
-  const markReadIfUnreadInbox = (id: string) => {
-    if (isUnreadInboxThread(id)) markRead(id);
-  };
-
-  const bodyById = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const t of local) m[t.id] = t.body;
-    return m;
-  }, [local]);
 
   const moveToTrash = (id: string) => {
     void runInboxMutation(async () => {
@@ -460,13 +444,9 @@ export const ManagerInbox = forwardRef<
     [deleteAllTrash, reloadInbox, suppressCompose],
   );
 
-  const toggleExpand = (id: string) => {
-    setExpandedId((cur) => (cur === id ? null : id));
-  };
-
   const handleReply = useCallback(
-    async (row: PortalInboxTableRow, text: string) => {
-      const thread = local.find((t) => t.id === row.id);
+    async (rowId: string, text: string) => {
+      const thread = local.find((t) => t.id === rowId);
       if (!thread) return;
       const reply: InboxThreadMessage = {
         id: `reply-${Date.now().toString(36)}`,
@@ -557,6 +537,69 @@ export const ManagerInbox = forwardRef<
     [navigate, showToast, inboxBase],
   );
 
+  // ---- Open conversation (right pane) ----------------------------------
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replySending, setReplySending] = useState(false);
+
+  const activeThread = useMemo(
+    () => (expandedId ? local.find((t) => t.id === expandedId) ?? null : null),
+    [expandedId, local],
+  );
+
+  // A fresh draft per conversation.
+  useEffect(() => {
+    setReplyDraft("");
+  }, [expandedId]);
+
+  const activeIsSent = activeThread?.folder === "sent";
+  const activeFolder = activeThread
+    ? activeThread.folder === "trash"
+      ? inferPreviousFolder(activeThread)
+      : activeThread.folder
+    : "inbox";
+
+  const activeBubbles = useMemo((): InboxBubbleMessage[] => {
+    if (!activeThread) return [];
+    return inboxThreadMessages(activeThread).map((m, i) => {
+      // Root direction follows the folder (a Sent thread we authored); every
+      // appended message in this model is a manager reply, i.e. outbound.
+      const outbound = i === 0 ? activeFolder === "sent" : true;
+      return {
+        id: m.id,
+        author: m.from,
+        body: m.body,
+        at: m.at,
+        direction: outbound ? "outbound" : "inbound",
+      } satisfies InboxBubbleMessage;
+    });
+  }, [activeThread, activeFolder]);
+
+  const openThread = useCallback(
+    (thread: InboxThread) => {
+      setExpandedId(thread.id);
+      // Opening an unread inbox message reads it (natural inbox behaviour).
+      if (thread.folder === "inbox" && thread.unread) markReadSilent(thread.id);
+    },
+    // markReadSilent only closes over stable state setters.
+    [],
+  );
+
+  const sendActiveReply = useCallback(async () => {
+    if (!activeThread) return;
+    const text = replyDraft.trim();
+    if (!text) return;
+    setReplySending(true);
+    try {
+      await handleReply(activeThread.id, text);
+      setReplyDraft("");
+      showToast("Reply sent.");
+    } catch {
+      showToast("Could not send reply.");
+    } finally {
+      setReplySending(false);
+    }
+  }, [activeThread, replyDraft, handleReply, showToast]);
+
   const emptyCopy =
     tabId === "sent" && rowsForTab.length === 0
       ? "No sent messages yet."
@@ -639,9 +682,181 @@ export const ManagerInbox = forwardRef<
     </div>
   );
 
+  const rowCheckbox = (thread: InboxThread) => (
+    <input
+      type="checkbox"
+      className="h-4 w-4 shrink-0 rounded border-border accent-primary"
+      checked={threadSelection.selectedIds.has(thread.id)}
+      onChange={() => threadSelection.toggleSelected(thread.id)}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={`Select message ${thread.subject}`}
+    />
+  );
+
+  const bulkButtons = (
+    <>
+      {searchActive || tabId === "unopened" ? (
+        <Button type="button" variant="outline" className="min-h-0 rounded-full px-3 py-1.5 text-xs" onClick={bulkMarkRead}>
+          Mark read
+        </Button>
+      ) : null}
+      {searchActive || tabId === "unopened" || tabId === "opened" || tabId === "sent" ? (
+        <Button type="button" variant="outline" className="min-h-0 rounded-full px-3 py-1.5 text-xs" onClick={bulkMoveToTrash}>
+          Trash
+        </Button>
+      ) : null}
+      {!searchActive && tabId === "trash" ? (
+        <>
+          <Button type="button" variant="outline" className="min-h-0 rounded-full px-3 py-1.5 text-xs" onClick={bulkRestoreFromTrash}>
+            Restore
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-0 rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-700 hover:bg-[var(--status-overdue-bg)]"
+            onClick={bulkDeleteForever}
+          >
+            Delete
+          </Button>
+        </>
+      ) : null}
+      <Button type="button" variant="outline" className="min-h-0 rounded-full px-3 py-1.5 text-xs" onClick={threadSelection.clearSelection}>
+        Clear
+      </Button>
+    </>
+  );
+
+  const hasSelection = threadSelection.selectedIds.size > 0;
+
+  const listPane = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 space-y-2 border-b border-border p-2.5">
+        {searchBox}
+        {searchActive ? (
+          <p className="px-1 text-[11px] leading-snug text-muted">
+            {rowsForTab.length} message{rowsForTab.length === 1 ? "" : "s"} matching{" "}
+            <span className="font-medium text-foreground">“{query.trim()}”</span> — best first.{" "}
+            {searchSkipsTrashNote(tabId)}
+          </p>
+        ) : null}
+        {rowsForTab.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-muted">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border accent-primary"
+                checked={threadSelection.allSelected}
+                onChange={() => threadSelection.toggleSelectAll()}
+                aria-label="Select all messages"
+              />
+              {hasSelection ? `${threadSelection.selectedIds.size} selected` : "Select all"}
+            </label>
+            {hasSelection ? <div className="flex flex-wrap items-center gap-1.5">{bulkButtons}</div> : null}
+          </div>
+        ) : null}
+      </div>
+      <div className={INBOX_LIST_SCROLL}>
+        {rowsForTab.length === 0 ? (
+          <div className="p-4">
+            <PortalInboxEmptyState title={searchActive ? `No messages match “${query.trim()}”.` : emptyCopy} />
+          </div>
+        ) : (
+          rowsForTab.map((thread) => {
+            const sentSemantics = searchActive ? thread.folder === "sent" : tabId === "sent";
+            const recipientLabel = thread.email || "Unknown recipient";
+            const displayName = sentSemantics
+              ? searchActive
+                ? `To: ${recipientLabel}`
+                : recipientLabel
+              : thread.from || thread.email || "Unknown sender";
+            const msgs = inboxThreadMessages(thread);
+            const lastMsg = msgs[msgs.length - 1];
+            const folder = thread.folder === "trash" ? inferPreviousFolder(thread) : thread.folder;
+            const lastOutbound = msgs.length > 1 ? true : folder === "sent";
+            return (
+              <InboxConversationRow
+                key={thread.id}
+                name={displayName}
+                subtitle={thread.subject}
+                preview={previewLine(lastMsg?.body ?? thread.preview ?? "", 80)}
+                previewPrefix={lastOutbound ? "You: " : undefined}
+                time={thread.time}
+                unread={thread.folder === "inbox" && thread.unread}
+                selected={expandedId === thread.id}
+                onOpen={() => openThread(thread)}
+                leading={rowCheckbox(thread)}
+              />
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  const threadHeaderActions = activeThread ? (
+    activeThread.folder === "trash" ? (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-0 rounded-full px-3 py-1.5 text-xs"
+          onClick={() => restoreFromTrash(activeThread.id)}
+        >
+          Restore
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-0 rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-700 hover:bg-[var(--status-overdue-bg)]"
+          onClick={() => deleteForever(activeThread.id)}
+        >
+          Delete
+        </Button>
+      </>
+    ) : (
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-0 rounded-full px-3 py-1.5 text-xs"
+        data-attr="inbox-thread-trash"
+        onClick={() => moveToTrash(activeThread.id)}
+      >
+        Trash
+      </Button>
+    )
+  ) : null;
+
+  const threadPane = activeThread ? (
+    <InboxThreadView
+      title={
+        activeIsSent
+          ? activeThread.email || "Unknown recipient"
+          : activeThread.from || activeThread.email || "Unknown sender"
+      }
+      subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
+      messages={activeBubbles}
+      onBack={() => setExpandedId(null)}
+      headerActions={threadHeaderActions}
+      emptyLabel="No messages in this conversation."
+      composer={
+        activeThread.folder === "trash" ? undefined : (
+          <InboxComposer
+            value={replyDraft}
+            onChange={setReplyDraft}
+            onSubmit={() => void sendActiveReply()}
+            sending={replySending}
+            placeholder="Write a reply…"
+            dataAttr="inbox-reply"
+          />
+        )
+      }
+    />
+  ) : (
+    <InboxThreadEmpty />
+  );
+
   const inboxBody = (
     <>
-      {embeddedInCommunication ? <div className="mb-4 flex">{searchBox}</div> : null}
       {embeddedInCommunication && !externalTitleActions ? (
         <div className="mb-4 flex flex-wrap justify-end gap-2">
           {tabId === "trash" ? (
@@ -680,92 +895,8 @@ export const ManagerInbox = forwardRef<
 
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
-      ) : rowsForTab.length === 0 ? (
-        <div className="space-y-2">
-          <PortalInboxEmptyState
-            title={searchActive ? `No messages match “${query.trim()}”.` : emptyCopy}
-          />
-          {searchActive ? <p className="text-center text-sm text-muted">{searchSkipsTrashNote(tabId)}</p> : null}
-        </div>
       ) : (
-        <div className="space-y-3">
-          {searchActive ? (
-            <p className="text-sm text-muted">
-              {rowsForTab.length} message{rowsForTab.length === 1 ? "" : "s"} matching{" "}
-              <span className="font-medium text-foreground">“{query.trim()}”</span> — best matches
-              first. {searchSkipsTrashNote(tabId)}
-            </p>
-          ) : null}
-          <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
-            {searchActive || tabId === "unopened" ? (
-              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
-                Mark read
-              </Button>
-            ) : null}
-            {searchActive || tabId === "unopened" || tabId === "opened" || tabId === "sent" ? (
-              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                Trash
-              </Button>
-            ) : null}
-            {!searchActive && tabId === "trash" ? (
-              <>
-                <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromTrash}>
-                  Restore
-                </Button>
-                <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteForever}>
-                  Delete
-                </Button>
-              </>
-            ) : null}
-          </PortalInboxSelectionToolbar>
-          <PortalInboxMessageTable
-            rows={toRows(rowsForTab, tabId, searchActive)}
-            primaryPartyHeader={searchActive ? "From / To" : tabId === "sent" ? "To" : "From"}
-            onMarkRead={searchActive ? markReadIfUnreadInbox : tabId === "unopened" ? markRead : undefined}
-            getDetailBody={(row) => bodyById[row.id]}
-            getThreadMessages={(row) => {
-              const thread = local.find((t) => t.id === row.id);
-              return thread ? inboxThreadMessages(thread) : [];
-            }}
-            onReply={!searchActive && tabId === "trash" ? undefined : handleReply}
-            expandedId={expandedId}
-            onToggleExpand={toggleExpand}
-            selection={{
-              selectedIds: threadSelection.selectedIds,
-              onToggleSelected: threadSelection.toggleSelected,
-              onToggleSelectAll: threadSelection.toggleSelectAll,
-              allSelected: threadSelection.allSelected,
-              selectableCount: threadRowIds.length,
-            }}
-            renderExtraActions={(row) => {
-              // Search spans folders but excludes trash, so a search row is
-              // always a live message. Letting the Trash tab's actions through
-              // here would put a no-confirm permanent delete on real mail.
-              if (!searchActive && tabId === "trash") {
-                return (
-                  <>
-                    <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => restoreFromTrash(row.id)}>
-                      Restore
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-                      onClick={() => deleteForever(row.id)}
-                    >
-                      Delete
-                    </Button>
-                  </>
-                );
-              }
-              return (
-                <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => moveToTrash(row.id)}>
-                  Trash
-                </Button>
-              );
-            }}
-          />
-        </div>
+        <InboxTwoPane threadOpen={Boolean(activeThread)} list={listPane} thread={threadPane} />
       )}
     </>
   );
@@ -799,7 +930,6 @@ export const ManagerInbox = forwardRef<
             activeId={tabId}
             onChange={(id) => navigate(`${inboxBase}/${id}`)}
           />
-          {searchBox}
         </ManagerPortalFilterRow>
       }
     >

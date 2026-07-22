@@ -10,9 +10,10 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { ChevronLeft, Search, Trash2 } from "lucide-react";
+import { ArrowUp, ChevronLeft, Search, Trash2 } from "lucide-react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerSmsComposeModal } from "@/components/portal/manager-sms-compose-modal";
+import { INBOX_LIST_SCROLL, InboxTwoPane } from "@/components/portal/portal-inbox-ui";
 import {
   MANAGER_SMS_SORT_OPTIONS,
   normalizeManagerSmsConversationsPayload,
@@ -30,7 +31,6 @@ import {
 import { counterpartyRoleLabel } from "@/lib/sms-conversation-identity";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { formatPacificDate } from "@/lib/pacific-time";
-import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 
 const SMS_OPENED_STORAGE_KEY = "axis_manager_sms_opened_v1";
 // v2 stores CONVERSATION IDs, not phones: since one phone can be two threads
@@ -38,13 +38,12 @@ const SMS_OPENED_STORAGE_KEY = "axis_manager_sms_opened_v1";
 // erase the other as well.
 const SMS_HIDDEN_STORAGE_KEY = "axis_manager_sms_hidden_v2";
 
-/** iOS Messages blue (outbound bubbles / accents). */
-const IOS_BLUE = "#0A84FF";
-const IOS_DELETE = "#FF3B30";
-const IOS_GRAY_BUBBLE = "rgba(120, 120, 128, 0.36)";
-const IOS_LIST_BG = "#1C1C1E";
-const IOS_THREAD_BG = "#000000";
-const IOS_HAIRLINE = "rgba(84, 84, 88, 0.65)";
+// Site-themed surfaces (values resolve per light/dark via CSS variables) so the
+// SMS panel matches the rest of the product instead of a hardcoded iOS look.
+/** Outbound bubble / send accent — the site primary (cobalt light / indigo dark). */
+const BUBBLE_OUT_BG = "var(--btn-primary)";
+/** Destructive red for swipe / delete affordances. */
+const DELETE_RED = "var(--status-overdue-fg)";
 
 function formatPhoneDisplay(phone: string | null): string {
   if (!phone?.trim()) return "";
@@ -136,9 +135,9 @@ function persistHiddenConversationIds(ids: Set<string>): void {
 function Avatar({ name }: { name: string }) {
   return (
     <div
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold text-white"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold text-white"
       style={{
-        background: "linear-gradient(180deg, #5e5ce6 0%, #bf5af2 100%)",
+        background: "linear-gradient(160deg, var(--primary) 0%, var(--primary-alt) 100%)",
       }}
       aria-hidden
     >
@@ -336,7 +335,8 @@ export const ManagerSmsPanel = forwardRef<
 
   useEffect(() => {
     if (!activeId) return;
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // Optional call: scrollIntoView is absent in jsdom / non-DOM environments.
+    threadEndRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
   }, [activeId, active?.messages.length]);
 
   const markOpened = useCallback((messageIds: string[]) => {
@@ -470,8 +470,195 @@ export const ManagerSmsPanel = forwardRef<
     }
   }
 
-  const showList = !activeId;
   const showThread = Boolean(activeId && active);
+
+  const listPane = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="shrink-0 px-3.5 pb-2 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:pt-4">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">Messages</h2>
+      </header>
+
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 pb-2.5">
+        <label className="relative block min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search"
+            enterKeyHint="search"
+            className="h-9 w-full rounded-full border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            data-attr="sms-messages-search"
+          />
+        </label>
+        <label className="sr-only" htmlFor="sms-sort">
+          Sort conversations
+        </label>
+        <select
+          id="sms-sort"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as ManagerSmsSortId)}
+          className="h-9 shrink-0 rounded-full border border-border bg-card px-2.5 text-xs font-medium text-foreground outline-none focus:border-primary/40"
+          data-attr="sms-messages-sort"
+          aria-label="Sort conversations"
+        >
+          {MANAGER_SMS_SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={INBOX_LIST_SCROLL}>
+        {loading ? <p className="px-4 py-8 text-center text-sm text-muted">Loading…</p> : null}
+        {error ? (
+          <div className="px-4 py-6 text-center text-sm text-danger">
+            {error}{" "}
+            <button type="button" className="underline" onClick={() => void load()}>
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {!loading && !error && visibleRows.length === 0 ? (
+          <p className="px-6 py-16 text-center text-sm text-muted">
+            No messages
+            <span className="mt-1 block text-xs text-muted">
+              Use New message above to start a conversation.
+            </span>
+          </p>
+        ) : null}
+        <ul>
+          {visibleRows.map((row) => (
+            <ConversationRow
+              key={row.rowId}
+              name={row.resident.name}
+              subtitle={
+                row.resident.propertyLabel?.trim() ||
+                formatPhoneDisplay(row.resident.phone) ||
+                row.resident.residentEmail ||
+                ""
+              }
+              preview={
+                row.lastMessage
+                  ? `${row.lastMessage.direction === "outbound" ? "You: " : ""}${row.lastMessage.body}`
+                  : ""
+              }
+              time={iosListTimestamp(row.lastMessage?.createdAt)}
+              unread={row.unread}
+              editing={false}
+              deleting={deletingId === row.rowId}
+              selected={activeId === row.rowId}
+              onOpen={() => openThread(row.rowId, row.messages)}
+              onDelete={allowDelete ? () => void deleteConversation(row.resident) : undefined}
+            />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+
+  const threadPane = !active ? (
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-accent/40 text-muted">
+        <Search className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+      </div>
+      <p className="mt-4 text-sm font-semibold text-foreground">Select a conversation</p>
+      <p className="mt-1 max-w-xs text-xs text-muted">
+        Choose a conversation, or use New message above.
+      </p>
+    </div>
+  ) : (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header
+        className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
+        style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <button
+          type="button"
+          className="flex min-h-9 touch-manipulation items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary active:opacity-60 lg:hidden"
+          data-attr="sms-messages-back"
+          onClick={() => setActiveId(null)}
+          aria-label="Back to conversations"
+        >
+          <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+          <span>Messages</span>
+        </button>
+        <div className="min-w-0 flex-1 px-1">
+          <p className="truncate text-sm font-semibold text-foreground">{active.resident.name}</p>
+          <p className="truncate text-xs text-muted">
+            {formatPhoneDisplay(active.resident.phone) ||
+              active.resident.propertyLabel ||
+              active.resident.residentEmail ||
+              " "}
+          </p>
+        </div>
+        {allowDelete ? (
+          <button
+            type="button"
+            className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-lg text-muted transition-colors hover:bg-foreground/5 hover:text-danger disabled:opacity-50"
+            aria-label="Delete conversation"
+            data-attr="sms-messages-thread-delete"
+            disabled={deletingId === active.rowId}
+            onClick={() => void deleteConversation(active.resident)}
+          >
+            <Trash2 className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+        ) : (
+          <span className="h-9 w-9" aria-hidden />
+        )}
+      </header>
+
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
+        {active.messages.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">No messages yet</p>
+        ) : (
+          active.messages.map((msg) => <Bubble key={msg.id} message={msg} />)
+        )}
+        <div ref={threadEndRef} />
+      </div>
+
+      <form
+        className="flex shrink-0 items-end gap-2 border-t border-border bg-card px-3 pt-2.5"
+        style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void sendReply();
+        }}
+      >
+        <textarea
+          rows={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Text message"
+          maxLength={1600}
+          enterKeyHint="send"
+          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+          data-attr="sms-messages-reply"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void sendReply();
+            }
+          }}
+        />
+        <button
+          type="submit"
+          disabled={sending || !draft.trim()}
+          className="mb-0.5 flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
+          style={{ background: BUBBLE_OUT_BG }}
+          aria-label="Send"
+          data-attr="sms-messages-send"
+        >
+          {sending ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
+          )}
+        </button>
+      </form>
+    </div>
+  );
 
   return (
     <div className="space-y-0">
@@ -485,238 +672,7 @@ export const ManagerSmsPanel = forwardRef<
         />
       ) : null}
 
-      <div
-        className={[
-          "overflow-hidden border shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset]",
-          "rounded-[22px] border-white/10 max-lg:rounded-2xl",
-          "max-lg:-mx-1 [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:border-x-0",
-        ].join(" ")}
-        style={{
-          backgroundColor: IOS_LIST_BG,
-          minHeight: isNativeRuntimeSync()
-            ? "min(78dvh, calc(100dvh - 11rem))"
-            : "min(70vh, 720px)",
-        }}
-      >
-        <div
-          className="grid h-full lg:grid-cols-[minmax(280px,38%)_1fr]"
-          style={{
-            minHeight: isNativeRuntimeSync()
-              ? "min(78dvh, calc(100dvh - 11rem))"
-              : "min(70vh, 720px)",
-          }}
-        >
-          {/*
-            Conversation list.
-            min-w-0 on both grid items: a grid item defaults to min-width:auto,
-            so the nowrap conversation rows set the column's width. Without it
-            the single mobile column blows out to its content width and
-            everything right of the search box — including the sort control —
-            is pushed off-screen behind the panel's overflow-hidden.
-          */}
-          <section
-            className={`flex min-h-0 min-w-0 flex-col ${showThread ? "hidden lg:flex lg:border-r" : "flex"}`}
-            style={{ borderColor: IOS_HAIRLINE }}
-          >
-            <header className="px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:pt-4">
-              <h2 className="text-[17px] font-semibold tracking-tight text-white">Messages</h2>
-            </header>
-
-            <div className="flex items-center gap-2 px-3 pb-2">
-              <label className="relative block min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search"
-                  enterKeyHint="search"
-                  className="h-10 w-full rounded-[10px] border-0 bg-white/[0.12] pl-9 pr-3 text-[16px] text-white outline-none placeholder:text-white/40 sm:h-9 sm:text-[15px]"
-                  data-attr="sms-messages-search"
-                />
-              </label>
-              <label className="sr-only" htmlFor="sms-sort">
-                Sort conversations
-              </label>
-              <select
-                id="sms-sort"
-                value={sort}
-                onChange={(e) => setSort(e.target.value as ManagerSmsSortId)}
-                className="h-10 shrink-0 rounded-[10px] border-0 bg-white/[0.12] px-2 text-[13px] text-white outline-none sm:h-9"
-                data-attr="sms-messages-sort"
-                aria-label="Sort conversations"
-              >
-                {MANAGER_SMS_SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-neutral-900 text-white">
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
-              {loading ? (
-                <p className="px-4 py-8 text-center text-[15px] text-white/45">Loading…</p>
-              ) : null}
-              {error ? (
-                <div className="px-4 py-6 text-center text-[15px] text-rose-300">
-                  {error}{" "}
-                  <button type="button" className="underline" onClick={() => void load()}>
-                    Retry
-                  </button>
-                </div>
-              ) : null}
-              {!loading && !error && visibleRows.length === 0 ? (
-                <p className="px-6 py-16 text-center text-[15px] text-white/45">
-                  No Messages
-                  <span className="mt-1 block text-[13px] text-white/30">
-                    Use New message above to start a conversation.
-                  </span>
-                </p>
-              ) : null}
-              <ul>
-                {visibleRows.map((row) => (
-                  <ConversationRow
-                    key={row.rowId}
-                    name={row.resident.name}
-                    subtitle={
-                      row.resident.propertyLabel?.trim() ||
-                      formatPhoneDisplay(row.resident.phone) ||
-                      row.resident.residentEmail ||
-                      ""
-                    }
-                    preview={
-                      row.lastMessage
-                        ? `${row.lastMessage.direction === "outbound" ? "You: " : ""}${row.lastMessage.body}`
-                        : ""
-                    }
-                    time={iosListTimestamp(row.lastMessage?.createdAt)}
-                    unread={row.unread}
-                    editing={false}
-                    deleting={deletingId === row.rowId}
-                    selected={activeId === row.rowId}
-                    onOpen={() => openThread(row.rowId, row.messages)}
-                    onDelete={allowDelete ? () => void deleteConversation(row.resident) : undefined}
-                  />
-                ))}
-              </ul>
-            </div>
-          </section>
-
-          {/* Thread */}
-          <section
-            className={`min-h-0 min-w-0 flex-col ${showThread ? "flex" : "hidden lg:flex"}`}
-            style={{ backgroundColor: IOS_THREAD_BG }}
-          >
-            {!active ? (
-              <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-                <p className="text-[20px] font-semibold text-white/90">Messages</p>
-                <p className="mt-2 max-w-xs text-[15px] leading-snug text-white/40">
-                  Select a conversation, or use New message above.
-                </p>
-              </div>
-            ) : (
-              <>
-                <header
-                  className="flex items-center gap-1 border-b px-1 py-1.5 backdrop-blur-xl sm:px-2 sm:py-2"
-                  style={{
-                    backgroundColor: "rgba(28, 28, 30, 0.92)",
-                    borderColor: IOS_HAIRLINE,
-                    paddingTop: "max(0.35rem, env(safe-area-inset-top, 0px))",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="flex min-h-11 touch-manipulation items-center gap-0.5 rounded-lg px-1 py-2 text-[17px] active:opacity-60 lg:hidden"
-                    style={{ color: IOS_BLUE }}
-                    data-attr="sms-messages-back"
-                    onClick={() => setActiveId(null)}
-                  >
-                    <ChevronLeft className="h-7 w-7" strokeWidth={2.25} />
-                    <span>Messages</span>
-                  </button>
-                  <div className="min-w-0 flex-1 px-1 text-center">
-                    <p className="truncate text-[16px] font-semibold text-white">{active.resident.name}</p>
-                    <p className="truncate text-[12px] text-white/45">
-                      {formatPhoneDisplay(active.resident.phone) ||
-                        active.resident.propertyLabel ||
-                        active.resident.residentEmail ||
-                        " "}
-                    </p>
-                  </div>
-                  {allowDelete ? (
-                    <button
-                      type="button"
-                      className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-lg active:opacity-60"
-                      style={{ color: IOS_BLUE }}
-                      aria-label="Delete conversation"
-                      data-attr="sms-messages-thread-delete"
-                      disabled={deletingId === active.rowId}
-                      onClick={() => void deleteConversation(active.resident)}
-                    >
-                      <Trash2 className="h-5 w-5" strokeWidth={1.75} />
-                    </button>
-                  ) : (
-                    <span className="min-h-11 min-w-11" aria-hidden />
-                  )}
-                </header>
-
-                <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch] sm:space-y-2 sm:py-4">
-                  {active.messages.length === 0 ? (
-                    <p className="py-10 text-center text-[15px] text-white/40">No messages yet</p>
-                  ) : (
-                    active.messages.map((msg) => (
-                      <Bubble key={msg.id} message={msg} />
-                    ))
-                  )}
-                  <div ref={threadEndRef} />
-                </div>
-
-                <form
-                  className="flex items-end gap-2 border-t px-3 pt-2"
-                  style={{
-                    backgroundColor: IOS_LIST_BG,
-                    borderColor: IOS_HAIRLINE,
-                    paddingBottom: "max(0.65rem, env(safe-area-inset-bottom, 0px))",
-                  }}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void sendReply();
-                  }}
-                >
-                  <textarea
-                    rows={1}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    placeholder="Text Message"
-                    maxLength={1600}
-                    enterKeyHint="send"
-                    className="max-h-28 min-h-[36px] flex-1 resize-none rounded-[20px] border bg-black/25 px-3.5 py-2 text-[16px] leading-snug text-white outline-none placeholder:text-white/35"
-                    style={{ borderColor: "rgba(255,255,255,0.18)" }}
-                    data-attr="sms-messages-reply"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void sendReply();
-                      }
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !draft.trim()}
-                    className="mb-0.5 flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-full text-white disabled:opacity-35"
-                    style={{ backgroundColor: draft.trim() ? IOS_BLUE : "rgba(120,120,128,0.45)" }}
-                    aria-label="Send"
-                    data-attr="sms-messages-send"
-                  >
-                    <span className="text-[17px] font-semibold leading-none">↑</span>
-                  </button>
-                </form>
-              </>
-            )}
-          </section>
-        </div>
-      </div>
+      <InboxTwoPane threadOpen={showThread} list={listPane} thread={threadPane} />
     </div>
   );
 });
@@ -726,12 +682,12 @@ function Bubble({ message }: { message: ManagerSmsMessageRow }) {
   return (
     <div className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[min(88%,26rem)] px-3.5 py-2 text-[16px] leading-[1.25] text-white ${
-          outbound ? "rounded-[18px] rounded-br-[5px]" : "rounded-[18px] rounded-bl-[5px]"
+        className={`max-w-[min(85%,26rem)] px-3.5 py-2 text-sm leading-relaxed ${
+          outbound
+            ? "rounded-2xl rounded-br-md text-primary-foreground"
+            : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
         }`}
-        style={{
-          backgroundColor: outbound ? IOS_BLUE : IOS_GRAY_BUBBLE,
-        }}
+        style={outbound ? { background: BUBBLE_OUT_BG } : undefined}
       >
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
       </div>
@@ -799,7 +755,7 @@ function ConversationRow({
   };
 
   return (
-    <li className="relative isolate overflow-hidden" style={{ backgroundColor: IOS_LIST_BG }}>
+    <li className="relative isolate overflow-hidden bg-card">
       {/* Delete action sits under the row — only visible when slid open */}
       {canDelete ? (
         <div
@@ -809,8 +765,8 @@ function ConversationRow({
         >
           <button
             type="button"
-            className="flex w-full touch-manipulation items-center justify-center text-[15px] font-medium text-white active:brightness-90"
-            style={{ backgroundColor: IOS_DELETE }}
+            className="flex w-full touch-manipulation items-center justify-center text-[13px] font-medium text-white active:brightness-90"
+            style={{ backgroundColor: DELETE_RED }}
             data-attr="sms-messages-swipe-delete"
             disabled={deleting || reveal === 0}
             tabIndex={reveal === 0 ? -1 : 0}
@@ -826,14 +782,17 @@ function ConversationRow({
 
       <div
         className={[
-          "relative z-[1] flex cursor-pointer items-center gap-3 px-4 py-3 transition-transform duration-200 ease-out",
+          "relative z-[1] flex cursor-pointer items-center gap-3 border-b border-border px-3 py-2.5 transition-transform duration-200 ease-out",
           "touch-pan-y",
-          selected ? "lg:bg-white/[0.07]" : "",
         ].join(" ")}
         style={{
-          backgroundColor: IOS_LIST_BG,
+          // Opaque background so the row covers the delete action beneath it as
+          // it slides; the selected state is an opaque primary tint (not the
+          // translucent bg-accent, which would let the red bleed through).
+          backgroundColor: selected
+            ? "color-mix(in srgb, var(--card) 88%, var(--primary) 12%)"
+            : "var(--card)",
           transform: `translate3d(${reveal}px,0,0)`,
-          borderBottom: `0.5px solid ${IOS_HAIRLINE}`,
         }}
         onClick={() => {
           if (dragging.current) {
@@ -859,7 +818,7 @@ function ConversationRow({
           <button
             type="button"
             className="flex h-6 w-6 shrink-0 touch-manipulation items-center justify-center rounded-full text-white"
-            style={{ backgroundColor: IOS_DELETE }}
+            style={{ backgroundColor: DELETE_RED }}
             aria-label={armed ? `Hide delete for ${name}` : `Delete ${name}`}
             aria-expanded={armed}
             data-attr="sms-messages-edit-delete"
@@ -876,26 +835,24 @@ function ConversationRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <p
-              className={`truncate text-[16px] tracking-tight ${
-                unread ? "font-semibold text-white" : "font-normal text-white"
+              className={`truncate text-sm ${
+                unread ? "font-semibold text-foreground" : "font-medium text-foreground/90"
               }`}
             >
               {name}
             </p>
-            <span className="shrink-0 text-[14px] tabular-nums text-white/40">{time}</span>
+            <span className="shrink-0 text-[11px] tabular-nums text-muted">{time}</span>
           </div>
-          {subtitle ? <p className="truncate text-[13px] text-white/40">{subtitle}</p> : null}
+          {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
           <div className="mt-0.5 flex items-center gap-2">
             <p
-              className={`min-w-0 flex-1 truncate text-[14px] ${
-                unread ? "font-medium text-white/75" : "text-white/45"
+              className={`min-w-0 flex-1 truncate text-xs ${
+                unread ? "font-medium text-foreground/75" : "text-muted"
               }`}
             >
               {preview || " "}
             </p>
-            {unread ? (
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: IOS_BLUE }} />
-            ) : null}
+            {unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-primary" /> : null}
           </div>
         </div>
       </div>
