@@ -6,6 +6,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PromotionAiDraftCard } from "@/components/portal/promotion-ai-draft-card";
 import { generateFlyerCopy } from "@/lib/manager-promotions-storage";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
+import { fileToFlyerImage } from "@/lib/promotion-image-upload";
 import { enrichPromotionDraftFromListing } from "@/lib/promotion-listing-context";
 import {
   FLYER_IMAGE_LIMIT,
@@ -86,53 +87,18 @@ export function draftInputs(draft: PromotionDraft): PromotionInputs {
   };
 }
 
-/** Longest edge of a stored flyer photo — keeps data URLs small enough to persist. */
-const FLYER_IMAGE_MAX_DIM = 1280;
-
-/**
- * Read an uploaded photo and downscale it client-side (canvas → JPEG) so the
- * stored data URL stays a reasonable size. Returns null for non-images or
- * unreadable files.
- */
-async function fileToFlyerImage(file: File): Promise<string | null> {
-  if (!file.type.startsWith("image/") || file.size > 15 * 1024 * 1024) return null;
-  try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = reject;
-      el.src = dataUrl;
-    });
-    if (!img.width || !img.height) return null;
-    const scale = Math.min(1, FLYER_IMAGE_MAX_DIM / Math.max(img.width, img.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    // JPEG has no alpha — flatten transparent PNGs onto white, not black.
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.78);
-  } catch {
-    return null;
-  }
-}
-
 export function draftWithPropertyKey(
   base: PromotionDraft,
   key: string,
   listings: ManagerPromotionPropertyOption[],
   opts?: { managerContact?: string },
 ): PromotionDraft {
-  if (key === CUSTOM_PROPERTY_KEY) return { ...base, propertyKey: key };
+  if (key === CUSTOM_PROPERTY_KEY) {
+    // `propertyLabel` / `address` were autofilled from the listing that was
+    // selected before, and a saved promotion must never name a property it is
+    // not linked to.
+    return { ...base, propertyKey: key, propertyLabel: "", address: "" };
+  }
   const property = listings.find((l) => l.id === key)?.property;
   if (!property) return { ...base, propertyKey: key };
   return enrichPromotionDraftFromListing({ ...base, propertyKey: key }, property, opts);

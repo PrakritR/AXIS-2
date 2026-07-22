@@ -18,28 +18,35 @@ const PROMOTION_KIND_OPTIONS: { id: PromotionAssetKind; label: string; descripti
   { id: "text", label: "Text", description: "Caption, email, SMS, or listing blurb." },
 ];
 
+type FlyerContentField = Exclude<keyof PromotionDraft, "propertyKey" | "images">;
+
 /** Flyer draft fields that count as manager-entered content for the discard
- *  warning. `propertyKey` is deliberately absent: picking a property re-derives
- *  most of the draft from the listing, so it re-baselines instead (see below). */
-const FLYER_CONTENT_FIELDS = [
-  "propertyLabel",
-  "address",
-  "title",
-  "headline",
-  "sellingPoints",
-  "customDetails",
-  "price",
-  "promo",
-  "cta",
-  "contact",
-  "schedulingUrl",
-  "includeSchedulingLink",
-  "theme",
-  "flyerSize",
-  "template",
-  "tone",
-  "aiPrompt",
-] as const;
+ *  warning. `propertyKey` is deliberately excluded: picking a property re-derives
+ *  most of the draft from the listing, so it re-baselines instead (see below);
+ *  `images` is compared separately. Typing the map as an exhaustive `Record`
+ *  makes the compiler flag a new `PromotionDraft` field that isn't listed —
+ *  otherwise it would be silently discardable without a confirm. */
+const FLYER_CONTENT_FIELD_SET: Record<FlyerContentField, true> = {
+  propertyLabel: true,
+  address: true,
+  title: true,
+  headline: true,
+  sellingPoints: true,
+  customDetails: true,
+  price: true,
+  promo: true,
+  cta: true,
+  contact: true,
+  schedulingUrl: true,
+  includeSchedulingLink: true,
+  theme: true,
+  flyerSize: true,
+  template: true,
+  tone: true,
+  aiPrompt: true,
+};
+
+const FLYER_CONTENT_FIELDS = Object.keys(FLYER_CONTENT_FIELD_SET) as FlyerContentField[];
 
 /** Field-by-field compare — `images` holds base64 data URLs, so serializing the
  *  whole draft to compare it would cost megabytes on every type switch. */
