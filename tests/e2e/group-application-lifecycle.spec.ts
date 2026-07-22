@@ -363,10 +363,30 @@ async function submitApplicationWithRetry(
 test.describe.configure({ mode: "serial", timeout: 600_000 });
 
 test.describe("Group applications end to end", () => {
+  // Self-documenting gate: a skipped run must never read as "the group round trip
+  // passed". This suite needs a real dev/test Supabase project (.env with
+  // NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) plus the fixture listing and
+  // resident accounts described in the file header; none of that exists in a bare
+  // worktree, so it stays off by default rather than silently green.
   test.skip(
     process.env.GROUP_E2E_ENABLED !== "1",
-    "Set GROUP_E2E_ENABLED=1 once the fixture listing + resident accounts exist (see file header).",
+    "SKIPPED — GROUP_E2E_ENABLED is not 1, so the live group-application round trip " +
+      "(mint → persist → resident retrieve → joiner reconcile → manager badge/roster) did NOT run. " +
+      "Set GROUP_E2E_ENABLED=1 with a dev/test Supabase .env and the fixture from this file's header. " +
+      "The submitted-vs-draft ordering guard is covered deterministically by " +
+      "tests/unit/application-draft-downgrade.test.ts, which does run.",
   );
+
+  // Enabled but unconfigured would otherwise point at the localhost placeholder client
+  // and fail deep inside a wizard step — fail loudly, and early, instead.
+  test.beforeAll(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error(
+        "GROUP_E2E_ENABLED=1 but NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are unset. " +
+          "Seed this worktree's .env (npm run seed:env) and point it at the DEV/TEST project — never production.",
+      );
+    }
+  });
 
   // Idempotent reruns: clear any applications left on the dedicated test listing.
   test.beforeAll(async () => {

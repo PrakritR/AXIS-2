@@ -860,7 +860,7 @@ export function ManagerApplications() {
               <li key={row.id} id={`portal-application-${row.id}`}>
                 <button
                   type="button"
-                  className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40 sm:gap-3.5 sm:px-5 sm:py-3.5"
+                  className="group flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40 sm:gap-3.5 sm:px-5 sm:py-3.5"
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                   aria-expanded={expanded}
                 >
@@ -870,9 +870,13 @@ export function ManagerApplications() {
                   >
                     {applicantInitials(row.name)}
                   </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
+                  {/* Floor the name column so a long group badge wraps to its own line
+                      instead of squeezing the applicant's name down to one letter. */}
+                  <span className="flex min-w-24 flex-1 flex-col">
                     <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                      <span className="truncate">{row.name}</span>
+                      {/* `block` so `truncate` actually ellipsizes — an inline span ignores
+                          overflow/text-overflow and would run under the trailing badges. */}
+                      <span className="block truncate">{row.name}</span>
                     </PortalTableInlineExpand>
                     {subtitle ? (
                       <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
