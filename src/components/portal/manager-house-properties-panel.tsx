@@ -539,7 +539,11 @@ function ManagerPropertyInlineDetails({
             data-attr="draft-delete"
             onClick={() => {
               if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
-              deferCatalogMutation(() => run("Draft deleted.", deleteManagerPropertyDraft(row.adminRefId, managerUserId)));
+              deferCatalogMutation(() => {
+                void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) =>
+                  run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again."),
+                );
+              });
             }}
           >
             Delete draft
@@ -586,34 +590,40 @@ function ManagerPropertyInlineDetails({
         ) : null}
       </PortalCollapsibleSection>
 
+      {/* A draft has no live listing behind it, so every panel that persists
+          through `houseSaveTarget` is withheld — the wizard ("Continue editing")
+          is the only way to change a draft, and publishing is its only route to
+          a prospect-facing state. */}
       {bucket !== 5 ? (
-        <ManagerPropertyHouseDetailsPanel
-          noteKey={noteKey}
-          sub={managerSubmission}
-          saveTarget={houseSaveTarget}
-          managerUserId={managerUserId}
-          onUpdated={onUpdated}
-          showToast={showToast}
-        />
+        <>
+          <ManagerPropertyHouseDetailsPanel
+            noteKey={noteKey}
+            sub={managerSubmission}
+            saveTarget={houseSaveTarget}
+            managerUserId={managerUserId}
+            onUpdated={onUpdated}
+            showToast={showToast}
+          />
+
+          <ManagerPropertyApplicationQuestionsPanel
+            sub={managerSubmission}
+            saveTarget={houseSaveTarget}
+            managerUserId={managerUserId}
+            onUpdated={onUpdated}
+            showToast={showToast}
+          />
+
+          <ManagerPropertyLeasePanel
+            sub={managerSubmission}
+            saveTarget={houseSaveTarget}
+            managerUserId={managerUserId}
+            onUpdated={onUpdated}
+            showToast={showToast}
+            propertyHint={leasePropertyHint}
+            demoMode={isDemoModeActive()}
+          />
+        </>
       ) : null}
-
-      <ManagerPropertyApplicationQuestionsPanel
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-      />
-
-      <ManagerPropertyLeasePanel
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-        propertyHint={leasePropertyHint}
-        demoMode={isDemoModeActive()}
-      />
 
       {bucket === 2 && listingId ? (
         <ManagerPropertyPromotionPanel listingId={listingId} showToast={showToast} onUpdated={onUpdated} />

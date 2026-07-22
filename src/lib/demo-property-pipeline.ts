@@ -661,17 +661,22 @@ export function submitManagerPendingProperty(input: ManagerPropertyDraftInput, m
   return listingId;
 }
 
-export async function submitManagerPendingPropertyToServer(
+/**
+ * The single publish path: mirror a submission to the server as a live listing
+ * under `listingId` and add it to the local extras catalog. Both the brand-new
+ * wizard submit and the draft publish route through this, so the two can never
+ * drift on the row shape they write.
+ */
+export async function publishManagerListingSubmissionToServer(
+  listingId: string,
   input: ManagerPropertyDraftInput,
   managerUserId: string,
-): Promise<string | null> {
-  if (!managerUserId.trim()) return null;
+): Promise<boolean> {
+  if (!managerUserId.trim() || !listingId.trim()) return false;
   const legacy = deriveLegacyFields(input);
-  const draftId = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const listingId = `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${draftId.slice(-6)}`;
   const row: ManagerPendingPropertyRow = {
     ...legacy,
-    id: draftId,
+    id: listingId,
     submittedAt: new Date().toISOString(),
     submission: input,
     submittedByUserId: managerUserId,
@@ -693,8 +698,20 @@ export async function submitManagerPendingPropertyToServer(
       managerUserId,
     },
   });
-  if (!ok) return null;
+  if (!ok) return false;
   appendExtraListing(prop, managerUserId);
+  return true;
+}
+
+export async function submitManagerPendingPropertyToServer(
+  input: ManagerPropertyDraftInput,
+  managerUserId: string,
+): Promise<string | null> {
+  if (!managerUserId.trim()) return null;
+  const legacy = deriveLegacyFields(input);
+  const draftId = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const listingId = `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${draftId.slice(-6)}`;
+  if (!(await publishManagerListingSubmissionToServer(listingId, input, managerUserId))) return null;
   await syncPropertyPipelineFromServer({ force: true });
   return listingId;
 }
@@ -755,7 +772,14 @@ export function updateExtraListingFromSubmission(
 ): boolean {
   if (!managerUserId.trim()) return false;
   const map = readExtrasMap();
-  const list = map[managerUserId] ?? [];
+  // This path only ever EDITS a listing that is ALREADY live. Resolve it across
+  // the whole catalog, because a co-managed listing lives under its owner's key,
+  // not the editing manager's. An id that is nowhere in the catalog is not a live
+  // listing (a draft, an unlisted row) — writing it here would mirror that record
+  // as `status: "live"` and publish it to the public rent catalog unvalidated.
+  const ownerKey = Object.keys(map).find((uid) => (map[uid] ?? []).some((p) => p.id === listingId));
+  if (!ownerKey) return false;
+  const list = map[ownerKey]!;
   const idx = list.findIndex((p) => p.id === listingId);
   const legacy = deriveLegacyFields(input);
   const pendingLike: ManagerPendingPropertyRow = {
@@ -766,11 +790,13 @@ export function updateExtraListingFromSubmission(
     submittedByUserId: managerUserId,
   };
   const next = buildMockPropertyFromDraft(pendingLike, listingId);
-  const owner = next.managerUserId ?? managerUserId;
+  // An edit never transfers ownership — a co-manager saving a linked listing
+  // must leave it owned by the manager whose catalog it lives in.
+  const owner = list[idx]!.managerUserId ?? next.managerUserId ?? ownerKey;
   // Listings publish immediately — edits stay live on the rent catalog.
   const publishLive = true;
   list[idx] = { ...next, managerUserId: owner, adminPublishLive: publishLive };
-  map[managerUserId] = list;
+  map[ownerKey] = list;
   writeExtrasMap(map);
   mirrorPropertyRecord({
     id: listingId,

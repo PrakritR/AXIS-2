@@ -582,8 +582,10 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   blank name.** A save made before the manager typed a property name gets a
   neutral `mgr-listing-<rand>` id flagged `draftIdProvisional`, never a
   blank-slug `mgr---<rand>`. The first later save *in the same wizard session*
-  re-keys it to the real `mgr-<building>-<unit>-<rand>` id (new draft row
-  written, old draft row deleted before the next sync). A **resumed** draft
+  re-keys it to the real `mgr-<building>-<unit>-<rand>` id — the superseded row
+  is deleted *before* the re-keyed one is written, and the re-key is abandoned
+  (the save just stays on the provisional id) if that delete fails, so one draft
+  can never become two rows. A **resumed** draft
   keeps its id (`allowIdUpgrade: false`) — re-keying it would change the drafts
   table row key and unmount the open editor. Publishing is always in place, so
   the one-record invariant holds either way. Unnamed drafts render as "Untitled
@@ -599,6 +601,19 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   (`manager-house-properties-panel.tsx`) with Continue editing / Delete draft.
   Migration: `…_manager_property_records_draft_status.sql` adds `'draft'` to the
   status CHECK.
+- **The wizard is the only editor of a draft.** The drafts row (bucket 5) hides
+  every detail panel that persists through `houseSaveTarget` (House details,
+  Application questions, Lease) — a draft is absent from the extras catalog, so
+  those panels would resolve to `{mode: "listing"}` and their save would mirror
+  the record `status: "live"`. `updateExtraListingFromSubmission` now refuses an
+  id it cannot find in the live catalog, which is the backstop for that whole
+  class of "edit a non-live row into the public catalog" bug.
+- **Deleting a draft reclaims its uploads.** `deleteManagerPropertyDraft` is
+  async: it awaits the server delete and reports success only when the row is
+  really gone (a failed delete leaves the draft visible instead of letting it
+  reappear on the next sync), then removes the submission's `listing-photos`
+  objects via `deleteSubmissionMediaObjects`
+  (`src/lib/listing-media-storage.ts`). Draft *count* is deliberately uncapped.
 
 # Financials UI cleanup (Blue Steel consolidation)
 

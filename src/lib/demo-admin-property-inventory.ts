@@ -15,6 +15,7 @@ import {
   readScopedExtraListings,
   readPendingManagerPropertiesForUser,
   removeExtraListing,
+  publishManagerListingSubmissionToServer,
   submitManagerPendingProperty,
   syncPropertyPipelineFromServer,
   takePendingManagerProperty,
@@ -22,6 +23,7 @@ import {
   type ManagerPendingPropertyRow,
   type ManagerPropertyDraftInput,
 } from "@/lib/demo-property-pipeline";
+import { deleteSubmissionMediaObjects } from "@/lib/listing-media-storage";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
@@ -582,9 +584,14 @@ function submissionToDraftAdminRow(
   };
 }
 
-/** `mgr-<building>-<unit>-<rand>` once a property name exists, otherwise a neutral id. */
+/**
+ * `mgr-<building>-<unit>-<rand>` once a property name exists, otherwise a neutral
+ * id. The suffix carries a random component as well as the clock because this id
+ * is both the record primary key and the permanent public listing URL — two mints
+ * in the same millisecond must not collide.
+ */
 function mintManagerPropertyId(legacy: { buildingName: string; unitLabel: string }): string {
-  const suffix = Date.now().toString(36).slice(-6);
+  const suffix = `${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 8)}`;
   const nameSlug = slugPart(legacy.buildingName);
   return nameSlug ? `mgr-${nameSlug}-${slugPart(legacy.unitLabel)}-${suffix}` : `mgr-listing-${suffix}`;
 }
@@ -619,9 +626,10 @@ export async function saveManagerPropertyDraftToServer(
 ): Promise<string | null> {
   if (!managerUserId.trim()) return null;
   const legacy = deriveLegacyFields(input);
-  const side = readSide(managerUserId);
   const existingId = opts?.existingDraftId?.trim() ?? "";
-  const existingRow = existingId ? side.drafts.find((r) => r.adminRefId === existingId) ?? null : null;
+  const existingRow = existingId
+    ? readSide(managerUserId).drafts.find((r) => r.adminRefId === existingId) ?? null
+    : null;
   const hasName = slugPart(legacy.buildingName).length > 0;
 
   let listingId = existingId;
@@ -631,9 +639,15 @@ export async function saveManagerPropertyDraftToServer(
     listingId = mintManagerPropertyId(legacy);
     provisionalId = !hasName;
   } else if (provisionalId && hasName && opts?.allowIdUpgrade) {
-    listingId = mintManagerPropertyId(legacy);
-    provisionalId = false;
-    staleDraftId = existingId;
+    // Drop the superseded draft row BEFORE writing the re-keyed one, so a failed
+    // delete can never leave the manager holding two rows for one draft (nor let
+    // the next server sync resurrect the old id as a duplicate). If it fails we
+    // simply keep saving under the provisional id and try again next save.
+    if (await deletePropertyRecordFromServer(existingId)) {
+      listingId = mintManagerPropertyId(legacy);
+      provisionalId = false;
+      staleDraftId = existingId;
+    }
   }
 
   const row = submissionToDraftAdminRow(input, managerUserId, listingId, {
@@ -648,14 +662,17 @@ export async function saveManagerPropertyDraftToServer(
     rowData: row,
   });
   if (!ok) return null;
-  const remaining = staleDraftId ? side.drafts.filter((r) => r.adminRefId !== staleDraftId) : side.drafts;
+  // Re-read the side buckets AFTER the round-trip: a concurrent list/unlist or a
+  // pipeline sync may have rewritten them while the save was in flight, and
+  // writing back the pre-await snapshot would silently drop that change.
+  const fresh = readSide(managerUserId);
+  const remaining = staleDraftId ? fresh.drafts.filter((r) => r.adminRefId !== staleDraftId) : fresh.drafts;
   const idx = remaining.findIndex((r) => r.adminRefId === listingId);
   const drafts = idx === -1 ? [...remaining, row] : remaining.map((r, i) => (i === idx ? row : r));
-  writeSideStorage({ ...side, drafts }, managerUserId);
-  // Drop the superseded draft row BEFORE re-syncing, so the server sync cannot
-  // resurrect it as a duplicate draft.
-  if (staleDraftId) await deletePropertyRecordFromServer(staleDraftId);
-  await syncPropertyPipelineFromServer({ force: true });
+  // writeSideStorage dispatches PROPERTY_PIPELINE_EVENT, whose listeners already
+  // re-sync from the server — an explicit force sync here would just triple the
+  // egress of a button a manager can press on every wizard step.
+  writeSideStorage({ ...fresh, drafts }, managerUserId);
   return listingId;
 }
 
@@ -670,29 +687,8 @@ export async function publishManagerPropertyDraftToServer(
   managerUserId: string,
 ): Promise<string | null> {
   if (!managerUserId.trim() || !draftId.trim()) return null;
-  const legacy = deriveLegacyFields(input);
   const listingId = draftId.trim();
-  const pendingLike: ManagerPendingPropertyRow = {
-    ...legacy,
-    id: listingId,
-    submittedAt: new Date().toISOString(),
-    submission: input,
-    submittedByUserId: managerUserId,
-  };
-  const prop: MockProperty = {
-    ...buildMockPropertyFromDraft(pendingLike, listingId),
-    adminPublishLive: true,
-    managerUserId,
-  };
-  const ok = await upsertPropertyRecordToServer({
-    id: listingId,
-    managerUserId,
-    status: "live",
-    propertyData: prop,
-    rowData: { ...legacy, adminRefId: listingId, listingId, managerUserId },
-  });
-  if (!ok) return null;
-  appendExtraListing(prop, managerUserId);
+  if (!(await publishManagerListingSubmissionToServer(listingId, input, managerUserId))) return null;
   const side = readSide(managerUserId);
   const nextDrafts = side.drafts.filter((r) => r.adminRefId !== listingId);
   if (nextDrafts.length !== side.drafts.length) {
@@ -702,14 +698,23 @@ export async function publishManagerPropertyDraftToServer(
   return listingId;
 }
 
-/** Permanently delete a saved draft (owner-only). */
-export function deleteManagerPropertyDraft(draftId: string, forManagerUserId?: string | null): boolean {
-  const side = readSide(forManagerUserId);
-  const idx = side.drafts.findIndex((r) => r.adminRefId === draftId);
-  if (idx === -1) return false;
-  const nextDrafts = [...side.drafts.slice(0, idx), ...side.drafts.slice(idx + 1)];
-  writeSideStorage({ ...side, drafts: nextDrafts }, forManagerUserId);
-  deleteMirroredPropertyRecord(draftId);
+/**
+ * Permanently delete a saved draft (owner-only). Resolves false — leaving the
+ * draft in place — unless the server row is actually gone, so a delete that never
+ * landed is reported rather than reappearing on the next sync. The draft's
+ * uploaded media is reclaimed too; nothing else references it once it is gone.
+ */
+export async function deleteManagerPropertyDraft(
+  draftId: string,
+  forManagerUserId?: string | null,
+): Promise<boolean> {
+  const existing = readSide(forManagerUserId).drafts.find((r) => r.adminRefId === draftId);
+  if (!existing) return false;
+  if (!(await deletePropertyRecordFromServer(draftId))) return false;
+  const fresh = readSide(forManagerUserId);
+  const nextDrafts = fresh.drafts.filter((r) => r.adminRefId !== draftId);
+  writeSideStorage({ ...fresh, drafts: nextDrafts }, forManagerUserId);
+  await deleteSubmissionMediaObjects(existing.submission);
   return true;
 }
 

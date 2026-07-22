@@ -2385,12 +2385,13 @@ export function ManagerAddListingForm({
     setSavingDraft(true);
     try {
       let payload = buildSubmissionPayload();
+      let mediaFailed = false;
       try {
         payload = await uploadSubmissionMedia(payload, uploadedMediaRef.current);
       } catch (err) {
         console.error("manager-add-listing-form: draft media upload failed", err);
         payload = stripUnresolvedSubmissionMedia(payload);
-        showToast("Saved your text — photos couldn't upload. Reopen the draft to retry.");
+        mediaFailed = true;
       }
       const id = await saveManagerPropertyDraftToServer(payload, userId, {
         existingDraftId: draftIdRef.current,
@@ -2405,7 +2406,14 @@ export function ManagerAddListingForm({
         return;
       }
       draftIdRef.current = id;
-      showToast("Draft saved. Continue anytime from Properties → Drafts.");
+      // The failed uploads were stripped from what we just saved, so the photos
+      // exist only in this still-open wizard — reopening the draft will not have
+      // them back. Saying "save again here" is the only retry that works.
+      showToast(
+        mediaFailed
+          ? "Draft saved without your photos — the upload failed. Tap Save draft again before closing this window to retry them."
+          : "Draft saved. Continue anytime from Properties → Drafts.",
+      );
       onSaved?.();
     } finally {
       setSavingDraft(false);
