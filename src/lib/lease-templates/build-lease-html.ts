@@ -10,6 +10,13 @@ import {
 } from "@/lib/manager-listing-submission";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import { formatUtilitiesListingLine, resolveListingUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
+import {
+  leaseUtilityAllowanceNote,
+  leaseUtilityKindLabel,
+  leaseUtilityPaidByLabel,
+  leaseUtilitySetUpByLabel,
+  normalizeLeaseUtilities,
+} from "@/lib/lease-utilities";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
@@ -69,6 +76,29 @@ function customTermsAddendumHtml(sub: ManagerListingSubmissionV1 | undefined, he
 ${body}
 </div>
 `;
+}
+
+/**
+ * Structured "which utility is included vs. paid separately, who sets it up, and any
+ * included allowance" table for the lease's Utilities section. Empty string when the
+ * manager configured no breakdown (the lease then falls back to its standard prose).
+ */
+function utilitiesResponsibilityHtml(sub: ManagerListingSubmissionV1 | undefined): string {
+  const lines = normalizeLeaseUtilities(sub?.leaseUtilities);
+  if (!lines?.length) return "";
+  const rows = lines
+    .map((line) => {
+      const note = leaseUtilityAllowanceNote(line);
+      return `  <tr><td>${escapeHtml(leaseUtilityKindLabel(line))}</td><td>${escapeHtml(
+        leaseUtilityPaidByLabel(line),
+      )}</td><td>${escapeHtml(leaseUtilitySetUpByLabel(line))}</td><td>${note ? escapeHtml(note) : "—"}</td></tr>`;
+    })
+    .join("\n");
+  return `<p>The following utilities and services apply to the Premises. &quot;Included in rent&quot; means the cost is covered by the monthly rent (up to any allowance shown); otherwise the responsible party sets up the account and pays the provider.</p>
+<table>
+  <tr><th>Utility / service</th><th>Responsibility</th><th>Account set up by</th><th>Included allowance / notes</th></tr>
+${rows}
+</table>`;
 }
 
 function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined): string {
@@ -356,6 +386,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const leaseTermsBody = escapeHtml(sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.");
   const houseOverview = escapeHtml(sub?.houseOverview?.trim() || list?.tagline || "Shared co-living housing as described on the listing.");
   const sharedSpacesText = sharedSpacesLeaseParagraph(sub);
+  const utilitiesBreakdown = utilitiesResponsibilityHtml(subNorm);
   const amenities = escapeHtml(sub?.amenitiesText?.trim() || "See listing amenities.");
   const houseRules = escapeHtml(sub?.houseRulesText?.trim() || "");
   const petPolicy = (room?.petFriendly ?? list?.petFriendly)
@@ -521,7 +552,8 @@ ${proratedSection || ""}
 <p>If any payment is returned for insufficient funds or any other reason, Resident shall pay a returned-payment fee of $35.00 in addition to any applicable bank charges. After two returned payments, Landlord may require all future payments to be made by cashier's check, money order, or Zelle.</p>
 
 <h2>${proratedSection ? "8" : "7"}. Utilities &amp; Services</h2>
-<p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property. The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
+${utilitiesBreakdown}
+<p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesBreakdown ? "This estimate reflects the utilities the Resident is responsible for above." : "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property."} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
 
 <h2>${proratedSection ? "9" : "8"}. Use, Occupancy &amp; Guest Policy</h2>
 <p>The Premises shall be used exclusively as a private residence. The only authorized occupant(s) are: <strong>${tenantName}</strong> and <strong>${occupancy}</strong> additional authorized occupant(s) listed in writing at signing.</p>

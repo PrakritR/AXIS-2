@@ -68,6 +68,16 @@ import {
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
 import {
+  LEASE_UTILITY_KIND_OPTIONS,
+  LEASE_UTILITY_PARTY_OPTIONS,
+  LEASE_UTILITY_PAYMENT_OPTIONS,
+  defaultLeaseUtilities,
+  type LeaseUtilityKind,
+  type LeaseUtilityLine,
+  type LeaseUtilityPayment,
+  type LeaseUtilityResponsibleParty,
+} from "@/lib/lease-utilities";
+import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
   LISTING_BEDROOM_SLOT_OPTIONS,
@@ -496,6 +506,163 @@ function UtilitiesPaymentModelPicker({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Per-utility responsibility breakdown that flows onto the generated lease document. */
+function LeaseUtilitiesEditor({
+  value,
+  aggregateModel,
+  onChange,
+}: {
+  value: LeaseUtilityLine[] | undefined;
+  aggregateModel: UtilitiesPaymentModel | undefined;
+  onChange: (next: LeaseUtilityLine[]) => void;
+}) {
+  const lines = value ?? [];
+  const update = (i: number, patch: Partial<LeaseUtilityLine>) =>
+    onChange(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  const remove = (i: number) => onChange(lines.filter((_, idx) => idx !== i));
+  const add = () => {
+    const used = new Set(lines.map((l) => l.kind));
+    const nextKind =
+      LEASE_UTILITY_KIND_OPTIONS.find((o) => o.id !== "other" && !used.has(o.id))?.id ?? "other";
+    onChange([...lines, { kind: nextKind, paidBy: "resident", setUpBy: "resident" }]);
+  };
+
+  if (!lines.length) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-accent/20 p-4 text-center">
+        <p className="text-sm text-muted">
+          Add a per-utility breakdown so the generated lease states which utilities are included in rent, who pays each,
+          and any included allowance.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className={`mt-3 ${LISTING_WIZARD_ACTION_BTN}`}
+          data-attr="lease-utilities-seed"
+          onClick={() => onChange(defaultLeaseUtilities(aggregateModel))}
+        >
+          + Add standard utilities
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {lines.map((line, i) => (
+        <div key={i} className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm font-semibold text-foreground">
+              {line.kind === "other"
+                ? line.label?.trim() || "Other utility"
+                : LEASE_UTILITY_KIND_OPTIONS.find((o) => o.id === line.kind)?.label}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className={LISTING_WIZARD_REMOVE_BTN}
+              onClick={() => remove(i)}
+            >
+              Remove
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <GridField>
+              <FieldLabel>Utility / service</FieldLabel>
+              <Select
+                aria-label={`Utility ${i + 1} type`}
+                className={selectInputCls}
+                value={line.kind}
+                onChange={(e) => update(i, { kind: e.target.value as LeaseUtilityKind })}
+              >
+                {LEASE_UTILITY_KIND_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </GridField>
+            {line.kind === "other" ? (
+              <GridField>
+                <FieldLabel>Custom name</FieldLabel>
+                <Input
+                  value={line.label ?? ""}
+                  onChange={(e) => update(i, { label: e.target.value })}
+                  placeholder="e.g. Landscaping"
+                />
+              </GridField>
+            ) : null}
+            <GridField>
+              <FieldLabel>Who pays</FieldLabel>
+              <Select
+                aria-label={`Utility ${i + 1} who pays`}
+                className={selectInputCls}
+                value={line.paidBy}
+                onChange={(e) =>
+                  update(i, {
+                    paidBy: e.target.value as LeaseUtilityPayment,
+                    ...(e.target.value === "included_in_rent" ? {} : { allowance: undefined }),
+                  })
+                }
+              >
+                {LEASE_UTILITY_PAYMENT_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </GridField>
+            <GridField>
+              <FieldLabel>Account set up by</FieldLabel>
+              <Select
+                aria-label={`Utility ${i + 1} account set up by`}
+                className={selectInputCls}
+                value={line.setUpBy}
+                onChange={(e) => update(i, { setUpBy: e.target.value as LeaseUtilityResponsibleParty })}
+              >
+                {LEASE_UTILITY_PARTY_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </GridField>
+            {line.paidBy === "included_in_rent" ? (
+              <GridField>
+                <FieldLabel hint="Optional — resident pays any overage above this cap.">
+                  Included allowance / cap
+                </FieldLabel>
+                <Input
+                  value={line.allowance ?? ""}
+                  onChange={(e) => update(i, { allowance: e.target.value })}
+                  placeholder="e.g. $50/mo"
+                />
+              </GridField>
+            ) : null}
+            <div className="sm:col-span-2">
+              <FieldLabel>Notes (optional)</FieldLabel>
+              <Input
+                value={line.notes ?? ""}
+                onChange={(e) => update(i, { notes: e.target.value })}
+                placeholder="Provider, split arrangement, etc."
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        className={`${LISTING_WIZARD_ACTION_BTN}`}
+        data-attr="lease-utilities-add"
+        onClick={add}
+      >
+        + Add utility
+      </Button>
     </div>
   );
 }
@@ -2778,6 +2945,21 @@ export function ManagerAddListingForm({
                   </div>
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>
+              </ListingSubsection>
+
+              <ListingSubsection
+                title="Utilities on the lease"
+                description="Which utilities are included in rent vs. paid separately, who sets up each account, and any included allowance. This renders in the Utilities section of the generated lease."
+              >
+                <LeaseUtilitiesEditor
+                  value={sub.leaseUtilities}
+                  aggregateModel={
+                    isEntireHome
+                      ? sub.entireHomeUtilitiesPaymentModel
+                      : sub.rooms.find((r) => r.utilitiesPaymentModel)?.utilitiesPaymentModel
+                  }
+                  onChange={(next) => setSub((s) => ({ ...s, leaseUtilities: next }))}
+                />
               </ListingSubsection>
 
               <ListingSubsection
