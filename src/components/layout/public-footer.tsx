@@ -1,5 +1,6 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 import {
   PUBLIC_SOCIAL_LINKS,
@@ -52,46 +53,43 @@ const footerLinkClass =
  */
 const footerShell = "mx-auto w-full max-w-[1600px] px-6 sm:px-10 lg:px-14 xl:px-20";
 
-/** Simple monochrome brand glyphs — inherit currentColor, no external icon set. */
-function SocialGlyph({ id }: { id: PublicSocialId }) {
-  const common = {
-    viewBox: "0 0 24 24",
-    className: "h-[18px] w-[18px]",
-    "aria-hidden": true,
-  } as const;
+const SOCIAL_GLYPH_SVG_PROPS = {
+  viewBox: "0 0 24 24",
+  className: "h-[18px] w-[18px]",
+  "aria-hidden": true,
+} as const;
 
-  if (id === "instagram") {
-    return (
-      <svg {...common} fill="none" stroke="currentColor" strokeWidth="1.7">
-        <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5.2" />
-        <circle cx="12" cy="12" r="4" />
-        <circle cx="17.1" cy="6.9" r="1.1" fill="currentColor" stroke="none" />
-      </svg>
-    );
-  }
-
-  if (id === "x") {
-    return (
-      <svg {...common} fill="currentColor">
-        <path d="M3 3h5.1l4.3 5.8L17.7 3H21l-6.9 7.7L21.4 21h-5.1l-4.6-6.2L6 21H2.7l7.3-8.1L3 3Zm2.6 1.6 9.6 14.8h1.7L7.3 4.6H5.6Z" />
-      </svg>
-    );
-  }
-
-  if (id === "linkedin") {
-    return (
-      <svg {...common} fill="currentColor">
-        <path d="M5 3.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM3.2 9h3.6v11.6H3.2V9Zm6 0h3.4v1.6a3.9 3.9 0 0 1 3.4-1.8c2.8 0 4.2 1.8 4.2 5v6.8h-3.6v-6c0-1.5-.6-2.5-1.9-2.5-1.1 0-1.7.7-2 1.5-.1.3-.1.7-.1 1v6h-3.5V9Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...common} fill="currentColor">
+/**
+ * Simple monochrome brand glyphs — inherit currentColor, no external icon set.
+ *
+ * Keyed by `PublicSocialId` so adding a network without drawing its mark is a
+ * compile error rather than a silent fallthrough that renders one brand's logo
+ * under another brand's accessible name.
+ */
+const SOCIAL_GLYPHS: Record<PublicSocialId, ReactNode> = {
+  instagram: (
+    <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="none" stroke="currentColor" strokeWidth="1.7">
+      <rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5.2" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.1" cy="6.9" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  x: (
+    <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
+      <path d="M3 3h5.1l4.3 5.8L17.7 3H21l-6.9 7.7L21.4 21h-5.1l-4.6-6.2L6 21H2.7l7.3-8.1L3 3Zm2.6 1.6 9.6 14.8h1.7L7.3 4.6H5.6Z" />
+    </svg>
+  ),
+  linkedin: (
+    <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
+      <path d="M5 3.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM3.2 9h3.6v11.6H3.2V9Zm6 0h3.4v1.6a3.9 3.9 0 0 1 3.4-1.8c2.8 0 4.2 1.8 4.2 5v6.8h-3.6v-6c0-1.5-.6-2.5-1.9-2.5-1.1 0-1.7.7-2 1.5-.1.3-.1.7-.1 1v6h-3.5V9Z" />
+    </svg>
+  ),
+  facebook: (
+    <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
       <path d="M13.6 21v-8h2.7l.4-3.1h-3.1V7.9c0-.9.3-1.5 1.6-1.5h1.6V3.6c-.3 0-1.2-.1-2.3-.1-2.4 0-4 1.4-4 4.1v2.3H7.8V13h2.7v8h3.1Z" />
     </svg>
-  );
-}
+  ),
+};
 
 function SocialRow({ className = "" }: { className?: string }) {
   if (PUBLIC_SOCIAL_LINKS.length === 0) return null;
@@ -108,7 +106,7 @@ function SocialRow({ className = "" }: { className?: string }) {
             data-attr={`footer-social-${id}`}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-primary/40 hover:text-primary"
           >
-            <SocialGlyph id={id} />
+            {SOCIAL_GLYPHS[id]}
           </a>
         </li>
       ))}

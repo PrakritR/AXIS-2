@@ -314,9 +314,16 @@ cannot show an `Approved` badge, because that row lives on another tab.
 **Guide art** (`public/marketing/guide-*.webp`) is authored at **1800×920**
 (≈1.96:1) to match the `.lp-chapter .lp-art` box (`min-height: 200px`,
 `object-fit: cover`, `object-position: top left`), so the whole screenshot
-lands in the card instead of a tight crop that reads as texture. Regenerate by
-composing the portal's real markup and tokens, then capture at 2× — a portrait
-crop of a live portal screenshot does not fit this box.
+lands in the card instead of a tight crop that reads as texture. Regenerate with
+`node scripts/generate-marketing-guide-art.mjs`, which composes the portal's
+real markup and tokens at 900×460 and captures at 2× — a portrait crop of a live
+portal screenshot does not fit this box.
+
+Every count a board prints (the calendar's per-day "N open" headers and week
+total, the inbox tab badges) is **derived in that script from the rows and cells
+the board actually draws**, never typed in beside them. Hand-authored totals
+drift from the art the moment a row is added, which is the same
+internal-inconsistency failure as a Pending tab showing an `Approved` badge.
 
 ## Brand assets (PropLane)
 
