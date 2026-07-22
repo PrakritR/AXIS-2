@@ -46,7 +46,8 @@ import {
   syncInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
-import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
+import type { GroupRole, RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
+import { resolveSubmitGroupId } from "@/lib/rental-application/application-groups";
 import {
   computeLeaseEndDate,
   normalizeIsoDateInput,
@@ -189,6 +190,10 @@ function RentalApplicationWizardInner({
     syncError?: string;
     guestFlow?: boolean;
     mailtoHref?: string;
+    /** Shared Group ID for group applications (first applicant shares it, joining members paste it). */
+    groupId?: string;
+    groupRole?: GroupRole;
+    groupSize?: string;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
@@ -588,6 +593,13 @@ function RentalApplicationWizardInner({
       const listing = prop;
       const applicantName = form.fullLegalName.trim() || "Applicant";
 
+      // Group applications: the first applicant mints a shareable Group ID on submit;
+      // joining members keep the id they pasted. Persist it on the stored snapshot so
+      // every member's independent application row can be reconciled into one group.
+      const resolvedGroupId = resolveSubmitGroupId(form);
+      const submittedForm: RentalWizardFormState =
+        resolvedGroupId && resolvedGroupId !== form.groupId ? { ...form, groupId: resolvedGroupId } : form;
+
       recordApplicationCharges({
         residentEmail: form.email,
         residentName: form.fullLegalName,
@@ -609,7 +621,7 @@ function RentalApplicationWizardInner({
         backgroundCheckStatus: "pending_review" as const,
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
-        application: structuredClone(form),
+        application: structuredClone(submittedForm),
       };
 
       replaceManagerApplicationRowInCache(applicationRow);
@@ -646,6 +658,7 @@ function RentalApplicationWizardInner({
         property_id: pid || undefined,
         synced_to_server: sync.ok,
         email_sent: emailSent,
+        group_role: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupRole ?? undefined : undefined,
       });
       clearRentalWizardDraft();
       setForm(createInitialRentalWizardState());
@@ -672,6 +685,9 @@ function RentalApplicationWizardInner({
         syncError: sync.ok ? undefined : sync.error,
         guestFlow: isGuestSubmit,
         mailtoHref,
+        groupId: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupId : undefined,
+        groupRole: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupRole : undefined,
+        groupSize: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupSize : undefined,
       });
       if (sync.ok) {
         showToast("Application submitted.");
@@ -1043,6 +1059,9 @@ function RentalApplicationWizardInner({
             syncError={postSubmit.syncError}
             guestFlow={postSubmit.guestFlow}
             mailtoHref={postSubmit.mailtoHref}
+            groupId={postSubmit.groupId}
+            groupRole={postSubmit.groupRole}
+            groupSize={postSubmit.groupSize}
             onDone={() => setPostSubmit(null)}
           />
         ) : (

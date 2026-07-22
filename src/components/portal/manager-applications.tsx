@@ -56,6 +56,14 @@ import {
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import {
+  buildApplicationGroups,
+  groupForRow,
+  summarizeGroupProgress,
+  type ApplicationGroup,
+  type ApplicationGroupMemberStatus,
+  type GroupRowInput,
+} from "@/lib/rental-application/application-groups";
+import {
   APPLICATION_COMPLETION_REMINDER_SUBJECT,
   buildApplicationCompletionReminderBody,
 } from "@/lib/application-completion-reminder-email";
@@ -106,6 +114,36 @@ function applicationStatusPill(row: DemoApplicantRow): ApplicationStatusPill {
   if (bg === "pending_review" || row.screening) return { label: "Screening", tone: "pending" };
   return { label: "New", tone: "info" };
 }
+
+/** Coarse per-member status used by group reconciliation (mirrors the row status pill). */
+function groupMemberStatusForRow(row: DemoApplicantRow): ApplicationGroupMemberStatus {
+  if (row.bucket === "approved") return "approved";
+  if (row.bucket === "rejected") return "rejected";
+  if (isInProgressApplicationRow(row)) return "in_progress";
+  if (row.backgroundCheckStatus === "pending_review" || row.screening) return "screening";
+  return "submitted";
+}
+
+/** Reduce an application row to the fields group reconciliation needs. */
+function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput {
+  return {
+    id: row.id,
+    name: row.name || row.email || "Applicant",
+    email: row.email || "",
+    role: row.application?.groupRole ?? null,
+    groupId: row.application?.groupId ?? "",
+    groupSize: row.application?.groupSize ?? "",
+    status: groupMemberStatusForRow(row),
+  };
+}
+
+const GROUP_MEMBER_STATUS_LABEL: Record<ApplicationGroupMemberStatus, string> = {
+  in_progress: "In progress",
+  submitted: "Submitted",
+  screening: "Screening",
+  approved: "Approved",
+  rejected: "Rejected",
+};
 
 /** Up-to-two-letter initials for the Linear-style circular row avatar. */
 function applicantInitials(name: string): string {
@@ -240,6 +278,51 @@ export function ApplicationDocumentPreview({
   );
 }
 
+/**
+ * Group-application roster shown inside an expanded application. Presents the household
+ * as a single group covering the bundle while each member keeps an independent account.
+ * Approvals stay per-member elsewhere, so an unfinished member is surfaced here (waiting
+ * on N) rather than silently blocking the rest.
+ */
+function ApplicationGroupSection({ group, currentRowId }: { group: ApplicationGroup; currentRowId: string }) {
+  const progress = summarizeGroupProgress(group);
+  return (
+    <PortalCollapsibleSection
+      title="Group application"
+      defaultExpanded
+      surfaceMuted={false}
+      className="mt-4"
+      contentClassName="p-4 pt-0"
+      toggleDataAttr="application-group-toggle"
+      headerActions={<Badge tone={progress.tone}>{progress.label}</Badge>}
+    >
+      <p className="mb-3 text-xs text-muted">
+        Group ID <span className="font-mono text-foreground">{group.groupId}</span>
+        {group.missingCount != null && group.missingCount > 0
+          ? ` · waiting on ${group.missingCount} more ${group.missingCount === 1 ? "applicant" : "applicants"} to start`
+          : ""}
+      </p>
+      <ul className="divide-y divide-[var(--border)] rounded-2xl border border-border">
+        {group.members.map((m) => (
+          <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[13px] font-medium text-foreground">
+                {m.name}
+                {m.id === currentRowId ? <span className="ml-1.5 text-[11px] text-muted">(this application)</span> : null}
+                {m.role === "first" ? <span className="ml-1.5 text-[11px] text-muted">· organizer</span> : null}
+              </span>
+              {m.email ? <span className="truncate text-[11px] text-muted">{m.email}</span> : null}
+            </span>
+            <Badge tone={m.status === "approved" ? "confirmed" : m.status === "rejected" ? "overdue" : m.status === "in_progress" ? "neutral" : "info"}>
+              {GROUP_MEMBER_STATUS_LABEL[m.status]}
+            </Badge>
+          </li>
+        ))}
+      </ul>
+    </PortalCollapsibleSection>
+  );
+}
+
 function roomSortKey(row: DemoApplicantRow): string {
   return (
     getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "") ||
@@ -369,6 +452,13 @@ export function ManagerApplications() {
     if (!scopeUserId) return [];
     return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId, "applications"));
   }, [rows, scopeUserId]);
+
+  // Reconcile group applications across every bucket (a group can span pending / approved /
+  // in-progress) so the whole household is visible from any one member's row.
+  const applicationGroups = useMemo(
+    () => buildApplicationGroups(scopedRows.map(groupRowInputForRow)),
+    [scopedRows],
+  );
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
   const tabs = useMemo(
@@ -655,6 +745,13 @@ export function ManagerApplications() {
         </Button>
       </PortalTableDetailActions>
 
+      {(() => {
+        const group = groupForRow(applicationGroups, groupRowInputForRow(row));
+        return group && group.members.length > 1 ? (
+          <ApplicationGroupSection group={group} currentRowId={row.id} />
+        ) : null;
+      })()}
+
       <ApplicationDocumentPreview row={row} />
 
       <ApplicationScreeningPanel
@@ -737,6 +834,8 @@ export function ManagerApplications() {
             const expanded = expandedId === row.id;
             const status = applicationStatusPill(row);
             const room = displayRoomForRow(row);
+            const group = groupForRow(applicationGroups, groupRowInputForRow(row));
+            const groupSize = group && group.members.length > 1 ? group.expectedSize ?? group.totalCount : null;
             const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
               .filter((part) => part && part !== "—")
               .join(" · ");
@@ -762,7 +861,14 @@ export function ManagerApplications() {
                       <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
                     ) : null}
                   </span>
-                  <span className="ml-auto flex shrink-0 items-center">
+                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                    {groupSize != null ? (
+                      <span title={`Group application · ${group!.groupId}`}>
+                        <Badge tone="info">
+                          Group {group!.totalCount}/{groupSize}
+                        </Badge>
+                      </span>
+                    ) : null}
                     <Badge tone={status.tone}>{status.label}</Badge>
                   </span>
                 </button>

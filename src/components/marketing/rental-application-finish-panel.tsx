@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import type { GroupRole } from "@/lib/rental-application/types";
 
 type FinishPanelProps = {
   axisId: string;
@@ -13,8 +15,66 @@ type FinishPanelProps = {
   guestFlow?: boolean;
   /** Mailto fallback when Resend is not configured (local/dev). */
   mailtoHref?: string;
+  /** Shared Group ID when this was submitted as part of a group application. */
+  groupId?: string;
+  groupRole?: GroupRole;
+  groupSize?: string;
   onDone: () => void;
 };
+
+/** Group-application confirmation: the first applicant shares the Group ID; joiners see they linked in. */
+function GroupShareCallout({
+  groupId,
+  groupRole,
+  groupSize,
+}: {
+  groupId: string;
+  groupRole?: GroupRole;
+  groupSize?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const size = Number.parseInt((groupSize ?? "").trim(), 10);
+  const others = Number.isFinite(size) && size >= 2 ? size - 1 : null;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(groupId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (e.g. insecure context) — the id stays visible to copy manually.
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-accent/20 p-4 text-left [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
+      <p className="text-[13px] font-semibold text-foreground">
+        {groupRole === "joining" ? "You joined a group application" : "Your group is ready"}
+      </p>
+      <p className="mt-1 text-[12px] leading-relaxed text-muted">
+        {groupRole === "joining"
+          ? "Your application is linked to your group. Each member applies with their own account, and your manager reviews you together."
+          : others != null
+            ? `Share this Group ID with your ${others} ${others === 1 ? "roommate" : "roommates"} so their applications link to yours. Each of you keeps your own account.`
+            : "Share this Group ID with your roommates so their applications link to yours. Each of you keeps your own account."}
+      </p>
+      <div className="mt-3 flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-card px-3 py-2 font-mono text-[13px] text-foreground">
+          {groupId}
+        </code>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 shrink-0 rounded-full px-4 text-xs"
+          data-attr="group-id-copy"
+          onClick={() => void copy()}
+        >
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function RentalApplicationFinishPanel({
   axisId,
@@ -23,10 +83,14 @@ export function RentalApplicationFinishPanel({
   syncError,
   guestFlow = false,
   mailtoHref,
+  groupId,
+  groupRole,
+  groupSize,
   onDone,
 }: FinishPanelProps) {
   const signInHref = `/auth/sign-in?intent=resident&next=${encodeURIComponent("/resident/applications")}`;
   const emailFailed = guestFlow && emailSent === false;
+  const showGroup = Boolean(groupId && groupId.trim());
 
   return (
     <div className="application-finish-panel relative mt-4 overflow-hidden rounded-2xl border border-border/80 bg-card/80 p-4 backdrop-blur-md sm:mt-8 sm:rounded-3xl sm:p-6">
@@ -69,6 +133,10 @@ export function RentalApplicationFinishPanel({
       ) : null}
 
       <p className="mt-3 text-center font-mono text-xs text-muted">Application ID: {axisId}</p>
+
+      {showGroup ? (
+        <GroupShareCallout groupId={groupId!.trim()} groupRole={groupRole} groupSize={groupSize} />
+      ) : null}
 
       <div className="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
         {guestFlow ? (
