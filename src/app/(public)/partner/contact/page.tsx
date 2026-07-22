@@ -11,7 +11,7 @@ function PartnerContactRedirect() {
   const scheduleTab = searchParams.get("tab") === "schedule";
 
   useEffect(() => {
-    router.replace(scheduleTab ? "/book-a-demo" : "/contact");
+    router.replace(scheduleTab ? "/contact?tab=schedule" : "/contact");
   }, [router, scheduleTab]);
 
   return (

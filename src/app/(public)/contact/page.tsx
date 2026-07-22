@@ -1,10 +1,11 @@
 "use client";
 
+import { PartnerMeetingScheduler } from "@/components/partner/partner-meeting-scheduler";
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import { BOOK_DEMO_HREF, PUBLIC_SUPPORT_EMAIL } from "@/lib/marketing/public-contact";
-import { useRouter, useSearchParams } from "next/navigation";
+import { PUBLIC_SUPPORT_EMAIL } from "@/lib/marketing/public-contact";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import "@/components/marketing/landing-proplane.css";
 
@@ -32,7 +33,6 @@ export default function ContactPage() {
 
 function ContactInner() {
   const { showToast } = useAppUi();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get("tab") === "schedule" ? "schedule" : "message";
   const [tab, setTab] = useState<"schedule" | "message">(tabFromUrl);
@@ -40,13 +40,10 @@ function ContactInner() {
   useEffect(() => {
     queueMicrotask(() => {
       const t = searchParams.get("tab");
-      if (t === "schedule") {
-        router.replace(BOOK_DEMO_HREF);
-        return;
-      }
-      if (t === "message") setTab("message");
+      if (t === "schedule") setTab("schedule");
+      else if (t === "message") setTab("message");
     });
-  }, [router, searchParams]);
+  }, [searchParams]);
 
   return (
     <MarketingPageShell>
@@ -60,13 +57,7 @@ function ContactInner() {
           <div className="mt-6">
             <SegmentedTwo
               value={tab}
-              onChange={(next) => {
-                if (next === "schedule") {
-                  router.push(BOOK_DEMO_HREF);
-                  return;
-                }
-                setTab("message");
-              }}
+              onChange={setTab}
               left={{ id: "schedule", label: "Book a demo" }}
               right={{ id: "message", label: "Send message" }}
             />
@@ -75,7 +66,11 @@ function ContactInner() {
           <div key={tab} className="animate-fade-in text-left">
             {tab === "message" ? (
               <ContactMessageForm showToast={showToast} />
-            ) : null}
+            ) : (
+              <div className="mt-6">
+                <PartnerMeetingScheduler showToast={showToast} />
+              </div>
+            )}
           </div>
         </div>
       </header>

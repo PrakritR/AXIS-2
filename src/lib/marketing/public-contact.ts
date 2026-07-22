@@ -12,7 +12,7 @@ export const PUBLIC_SUPPORT_ADDRESS_MAP_QUERY = "5259+Brooklyn+Ave+NE%2C+98105";
 
 export const MANAGER_GET_STARTED_HREF =
   "/auth/create-account?mode=create&role=manager";
-export const BOOK_DEMO_HREF = "/book-a-demo";
+export const BOOK_DEMO_HREF = "/contact?tab=schedule";
 
 /**
  * Public social profiles, rendered as the footer icon row.

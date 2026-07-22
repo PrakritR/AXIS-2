@@ -1,26 +1,20 @@
 "use client";
 
-import { PartnerMeetingScheduler } from "@/components/partner/partner-meeting-scheduler";
-import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
-import { useAppUi } from "@/components/providers/app-ui-provider";
-import "@/components/marketing/landing-proplane.css";
+import { BOOK_DEMO_HREF } from "@/lib/marketing/public-contact";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-export default function BookADemoPage() {
-  const { showToast } = useAppUi();
+/** Legacy path — demo booking lives on Contact → Book a demo tab. */
+export default function BookADemoRedirectPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace(BOOK_DEMO_HREF);
+  }, [router]);
 
   return (
-    <MarketingPageShell>
-      <header className="lp-page-hero">
-        <div className="lp-w max-w-[560px]">
-          <h1 className="lp-page-title lp-page-title-wide">Book a demo</h1>
-          <p className="lp-page-lede">
-            Pick a time that works — we will walk you through PropLane live.
-          </p>
-          <div className="mt-6 text-left">
-            <PartnerMeetingScheduler showToast={showToast} />
-          </div>
-        </div>
-      </header>
-    </MarketingPageShell>
+    <div className="min-h-screen px-4 py-16 sm:py-20">
+      <p className="text-center text-sm text-muted">Redirecting to book a demo…</p>
+    </div>
   );
 }
