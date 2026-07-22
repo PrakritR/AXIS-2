@@ -217,7 +217,7 @@ export function ResidentApplicationsPanel({
           groupRole={row.application?.groupRole}
           groupSize={row.application?.groupSize}
           className="mt-0"
-          shareable={row.bucket === "pending"}
+          shareable={row.bucket !== "rejected"}
         />
       ) : null}
       {isInProgressApplicationRow(row) && applyMode ? (

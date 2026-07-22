@@ -38,7 +38,11 @@ export function GroupShareCallout({
   groupRole?: GroupRole;
   groupSize?: string;
   className?: string;
-  /** False once the application has been decided — the id stays retrievable, the invitation goes away. */
+  /**
+   * False only for a terminal application (not approved). An approved organizer whose
+   * roommates have not applied yet still needs to hand out the code. The id stays
+   * retrievable either way.
+   */
   shareable?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
@@ -68,7 +72,7 @@ export function GroupShareCallout({
       </p>
       <p className="mt-1 text-[12px] leading-relaxed text-muted">
         {!shareable
-          ? "This application was submitted as part of a group. Keep this Group ID for your records — it is no longer accepting new members."
+          ? "Your application was not approved. Your Group ID is kept here for reference."
           : groupRole === "joining"
             ? "Your application is linked to your group. Each member applies with their own account, and your manager reviews you together."
             : others != null
