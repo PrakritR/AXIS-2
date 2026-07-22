@@ -5,7 +5,7 @@ import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import { PUBLIC_SUPPORT_EMAIL } from "@/lib/marketing/public-contact";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import "@/components/marketing/landing-proplane.css";
 
@@ -33,17 +33,20 @@ export default function ContactPage() {
 
 function ContactInner() {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const tabFromUrl = searchParams.get("tab") === "schedule" ? "schedule" : "message";
-  const [tab, setTab] = useState<"schedule" | "message">(tabFromUrl);
+  const tab = searchParams.get("tab") === "schedule" ? "schedule" : "message";
 
   useEffect(() => {
-    queueMicrotask(() => {
-      const t = searchParams.get("tab");
-      if (t === "schedule") setTab("schedule");
-      else if (t === "message") setTab("message");
+    if (tab !== "schedule") return;
+    document.getElementById("book-a-demo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [tab]);
+
+  const setTab = (next: "schedule" | "message") => {
+    router.replace(next === "schedule" ? "/contact?tab=schedule" : "/contact?tab=message", {
+      scroll: false,
     });
-  }, [searchParams]);
+  };
 
   return (
     <MarketingPageShell>
@@ -67,7 +70,7 @@ function ContactInner() {
             {tab === "message" ? (
               <ContactMessageForm showToast={showToast} />
             ) : (
-              <div className="mt-6">
+              <div id="book-a-demo" className="mt-6 scroll-mt-28">
                 <PartnerMeetingScheduler showToast={showToast} />
               </div>
             )}
