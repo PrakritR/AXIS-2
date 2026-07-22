@@ -590,11 +590,13 @@ function ManagerPropertyInlineDetails({
         ) : null}
       </PortalCollapsibleSection>
 
-      {/* A draft has no live listing behind it, so every panel that persists
-          through `houseSaveTarget` is withheld — the wizard ("Continue editing")
-          is the only way to change a draft, and publishing is its only route to
-          a prospect-facing state. */}
-      {bucket !== 5 ? (
+      {/* Neither a draft (bucket 5) nor an unlisted row (bucket 3) has a live
+          listing behind it, so every panel that persists through
+          `houseSaveTarget` is withheld — that save writes the LIVE catalog, and
+          for these rows it would either publish an unvalidated draft or silently
+          re-list a property the manager took down. A draft is changed by the
+          wizard ("Continue editing"); an unlisted row by relisting it first. */}
+      {bucket !== 3 && bucket !== 5 ? (
         <>
           <ManagerPropertyHouseDetailsPanel
             noteKey={noteKey}

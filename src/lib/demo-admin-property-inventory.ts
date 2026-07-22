@@ -639,15 +639,9 @@ export async function saveManagerPropertyDraftToServer(
     listingId = mintManagerPropertyId(legacy);
     provisionalId = !hasName;
   } else if (provisionalId && hasName && opts?.allowIdUpgrade) {
-    // Drop the superseded draft row BEFORE writing the re-keyed one, so a failed
-    // delete can never leave the manager holding two rows for one draft (nor let
-    // the next server sync resurrect the old id as a duplicate). If it fails we
-    // simply keep saving under the provisional id and try again next save.
-    if (await deletePropertyRecordFromServer(existingId)) {
-      listingId = mintManagerPropertyId(legacy);
-      provisionalId = false;
-      staleDraftId = existingId;
-    }
+    listingId = mintManagerPropertyId(legacy);
+    provisionalId = false;
+    staleDraftId = existingId;
   }
 
   const row = submissionToDraftAdminRow(input, managerUserId, listingId, {
@@ -662,11 +656,19 @@ export async function saveManagerPropertyDraftToServer(
     rowData: row,
   });
   if (!ok) return null;
+  // Write BEFORE delete on an id re-key: the re-keyed row is safely on the server
+  // before the superseded one goes, so a failed save can never leave the draft
+  // with no record at all. A transient duplicate draft is visible and deletable;
+  // a vanished draft is silent data loss, and preventing that loss is the entire
+  // point of this feature. When the delete fails the stale row stays in the list
+  // (rather than being hidden and resurrected by the next sync) so the manager
+  // can remove it.
+  const staleDelete = staleDraftId ? await deletePropertyRecordFromServer(staleDraftId) : false;
   // Re-read the side buckets AFTER the round-trip: a concurrent list/unlist or a
   // pipeline sync may have rewritten them while the save was in flight, and
   // writing back the pre-await snapshot would silently drop that change.
   const fresh = readSide(managerUserId);
-  const remaining = staleDraftId ? fresh.drafts.filter((r) => r.adminRefId !== staleDraftId) : fresh.drafts;
+  const remaining = staleDelete ? fresh.drafts.filter((r) => r.adminRefId !== staleDraftId) : fresh.drafts;
   const idx = remaining.findIndex((r) => r.adminRefId === listingId);
   const drafts = idx === -1 ? [...remaining, row] : remaining.map((r, i) => (i === idx ? row : r));
   // writeSideStorage dispatches PROPERTY_PIPELINE_EVENT, whose listeners already
