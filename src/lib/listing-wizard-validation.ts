@@ -17,6 +17,15 @@ export function listingRoomDailyRentKey(roomId: string): string {
   return `room-${roomId}-daily-rent`;
 }
 
+/**
+ * A room is priced when it carries a monthly rent OR an explicit daily rate. Every
+ * gate that asks "does this room have a price?" must use this, so a daily-only room
+ * that passes step validation is not rejected later by a monthly-only check.
+ */
+export function listingRoomHasRent(room: ManagerRoomSubmission): boolean {
+  return room.monthlyRent > 0 || (room.rentBasis === "daily" && (room.dailyRentPrice ?? 0) > 0);
+}
+
 export function listingBathroomNameKey(bathId: string): string {
   return `bathroom-${bathId}-name`;
 }
@@ -79,11 +88,9 @@ export function validateListingWizardStep(
       errs.monthlyRent = "Enter the monthly rent for the entire home.";
     }
     if (!isEntireHome) {
-      const roomHasRent = (room: ManagerRoomSubmission) =>
-        room.monthlyRent > 0 || (room.rentBasis === "daily" && (room.dailyRentPrice ?? 0) > 0);
-      const anyRent = sub.rooms.some(roomHasRent);
+      const anyRent = sub.rooms.some(listingRoomHasRent);
       if (!anyRent && sub.rooms.length > 0) {
-        errs.monthlyRent = "Set monthly rent for at least one room (leave others at 0 if not offered).";
+        errs.monthlyRent = "Set a monthly or daily rent for at least one room (leave others at 0 if not offered).";
       }
       // A room switched to daily pricing must carry a positive daily rate.
       for (const room of sub.rooms) {

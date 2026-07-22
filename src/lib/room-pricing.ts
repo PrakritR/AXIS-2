@@ -58,7 +58,9 @@ export function roomPricePeriodSuffix(room: RoomPricingLike | null | undefined):
 }
 
 /**
- * A single comparable monthly-equivalent number for sorting and budget filters:
+ * A single comparable monthly-equivalent number for sorting, budget filters, and
+ * AGGREGATE labels (rent ranges, "starting at", estimated totals) so mixed listings
+ * stay coherent as "/mo" while each room's own row still shows its true "$X/day":
  * daily rooms use dailyRentPrice × {@link DAILY_RENT_MONTH_ESTIMATE_DAYS}; monthly
  * rooms use monthlyRent. Returns 0 when nothing is priced.
  */
@@ -67,6 +69,23 @@ export function roomMonthlyEquivalent(room: RoomPricingLike | null | undefined):
   if (daily !== undefined) return Number((daily * DAILY_RENT_MONTH_ESTIMATE_DAYS).toFixed(2));
   const monthly = positiveNumber(room?.monthlyRent);
   return monthly ?? 0;
+}
+
+/**
+ * Monthly-equivalent for a stored rate PAIR (e.g. a recurring rent profile) where a
+ * positive daily rate is itself the signal that the daily basis is active — those
+ * records carry no `rentBasis` flag. Use this anywhere a persisted rent figure is
+ * reported or totalled, so a daily-priced resident never shows as $0/mo.
+ */
+export function rentMonthlyEquivalent(
+  monthlyRent: number | null | undefined,
+  dailyRentPrice: number | null | undefined,
+): number {
+  return roomMonthlyEquivalent({
+    monthlyRent,
+    rentBasis: (dailyRentPrice ?? 0) > 0 ? "daily" : "monthly",
+    dailyRentPrice,
+  });
 }
 
 /**
@@ -88,8 +107,6 @@ export function formatRoomPriceAmount(amount: number): string {
   return Number.isInteger(amount) ? `$${amount.toLocaleString("en-US")}` : `$${amount.toFixed(2)}`;
 }
 
-const formatUsd = formatRoomPriceAmount;
-
 /**
  * The room's headline price label, e.g. "$40/day" or "$825/mo". Returns
  * `fallback` when nothing is priced.
@@ -100,5 +117,5 @@ export function roomHeadlinePriceLabel(
 ): string {
   const amount = roomHeadlineAmount(room);
   if (amount === null) return fallback;
-  return `${formatUsd(amount)}${roomPricePeriodSuffix(room)}`;
+  return `${formatRoomPriceAmount(amount)}${roomPricePeriodSuffix(room)}`;
 }
