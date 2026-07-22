@@ -758,9 +758,11 @@ function RentalApplicationWizardInner({
     }
 
     void (async () => {
-      const res = await fetch(
-        `/api/stripe/application-fee-verify?session_id=${encodeURIComponent(sessionId)}&expected_email=${encodeURIComponent(em)}`,
-      );
+      const res = await fetch("/api/stripe/application-fee-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, expectedEmail: em }),
+      });
       const data = (await res.json().catch(() => ({}))) as {
         paid?: boolean;
         processing?: boolean;
