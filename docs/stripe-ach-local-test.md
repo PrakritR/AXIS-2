@@ -1,6 +1,6 @@
 # Local ACH testing (Stripe test mode)
 
-Use this guide to test **resident rent/utilities** and **application fee** bank payments on `http://localhost:3000` without charging real money.
+Use this guide to test **resident rent/utilities** bank payments on `http://localhost:3000` without charging real money. Rental **application fees** no longer use ACH — that checkout is card / Apple Pay ([`stripe-apple-pay-payments.md`](stripe-apple-pay-payments.md)); test it with card `4242…`, since wallets never appear on `localhost`.
 
 ## 1. Switch `.env.local` to test mode
 
@@ -62,20 +62,20 @@ Copy the printed `whsec_…` into `STRIPE_WEBHOOK_SECRET` in `.env.local`, then 
 
 Each manager gets a test Connect account stored in `profiles.stripe_connect_account_id`.
 
-## 5. Enable ACH on a property
+## 5. Enable PropLane payments on a property
 
-When adding or editing a listing, turn on **Axis payments (ACH)**.
+When adding or editing a listing, turn on **PropLane payments with Stripe**.
 
-Residents only see “Pay with bank (ACH)” when:
+Residents only see “Bank (ACH)” when:
 
-- The property has Axis ACH enabled, and
+- The property has PropLane payments enabled, and
 - The manager’s Connect account is ready.
 
 ## 6. Create a charge to pay
 
 As **manager**: add a household charge (rent, utility, etc.) for a resident email that has a resident login.
 
-As **resident**: sign in with that email → **Payments** → **Pay with bank (ACH)**.
+As **resident**: sign in with that email → **Payments** → **Bank (ACH)**.
 
 ## 7. Test bank account (Stripe Checkout)
 
@@ -113,7 +113,7 @@ stripe trigger checkout.session.async_payment_succeeded
 |-------|-----|
 | `STRIPE_NOT_CONFIGURED` | Set `STRIPE_SECRET_KEY` in `.env.local`, restart dev |
 | `MANAGER_NO_CONNECT_ACCOUNT` | Manager completes Portal → Payments Connect |
-| `AXIS_PAYMENTS_DISABLED` | Enable Axis ACH on the property listing |
+| `AXIS_PAYMENTS_DISABLED` | Enable **PropLane payments with Stripe** on the property listing |
 | Webhook never fires | Run `npm run stripe:listen`, update `STRIPE_WEBHOOK_SECRET`, restart dev |
 | Live keys locally | Switch to `sk_test_` / `pk_test_` for local ACH tests |
 

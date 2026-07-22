@@ -6,14 +6,29 @@ import { isApplicationFeeCheckoutSession, markApplicationFeePaidFromStripeSessio
 
 export const runtime = "nodejs";
 
+function normalizedEmail(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+type Body = {
+  sessionId?: string;
+  expectedEmail?: string;
+};
+
 /**
  * Confirms a completed Checkout Session for `rental_application_fee` (ACH return URL flow).
+ *
+ * The caller POSTs the email it believes bought the session and gets back only
+ * `emailMatches`. This endpoint is unauthenticated, so the applicant's address
+ * is never echoed in the response — and it travels in the request BODY rather
+ * than the query string, which CDN/proxy/APM access logs record verbatim.
  */
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const sessionId = searchParams.get("session_id")?.trim();
+export async function POST(req: Request) {
+  const body = (await req.json().catch(() => ({}))) as Body;
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+  const expectedEmail = normalizedEmail(body.expectedEmail);
   if (!sessionId) {
-    return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
+    return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
   }
 
   try {
@@ -55,6 +70,9 @@ export async function GET(req: Request) {
       paymentStatus: session.payment_status,
       sessionId: session.id,
       propertyId: session.metadata?.property_id ?? null,
+      emailMatches:
+        expectedEmail.length > 0 &&
+        expectedEmail === normalizedEmail(session.metadata?.resident_email ?? session.customer_email),
       chargeId,
       alreadyPaid,
     });

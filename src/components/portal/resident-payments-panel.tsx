@@ -641,6 +641,11 @@ export function ResidentPaymentsPanel({
       <div className={`grid gap-2 ${options.length > 2 ? "sm:grid-cols-3" : "grid-cols-2"}`}>
         {options.map((option) => {
           const selected = paymentMethod === option.id;
+          // Apple Pay / Google Pay ride on the card method-class in Stripe
+          // Checkout — surface that so the wallet one-tap is discoverable. Only
+          // on the web surface: the native WKWebView/WebView shell is not
+          // entitled for web wallets, so promising them there is a dead end.
+          const walletHint = option.id === "card" && !isNativeApp;
           return (
             <button
               key={option.id}
@@ -650,13 +655,16 @@ export function ResidentPaymentsPanel({
                 setPaymentMethod(option.id);
                 setCheckout(null);
               }}
-              className={`rounded-xl border px-3 py-3 text-left transition ${
+              className={`flex min-h-[64px] flex-col justify-center rounded-xl border px-3 py-3 text-left transition active:scale-[0.99] ${
                 selected
                   ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                   : "border-border bg-card hover:border-primary/30"
               }`}
             >
               <p className="text-sm font-semibold text-foreground">{option.title}</p>
+              {walletHint ? (
+                <p className="mt-0.5 text-[11px] font-medium text-primary"> Apple&nbsp;Pay · Google&nbsp;Pay</p>
+              ) : null}
               <p className="mt-1 text-xs text-muted">{option.feeLabel}</p>
             </button>
           );
@@ -676,13 +684,14 @@ export function ResidentPaymentsPanel({
             .filter((c): c is HouseholdCharge => Boolean(c)),
         )}
         {checkout.totalCents != null && checkout.subtotalCents != null ? (
-          <p className="text-xs text-muted">
-            Subtotal {formatUsd(checkout.subtotalCents)}
-            {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
-            {checkout.axisFeeCents ? ` · PropLane fee ${formatUsd(checkout.axisFeeCents)}` : ""}
-            {" · "}
-            <span className="font-semibold text-foreground">Total {formatUsd(checkout.totalCents)}</span>
-          </p>
+          <div className="flex items-baseline justify-between rounded-xl border border-border bg-accent/30 px-4 py-3">
+            <span className="text-xs text-muted">
+              Subtotal {formatUsd(checkout.subtotalCents)}
+              {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
+              {checkout.axisFeeCents ? ` · PropLane fee ${formatUsd(checkout.axisFeeCents)}` : ""}
+            </span>
+            <span className="text-lg font-bold tabular-nums text-foreground">{formatUsd(checkout.totalCents)}</span>
+          </div>
         ) : null}
         {checkout.loading ? (
           <p className="text-sm text-muted">Loading secure checkout…</p>

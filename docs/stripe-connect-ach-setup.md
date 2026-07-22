@@ -1,6 +1,6 @@
 # Stripe Connect + ACH setup (resident portal payments)
 
-ACH bank transfers are **only** for resident payments (rent, utilities, application fees). Manager Pro/Business subscriptions use **card**, not ACH.
+ACH bank transfers are **only** for resident rent/utility payments. Rental **application fees** are paid online by card / Apple Pay / Google Pay — see [`stripe-apple-pay-payments.md`](stripe-apple-pay-payments.md). Manager Pro/Business subscriptions use **card**, not ACH.
 
 ## Architecture
 
@@ -86,9 +86,9 @@ Until this is done, residents see errors when trying ACH and should use Zelle/Ve
 
 ## Part C — Property + resident setup
 
-### C1. Enable ACH on listing
+### C1. Enable PropLane payments on listing
 
-**Properties → edit listing → Resident payment methods** → check **Axis payments (ACH)**.
+**Properties → edit listing → Resident payment methods** → check **PropLane payments with Stripe**. One checkbox enables both rails: rent by bank (ACH), card, or Link, and the application fee by card / Apple Pay.
 
 ### C2. Manager creates a charge
 
@@ -128,6 +128,6 @@ Live webhook URL: `https://your-domain.com/api/stripe/webhook`
 | “Stripe Connect is not activated” | Finish Connect setup in Dashboard (Part A1) |
 | Demo / keys missing message | Set `STRIPE_SECRET_KEY` + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, restart dev |
 | `MANAGER_NO_CONNECT_ACCOUNT` | Manager completes Payouts onboarding |
-| `AXIS_PAYMENTS_DISABLED` | Enable Axis ACH on property listing |
+| `AXIS_PAYMENTS_DISABLED` | Enable **PropLane payments with Stripe** on the property listing |
 | Charge stays pending after ACH | Check `stripe listen` + webhook secret |
 | Restricted Connect account | Manager completes outstanding requirements in Payouts |

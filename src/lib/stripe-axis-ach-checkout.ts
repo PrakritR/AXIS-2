@@ -70,15 +70,43 @@ export function axisAchCheckoutProcessing(session: Stripe.Checkout.Session): boo
   return session.status === "complete" && session.payment_status === "unpaid";
 }
 
-function paymentMethodStripeConfig(method: ResidentAxisPaymentMethod): {
-  payment_method_types: ("card" | "link" | "us_bank_account")[];
-  payment_method_options?: {
-    us_bank_account?: {
-      financial_connections: { permissions: ["payment_method"] };
-      verification_method: "automatic";
-    };
-  };
-} {
+/**
+ * Stripe payment-method selection for a resident/applicant Checkout session.
+ *
+ * Returns EITHER an explicit `payment_method_types` allowlist OR a
+ * `payment_method_configuration` (dynamic payment methods) — never both, since
+ * Stripe rejects a session that sets the two together.
+ *
+ * Apple Pay / Google Pay are card wallets: they only ride on the `card`
+ * method-class sessions, whose processing fee (2.9% + $0.30) is identical for a
+ * plain card, Apple Pay, or Google Pay — so the fee line item baked before the
+ * session (see below) is correct no matter which the buyer taps. When
+ * `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION` names a card-scoped PMC we
+ * use dynamic payment methods (Stripe's recommended path for surfacing wallets,
+ * matching the subscription flow in `subscription-checkout-session.ts`); the
+ * PMC must exclude bank/ACH so a card session never surfaces a method with a
+ * different fee. Without the env we fall back to an explicit `["card"]` type,
+ * which still surfaces Apple Pay on one-time (`mode: "payment"`) Checkout once
+ * the domain is registered, and never leaks a wrong-fee method.
+ *
+ * `ach` stays an explicit `us_bank_account` session (its own lower fee); `link`
+ * keeps its explicit Link+card allowlist.
+ */
+async function paymentMethodStripeConfig(
+  stripe: Stripe,
+  method: ResidentAxisPaymentMethod,
+): Promise<
+  | {
+      payment_method_types: ("card" | "link" | "us_bank_account")[];
+      payment_method_options?: {
+        us_bank_account?: {
+          financial_connections: { permissions: ["payment_method"] };
+          verification_method: "automatic";
+        };
+      };
+    }
+  | { payment_method_configuration: string }
+> {
   if (method === "ach") {
     return {
       payment_method_types: ["us_bank_account"],
@@ -93,7 +121,71 @@ function paymentMethodStripeConfig(method: ResidentAxisPaymentMethod): {
   if (method === "link") {
     return { payment_method_types: ["link", "card"] };
   }
+  const cardPmc = process.env.STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION?.trim();
+  if (cardPmc && (await cardScopedPaymentMethodConfiguration(stripe, cardPmc))) {
+    return { payment_method_configuration: cardPmc };
+  }
   return { payment_method_types: ["card"] };
+}
+
+/**
+ * Payment methods whose Stripe processing cost is the card rate (2.9% + $0.30),
+ * i.e. the ones the card session's pre-baked fee line item already prices
+ * correctly. Apple Pay / Google Pay are card wallets and settle as `card`; Link
+ * is priced identically (`RESIDENT_PROCESSING_FEE_BPS.link` in
+ * `payment-policy.ts`) and Stripe commonly enables it alongside card, so a PMC
+ * carrying it is still fee-exact and must not be rejected.
+ */
+const CARD_CLASS_PAYMENT_METHODS = new Set(["card", "apple_pay", "google_pay", "link"]);
+
+const cardPmcScopeCache = new Map<string, { cardScoped: boolean; expiresAt: number }>();
+const CARD_PMC_CACHE_TTL_MS = 10 * 60_000;
+const CARD_PMC_ERROR_CACHE_TTL_MS = 60_000;
+
+/**
+ * A card session bakes the card processing fee AND the Connect
+ * `application_fee_amount` before the session exists, so a PMC that also enables
+ * a different-fee method (`us_bank_account`, Klarna, Affirm, …) would silently
+ * break the "manager payout == full subtotal" invariant and mislabel
+ * `metadata.payment_method` for the webhook. Verify the configuration really is
+ * card-scoped before trusting it; anything else (including a failed lookup)
+ * falls back to the explicit `["card"]` allowlist, which is always fee-correct.
+ */
+async function cardScopedPaymentMethodConfiguration(stripe: Stripe, pmcId: string): Promise<boolean> {
+  const cached = cardPmcScopeCache.get(pmcId);
+  if (cached && cached.expiresAt > Date.now()) return cached.cardScoped;
+
+  let config: Record<string, unknown>;
+  try {
+    config = (await stripe.paymentMethodConfigurations.retrieve(pmcId)) as unknown as Record<string, unknown>;
+  } catch (e) {
+    console.error(
+      `[stripe] Could not verify STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) is card-scoped; falling back to explicit card payment methods.`,
+      e,
+    );
+    cardPmcScopeCache.set(pmcId, { cardScoped: false, expiresAt: Date.now() + CARD_PMC_ERROR_CACHE_TTL_MS });
+    return false;
+  }
+
+  const offending = Object.entries(config)
+    .filter(([name, value]) => !CARD_CLASS_PAYMENT_METHODS.has(name) && paymentMethodEntryEnabled(value))
+    .map(([name]) => name);
+
+  const cardScoped = offending.length === 0;
+  if (!cardScoped) {
+    console.error(
+      `[stripe] STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) enables non-card methods [${offending.join(", ")}] whose processing fee differs from card; falling back to explicit card payment methods. Scope the configuration to card + Apple Pay + Google Pay (+ Link).`,
+    );
+  }
+  cardPmcScopeCache.set(pmcId, { cardScoped, expiresAt: Date.now() + CARD_PMC_CACHE_TTL_MS });
+  return cardScoped;
+}
+
+function paymentMethodEntryEnabled(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as { available?: unknown; display_preference?: { value?: unknown } };
+  if (!("display_preference" in entry)) return false;
+  return entry.available === true || entry.display_preference?.value === "on";
 }
 
 /**
@@ -183,13 +275,12 @@ export async function createAxisAchCheckoutSession(
   }
 
   const totalCents = subtotalCents + processingFeeCents + axisFeeCents;
-  const { payment_method_types, payment_method_options } = paymentMethodStripeConfig(paymentMethod);
+  const paymentMethodConfig = await paymentMethodStripeConfig(stripe, paymentMethod);
 
   const sessionBase = {
     mode: "payment" as const,
     customer_email: residentEmail,
-    payment_method_types,
-    ...(payment_method_options ? { payment_method_options } : {}),
+    ...paymentMethodConfig,
     line_items: stripeLineItems,
     metadata: {
       ...input.metadata,

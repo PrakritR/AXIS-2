@@ -56,18 +56,18 @@ Do **not** use `stripe listen` signing secrets in production — those are for l
 
 **Settings → Billing → Customer portal** (live mode): enable so managers can update cards and cancel from `/portal/plan`.
 
-## 7. Apple Pay for subscriptions
+## 7. Apple Pay
 
-Manager Pro/Business checkout supports **Apple Pay** via Stripe dynamic payment methods.
+Manager Pro/Business checkout **and** resident rent / rental-application-fee checkout support **Apple Pay** via Stripe dynamic payment methods. Domain registration is shared — register once and it applies to every wallet flow.
 
-1. **Settings → Payment methods** — enable **Apple Pay**.
+1. **Settings → Payment methods** — enable **Apple Pay** (and **Google Pay**).
 2. Register domains:
    ```bash
    node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs
    ```
-3. Test on Safari (HTTPS) at `/partner/pricing` or `/portal/plan`.
+3. Test on Safari (HTTPS) at `/partner/pricing` or `/portal/plan`, and at `/resident/payments` / `/rent/apply`.
 
-Full guide: [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md).
+Full guides: [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md) (subscriptions) and [`docs/stripe-apple-pay-payments.md`](stripe-apple-pay-payments.md) (rent + application fees, incl. the optional `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION`).
 
 ## 8. Update hosting (Vercel)
 

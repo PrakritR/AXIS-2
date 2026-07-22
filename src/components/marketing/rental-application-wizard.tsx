@@ -726,7 +726,7 @@ function RentalApplicationWizardInner({
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     if (isAchApplicationFeeChannel(payChannel)) {
-      return checkoutBusy ? "Opening bank checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay with bank (ACH)";
+      return checkoutBusy ? "Opening secure checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay application fee";
     }
     if (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other") {
       return "Submit application";
@@ -765,13 +765,17 @@ function RentalApplicationWizardInner({
     }
 
     void (async () => {
-      const res = await fetch(`/api/stripe/application-fee-verify?session_id=${encodeURIComponent(sessionId)}`);
+      const res = await fetch("/api/stripe/application-fee-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, expectedEmail: em }),
+      });
       const data = (await res.json().catch(() => ({}))) as {
         paid?: boolean;
         processing?: boolean;
         error?: string;
         propertyId?: string | null;
-        residentEmail?: string | null;
+        emailMatches?: boolean;
       };
       if (!res.ok) {
         showToast(typeof data.error === "string" ? data.error : "Could not verify payment.");
@@ -779,6 +783,10 @@ function RentalApplicationWizardInner({
         return;
       }
       if (!data.paid) {
+        // Retained for legacy in-flight ACH application-fee sessions created
+        // before the fee channel switched to card: those still return
+        // complete-but-unpaid while the bank transfer clears. New sessions are
+        // card, so they come back paid.
         if (data.processing) {
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
@@ -800,9 +808,7 @@ function RentalApplicationWizardInner({
         String(data.propertyId ?? "")
           .trim()
           .toLowerCase() !== pid.toLowerCase() ||
-        String(data.residentEmail ?? "")
-          .trim()
-          .toLowerCase() !== em.toLowerCase()
+        data.emailMatches !== true
       ) {
         showToast("Payment confirmation does not match this application. Use the same email and listing as before checkout.");
         router.replace(wizardApplyPath);
@@ -893,7 +899,7 @@ function RentalApplicationWizardInner({
             };
 
             if (!res.ok) {
-              showToast(typeof payload.error === "string" ? payload.error : "Could not start bank payment.");
+              showToast(typeof payload.error === "string" ? payload.error : "Could not start card payment.");
               return;
             }
 
