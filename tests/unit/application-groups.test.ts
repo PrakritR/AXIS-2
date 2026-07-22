@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applicationHasGroup,
   buildApplicationGroups,
+  describeGroupBadge,
   groupForRow,
   makeApplicationGroupId,
   normalizeGroupId,
@@ -26,8 +27,13 @@ describe("makeApplicationGroupId", () => {
   it("produces an AXISGRP- id that passes the group-id length/prefix rule", () => {
     const id = makeApplicationGroupId();
     expect(id.startsWith("AXISGRP-")).toBe(true);
-    expect(id.length).toBeGreaterThanOrEqual(12);
+    expect(id.length).toBe(16);
     expect(normalizeGroupId(id)).toBe(id.toUpperCase());
+  });
+
+  it("mints distinct ids within the same millisecond (random, not timestamp-derived)", () => {
+    const ids = new Set(Array.from({ length: 200 }, () => makeApplicationGroupId()));
+    expect(ids.size).toBe(200);
   });
 });
 
@@ -118,6 +124,35 @@ describe("buildApplicationGroups", () => {
     expect(summarizeGroupProgress(g).label).toBe("1 applicant");
   });
 
+  it("never reads complete when more rows carry the id than the declared size", () => {
+    const rows: GroupRowInput[] = [
+      row({ id: "a", role: "first", groupSize: "3", status: "submitted" }),
+      row({ id: "b", role: "joining", status: "submitted" }),
+      row({ id: "c", role: "joining", status: "submitted" }),
+      row({ id: "d", role: "joining", status: "submitted" }),
+    ];
+    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    expect(g.totalCount).toBe(4);
+    expect(g.expectedSize).toBe(3);
+    expect(g.isOverSubscribed).toBe(true);
+    expect(g.isComplete).toBe(false);
+    expect(summarizeGroupProgress(g)).toEqual({ label: "4 applicants · 3 declared", tone: "pending" });
+    expect(describeGroupBadge(g).label).toBe("Group 4 · 3 declared");
+  });
+
+  it("flags a group whose id matches no first applicant", () => {
+    const rows: GroupRowInput[] = [
+      row({ id: "b", role: "joining", status: "submitted" }),
+      row({ id: "c", role: "joining", status: "submitted" }),
+    ];
+    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    expect(g.hasFirst).toBe(false);
+    const badge = describeGroupBadge(g);
+    expect(badge.label).toBe("Group 2 · unlinked");
+    expect(badge.tone).toBe("pending");
+    expect(badge.title).toContain("mistyped");
+  });
+
   it("de-duplicates a row id that appears twice", () => {
     const rows: GroupRowInput[] = [
       row({ id: "a", role: "first", groupSize: "2" }),
@@ -146,5 +181,42 @@ describe("summarizeGroupProgress", () => {
     ];
     const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
     expect(summarizeGroupProgress(g)).toEqual({ label: "All 2 applied", tone: "confirmed" });
+  });
+});
+
+describe("describeGroupBadge", () => {
+  it("shows a raw count with no denominator when the declared size is unknown", () => {
+    const rows: GroupRowInput[] = [
+      row({ id: "a", role: "first", groupSize: "", status: "submitted" }),
+      row({ id: "b", role: "joining", status: "submitted" }),
+    ];
+    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    expect(g.expectedSize).toBeNull();
+    expect(describeGroupBadge(g).label).toBe("Group 2");
+  });
+
+  it("counts submitted members in the numerator, matching the roster summary", () => {
+    const rows: GroupRowInput[] = [
+      row({ id: "a", role: "first", groupSize: "3", status: "submitted" }),
+      row({ id: "b", role: "joining", status: "flagged" }),
+      row({ id: "c", role: "joining", status: "in_progress" }),
+    ];
+    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    expect(describeGroupBadge(g).label).toBe("Group 2/3");
+    expect(summarizeGroupProgress(g).label).toBe("2 of 3 applied · waiting on 1");
+    expect(g.isComplete).toBe(false);
+  });
+
+  it("marks a fully applied group confirmed", () => {
+    const rows: GroupRowInput[] = [
+      row({ id: "a", role: "first", groupSize: "2", status: "screened" }),
+      row({ id: "b", role: "joining", status: "approved" }),
+    ];
+    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    expect(describeGroupBadge(g)).toEqual({
+      label: "Group 2/2",
+      tone: "confirmed",
+      title: "Group ID AXISGRP-ABCD1234",
+    });
   });
 });

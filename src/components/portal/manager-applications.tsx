@@ -56,7 +56,9 @@ import {
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import {
+  applicationHasGroup,
   buildApplicationGroups,
+  describeGroupBadge,
   groupForRow,
   summarizeGroupProgress,
   type ApplicationGroup,
@@ -101,27 +103,42 @@ type ApplicationStatusPill = {
 };
 
 /**
- * Presentation-only status pill for the Linear row — derived purely from the row's
- * existing bucket + screening signals (no new state, no writes).
+ * Single source of truth for an application's status — derived purely from the row's
+ * existing bucket + screening signals (no new state, no writes). Both the row pill and
+ * the group roster read the same value, so they can never contradict each other.
  */
-function applicationStatusPill(row: DemoApplicantRow): ApplicationStatusPill {
-  if (row.bucket === "approved") return { label: "Approved", tone: "confirmed" };
-  if (row.bucket === "rejected") return { label: "Rejected", tone: "overdue" };
-  if (isInProgressApplicationRow(row)) return { label: "In progress", tone: "neutral" };
-  const bg = row.backgroundCheckStatus;
-  if (bg === "flagged") return { label: "Flagged", tone: "overdue" };
-  if (bg === "passed") return { label: "Screened", tone: "info" };
-  if (bg === "pending_review" || row.screening) return { label: "Screening", tone: "pending" };
-  return { label: "New", tone: "info" };
-}
-
-/** Coarse per-member status used by group reconciliation (mirrors the row status pill). */
-function groupMemberStatusForRow(row: DemoApplicantRow): ApplicationGroupMemberStatus {
+function applicationStatusForRow(row: DemoApplicantRow): ApplicationGroupMemberStatus {
   if (row.bucket === "approved") return "approved";
   if (row.bucket === "rejected") return "rejected";
   if (isInProgressApplicationRow(row)) return "in_progress";
-  if (row.backgroundCheckStatus === "pending_review" || row.screening) return "screening";
+  const bg = row.backgroundCheckStatus;
+  if (bg === "flagged") return "flagged";
+  if (bg === "passed") return "screened";
+  if (bg === "pending_review" || row.screening) return "screening";
   return "submitted";
+}
+
+const APPLICATION_STATUS_PILL: Record<ApplicationGroupMemberStatus, ApplicationStatusPill> = {
+  approved: { label: "Approved", tone: "confirmed" },
+  rejected: { label: "Rejected", tone: "overdue" },
+  in_progress: { label: "In progress", tone: "neutral" },
+  flagged: { label: "Flagged", tone: "overdue" },
+  screened: { label: "Screened", tone: "info" },
+  screening: { label: "Screening", tone: "pending" },
+  submitted: { label: "New", tone: "info" },
+};
+
+function applicationStatusPill(row: DemoApplicantRow): ApplicationStatusPill {
+  return APPLICATION_STATUS_PILL[applicationStatusForRow(row)];
+}
+
+/**
+ * The Group ID a row participates in, or "" when it does not. Gated on
+ * `applyingAsGroup` so a stale id left on an application that no longer declares a
+ * group can never pull that row into someone else's roster.
+ */
+function groupIdForRow(row: DemoApplicantRow): string {
+  return applicationHasGroup(row.application) ? row.application?.groupId ?? "" : "";
 }
 
 /** Reduce an application row to the fields group reconciliation needs. */
@@ -131,19 +148,11 @@ function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput {
     name: row.name || row.email || "Applicant",
     email: row.email || "",
     role: row.application?.groupRole ?? null,
-    groupId: row.application?.groupId ?? "",
+    groupId: groupIdForRow(row),
     groupSize: row.application?.groupSize ?? "",
-    status: groupMemberStatusForRow(row),
+    status: applicationStatusForRow(row),
   };
 }
-
-const GROUP_MEMBER_STATUS_LABEL: Record<ApplicationGroupMemberStatus, string> = {
-  in_progress: "In progress",
-  submitted: "Submitted",
-  screening: "Screening",
-  approved: "Approved",
-  rejected: "Rejected",
-};
 
 /** Up-to-two-letter initials for the Linear-style circular row avatar. */
 function applicantInitials(name: string): string {
@@ -302,6 +311,18 @@ function ApplicationGroupSection({ group, currentRowId }: { group: ApplicationGr
           ? ` · waiting on ${group.missingCount} more ${group.missingCount === 1 ? "applicant" : "applicants"} to start`
           : ""}
       </p>
+      {!group.hasFirst ? (
+        <p className="mb-3 text-xs text-[var(--status-pending-fg)]">
+          No organizer application uses this Group ID — it may have been mistyped, so these applicants may not be
+          linked to the household they intended.
+        </p>
+      ) : null}
+      {group.isOverSubscribed ? (
+        <p className="mb-3 text-xs text-[var(--status-pending-fg)]">
+          {group.totalCount} applications carry this Group ID, more than the {group.expectedSize} the organizer
+          declared.
+        </p>
+      ) : null}
       <ul className="divide-y divide-[var(--border)] rounded-2xl border border-border">
         {group.members.map((m) => (
           <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
@@ -313,9 +334,7 @@ function ApplicationGroupSection({ group, currentRowId }: { group: ApplicationGr
               </span>
               {m.email ? <span className="truncate text-[11px] text-muted">{m.email}</span> : null}
             </span>
-            <Badge tone={m.status === "approved" ? "confirmed" : m.status === "rejected" ? "overdue" : m.status === "in_progress" ? "neutral" : "info"}>
-              {GROUP_MEMBER_STATUS_LABEL[m.status]}
-            </Badge>
+            <Badge tone={APPLICATION_STATUS_PILL[m.status].tone}>{APPLICATION_STATUS_PILL[m.status].label}</Badge>
           </li>
         ))}
       </ul>
@@ -704,7 +723,9 @@ export function ManagerApplications() {
     }
   };
 
-  const renderApplicationDetail = (row: DemoApplicantRow) => (
+  const renderApplicationDetail = (row: DemoApplicantRow) => {
+    const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+    return (
     <>
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
@@ -745,12 +766,7 @@ export function ManagerApplications() {
         </Button>
       </PortalTableDetailActions>
 
-      {(() => {
-        const group = groupForRow(applicationGroups, groupRowInputForRow(row));
-        return group && group.members.length > 1 ? (
-          <ApplicationGroupSection group={group} currentRowId={row.id} />
-        ) : null;
-      })()}
+      {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
 
       <ApplicationDocumentPreview row={row} />
 
@@ -760,7 +776,8 @@ export function ManagerApplications() {
         onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
       />
     </>
-  );
+    );
+  };
 
   return (
     <>
@@ -834,8 +851,8 @@ export function ManagerApplications() {
             const expanded = expandedId === row.id;
             const status = applicationStatusPill(row);
             const room = displayRoomForRow(row);
-            const group = groupForRow(applicationGroups, groupRowInputForRow(row));
-            const groupSize = group && group.members.length > 1 ? group.expectedSize ?? group.totalCount : null;
+            const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+            const groupBadge = group ? describeGroupBadge(group) : null;
             const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
               .filter((part) => part && part !== "—")
               .join(" · ");
@@ -862,11 +879,9 @@ export function ManagerApplications() {
                     ) : null}
                   </span>
                   <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                    {groupSize != null ? (
-                      <span title={`Group application · ${group!.groupId}`}>
-                        <Badge tone="info">
-                          Group {group!.totalCount}/{groupSize}
-                        </Badge>
+                    {groupBadge ? (
+                      <span title={groupBadge.title}>
+                        <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
                       </span>
                     ) : null}
                     <Badge tone={status.tone}>{status.label}</Badge>

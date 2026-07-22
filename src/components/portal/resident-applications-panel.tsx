@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
+import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
@@ -46,6 +47,7 @@ import {
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
+import { applicationHasGroup } from "@/lib/rental-application/application-groups";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 
 function countByBucket(rows: DemoApplicantRow[]) {
@@ -209,6 +211,14 @@ export function ResidentApplicationsPanel({
 
   const renderRowDetail = (row: DemoApplicantRow) => (
     <div className="mx-auto max-w-5xl space-y-4">
+      {!isInProgressApplicationRow(row) && applicationHasGroup(row.application) ? (
+        <GroupShareCallout
+          groupId={(row.application?.groupId ?? "").trim()}
+          groupRole={row.application?.groupRole}
+          groupSize={row.application?.groupSize}
+          className="mt-0"
+        />
+      ) : null}
       {isInProgressApplicationRow(row) && applyMode ? (
         embeddedWizard
       ) : editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row) ? (

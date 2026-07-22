@@ -20,17 +20,37 @@ import type { GroupRole, RentalWizardFormState } from "./types";
 
 export const GROUP_ID_PREFIX = "AXISGRP-";
 
+/** 32 unambiguous characters — a byte masked to 5 bits indexes it without modulo bias. */
+const GROUP_ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const GROUP_ID_RANDOM_LENGTH = 8;
+
+/**
+ * Random suffix for a Group ID. `crypto.getRandomValues` is available in insecure
+ * contexts (plain-HTTP LAN dev, older WebViews) where `crypto.randomUUID` is not, so
+ * an id minted there is still unguessable and collision-resistant rather than a
+ * timestamp two simultaneous applicants could both mint.
+ */
+function randomGroupIdSuffix(): string {
+  let out = "";
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(GROUP_ID_RANDOM_LENGTH);
+    crypto.getRandomValues(bytes);
+    for (const byte of bytes) out += GROUP_ID_ALPHABET[byte & 31];
+    return out;
+  }
+  while (out.length < GROUP_ID_RANDOM_LENGTH) {
+    out += GROUP_ID_ALPHABET[Math.floor(Math.random() * GROUP_ID_ALPHABET.length)];
+  }
+  return out;
+}
+
 /**
  * Generate a shareable Group ID for the first applicant of a group application.
  * Format `AXISGRP-XXXXXXXX` (16 chars) — satisfies `validateAxisGroupId`
  * (prefix + length ≥ 12) in `../../app/(public)/rent/apply/apply-validation`.
  */
 export function makeApplicationGroupId(): string {
-  const rand =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()
-      : `${Date.now().toString(36).toUpperCase()}00000000`.slice(0, 8);
-  return `${GROUP_ID_PREFIX}${rand}`;
+  return `${GROUP_ID_PREFIX}${randomGroupIdSuffix()}`;
 }
 
 /** Canonical form for matching/storing a Group ID (case-insensitive, trimmed). */
@@ -64,6 +84,8 @@ export type ApplicationGroupMemberStatus =
   | "in_progress"
   | "submitted"
   | "screening"
+  | "flagged"
+  | "screened"
   | "approved"
   | "rejected";
 
@@ -103,9 +125,15 @@ export type ApplicationGroup = {
   /** True when at least one member declared themselves the first applicant. */
   hasFirst: boolean;
   /**
+   * More applications carry this id than the first applicant declared. Nothing is
+   * rejected — the count is simply reported raw instead of as a misleading ratio.
+   */
+  isOverSubscribed: boolean;
+  /**
    * All expected members are present and none is still in progress. A group can never
    * *block* on completeness — approvals stay per-member — but this drives the "waiting
    * on N" / "all in" copy so a stalled member is visible rather than silently deadlocked.
+   * An over-subscribed group is never "complete": the declared size no longer describes it.
    */
   isComplete: boolean;
 };
@@ -162,8 +190,8 @@ export function buildApplicationGroups(rows: GroupRowInput[]): Map<string, Appli
     const submittedCount = members.filter((m) => m.status !== "in_progress").length;
     const missingCount = expectedSize == null ? null : Math.max(0, expectedSize - totalCount);
     const hasFirst = members.some((m) => m.role === "first");
-    const isComplete =
-      expectedSize != null && totalCount >= expectedSize && members.every((m) => m.status !== "in_progress");
+    const isOverSubscribed = expectedSize != null && totalCount > expectedSize;
+    const isComplete = expectedSize != null && !isOverSubscribed && submittedCount >= expectedSize;
 
     groups.set(gid, {
       groupId: gid,
@@ -173,6 +201,7 @@ export function buildApplicationGroups(rows: GroupRowInput[]): Map<string, Appli
       totalCount,
       missingCount,
       hasFirst,
+      isOverSubscribed,
       isComplete,
     });
   }
@@ -199,6 +228,10 @@ export function summarizeGroupProgress(group: ApplicationGroup): { label: string
     const noun = group.totalCount === 1 ? "applicant" : "applicants";
     return { label: `${group.totalCount} ${noun}`, tone: "info" };
   }
+  if (group.isOverSubscribed) {
+    const noun = group.totalCount === 1 ? "applicant" : "applicants";
+    return { label: `${group.totalCount} ${noun} · ${group.expectedSize} declared`, tone: "pending" };
+  }
   if (group.isComplete) {
     return { label: `All ${group.expectedSize} applied`, tone: "confirmed" };
   }
@@ -208,4 +241,43 @@ export function summarizeGroupProgress(group: ApplicationGroup): { label: string
   const shown = group.submittedCount;
   const suffix = remaining > 0 ? ` · waiting on ${remaining}` : "";
   return { label: `${shown} of ${group.expectedSize} applied${suffix}`, tone: "pending" };
+}
+
+export type GroupBadgeDescriptor = {
+  label: string;
+  tone: "confirmed" | "pending" | "info";
+  /** Longer hover text — carries the Group ID and any reconciliation warning. */
+  title: string;
+};
+
+/**
+ * Compact badge for an application row. A ratio is only shown when the denominator is
+ * real: an unknown or exceeded declared size renders the raw member count instead, and
+ * a group whose id matches no first applicant (a mistyped/fabricated code) is called
+ * out rather than passing silently as a household of one.
+ */
+export function describeGroupBadge(group: ApplicationGroup): GroupBadgeDescriptor {
+  const idText = `Group ID ${group.groupId}`;
+  if (!group.hasFirst) {
+    return {
+      label: `Group ${group.totalCount} · unlinked`,
+      tone: "pending",
+      title: `${idText} · no organizer application uses this code — it may have been mistyped`,
+    };
+  }
+  if (group.expectedSize == null) {
+    return { label: `Group ${group.totalCount}`, tone: "info", title: idText };
+  }
+  if (group.isOverSubscribed) {
+    return {
+      label: `Group ${group.totalCount} · ${group.expectedSize} declared`,
+      tone: "pending",
+      title: `${idText} · more applications carry this code than the ${group.expectedSize} the organizer declared`,
+    };
+  }
+  return {
+    label: `Group ${group.submittedCount}/${group.expectedSize}`,
+    tone: group.isComplete ? "confirmed" : "info",
+    title: idText,
+  };
 }

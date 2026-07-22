@@ -22,15 +22,21 @@ type FinishPanelProps = {
   onDone: () => void;
 };
 
-/** Group-application confirmation: the first applicant shares the Group ID; joiners see they linked in. */
-function GroupShareCallout({
+/**
+ * Group-application confirmation: the first applicant shares the Group ID; joiners see
+ * they linked in. Rendered both on the finish screen and, durably, on the resident's
+ * submitted application in the portal so the code can be re-read and re-shared later.
+ */
+export function GroupShareCallout({
   groupId,
   groupRole,
   groupSize,
+  className,
 }: {
   groupId: string;
   groupRole?: GroupRole;
   groupSize?: string;
+  className?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const size = Number.parseInt((groupSize ?? "").trim(), 10);
@@ -47,7 +53,9 @@ function GroupShareCallout({
   };
 
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-accent/20 p-4 text-left [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
+    <div
+      className={`rounded-2xl border border-border bg-accent/20 p-4 text-left [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4 ${className ?? "mt-4"}`}
+    >
       <p className="text-[13px] font-semibold text-foreground">
         {groupRole === "joining" ? "You joined a group application" : "Your group is ready"}
       </p>
