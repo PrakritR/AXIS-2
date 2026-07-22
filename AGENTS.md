@@ -291,6 +291,49 @@ sections (cash-flow chart + the "Needs attention" groups). Two invariants:
 The same list-density problem exists on the **resident** dashboard
 (`resident-dashboard.tsx`, same `AttentionGroup` shape) — not yet migrated.
 
+## Marketing mocks must use portal-accurate copy
+
+Every product mock on the marketing site — the homepage Applications panel
+(`landing-applications-pipeline.tsx`), the ops task rows in
+`landing-home-sections.tsx`, the guide art under `public/marketing/` — depicts
+a screen a manager can actually open. Marketing-only slang that no portal
+surface ships ("lease packet", "lease draft") reads as a fake product and has
+been rejected in review twice.
+
+Before writing mock copy, open the real component and copy its labels:
+
+| Mock | Source of truth |
+| --- | --- |
+| Applications panel | `manager-applications.tsx` — tabs Pending / Approved / Rejected, badges from `applicationStatusPill` (New / Screening / Screened / Flagged / In progress), row actions Approve / Reject / Send reminder / Delete |
+| Lease task rows | `manager-leases.tsx` — Manager review / Resident signature pending / Manager signature pending / Signed |
+| Section names in task rows | `src/lib/portals/pro.ts` (Leases, Payments, Services → Work orders / Vendors, Communication) |
+
+Rows in a mock must also be internally consistent: a table filtered to Pending
+cannot show an `Approved` badge, because that row lives on another tab.
+
+**Guide art** (`public/marketing/guide-*.webp`) is authored at **1800×920**
+(≈1.96:1) to match the `.lp-chapter .lp-art` box (`min-height: 200px`,
+`object-fit: cover`, `object-position: top left`), so the whole screenshot
+lands in the card instead of a tight crop that reads as texture. Regenerate by
+composing the portal's real markup and tokens, then capture at 2× — a portrait
+crop of a live portal screenshot does not fit this box.
+
+## Brand assets (PropLane)
+
+The product is **PropLane**; the `Axis*` component names are historical, not a
+second brand. Anything user-visible reads PropLane, and the mark is the
+paper-plane glyph — never the legacy "AX" letters.
+
+| Surface | File |
+| --- | --- |
+| Browser tab / bookmarks | `src/app/icon.svg` and `src/app/favicon.ico` (Next file conventions — keep the two in sync) |
+| Header / footer lockup | `AxisLogoLink` in `src/components/brand/axis-logo.tsx` (mark + `AxisLogoWordmark`) |
+
+`favicon.ico` has no generator script checked in; it is built from `icon.svg`
+with `sharp` (16/32/48 as 32-bit BMP entries plus a 256 PNG entry). Regenerate
+it whenever `icon.svg` changes — a stale `.ico` wins in the tab on browsers
+that prefer it, so editing only the SVG leaves the old mark visible.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the

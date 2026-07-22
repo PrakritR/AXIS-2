@@ -115,7 +115,11 @@ export function AxisLogoLink({
   showWordmark?: boolean;
 }) {
   return (
-    <Link href={href} className={`flex items-center ${showWordmark && (size === "compact" ? "gap-2" : "gap-3")}`}>
+    <Link
+      href={href}
+      aria-label="PropLane home"
+      className={`flex items-center ${showWordmark ? (size === "compact" ? "gap-2" : "gap-3") : ""}`}
+    >
       <AxisLogoMark variant={variant} size={size} />
       {showWordmark ? <AxisLogoWordmark size={size} /> : null}
     </Link>

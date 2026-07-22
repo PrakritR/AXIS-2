@@ -61,9 +61,9 @@ function LearnSection() {
             <div className="lp-art lp-art-messages">
               <Image
                 src="/marketing/guide-messages.webp"
-                alt="PropLane Communication schedule showing automated messages queued on upcoming send dates"
+                alt="PropLane Communication → Schedule tab: automated rent, tour, and renewal messages queued on upcoming send dates"
                 fill
-                sizes="(max-width: 700px) 100vw, 420px"
+                sizes="(max-width: 700px) 100vw, 460px"
                 className="lp-art-img"
               />
             </div>
@@ -76,9 +76,9 @@ function LearnSection() {
             <div className="lp-art lp-art-tours">
               <Image
                 src="/marketing/guide-tours.webp"
-                alt="PropLane Calendar showing open self-scheduling tour slots for a property, ready for prospects to book"
+                alt="PropLane Calendar availability week: open self-scheduling tour slots alongside tours prospects have already booked"
                 fill
-                sizes="(max-width: 700px) 100vw, 420px"
+                sizes="(max-width: 700px) 100vw, 460px"
                 className="lp-art-img"
               />
             </div>
@@ -103,7 +103,6 @@ function WeekRoadmapSection() {
         <div className="lp-intro">
           <h2>Your week, one pipeline</h2>
           <p>You approve. PropLane advances the rest.</p>
-          <CtaPair primaryAttr="home-roadmap-start" secondaryAttr="home-roadmap-book-demo" />
         </div>
         <div className="lp-split-feat">
           <div className="lp-copy">
@@ -156,18 +155,15 @@ function OpsSkySection() {
         </div>
       </div>
       <h2>All the tools your portfolio needs</h2>
-      <p className="lp-sub">
-        Approvals, background work, and building-level context — tuned for property ops, not a jungle backdrop.
-      </p>
       <div className="lp-controls">
         <div className="lp-pt">You approve every outbound action</div>
         <div className="lp-pt lp-on">Rent, leases &amp; work orders run in the background</div>
         <div className="lp-pt">Customize per building and vendor</div>
       </div>
       <div className="lp-task-float">
-        <TaskFloatRow status="review" label="Ready to review" title="Lease packet · Cascade 4B" agent="Leasing" />
-        <TaskFloatRow status="run" label="Running" title="Rent reminder · April overdue" agent="Rent" />
-        <TaskFloatRow status="done" label="Completed" title="Work order #142 · bids collected" agent="Vendors" />
+        <TaskFloatRow status="review" label="Manager review" title="Lease · Cascade 4B" agent="Leases" />
+        <TaskFloatRow status="run" label="Running" title="Rent reminder · April overdue" agent="Payments" />
+        <TaskFloatRow status="done" label="Completed" title="Work order #142 · bids collected" agent="Work orders" />
       </div>
       <div className="lp-portfolio-strip" aria-hidden>
         {PORTFOLIO_BUILDINGS.map((name) => (
