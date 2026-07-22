@@ -163,7 +163,8 @@
         "source": "listing.leaseUtilities",
         "optional": true,
         "shape": "per-utility rows: kind (+ custom label), paidBy (included_in_rent | resident | manager), setUpBy (resident | manager), optional allowance and notes",
-        "renders": "table in the Utilities & Services section; absent = standard prorated-share prose"
+        "renders": "table in the Utilities & Services section; absent = standard prorated-share prose",
+        "estimate_sentence": "when present, replaces the prorated-share sentence after utilities_estimate: 'reflects the utilities the Resident is responsible for above' if any row is resident-paid, otherwise 'all listed utilities are included in rent or paid by Landlord' — the table never contradicts the quoted estimate"
       },
       "pet_policy": { "derived": "property.petFriendly" }
     },
