@@ -13,6 +13,10 @@ export const runtime = "nodejs";
  * `?scope=guided`: mirror of the all-portals `testeverything@` account for the
  * guided "Run demo" tour (`source: "blank"` when that account is absent, so the
  * client seeds the blank slate the tour scripts expect).
+ *
+ * While `DEMO_PORTAL_MIRROR_ENABLED` is off both mirror reads return `null`, so
+ * this route always answers `source: "static"` (the empty snapshot) / `"blank"`
+ * and never touches the database. See `docs/agents/demo-sandbox.md`.
  */
 export async function GET(request: Request) {
   const scope = new URL(request.url).searchParams.get("scope");

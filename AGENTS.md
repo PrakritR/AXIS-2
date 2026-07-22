@@ -248,8 +248,8 @@ falling back to anything else. This applies to Browse cards
 listing detail hero gallery (`listing-detail-sections.tsx`). The only
 permitted stock fallback is `demoOnlyBrowseCardPlaceholderImage`
 (`src/lib/room-listings-catalog.ts`), gated behind `isDemoModeActive()` so it
-can only ever affect the `/demo` sandbox, whose seeded properties always carry
-a real (illustrated) house photo and should never look "broken"
+can only ever affect the `/demo` sandbox, whose photo-less properties (the
+guided tour lists one through the real wizard) should never look "broken"
 mid-walkthrough. Regression coverage:
 `tests/unit/property-browse-cards.test.ts`.
 

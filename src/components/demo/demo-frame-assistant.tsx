@@ -43,10 +43,11 @@ function useOpen() {
 /**
  * The in-demo Axis Assistant — the portal/property-scoped assistant, pinned
  * bottom-right INSIDE the demo frame exactly where it sits in the real property
- * portal. It talks to the sandboxed `/api/agent/demo-chat` (fictional portfolio
- * data) and is fully CONTAINED within the frame: its FAB, backdrop, and panel
- * are absolutely positioned inside the (overflow-hidden) frame, so nothing spills
- * onto the page. The site-wide general assistant handles broader questions.
+ * portal. It talks to the sandboxed `/api/agent/demo-chat` (in-memory snapshot
+ * data, currently empty) and is fully CONTAINED within the frame: its FAB,
+ * backdrop, and panel are absolutely positioned inside the (overflow-hidden)
+ * frame, so nothing spills onto the page. The site-wide general assistant
+ * handles broader questions.
  *
  * The "Run demo" auto-play drives this via the shared scripted-prompt channel.
  */

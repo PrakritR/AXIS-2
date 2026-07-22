@@ -114,7 +114,7 @@ export function reseedDemoPortalForGuidedStep(): void {
   applyDemoSnapshot(buildDemoGuidedSnapshot(getDemoGuidedState().step));
 }
 
-/** Force idle rich portfolio (exiting guided tour). */
+/** Force the idle snapshot back on (exiting guided tour). */
 export function seedDemoIdleData(): void {
   if (typeof window === "undefined" || !isDemoModeActive()) return;
   applyDemoSnapshot(buildDemoIdleSnapshot());
@@ -148,7 +148,8 @@ function shouldSkipHomepageDemoSeed(): boolean {
 }
 
 /**
- * Idle `/demo` mount: prefer DB mirror when available, else static demo-data.
+ * Idle `/demo` mount: prefer the DB mirror when it is enabled and available,
+ * else the static snapshot (`buildDemoIdleSnapshot`, currently empty).
  */
 export async function seedDemoPortalIdleData(): Promise<void> {
   if (typeof window === "undefined" || !isDemoModeActive()) return;

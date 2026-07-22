@@ -3,13 +3,15 @@
 
 # Sandbox accounts & the /demo mirror (one config, every environment)
 
-**The canonical `@test.axis.local` accounts are the demo's data source, and the
-data flow is strictly one-way: signed-in portal edits → DB → `/demo`. Never the
-reverse.** `/demo` renders from browser-local stores seeded on every mount from
+**`/demo` is read-only against real data, and when it does read it the flow is
+strictly one-way: signed-in portal edits → DB → `/demo`. Never the reverse.**
+`/demo` renders from browser-local stores re-seeded on every mount, so demo edits
+live in sessionStorage and are wiped by refresh. The seed comes from
 `GET /api/demo/portal-snapshot` (service-role read of `manager@`/`resident@`/
 `vendor@test.axis.local`, ids remapped to synthetic `demo-*` scopes, per-empty-
-collection static fallback) — so demo edits live in sessionStorage and are wiped
-by refresh. Every server-mirror write path is `isDemoModeActive()`-gated; the
+collection static fallback) **only while the mirror is enabled — it is currently
+off**, so today every mount seeds the static snapshot instead; see the two
+sources below. Every server-mirror write path is `isDemoModeActive()`-gated; the
 work-orders panel's direct fetches (approve-pay / complete / auto-schedule /
 bid-accept / vendor email) got explicit demo short-circuits — a signed-in user
 browsing `/demo` must never write real rows. Keep that gate pattern for any new
@@ -20,7 +22,8 @@ data sources.** A visitor sees whichever of these wins:
 
 1. **The DB mirror** — `GET /api/demo/portal-snapshot`, the canonical
    `@test.axis.local` accounts' real portal rows. Wins whenever those accounts
-   hold data, in whatever environment the deploy points at.
+   hold data, in whatever environment the deploy points at — while it is
+   enabled, which it currently is not (see below).
 2. **The static snapshot** — `buildDemoIdleSnapshot()` in
    `src/lib/demo/demo-guided-data.ts`, the fallback when the mirror is empty or
    unreachable. It returns `emptySnapshot()`, so `/demo` renders the real portal

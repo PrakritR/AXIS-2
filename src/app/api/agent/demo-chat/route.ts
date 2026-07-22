@@ -22,8 +22,9 @@ const demoReadOnlyRegistry = buildRegistry(
  * PUBLIC, UNAUTHENTICATED demo chatbot for the marketing `/demo` page.
  *
  * It runs the SAME read-only agent loop as `/api/agent/chat`, but against a
- * fixed, sandboxed context backed by fictional in-memory data — never a real
- * account or database (`buildDemoAgentContext`). This is safe by construction:
+ * fixed, sandboxed context backed by an in-memory snapshot — never a real
+ * account or database (`buildDemoAgentContext`). That snapshot currently ships
+ * empty (see `docs/agents/demo-sandbox.md`). This is safe by construction:
  *
  *  - The model is given a READ-ONLY registry (write tools are filtered out
  *    below, so it cannot even propose an action), and this route deliberately

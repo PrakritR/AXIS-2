@@ -11,7 +11,8 @@
  * - **Mirror.** `demo-portal-mirror.server.ts` overlays the canonical
  *   `@test.axis.local` accounts' real portal rows when they have any
  *   (`/api/demo/portal-snapshot`). That is where an accurate demo portfolio
- *   belongs — curate it by signing in as those accounts.
+ *   belongs — curate it by signing in as those accounts. Currently switched off
+ *   at `DEMO_PORTAL_MIRROR_ENABLED` (`demo-mirror-flag.ts`).
  * - **Autoplay.** The "Run demo" walkthrough builds its own property,
  *   application, and lease live through the real wizards
  *   (`demo-segment-playback.tsx`), starting from this blank slate.

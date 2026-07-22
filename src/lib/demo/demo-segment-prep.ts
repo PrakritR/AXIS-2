@@ -29,8 +29,9 @@ export async function prepareDemoListedProperty(): Promise<string | null> {
  * BLANK sandbox — there is no static fictional portfolio (see
  * `demo-guided-data.ts`) — and then builds exactly what its story needs through
  * the same code paths the real portal uses. That is also why the offered
- * segments (`DEMO_SEGMENT_LABELS`) are only the self-building ones: a
- * walkthrough that operates on pre-existing rows would have nothing to click.
+ * segments (`DEMO_SEGMENT_OPTIONS`, a subset of `DEMO_SEGMENT_LABELS`) are only
+ * the self-building ones: a walkthrough that operates on pre-existing rows would
+ * have nothing to click.
  */
 export async function prepareDemoSegment(segment: DemoSegment): Promise<{ propertyId: string | null }> {
   if (!isDemoModeActive()) return { propertyId: null };
