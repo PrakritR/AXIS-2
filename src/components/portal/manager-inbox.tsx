@@ -67,12 +67,19 @@ function previewLine(body: string, max = 100) {
   return `${t.slice(0, max)}…`;
 }
 
+/**
+ * `perRowFolder` is for lists that span folders (search results): "is this a
+ * sent message?" then has to be answered per row, because the active tab no
+ * longer describes what the row is. Such a list also gets the recipient marked
+ * "To:" so a sent thread is never read as one the recipient sent us.
+ */
 function toRows(list: InboxThread[], tabId: string, perRowFolder = false): PortalInboxTableRow[] {
   return list.map((t) => {
     const sentSemantics = perRowFolder ? t.folder === "sent" : tabId === "sent";
+    const recipientLabel = t.email || "Unknown recipient";
     return {
       id: t.id,
-      name: sentSemantics ? (t.email || "Unknown recipient") : t.from,
+      name: sentSemantics ? (perRowFolder ? `To: ${recipientLabel}` : recipientLabel) : t.from,
       email: sentSemantics ? (t.from ? `From ${t.from}` : "") : t.email,
       subject: t.subject,
       whenLabel: t.time,
@@ -564,6 +571,11 @@ export const ManagerInbox = forwardRef<
     threadSelection.clearSelection();
   };
 
+  // Rendered next to the tab pills when Inbox owns its own page shell, and at
+  // the top of the body when Communication owns it. Both are required: the real
+  // manager portal only ever mounts the embedded branch (/portal/inbox/*
+  // redirects to Communication), so a filter-row-only search box would render
+  // on /demo and nowhere else.
   const searchBox = (
     <div className="relative min-w-0 flex-1 sm:max-w-xs">
       <svg
@@ -705,6 +717,9 @@ export const ManagerInbox = forwardRef<
               selectableCount: threadRowIds.length,
             }}
             renderExtraActions={(row) => {
+              // Search spans folders but excludes trash, so a search row is
+              // always a live message. Letting the Trash tab's actions through
+              // here would put a no-confirm permanent delete on real mail.
               if (!searchActive && tabId === "trash") {
                 return (
                   <>
