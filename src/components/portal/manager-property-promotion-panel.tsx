@@ -9,6 +9,7 @@ import {
   PromotionForm,
   draftInputs,
   draftWithPropertyKey,
+  promotionTextIdentityFromDraft,
   type PromotionDraft,
 } from "@/components/portal/promotion-form";
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
@@ -307,7 +308,7 @@ export function ManagerPropertyPromotionPanel({
     }
 
     const base = draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts);
-    const label = base.propertyLabel.trim() || base.headline.trim() || "Untitled promotion";
+    const { propertyLabel: label } = promotionTextIdentityFromDraft(base);
     const entryTitle = nextPromotionAssetDefaultTitle(assets, "text");
     setGeneratingTextId("__new__");
     try {
@@ -509,6 +510,7 @@ export function ManagerPropertyPromotionPanel({
         open={showForm}
         title="Edit flyer"
         onClose={closeForm}
+        busy={generating}
         panelClassName="max-w-2xl"
         footer={
           <div className="flex flex-wrap gap-2">

@@ -202,6 +202,7 @@ export function PromotionTextGenerateModal({
       open={open}
       title="Generate promotion text"
       onClose={onClose}
+      busy={busy}
       panelClassName="max-w-lg"
       dense
       footer={

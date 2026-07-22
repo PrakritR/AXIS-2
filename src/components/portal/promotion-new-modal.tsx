@@ -159,6 +159,7 @@ export function PromotionNewModal({
       open={open}
       title="New promotion"
       onClose={onClose}
+      busy={flyerBusy || textBusy}
       panelClassName="max-w-2xl"
       footer={
         kind === "flyer" ? (
