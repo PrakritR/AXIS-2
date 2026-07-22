@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -43,8 +44,17 @@ export async function PATCH(req: Request) {
     // It is provisioned out-of-band (admin/service role) only. And changing the
     // personal `phone` INVALIDATES verification (clears phone_verified_at), so
     // the inbound-forward gate can never forward to an unverified number.
+    //
+    // The write runs on the service-role client, NOT the caller's session:
+    // `authenticated` no longer holds UPDATE on `profiles` (see
+    // 20260722120000_lock_role_grant_surface.sql), because a self-service
+    // UPDATE grant is indistinguishable from a self-service `role = 'admin'`
+    // grant. This route is the authorization check — it has already resolved
+    // `user` server-side, and every write below is pinned to `user.id`. The
+    // caller cannot name the row or the columns.
+    const db = createSupabaseServiceRoleClient();
     const nextPhone = phoneRaw.length ? phoneRaw : null;
-    const { data: currentProfile } = await supabase
+    const { data: currentProfile } = await db
       .from("profiles")
       .select("phone")
       .eq("id", user.id)
@@ -53,7 +63,7 @@ export async function PATCH(req: Request) {
 
     const updatedAt = new Date().toISOString();
     let error = (
-      await supabase
+      await db
         .from("profiles")
         .update({
           full_name: fullNameRaw.length ? fullNameRaw : null,
@@ -66,7 +76,7 @@ export async function PATCH(req: Request) {
 
     if (error && looksLikeMissingPhoneColumn(error)) {
       error = (
-        await supabase
+        await db
           .from("profiles")
           .update({
             full_name: fullNameRaw.length ? fullNameRaw : null,

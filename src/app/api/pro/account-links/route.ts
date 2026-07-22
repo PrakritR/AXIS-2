@@ -6,6 +6,7 @@ import {
   type AccountLinkTabKind,
   type AccountLinksPayload,
 } from "@/lib/account-links";
+import { findPropertyIdsNotOwnedByManager } from "@/lib/auth/co-manager-invite-scope";
 import { normalizePropertyCoManagerPermissions, flatCoManagerPermissionsFromProperty, type CoManagerPermissions, type PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
 import { maxAccountLinksForTier } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
@@ -241,6 +242,21 @@ export async function POST(req: Request) {
     }
 
     const svc = createSupabaseServiceRoleClient();
+
+    // Security: the inviter may only delegate properties they actually own.
+    // Without this, any manager could name a victim's publicly-listed property
+    // id and grant themselves (via a second account) full co-manager access to
+    // it. See findPropertyIdsNotOwnedByManager.
+    const ownership = await findPropertyIdsNotOwnedByManager(svc, user.id, assignedPropertyIds);
+    if (!ownership.ok) {
+      return NextResponse.json({ error: ownership.error }, { status: 500 });
+    }
+    if (ownership.unowned.length > 0) {
+      return NextResponse.json(
+        { error: "You can only assign properties you manage." },
+        { status: 403 },
+      );
+    }
 
     const { data: inviterProfile, error: inviterErr } = await svc
       .from("profiles")

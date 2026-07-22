@@ -470,6 +470,65 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] iOS TestFlight workflow green (or secrets gap reported)
 ```
 
+# The PostgREST surface is public — RLS row predicates are not a column gate
+
+`supabase/config.toml` exposes the `public` schema through PostgREST, so **any
+privilege `anon` / `authenticated` holds is reachable from a browser console
+with the shipped public anon key.** RLS is the only thing in front of it, and
+RLS constrains *which row* you may write — never which column or value.
+
+That distinction shipped a critical privilege escalation: `profiles_update_self`
+was `FOR UPDATE USING (auth.uid() = id)`, so
+`update profiles set role='admin' where id=<me>` satisfied the predicate
+perfectly. `profile_roles_insert_self` had the same shape. Closed in
+`20260722120000_lock_role_grant_surface.sql`.
+
+**Rules for any table the auth/permission layer reads as a trust signal**
+(`profiles`, `profile_roles`, `vendor_invites`, and anything like them):
+
+- **Grant client roles `SELECT` only.** A `WITH CHECK` cannot express "you may
+  not change this column", so if a write grant exists, assume every column in
+  the row is attacker-controlled. Column-level `GRANT`s are the load-bearing
+  control, not the policy.
+- **Never `FOR ALL`** on a client-reachable table — it governs `INSERT` and
+  `UPDATE` too, and `WITH CHECK (owner = auth.uid())` is trivially satisfied by
+  an attacker naming *themselves* as the owner. Precedents to copy:
+  `20260705120000_work_order_bids_vendor_select_only.sql`,
+  `20260708174235_vendor_invoices_vendor_select_only`.
+- **Revoking `UPDATE` also revokes it for the user-scoped server client**
+  (`createSupabaseServerClient`), not just the browser — that client is
+  `authenticated` too. Self-service writes belong in a route that authorizes the
+  session and then writes with `createSupabaseServiceRoleClient()` pinned to
+  `user.id`. `PATCH /api/profile` is the reference implementation and is now the
+  only self-service write path onto `profiles`.
+- **Trust columns are wider than `role`.** `filterAdminUserIds` also grants
+  admin on `profiles.email = PRIMARY_ADMIN_EMAIL`, and that column carries no
+  unique constraint — self-writable `email` was an independent route to admin.
+  `sms_from_number` / `phone_verified_at` back the SMS trust boundary the same
+  way.
+- **Ids in a request body are not authorization.** `assigned_property_ids` on a
+  co-manager invite was stored verbatim, so a manager could name a victim's
+  publicly-listed property and take it over. Validate against ownership
+  (`findPropertyIdsNotOwnedByManager`) and treat a missing row as unowned.
+
+Regression coverage: `tests/unit/role-grant-surface.test.ts` replays every
+migration and fails if a later one re-grants DML or re-adds a write policy on
+those tables. The live proof is `scripts/verify-role-escalation-closed.mjs`,
+which signs up a throwaway resident and runs the real attack over HTTP against
+the dev project — run it after touching policies or grants:
+
+```
+node --env-file=.env scripts/verify-role-escalation-closed.mjs   # dev/test only
+```
+
+**Migration versions are apply-time, not filenames.** Supabase records the
+timestamp at which a migration was applied, so a repo file named
+`20260721210000_…` can be recorded as `20260722023635`. A new migration filename
+must sort after the *recorded* remote head or `db push` refuses the whole batch
+(`npm run db:status` to read it) — and because names and recorded versions drift
+apart, migrations get replayed by `db push --include-all`. **Write every
+migration idempotently** (`drop policy if exists` before `create policy`, etc.).
+
 # Working in a git worktree
 
 Worktrees (e.g. created by `treehouse`) only contain *tracked* files. Gitignored

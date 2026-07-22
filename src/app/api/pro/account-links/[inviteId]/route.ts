@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { asStringArray, readPropertyPermissionsFromRow, serializeInvite, type InviteRow } from "@/app/api/pro/account-links/route";
 import { looksLikeAccountLinksMissingTable } from "@/lib/account-links";
+import { findPropertyIdsNotOwnedByManager } from "@/lib/auth/co-manager-invite-scope";
 import {
   normalizePropertyCoManagerPermissions,
   prunePropertyCoManagerPermissions,
@@ -116,10 +117,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       if (patchPerms && invite.inviter_user_id !== user.id) {
         return NextResponse.json({ error: "Only the primary manager can change co-manager permissions." }, { status: 403 });
       }
+      // Security: the property scope defines what the co-manager may reach, so
+      // only the inviter may change it. Previously *either* party could, which
+      // let the invitee widen their own grant to arbitrary property ids.
+      if (patchProps && invite.inviter_user_id !== user.id) {
+        return NextResponse.json({ error: "Only the primary manager can change the property scope." }, { status: 403 });
+      }
 
       const nextAssigned = patchProps ? asStringArray(body?.assignedPropertyIds) : asStringArray(invite.assigned_property_ids);
       if (patchProps && nextAssigned.length === 0) {
         return NextResponse.json({ error: "Keep at least one property in this link." }, { status: 400 });
+      }
+      // …and only over properties the inviter actually owns.
+      if (patchProps) {
+        const ownership = await findPropertyIdsNotOwnedByManager(svc, invite.inviter_user_id, nextAssigned);
+        if (!ownership.ok) {
+          return NextResponse.json({ error: ownership.error }, { status: 500 });
+        }
+        if (ownership.unowned.length > 0) {
+          return NextResponse.json({ error: "You can only assign properties you manage." }, { status: 403 });
+        }
       }
 
       const nextPayout = patchPay

@@ -62,7 +62,15 @@ export async function findPendingVendorInviteByToken(
   if (error) throw new Error(error.message);
   const invite = (data as VendorInviteRow | null) ?? null;
   if (!invite) return null;
-  if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) return null;
+  // Fail closed on the TTL. This was `if (invite.expires_at && …)`, so a NULL
+  // expiry skipped the check entirely — and `vendor_invites` was directly
+  // INSERT-able by any authenticated user, who could therefore mint a
+  // never-expiring invite for an email they do not control and redeem it into a
+  // pre-confirmed account. The grant is revoked in
+  // 20260722120000_lock_role_grant_surface.sql and `expires_at` is now NOT
+  // NULL; this keeps redemption safe regardless.
+  const expiresAt = invite.expires_at ? new Date(invite.expires_at).getTime() : Number.NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
   return invite;
 }
 

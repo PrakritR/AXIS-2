@@ -71,17 +71,20 @@ export async function POST(req: Request) {
   // treat the recipient as a manager (by phone). Owner is who the SMS logs to.
   const conversations = await fetchAdminSmsConversations(auth.db);
   const toDigits = toPhone.replace(/\D/g, "");
+  // The recipient phone is the ONLY routing input. `residentUserId` used to be
+  // accepted here too, which let the caller pick the conversation — and with it
+  // the `ownerManagerUserId` this message is sent *as* — independently of the
+  // number being texted. Routing must follow the number, not the body.
+  const phoneMatches = conversations.residents.filter((r) => {
+    const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
+    return Boolean(phoneDigits) && (phoneDigits === toDigits || phoneDigits.endsWith(toDigits.slice(-10)));
+  });
+  // One phone on the shared line can be both a prospect and a resident
+  // conversation, so the admin may name the thread they are looking at — but
+  // only to disambiguate *within* the threads that already match this number.
   const replyKey = String(body.conversationKey ?? "").trim();
-  // Prefer the thread the admin is actually looking at — one phone on the
-  // shared line can be both a prospect and a resident conversation.
   const match =
-    (replyKey ? conversations.residents.find((r) => r.conversationKey === replyKey) : null) ??
-    conversations.residents.find((r) => {
-      const phoneDigits = String(r.phone ?? "").replace(/\D/g, "");
-      if (phoneDigits && (phoneDigits === toDigits || phoneDigits.endsWith(toDigits.slice(-10)))) return true;
-      if (body.residentUserId && r.residentUserId === body.residentUserId) return true;
-      return false;
-    });
+    (replyKey ? phoneMatches.find((r) => r.conversationKey === replyKey) : null) ?? phoneMatches[0];
 
   let ownerManagerUserId = String(match?.ownerManagerUserId ?? "").trim();
   let counterpartyRole = match?.counterpartyRole;
@@ -104,11 +107,25 @@ export async function POST(req: Request) {
     );
   }
 
+  // Log attribution must never come straight from the request body: an
+  // unvalidated `residentUserId` threads this message under an unrelated
+  // resident's conversation_key, corrupting the audit trail. Accept the
+  // client's value only when it names a resident in the conversation cohort
+  // that actually belongs to the resolved owning manager; otherwise drop it.
+  const attributedResidentUserId =
+    match?.residentUserId ??
+    (body.residentUserId &&
+    conversations.residents.some(
+      (r) => r.residentUserId === body.residentUserId && r.ownerManagerUserId === ownerManagerUserId,
+    )
+      ? body.residentUserId
+      : null);
+
   const result = await sendFromManagerWorkNumber({
     managerUserId: ownerManagerUserId,
     to: toPhone,
     text,
-    residentUserId: match?.residentUserId ?? body.residentUserId ?? null,
+    residentUserId: attributedResidentUserId,
     source: "work_number",
     counterpartyRole,
   });
