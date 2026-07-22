@@ -64,15 +64,18 @@ import {
 import {
   ManagerPortalPageShell,
   portalDashboardWelcomeSubtitle,
-  PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
   formatCompactChargeLine,
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
 import {
   PortalPreviewOverflowLink,
+  PortalTableExpandChevron,
   usePortalPreviewSlice,
 } from "@/components/portal/portal-data-table";
+import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
+import { useDashboardVisibility } from "@/hooks/use-dashboard-visibility";
+import { SlidersHorizontal } from "lucide-react";
 import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -192,14 +195,20 @@ function IssueRow({
 }
 
 /**
- * One "Needs attention" group: tiny uppercase label + section link, then a
- * hairline-bordered stack of dense issue rows (preview-sliced like the old
- * section cards, so native/mobile row limits + overflow link are preserved).
+ * One "Needs attention" group, now a collapsible card: a clickable header (tiny
+ * uppercase label · count · overflow badge · chevron) over a hairline-bordered
+ * stack of dense issue rows (preview-sliced so native/mobile row limits +
+ * overflow link are preserved).
+ *
+ * Collapse behaviour is what makes the dashboard survive a phone: a group opens
+ * by default only when it has items, so the wall of "nothing here" empty states
+ * collapses to one-line headers. The manager can tap any header to override.
+ * `linkLabel` is kept in the prop set for call-site parity but the section link
+ * now lives in the header as a compact arrow.
  */
 function AttentionGroup<T>({
   title,
   href,
-  linkLabel,
   badge,
   items,
   emptyMessage,
@@ -208,7 +217,7 @@ function AttentionGroup<T>({
 }: {
   title: string;
   href: string;
-  linkLabel: string;
+  linkLabel?: string;
   badge?: ReactNode;
   items: T[];
   emptyMessage: string;
@@ -217,26 +226,75 @@ function AttentionGroup<T>({
 }) {
   const { visible, overflow } = usePortalPreviewSlice(items);
   const { isNative } = useIsNativeApp();
+  const count = items.length;
+  const isEmpty = count === 0;
+  // null → follow the "open when non-empty" default (reactive to async loads);
+  // boolean → the manager's explicit tap wins.
+  const [override, setOverride] = useState<boolean | null>(null);
+  const open = override ?? !isEmpty;
 
   return (
-    <div className="space-y-2 [html[data-native]_&]:space-y-1.5">
-      <PortalDashboardSectionHeader title={title} href={href} linkLabel={linkLabel} badge={badge} />
-      {items.length === 0 ? (
-        <p className="text-sm text-muted [html[data-native]_&]:text-xs">{emptyMessage}</p>
-      ) : (
-        <>
-          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
-            {visible.map((item) => (
-              <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
-            ))}
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        data-attr="dashboard-attention-toggle"
+        onClick={() => setOverride(!open)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOverride(!open);
+          }
+        }}
+        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+      >
+        <PortalTableExpandChevron expanded={open} />
+        <h3 className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] text-muted [html[data-native]_&]:leading-snug">
+          {title}
+        </h3>
+        <span
+          className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+            isEmpty ? "text-muted/60" : "bg-[var(--secondary)] text-foreground"
+          }`}
+        >
+          {count}
+        </span>
+        {badge ? <span className="shrink-0">{badge}</span> : null}
+        <Link
+          href={href}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Open ${title}`}
+          data-attr="dashboard-attention-link"
+          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold text-primary hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+        >
+          →
+        </Link>
+      </div>
+      {open ? (
+        isEmpty ? (
+          <p className="border-t border-border px-3.5 py-2.5 text-xs text-muted [html[data-native]_&]:px-3 [html[data-native]_&]:py-2">
+            {emptyMessage}
+          </p>
+        ) : (
+          <div className="border-t border-border">
+            <div className="divide-y divide-border">
+              {visible.map((item) => (
+                <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
+              ))}
+            </div>
+            {overflow > 0 ? (
+              <div className="border-t border-border px-3.5 py-2 [html[data-native]_&]:px-3">
+                <PortalPreviewOverflowLink
+                  overflow={overflow}
+                  href={href}
+                  label={isNative ? `View all (${count}) →` : `View all ${count} →`}
+                />
+              </div>
+            ) : null}
           </div>
-          <PortalPreviewOverflowLink
-            overflow={overflow}
-            href={href}
-            label={isNative ? `View all (${items.length}) →` : undefined}
-          />
-        </>
-      )}
+        )
+      ) : null}
     </div>
   );
 }
@@ -406,6 +464,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const bump = () => setTick((n) => n + 1);
   const [nowMs] = useState(() => Date.now());
   const [docExpirySummary, setDocExpirySummary] = useState<DocumentExpirationSummary | null>(null);
+  const { visibility, setVisible, reset } = useDashboardVisibility(userId);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   useEffect(() => {
     if (!authReady || !userId || isDemoModeActive()) {
@@ -610,13 +670,24 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     overdueCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0),
   );
 
+  // Reflect only the sections the manager keeps visible, so the "N open" badge
+  // matches what's actually on their dashboard.
   const openCount =
-    pendingTours.length +
-    pendingApps.length +
-    pendingLeaseRows.length +
-    pendingCharges.length +
-    serviceItems.length +
-    inboxThreads.length;
+    (visibility.tours ? pendingTours.length : 0) +
+    (visibility.applications ? pendingApps.length : 0) +
+    (visibility.leases ? pendingLeaseRows.length : 0) +
+    (visibility.payments ? pendingCharges.length : 0) +
+    (visibility.services ? serviceItems.length : 0) +
+    (visibility.inbox ? inboxThreads.length : 0);
+
+  const anyAttentionVisible =
+    visibility.tours ||
+    visibility.applications ||
+    visibility.leases ||
+    visibility.residents ||
+    visibility.payments ||
+    visibility.services ||
+    visibility.inbox;
 
   const showDocExpiryBanner =
     docExpirySummary && (docExpirySummary.expired > 0 || docExpirySummary.within30 > 0);
@@ -704,7 +775,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         </div>
 
         {/* Financial trend graphs — payments collected vs. expenses, last 6 months. */}
-        <DashboardTrends payments={paymentsByMonth} expenses={expensesByMonth} />
+        {visibility.cashflow ? (
+          <DashboardTrends payments={paymentsByMonth} expenses={expensesByMonth} />
+        ) : null}
 
         {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">
@@ -714,186 +787,230 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             </span>
             <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
             {openCount > 0 ? (
-              <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
                 <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
                 {openCount} open
               </span>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setCustomizeOpen(true)}
+              data-attr="dashboard-customize-open"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+              <span className="[html[data-native]_&]:sr-only">Customize</span>
+            </button>
           </div>
 
-          <AttentionGroup
-            title="Tour requests"
-            href={`${BASE}/calendar`}
-            linkLabel="Calendar →"
-            items={pendingTours}
-            emptyMessage="No pending tour requests right now."
-            keyForItem={(tour) => tour.id}
-            renderRow={(tour) => (
-              <IssueRow
-                href={`${BASE}/calendar`}
-                dot={DOT_PENDING}
-                title={tour.label}
-                subtitle={tour.propertyTitle || "—"}
-                meta={fmt(tour.start)}
-                pill={<StatusPill tone="pending">Pending</StatusPill>}
-                dataAttr="dashboard-attention-tour"
-              />
-            )}
-          />
-
-          <AttentionGroup
-            title="Applications"
-            href={`${BASE}/applications`}
-            linkLabel="Applications →"
-            items={pendingApps}
-            emptyMessage="No pending applications — you're all caught up."
-            keyForItem={(app) => app.id}
-            renderRow={(app: DemoApplicantRow) => (
-              <IssueRow
-                href={`${BASE}/applications`}
-                dot={DOT_PENDING}
-                title={app.name || app.email || "Unknown"}
-                subtitle={app.property || "—"}
-                pill={<StatusPill tone="pending">{app.stage || "Pending"}</StatusPill>}
-                dataAttr="dashboard-attention-application"
-              />
-            )}
-          />
-
-          <AttentionGroup
-            title="Leases pending signature"
-            href={`${BASE}/leases`}
-            linkLabel="Leases →"
-            items={pendingLeaseRows}
-            emptyMessage="No leases waiting for a signature."
-            keyForItem={(lease) => lease.id}
-            renderRow={(lease: LeasePipelineRow) => {
-              const yourTurn = lease.status === "Manager Signature Pending";
-              return (
+          {visibility.tours ? (
+            <AttentionGroup
+              title="Tour requests"
+              href={`${BASE}/calendar`}
+              linkLabel="Calendar →"
+              items={pendingTours}
+              emptyMessage="No pending tour requests right now."
+              keyForItem={(tour) => tour.id}
+              renderRow={(tour) => (
                 <IssueRow
-                  href={`${BASE}/leases`}
-                  dot={yourTurn ? DOT_INFO : DOT_PENDING}
+                  href={`${BASE}/calendar`}
+                  dot={DOT_PENDING}
+                  title={tour.label}
+                  subtitle={tour.propertyTitle || "—"}
+                  meta={fmt(tour.start)}
+                  pill={<StatusPill tone="pending">Pending</StatusPill>}
+                  dataAttr="dashboard-attention-tour"
+                />
+              )}
+            />
+          ) : null}
+
+          {visibility.applications ? (
+            <AttentionGroup
+              title="Applications"
+              href={`${BASE}/applications`}
+              linkLabel="Applications →"
+              items={pendingApps}
+              emptyMessage="No pending applications — you're all caught up."
+              keyForItem={(app) => app.id}
+              renderRow={(app: DemoApplicantRow) => (
+                <IssueRow
+                  href={`${BASE}/applications`}
+                  dot={DOT_PENDING}
+                  title={app.name || app.email || "Unknown"}
+                  subtitle={app.property || "—"}
+                  pill={<StatusPill tone="pending">{app.stage || "Pending"}</StatusPill>}
+                  dataAttr="dashboard-attention-application"
+                />
+              )}
+            />
+          ) : null}
+
+          {visibility.leases ? (
+            <AttentionGroup
+              title="Leases pending signature"
+              href={`${BASE}/leases`}
+              linkLabel="Leases →"
+              items={pendingLeaseRows}
+              emptyMessage="No leases waiting for a signature."
+              keyForItem={(lease) => lease.id}
+              renderRow={(lease: LeasePipelineRow) => {
+                const yourTurn = lease.status === "Manager Signature Pending";
+                return (
+                  <IssueRow
+                    href={`${BASE}/leases`}
+                    dot={yourTurn ? DOT_INFO : DOT_PENDING}
+                    title={lease.residentName || lease.residentEmail}
+                    subtitle={formatCompactPlacementLine(lease.unit || "—")}
+                    meta={lease.signedRentLabel}
+                    pill={
+                      <StatusPill tone={yourTurn ? "info" : "pending"}>
+                        {yourTurn ? "Your signature" : "Resident signing"}
+                      </StatusPill>
+                    }
+                    dataAttr="dashboard-attention-lease"
+                  />
+                );
+              }}
+            />
+          ) : null}
+
+          {visibility.residents ? (
+            <AttentionGroup
+              title="Residents"
+              href={`${BASE}/residents/current`}
+              linkLabel="Residents →"
+              items={activeResidents}
+              emptyMessage="No current residents yet."
+              keyForItem={(lease) => lease.id}
+              renderRow={(lease: LeasePipelineRow) => (
+                <IssueRow
+                  href={`${BASE}/residents/current`}
+                  dot={DOT_CONFIRMED}
                   title={lease.residentName || lease.residentEmail}
                   subtitle={formatCompactPlacementLine(lease.unit || "—")}
                   meta={lease.signedRentLabel}
-                  pill={
-                    <StatusPill tone={yourTurn ? "info" : "pending"}>
-                      {yourTurn ? "Your signature" : "Resident signing"}
-                    </StatusPill>
-                  }
-                  dataAttr="dashboard-attention-lease"
+                  pill={<StatusPill tone="success">Active</StatusPill>}
+                  dataAttr="dashboard-attention-resident"
                 />
-              );
-            }}
-          />
+              )}
+            />
+          ) : null}
 
-          <AttentionGroup
-            title="Residents"
-            href={`${BASE}/residents/current`}
-            linkLabel="Residents →"
-            items={activeResidents}
-            emptyMessage="No current residents yet."
-            keyForItem={(lease) => lease.id}
-            renderRow={(lease: LeasePipelineRow) => (
-              <IssueRow
-                href={`${BASE}/residents/current`}
-                dot={DOT_CONFIRMED}
-                title={lease.residentName || lease.residentEmail}
-                subtitle={formatCompactPlacementLine(lease.unit || "—")}
-                meta={lease.signedRentLabel}
-                pill={<StatusPill tone="success">Active</StatusPill>}
-                dataAttr="dashboard-attention-resident"
-              />
-            )}
-          />
+          {visibility.payments ? (
+            <AttentionGroup
+              title="Pending & overdue payments"
+              href={`${BASE}/payments`}
+              linkLabel="Payments →"
+              badge={
+                overdueChargeCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                    {overdueChargeCount} overdue
+                  </span>
+                ) : null
+              }
+              items={pendingCharges}
+              emptyMessage="No pending or overdue payments right now."
+              keyForItem={(charge) => charge.id}
+              renderRow={(charge) => {
+                const overdue = isHouseholdChargeOverdue(charge);
+                return (
+                  <IssueRow
+                    href={`${BASE}/payments`}
+                    dot={overdue ? DOT_OVERDUE : DOT_PENDING}
+                    title={charge.residentName || charge.residentEmail}
+                    subtitle={formatCompactChargeLine(
+                      charge.title || "Charge",
+                      charge.balanceLabel,
+                      chargeDueLabel(charge),
+                      { omitBalance: true },
+                    )}
+                    meta={charge.balanceLabel}
+                    pill={
+                      <StatusPill tone={overdue ? "danger" : "pending"}>
+                        {overdue ? "Overdue" : "Pending"}
+                      </StatusPill>
+                    }
+                    dataAttr="dashboard-attention-payment"
+                  />
+                );
+              }}
+            />
+          ) : null}
 
-          <AttentionGroup
-            title="Pending & overdue payments"
-            href={`${BASE}/payments`}
-            linkLabel="Payments →"
-            badge={
-              overdueChargeCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                  {overdueChargeCount} overdue
-                </span>
-              ) : null
-            }
-            items={pendingCharges}
-            emptyMessage="No pending or overdue payments right now."
-            keyForItem={(charge) => charge.id}
-            renderRow={(charge) => {
-              const overdue = isHouseholdChargeOverdue(charge);
-              return (
+          {visibility.services ? (
+            <AttentionGroup
+              title="Services"
+              href={`${BASE}/services/requests`}
+              linkLabel="Services →"
+              badge={
+                pendingServiceCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                    {pendingServiceCount} pending
+                  </span>
+                ) : null
+              }
+              items={serviceItems}
+              emptyMessage="No pending add-on services or work orders."
+              keyForItem={(item) => item.id}
+              renderRow={(item) => (
                 <IssueRow
-                  href={`${BASE}/payments`}
-                  dot={overdue ? DOT_OVERDUE : DOT_PENDING}
-                  title={charge.residentName || charge.residentEmail}
-                  subtitle={formatCompactChargeLine(
-                    charge.title || "Charge",
-                    charge.balanceLabel,
-                    chargeDueLabel(charge),
-                    { omitBalance: true },
-                  )}
-                  meta={charge.balanceLabel}
-                  pill={
-                    <StatusPill tone={overdue ? "danger" : "pending"}>
-                      {overdue ? "Overdue" : "Pending"}
-                    </StatusPill>
-                  }
-                  dataAttr="dashboard-attention-payment"
+                  href={`${BASE}/services/requests`}
+                  dot={DOT_PENDING}
+                  title={item.title}
+                  subtitle={item.subtitle}
+                  pill={<StatusPill tone="pending">Pending</StatusPill>}
+                  dataAttr="dashboard-attention-service"
                 />
-              );
-            }}
-          />
+              )}
+            />
+          ) : null}
 
-          <AttentionGroup
-            title="Services"
-            href={`${BASE}/services/requests`}
-            linkLabel="Services →"
-            badge={
-              pendingServiceCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
-                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                  {pendingServiceCount} pending
-                </span>
-              ) : null
-            }
-            items={serviceItems}
-            emptyMessage="No pending add-on services or work orders."
-            keyForItem={(item) => item.id}
-            renderRow={(item) => (
-              <IssueRow
-                href={`${BASE}/services/requests`}
-                dot={DOT_PENDING}
-                title={item.title}
-                subtitle={item.subtitle}
-                pill={<StatusPill tone="pending">Pending</StatusPill>}
-                dataAttr="dashboard-attention-service"
-              />
-            )}
-          />
+          {visibility.inbox ? (
+            <AttentionGroup
+              title="Inbox"
+              href={`${BASE}/communication/inbox/unopened`}
+              linkLabel="Inbox →"
+              items={inboxThreads}
+              emptyMessage="No unread messages — inbox is clear."
+              keyForItem={(thread) => thread.id}
+              renderRow={(thread) => (
+                <IssueRow
+                  href={`${BASE}/communication/inbox/unopened`}
+                  dot={DOT_INFO}
+                  title={thread.from || "Unknown sender"}
+                  subtitle={thread.subject || thread.preview || "—"}
+                  pill={<StatusPill tone="info">Unread</StatusPill>}
+                  dataAttr="dashboard-attention-inbox"
+                />
+              )}
+            />
+          ) : null}
 
-          <AttentionGroup
-            title="Inbox"
-            href={`${BASE}/communication/inbox/unopened`}
-            linkLabel="Inbox →"
-            items={inboxThreads}
-            emptyMessage="No unread messages — inbox is clear."
-            keyForItem={(thread) => thread.id}
-            renderRow={(thread) => (
-              <IssueRow
-                href={`${BASE}/communication/inbox/unopened`}
-                dot={DOT_INFO}
-                title={thread.from || "Unknown sender"}
-                subtitle={thread.subject || thread.preview || "—"}
-                pill={<StatusPill tone="info">Unread</StatusPill>}
-                dataAttr="dashboard-attention-inbox"
-              />
-            )}
-          />
+          {!anyAttentionVisible ? (
+            <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+              <p className="text-sm text-muted">All attention sections are hidden.</p>
+              <button
+                type="button"
+                onClick={() => setCustomizeOpen(true)}
+                className="mt-1 text-xs font-semibold text-primary hover:underline underline-offset-2"
+              >
+                Customize your dashboard →
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      <DashboardCustomizeModal
+        open={customizeOpen}
+        onClose={() => setCustomizeOpen(false)}
+        visibility={visibility}
+        onToggle={setVisible}
+        onReset={reset}
+      />
     </ManagerPortalPageShell>
   );
 }
