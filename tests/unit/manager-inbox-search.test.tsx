@@ -149,10 +149,10 @@ describe("manager inbox search", () => {
     render(<ManagerInbox tabId="unopened" embeddedInCommunication externalTitleActions suppressCompose />);
     fireEvent.change(searchBox(), { target: { value: "roof" } });
 
-    // Mixed list gets a neutral column header...
-    expect(screen.getAllByText("From / To").length).toBeGreaterThan(0);
-    // ...and the sent thread is shown by recipient, explicitly marked "To:",
-    // rather than looking like a message Sam sent to the manager.
+    // The two-pane list has no column headers, but the folder-labelling
+    // invariant still holds on the row itself: the sent thread is shown by
+    // recipient, explicitly marked "To:", rather than looking like a message
+    // Sam sent to the manager.
     expect(screen.getAllByText("To: sam@example.com").length).toBeGreaterThan(0);
   });
 

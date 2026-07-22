@@ -1,12 +1,14 @@
 "use client";
 
-import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { PortalEmptyState } from "@/components/portal/portal-empty-state";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowUp, ChevronLeft } from "lucide-react";
+import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE, 
@@ -474,4 +476,391 @@ export function PortalInboxMessageTable({
   );
 
   return <PortalResponsiveDataView mobile={mobileCards} desktop={desktopTable} />;
+}
+
+/* ------------------------------------------------------------------ *
+ * Inline two-pane inbox primitives (Airbnb / Intercom / Front style). *
+ *                                                                     *
+ * A conversation list on the left; the open thread rendered as chat   *
+ * bubbles with a persistent composer on the right — no modal to send  *
+ * a reply. Everything below is theme-tokened (no hardcoded colours),  *
+ * so it matches the rest of the site in light and dark and is         *
+ * native-safe. The manager email inbox consumes these today; the      *
+ * resident / vendor / admin conversions build on the same primitives. *
+ * These are ADDITIVE — the table primitives above stay for the        *
+ * surfaces not yet migrated.                                          *
+ * ------------------------------------------------------------------ */
+
+export type InboxMessageDirection = "inbound" | "outbound";
+
+export type InboxBubbleMessage = {
+  id: string;
+  /** Display name of the author (shown above inbound bubbles when grouped). */
+  author: string;
+  body: string;
+  /** Human timestamp label — already formatted by the caller. */
+  at: string;
+  direction: InboxMessageDirection;
+  /** Optional delivery/status caption under the bubble (e.g. "Scheduled"). */
+  status?: string;
+};
+
+/** Scrollable body for a conversation list pane. */
+export const INBOX_LIST_SCROLL =
+  "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]";
+
+export function inboxInitials(name: string): string {
+  const parts = name
+    .trim()
+    .replace(/^(to|from):\s*/i, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+}
+
+/** Circular initials avatar in the site accent (cobalt in light, indigo in dark). */
+export function InboxAvatar({ name, className = "" }: { name: string; className?: string }) {
+  return (
+    <div
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white ${className}`}
+      style={{ background: "linear-gradient(160deg, var(--primary) 0%, var(--primary-alt) 100%)" }}
+      aria-hidden
+    >
+      {inboxInitials(name)}
+    </div>
+  );
+}
+
+/** One row in the left conversation list. */
+export function InboxConversationRow({
+  name,
+  subtitle,
+  preview,
+  time,
+  unread = false,
+  selected = false,
+  onOpen,
+  leading,
+  previewPrefix,
+}: {
+  name: string;
+  subtitle?: string;
+  preview: string;
+  time: string;
+  unread?: boolean;
+  selected?: boolean;
+  onOpen: () => void;
+  /** Optional slot before the avatar (e.g. a bulk-select checkbox). */
+  leading?: ReactNode;
+  /** e.g. "You: " when the last message was outbound. */
+  previewPrefix?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2.5 border-b border-border px-3 py-2.5 transition-colors ${
+        selected ? "bg-accent" : "hover:bg-foreground/[0.03]"
+      }`}
+    >
+      {leading}
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+        <InboxAvatar name={name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p
+              className={`truncate text-sm ${
+                unread ? "font-semibold text-foreground" : "font-medium text-foreground/90"
+              }`}
+            >
+              {name}
+            </p>
+            <span className="shrink-0 text-[11px] tabular-nums text-muted">{time}</span>
+          </div>
+          {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+          <div className="mt-0.5 flex items-center gap-2">
+            <p
+              className={`min-w-0 flex-1 truncate text-xs ${
+                unread ? "font-medium text-foreground/75" : "text-muted"
+              }`}
+            >
+              {previewPrefix ?? ""}
+              {preview || " "}
+            </p>
+            {unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden /> : null}
+          </div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+/** A single chat bubble — outbound right (accent), inbound left (neutral). */
+export function InboxBubble({
+  message,
+  showAuthor = false,
+}: {
+  message: InboxBubbleMessage;
+  showAuthor?: boolean;
+}) {
+  const outbound = message.direction === "outbound";
+  return (
+    <div className={`flex flex-col ${outbound ? "items-end" : "items-start"}`}>
+      {showAuthor && !outbound ? (
+        <span className="mb-1 px-1 text-[11px] font-medium text-muted">{message.author}</span>
+      ) : null}
+      <div
+        className={`max-w-[min(85%,32rem)] px-3.5 py-2 text-sm leading-relaxed ${
+          outbound
+            ? "rounded-2xl rounded-br-md text-primary-foreground"
+            : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
+        }`}
+        style={outbound ? { background: "var(--btn-primary)" } : undefined}
+      >
+        <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
+      </div>
+      <span className="mt-1 px-1 text-[11px] text-muted">
+        {message.at}
+        {message.status ? ` · ${message.status}` : ""}
+      </span>
+    </div>
+  );
+}
+
+/** Persistent composer pinned to the bottom of an open thread. */
+export function InboxComposer({
+  value,
+  onChange,
+  onSubmit,
+  sending = false,
+  disabled = false,
+  placeholder = "Write a message…",
+  maxLength,
+  hint,
+  dataAttr,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  sending?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+  maxLength?: number;
+  hint?: ReactNode;
+  dataAttr?: string;
+}) {
+  const canSend = !sending && !disabled && value.trim().length > 0;
+  return (
+    <form
+      className="shrink-0 border-t border-border bg-card px-3 py-2.5"
+      style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (canSend) onSubmit();
+      }}
+    >
+      <div className="flex items-end gap-2">
+        <textarea
+          rows={1}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          disabled={disabled}
+          enterKeyHint="send"
+          data-attr={dataAttr}
+          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (canSend) onSubmit();
+            }
+          }}
+        />
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label="Send"
+          data-attr={dataAttr ? `${dataAttr}-send` : undefined}
+          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
+          style={{ background: "var(--btn-primary)" }}
+        >
+          {sending ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
+          )}
+        </button>
+      </div>
+      {hint || maxLength ? (
+        <div className="mt-1 flex items-center justify-between gap-2 px-1">
+          <span className="text-[11px] text-muted">{hint}</span>
+          {maxLength ? (
+            <span className="text-[11px] tabular-nums text-muted">
+              {value.trim().length}/{maxLength}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </form>
+  );
+}
+
+/** Right-pane placeholder shown when no conversation is selected. */
+export function InboxThreadEmpty({
+  title = "Select a conversation",
+  hint = "Choose a message on the left to read it and reply here.",
+}: {
+  title?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-accent/40 text-muted">
+        <PortalEmptyIcon kind="inbox" className="h-6 w-6" />
+      </div>
+      <p className="mt-4 text-sm font-semibold text-foreground">{title}</p>
+      <p className="mt-1 max-w-xs text-xs text-muted">{hint}</p>
+    </div>
+  );
+}
+
+/** Right pane: thread header, scrolling bubble history, and a composer slot. */
+export function InboxThreadView({
+  title,
+  subtitle,
+  messages,
+  showAuthors = false,
+  onBack,
+  headerActions,
+  composer,
+  emptyLabel = "No messages yet.",
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  messages: InboxBubbleMessage[];
+  /** Show the author name above inbound bubbles (multi-party threads). */
+  showAuthors?: boolean;
+  /** Mobile-only back affordance returning to the list. */
+  onBack?: () => void;
+  headerActions?: ReactNode;
+  /** Pass an <InboxComposer/>; omit for a read-only thread (e.g. Trash). */
+  composer?: ReactNode;
+  emptyLabel?: string;
+}) {
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Optional call: scrollIntoView is absent in jsdom / non-DOM environments.
+    endRef.current?.scrollIntoView?.({ block: "end" });
+  }, [messages.length]);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header
+        className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
+        style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
+      >
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex min-h-9 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary lg:hidden"
+            aria-label="Back to conversations"
+            data-attr="inbox-thread-back"
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+            <span>Inbox</span>
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1 px-1">
+          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+          {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+        </div>
+        {headerActions ? <div className="flex shrink-0 items-center gap-1.5">{headerActions}</div> : null}
+      </header>
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
+        {messages.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">{emptyLabel}</p>
+        ) : (
+          messages.map((m) => <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />)
+        )}
+        <div ref={endRef} />
+      </div>
+
+      {composer}
+    </div>
+  );
+}
+
+/** Responsive two-pane shell: list + thread on desktop; list-then-thread on mobile.
+ *
+ * The shell fills the space between its top edge and the bottom of the viewport
+ * (measured at mount / resize) so the composer stays pinned and visible without
+ * a fixed height that would overflow one page header and under-fill another —
+ * important because this is shared across portals whose header stacks differ. */
+export function InboxTwoPane({
+  list,
+  thread,
+  threadOpen,
+  className = "",
+}: {
+  list: ReactNode;
+  thread: ReactNode;
+  /** On narrow widths, show the thread pane (and hide the list) when true. */
+  threadOpen: boolean;
+  className?: string;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = rootRef.current;
+      if (!el || typeof window === "undefined") return;
+      const top = el.getBoundingClientRect().top;
+      // The mobile portal renders a fixed bottom nav that overlays the viewport;
+      // reserve its height so the composer never hides behind it. It is
+      // display:none on desktop, so this contributes 0 there.
+      const bottomNav = document.querySelector(".portal-native-bottom-nav");
+      const navHeight = bottomNav ? bottomNav.getBoundingClientRect().height : 0;
+      const avail = window.innerHeight - top - navHeight - 16;
+      setMeasuredHeight(Math.max(440, Math.min(760, avail)));
+    };
+    measure();
+    // Re-measure after layout settles — the fixed bottom nav (and final card
+    // position) may not have their size on the first synchronous pass.
+    const raf = requestAnimationFrame(measure);
+    const timer = window.setTimeout(measure, 300);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
+  const height = measuredHeight ? `${measuredHeight}px` : fallback;
+
+  return (
+    <div
+      ref={rootRef}
+      className={`overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] ${className}`}
+      style={{ height }}
+    >
+      <div className="grid h-full lg:grid-cols-[minmax(300px,34%)_1fr]">
+        <section
+          className={`min-h-0 min-w-0 flex-col border-border lg:border-r ${
+            threadOpen ? "hidden lg:flex" : "flex"
+          }`}
+        >
+          {list}
+        </section>
+        <section className={`min-h-0 min-w-0 flex-col ${threadOpen ? "flex" : "hidden lg:flex"}`}>
+          {thread}
+        </section>
+      </div>
+    </div>
+  );
 }
