@@ -765,6 +765,32 @@
   object-position: top left;
 }
 
+/* Theme swap: light art in light theme, dark art in dark theme. `data-theme`
+   is always set before paint (blocking script in layout.tsx), so the correct
+   image is chosen with no client JS and no flash. */
+.lp-art-img-dark {
+  display: none;
+}
+
+[data-theme="dark"] .lp-art-img-light {
+  display: none;
+}
+
+[data-theme="dark"] .lp-art-img-dark {
+  display: block;
+}
+
+/* Dark: purple-tinted near-black under the dark portal screenshots (no blue),
+   matching the other dark `.lp-art-*` washes. */
+[data-theme="dark"] .lp-art-messages,
+[data-theme="dark"] .lp-art-tours {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--pl-purple) 9%, var(--lp-surface-2)) 0%,
+    color-mix(in srgb, var(--pl-purple) 5%, var(--lp-surface)) 100%
+  );
+}
+
 .lp-frost {
   position: absolute;
   left: 0;

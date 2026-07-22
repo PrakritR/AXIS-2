@@ -43,7 +43,8 @@ function CtaPair({
   );
 }
 
-function LearnSection() {
+// Exported for unit coverage of the light/dark guide-art swap.
+export function LearnSection() {
   return (
     <section id="learn" className="lp-learn lp-blueprint scroll-mt-20">
       <div className="lp-w">
@@ -64,7 +65,15 @@ function LearnSection() {
                 alt="PropLane Communication → Schedule tab: automated rent, tour, and renewal messages queued on upcoming send dates"
                 fill
                 sizes="(max-width: 700px) 100vw, 460px"
-                className="lp-art-img"
+                className="lp-art-img lp-art-img-light"
+              />
+              <Image
+                src="/marketing/guide-messages-dark.webp"
+                alt=""
+                aria-hidden
+                fill
+                sizes="(max-width: 700px) 100vw, 460px"
+                className="lp-art-img lp-art-img-dark"
               />
             </div>
           </article>
@@ -79,7 +88,15 @@ function LearnSection() {
                 alt="PropLane Calendar availability week: open self-scheduling tour slots alongside tours prospects have already booked"
                 fill
                 sizes="(max-width: 700px) 100vw, 460px"
-                className="lp-art-img"
+                className="lp-art-img lp-art-img-light"
+              />
+              <Image
+                src="/marketing/guide-tours-dark.webp"
+                alt=""
+                aria-hidden
+                fill
+                sizes="(max-width: 700px) 100vw, 460px"
+                className="lp-art-img lp-art-img-dark"
               />
             </div>
           </article>
