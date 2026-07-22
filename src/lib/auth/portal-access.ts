@@ -5,6 +5,7 @@ import type { AuthRole } from "@/components/auth/portal-switcher";
 import { normalizePortalRoles } from "@/lib/auth/portal-roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerSessionProfile, type ServerProfile } from "@/lib/auth/server-profile";
+import { isProductionRuntime } from "@/lib/server-env";
 
 export const ACTIVE_PORTAL_COOKIE = "axis_active_portal";
 
@@ -84,6 +85,50 @@ export function hasRole(ctx: PortalAccessContext, role: AuthRole): boolean {
 
 export function hasAdminRole(ctx: PortalAccessContext): boolean {
   return hasRole(ctx, "admin");
+}
+
+/**
+ * In the live production deployment an admin (founder/ops) identity must NOT be
+ * able to cross into the manager/property portal — an ops account should never
+ * operate as a landlord on the real site. The block is lifted outside
+ * production (local, preview) so day-to-day and staging work is unaffected, and
+ * it keys on the `admin` role, which genuine manager accounts never hold, so
+ * real managers are untouched.
+ */
+export function adminBlockedFromManagerPortal(ctx: PortalAccessContext): boolean {
+  return hasAdminRole(ctx) && isProductionRuntime();
+}
+
+/**
+ * Whether `role`'s portal is reachable for this account given the current
+ * runtime. Layered on top of role membership: a role the account does not hold
+ * is never reachable, and the production admin→manager block above removes
+ * `manager` for admin identities. This is the single source of truth for both
+ * hiding the portal switch and refusing the server-side switch/route.
+ */
+export function isPortalRoleReachable(ctx: PortalAccessContext, role: AuthRole): boolean {
+  if (!hasRole(ctx, role)) return false;
+  if (role === "manager" && adminBlockedFromManagerPortal(ctx)) return false;
+  return true;
+}
+
+/** Roles whose portals this account may actually enter in the current runtime. */
+export function reachablePortalRoles(ctx: PortalAccessContext): AuthRole[] {
+  return ctx.roles.filter((role) => isPortalRoleReachable(ctx, role));
+}
+
+/**
+ * Server-side guard for the manager/property portal layout. Ensures a
+ * production admin identity cannot load the property portal by typing the URL,
+ * not merely by having the switch hidden. Genuine managers and non-production
+ * runtimes are unaffected.
+ */
+export async function assertPropertyPortalAccess() {
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) return; // middleware handles the unauthenticated case for /portal/*
+  if (adminBlockedFromManagerPortal(ctx)) {
+    redirect("/admin/dashboard");
+  }
 }
 
 export async function assertAdminPortalAccess() {
