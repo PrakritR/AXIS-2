@@ -312,27 +312,28 @@ describe("handleClawLeasingInbound — known resident thread", () => {
     expect(sendFromManager).toHaveBeenCalledTimes(1);
   });
 
-  it("releases idempotency when inbound persistence fails so delivery can retry before replying", async () => {
+  it("still replies when inbound persistence fails (best-effort log, no gateway retry loop)", async () => {
     const { handleClawLeasingInbound } = await import("@/lib/claw-leasing-bot.server");
-    logManagerSmsMessage.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    logManagerSmsMessage.mockResolvedValueOnce(false);
 
-    const failed = await handleClawLeasingInbound({
+    const result = await handleClawLeasingInbound({
       from: "+15105794001",
-      text: "retry this",
-      messageId: "inbound-log-retry-test",
+      text: "what do I owe this month?",
+      messageId: "inbound-log-best-effort-test",
       workNumber: "+12053690702",
     });
-    expect(failed.ok).toBe(false);
-    expect(sendFromManager).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(result.replied).toBe(true);
+    expect(sendFromManager).toHaveBeenCalledTimes(1);
 
-    const retried = await handleClawLeasingInbound({
+    // The message stays claimed, so a gateway redelivery does not double-reply.
+    const redelivered = await handleClawLeasingInbound({
       from: "+15105794001",
-      text: "retry this",
-      messageId: "inbound-log-retry-test",
+      text: "what do I owe this month?",
+      messageId: "inbound-log-best-effort-test",
       workNumber: "+12053690702",
     });
-    expect(retried.ok).toBe(true);
-    expect(retried.replied).toBe(true);
+    expect(redelivered.replied).toBe(false);
     expect(sendFromManager).toHaveBeenCalledTimes(1);
   });
 });

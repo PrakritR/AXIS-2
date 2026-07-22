@@ -32,6 +32,7 @@ vi.mock("@/lib/auth/co-manager-module-scope", () => ({
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { syncLedgerChargeEntry } from "@/lib/reports/ledger-sync";
 import { POST } from "@/app/api/portal-household-charges/route";
 
 type Stored = { status: string; manager_user_id: string; property_id: string | null; row_data: Record<string, unknown> };
@@ -136,6 +137,27 @@ describe("portal-household-charges POST — paid is sticky", () => {
 
     expect(res.status).toBe(200);
     expect(stored.get("hc_2")!.status).toBe("paid");
+  });
+
+  it("returns 200 when the ledger/GL write-through rejects — the charge row is already persisted", async () => {
+    const { db, stored } = makeDb({
+      hc_4: { status: "pending", manager_user_id: "mgr_1", property_id: "prop_1", row_data: { id: "hc_4", status: "pending" } },
+    });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(db as never);
+    // A benign concurrent re-post of an already-persisted charge (e.g. a unique
+    // violation inside the GL posting) must not 500 the whole batch.
+    vi.mocked(syncLedgerChargeEntry).mockRejectedValueOnce(new Error("duplicate ledger entry"));
+
+    const res = await POST(
+      jsonReq({
+        action: "replace",
+        charges: [{ id: "hc_4", status: "paid", propertyId: "prop_1", residentEmail: "r@test.com" }],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(syncLedgerChargeEntry).toHaveBeenCalled();
+    expect(stored.get("hc_4")!.status).toBe("paid");
   });
 
   it("action:'unmarkPaid' explicitly reverts a paid charge to pending", async () => {
