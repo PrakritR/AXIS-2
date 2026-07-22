@@ -378,8 +378,9 @@ function formatFurnishing(raw: string | undefined): string | undefined {
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string {
   const utilLine = formatUtilitiesListingLine(resolveRoomUtilitiesPaymentModel(r), r.utilitiesEstimate);
   const f = r.furnishing?.trim();
-  const rentLabel =
-    isEntireHomeListing(sub) && r.monthlyRent <= 0
+  const rentLabel = roomIsDailyPriced(r)
+    ? roomHeadlinePriceLabel(r)
+    : isEntireHomeListing(sub) && r.monthlyRent <= 0
       ? "Included in lease"
       : `$${r.monthlyRent}`;
   let s = `${r.name.trim()}: ${rentLabel}`;

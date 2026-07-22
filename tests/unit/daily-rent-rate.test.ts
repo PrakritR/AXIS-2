@@ -87,4 +87,19 @@ describe("daily rent rate — listing rich content", () => {
     expect(room?.price).toBe("$40/day");
     expect(room?.pricePeriod).toBe("day");
   });
+
+  it("shows a daily room's rate on the bundle card room lines, not $0", () => {
+    const sub = dailyRoomSub();
+    sub.rooms = [
+      sub.rooms[0]!,
+      { ...sub.rooms[0]!, id: "r2", name: "Room 2", monthlyRent: 950, rentBasis: "monthly", dailyRentPrice: undefined },
+    ];
+    const property = mockProperty({ id: "mgr-daily-3", listingSubmission: sub });
+    const rich = listingRichFromManagerSubmission(property, sub);
+    const roomLines = rich.bundleCards.flatMap((b) => b.roomLines ?? []);
+    expect(roomLines.some((line) => line.startsWith("Room 1: $40/day"))).toBe(true);
+    expect(roomLines.some((line) => line.startsWith("Room 1: $0"))).toBe(false);
+    // the monthly room's line is unchanged
+    expect(roomLines.some((line) => line.startsWith("Room 2: $950"))).toBe(true);
+  });
 });
