@@ -1,4 +1,3 @@
-import type { MockProperty } from "@/data/types";
 import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import {
@@ -39,10 +38,6 @@ function escapeHtml(s: string): string {
 function dash(s: string | undefined | null): string {
   const t = (s ?? "").trim();
   return t ? escapeHtml(t) : "—";
-}
-
-function submissionFor(prop: MockProperty | undefined): ManagerListingSubmissionV1 | undefined {
-  return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
 }
 
 /**
@@ -161,21 +156,6 @@ function parseAmount(s: string | undefined | null): number | null {
 
 function fmtUsd(n: number): string {
   return "$" + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
-function parseLocalDateOnly(raw: string | undefined | null): Date | null {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (match) {
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const dt = new Date(year, month - 1, day, 12, 0, 0, 0);
-    return Number.isNaN(dt.getTime()) ? null : dt;
-  }
-  const dt = new Date(value);
-  return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
 function isMonthToMonthLease(application: Partial<RentalWizardFormState> | undefined | null): boolean {

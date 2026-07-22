@@ -34,13 +34,11 @@ import {
   applyListingBathroomSlots,
   listingTotalBathroomsIdFromCount,
   applyEntireHomeListingPricing,
-  applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
   customApplicationFieldKeyFromLabel,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
-  normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
   duplicateRoomEntry,
@@ -112,7 +110,6 @@ import {
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
-  sanitizePaymentLinkInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,
@@ -1653,7 +1650,6 @@ export function ManagerAddListingForm({
       const bundles = [...(s.bundles ?? [])];
       const cur = bundles[bundleIndex];
       if (!cur) return s;
-      const named = s.rooms.filter((r) => r.name.trim());
       const includedRoomIds = mode === "all_named" ? s.rooms.map((r) => r.id) : [];
       bundles[bundleIndex] = {
         ...cur,
