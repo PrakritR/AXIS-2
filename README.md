@@ -32,7 +32,7 @@ Rent & utility payments (card, ACH, Link via Stripe Connect), move-in checklist,
 
 - **Framework** — Next.js 16, React 19, TypeScript
 - **Styling** — Tailwind CSS v4, Radix UI
-- **Data** — Supabase (Auth + Postgres), 46 SQL migrations in `supabase/migrations/`
+- **Data** — Supabase (Auth + Postgres), SQL migrations in `supabase/migrations/`
 - **Payments** — Stripe (subscriptions + Connect)
 - **Native** — Capacitor 8 (`com.axisseattlehousing.app`)
 - **Tests** — Vitest (unit + integration), Playwright (e2e)

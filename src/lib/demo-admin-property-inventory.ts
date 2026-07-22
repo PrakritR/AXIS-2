@@ -13,7 +13,6 @@ import {
   readAllPendingManagerProperties,
   readExtraListingsForUser,
   readScopedExtraListings,
-  readPendingManagerPropertiesForUser,
   removeExtraListing,
   publishManagerListingSubmissionToServer,
   submitManagerPendingProperty,
