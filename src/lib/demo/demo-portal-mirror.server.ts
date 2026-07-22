@@ -27,8 +27,8 @@ import {
   buildDemoBlankSnapshot,
   buildDemoIdleSnapshot,
   type DemoDataSnapshot,
+  type DemoScheduleSeed,
 } from "@/lib/demo/demo-guided-data";
-import type { DemoScheduleSeed } from "@/lib/demo/demo-data";
 import type { PartnerInquiry, PlannedEvent } from "@/lib/demo-admin-scheduling";
 import {
   MANAGER_INBOX_SCOPE,

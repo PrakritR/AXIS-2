@@ -1,3 +1,9 @@
+/**
+ * The property the "Run demo" walkthrough creates through the real listing
+ * wizard. Values are deliberately generic placeholders, not an invented
+ * building with a plausible name and street address — a visitor watching the
+ * tour should never mistake demo scaffolding for a real listing.
+ */
 import {
   createDefaultListingSubmission,
   normalizeManagerListingSubmissionV1,
@@ -11,19 +17,19 @@ export function buildDemoPropertyCreationSubmission(): ManagerListingSubmissionV
   const roomB = `demo-room-b-${Date.now()}`;
   return normalizeManagerListingSubmissionV1({
     ...base,
-    buildingName: "Harbor View House",
-    address: "1200 Pike St, Seattle, WA",
+    buildingName: "Demo Property",
+    address: "100 Example Ave, Seattle, WA",
     zip: "98101",
-    neighborhood: "Capitol Hill",
+    neighborhood: "Seattle",
     listingPropertyTypeId: "house",
     listingPlaceCategoryId: "shared_home",
     listingStoriesId: "2",
     listingTotalBathroomsId: "2",
     listingBedroomSlots: 2,
-    tagline: "Bright Capitol Hill home with shared common spaces",
+    tagline: "Sample listing created by the PropLane demo walkthrough",
     petFriendly: true,
     houseOverview:
-      "Renovated craftsman with a modern kitchen, in-unit laundry, and quick access to light rail.",
+      "Placeholder listing created by the demo walkthrough — every field here is sample text, not a real home.",
     houseRulesText: "Quiet hours 10pm–8am · No smoking indoors · Guests welcome up to 7 nights",
     amenitiesText: "In-unit laundry\nHigh-speed Wi‑Fi\nSecure entry\nBackyard patio",
     applicationFee: "$45.00",

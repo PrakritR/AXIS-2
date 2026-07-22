@@ -13,19 +13,23 @@ import {
   CANONICAL_DEMO_VENDOR_EMAIL,
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
-import type { DemoDataSnapshot } from "@/lib/demo/demo-guided-data";
+import type { DemoDataSnapshot, DemoScheduleSeed } from "@/lib/demo/demo-guided-data";
 import {
   DEMO_MANAGER_USER_ID,
   DEMO_RESIDENT_USER_ID,
   DEMO_VENDOR_USER_ID,
 } from "@/lib/demo/demo-session";
-import type { DemoScheduleSeed } from "@/lib/demo/demo-data";
 import type { PartnerInquiry, PlannedEvent } from "@/lib/demo-admin-scheduling";
 
-/** Demo idle application id for the canonical resident. */
+/**
+ * Snapshot-side application id reserved for the canonical resident. The idle
+ * snapshot ships empty (`demo-guided-data.ts`), so this only bites once a
+ * curated portfolio is filled back in — a row carrying this id is rewritten to
+ * the canonical resident's real AXIS id when seeded into the DB.
+ */
 export const DEMO_CANONICAL_RESIDENT_APP_DEMO_ID = "demo-app-4";
 
-/** Charge/application cross-refs in demo-data for the canonical resident. */
+/** Charge → application cross-ref for that same reserved row. */
 export const DEMO_CANONICAL_RESIDENT_CHARGE_APP_REF = "AXIS-DEMOAPP4";
 
 export type DemoPortfolioDbContext = {

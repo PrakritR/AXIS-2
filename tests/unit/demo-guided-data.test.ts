@@ -50,17 +50,19 @@ describe("demo-guided session", () => {
 });
 
 describe("demo-guided-data snapshots", () => {
-  it("idle snapshot seeds a rich cross-portal portfolio", () => {
+  it("idle snapshot ships empty — no fictional portfolio in the public sandbox", () => {
     const snapshot = buildDemoIdleSnapshot();
-    expect(snapshot.properties.length).toBeGreaterThan(0);
-    expect(snapshot.applications.length).toBeGreaterThan(3);
-    expect(snapshot.charges.some((c) => c.status === "pending")).toBe(true);
-    expect(snapshot.leases.length).toBeGreaterThan(0);
-    expect(snapshot.workOrders.length).toBeGreaterThan(0);
-    expect(snapshot.managerInbox.length).toBeGreaterThan(0);
-    expect(snapshot.residentInbox.length).toBeGreaterThan(0);
-    expect(snapshot.vendorInbox.length).toBeGreaterThan(0);
-    expect(snapshot.schedule.plannedEvents.length).toBeGreaterThan(0);
+    expect(snapshot.properties).toEqual([]);
+    expect(snapshot.applications).toEqual([]);
+    expect(snapshot.charges).toEqual([]);
+    expect(snapshot.leases).toEqual([]);
+    expect(snapshot.workOrders).toEqual([]);
+    expect(snapshot.managerInbox).toEqual([]);
+    expect(snapshot.residentInbox).toEqual([]);
+    expect(snapshot.vendorInbox).toEqual([]);
+    expect(snapshot.schedule.plannedEvents).toEqual([]);
+    expect(snapshot.schedule.partnerInquiries).toEqual([]);
+    expect(snapshot.residentUploads).toEqual([]);
   });
 
   it("blank snapshot clears portfolio for guided tour", () => {
@@ -71,11 +73,11 @@ describe("demo-guided-data snapshots", () => {
     expect(snapshot.managerInbox).toEqual([]);
   });
 
-  it("resident demo lease is fully signed in idle mode", () => {
-    const residentLease = buildDemoIdleSnapshot().leases.find(
-      (lease) => lease.residentEmail === DEMO_RESIDENT_EMAIL,
-    );
-    expect(residentLease?.status).toBe("Fully Signed");
-    expect(residentLease?.fullySignedAt).toBeTruthy();
+  it("idle and blank snapshots are independent objects", () => {
+    const a = buildDemoIdleSnapshot();
+    const b = buildDemoIdleSnapshot();
+    a.properties.push({ id: "x" } as (typeof a.properties)[number]);
+    expect(b.properties).toEqual([]);
+    expect(buildDemoBlankSnapshot().properties).toEqual([]);
   });
 });

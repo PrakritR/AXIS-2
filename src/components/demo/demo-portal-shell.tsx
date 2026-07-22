@@ -33,7 +33,7 @@ import {
   subscribeDemoGuidedState,
 } from "@/lib/demo/demo-guided";
 import type { DemoSegment } from "@/lib/demo/demo-segments";
-import { DEMO_SEGMENT_LABELS } from "@/lib/demo/demo-segments";
+import { DEMO_SEGMENT_LABELS, DEMO_SEGMENT_OPTIONS } from "@/lib/demo/demo-segments";
 import { seedDemoIdleData, seedDemoPortalIdleData } from "@/lib/demo/demo-seed";
 import { isDemoSignedIn, purgeDemoSeededSessionStorage } from "@/lib/demo/demo-client-teardown";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
@@ -392,9 +392,9 @@ export function DemoPortalShell() {
                   data-attr="demo-segment-select"
                   className="h-9 max-w-[11rem] rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground"
                 >
-                  {(Object.entries(DEMO_SEGMENT_LABELS) as [DemoSegment, string][]).map(([id, label]) => (
+                  {DEMO_SEGMENT_OPTIONS.map((id) => (
                     <option key={id} value={id}>
-                      {label}
+                      {DEMO_SEGMENT_LABELS[id]}
                     </option>
                   ))}
                 </select>
