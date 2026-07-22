@@ -32,11 +32,14 @@ export function GroupShareCallout({
   groupRole,
   groupSize,
   className,
+  shareable = true,
 }: {
   groupId: string;
   groupRole?: GroupRole;
   groupSize?: string;
   className?: string;
+  /** False once the application has been decided — the id stays retrievable, the invitation goes away. */
+  shareable?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const size = Number.parseInt((groupSize ?? "").trim(), 10);
@@ -57,14 +60,20 @@ export function GroupShareCallout({
       className={`rounded-2xl border border-border bg-accent/20 p-4 text-left [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4 ${className ?? "mt-4"}`}
     >
       <p className="text-[13px] font-semibold text-foreground">
-        {groupRole === "joining" ? "You joined a group application" : "Your group is ready"}
+        {!shareable
+          ? "Group application"
+          : groupRole === "joining"
+            ? "You joined a group application"
+            : "Your group is ready"}
       </p>
       <p className="mt-1 text-[12px] leading-relaxed text-muted">
-        {groupRole === "joining"
-          ? "Your application is linked to your group. Each member applies with their own account, and your manager reviews you together."
-          : others != null
-            ? `Share this Group ID with your ${others} ${others === 1 ? "roommate" : "roommates"} so their applications link to yours. Each of you keeps your own account.`
-            : "Share this Group ID with your roommates so their applications link to yours. Each of you keeps your own account."}
+        {!shareable
+          ? "This application was submitted as part of a group. Keep this Group ID for your records — it is no longer accepting new members."
+          : groupRole === "joining"
+            ? "Your application is linked to your group. Each member applies with their own account, and your manager reviews you together."
+            : others != null
+              ? `Share this Group ID with your ${others} ${others === 1 ? "roommate" : "roommates"} so their applications link to yours. Each of you keeps your own account.`
+              : "Share this Group ID with your roommates so their applications link to yours. Each of you keeps your own account."}
       </p>
       <div className="mt-3 flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-card px-3 py-2 font-mono text-[13px] text-foreground">

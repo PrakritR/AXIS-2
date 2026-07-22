@@ -312,9 +312,9 @@ function ApplicationGroupSection({ group, currentRowId }: { group: ApplicationGr
           : ""}
       </p>
       {!group.hasFirst ? (
-        <p className="mb-3 text-xs text-[var(--status-pending-fg)]">
-          No organizer application uses this Group ID — it may have been mistyped, so these applicants may not be
-          linked to the household they intended.
+        <p className="mb-3 text-xs text-muted">
+          No organizer application using this Group ID is visible in your applications. The organizer may have applied
+          to a property outside your access, or the code may not match an existing group.
         </p>
       ) : null}
       {group.isOverSubscribed ? (

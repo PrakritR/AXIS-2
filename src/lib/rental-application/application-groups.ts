@@ -80,6 +80,23 @@ export function resolveSubmitGroupId(
   return "";
 }
 
+/**
+ * Resolve the Group ID when an ALREADY SUBMITTED application is re-saved from an editor.
+ * The persisted id is the fallback, so a step-1 re-selection that blanks the field cannot
+ * silently drop a group member out of their household. A group keeps one id for its
+ * lifetime — nothing is re-minted here except for an application that opts into a group
+ * as the first applicant and has never had an id at all. Switching `applyingAsGroup` to
+ * "no" remains a deliberate opt-out and still clears the id.
+ */
+export function resolveEditGroupId(
+  form: Pick<RentalWizardFormState, "applyingAsGroup" | "groupRole" | "groupId">,
+  persistedGroupId: string | null | undefined,
+  mint: () => string = makeApplicationGroupId,
+): string {
+  const existing = form.groupId.trim() || (persistedGroupId ?? "").trim();
+  return resolveSubmitGroupId({ ...form, groupId: existing }, mint);
+}
+
 export type ApplicationGroupMemberStatus =
   | "in_progress"
   | "submitted"
@@ -252,17 +269,18 @@ export type GroupBadgeDescriptor = {
 
 /**
  * Compact badge for an application row. A ratio is only shown when the denominator is
- * real: an unknown or exceeded declared size renders the raw member count instead, and
- * a group whose id matches no first applicant (a mistyped/fabricated code) is called
- * out rather than passing silently as a household of one.
+ * real: an unknown or exceeded declared size renders the raw member count instead. The
+ * "organizer not visible" case is stated as an observation about THIS viewer's rows —
+ * groups are reconciled only over the applications a manager can see, so an organizer
+ * scoped to another portfolio is a legitimate case, not applicant error.
  */
 export function describeGroupBadge(group: ApplicationGroup): GroupBadgeDescriptor {
   const idText = `Group ID ${group.groupId}`;
   if (!group.hasFirst) {
     return {
-      label: `Group ${group.totalCount} · unlinked`,
-      tone: "pending",
-      title: `${idText} · no organizer application uses this code — it may have been mistyped`,
+      label: `Group ${group.totalCount} · organizer not shown`,
+      tone: "info",
+      title: `${idText} · no organizer application using this code is visible in your applications`,
     };
   }
   if (group.expectedSize == null) {

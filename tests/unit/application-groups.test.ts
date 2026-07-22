@@ -6,6 +6,7 @@ import {
   groupForRow,
   makeApplicationGroupId,
   normalizeGroupId,
+  resolveEditGroupId,
   resolveSubmitGroupId,
   summarizeGroupProgress,
   type GroupRowInput,
@@ -75,6 +76,43 @@ describe("resolveSubmitGroupId", () => {
   });
 });
 
+describe("resolveEditGroupId", () => {
+  it("carries the persisted id forward when an edit blanks the field", () => {
+    expect(
+      resolveEditGroupId(
+        { applyingAsGroup: "yes", groupRole: "first", groupId: "" },
+        "AXISGRP-ABCD1234",
+        () => "AXISGRP-NEWMINT",
+      ),
+    ).toBe("AXISGRP-ABCD1234");
+  });
+
+  it("keeps one stable id across an edit and re-save for a joining member", () => {
+    expect(
+      resolveEditGroupId(
+        { applyingAsGroup: "yes", groupRole: "joining", groupId: "AXISGRP-ABCD1234" },
+        "AXISGRP-ABCD1234",
+        () => "AXISGRP-NEWMINT",
+      ),
+    ).toBe("AXISGRP-ABCD1234");
+  });
+
+  it("mints only when a group application has never had an id", () => {
+    expect(
+      resolveEditGroupId({ applyingAsGroup: "yes", groupRole: "first", groupId: "" }, "", () => "AXISGRP-NEWMINT"),
+    ).toBe("AXISGRP-NEWMINT");
+    expect(
+      resolveEditGroupId({ applyingAsGroup: "yes", groupRole: "joining", groupId: "" }, undefined, () => "NOPE"),
+    ).toBe("");
+  });
+
+  it("drops the id only when the resident deliberately opts out of the group", () => {
+    expect(
+      resolveEditGroupId({ applyingAsGroup: "no", groupRole: null, groupId: "" }, "AXISGRP-ABCD1234", () => "NOPE"),
+    ).toBe("");
+  });
+});
+
 describe("buildApplicationGroups", () => {
   it("groups rows by normalized id, derives expected size from the first applicant, and counts progress", () => {
     const rows: GroupRowInput[] = [
@@ -140,7 +178,7 @@ describe("buildApplicationGroups", () => {
     expect(describeGroupBadge(g).label).toBe("Group 4 · 3 declared");
   });
 
-  it("flags a group whose id matches no first applicant", () => {
+  it("reports — without blaming the applicant — a group with no visible organizer row", () => {
     const rows: GroupRowInput[] = [
       row({ id: "b", role: "joining", status: "submitted" }),
       row({ id: "c", role: "joining", status: "submitted" }),
@@ -148,9 +186,10 @@ describe("buildApplicationGroups", () => {
     const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
     expect(g.hasFirst).toBe(false);
     const badge = describeGroupBadge(g);
-    expect(badge.label).toBe("Group 2 · unlinked");
-    expect(badge.tone).toBe("pending");
-    expect(badge.title).toContain("mistyped");
+    expect(badge.label).toBe("Group 2 · organizer not shown");
+    expect(badge.tone).toBe("info");
+    expect(badge.title).toContain("visible in your applications");
+    expect(badge.title).not.toContain("mistyped");
   });
 
   it("de-duplicates a row id that appears twice", () => {

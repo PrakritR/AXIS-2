@@ -16,6 +16,7 @@ import {
   normalizeIsoDateInput,
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
+import { resolveEditGroupId } from "@/lib/rental-application/application-groups";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
@@ -186,6 +187,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
       setSaving(true);
       const pid = form.propertyId.trim() || row.propertyId?.trim() || "";
       const prop = pid ? getPropertyById(pid) : undefined;
+      const groupId = resolveEditGroupId(form, row.application?.groupId);
       const updated: DemoApplicantRow = {
         ...row,
         name: form.fullLegalName.trim() || row.name,
@@ -195,7 +197,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
         bucket: preserveReviewStatus ? row.bucket : "pending",
         stage: preserveReviewStatus ? row.stage : row.stage || "Submitted",
         detail: `Updated ${new Date().toLocaleString()}`,
-        application: structuredClone({ ...form, email: residentEmail }),
+        application: structuredClone({ ...form, email: residentEmail, groupId }),
       };
       const result = await upsertApplicationRowToServerAwait(updated);
       setSaving(false);
