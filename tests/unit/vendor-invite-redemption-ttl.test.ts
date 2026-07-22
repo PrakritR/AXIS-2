@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   findPendingVendorInviteByEmail,
   findPendingVendorInviteByToken,
+  lookupVendorInviteByEmail,
+  provisionVendorAccountByEmail,
+  VENDOR_INVITE_EXPIRED_ERROR,
 } from "@/lib/auth/provision-vendor-account";
 
 /**
@@ -109,5 +112,79 @@ describe("findPendingVendorInviteByEmail — TTL is fail-closed too", () => {
       expires_at: new Date(Date.now() + HOUR).toISOString(),
     });
     await expect(findPendingVendorInviteByEmail(db, "vendor@example.com")).resolves.toMatchObject({ id: "inv-1" });
+  });
+});
+
+/**
+ * Failing closed on the TTL is right; failing SILENTLY is not. Dropping the
+ * expired invite left the vendor with an account whose `linkedManagerId` is
+ * null, no message explaining why, and a manager who sees nothing to resend.
+ * The token path already answers "invalid or has expired"; the email path has
+ * to signal it too — without ever redeeming the stale invite.
+ */
+function dbForEmailLookup(opts: {
+  redeemable: Record<string, unknown> | null;
+  anyPending: Record<string, unknown> | null;
+}) {
+  const afterEmail = (row: Record<string, unknown> | null) => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: row, error: null });
+    const limit = vi.fn(() => ({ maybeSingle }));
+    const order = vi.fn(() => ({ limit }));
+    return { order, gt: vi.fn(() => ({ order })) };
+  };
+  const select = vi.fn((columns: string) => ({
+    eq: vi.fn(() => ({
+      eq: vi.fn(() => afterEmail(columns.trim() === "id" ? opts.anyPending : opts.redeemable)),
+    })),
+  }));
+  return { from: vi.fn(() => ({ select })) } as never;
+}
+
+const UNEXPIRED = {
+  id: "inv-1",
+  manager_user_id: "mgr-1",
+  vendor_email: "vendor@example.com",
+  expires_at: new Date(Date.now() + HOUR).toISOString(),
+};
+
+describe("lookupVendorInviteByEmail — expired and never-invited are different answers", () => {
+  it("reports an expired invite as expired rather than as no invite", async () => {
+    const db = dbForEmailLookup({ redeemable: null, anyPending: { id: "inv-1" } });
+    await expect(lookupVendorInviteByEmail(db, "vendor@example.com")).resolves.toEqual({ kind: "expired" });
+  });
+
+  it("reports a genuine absence as none", async () => {
+    const db = dbForEmailLookup({ redeemable: null, anyPending: null });
+    await expect(lookupVendorInviteByEmail(db, "vendor@example.com")).resolves.toEqual({ kind: "none" });
+  });
+
+  it("returns the redeemable invite without the second query", async () => {
+    const db = dbForEmailLookup({ redeemable: UNEXPIRED, anyPending: null });
+    await expect(lookupVendorInviteByEmail(db, "vendor@example.com")).resolves.toEqual({
+      kind: "redeemable",
+      invite: UNEXPIRED,
+    });
+  });
+});
+
+describe("provisionVendorAccountByEmail — self-serve path surfaces expiry", () => {
+  // The stub exposes only `from`, so returning here at all proves the handler
+  // bailed before any provisioning write (which needs `auth.admin`).
+  it("refuses instead of quietly creating an unlinked vendor account", async () => {
+    const db = dbForEmailLookup({ redeemable: null, anyPending: { id: "inv-1" } });
+    await expect(
+      provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" }),
+    ).resolves.toEqual({ ok: false, status: 410, error: VENDOR_INVITE_EXPIRED_ERROR });
+  });
+
+  it("leaves the explicit-invite paths (token / OAuth) untouched", async () => {
+    const db = dbForEmailLookup({ redeemable: null, anyPending: { id: "inv-1" } });
+    const from = (db as unknown as { from: ReturnType<typeof vi.fn> }).from;
+    await provisionVendorAccountByEmail(db, {
+      userId: "user-1",
+      email: "vendor@example.com",
+      invite: null,
+    }).catch(() => null);
+    expect(from).not.toHaveBeenCalledWith("vendor_invites");
   });
 });

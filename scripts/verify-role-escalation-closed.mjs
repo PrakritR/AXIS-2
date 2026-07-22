@@ -8,13 +8,18 @@
  * MUST be denied.
  *
  * Usage:
- *   node --env-file=.env scripts/verify-role-escalation-closed.mjs
+ *   ALLOW_PROBE_TARGET=<project-ref> node --env-file=.env scripts/verify-role-escalation-closed.mjs
  *
  * Exit code 0 = every escalation probe was denied (surface is closed).
  * Exit code 1 = at least one probe succeeded (privilege escalation is OPEN).
+ * Exit code 2 = misconfigured (missing env, or the target guard did not match).
  *
- * Point this at the dev/test project only — it creates and deletes a user.
- * See docs/database-environments.md; never run it against production.
+ * Point this at the dev/test project only — it creates and deletes a user, and
+ * while the hole is open it briefly writes an admin-privileged row. That is why
+ * `ALLOW_PROBE_TARGET` must name the target project ref explicitly: the script
+ * runs against whatever `NEXT_PUBLIC_SUPABASE_URL` happens to be in the
+ * environment, and a doc comment is not a control. See
+ * docs/database-environments.md; never run it against production.
  */
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -22,6 +27,32 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
 if (!url || !anonKey || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY.");
+  process.exit(2);
+}
+
+/** `https://abcdefgh.supabase.co` → `abcdefgh`; a local stack → its `host:port`. */
+function probeTargetFromUrl(rawUrl) {
+  let host;
+  try {
+    host = new URL(rawUrl).host;
+  } catch {
+    return "";
+  }
+  const hosted = /^([a-z0-9-]+)\.supabase\.(co|in|red)$/i.exec(host);
+  return hosted ? hosted[1] : host;
+}
+
+const probeTarget = probeTargetFromUrl(url);
+const allowedTarget = process.env.ALLOW_PROBE_TARGET?.trim() ?? "";
+
+// Fail closed: no opt-in, an unparseable URL, or a mismatch all refuse to run.
+if (!probeTarget || allowedTarget !== probeTarget) {
+  console.error(
+    `Refusing to run: this script writes real rows (including an admin-privileged one while the hole is open).\n` +
+      `Set ALLOW_PROBE_TARGET to the dev/test project it should touch, and confirm it is NOT production first.\n` +
+      `  NEXT_PUBLIC_SUPABASE_URL resolves to target: ${probeTarget || "(unparseable)"}\n` +
+      `  ALLOW_PROBE_TARGET is currently: ${allowedTarget || "(unset)"}`,
+  );
   process.exit(2);
 }
 

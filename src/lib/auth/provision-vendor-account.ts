@@ -62,6 +62,42 @@ export async function findPendingVendorInviteByEmail(
   return redeemableInvite((data as VendorInviteRow | null) ?? null);
 }
 
+export const VENDOR_INVITE_EXPIRED_ERROR =
+  "This vendor invite has expired. Ask the manager who invited you to send a new invite.";
+
+export type VendorInviteEmailLookup =
+  | { kind: "none" }
+  | { kind: "redeemable"; invite: VendorInviteRow }
+  | { kind: "expired" };
+
+/**
+ * The TTL must fail closed, but "expired" and "never invited" are different
+ * outcomes for the person signing up: silently treating an expired invite as no
+ * invite drops the vendor into the portal with no linked manager and nothing to
+ * self-diagnose. Distinguish the two so the self-serve path can say the same
+ * thing the token path says instead of provisioning a quietly wrong account.
+ * The second query only runs when nothing redeemable was found.
+ */
+export async function lookupVendorInviteByEmail(
+  supabase: SupabaseClient,
+  email: string,
+): Promise<VendorInviteEmailLookup> {
+  const redeemable = await findPendingVendorInviteByEmail(supabase, email);
+  if (redeemable) return { kind: "redeemable", invite: redeemable };
+
+  const { data, error } = await supabase
+    .from("vendor_invites")
+    .select("id")
+    .eq("status", "pending")
+    .eq("vendor_email", email)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? { kind: "expired" } : { kind: "none" };
+}
+
 /** Resolves an invite from its emailed single-use token — never trust a client-supplied email instead. */
 export async function findPendingVendorInviteByToken(
   supabase: SupabaseClient,
@@ -125,7 +161,18 @@ export async function provisionVendorAccountByEmail(
     return { ok: false, status: 400, error: "Enter a valid email address." };
   }
 
-  let invite = opts.invite !== undefined ? opts.invite : await findPendingVendorInviteByEmail(supabase, normalEmail);
+  let invite: VendorInviteRow | null;
+  if (opts.invite !== undefined) {
+    invite = opts.invite;
+  } else {
+    const lookup = await lookupVendorInviteByEmail(supabase, normalEmail);
+    // Never redeem an expired invite — but say so rather than provisioning an
+    // unlinked vendor account the manager cannot see and the vendor cannot fix.
+    if (lookup.kind === "expired") {
+      return { ok: false, status: 410, error: VENDOR_INVITE_EXPIRED_ERROR };
+    }
+    invite = lookup.kind === "redeemable" ? lookup.invite : null;
+  }
 
   if (invite?.vendor_directory_id) {
     const ownershipOk = await directoryBelongsToManager(supabase, invite.vendor_directory_id, invite.manager_user_id);

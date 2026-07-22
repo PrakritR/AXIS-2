@@ -66,6 +66,14 @@ function serviceClient(ownedByInviter: string[], invite?: Record<string, unknown
           })),
         };
       }
+      if (table === "profiles") {
+        return {
+          select: vi.fn(() => ({
+            in: vi.fn(() => Promise.resolve({ data: [], error: null })),
+            eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),
+          })),
+        };
+      }
       if (table === "account_link_invites") {
         return {
           select: vi.fn(() => ({
@@ -99,6 +107,12 @@ const acceptedInvite = {
   property_co_manager_permissions: {},
   co_manager_permissions: {},
 };
+
+const pendingInvite = (assignedPropertyIds: string[]) => ({
+  ...acceptedInvite,
+  status: "pending",
+  assigned_property_ids: assignedPropertyIds,
+});
 
 describe("co-manager invite property scope", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -193,6 +207,48 @@ describe("co-manager invite property scope", () => {
       const { status, data } = await parseJsonResponse<{ error?: string }>(res);
       expect(status).toBe(403);
       expect(data.error).toMatch(/only assign properties you manage/i);
+    });
+
+    /**
+     * The create-time gate only covers rows written after it shipped. An invite
+     * forged before the deploy is still pending, so accept must re-derive the
+     * inviter's ownership rather than trusting the stored list.
+     */
+    it("rejects accepting an invite that names a property the inviter does not own", async () => {
+      vi.mocked(createSupabaseServerClient).mockResolvedValue(sessionClientFor(INVITEE));
+      vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(serviceClient([OWNED], pendingInvite([VICTIM])));
+
+      const res = await patchAccountLink(
+        jsonRequest("http://localhost/api/pro/account-links/link-1", { method: "PATCH", body: { action: "accept" } }),
+        { params },
+      );
+      const { status, data } = await parseJsonResponse<{ error?: string }>(res);
+      expect(status).toBe(403);
+      expect(data.error).toMatch(/does not manage/i);
+    });
+
+    it("rejects the whole accept rather than silently dropping the unowned id", async () => {
+      vi.mocked(createSupabaseServerClient).mockResolvedValue(sessionClientFor(INVITEE));
+      vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+        serviceClient([OWNED], pendingInvite([OWNED, VICTIM])),
+      );
+
+      const res = await patchAccountLink(
+        jsonRequest("http://localhost/api/pro/account-links/link-1", { method: "PATCH", body: { action: "accept" } }),
+        { params },
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it("still accepts an invite whose properties the inviter owns", async () => {
+      vi.mocked(createSupabaseServerClient).mockResolvedValue(sessionClientFor(INVITEE));
+      vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(serviceClient([OWNED], pendingInvite([OWNED])));
+
+      const res = await patchAccountLink(
+        jsonRequest("http://localhost/api/pro/account-links/link-1", { method: "PATCH", body: { action: "accept" } }),
+        { params },
+      );
+      expect(res.status).toBe(200);
     });
 
     it("still lets the inviter narrow the scope to properties they own", async () => {

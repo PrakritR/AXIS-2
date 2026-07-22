@@ -283,6 +283,29 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
       if (isCrossSandboxPortalPair(inviterEmail, inviteeEmail)) {
         return NextResponse.json({ error: CROSS_SANDBOX_PORTAL_PAIR_ERROR }, { status: 400 });
       }
+
+      // The ownership gate on create only covers rows written after it shipped.
+      // A link forged earlier — naming a property harvested from the public
+      // listing feed — is still pending and accepting it would grant full
+      // co-manager access, so re-derive ownership here. Reject outright rather
+      // than narrowing the list: a silent partial grant is the failure mode.
+      const ownership = await findPropertyIdsNotOwnedByManager(
+        svc,
+        invite.inviter_user_id,
+        asStringArray(invite.assigned_property_ids),
+      );
+      if (!ownership.ok) {
+        return NextResponse.json({ error: ownership.error }, { status: 500 });
+      }
+      if (ownership.unowned.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "This link assigns a property the inviting manager does not manage. Ask them to send a new invite.",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     const nextStatus = actionNorm === "accept" ? "accepted" : "rejected";

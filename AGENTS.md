@@ -512,15 +512,30 @@ perfectly. `profile_roles_insert_self` had the same shape. Closed in
   co-manager invite was stored verbatim, so a manager could name a victim's
   publicly-listed property and take it over. Validate against ownership
   (`findPropertyIdsNotOwnedByManager`) and treat a missing row as unowned.
+- **Validating only on write leaves the hole open for rows already in the
+  table.** Invites forged before the gate shipped are still pending, and a
+  legitimately assigned property can be transferred away afterwards, so
+  ownership is re-derived at BOTH ends: the accept branch of
+  `PATCH /api/pro/account-links/[inviteId]` refuses (403, never a silent
+  narrowing) an invite naming a property the inviter does not manage, and every
+  scope resolver that turns an accepted link into access
+  (`collectLinkedPropertyIdsForUser`, `collectLinkedPropertyPermissionsForUser`,
+  `linkedOwnerScopeForModule`, `linkedOwnerForProperty`,
+  `getShareablePropertyForUser`, `GET /api/property-records`) filters through
+  `resolveInviterOwnedProperties` — one batched lookup, fail-closed, never a
+  query per property.
 
 Regression coverage: `tests/unit/role-grant-surface.test.ts` replays every
 migration and fails if a later one re-grants DML or re-adds a write policy on
 those tables. The live proof is `scripts/verify-role-escalation-closed.mjs`,
 which signs up a throwaway resident and runs the real attack over HTTP against
-the dev project — run it after touching policies or grants:
+the dev project — run it after touching policies or grants. It writes real rows,
+so it refuses to start unless `ALLOW_PROBE_TARGET` names the Supabase project ref
+parsed from `NEXT_PUBLIC_SUPABASE_URL` (check it is not production first):
 
 ```
-node --env-file=.env scripts/verify-role-escalation-closed.mjs   # dev/test only
+ALLOW_PROBE_TARGET=<dev-project-ref> \
+  node --env-file=.env scripts/verify-role-escalation-closed.mjs   # dev/test only
 ```
 
 **Write every migration idempotently** (`drop policy if exists` before `create

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolveInviterOwnedProperties } from "@/lib/auth/co-manager-invite-scope";
 import { collectLinkedPropertyPermissionsForUser } from "@/lib/auth/manager-lease-scope";
 import {
   hasCoManagerPermissionLevelForProperty,
@@ -53,11 +54,25 @@ export async function linkedOwnerForProperty(
     .select("inviter_user_id, assigned_property_ids")
     .eq("invitee_user_id", userId)
     .eq("status", "accepted");
-  for (const row of data ?? []) {
-    const ids = Array.isArray(row.assigned_property_ids) ? row.assigned_property_ids.map(String) : [];
-    if (ids.includes(pid) && row.inviter_user_id) return String(row.inviter_user_id);
-  }
-  return null;
+  const candidates = [
+    ...new Set(
+      (data ?? [])
+        .filter((row) => {
+          const ids = Array.isArray(row.assigned_property_ids) ? row.assigned_property_ids.map(String) : [];
+          return ids.includes(pid);
+        })
+        .map((row) => String(row.inviter_user_id ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (candidates.length === 0) return null;
+
+  // Attribution must not follow a link onto a property its inviter does not own.
+  const inviterOwns = await resolveInviterOwnedProperties(
+    db,
+    candidates.map((inviterUserId) => ({ inviterUserId, propertyIds: [pid] })),
+  );
+  return candidates.find((inviterId) => inviterOwns(inviterId, pid)) ?? null;
 }
 
 /** Linked property ids on which this user (as an accepted co-manager) may use `module`. */
@@ -123,6 +138,7 @@ export async function linkedOwnerScopeForModule(
       }
     }
 
+    const eligible: { inviterId: string; assigned: string[]; row: unknown }[] = [];
     for (const row of linkRows ?? []) {
       const inviterId = String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim();
       if (!inviterId) continue;
@@ -132,6 +148,19 @@ export async function linkedOwnerScopeForModule(
       const assigned = Array.isArray(assignedRaw)
         ? assignedRaw.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim())
         : [];
+      if (assigned.length === 0) continue;
+      eligible.push({ inviterId, assigned, row });
+    }
+
+    // One batched ownership lookup for every link: a stored assignment is only
+    // access while its inviter still owns the property.
+    const inviterOwns = await resolveInviterOwnedProperties(
+      db,
+      eligible.map(({ inviterId, assigned }) => ({ inviterUserId: inviterId, propertyIds: assigned })),
+    );
+
+    for (const { inviterId, assigned: assignedRawIds, row } of eligible) {
+      const assigned = assignedRawIds.filter((id) => inviterOwns(inviterId, id));
       if (assigned.length === 0) continue;
 
       const perms = normalizePropertyCoManagerPermissions(

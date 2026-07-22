@@ -82,6 +82,30 @@ function parseGrantStatement(sql: string): GrantStatement | null {
   };
 }
 
+const POLICY_DROP_RE = /^drop\s+policy\s+(?:if\s+exists\s+)?"?([\w-]+)"?\s+on\s+(?:public\.)?"?(\w+)"?/i;
+const POLICY_CREATE_RE = /^create\s+policy\s+"?([\w-]+)"?\s+on\s+(?:public\.)?"?(\w+)"?\s+(.*)$/i;
+
+/**
+ * Replays every drop/create in migration order and returns the policies still
+ * live on `table` — name → `<policy body> [<defining file>]`. One implementation
+ * so the two policy assertions below cannot drift apart on the parsing.
+ */
+function livePoliciesFor(table: string): Map<string, string> {
+  const live = new Map<string, string>();
+  for (const { sql, file } of STATEMENTS) {
+    const drop = POLICY_DROP_RE.exec(sql);
+    if (drop && drop[2].toLowerCase() === table) {
+      live.delete(drop[1].toLowerCase());
+      continue;
+    }
+    const create = POLICY_CREATE_RE.exec(sql);
+    if (create && create[2].toLowerCase() === table) {
+      live.set(create[1].toLowerCase(), `${create[3]} [${file}]`);
+    }
+  }
+  return live;
+}
+
 describe("role-grant surface on trust tables", () => {
   it("reads the migration directory", () => {
     expect(STATEMENTS.length).toBeGreaterThan(100);
@@ -142,21 +166,7 @@ describe("role-grant surface on trust tables", () => {
       it("ends with no policy permitting a client-side write", () => {
         // A policy is only reachable if the grant exists, but a future migration
         // that re-grants DML must not find a permissive write policy waiting.
-        const live = new Map<string, string>();
-
-        for (const { sql, file } of STATEMENTS) {
-          const drop = /^drop\s+policy\s+(?:if\s+exists\s+)?"?([\w-]+)"?\s+on\s+(?:public\.)?"?(\w+)"?/i.exec(sql);
-          if (drop && drop[2].toLowerCase() === table) {
-            live.delete(drop[1].toLowerCase());
-            continue;
-          }
-          const create = /^create\s+policy\s+"?([\w-]+)"?\s+on\s+(?:public\.)?"?(\w+)"?\s+(.*)$/i.exec(sql);
-          if (create && create[2].toLowerCase() === table) {
-            live.set(create[1].toLowerCase(), `${create[3]} [${file}]`);
-          }
-        }
-
-        const writePolicies = [...live.entries()].filter(([, body]) =>
+        const writePolicies = [...livePoliciesFor(table).entries()].filter(([, body]) =>
           /\bfor\s+(all|insert|update|delete)\b/i.test(body),
         );
 
@@ -167,19 +177,7 @@ describe("role-grant surface on trust tables", () => {
       });
 
       it("keeps an owner-scoped SELECT policy so the app can still read", () => {
-        const live = new Map<string, string>();
-        for (const { sql } of STATEMENTS) {
-          const drop = /^drop\s+policy\s+(?:if\s+exists\s+)?"?([\w-]+)"?\s+on\s+(?:public\.)?"?(\w+)"?/i.exec(sql);
-          if (drop && drop[2].toLowerCase() === table) {
-            live.delete(drop[1].toLowerCase());
-            continue;
-          }
-          const create = /^create\s+policy\s+"?([\w-]+)"?\s+on\s+(?:public\.)?"?(\w+)"?\s+(.*)$/i.exec(sql);
-          if (create && create[2].toLowerCase() === table) {
-            live.set(create[1].toLowerCase(), create[3]);
-          }
-        }
-        const selects = [...live.values()].filter((body) => /\bfor\s+select\b/i.test(body));
+        const selects = [...livePoliciesFor(table).values()].filter((body) => /\bfor\s+select\b/i.test(body));
         expect(selects.length, `${table} lost its SELECT policy — the portal reads this table on boot`).toBeGreaterThan(0);
         // Every surviving SELECT policy must still be scoped to the caller.
         for (const body of selects) {
