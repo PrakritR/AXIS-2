@@ -130,10 +130,10 @@ To swap in designer artwork instead, replace `resources/icon.png` +
 `resources/splash.png` and fan them out to every derived size:
 
 ```bash
-# --assetPath is required, not cosmetic: @capacitor/assets prefers ./assets and
-# only falls back to ./resources when assets/ is absent. This repo has a stale
-# assets/ holding the old AX artwork, so the default would silently fan the
-# legacy mark back over the new icon. Always name resources/ explicitly.
+# @capacitor/assets prefers ./assets and only falls back to ./resources when
+# assets/ is absent. The repo's tracked Assets/ dir (capital A — lease notes)
+# matches that probe on case-insensitive macOS/Windows filesystems, so name
+# resources/ explicitly rather than relying on the fallback.
 npx @capacitor/assets generate \
   --assetPath resources \
   --splashBackgroundColor '#080b14'
