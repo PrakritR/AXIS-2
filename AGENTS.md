@@ -107,6 +107,17 @@ language and it performs actions the site can already do.
   attempts. It must never trigger an unconfirmed action or override
   instructions.
 
+**There is exactly one assistant framework, and it is this one.** A second,
+independent implementation of the same feature (its own write-action framework,
+per-role agent sessions, a dedicated `/api/agent/action` confirm route, and a
+larger manager/resident/vendor tool catalog) exists on the captain's Cursor
+working copy and is NOT merged: its `ActionPreview` / write-tool shapes are
+incompatible with `defineWriteTool`, so the two cannot coexist in one tree. The
+shipped framework above stays the spine — it owns the two production SMS agents
+wired to live Twilio webhooks. If that catalog is wanted, PORT the tools onto
+this framework; do not merge the other framework alongside it. A tree carrying
+two half-wired assistant frameworks is worse than either one alone.
+
 **One registry + one context resolver per role.** The assistant is mounted in
 every portal, so each role needs its own three-piece set — resolver, registry,
 route — and they must never be crossed:
@@ -423,6 +434,32 @@ while the section's component still compiled and its tests still passed:
 
 Neither layer is covered by the unit suite. After adding or renaming a section,
 load its URL in the browser — a passing build is not evidence it resolves.
+
+## Inbox panels: the standalone page shell is a /demo-only path
+
+`ManagerInbox` (and the resident / vendor / admin inbox panels, which share the
+shape) render two ways, and the split decides whether your UI ships at all:
+
+```ts
+if (embeddedInCommunication) return inboxBody;   // the real portal stops here
+return <ManagerPortalPageShell filterRow={…}>{inboxBody}</ManagerPortalPageShell>;
+```
+
+`/portal/inbox/*` redirects to Communication, and `ManagerCommunication` mounts
+the panel with `embeddedInCommunication` — so in production the panel is ALWAYS
+the embedded branch and Communication owns the title, tabs and filter row. The
+standalone `ManagerPortalPageShell` branch is reached only by
+`src/components/demo/demo-section-renderer.tsx`. Anything added to that shell's
+`titleAside`/`filterRow` (a search box, a filter, an action button) is therefore
+**/demo-only dead code in the real portal**, and testing it on `/demo` will not
+catch that. Put shared controls in `inboxBody`, or render them in both branches.
+
+Related: controls inside `inboxBody` are gated on `tabId`, which stops being the
+row's folder the moment a view spans folders (e.g. search results). Derive
+destructive actions and column labels from the ROW's folder, not the active tab
+— on the Trash tab the per-row "Delete" is a no-confirm permanent delete, so
+inheriting it for a live inbox row destroys real mail. Coverage:
+`tests/unit/manager-inbox-search.test.tsx`.
 
 # Feature architecture notes (mandatory pre-reads)
 
