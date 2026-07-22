@@ -10,6 +10,7 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
+    "postinstall": "patch-package",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -129,6 +130,7 @@
     "eslint-config-next": "16.2.4",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
+    "patch-package": "^8.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"
