@@ -520,7 +520,9 @@ month, each recurring month, partial last month) bills `billable-days ×
 dailyRentPrice` using each month's REAL day count. **Daily never wins unless the
 manager explicitly sets `rentBasis = "daily"`**, so monthly rooms are untouched.
 Normalization downgrades `rentBasis="daily"` to `"monthly"` when no positive daily
-price is set.
+price is set. One exception at charge time: a resident's own negotiated monthly rent
+(a `managerRentOverride` or a signed/renewed rent) still beats the room's daily basis,
+exactly as it already beats the room's listing monthly rent.
 
 - **Single source of truth:** `src/lib/room-pricing.ts` (`roomIsDailyPriced`,
   `roomHeadlinePriceLabel`, `roomMonthlyEquivalent`, etc.). Use it for any new
@@ -533,7 +535,8 @@ price is set.
   and the recurring generator via `RecurringRentProfile.dailyRentPrice` in
   `src/lib/household-charges.ts`. It extends the existing daily proration to full
   months — utilities stay monthly.
-- Coverage: `tests/unit/room-pricing.test.ts`, `tests/unit/daily-rent-rate.test.ts`.
+- Coverage: `tests/unit/room-pricing.test.ts`, `tests/unit/daily-rent-rate.test.ts`,
+  `tests/unit/daily-rent-charges.test.ts`, `tests/unit/daily-rent-profile-clear.test.ts`.
 
 ## Add-on services vs. work orders
 
