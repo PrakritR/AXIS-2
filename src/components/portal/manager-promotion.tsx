@@ -294,6 +294,20 @@ export function ManagerPromotion() {
     setDraft(EMPTY_DRAFT);
   }, []);
 
+  // Both filters are mutually exclusive selections, so a saved asset can sit
+  // outside either of them. Move both to whatever renders the saved row before
+  // expanding it — otherwise the success toast points at nothing.
+  const revealAsset = useCallback(
+    (assetId: string, kind: PromotionContentFilter, rowPropertyId: string | null | undefined) => {
+      setContentFilter(kind);
+      setPropertyFilter((cur) =>
+        !cur || samePropertyId(rowPropertyId, cur) ? cur : rowPropertyId?.trim() || "",
+      );
+      setExpandedId(assetId);
+    },
+    [],
+  );
+
   const openEditFlyer = useCallback(
     (row: ManagerPromotionRow, entryId: string) => {
       const entry = readFlyerEntries(row).find((e) => e.id === entryId) ?? null;
@@ -388,11 +402,7 @@ export function ManagerPromotion() {
       upsertManagerPromotion({ ...savedRow, updatedAt: now });
       closeForm();
       const assetId = makePromotionAssetId(savedRow.id, "flyer", entryId);
-      // The pills are mutually exclusive, so land the manager on the kind they
-      // just saved — otherwise the new row is filtered out of the list it
-      // expands into.
-      setContentFilter("image");
-      setExpandedId(assetId);
+      revealAsset(assetId, "image", savedRow.propertyId);
       if (isDemoModeActive()) {
         window.dispatchEvent(new CustomEvent(DEMO_PROMOTION_GENERATED_EVENT, { detail: { assetId } }));
       }
@@ -495,8 +505,7 @@ export function ManagerPromotion() {
       });
       upsertManagerPromotion(row);
       closeForm();
-      setContentFilter("text");
-      setExpandedId(makePromotionAssetId(row.id, "text", entry.id));
+      revealAsset(makePromotionAssetId(row.id, "text", entry.id), "text", row.propertyId);
       showToast(source === "ai" ? "Promotion text created." : "Promotion text created (offline copy).");
     } catch {
       showToast("Could not generate promotion text.");
@@ -666,7 +675,7 @@ export function ManagerPromotion() {
             <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
               {generating ? "Updating…" : "Update flyer"}
             </Button>
-            <Button type="button" variant="outline" onClick={closeForm}>
+            <Button type="button" variant="outline" onClick={closeForm} disabled={generating}>
               Cancel
             </Button>
           </div>

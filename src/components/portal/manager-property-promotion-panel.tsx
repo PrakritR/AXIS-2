@@ -515,7 +515,7 @@ export function ManagerPropertyPromotionPanel({
             <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
               {generating ? "Updating…" : "Update flyer"}
             </Button>
-            <Button type="button" variant="outline" onClick={closeForm}>
+            <Button type="button" variant="outline" onClick={closeForm} disabled={generating}>
               Cancel
             </Button>
           </div>
