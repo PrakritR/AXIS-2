@@ -43,6 +43,7 @@ import {
 } from "@/lib/rental-application/application-policy";
 import {
   isInProgressApplicationRow,
+  markApplicationSubmitInitiated,
   syncInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -590,6 +591,9 @@ function RentalApplicationWizardInner({
       setSubmitting(true);
       const prop = pid ? getPropertyById(pid) : undefined;
       const axisId = loadRentalWizardDraftAxisId()?.trim() || makeNewApplicationId();
+      // Stop the per-keystroke draft effect from issuing further writes for this
+      // application now that it is being submitted.
+      markApplicationSubmitInitiated(axisId);
       const listing = prop;
       const applicantName = form.fullLegalName.trim() || "Applicant";
 

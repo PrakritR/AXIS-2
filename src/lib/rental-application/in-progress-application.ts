@@ -53,12 +53,26 @@ export function buildInProgressApplicationRow(input: {
   };
 }
 
+const submitInitiatedAxisIds = new Set<string>();
+
+/**
+ * Marks an axis id as having entered submit, so the wizard's per-keystroke draft
+ * effect stops issuing draft writes for it. This is only a cheap second layer —
+ * the authoritative defense is the conditional write in the API route, which no
+ * caller can bypass.
+ */
+export function markApplicationSubmitInitiated(axisId: string): void {
+  const id = axisId.trim();
+  if (id) submitInitiatedAxisIds.add(id);
+}
+
 export function syncInProgressApplicationRow(input: {
   axisId: string;
   form: RentalWizardFormState;
   residentEmail: string;
 }): void {
   const row = buildInProgressApplicationRow(input);
+  if (submitInitiatedAxisIds.has(row.id.trim())) return;
   // Never walk a submitted application back to a draft. The server enforces this
   // too (a draft POST can still be in flight when submit lands); this keeps the
   // local cache honest and avoids issuing the doomed write at all.

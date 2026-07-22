@@ -6,7 +6,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
-import { normalizeApplicationAxisId, wouldDowngradeSubmittedApplication } from "@/lib/manager-applications-storage";
+import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -39,35 +39,64 @@ function idVariants(id: string): string[] {
   return [...new Set([trimmed, normalized].filter(Boolean))];
 }
 
-async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceRoleClient>, oldId: string, row: DemoApplicantRow) {
-  // Draft syncs are fired unawaited by the wizard, so one can still be in flight
-  // when the submit write lands and would otherwise revert a submitted
-  // application to a draft nobody sees. Re-read immediately before the upsert so
-  // the check reflects the newest stored state, and drop the downgrade.
-  if (row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress") {
-    const { data: current } = await db
+/** Stage stored on a draft snapshot; matched case-insensitively via `ilike`. */
+const DRAFT_STAGE = "in progress";
+
+/**
+ * Persist a draft (in-progress) snapshot without ever walking a submitted
+ * application backwards.
+ *
+ * The wizard fires draft syncs unawaited, so a draft request routinely reads the
+ * pre-submit state and only commits after the submit write landed. Read-then-write
+ * cannot close that window no matter where the check sits — the check and the
+ * write must be ONE statement. So the draft goes out as a conditional UPDATE the
+ * database itself refuses unless the stored row is still a draft. Only when no row
+ * exists at all do we insert, and a unique violation there means a row appeared
+ * concurrently, so we re-run the same conditional update rather than clobbering it.
+ */
+async function persistDraftRow(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  ids: string[],
+  values: Record<string, unknown>,
+): Promise<void> {
+  const updateIfStillDraft = async (): Promise<boolean> => {
+    const { data } = await db
       .from("manager_application_records")
-      .select("row_data")
-      .in("id", idVariants(row.id))
-      .limit(1);
-    const stored = current?.[0]?.row_data as DemoApplicantRow | undefined;
-    if (wouldDowngradeSubmittedApplication(stored, row)) return;
-  }
+      .update(values)
+      .in("id", ids)
+      .eq("row_data->>bucket", "pending")
+      .ilike("row_data->>stage", DRAFT_STAGE)
+      .select("id");
+    return (data?.length ?? 0) > 0;
+  };
+
+  if (await updateIfStillDraft()) return;
+  const { error } = await db.from("manager_application_records").insert(values);
+  // A failed insert means a row is there after all (unique violation on the id
+  // primary key); re-run the conditional update so a concurrently created draft
+  // still gets the newer snapshot, and a submitted one is left alone.
+  if (error) await updateIfStillDraft();
+}
+
+async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceRoleClient>, oldId: string, row: DemoApplicantRow) {
+  const values = {
+    id: row.id,
+    manager_user_id: row.managerUserId || null,
+    resident_email: row.email?.trim().toLowerCase() || null,
+    property_id: row.propertyId || row.application?.propertyId || null,
+    assigned_property_id: row.assignedPropertyId || null,
+    row_data: row,
+    updated_at: new Date().toISOString(),
+  };
   if (oldId !== row.id) {
     await db.from("manager_application_records").delete().eq("id", oldId);
   }
-  await db.from("manager_application_records").upsert(
-    {
-      id: row.id,
-      manager_user_id: row.managerUserId || null,
-      resident_email: row.email?.trim().toLowerCase() || null,
-      property_id: row.propertyId || row.application?.propertyId || null,
-      assigned_property_id: row.assignedPropertyId || null,
-      row_data: row,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" },
-  );
+  if (isDraftApplicationRow(row)) {
+    await persistDraftRow(db, idVariants(row.id), values);
+  } else {
+    // Submit and every forward move stay authoritative and write unconditionally.
+    await db.from("manager_application_records").upsert(values, { onConflict: "id" });
+  }
   if (row.bucket === "approved") {
     try {
       const provisioned = await provisionApprovedResidentAccount(db, row);

@@ -20,26 +20,63 @@ const state = vi.hoisted(() => ({
   records: [] as Row[],
   user: null as { id: string; email?: string } | null,
   profile: null as Row | null,
+  // Holds the FIRST write carrying this stage until the promise resolves, so a
+  // request can be frozen mid-flight and made to commit last. Models one
+  // request's write landing after another's without relying on timing.
+  holdStage: null as string | null,
+  holdUntil: null as Promise<void> | null,
 }));
+
+/** Reads a column, understanding PostgREST JSON paths like `row_data->>stage`. */
+function readColumn(row: Row, col: string): unknown {
+  const [base, key] = col.split("->>");
+  if (!key) return row[col];
+  const json = row[base] as Row | undefined;
+  return json?.[key];
+}
 
 function makeFakeDb() {
   function builder(table: string) {
     const rows = table === "profiles" ? (state.profile ? [state.profile] : []) : state.records;
     const filters: Array<(row: Row) => boolean> = [];
-    let mode: "select" | "delete" = "select";
+    let mode: "select" | "delete" | "update" = "select";
+    let pending: Row | null = null;
 
     const matched = () => rows.filter((row) => filters.every((fn) => fn(row)));
 
+    // The database evaluates an UPDATE's WHERE clause against the newest
+    // committed row, so a held write re-checks its condition on release.
+    async function awaitHold(values: Row) {
+      const stage = (values.row_data as Row | undefined)?.stage;
+      if (!state.holdUntil || stage !== state.holdStage) return;
+      const hold = state.holdUntil;
+      state.holdUntil = null;
+      await hold;
+    }
+
     const api = {
       select() {
+        if (mode === "update") {
+          const values = pending as Row;
+          return awaitHold(values).then(() => {
+            const hit = matched();
+            for (const row of hit) Object.assign(row, values);
+            return { data: hit.map((row) => ({ id: row.id })), error: null };
+          });
+        }
         return api;
       },
       eq(col: string, val: unknown) {
-        filters.push((row) => row[col] === val);
+        filters.push((row) => readColumn(row, col) === val);
+        return api;
+      },
+      ilike(col: string, pattern: string) {
+        const want = pattern.toLowerCase();
+        filters.push((row) => String(readColumn(row, col) ?? "").toLowerCase() === want);
         return api;
       },
       in(col: string, vals: unknown[]) {
-        filters.push((row) => vals.includes(row[col]));
+        filters.push((row) => vals.includes(readColumn(row, col)));
         return api;
       },
       limit() {
@@ -52,11 +89,26 @@ function makeFakeDb() {
         mode = "delete";
         return api;
       },
-      upsert(values: Row) {
+      update(values: Row) {
+        mode = "update";
+        pending = values;
+        return api;
+      },
+      async insert(values: Row) {
+        await awaitHold(values);
+        // `id` is the table's primary key, so a concurrent insert loses here.
+        if (state.records.some((row) => row.id === values.id)) {
+          return { data: null, error: { code: "23505", message: "duplicate key value" } };
+        }
+        state.records.push({ ...values });
+        return { data: null, error: null };
+      },
+      async upsert(values: Row) {
+        await awaitHold(values);
         const idx = state.records.findIndex((row) => row.id === values.id);
         if (idx >= 0) state.records[idx] = { ...state.records[idx], ...values };
         else state.records.push({ ...values });
-        return Promise.resolve({ data: null, error: null });
+        return { data: null, error: null };
       },
       then(resolve: (value: { data: Row[]; error: null }) => unknown) {
         if (mode === "delete") {
@@ -134,6 +186,8 @@ describe("submitted applications survive a trailing in-progress draft write", ()
     state.records = [];
     state.user = { id: "resident-1", email: RESIDENT_EMAIL };
     state.profile = { id: "resident-1", email: RESIDENT_EMAIL, role: "resident" };
+    state.holdStage = null;
+    state.holdUntil = null;
   });
 
   it("keeps the submitted snapshot when a draft sync lands after submit", async () => {
@@ -147,6 +201,30 @@ describe("submitted applications survive a trailing in-progress draft write", ()
 
     expect(storedRow()?.stage).toBe("Submitted");
     expect(storedRow()?.bucket).toBe("pending");
+  });
+
+  it("drops a concurrent draft write that saw the pre-submit state but commits last", async () => {
+    // The losing interleaving: the draft request is already in flight and has
+    // seen a table with no submitted row, then the submit lands, and only THEN
+    // does the draft's write reach the table. A read-then-write guard passes its
+    // check here and still clobbers the submission.
+    let release!: () => void;
+    state.holdStage = "In progress";
+    state.holdUntil = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const draft = postUpsert(applicationRow("In progress"));
+    const submit = await postUpsert(applicationRow("Submitted"));
+    expect(submit.status).toBe(200);
+    expect(storedRow()?.stage).toBe("Submitted");
+
+    release();
+    expect((await draft).status).toBe(200);
+
+    expect(storedRow()?.stage).toBe("Submitted");
+    expect(storedRow()?.detail).toBe("Submitted now");
+    expect((storedRow()?.application as Row | undefined)?.groupId).toBe("AXISGRP-TZNQYRN8");
   });
 
   it("still lets a genuine draft resume write in progress before any submit", async () => {

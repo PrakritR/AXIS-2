@@ -138,7 +138,7 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
 }
 
 /** A pending row still being filled in by the applicant (not yet submitted). */
-function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
+export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
   return row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress";
 }
 
