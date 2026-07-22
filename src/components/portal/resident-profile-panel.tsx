@@ -147,8 +147,16 @@ export function ResidentProfilePanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName: name.trim(), phone: phone.trim() }),
       });
+      const raw = await res.text();
+      let body: { error?: string; ok?: boolean } = {};
+      try {
+        body = raw ? (JSON.parse(raw) as { error?: string; ok?: boolean }) : {};
+      } catch {
+        showToast("Save failed (invalid response).");
+        return;
+      }
       if (!res.ok) {
-        showToast("Could not save profile.");
+        showToast(body.error ?? "Could not save profile.");
         return;
       }
       showToast("Profile saved.");

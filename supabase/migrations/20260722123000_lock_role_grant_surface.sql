@@ -66,6 +66,13 @@ REVOKE INSERT, UPDATE, DELETE ON public.vendor_invites FROM anon, authenticated;
 -- The code is now fail-closed as well, but stop NULLs reaching it at all.
 -- Existing NULLs are backfilled to created_at + 7 days, matching the TTL the
 -- issuing route stamps; already-elapsed values simply read as expired.
+--
+-- Do NOT "fix" this by backfilling to now() + 7 days. The issuing route ALWAYS
+-- stamps expires_at, so a NULL expiry is the shape a FORGED invite takes — that
+-- was the exploit, since a NULL skipped the TTL check outright. A now()-based
+-- window would hand those rows a fresh redemption period. Blast radius was
+-- verified as zero before this shipped: public.vendor_invites held zero rows in
+-- the dev project, and the security review recorded zero invites in production.
 UPDATE public.vendor_invites
    SET expires_at = created_at + interval '7 days'
  WHERE expires_at IS NULL;
