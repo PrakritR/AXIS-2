@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
@@ -42,11 +43,17 @@ import {
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
+  replaceManagerApplicationRowInCache,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
+import {
+  canResidentWithdrawApplication,
+  isWithdrawnApplicationRow,
+  sortResidentApplicationRows,
+} from "@/lib/rental-application/resident-application-list";
 import { applicationHasGroup } from "@/lib/rental-application/application-groups";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 
@@ -81,17 +88,6 @@ function continueApplicationPath(row: DemoApplicantRow): string {
     : `${RESIDENT_PORTAL_BASE_PATH}/applications/apply`;
 }
 
-function sortApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-  return [...rows].sort((a, b) => {
-    const propertyCmp = collator.compare(a.property || "", b.property || "");
-    if (propertyCmp !== 0) return propertyCmp;
-    const byId = collator.compare(a.id, b.id);
-    if (byId !== 0) return byId;
-    return collator.compare(a.name || "", b.name || "");
-  });
-}
-
 export function ResidentApplicationsPanel({
   embedded = false,
   applyMode: applyModeProp = false,
@@ -116,6 +112,8 @@ export function ResidentApplicationsPanel({
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<DemoApplicantRow | null>(null);
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
   const openHandled = useRef(false);
 
   useEffect(() => {
@@ -151,8 +149,11 @@ export function ResidentApplicationsPanel({
   const rows = useMemo(() => {
     void tick;
     if (!residentEmail) return [];
-    return sortApplicationRows(
-      readManagerApplicationRows().filter((row) => (row.email ?? "").trim().toLowerCase() === residentEmail),
+    // A withdrawn application leaves the resident's active list (the manager keeps it).
+    return sortResidentApplicationRows(
+      readManagerApplicationRows().filter(
+        (row) => (row.email ?? "").trim().toLowerCase() === residentEmail && !isWithdrawnApplicationRow(row),
+      ),
     );
   }, [residentEmail, tick]);
 
@@ -197,6 +198,75 @@ export function ResidentApplicationsPanel({
       setExpandedId(hit.id);
     });
   }, [rows, searchParams]);
+
+  const confirmWithdraw = async () => {
+    const row = withdrawTarget;
+    if (!row || withdrawBusy) return;
+    setWithdrawBusy(true);
+    try {
+      const res = await fetch("/api/manager-applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "withdraw", id: row.id }),
+      });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !body?.ok) {
+        showToast(body?.error ?? "Could not withdraw application.");
+        return;
+      }
+      // Reflect the withdrawal locally (no server mirror) so the row leaves the
+      // active list immediately; the server already persisted `withdrawnAt`.
+      replaceManagerApplicationRowInCache({ ...row, withdrawnAt: new Date().toISOString() });
+      if (expandedId === row.id) setExpandedId(null);
+      if (editingId === row.id) setEditingId(null);
+      setWithdrawTarget(null);
+      setTick((t) => t + 1);
+      showToast("Application withdrawn. Your property manager still has the record.");
+    } catch {
+      showToast("Could not withdraw application.");
+    } finally {
+      setWithdrawBusy(false);
+    }
+  };
+
+  const withdrawModal = (
+    <Modal
+      open={withdrawTarget !== null}
+      title="Withdraw application"
+      onClose={() => (withdrawBusy ? undefined : setWithdrawTarget(null))}
+      panelClassName="max-w-md"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Withdrawing removes this application from your active list. It is not deleted — your property
+          manager keeps the record{withdrawTarget?.property ? ` for ${withdrawTarget.property}` : ""} and its
+          history, and you can reapply later if you change your mind.
+        </p>
+        <div className="flex justify-start gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => setWithdrawTarget(null)}
+            disabled={withdrawBusy}
+          >
+            Keep application
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            className="rounded-full"
+            data-attr="resident-application-withdraw-confirm"
+            onClick={() => void confirmWithdraw()}
+            disabled={withdrawBusy}
+          >
+            {withdrawBusy ? "Withdrawing…" : "Withdraw application"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
 
   const embeddedWizard = (
     <RentalApplicationWizard
@@ -252,6 +322,17 @@ export function ResidentApplicationsPanel({
                 onClick={() => setEditingId(row.id)}
               >
                 Edit application
+              </Button>
+            ) : null}
+            {canResidentWithdrawApplication(row) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                data-attr="resident-application-withdraw"
+                onClick={() => setWithdrawTarget(row)}
+              >
+                Withdraw application
               </Button>
             ) : null}
           </PortalTableDetailActions>
@@ -392,6 +473,7 @@ export function ResidentApplicationsPanel({
       ) : rowsForBucket.length > 0 ? (
         renderApplicationsTable()
       ) : null}
+      {withdrawModal}
     </>
   );
 

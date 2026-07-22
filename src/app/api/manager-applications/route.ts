@@ -391,7 +391,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
-      action?: "upsert" | "delete" | "replace";
+      action?: "upsert" | "delete" | "replace" | "withdraw";
       id?: string;
       row?: DemoApplicantRow;
       rows?: DemoApplicantRow[];
@@ -462,6 +462,61 @@ export async function POST(req: Request) {
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }
       return NextResponse.json({ ok: true, deleted: idsToDelete.size });
+    }
+
+    // Resident self-service WITHDRAW: a reversible, non-destructive state change.
+    // Never a hard delete — the record, screening, documents and bucket stay intact;
+    // only `row_data.withdrawnAt` is stamped so the row leaves the resident's active
+    // list while the manager keeps it (labelled "Withdrawn"). Ownership is enforced
+    // from the AUTHENTICATED session's email (the request carries only the id), so a
+    // resident can never withdraw another applicant's application.
+    if (body.action === "withdraw") {
+      if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+      const id = body.id?.trim();
+      if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      const ids = idVariants(id);
+      const { data: records, error: loadError } = await db
+        .from("manager_application_records")
+        .select("id, row_data, resident_email")
+        .in("id", ids);
+      if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
+      if (!records || records.length === 0) {
+        return NextResponse.json({ error: "Application not found." }, { status: 404 });
+      }
+
+      const admin = await isAdminUser(user.id);
+      const { role, email } = await resolvePortalRole(db, user);
+      // Withdraw is a resident self-service action; managers use Reject.
+      if (!admin && role !== "resident") {
+        return NextResponse.json({ error: "Only the applicant can withdraw this application." }, { status: 403 });
+      }
+
+      const withdrawnAt = new Date().toISOString();
+      let withdrawn = 0;
+      for (const record of records) {
+        const stored = (record.row_data ?? {}) as DemoApplicantRow;
+        if (!admin) {
+          const rowEmail = (stored.email ?? record.resident_email ?? "").trim().toLowerCase();
+          if (!email || rowEmail !== email) {
+            return NextResponse.json({ error: "You can only withdraw your own application." }, { status: 403 });
+          }
+          if (stored.bucket !== "pending") {
+            return NextResponse.json({ error: "This application can no longer be withdrawn." }, { status: 409 });
+          }
+        }
+        if (stored.withdrawnAt) {
+          withdrawn += 1; // already withdrawn — idempotent
+          continue;
+        }
+        const nextRowData: DemoApplicantRow = { ...stored, withdrawnAt };
+        const { error: updateError } = await db
+          .from("manager_application_records")
+          .update({ row_data: nextRowData, updated_at: withdrawnAt })
+          .eq("id", record.id);
+        if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+        withdrawn += 1;
+      }
+      return NextResponse.json({ ok: true, withdrawn });
     }
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
