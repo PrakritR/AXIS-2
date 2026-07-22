@@ -122,6 +122,20 @@ npm run db:link:dev                                 # ALWAYS relink back to dev/
 Because the same migration files are pushed to both projects, the schemas stay
 mirrored.
 
+### Release note: `--include-all` required for the vendor-invoice RLS migration
+
+Production (project `qahnczmilgptcedaqype`) records applied migrations under
+**apply-time versions, not their repo filenames** — e.g. repo
+`20260721130000_claw_thread_topic_services.sql` is recorded on prod as version
+`20260721200505`. At this deploy the production migration head was
+`20260721200505`, so the pending local migrations `20260721140000` and
+`20260721141000` sort **before** it. Plain `supabase db push` (`npm run
+db:push`) therefore refuses them as out-of-order; push this release with
+`supabase db push --include-all` instead (both migrations are idempotent, so
+`--include-all` is safe). Do not fix this by re-timestamping repo files —
+prod's apply-time versioning means repo timestamps don't map to the remote
+head.
+
 > Note: `supabase db push/diff/baseline` act on whichever project is currently
 > **linked**. Keep dev/test linked by default; only link production for a
 > deliberate deploy, and relink to dev/test immediately after.
