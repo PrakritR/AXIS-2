@@ -3,8 +3,10 @@
 These are **real-world** payments (housing rent, application fees), exempt from
 Apple's IAP rule under App Store Guideline **3.1.5(a)** — so Stripe + Apple Pay is
 the correct, compliant processor. (Manager SaaS **subscriptions** are a separate
-flow — see [`stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md)
-— and go through StoreKit IAP, not this path. Do not conflate the two.)
+flow on their own Stripe builder — see
+[`stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md) — and
+their in-app billing is owned by a separate StoreKit IAP task, not this path. Do
+not conflate the two.)
 
 ## How Apple Pay is enabled here
 

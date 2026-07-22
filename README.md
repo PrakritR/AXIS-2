@@ -18,7 +18,7 @@ Properties, tour scheduling, rental applications, resident & lease management, h
 
 ### Resident portal (`/resident`)
 
-Rent & utility payments (card, ACH, Link via Stripe Connect), move-in checklist, services & work orders, inbox, lease & receipts, financial statements. Full workspace unlocks after lease approval.
+Rent & utility payments (card incl. Apple Pay / Google Pay, ACH, Link via Stripe Connect), move-in checklist, services & work orders, inbox, lease & receipts, financial statements. Full workspace unlocks after lease approval.
 
 ### Platform capabilities
 
@@ -135,6 +135,7 @@ See [`docs/mobile-app.md`](docs/mobile-app.md) and [`docs/firebase-push-setup.md
 | [`docs/stripe-connect-ach-setup.md`](docs/stripe-connect-ach-setup.md) | Resident payments via Stripe Connect |
 | [`docs/stripe-go-live.md`](docs/stripe-go-live.md) | Production Stripe checklist |
 | [`docs/stripe-apple-pay-subscriptions.md`](docs/stripe-apple-pay-subscriptions.md) | Apple Pay for manager subscriptions |
+| [`docs/stripe-apple-pay-payments.md`](docs/stripe-apple-pay-payments.md) | Apple Pay for rent & rental-application fees |
 | [`docs/stripe-ach-local-test.md`](docs/stripe-ach-local-test.md) | Local ACH / webhook testing |
 | [`docs/design.md`](docs/design.md) | Blue Steel design system |
 | [`docs/mobile-app.md`](docs/mobile-app.md) | Capacitor native app workflow |

@@ -20,9 +20,9 @@ for the checklist and registries that keep browser and app behavior aligned.
 | Flow | Web | iOS / Android app |
 | --- | --- | --- |
 | **Manager subscription** (Pro / Business) | Stripe Checkout — card or Apple Pay | Same — choose **Apple Pay** or card in embedded checkout |
-| **Resident rent & fees** | Bank (ACH), Link, or card via Stripe | **Bank (ACH) only** via Stripe |
+| **Resident rent & fees** | Bank (ACH), card (**Apple Pay / Google Pay** or a typed card), or Link via Stripe | Bank (ACH) or card via Stripe — **no Link**, and the Apple Pay / Google Pay hint is hidden |
 
-Rent in the app always uses ACH (`src/lib/platform/resident-payments.ts`). Subscription Apple Pay setup: [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md).
+Per-surface pay methods come from `residentPaymentMethodsForSurface()` (`src/lib/platform/resident-payments.ts`); the app drops Link. The card option advertises the wallets on the web only — Apple Pay inside the WebView depends on native entitlement, which is out of scope for the payments work. Apple Pay setup: [`docs/stripe-apple-pay-payments.md`](stripe-apple-pay-payments.md) (rent + application fees), [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md) (subscriptions).
 
 ---
 
