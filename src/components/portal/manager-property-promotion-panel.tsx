@@ -398,7 +398,7 @@ export function ManagerPropertyPromotionPanel({
       ? assets.find((a) => a.id === textModalAssetId) ?? null
       : null;
 
-  const renderHeaderActions = (asset: PromotionAsset, _indexWithinKind: number) => {
+  const renderHeaderActions = (asset: PromotionAsset) => {
     if (asset.kind === "flyer") {
       return (
         <PromotionFlyerHeaderActions
@@ -431,7 +431,7 @@ export function ManagerPropertyPromotionPanel({
     );
   };
 
-  const renderExpanded = (asset: PromotionAsset, _indexWithinKind: number) => {
+  const renderExpanded = (asset: PromotionAsset) => {
     if (asset.kind === "flyer") {
       return <PromotionFlyerAssetDetail asset={asset} />;
     }
