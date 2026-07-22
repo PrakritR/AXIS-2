@@ -77,8 +77,8 @@ back to Download.
 
 **UI**
 - Manager Library: visibility picker on upload/edit (`ManagerDocumentLibrary`), vendor dropdown from manager vendor directory.
-- Resident Documents: **Shared with you** tab (`portal-shared-documents-table.tsx`).
-- Vendor Documents: **From managers** tab (same shared table component).
+- Resident Documents: manager-shared docs are folded into the **Other documents** tab (`resident-other-documents.tsx`), one merged table with a Source column ("You" vs "Shared"); the standalone "Shared with you" tab was removed and `/documents/shared` redirects to `/documents/other`. Same `/api/resident/shared-documents` endpoint + signed-URL preview as before.
+- Vendor Documents: **From managers** tab (`portal-shared-documents-table.tsx`).
 
 # Documents module (Phase 3: expiration & compliance)
 
