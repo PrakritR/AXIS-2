@@ -701,10 +701,32 @@ export async function publishManagerPropertyDraftToServer(
 }
 
 /**
+ * Every submission still held by a locally-known record: the remaining side
+ * buckets, the live/co-managed listing catalog and the pending queue. Uploads are
+ * deduplicated per data URL, so records can share bucket objects — media cleanup
+ * has to diff against this rather than assume a deleted row owned its media
+ * exclusively.
+ */
+function survivingSubmissions(forManagerUserId?: string | null): ManagerListingSubmissionV1[] {
+  const side = readSide(forManagerUserId);
+  const out: ManagerListingSubmissionV1[] = [];
+  for (const rows of [side.drafts, side.unlisted, side.requestChange, side.rejected]) {
+    for (const row of rows) if (row.submission) out.push(row.submission);
+  }
+  for (const listing of readAllExtraListings()) {
+    if (listing.listingSubmission) out.push(listing.listingSubmission);
+  }
+  for (const pending of readAllPendingManagerProperties()) {
+    if (pending.submission) out.push(pending.submission);
+  }
+  return out;
+}
+
+/**
  * Permanently delete a saved draft (owner-only). Resolves false — leaving the
  * draft in place — unless the server row is actually gone, so a delete that never
- * landed is reported rather than reappearing on the next sync. The draft's
- * uploaded media is reclaimed too; nothing else references it once it is gone.
+ * landed is reported rather than reappearing on the next sync. Its uploads are
+ * reclaimed afterwards, minus any object another surviving record still points at.
  */
 export async function deleteManagerPropertyDraft(
   draftId: string,
@@ -716,7 +738,7 @@ export async function deleteManagerPropertyDraft(
   const fresh = readSide(forManagerUserId);
   const nextDrafts = fresh.drafts.filter((r) => r.adminRefId !== draftId);
   writeSideStorage({ ...fresh, drafts: nextDrafts }, forManagerUserId);
-  await deleteSubmissionMediaObjects(existing.submission);
+  await deleteSubmissionMediaObjects(existing.submission, survivingSubmissions(forManagerUserId));
   return true;
 }
 

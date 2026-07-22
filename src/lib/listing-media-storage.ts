@@ -57,19 +57,37 @@ export function collectSubmissionMediaUrls(sub: ManagerListingSubmissionV1): str
   return out;
 }
 
+/** Distinct `listing-photos` object paths a submission references. */
+export function collectSubmissionMediaPaths(sub: ManagerListingSubmissionV1 | null | undefined): Set<string> {
+  if (!sub) return new Set();
+  return new Set(
+    collectSubmissionMediaUrls(sub).map(listingMediaObjectPath).filter((p): p is string => Boolean(p)),
+  );
+}
+
 /**
  * Best-effort reclamation of the storage objects a discarded submission owned.
  * Egress and storage are a real constraint on the free plan, so deleting a draft
- * must not strand its uploads in the bucket. Never throws — losing the cleanup is
- * strictly better than failing the delete the manager asked for.
+ * must not strand its uploads in the bucket.
+ *
+ * Uploads are deduplicated per data URL, so two records can legitimately point at
+ * the same object — most visibly the two draft rows a partially-failed id re-key
+ * leaves behind. `stillReferencedBy` must therefore carry every submission that
+ * survives the delete; a path any of them still uses is left alone, because
+ * stripping a surviving record's photos is worse than stranding an object.
+ * Never throws — losing the cleanup is strictly better than failing the delete
+ * the manager asked for.
  */
 export async function deleteSubmissionMediaObjects(
   sub: ManagerListingSubmissionV1 | null | undefined,
+  stillReferencedBy: Iterable<ManagerListingSubmissionV1 | null | undefined> = [],
 ): Promise<void> {
   if (!sub || typeof window === "undefined" || isDemoModeActive()) return;
-  const paths = Array.from(
-    new Set(collectSubmissionMediaUrls(sub).map(listingMediaObjectPath).filter((p): p is string => Boolean(p))),
-  );
+  const retained = new Set<string>();
+  for (const other of stillReferencedBy) {
+    for (const path of collectSubmissionMediaPaths(other)) retained.add(path);
+  }
+  const paths = Array.from(collectSubmissionMediaPaths(sub)).filter((p) => !retained.has(p));
   if (paths.length === 0) return;
   try {
     const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");

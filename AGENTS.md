@@ -620,7 +620,14 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   really gone (a failed delete leaves the draft visible instead of letting it
   reappear on the next sync), then removes the submission's `listing-photos`
   objects via `deleteSubmissionMediaObjects`
-  (`src/lib/listing-media-storage.ts`). Draft *count* is deliberately uncapped.
+  (`src/lib/listing-media-storage.ts`). **A record does not own its uploads
+  exclusively** — the wizard dedupes uploads per data URL, so the two draft rows
+  a partially-failed re-key leaves behind reference the *same* bucket objects.
+  `deleteSubmissionMediaObjects` therefore takes every surviving submission
+  (`survivingSubmissions`: the other side-bucket rows, the live catalog and the
+  pending queue) and skips any path still referenced; deleting the leftover
+  duplicate must never strip the surviving draft's photos. Draft *count* is
+  deliberately uncapped.
 
 # Financials UI cleanup (Blue Steel consolidation)
 
