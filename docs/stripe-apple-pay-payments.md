@@ -33,7 +33,9 @@ uses **dynamic payment methods** scoped to card. `paymentMethodStripeConfig()`:
   session never surfaces a different-fee method — and that is *enforced at
   runtime*, not just documented: before using the PMC the builder retrieves it
   from Stripe (cached 10 min) and checks that no method outside
-  card / Apple Pay / Google Pay is enabled. A PMC that also offers
+  card / Apple Pay / Google Pay / Link is enabled. Link is allowed because this
+  repo prices it at exactly the card rate, so it cannot skew the baked fee line
+  item — and Stripe commonly enables it alongside card. A PMC that also offers
   `us_bank_account`, Klarna, Affirm, … (or a PMC that cannot be retrieved) logs a
   `console.error` and falls back to the explicit `["card"]` allowlist rather than
   creating a session whose baked fee line item could be wrong.
@@ -81,7 +83,7 @@ checkout wallet.
    to register the production hostname(s), then `--validate-only` until Apple Pay
    reads `active`.
 3. **Recommended:** create a **card-scoped** Payment Method Configuration
-   (Apple Pay + Google Pay + Card, **no** ACH/Link) and set
+   (Apple Pay + Google Pay + Card, optionally Link, **no** ACH) and set
    `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION=pmc_…` in the app env. This
    guarantees the wallets surface via dynamic payment methods while keeping the
    card-fee model exact. Without it, card sessions fall back to `["card"]`.

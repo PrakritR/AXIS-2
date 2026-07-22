@@ -131,12 +131,16 @@ async function paymentMethodStripeConfig(
 /**
  * Payment methods whose Stripe processing cost is the card rate (2.9% + $0.30),
  * i.e. the ones the card session's pre-baked fee line item already prices
- * correctly. Apple Pay / Google Pay are card wallets and settle as `card`.
+ * correctly. Apple Pay / Google Pay are card wallets and settle as `card`; Link
+ * is priced identically (`RESIDENT_PROCESSING_FEE_BPS.link` in
+ * `payment-policy.ts`) and Stripe commonly enables it alongside card, so a PMC
+ * carrying it is still fee-exact and must not be rejected.
  */
-const CARD_CLASS_PAYMENT_METHODS = new Set(["card", "apple_pay", "google_pay"]);
+const CARD_CLASS_PAYMENT_METHODS = new Set(["card", "apple_pay", "google_pay", "link"]);
 
 const cardPmcScopeCache = new Map<string, { cardScoped: boolean; expiresAt: number }>();
 const CARD_PMC_CACHE_TTL_MS = 10 * 60_000;
+const CARD_PMC_ERROR_CACHE_TTL_MS = 60_000;
 
 /**
  * A card session bakes the card processing fee AND the Connect
@@ -159,6 +163,7 @@ async function cardScopedPaymentMethodConfiguration(stripe: Stripe, pmcId: strin
       `[stripe] Could not verify STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) is card-scoped; falling back to explicit card payment methods.`,
       e,
     );
+    cardPmcScopeCache.set(pmcId, { cardScoped: false, expiresAt: Date.now() + CARD_PMC_ERROR_CACHE_TTL_MS });
     return false;
   }
 
@@ -169,7 +174,7 @@ async function cardScopedPaymentMethodConfiguration(stripe: Stripe, pmcId: strin
   const cardScoped = offending.length === 0;
   if (!cardScoped) {
     console.error(
-      `[stripe] STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) enables non-card methods [${offending.join(", ")}] whose processing fee differs from card; falling back to explicit card payment methods. Scope the configuration to card + Apple Pay + Google Pay.`,
+      `[stripe] STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) enables non-card methods [${offending.join(", ")}] whose processing fee differs from card; falling back to explicit card payment methods. Scope the configuration to card + Apple Pay + Google Pay (+ Link).`,
     );
   }
   cardPmcScopeCache.set(pmcId, { cardScoped, expiresAt: Date.now() + CARD_PMC_CACHE_TTL_MS });

@@ -758,13 +758,15 @@ function RentalApplicationWizardInner({
     }
 
     void (async () => {
-      const res = await fetch(`/api/stripe/application-fee-verify?session_id=${encodeURIComponent(sessionId)}`);
+      const res = await fetch(
+        `/api/stripe/application-fee-verify?session_id=${encodeURIComponent(sessionId)}&expected_email=${encodeURIComponent(em)}`,
+      );
       const data = (await res.json().catch(() => ({}))) as {
         paid?: boolean;
         processing?: boolean;
         error?: string;
         propertyId?: string | null;
-        residentEmail?: string | null;
+        emailMatches?: boolean;
       };
       if (!res.ok) {
         showToast(typeof data.error === "string" ? data.error : "Could not verify payment.");
@@ -797,9 +799,7 @@ function RentalApplicationWizardInner({
         String(data.propertyId ?? "")
           .trim()
           .toLowerCase() !== pid.toLowerCase() ||
-        String(data.residentEmail ?? "")
-          .trim()
-          .toLowerCase() !== em.toLowerCase()
+        data.emailMatches !== true
       ) {
         showToast("Payment confirmation does not match this application. Use the same email and listing as before checkout.");
         router.replace(wizardApplyPath);

@@ -6,12 +6,22 @@ import { isApplicationFeeCheckoutSession, markApplicationFeePaidFromStripeSessio
 
 export const runtime = "nodejs";
 
+function normalizedEmail(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 /**
  * Confirms a completed Checkout Session for `rental_application_fee` (ACH return URL flow).
+ *
+ * The caller passes the email it believes bought the session and gets back only
+ * `emailMatches`. This endpoint is unauthenticated and the session id travels in
+ * the success URL (browser history, referrers), so it must never echo the
+ * applicant's address back.
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("session_id")?.trim();
+  const expectedEmail = normalizedEmail(searchParams.get("expected_email"));
   if (!sessionId) {
     return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
   }
@@ -55,7 +65,9 @@ export async function GET(req: Request) {
       paymentStatus: session.payment_status,
       sessionId: session.id,
       propertyId: session.metadata?.property_id ?? null,
-      residentEmail: session.metadata?.resident_email ?? session.customer_email ?? null,
+      emailMatches:
+        expectedEmail.length > 0 &&
+        expectedEmail === normalizedEmail(session.metadata?.resident_email ?? session.customer_email),
       chargeId,
       alreadyPaid,
     });

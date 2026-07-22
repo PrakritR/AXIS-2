@@ -46,12 +46,14 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
     card: enabled(),
     apple_pay: enabled(),
     google_pay: enabled(),
+    link: disabled(),
     us_bank_account: disabled(),
     klarna: disabled(),
   };
 
   function captureStripe(pmc?: Record<string, unknown> | Error) {
     const calls: Record<string, unknown>[] = [];
+    const pmcLookups: string[] = [];
     const stripe = {
       checkout: {
         sessions: {
@@ -63,12 +65,13 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
       },
       paymentMethodConfigurations: {
         retrieve: async (id: string) => {
+          pmcLookups.push(id);
           if (pmc instanceof Error) throw pmc;
           return { id, ...(pmc ?? CARD_SCOPED_PMC) };
         },
       },
     } as unknown as Stripe;
-    return { stripe, calls };
+    return { stripe, calls, pmcLookups };
   }
 
   const baseInput = {
@@ -122,6 +125,16 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
     logged.mockRestore();
   });
 
+  // Link is priced at the card rate here, so a card+wallets+Link PMC is still
+  // fee-exact — rejecting it would strip Apple Pay from a valid configuration.
+  it("accepts a PMC that also enables Link (identical card-rate fee)", async () => {
+    process.env.STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION = "pmc_card_wallets_link";
+    const { stripe, calls } = captureStripe({ ...CARD_SCOPED_PMC, link: enabled() });
+    await createAxisAchCheckoutSession(stripe, { ...baseInput, paymentMethod: "card" });
+    expect(calls[0]).not.toHaveProperty("payment_method_types");
+    expect(calls[0]?.payment_method_configuration).toBe("pmc_card_wallets_link");
+  });
+
   it("rejects a PMC that enables a deferred-payment method (klarna) too", async () => {
     process.env.STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION = "pmc_card_plus_klarna";
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -131,14 +144,19 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
     logged.mockRestore();
   });
 
-  it("falls back to explicit card when the PMC lookup itself fails", async () => {
+  // A typo'd / deleted PMC id must not cost a Stripe round-trip plus a
+  // console.error on EVERY card checkout — the failure is cached too.
+  it("falls back to explicit card when the PMC lookup itself fails, and caches that", async () => {
     process.env.STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION = "pmc_missing";
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { stripe, calls } = captureStripe(new Error("No such payment_method_configuration"));
+    const { stripe, calls, pmcLookups } = captureStripe(new Error("No such payment_method_configuration"));
+    await createAxisAchCheckoutSession(stripe, { ...baseInput, paymentMethod: "card" });
     await createAxisAchCheckoutSession(stripe, { ...baseInput, paymentMethod: "card" });
     expect(calls[0]?.payment_method_types).toEqual(["card"]);
+    expect(calls[1]?.payment_method_types).toEqual(["card"]);
     expect(calls[0]).not.toHaveProperty("payment_method_configuration");
-    expect(logged).toHaveBeenCalled();
+    expect(pmcLookups).toEqual(["pmc_missing"]);
+    expect(logged).toHaveBeenCalledTimes(1);
     logged.mockRestore();
   });
 
