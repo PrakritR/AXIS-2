@@ -209,7 +209,7 @@ export function PortalInboxMessageTable({
   onToggleExpand?: (id: string) => void;
   /** Trash / restore / delete — shown in the expanded row only (with Mark read, Reply, Hide). */
   renderExtraActions?: (row: PortalInboxTableRow) => ReactNode;
-  primaryPartyHeader?: "From" | "To" | "Recipient";
+  primaryPartyHeader?: "From" | "To" | "Recipient" | "From / To";
   /** Schedule tab uses Recipient + Send date & time + Subject (no trailing When). */
   layout?: PortalInboxTableLayout;
   selection?: PortalInboxSelectionProps;

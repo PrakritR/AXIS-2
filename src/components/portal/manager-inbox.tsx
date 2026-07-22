@@ -67,15 +67,18 @@ function previewLine(body: string, max = 100) {
   return `${t.slice(0, max)}…`;
 }
 
-function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
-  return list.map((t) => ({
-    id: t.id,
-    name: tabId === "sent" ? (t.email || "Unknown recipient") : t.from,
-    email: tabId === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
-    subject: t.subject,
-    whenLabel: t.time,
-    read: !t.unread,
-  }));
+function toRows(list: InboxThread[], tabId: string, perRowFolder = false): PortalInboxTableRow[] {
+  return list.map((t) => {
+    const sentSemantics = perRowFolder ? t.folder === "sent" : tabId === "sent";
+    return {
+      id: t.id,
+      name: sentSemantics ? (t.email || "Unknown recipient") : t.from,
+      email: sentSemantics ? (t.from ? `From ${t.from}` : "") : t.email,
+      subject: t.subject,
+      whenLabel: t.time,
+      read: !t.unread,
+    };
+  });
 }
 
 function countThreads(threads: InboxThread[], scheduleCount: number) {
@@ -286,6 +289,11 @@ export const ManagerInbox = forwardRef<
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
     setRetainedIds((prev) => new Set(prev).add(id));
     showToast("Marked as read — moves to Opened after refresh.");
+  };
+
+  const markReadIfUnreadInbox = (id: string) => {
+    const thread = local.find((t) => t.id === id);
+    if (thread && thread.folder === "inbox" && thread.unread) markRead(id);
   };
 
   const bodyById = useMemo(() => {
@@ -556,8 +564,49 @@ export const ManagerInbox = forwardRef<
     threadSelection.clearSelection();
   };
 
+  const searchBox = (
+    <div className="relative min-w-0 flex-1 sm:max-w-xs">
+      <svg
+        viewBox="0 0 24 24"
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="m21 21-4.3-4.3M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search messages…"
+        aria-label="Search messages by sender, subject, or content"
+        data-attr="inbox-message-search"
+        className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-8 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+      />
+      {searchActive ? (
+        <button
+          type="button"
+          onClick={() => setQuery("")}
+          aria-label="Clear search"
+          className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:bg-foreground/5 hover:text-foreground"
+        >
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ) : null}
+    </div>
+  );
+
   const inboxBody = (
     <>
+      {embeddedInCommunication ? <div className="mb-4 flex">{searchBox}</div> : null}
       {embeddedInCommunication && !externalTitleActions ? (
         <div className="mb-4 flex flex-wrap justify-end gap-2">
           {tabId === "trash" ? (
@@ -610,7 +659,7 @@ export const ManagerInbox = forwardRef<
             </p>
           ) : null}
           <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
-            {tabId === "unopened" ? (
+            {!searchActive && tabId === "unopened" ? (
               <>
                 <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
                   Mark read
@@ -620,12 +669,12 @@ export const ManagerInbox = forwardRef<
                 </Button>
               </>
             ) : null}
-            {tabId === "opened" || tabId === "sent" ? (
+            {searchActive || tabId === "opened" || tabId === "sent" ? (
               <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
                 Trash
               </Button>
             ) : null}
-            {tabId === "trash" ? (
+            {!searchActive && tabId === "trash" ? (
               <>
                 <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromTrash}>
                   Restore
@@ -637,15 +686,15 @@ export const ManagerInbox = forwardRef<
             ) : null}
           </PortalInboxSelectionToolbar>
           <PortalInboxMessageTable
-            rows={toRows(rowsForTab, tabId)}
-            primaryPartyHeader={tabId === "sent" ? "To" : "From"}
-            onMarkRead={tabId === "unopened" ? markRead : undefined}
+            rows={toRows(rowsForTab, tabId, searchActive)}
+            primaryPartyHeader={searchActive ? "From / To" : tabId === "sent" ? "To" : "From"}
+            onMarkRead={searchActive ? markReadIfUnreadInbox : tabId === "unopened" ? markRead : undefined}
             getDetailBody={(row) => bodyById[row.id]}
             getThreadMessages={(row) => {
               const thread = local.find((t) => t.id === row.id);
               return thread ? inboxThreadMessages(thread) : [];
             }}
-            onReply={tabId === "trash" ? undefined : handleReply}
+            onReply={!searchActive && tabId === "trash" ? undefined : handleReply}
             expandedId={expandedId}
             onToggleExpand={toggleExpand}
             selection={{
@@ -656,7 +705,7 @@ export const ManagerInbox = forwardRef<
               selectableCount: threadRowIds.length,
             }}
             renderExtraActions={(row) => {
-              if (tabId === "trash") {
+              if (!searchActive && tabId === "trash") {
                 return (
                   <>
                     <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => restoreFromTrash(row.id)}>
@@ -714,43 +763,7 @@ export const ManagerInbox = forwardRef<
             activeId={tabId}
             onChange={(id) => navigate(`${inboxBase}/${id}`)}
           />
-          <div className="relative min-w-0 flex-1 sm:max-w-xs">
-            <svg
-              viewBox="0 0 24 24"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="m21 21-4.3-4.3M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search messages…"
-              aria-label="Search messages by sender, subject, or content"
-              data-attr="inbox-message-search"
-              className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-8 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-            />
-            {searchActive ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:bg-foreground/5 hover:text-foreground"
-              >
-                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" aria-hidden="true">
-                  <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            ) : null}
-          </div>
+          {searchBox}
         </ManagerPortalFilterRow>
       }
     >
