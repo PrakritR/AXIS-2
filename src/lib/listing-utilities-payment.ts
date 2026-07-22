@@ -1,5 +1,6 @@
 import type { ManagerListingSubmissionV1, ManagerRoomSubmission } from "@/lib/manager-listing-submission";
 import { isEntireHomeListing } from "@/lib/manager-listing-submission";
+import { hasResidentPaidLeaseUtility, normalizeLeaseUtilities } from "@/lib/lease-utilities";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 /** How utilities are paid for a listed room or entire-home lease. */
@@ -106,6 +107,30 @@ export function resolveAggregateUtilitiesPaymentModel(
   if (!sub) return "manager_billed";
   if (isEntireHomeListing(sub)) return resolveEntireHomeUtilitiesPaymentModel(sub);
   return resolveUniformRoomUtilitiesPaymentModel(sub) ?? resolveListingUtilitiesPaymentModel(sub);
+}
+
+/**
+ * The largest monthly utilities estimate this listing would bill residents through the
+ * portal (0 when nothing is manager-billed or no estimate is set).
+ */
+export function aggregateBillableUtilitiesEstimate(sub: ManagerListingSubmissionV1 | undefined): number {
+  if (!sub?.v || resolveAggregateUtilitiesPaymentModel(sub) !== "manager_billed") return 0;
+  const raws = isEntireHomeListing(sub)
+    ? [sub.entireHomeUtilitiesEstimate, sub.rooms.find((r) => r.name.trim())?.utilitiesEstimate]
+    : sub.rooms.filter((r) => r.name.trim()).map((r) => r.utilitiesEstimate);
+  return raws.reduce<number>((max, raw) => Math.max(max, parseMoneyAmount(raw ?? "")), 0);
+}
+
+/**
+ * The monthly utilities estimate the listing would still bill while the lease's per-utility
+ * breakdown says nothing is the Resident's to pay — 0 when the two agree. The generated lease
+ * quotes the estimate from the listing model, so a non-zero result means the signed document
+ * and the recurring charge would tell the resident different things.
+ */
+export function leaseUtilitiesBillingConflictAmount(sub: ManagerListingSubmissionV1 | undefined): number {
+  const lines = normalizeLeaseUtilities(sub?.leaseUtilities);
+  if (!lines?.length || hasResidentPaidLeaseUtility(lines)) return 0;
+  return aggregateBillableUtilitiesEstimate(sub);
 }
 
 /** Monthly utilities amount billable through the manager portal (0 when tenant pays directly or included). */
