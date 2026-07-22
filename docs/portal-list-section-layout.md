@@ -63,7 +63,7 @@ Use `PortalListSectionShell` as a thin alias when building new sections:
 
 | Section | File | Notes |
 |---------|------|-------|
-| Inbox | [`manager-inbox.tsx`](../src/components/portal/manager-inbox.tsx) | Status pills + header/mobile actions |
+| Inbox | [`manager-inbox.tsx`](../src/components/portal/manager-inbox.tsx) | Status pills + header/mobile actions. Layout reference only: its `ManagerPortalPageShell` branch renders on `/demo` alone — the real portal mounts the panel embedded in Communication (see AGENTS.md → "Inbox panels"), so controls added there do not ship. |
 | Residents | [`manager-residents.tsx`](../src/components/portal/manager-residents.tsx) | Property filter + status pills + table |
 | Services | [`manager-all-services-panel.tsx`](../src/components/portal/manager-all-services-panel.tsx) | `TabNav` + conditional header CTA |
 | Leases | [`manager-leases.tsx`](../src/components/portal/manager-leases.tsx) | Property filter + status pills |

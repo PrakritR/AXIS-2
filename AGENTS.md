@@ -449,8 +449,8 @@ while the section's component still compiled and its tests still passed:
    rewrites near the top of `src/lib/render-portal-section.tsx` run before
    `findSection`, so an ungated `section === "..."` rule fires for *every*
    portal. Gate on the capability, not a kind allowlist — e.g. the Inbox →
-   Communication rewrite checks `findSection(def, "communication")`, so the
-   admin portal (which still ships Inbox as a real section) is unaffected.
+   Communication rewrite checks `findSection(def, "communication")`, so it can
+   only fire for a portal that actually has a Communication section to land in.
 
 Neither layer is covered by the unit suite. After adding or renaming a section,
 load its URL in the browser — a passing build is not evidence it resolves.
