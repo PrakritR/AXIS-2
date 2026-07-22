@@ -49,7 +49,6 @@ export default function PartnerLandingPage() {
   return (
     <MarketingPageShell>
       <MarketingHero
-        eyebrow="For managers"
         title="Run the portfolio. Approve the rest."
         subtitle="PropLane drafts leases, rent work, and vendor outreach — then hands you one queue. Free to start."
       >
@@ -112,17 +111,6 @@ export default function PartnerLandingPage() {
         </div>
       </MarketingSection>
 
-      <div className="lp-page-cta-band">
-        <div className="lp-w">
-          <h2>Manage with PropLane</h2>
-          <p>Create a manager account in minutes — or book a demo first.</p>
-          <MarketingCtaPair
-            primaryAttr="partner-cta-get-started"
-            secondaryAttr="partner-cta-book-demo"
-            large
-          />
-        </div>
-      </div>
     </MarketingPageShell>
   );
 }

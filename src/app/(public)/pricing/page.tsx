@@ -4,7 +4,6 @@ import {
   MANAGER_PLAN_TIERS,
   type ManagerPlanTierDefinition,
 } from "@/data/manager-plan-tiers";
-import { MarketingCtaPair } from "@/components/marketing/marketing-cta";
 import {
   MarketingHero,
   MarketingPageShell,
@@ -179,7 +178,6 @@ export default async function PricingPage({
   return (
     <MarketingPageShell>
       <MarketingHero
-        eyebrow="PropLane · Pricing"
         title={
           <>
             Simple pricing.
@@ -189,7 +187,6 @@ export default async function PricingPage({
             </span>
           </>
         }
-        subtitle="One platform for managers, residents, and vendors. Start free, upgrade when it earns its keep."
       >
         <p className="mt-4 text-[12.5px] text-[color-mix(in_srgb,var(--lp-muted)_75%,transparent)]">
           14-day trial · no card required · book a demo anytime
@@ -234,19 +231,6 @@ export default async function PricingPage({
         </div>
       </MarketingSection>
 
-      <div className="lp-page-cta-band">
-        <div className="lp-w">
-          <h2>Try it before you pay.</h2>
-          <p>Start on the free tier, or book a walkthrough with the team — no card required.</p>
-          <MarketingCtaPair
-            primaryHref={`${CTA_BASE}&tier=free`}
-            primaryLabel="Get started free"
-            primaryAttr="pricing-final-get-started"
-            secondaryAttr="pricing-final-book-demo"
-            large
-          />
-        </div>
-      </div>
     </MarketingPageShell>
   );
 }

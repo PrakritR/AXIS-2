@@ -71,7 +71,6 @@ export default function WhyPropLanePage() {
   return (
     <MarketingPageShell>
       <MarketingHero
-        eyebrow="Why PropLane"
         title="Property ops that wait for your OK"
         subtitle="Tours. Texts. Rent. Approvals. One platform — AI drafts, you confirm."
       >
@@ -207,17 +206,6 @@ export default function WhyPropLanePage() {
         </div>
       </MarketingSection>
 
-      <div className="lp-page-cta-band">
-        <div className="lp-w">
-          <h2>Start free</h2>
-          <p>14-day Pro trial. No card required.</p>
-          <MarketingCtaPair
-            primaryAttr="why-proplane-cta-get-started"
-            secondaryAttr="why-proplane-cta-contact"
-            large
-          />
-        </div>
-      </div>
     </MarketingPageShell>
   );
 }

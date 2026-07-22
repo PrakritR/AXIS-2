@@ -44,12 +44,7 @@ export function LandingDemoHero() {
 
         <div className="relative mx-auto grid w-full max-w-[1120px] items-center gap-12 px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-14 lg:pb-24 lg:pt-20">
           <div className="min-w-0 max-w-[34rem]">
-            <span className="landing-hero-badge inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11.5px] font-medium tracking-[0.06em]">
-              <span aria-hidden className="landing-hero-badge-dot size-1.5 rounded-full" />
-              PROPLANE · IN BETA
-            </span>
-
-            <h1 className="mt-5 text-[clamp(2.35rem,5.2vw,3.65rem)] font-semibold leading-[1.05] tracking-[-0.035em]">
+            <h1 className="text-[clamp(2.35rem,5.2vw,3.65rem)] font-semibold leading-[1.05] tracking-[-0.035em]">
               <span className="landing-hero-line block">The AI does</span>
               <span className="landing-hero-line block">the busywork.</span>
               <span className="landing-hero-line landing-hero-line--muted block">You approve.</span>

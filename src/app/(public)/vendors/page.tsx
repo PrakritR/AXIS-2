@@ -5,7 +5,6 @@ import {
   MarketingPageShell,
   MarketingSection,
 } from "@/components/marketing/marketing-page-shell";
-import { PublicPageAuthFooter } from "@/components/marketing/public-page-auth-footer";
 
 export const metadata: Metadata = {
   title: "Vendors · PropLane",
@@ -52,9 +51,7 @@ export default function VendorsPage() {
   return (
     <MarketingPageShell>
       <MarketingHero
-        eyebrow="For vendors"
         title="Work orders, sent straight to you."
-        subtitle="PropLane connects you to property managers who need repairs and turnovers — without marketplace fees."
       >
         <MarketingCtaPair
           primaryHref={VENDOR_SIGNUP_HREF}
@@ -105,17 +102,6 @@ export default function VendorsPage() {
           ))}
         </div>
       </MarketingSection>
-
-      <PublicPageAuthFooter
-        getStartedHref={VENDOR_SIGNUP_HREF}
-        signInHref="/auth/sign-in"
-        getStartedLabel="Join as a vendor"
-        getStartedDataAttr="vendors-get-started"
-        signInDataAttr="vendors-sign-in-link"
-        secondaryHref="/contact"
-        secondaryLabel="Talk to us"
-        secondaryDataAttr="vendors-book-demo"
-      />
     </MarketingPageShell>
   );
 }
