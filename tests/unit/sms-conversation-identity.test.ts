@@ -39,7 +39,7 @@ function makeDb(canned: {
   const from = (table: string) => {
     const builder: Record<string, unknown> = {};
     const self = () => builder;
-    for (const m of ["select", "eq", "in", "order", "limit"]) builder[m] = self;
+    for (const m of ["select", "eq", "in", "order", "limit", "range"]) builder[m] = self;
     builder.maybeSingle = async () => ({ data: canned.profileSingle ?? null, error: null });
     builder.then = (resolve: (v: { data: unknown[]; error: null }) => unknown) =>
       resolve({ data: tableData[table] ?? [], error: null });
@@ -92,8 +92,8 @@ describe("fetchManagerSmsConversations — per-counterparty threading & tenant i
     const { fetchManagerSmsConversations } = await import("@/lib/manager-sms-messages.server");
     const db = makeDb({
       managerApplications: [
-        { resident_email: "alice@example.com", row_data: { bucket: "approved", name: "Alice", phone: "+14150000001" } },
-        { resident_email: "bob@example.com", row_data: { bucket: "approved", name: "Bob", phone: "+14150000002" } },
+        { manager_user_id: M, resident_email: "alice@example.com", row_data: { bucket: "approved", name: "Alice", phone: "+14150000001" } },
+        { manager_user_id: M, resident_email: "bob@example.com", row_data: { bucket: "approved", name: "Bob", phone: "+14150000002" } },
       ],
       profilesByEmail: [
         { id: ALICE, email: "alice@example.com", phone: "+14150000001", full_name: "Alice A" },
@@ -133,7 +133,7 @@ describe("fetchManagerSmsConversations — per-counterparty threading & tenant i
     const sharedPhone = "+14159999999";
     const db = makeDb({
       managerApplications: [
-        { resident_email: "carol@example.com", row_data: { bucket: "approved", name: "Carol", phone: sharedPhone } },
+        { manager_user_id: M, resident_email: "carol@example.com", row_data: { bucket: "approved", name: "Carol", phone: sharedPhone } },
       ],
       profilesByEmail: [{ id: ALICE, email: "carol@example.com", phone: sharedPhone, full_name: "Carol C" }],
       managerMessages: [
@@ -159,5 +159,53 @@ describe("fetchManagerSmsConversations — per-counterparty threading & tenant i
     expect(prospect?.messages.map((m) => m.body)).toEqual(["prospect-text"]);
     // The resident thread must NOT absorb the prospect-era text and vice versa.
     expect(resident?.messages.some((m) => m.body === "prospect-text")).toBe(false);
+  });
+
+  /**
+   * Admin oversight threads across the whole shared-line cohort, so the resident
+   * scan is batched with `.in("manager_user_id", …)` rather than one call per
+   * manager. Two things must hold: each seed stays attributed to the manager who
+   * actually owns it (a cross-owner mix-up here would put one manager's resident
+   * in another's list), and the round-trip count must not grow with the cohort.
+   */
+  it("attributes residents to their own manager and scans the cohort in one batched query", async () => {
+    const { fetchManagerSmsConversations } = await import("@/lib/manager-sms-messages.server");
+    const M2 = "mgr-2222-2222-2222-222222222222";
+    let appScans = 0;
+    const appRows = [
+      { manager_user_id: M, resident_email: "alice@example.com", row_data: { bucket: "approved", name: "Alice" } },
+      { manager_user_id: M2, resident_email: "bob@example.com", row_data: { bucket: "approved", name: "Bob" } },
+    ];
+    const db = {
+      from: (table: string) => {
+        if (table === "manager_application_records") appScans += 1;
+        const builder: Record<string, unknown> = {};
+        const self = () => builder;
+        for (const m of ["select", "eq", "in", "order", "limit", "range"]) builder[m] = self;
+        builder.maybeSingle = async () => ({ data: null, error: null });
+        builder.then = (resolve: (v: { data: unknown[]; error: null }) => unknown) =>
+          resolve({
+            data:
+              table === "manager_application_records"
+                ? appRows
+                : table === "profiles"
+                  ? [
+                      { id: ALICE, email: "alice@example.com", phone: "+14150000001", full_name: "Alice A" },
+                      { id: BOB, email: "bob@example.com", phone: "+14150000002", full_name: "Bob B" },
+                    ]
+                  : [],
+            error: null,
+          });
+        return builder;
+      },
+    } as never;
+
+    const payload = await fetchManagerSmsConversations(db, M, { scopeManagerIdsOverride: [M, M2] });
+    const alice = payload.residents.find((r) => r.residentUserId === ALICE);
+    const bob = payload.residents.find((r) => r.residentUserId === BOB);
+    expect(alice?.ownerManagerUserId).toBe(M);
+    expect(bob?.ownerManagerUserId).toBe(M2);
+    // One page fetched for the whole cohort — NOT one scan per manager.
+    expect(appScans).toBe(1);
   });
 });

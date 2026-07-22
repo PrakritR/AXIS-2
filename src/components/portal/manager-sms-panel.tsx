@@ -476,9 +476,16 @@ export const ManagerSmsPanel = forwardRef<
               : "min(70vh, 720px)",
           }}
         >
-          {/* Conversation list */}
+          {/*
+            Conversation list.
+            min-w-0 on both grid items: a grid item defaults to min-width:auto,
+            so the nowrap conversation rows set the column's width. Without it
+            the single mobile column blows out to its content width and
+            everything right of the search box — including the sort control —
+            is pushed off-screen behind the panel's overflow-hidden.
+          */}
           <section
-            className={`flex min-h-0 flex-col ${showThread ? "hidden lg:flex lg:border-r" : "flex"}`}
+            className={`flex min-h-0 min-w-0 flex-col ${showThread ? "hidden lg:flex lg:border-r" : "flex"}`}
             style={{ borderColor: IOS_HAIRLINE }}
           >
             <header className="px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top,0px))] lg:pt-4">
@@ -568,7 +575,7 @@ export const ManagerSmsPanel = forwardRef<
 
           {/* Thread */}
           <section
-            className={`min-h-0 flex-col ${showThread ? "flex" : "hidden lg:flex"}`}
+            className={`min-h-0 min-w-0 flex-col ${showThread ? "flex" : "hidden lg:flex"}`}
             style={{ backgroundColor: IOS_THREAD_BG }}
           >
             {!active ? (

@@ -14,6 +14,7 @@ import {
   deriveCounterpartyRole,
   type SmsCounterpartyRole,
 } from "@/lib/sms-conversation-identity";
+import { isPlaceholderManagerWorkNumber } from "@/lib/claw-leasing-links";
 import { normalizeE164 } from "@/lib/twilio";
 import { resolveManagerWorkNumber } from "@/lib/twilio-provisioning";
 
@@ -206,20 +207,58 @@ type ResidentSeed = {
   tenancyStatus: "resident" | "applicant";
 };
 
-async function listManagerResidents(db: SupabaseClient, managerUserId: string): Promise<ResidentSeed[]> {
-  // manager_application_records has no resident_user_id column — resolve via profiles.email.
-  const { data: apps, error: appsError } = await db
-    .from("manager_application_records")
-    .select("resident_email, row_data")
-    .eq("manager_user_id", managerUserId)
-    .limit(500);
+/** Page size and hard ceiling for the application-record scan below. */
+const RESIDENT_SCAN_PAGE = 1000;
+const RESIDENT_SCAN_MAX_ROWS = 20000;
 
-  if (appsError) {
-    console.error("listManagerResidents applications failed", appsError.message);
+/**
+ * Resident seeds for a SET of owning managers in a fixed number of round-trips.
+ *
+ * This is the shared-line hot path: admin oversight threads across the whole
+ * mapped-manager cohort, so a per-manager call here was O(N) sequential DB
+ * round-trips (2 per manager) that grew with every manager who joined the line.
+ * Both queries are batched with `.in(...)` instead, and the application scan
+ * pages rather than silently truncating at a fixed cap — a manager whose
+ * residents fell past the old per-manager `limit(500)` simply vanished from the
+ * conversation list with no signal.
+ *
+ * Returns one entry per requested owner, each sorted by name, so the caller's
+ * first-owner-wins dedup stays deterministic.
+ */
+async function listResidentsForOwners(
+  db: SupabaseClient,
+  managerUserIds: string[],
+): Promise<Map<string, ResidentSeed[]>> {
+  const owners = [...new Set(managerUserIds.map((id) => String(id ?? "").trim()).filter(Boolean))];
+  const byOwner = new Map<string, Map<string, ResidentSeed>>(owners.map((id) => [id, new Map()]));
+  if (owners.length === 0) return new Map();
+
+  // manager_application_records has no resident_user_id column — resolve via profiles.email.
+  const appRows: { manager_user_id?: unknown; resident_email?: unknown; row_data?: unknown }[] = [];
+  for (let from = 0; from < RESIDENT_SCAN_MAX_ROWS; from += RESIDENT_SCAN_PAGE) {
+    const { data, error } = await db
+      .from("manager_application_records")
+      .select("manager_user_id, resident_email, row_data")
+      .in("manager_user_id", owners)
+      .order("id", { ascending: true })
+      .range(from, from + RESIDENT_SCAN_PAGE - 1);
+    if (error) {
+      console.error("listResidentsForOwners applications failed", error.message);
+      break;
+    }
+    appRows.push(...(data ?? []));
+    if ((data?.length ?? 0) < RESIDENT_SCAN_PAGE) break;
+    if (from + RESIDENT_SCAN_PAGE >= RESIDENT_SCAN_MAX_ROWS) {
+      console.error(
+        `[manager-sms] resident scan hit the ${RESIDENT_SCAN_MAX_ROWS}-row ceiling — some conversations may be missing`,
+      );
+    }
   }
 
-  const seeds = new Map<string, ResidentSeed>();
-  for (const row of apps ?? []) {
+  for (const row of appRows) {
+    const ownerId = String(row.manager_user_id ?? "").trim();
+    const seeds = byOwner.get(ownerId);
+    if (!seeds) continue;
     const rd = (row.row_data ?? {}) as {
       bucket?: string;
       stage?: string;
@@ -256,7 +295,7 @@ async function listManagerResidents(db: SupabaseClient, managerUserId: string): 
     });
   }
 
-  const emails = [...seeds.keys()];
+  const emails = [...new Set([...byOwner.values()].flatMap((seeds) => [...seeds.keys()]))];
   if (emails.length > 0) {
     const { data: byEmail } = await db
       .from("profiles")
@@ -264,16 +303,23 @@ async function listManagerResidents(db: SupabaseClient, managerUserId: string): 
       .in("email", emails);
     for (const p of byEmail ?? []) {
       const email = String(p.email ?? "").trim().toLowerCase();
-      const seed = seeds.get(email);
-      if (!seed) continue;
-      seed.residentUserId = String(p.id ?? "").trim() || null;
-      if (!seed.phone) seed.phone = String(p.phone ?? "").trim() || null;
-      const name = String(p.full_name ?? "").trim();
-      if (name && (seed.name === email || !seed.name)) seed.name = name;
+      for (const seeds of byOwner.values()) {
+        const seed = seeds.get(email);
+        if (!seed) continue;
+        seed.residentUserId = String(p.id ?? "").trim() || null;
+        if (!seed.phone) seed.phone = String(p.phone ?? "").trim() || null;
+        const name = String(p.full_name ?? "").trim();
+        if (name && (seed.name === email || !seed.name)) seed.name = name;
+      }
     }
   }
 
-  return [...seeds.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return new Map(
+    [...byOwner.entries()].map(([ownerId, seeds]) => [
+      ownerId,
+      [...seeds.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    ]),
+  );
 }
 
 export async function fetchManagerSmsConversations(
@@ -292,13 +338,25 @@ export async function fetchManagerSmsConversations(
     options?.scopeManagerIdsOverride && options.scopeManagerIdsOverride.length > 0
       ? [...new Set(options.scopeManagerIdsOverride.map((id) => id.trim()).filter(Boolean))]
       : await resolveSmsScopeManagerIds(db, managerUserId);
+  // Only the VIEWER's own work number may be provisioned on demand
+  // (`resolveManagerWorkNumber` can fall through to `ensureManagerSmsNumber`).
+  // The in-scope fallback is a single batched read of numbers already on file:
+  // calling the provisioning-capable resolver once per scope manager was both
+  // O(N) round-trips and a side effect — admin opening this page could mint
+  // Twilio numbers for every manager on the shared line.
   const workNumber =
     (await resolveManagerWorkNumber(db, managerUserId)) ||
     (await (async () => {
-      for (const id of scopeManagerIds) {
-        if (id === managerUserId) continue;
-        const n = await resolveManagerWorkNumber(db, id);
-        if (n) return n;
+      const others = scopeManagerIds.filter((id) => id !== managerUserId);
+      if (others.length === 0) return null;
+      const { data } = await db.from("profiles").select("id, sms_from_number").in("id", others);
+      const numberById = new Map(
+        (data ?? []).map((r) => [String(r.id ?? "").trim(), String(r.sms_from_number ?? "").trim()] as const),
+      );
+      // Scope order decides, so the fallback stays deterministic.
+      for (const id of others) {
+        const n = numberById.get(id);
+        if (n && !isPlaceholderManagerWorkNumber(n)) return n;
       }
       return null;
     })());
@@ -311,8 +369,9 @@ export async function fetchManagerSmsConversations(
 
   const residents: (ResidentSeed & { ownerManagerUserId: string })[] = [];
   const seenResidentKeys = new Set<string>();
+  const residentsByOwner = await listResidentsForOwners(db, scopeManagerIds);
   for (const ownerId of scopeManagerIds) {
-    for (const seed of await listManagerResidents(db, ownerId)) {
+    for (const seed of residentsByOwner.get(ownerId) ?? []) {
       const key = seed.residentUserId || seed.residentEmail || seed.phone || seed.name;
       if (seenResidentKeys.has(key)) continue;
       seenResidentKeys.add(key);
