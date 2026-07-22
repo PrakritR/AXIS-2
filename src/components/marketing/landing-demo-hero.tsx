@@ -1,7 +1,7 @@
 import Link from "next/link";
+import { BOOK_DEMO_HREF, MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 
-const GET_STARTED = "/auth/create-account?mode=create&role=manager";
-const BOOK_DEMO = "/contact";
+const GET_STARTED = MANAGER_GET_STARTED_HREF;
 
 /** Semantic status dots — not brand accents. */
 const ATTENTION_ROWS = [
@@ -65,7 +65,7 @@ export function LandingDemoHero() {
                 Get started for free
               </Link>
               <Link
-                href={BOOK_DEMO}
+                href={BOOK_DEMO_HREF}
                 data-attr="home-hero-book-demo"
                 className="landing-hero-cta-ghost inline-flex min-h-[46px] items-center justify-center rounded-[10px] px-[20px] text-[14.5px] font-medium transition"
               >

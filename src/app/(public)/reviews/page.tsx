@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BOOK_DEMO_HREF } from "@/lib/marketing/public-contact";
 import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
 import { RevealOnView } from "@/components/motion/reveal-on-view";
 
@@ -180,7 +181,7 @@ export default function ReviewsPage() {
                 Get started for free
               </Link>
               <Link
-                href="/contact"
+                href={BOOK_DEMO_HREF}
                 data-attr="reviews-cta-book-demo"
                 className="hero-cta-outline inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border px-8 py-3 text-sm font-semibold transition-colors duration-200 active:scale-[0.99] sm:w-auto"
               >

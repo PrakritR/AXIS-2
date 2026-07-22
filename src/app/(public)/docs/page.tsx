@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BOOK_DEMO_HREF } from "@/lib/marketing/public-contact";
 
 export const metadata: Metadata = {
   title: "Docs",
@@ -363,7 +364,7 @@ export default function DocsPage() {
                 Get started for free
               </Link>
               <Link
-                href="/contact"
+                href={BOOK_DEMO_HREF}
                 data-attr="docs-demo-book-demo"
                 className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-[10px] border border-[var(--pl-line)] bg-[var(--pl-surface-raised)] px-6 text-[14.5px] font-medium text-foreground transition hover:border-foreground/20"
               >

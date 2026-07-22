@@ -2,10 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { ApplicationsPipelinePanel } from "@/components/marketing/landing-applications-pipeline";
 import { LandingDashboardChatDemo } from "@/components/marketing/landing-dashboard-chat-demo";
+import { BOOK_DEMO_HREF, MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 import "./landing-proplane.css";
 
-const GET_STARTED = "/auth/create-account?mode=create&role=manager";
-const BOOK_DEMO = "/contact";
+const GET_STARTED = MANAGER_GET_STARTED_HREF;
 
 /** Dashboard+assistant demo, learn guides, week pipeline, ops band, closing CTA. */
 export function LandingHomeSections() {
@@ -36,7 +36,7 @@ function CtaPair({
       <Link href={GET_STARTED} data-attr={primaryAttr} className={primaryClass}>
         Get started
       </Link>
-      <Link href={BOOK_DEMO} data-attr={secondaryAttr} className={secondaryClass}>
+      <Link href={BOOK_DEMO_HREF} data-attr={secondaryAttr} className={secondaryClass}>
         Book a demo
       </Link>
     </div>
