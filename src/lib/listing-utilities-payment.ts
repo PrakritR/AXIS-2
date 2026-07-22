@@ -110,15 +110,22 @@ export function resolveAggregateUtilitiesPaymentModel(
 }
 
 /**
- * The largest monthly utilities estimate this listing would bill residents through the
- * portal (0 when nothing is manager-billed or no estimate is set).
+ * The largest monthly utilities estimate this listing would actually bill residents through
+ * the portal (0 when nothing is manager-billed or no estimate is set). Rooms must resolve to
+ * manager_billed *uniformly*: `resolveAggregateUtilitiesPaymentModel` falls back to
+ * manager_billed when rooms disagree, which is a display default, not a billing fact.
  */
 export function aggregateBillableUtilitiesEstimate(sub: ManagerListingSubmissionV1 | undefined): number {
-  if (!sub?.v || resolveAggregateUtilitiesPaymentModel(sub) !== "manager_billed") return 0;
-  const raws = isEntireHomeListing(sub)
-    ? [sub.entireHomeUtilitiesEstimate, sub.rooms.find((r) => r.name.trim())?.utilitiesEstimate]
-    : sub.rooms.filter((r) => r.name.trim()).map((r) => r.utilitiesEstimate);
-  return raws.reduce<number>((max, raw) => Math.max(max, parseMoneyAmount(raw ?? "")), 0);
+  if (!sub?.v) return 0;
+  if (isEntireHomeListing(sub)) {
+    if (resolveEntireHomeUtilitiesPaymentModel(sub) !== "manager_billed") return 0;
+    const raws = [sub.entireHomeUtilitiesEstimate, sub.rooms.find((r) => r.name.trim())?.utilitiesEstimate];
+    return raws.reduce<number>((max, raw) => Math.max(max, parseMoneyAmount(raw ?? "")), 0);
+  }
+  if (resolveUniformRoomUtilitiesPaymentModel(sub) !== "manager_billed") return 0;
+  return sub.rooms
+    .filter((r) => r.name.trim())
+    .reduce<number>((max, room) => Math.max(max, utilitiesBillableMonthlyAmount(sub, room)), 0);
 }
 
 /**
