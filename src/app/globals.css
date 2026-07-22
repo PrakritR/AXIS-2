@@ -1756,8 +1756,7 @@ html[data-native] .application-finish-detail {
 
 html[data-native] .application-finish-panel {
   margin-top: 0.75rem;
-  padding: 0.875rem;
-  border-radius: 1rem;
+  padding: 0;
 }
 
 html[data-native] .rental-wizard {

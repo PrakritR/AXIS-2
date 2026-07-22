@@ -15,7 +15,7 @@ import { FIELD_LABEL_CLASS, READONLY_INPUT_CLASS } from "@/lib/ui-styles";
 
 function ResidentSetupFallback() {
   return (
-    <AuthCard>
+    <AuthCard variant="blend">
       <p className="text-center text-sm text-muted">Loading setup…</p>
     </AuthCard>
   );
@@ -129,7 +129,7 @@ function ResidentSetupInner() {
 
   if (loading) {
     return (
-      <AuthCard>
+      <AuthCard variant="blend">
         <p className="text-center text-sm text-muted">Validating your setup link…</p>
       </AuthCard>
     );
@@ -137,7 +137,7 @@ function ResidentSetupInner() {
 
   if (invalid) {
     return (
-      <AuthCard>
+      <AuthCard variant="blend">
         <AuthPageHeader
           eyebrow="Resident portal"
           title="Setup link required"
@@ -162,11 +162,11 @@ function ResidentSetupInner() {
   }
 
   return (
-    <AuthCard>
+    <AuthCard variant="blend">
       <AuthPageHeader
         eyebrow="Resident portal"
         title="Create your account"
-        subtitle="This link is tied to your rental application. Use the same email you applied with."
+        subtitle="Finish setting up your resident portal account to track your application."
       />
 
       <p className="mt-3 text-center font-mono text-xs text-muted">{axisId}</p>

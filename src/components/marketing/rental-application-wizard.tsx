@@ -191,6 +191,7 @@ function RentalApplicationWizardInner({
     syncError?: string;
     guestFlow?: boolean;
     mailtoHref?: string;
+    setupHref?: string;
     /** Shared Group ID for group applications (first applicant shares it, joining members paste it). */
     groupId?: string;
     groupRole?: GroupRole;
@@ -633,6 +634,7 @@ function RentalApplicationWizardInner({
 
       let emailSent = false;
       let mailtoHref: string | undefined;
+      let setupHref: string | undefined;
       const propertyTitle = (listing?.title?.trim() || pid.trim()) || undefined;
       const isGuestSubmit = !residentUserId && !isDemoModeActive();
       if (sync.ok && emailTrim.includes("@") && isGuestSubmit) {
@@ -645,12 +647,16 @@ function RentalApplicationWizardInner({
               axisId,
               applicantName: applicantName !== "Applicant" ? applicantName : undefined,
               propertyTitle,
+              includeSetupHandoff: true,
             }),
           });
-          const payload = (await res.json().catch(() => ({}))) as { mailtoHref?: string };
+          const payload = (await res.json().catch(() => ({}))) as { mailtoHref?: string; setupHref?: string };
           emailSent = res.ok;
           if (typeof payload.mailtoHref === "string" && payload.mailtoHref.startsWith("mailto:")) {
             mailtoHref = payload.mailtoHref;
+          }
+          if (typeof payload.setupHref === "string" && payload.setupHref.startsWith("/auth/resident-setup")) {
+            setupHref = payload.setupHref;
           }
         } catch {
           emailSent = false;
@@ -689,6 +695,7 @@ function RentalApplicationWizardInner({
         syncError: sync.ok ? undefined : sync.error,
         guestFlow: isGuestSubmit,
         mailtoHref,
+        setupHref,
         groupId: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupId : undefined,
         groupRole: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupRole : undefined,
         groupSize: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupSize : undefined,
@@ -1008,7 +1015,7 @@ function RentalApplicationWizardInner({
           : "rental-wizard mx-auto max-w-3xl px-4 py-5 sm:py-14"
       }
     >
-      {!embedded ? (
+      {!embedded && !postSubmit ? (
         <div className="rental-wizard-page-title text-center sm:text-left">
           <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
         </div>
@@ -1063,6 +1070,7 @@ function RentalApplicationWizardInner({
             syncError={postSubmit.syncError}
             guestFlow={postSubmit.guestFlow}
             mailtoHref={postSubmit.mailtoHref}
+            setupHref={postSubmit.setupHref}
             groupId={postSubmit.groupId}
             groupRole={postSubmit.groupRole}
             groupSize={postSubmit.groupSize}

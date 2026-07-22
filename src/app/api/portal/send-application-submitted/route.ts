@@ -6,7 +6,7 @@ import {
   buildApplicationSubmittedMailtoHref,
 } from "@/lib/application-submitted-email";
 import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
-import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
+import { ensureResidentSetupTokenForApplication, buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
@@ -38,7 +38,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
     }
 
-    let body: { email?: unknown; axisId?: unknown; applicantName?: unknown; propertyTitle?: unknown };
+    let body: {
+      email?: unknown;
+      axisId?: unknown;
+      applicantName?: unknown;
+      propertyTitle?: unknown;
+      includeSetupHandoff?: unknown;
+    };
     try {
       body = (await req.json()) as typeof body;
     } catch {
@@ -49,6 +55,7 @@ export async function POST(req: Request) {
     const axisId = typeof body.axisId === "string" ? body.axisId.trim() : "";
     const applicantName = typeof body.applicantName === "string" ? body.applicantName.trim() : "";
     const propertyTitle = typeof body.propertyTitle === "string" ? body.propertyTitle.trim() : "";
+    const includeSetupHandoff = body.includeSetupHandoff === true;
 
     if (!email || !EMAIL_RE.test(email)) {
       return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
@@ -74,6 +81,7 @@ export async function POST(req: Request) {
 
     const origin = appOrigin();
     const signupUrl = residentAccountCreationUrl(origin, ensured.axisId, ensured.token);
+    const setupHref = buildResidentSetupHref(ensured.token, ensured.axisId);
     const text = buildApplicationSubmittedEmailBody({
       applicantName: applicantName || undefined,
       applicantEmail: email,
@@ -158,20 +166,29 @@ export async function POST(req: Request) {
       /* non-critical */
     }
 
-    // The setup token is a resident-account claim capability, so it must only
-    // ever leave the server via the email sent to the applicant's own address —
-    // never in this route's JSON body. The one exception is the sandbox skip
-    // path (@axis.local / @test.axis.local): those aren't real recipients, and
-    // the guest wizard consumes the mailto fallback there. See the security
-    // review on the demo-first branch.
+    // The setup token is a resident-account claim capability. It normally only
+    // leaves via email. When includeSetupHandoff is true (guest wizard immediately
+    // after submit), the same token is also returned to the client that proved
+    // axisId+email ownership so account creation can continue without waiting
+    // for email. Sandbox skip and unconfigured-email paths include it too.
     if (shouldSkipOutboundEmail(email)) {
-      return NextResponse.json({ ok: true, skipped: true, mailtoHref });
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        mailtoHref,
+        ...(includeSetupHandoff ? { setupHref } : {}),
+      });
     }
 
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) {
       return NextResponse.json(
-        { ok: false, error: "Email delivery is not configured." },
+        {
+          ok: false,
+          error: "Email delivery is not configured.",
+          mailtoHref,
+          ...(includeSetupHandoff ? { setupHref } : {}),
+        },
         { status: 503 },
       );
     }
@@ -184,9 +201,20 @@ export async function POST(req: Request) {
     });
     const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
     if (!res.ok) {
-      return NextResponse.json({ ok: false, error: payload.message ?? res.statusText }, { status: 502 });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: payload.message ?? res.statusText,
+          ...(includeSetupHandoff ? { setupHref } : {}),
+        },
+        { status: 502 },
+      );
     }
-    return NextResponse.json({ ok: true, id: payload.id ?? null });
+    return NextResponse.json({
+      ok: true,
+      id: payload.id ?? null,
+      ...(includeSetupHandoff ? { setupHref } : {}),
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send email." }, { status: 500 });
   }
