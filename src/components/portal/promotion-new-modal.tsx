@@ -86,6 +86,7 @@ export function PromotionNewModal({
 
   function requestSwitch(next: PromotionAssetKind) {
     if (next === kind) return;
+    if (flyerBusy || textBusy) return;
     const leavingDirty = kind === "flyer" ? flyerDirty() : textDirtyRef.current;
     if (
       leavingDirty &&
@@ -144,6 +145,7 @@ export function PromotionNewModal({
             className="mt-1"
             value={kind}
             onChange={(e) => requestSwitch(e.target.value as PromotionAssetKind)}
+            disabled={flyerBusy || textBusy}
             data-attr="promotion-new-kind"
           >
             {PROMOTION_KIND_OPTIONS.map((opt) => (

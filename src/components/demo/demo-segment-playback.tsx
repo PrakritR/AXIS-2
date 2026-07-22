@@ -88,7 +88,6 @@ const INBOX_COMPOSE_SEND = '[data-attr="inbox-compose-send"]';
 const INBOX_MARK_READ = '[data-attr="inbox-mark-read"]';
 const INBOX_REPLY_SEND = '[data-attr="inbox-reply-send"]';
 const PROMOTION_NEW = '[data-attr="promotion-new"]';
-const PROMOTION_NEW_FLYER = '[data-attr="promotion-new-flyer"]';
 const PROMOTION_GENERATE = '[data-attr="promotion-generate"]';
 const PROMOTION_FLYER_DOWNLOAD = '[data-attr="promotion-flyer-download"]';
 const PROMOTION_ROW = '[data-attr="promotion-row"]';
@@ -428,7 +427,6 @@ async function runPromotionSegment(frame: HTMLElement, nav: DemoPlaybackNav, pro
   if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(2);
   await clickIfPresent(frame, PROMOTION_NEW);
-  await clickIfPresent(frame, PROMOTION_NEW_FLYER);
 
   if (!isGuidedDemoActive()) return;
   setGuidedDemoStep(3);
