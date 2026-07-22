@@ -92,8 +92,13 @@ const nextConfig: NextConfig = {
       // section (portals/admin.ts) rendered by AdminBugFeedbackClient. A legacy
       // redirect here shadows the route before it ever reaches the app router.
       { source: "/admin/bugs-feedback/:path+", destination: "/admin/bugs-feedback", permanent: false },
-      { source: "/resident/home", destination: "/resident/properties", permanent: false },
-      { source: "/resident/home/:path*", destination: "/resident/properties", permanent: false },
+      // Legacy resident "home"/"properties" section was renamed away (the resident
+      // portal now has dashboard + move-in "House details"; there is no `properties`
+      // section in resident-sections.ts). Point these at the real resident home so an
+      // old bookmark lands on the dashboard instead of a 404, matching the sibling
+      // /resident/announcements and /resident/support legacy redirects below.
+      { source: "/resident/home", destination: "/resident/dashboard", permanent: false },
+      { source: "/resident/home/:path*", destination: "/resident/dashboard", permanent: false },
       // /resident/lease is the standalone interactive Lease section (resident-sections.ts,
       // ResidentLeasePanel) — never redirect it; the read-only signed-lease
       // document lives at /resident/documents/lease.
