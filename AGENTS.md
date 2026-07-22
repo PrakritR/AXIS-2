@@ -512,20 +512,9 @@ perfectly. `profile_roles_insert_self` had the same shape. Closed in
   co-manager invite was stored verbatim, so a manager could name a victim's
   publicly-listed property and take it over. Validate against ownership
   (`findPropertyIdsNotOwnedByManager`) and treat a missing row as unowned.
-- **Ownership is re-derived at every WRITE, and deliberately not at read.**
-  Invites forged before the gate shipped are still pending, so the accept branch
-  of `PATCH /api/pro/account-links/[inviteId]` re-runs
-  `findPropertyIdsNotOwnedByManager` against the *inviter's* current ownership
-  and refuses with 403 — never a silent narrowing, since a silent partial grant
-  is the failure mode being closed. Do **not** add the same filter to the read
-  path (`collectLinkedPropertyIdsForUser`, `linkedOwnerScopeForModule`,
-  `getShareablePropertyForUser`, …): `transferPropertyOwnership` only rewires
-  the A↔B pair, so a property transferred to B leaves an unrelated co-manager
-  C's link naming an owner who no longer holds it. A read-time filter reads that
-  as forgery and silently revokes C while the co-manager card still lists the
-  property — "shows granted, behaves denied". Residual, accepted knowingly: an
-  already-accepted forged link is not re-checked at use, so the invite table
-  must be audited per environment before release.
+  Ownership is re-derived at every WRITE (create *and* accept) and deliberately
+  NOT at read — the reasoning, the read-path trap, and the residual risk are in
+  [`docs/agents/co-manager-access.md`](docs/agents/co-manager-access.md).
 
 Regression coverage: `tests/unit/role-grant-surface.test.ts` replays every
 migration and fails if a later one re-grants DML or re-adds a write policy on

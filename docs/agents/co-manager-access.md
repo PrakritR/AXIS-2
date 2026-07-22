@@ -25,6 +25,21 @@ their own scope was a self-service takeover of any publicly-listed property id).
 Coverage: `tests/unit/co-manager-invite-scope.test.ts`,
 `tests/integration/portal/co-manager-invite-property-scope.test.ts`.
 
+**Ownership is re-derived at every WRITE, and deliberately not at read.** Invites
+forged before the ownership gate shipped are still pending, so the accept branch
+of `PATCH /api/pro/account-links/[inviteId]` re-runs
+`findPropertyIdsNotOwnedByManager` against the *inviter's* current ownership and
+refuses with 403 — never a silent narrowing, since a silent partial grant is the
+failure mode being closed. Do **not** add the same filter to the read path
+(`collectLinkedPropertyIdsForUser`, `linkedOwnerScopeForModule`,
+`getShareablePropertyForUser`, …): `transferPropertyOwnership` only rewires the
+A↔B pair, so a property transferred to B leaves an unrelated co-manager C's link
+naming an owner who no longer holds it. A read-time filter reads that as forgery
+and silently revokes C while the co-manager card still lists the property —
+"shows granted, behaves denied". Residual, accepted knowingly: an
+already-accepted forged link is not re-checked at use, so the invite table must
+be audited per environment before release.
+
 **Server scoping** — `src/lib/auth/co-manager-module-scope.ts`:
 `linkedPropertyIdsForModule` (property-keyed tables),
 `linkedOwnerScopeForModule` (owner-keyed tables like the vendor directory),
