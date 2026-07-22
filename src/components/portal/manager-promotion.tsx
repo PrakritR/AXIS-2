@@ -39,6 +39,7 @@ import {
   PromotionForm,
   draftInputs,
   draftWithPropertyKey,
+  promotionTextIdentityFromDraft,
   type PromotionDraft,
 } from "@/components/portal/promotion-form";
 import {
@@ -466,8 +467,7 @@ export function ManagerPromotion() {
     // The unified new-promotion modal shares one `draft` for property context;
     // the text composer contributes format/tone/notes/images via `opts`.
     const base = draft;
-    const label = base.propertyLabel.trim() || base.headline.trim() || "Untitled promotion";
-    const propertyId = base.propertyKey === CUSTOM_PROPERTY_KEY ? null : base.propertyKey;
+    const { propertyId, propertyLabel: label } = promotionTextIdentityFromDraft(base);
     const entryTitle = nextPromotionAssetDefaultTitle(assets, "text");
     setGeneratingTextId("__new__");
     try {
@@ -669,6 +669,7 @@ export function ManagerPromotion() {
         open={showForm}
         title="Edit flyer"
         onClose={closeForm}
+        busy={generating}
         panelClassName="max-w-2xl"
         footer={
           <div className="flex flex-wrap gap-2">

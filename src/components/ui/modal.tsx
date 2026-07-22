@@ -21,6 +21,7 @@ export function Modal({
   panelClassName,
   stackClassName,
   dense = false,
+  busy = false,
 }: {
   open: boolean;
   title: ReactNode;
@@ -34,6 +35,12 @@ export function Modal({
   stackClassName?: string;
   /** Tighter header/body spacing for compact forms. */
   dense?: boolean;
+  /**
+   * An in-flight write owns the modal: backdrop click, the header Close button
+   * and Escape all become inert. Without this a "cancel" only hides the shell —
+   * the pending request still lands and reports success over a closed modal.
+   */
+  busy?: boolean;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -46,13 +53,13 @@ export function Modal({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || busy) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, busy, onClose]);
 
   if (!open || !isClient) return null;
 
@@ -62,7 +69,8 @@ export function Modal({
         type="button"
         aria-label="Close"
         className="modal-overlay fixed inset-0"
-        onClick={onClose}
+        onClick={busy ? undefined : onClose}
+        disabled={busy}
       />
       <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
         <div
@@ -87,9 +95,11 @@ export function Modal({
             <button
               type="button"
               onClick={onClose}
+              disabled={busy}
               className={cn(
                 "shrink-0 rounded-full border border-border bg-card font-semibold text-muted hover:bg-foreground/5",
                 dense ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-sm",
+                busy && "cursor-not-allowed opacity-50 hover:bg-card",
               )}
             >
               Close

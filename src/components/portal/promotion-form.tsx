@@ -48,6 +48,9 @@ export type PromotionDraft = {
 
 export const CUSTOM_PROPERTY_KEY = "__custom__";
 
+/** Shown instead of a property name when a promotion isn't linked to a property. */
+export const UNTITLED_PROMOTION_LABEL = "Untitled promotion";
+
 export const EMPTY_DRAFT: PromotionDraft = {
   propertyKey: CUSTOM_PROPERTY_KEY,
   propertyLabel: "",
@@ -93,15 +96,32 @@ export function draftWithPropertyKey(
   listings: ManagerPromotionPropertyOption[],
   opts?: { managerContact?: string },
 ): PromotionDraft {
-  if (key === CUSTOM_PROPERTY_KEY) {
-    // `propertyLabel` / `address` were autofilled from the listing that was
-    // selected before, and a saved promotion must never name a property it is
-    // not linked to.
-    return { ...base, propertyKey: key, propertyLabel: "", address: "" };
-  }
+  if (key === CUSTOM_PROPERTY_KEY) return { ...base, propertyKey: key };
   const property = listings.find((l) => l.id === key)?.property;
   if (!property) return { ...base, propertyKey: key };
   return enrichPromotionDraftFromListing({ ...base, propertyKey: key }, property, opts);
+}
+
+/**
+ * Row identity for a text promotion built from a draft. The text composer has no
+ * label field of its own, so `propertyLabel`/`headline` on a Custom draft can
+ * only be autofill left over from a listing that was picked and then switched
+ * away from — deriving the label from `propertyKey` keeps a row from naming a
+ * property it has no `propertyId` for. The flyer form is not routed through
+ * here: there the manager owns the "Property label (shown on flyer)" field.
+ */
+export function promotionTextIdentityFromDraft(draft: PromotionDraft): {
+  propertyId: string | null;
+  propertyLabel: string;
+} {
+  if (draft.propertyKey === CUSTOM_PROPERTY_KEY) {
+    return { propertyId: null, propertyLabel: UNTITLED_PROMOTION_LABEL };
+  }
+  return {
+    propertyId: draft.propertyKey,
+    propertyLabel:
+      draft.propertyLabel.trim() || draft.headline.trim() || UNTITLED_PROMOTION_LABEL,
+  };
 }
 
 /**
