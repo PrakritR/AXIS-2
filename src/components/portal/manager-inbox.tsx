@@ -62,8 +62,15 @@ type InboxThread = {
 };
 
 /** Search deliberately skips the trash folder; say so rather than letting a
- *  manager conclude a trashed message no longer exists. */
-const SEARCH_SKIPS_TRASH_NOTE = "Trash isn’t searched — open the Trash tab to browse it.";
+ *  manager conclude a trashed message no longer exists. Re-clicking the pill of
+ *  the tab you are already on does not change `tabId`, so "open the Trash tab"
+ *  is not a way out when Trash is already the active tab — name the step that
+ *  actually applies from where the reader is standing. */
+function searchSkipsTrashNote(tabId: string) {
+  return tabId === "trash"
+    ? "Trash isn’t searched — clear the search to browse it."
+    : "Trash isn’t searched — clear the search, then open the Trash tab.";
+}
 
 function previewLine(body: string, max = 100) {
   const t = body.trim().replace(/\s+/g, " ");
@@ -305,9 +312,13 @@ export const ManagerInbox = forwardRef<
     showToast("Marked as read — moves to Opened after refresh.");
   };
 
-  const markReadIfUnreadInbox = (id: string) => {
+  const isUnreadInboxThread = (id: string) => {
     const thread = local.find((t) => t.id === id);
-    if (thread && thread.folder === "inbox" && thread.unread) markRead(id);
+    return Boolean(thread && thread.folder === "inbox" && thread.unread);
+  };
+
+  const markReadIfUnreadInbox = (id: string) => {
+    if (isUnreadInboxThread(id)) markRead(id);
   };
 
   const bodyById = useMemo(() => {
@@ -558,7 +569,12 @@ export const ManagerInbox = forwardRef<
             : "No messages yet.";
 
   const bulkMarkRead = () => {
-    for (const id of threadSelection.selectedIds) markReadIfUnreadInbox(id);
+    const eligible = [...threadSelection.selectedIds].filter(isUnreadInboxThread);
+    if (eligible.length === 0) {
+      showToast("Nothing to mark read — the selection has no unread inbox messages.");
+      return;
+    }
+    for (const id of eligible) markRead(id);
     threadSelection.clearSelection();
   };
 
@@ -669,7 +685,7 @@ export const ManagerInbox = forwardRef<
           <PortalInboxEmptyState
             title={searchActive ? `No messages match “${query.trim()}”.` : emptyCopy}
           />
-          {searchActive ? <p className="text-center text-sm text-muted">{SEARCH_SKIPS_TRASH_NOTE}</p> : null}
+          {searchActive ? <p className="text-center text-sm text-muted">{searchSkipsTrashNote(tabId)}</p> : null}
         </div>
       ) : (
         <div className="space-y-3">
@@ -677,7 +693,7 @@ export const ManagerInbox = forwardRef<
             <p className="text-sm text-muted">
               {rowsForTab.length} message{rowsForTab.length === 1 ? "" : "s"} matching{" "}
               <span className="font-medium text-foreground">“{query.trim()}”</span> — best matches
-              first. {SEARCH_SKIPS_TRASH_NOTE}
+              first. {searchSkipsTrashNote(tabId)}
             </p>
           ) : null}
           <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
