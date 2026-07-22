@@ -40,7 +40,10 @@ export function useNativeCamera() {
     const file = new File([blob], `photo-${Date.now()}.${ext}`, {
       type: blob.type || `image/${ext}`,
     });
-    return { previewUrl: photo.webPath, file };
+    // Preview from a locally-minted object URL (like the web path below) rather
+    // than the platform-provided webPath string, so the value rendered into
+    // <img src> is one we created from our own blob, never external DOM text.
+    return { previewUrl: URL.createObjectURL(file), file };
   }, []);
 
   return { capture };

@@ -8,11 +8,12 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/auth/portal-access", () => ({
   getPortalAccessContext: vi.fn(),
   hasRole: vi.fn(),
+  isPortalRoleReachable: vi.fn(),
   ACTIVE_PORTAL_COOKIE: "axis_active_portal",
 }));
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
+import { getPortalAccessContext, hasRole, isPortalRoleReachable } from "@/lib/auth/portal-access";
 import { POST as setActivePortal } from "@/app/api/auth/set-active-portal/route";
 
 describe("POST /api/auth/set-active-portal", () => {
@@ -39,6 +40,7 @@ describe("POST /api/auth/set-active-portal", () => {
     } as never);
     vi.mocked(getPortalAccessContext).mockResolvedValue({ roles: ["manager", "resident"] } as never);
     vi.mocked(hasRole).mockReturnValue(true);
+    vi.mocked(isPortalRoleReachable).mockReturnValue(true);
 
     const req = jsonRequest("http://localhost/api/auth/set-active-portal", {
       method: "POST",
