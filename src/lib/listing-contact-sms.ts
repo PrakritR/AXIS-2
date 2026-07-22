@@ -1,14 +1,20 @@
 import type { MockProperty } from "@/data/types";
-import { managerContactSmsPhoneForPublicCta } from "@/lib/claw-leasing-links";
+import { listingCtaSmsPhone } from "@/lib/claw-leasing-links";
 
-/** Attach manager Twilio work number so listing CTAs match the public browse page. */
+/**
+ * Attach the resolved CTA number so a manager-side preview matches what the
+ * public browse page will render.
+ *
+ * `null` CLEARS any number stored on the property rather than leaving it — the
+ * stored blob is manager-editable, and a preview must show the same web
+ * "Schedule a tour / apply online" fallback the public listing will get.
+ */
 export function withListingContactSmsPhone(
   property: MockProperty,
   contactSmsPhone: string | null | undefined,
 ): MockProperty {
-  const phone = managerContactSmsPhoneForPublicCta(contactSmsPhone);
-  if (!phone) return property;
-  if (property.contactSmsPhone?.trim() === phone) return property;
+  const phone = listingCtaSmsPhone(contactSmsPhone) ?? undefined;
+  if (property.contactSmsPhone === phone) return property;
   return { ...property, contactSmsPhone: phone };
 }
 

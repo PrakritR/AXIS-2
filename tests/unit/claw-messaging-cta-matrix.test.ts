@@ -101,20 +101,23 @@ const FREEFORM_CASES: Array<{ text: string; intent: ReturnType<typeof classifyLe
 ];
 
 describe("Claw-primary single-number messaging", () => {
-  it("uses the shared agent line for every public CTA when Claw is enabled", () => {
+  it("keeps the shared agent line as the PropLane transport number when Claw is enabled", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
     expect(isClawSharedLineBridgeEnabled()).toBe(true);
     expect(managerContactSmsPhoneForPublicCta(null)).toBe(AGENT);
     expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe(AGENT);
     expect(managerContactSmsPhoneForPublicCta("+12065550199")).toBe(AGENT);
-    expect(isClawMessagingPubliclyEnabled()).toBe(true);
     expect(clawLeasingAgentPhoneE164()).toBe(AGENT);
+    // A public CTA, by contrast, needs a number resolved for that listing —
+    // the browser never falls back to the shared line on its own.
+    expect(isClawMessagingPubliclyEnabled()).toBe(false);
+    expect(isClawMessagingPubliclyEnabled(AGENT)).toBe(true);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });
 
-  it("builds every manager-side CTA deep link to the Claw agent number", () => {
+  it("builds every manager-side CTA deep link to the listing's own resolved number", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
 
@@ -125,10 +128,10 @@ describe("Claw-primary single-number messaging", () => {
         bundleLabel: c.bundleLabel,
         topic: c.topic,
         roomName: c.roomName,
-        // Even if a Twilio number is passed, Claw-primary forces the agent line.
+        // Production hands each listing its own manager's phone.
         toPhone: "+14258909021",
       });
-      expect(href.startsWith("sms:+12053690702")).toBe(true);
+      expect(href.startsWith("sms:+14258909021")).toBe(true);
       const decoded = decodeURIComponent(href.split("body=")[1] ?? "");
       if (typeof c.expectBody === "string") expect(decoded).toBe(c.expectBody);
       else expect(decoded).toMatch(c.expectBody);

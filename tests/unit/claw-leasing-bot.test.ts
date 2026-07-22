@@ -83,53 +83,65 @@ describe("claw leasing intent", () => {
     ).toBe("bun-2");
   });
 
-  it("does not enable public CTAs for Claw/555 when the Claw bridge is off", () => {
-    const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-    const prevAgent = process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
-    process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "0";
-    delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
-    expect(isLegacyClawSharedSmsNumber("+12053690702")).toBe(true);
-    expect(managerContactSmsPhoneForPublicCta("+12053690702")).toBeNull();
-    expect(isClawMessagingPubliclyEnabled("+12053690702")).toBe(false);
-    expect(managerContactSmsPhoneForPublicCta("+12065550199")).toBeNull();
-    expect(isClawMessagingPubliclyEnabled("+12065550199")).toBe(false);
-    if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
-    if (prevAgent === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
-    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE = prevAgent;
+  it("never enables a public CTA for a 555 placeholder or a missing number", () => {
+    // Which number a CTA *should* target is decided server-side by
+    // `resolveListingCtaSmsPhone`; the browser only rejects unusable values, so
+    // this holds regardless of the Claw bridge flag.
+    for (const flag of ["0", "1"]) {
+      const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+      process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = flag;
+      expect(isClawMessagingPubliclyEnabled("+12065550199"), flag).toBe(false);
+      expect(isClawMessagingPubliclyEnabled(null), flag).toBe(false);
+      expect(isClawMessagingPubliclyEnabled(""), flag).toBe(false);
+      expect(isClawMessagingPubliclyEnabled("not a phone"), flag).toBe(false);
+      // The shared agent line stays a legitimate CTA target — dev/preview route
+      // every listing there.
+      expect(isLegacyClawSharedSmsNumber("+12053690702"), flag).toBe(true);
+      expect(isClawMessagingPubliclyEnabled("+12053690702"), flag).toBe(true);
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+      else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
+    }
   });
 
-  it("always uses the shared Claw agent line for CTAs while Claw is primary", () => {
+  it("keeps the shared-line transport on the Claw agent number while Claw is primary", () => {
+    // `managerContactSmsPhoneForPublicCta` still backs the PropLane SMS
+    // transport (`proplane-sms-transport.server.ts`) and manager work-number
+    // UI, so it keeps collapsing everything onto the shared line. Public
+    // listing CTAs no longer go through it.
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
     expect(managerContactSmsPhoneForPublicCta("+12053690702")).toBe("+12053690702");
     expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe("+12053690702");
-    expect(isClawMessagingPubliclyEnabled("+12053690702")).toBe(true);
-    expect(
-      buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+14258909021" }).startsWith(
-        "sms:+12053690702",
-      ),
-    ).toBe(true);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });
 
-  it("returns # when Claw is off and no Twilio work number is provided", () => {
-    const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-    const prevAgent = process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
-    process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "0";
-    delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
-    expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test" })).toBe("#");
-    expect(
-      buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+12053690702" }),
-    ).toBe("#");
-    if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
-    if (prevAgent === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE;
-    else process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE = prevAgent;
+  it("texts the number the listing was resolved to, and # when it has none", () => {
+    for (const flag of ["0", "1"]) {
+      const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+      process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = flag;
+      // Production: this listing's own manager's phone.
+      expect(
+        buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+14258909021" }),
+      ).toMatch(/^sms:\+14258909021\?/);
+      // Dev / preview: the shared Claw leasing line.
+      expect(
+        buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+12053690702" }),
+      ).toMatch(/^sms:\+12053690702\?/);
+      // No usable number → no sms: link; callers render the web fallback.
+      expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test" }), flag).toBe("#");
+      expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: null }), flag).toBe("#");
+      expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "" }), flag).toBe("#");
+      expect(
+        buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+12065550199" }),
+        flag,
+      ).toBe("#");
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
+      else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
+    }
   });
 
-  it("builds sms deep links to the Claw agent number (Claw-primary)", () => {
+  it("builds sms deep links to the listing's resolved number", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
     const href = buildSmsDeepLink({
@@ -138,7 +150,7 @@ describe("claw leasing intent", () => {
       propertyLabel: "4709B 8th Ave NE",
       toPhone: "+14258909021",
     });
-    expect(href.startsWith("sms:+12053690702")).toBe(true);
+    expect(href.startsWith("sms:+14258909021")).toBe(true);
     const decoded = decodeURIComponent(href.split("body=")[1] ?? "");
     expect(decoded).toBe("Hi — I'd like to schedule a tour for 4709B 8th Ave NE.");
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;

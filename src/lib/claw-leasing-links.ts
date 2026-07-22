@@ -2,11 +2,19 @@
  * Client-safe listing SMS helpers (no Node/ws imports).
  * Used by listing CTAs (`sms:` deep links) and server auto-replies.
  *
- * PropLane messaging currently runs on ONE shared Claw Messenger agent line
- * for production. Twilio per-manager numbers are a future endeavour — keep
- * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so CTAs / work-number UI always use
- * the Claw agent phone.
+ * PropLane messaging (the transport that actually sends and receives) runs on
+ * ONE shared Claw Messenger agent line — keep
+ * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so work-number UI and
+ * `proplane-sms-transport.server.ts` keep using the Claw agent phone.
+ *
+ * Public listing CTAs are the one exception: in PRODUCTION they point at the
+ * property's own manager's phone instead. That split lives entirely in
+ * `resolveListingCtaSmsPhone` (`src/lib/listing-cta-phone.server.ts`); here,
+ * `listingCtaSmsPhone` / `buildSmsDeepLink` just carry whatever number the
+ * server resolved.
  */
+
+import { normalizePhoneE164 } from "@/lib/communication-other-recipients";
 
 export const CLAW_DEFAULT_AGENT_PHONE = "+12053690702";
 
@@ -96,10 +104,28 @@ export function clawLeasingAgentPhoneE164(): string {
   return CLAW_DEFAULT_AGENT_PHONE;
 }
 
-/** Whether public listings may show "Text to …" CTAs. */
+/**
+ * The number a public listing CTA texts — EXACTLY the one the server resolved
+ * for that listing in `resolveListingCtaSmsPhone`
+ * (`src/lib/listing-cta-phone.server.ts`), which is where the production
+ * (manager's own phone) vs. dev (shared Claw line) split is decided.
+ *
+ * The browser deliberately does NOT substitute a number of its own. In
+ * production a manager with no verified phone must fall back to the
+ * "Schedule a tour / apply online" web links, not silently text the shared
+ * line or another manager. So this only normalizes and rejects: it returns a
+ * well-formed E.164 number or `null`, never a malformed `sms:` target.
+ */
+export function listingCtaSmsPhone(contactSmsPhone: string | null | undefined): string | null {
+  const e164 = normalizePhoneE164(String(contactSmsPhone ?? ""));
+  if (!e164) return null;
+  if (isFictionalUs555Number(e164)) return null;
+  return e164;
+}
+
+/** Whether a listing may show "Text to …" CTAs — i.e. it has a real number. */
 export function isClawMessagingPubliclyEnabled(contactSmsPhone?: string | null): boolean {
-  if (isClawSharedLineBridgeEnabled()) return true;
-  return Boolean(managerContactSmsPhoneForPublicCta(contactSmsPhone));
+  return Boolean(listingCtaSmsPhone(contactSmsPhone));
 }
 
 export type LeasingIntent =
@@ -268,18 +294,16 @@ export function buildSmsDeepLink(args: {
   /** Optional context for question CTAs (layout, bathroom, lease terms, …). */
   topic?: string | null;
   roomName?: string | null;
-  /** Messaging number (ignored when Claw-primary — always the agent line). */
+  /**
+   * The listing's server-resolved CTA number (production: its own manager's
+   * phone; dev/preview: the shared Claw line). No number means no `sms:` link —
+   * callers render the web "Schedule a tour / apply online" fallback instead.
+   */
   toPhone?: string | null;
 }): string {
-  const toPhone = managerContactSmsPhoneForPublicCta(args.toPhone ?? clawLeasingAgentPhoneE164());
+  const toPhone = listingCtaSmsPhone(args.toPhone);
   if (!toPhone) return "#";
-  const phoneRaw = toPhone.replace(/\D/g, "");
-  const phoneDigits =
-    phoneRaw.startsWith("1") && phoneRaw.length === 11
-      ? phoneRaw
-      : phoneRaw.length === 10
-        ? `1${phoneRaw}`
-        : phoneRaw;
+  const phoneDigits = toPhone.replace(/\D/g, "");
   const label = (args.propertyLabel ?? "").trim();
   const bundleLabel = (args.bundleLabel ?? "").trim();
   const topic = (args.topic ?? "").trim();

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { MockProperty } from "@/data/types";
-import { managerContactSmsPhoneForPublicCta } from "@/lib/claw-leasing-links";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
+import { resolveListingCtaSmsPhone } from "@/lib/listing-cta-phone.server";
 import { isSandboxPublicListing } from "@/lib/public-sandbox-listings";
 import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -38,24 +38,36 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Property is not active for apply or tour links." }, { status: 404 });
     }
 
-    let contactSmsPhone = managerContactSmsPhoneForPublicCta(property.contactSmsPhone);
     let managerEmail: string | null = null;
+    let managerProfile: {
+      phone: string | null;
+      phone_verified_at: string | null;
+      sms_from_number: string | null;
+    } | null = null;
     if (data.manager_user_id) {
       const { data: profile } = await db
         .from("profiles")
-        .select("email, sms_from_number")
+        .select("email, phone, phone_verified_at, sms_from_number")
         .eq("id", data.manager_user_id)
         .maybeSingle();
       managerEmail = profile?.email ?? null;
-      const sms = managerContactSmsPhoneForPublicCta(String(profile?.sms_from_number ?? "").trim() || null);
-      if (sms) contactSmsPhone = sms;
+      managerProfile = profile
+        ? {
+            phone: profile.phone ?? null,
+            phone_verified_at: profile.phone_verified_at ?? null,
+            sms_from_number: profile.sms_from_number ?? null,
+          }
+        : null;
     }
 
     const resolved: MockProperty = {
       ...property,
       id: property.id || propertyId,
       managerUserId: property.managerUserId ?? data.manager_user_id ?? undefined,
-      ...(contactSmsPhone ? { contactSmsPhone } : {}),
+      // Same per-property rule as the public catalog: this listing's own
+      // manager, and the stored blob number is never trusted. See
+      // `resolveListingCtaSmsPhone`.
+      contactSmsPhone: resolveListingCtaSmsPhone(managerProfile) ?? undefined,
     };
 
     if (isProductionRuntime()) {
