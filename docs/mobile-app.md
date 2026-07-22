@@ -30,7 +30,7 @@ Rent in the app always uses ACH (`src/lib/platform/resident-payments.ts`). Subsc
 
 | Path | Purpose |
 | --- | --- |
-| `capacitor.config.ts` | App id `com.axisseattlehousing.app`, name **Axis**, points the WebView at production. |
+| `capacitor.config.ts` | App id `com.axisseattlehousing.app`, name **PropLane**, points the WebView at production. |
 | `native-shell/index.html` | Branded "you're offline" fallback (Capacitor's required `webDir`). |
 | `src/components/native/native-bridge.tsx` | Mounted in the root layout. On native only: hides splash, styles the status bar, registers push, opens deep links. No-ops on the web. |
 | `src/app/api/native/register-push-token/route.ts` | Stores a device token for the signed-in user. |
@@ -101,16 +101,49 @@ npx cap add android
 ```
 
 This scaffolds `ios/` and `android/` (committed to git; build artifacts are
-git-ignored). Then generate app icons and splash screens from the Axis mark:
+git-ignored). The **iOS** app icon and splash screen are generated from the
+**PropLane** paper-plane mark:
 
 ```bash
-# Default sources are committed in resources/ (regenerate the Axis-mark
-# defaults anytime: python3 scripts/generate-app-icons.py). Swap in designer
-# artwork at resources/icon.png (1024×1024) + resources/splash.png (2732×2732)
-# when ready, then copy into assets/ and run:
-mkdir -p assets && cp resources/icon.png assets/icon.png && cp resources/splash.png assets/splash.png
-npx @capacitor/assets generate --iconBackgroundColor '#ffffff' --splashBackgroundColor '#080b14'
+# Regenerate the PropLane iOS defaults anytime (sharp is a devDependency):
+node scripts/generate-ios-brand-assets.mjs
 ```
+
+That script is the source of truth. It reproduces the web brand mark
+(`src/components/brand/axis-logo.tsx` — plane body + fold line) in the PropLane
+steel/blue palette (`src/app/globals.css`) and writes, in one pass:
+
+- `resources/icon.png` (1024×1024) + `resources/splash.png` (2732×2732) — the
+  `@capacitor/assets` sources.
+- `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` — the
+  shipped iOS marketing icon (full-bleed steel/blue gradient + white plane).
+- `ios/App/App/Assets.xcassets/Splash.imageset/` — the launch image referenced
+  by `Base.lproj/LaunchScreen.storyboard` (dark `#080b14` bg + centered brand
+  tile + white plane).
+
+Every PNG it writes is **opaque RGB with no alpha channel** — App Store Connect
+rejects a marketing icon that carries one (ITMS-90717 "Invalid App Store
+Icon"), and a simulator build will not catch it. The script asserts this after
+each write, so keep any new output going through its `png()` helper.
+
+To swap in designer artwork instead, replace `resources/icon.png` +
+`resources/splash.png` and fan them out to every derived size:
+
+```bash
+# @capacitor/assets prefers ./assets and only falls back to ./resources when
+# assets/ is absent. The repo's tracked Assets/ dir (capital A — lease notes)
+# matches that probe on case-insensitive macOS/Windows filesystems, so name
+# resources/ explicitly rather than relying on the fallback.
+npx @capacitor/assets generate \
+  --assetPath resources \
+  --splashBackgroundColor '#080b14'
+```
+
+**Android still ships the legacy "AX" lettermark.** The generator above is iOS
+only; `android/app/src/main/res/mipmap-*/ic_launcher.png` and the
+`drawable-*/splash.png` variants are untouched Capacitor scaffolding and are
+tracked as a separate follow-up. Every non-Android user-visible surface should
+read PropLane.
 
 ---
 
@@ -204,6 +237,30 @@ This mirrors the `npm ci` + `npx cap sync ios` steps in
 so the Xcode Cloud and GitHub pipelines build the same thing. The script writes
 only `node_modules` and the Capacitor-generated iOS config; it never commits into
 `ios/App/Pods` or other generated output.
+
+### “‘apple-sign-in’ depends on ‘capacitor-swift-pm’ 7.0.0..&lt;8.0.0”
+
+Once `node_modules` exists, SPM hits a second conflict: the latest release of
+`@capacitor-community/apple-sign-in` (7.1.0 — there is no Capacitor 8 build)
+hard-pins `capacitor-swift-pm` to 7.x in its own `Package.swift`, while
+`ios/App/CapApp-SPM/Package.swift` pins `exact: "8.4.1"` for the Capacitor 8
+core plugins. `xcodebuild -resolvePackageDependencies` cannot satisfy both.
+
+The fix is **[`patches/@capacitor-community+apple-sign-in+7.1.0.patch`](../patches/@capacitor-community+apple-sign-in+7.1.0.patch)**,
+which widens that one dependency range to `"7.0.0"..<"9.0.0"`. The root
+`postinstall` script runs `patch-package`, so **every `npm ci` re-applies it** —
+Xcode Cloud (`ci_post_clone.sh`) and GitHub Actions included — and a fresh clone
+is never left with the unpatched plugin. The plugin's Swift source only uses
+stable `CAPPlugin` / `CAPBridgedPlugin` APIs that exist in capacitor-swift-pm 8,
+so widening the range is compile-safe.
+
+Do **not** hand-edit `ios/App/CapApp-SPM/Package.swift` to work around this — it
+is Capacitor-managed and `npx cap sync ios` regenerates it. Dropping the plugin
+is also not an option: native Sign in with Apple uses it
+(`src/lib/auth/native-apple-sign-in.ts`, see
+[`docs/apple-sign-in-setup.md`](apple-sign-in-setup.md)). When the plugin
+publishes a Capacitor 8 release, upgrade and delete the patch; bumping it to any
+other 7.x means regenerating the patch under the new version-stamped filename.
 
 ---
 
@@ -304,9 +361,10 @@ const shot = await capture();      // native picker in-app, file input on web
 if (shot) await upload(shot.file); // shot.previewUrl for an <img> preview
 ```
 
-On iOS add an `NSCameraUsageDescription` (and
-`NSPhotoLibraryUsageDescription`) string to `ios/App/App/Info.plist`, e.g.
-"Axis uses the camera to attach photos to applications and work orders."
+The iOS permission prompts (`NSCameraUsageDescription`,
+`NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription`) are
+already committed in `ios/App/App/Info.plist` — edit them there. They are
+user-visible at the permission prompt, so they must read **PropLane**.
 
 ---
 
