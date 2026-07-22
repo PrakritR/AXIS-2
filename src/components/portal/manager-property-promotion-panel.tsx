@@ -107,7 +107,7 @@ export function ManagerPropertyPromotionPanel({
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sectionExpanded, setSectionExpanded] = useState(true);
+  const [sectionExpanded, setSectionExpanded] = useState(false);
 
   useEffect(() => {
     if (!authReady) return;
