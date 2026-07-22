@@ -193,6 +193,35 @@ Feedback (`admin-bug-feedback-client.tsx`) and Communication → Email
 (`admin-inbox-client.tsx`) are the reference implementations — copy their
 structure rather than reinventing table/filter markup per tab.
 
+## Sharing listings to a prospect (Send listing modal)
+
+`ShareLeadLinkModal` (`share-lead-link-modal.tsx`) is the one "Send listing /
+Invite to apply / Share tour" surface, mounted from Properties (header **Share**
+and each listed row's ACTIONS **Send to prospect**), Applications, and Calendar.
+Only the **listing** kind is multi-select (a manager can send several/all
+properties at once via `CheckboxMultiSelect`); **apply** and **tour** stay
+single-property because they target one apply/tour flow. Rules baked into the
+modal + `/api/portal/send-lead-invite`:
+
+- **Single listing → direct listing page** (`buildManagerListingUrl` →
+  `/rent/listings/{id}`). **Several listings → filtered browse link**
+  (`buildManagerBrowseUrl` → `/rent/browse?ids=a,b,c`). The public browse page
+  reads that param (`BROWSE_IDS_PARAM` / `parseBrowseIdsParam` in
+  `manager-property-links.ts`) and restricts the grid via the
+  `PropertyBrowseFilters.propertyIds` set in `buildPropertyBrowseCards`
+  (`room-listings-catalog.ts`). The other manual filters still apply within the
+  set; an id not in the public catalog is simply absent (same visibility rule as
+  everywhere — a listing that isn't publicly active never appears on browse).
+- The **room selector only shows for exactly one selected property** — it is
+  meaningless (and hidden) for a multi-send.
+- The email builder (`lead-invite-email.ts`) takes an optional `listingCount`;
+  `>1` switches subject + body/html to the multi-listing "browse these N homes"
+  copy instead of the single-listing summary.
+- The server **re-authorizes every requested id** via
+  `getShareablePropertyForUser` and rejects the whole send (403) if any id is
+  not owned/assigned — never silently drops one. Client sends both `propertyId`
+  (first, back-compat) and `propertyIds` (full list).
+
 ## Listing images: never fabricate a photo
 
 A production listing/room with zero genuine uploaded photos must render
