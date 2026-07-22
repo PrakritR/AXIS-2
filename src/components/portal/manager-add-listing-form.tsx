@@ -899,6 +899,17 @@ export function listingWizardStepIndices(scope: ListingWizardScope): number[] {
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
+/** Coerce a persisted wizard step onto a step this scope actually renders. */
+function clampSavedWizardStep(value: number | null | undefined, scope: ListingWizardScope): number {
+  const steps = listingWizardStepIndices(scope);
+  const first = steps[0] ?? 0;
+  if (typeof value !== "number" || !Number.isFinite(value)) return first;
+  const wanted = Math.floor(value);
+  if (steps.includes(wanted)) return wanted;
+  const earlier = steps.filter((i) => i <= wanted);
+  return earlier.length > 0 ? earlier[earlier.length - 1]! : first;
+}
+
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home:        "Property type, address, layout, move-in access, amenities, and photos.",
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
@@ -1060,23 +1071,42 @@ function extToMime(ext: string): string {
   return map[ext] ?? "application/octet-stream";
 }
 
-async function uploadDataUrl(dataUrl: string): Promise<string> {
+/**
+ * Remembers the storage URL each `data:` URL was uploaded to, so saving a draft
+ * repeatedly (and then submitting) re-uses the objects already in the bucket
+ * instead of writing a fresh copy of every photo on every save.
+ */
+type UploadedMediaCache = Map<string, Promise<string>>;
+
+async function uploadDataUrl(dataUrl: string, cache?: UploadedMediaCache): Promise<string> {
   if (!dataUrl.startsWith("data:")) return dataUrl;
   // /demo has no signed-in Supabase session to upload against — keep the
   // data URL as-is so demo photos and lease templates round-trip locally.
   if (isDemoModeActive()) return dataUrl;
-  return uploadToBucket(dataUrl);
+  if (!cache) return uploadToBucket(dataUrl);
+  const inFlight = cache.get(dataUrl);
+  if (inFlight) return inFlight;
+  const pending = uploadToBucket(dataUrl);
+  cache.set(dataUrl, pending);
+  try {
+    return await pending;
+  } catch (err) {
+    // A failed upload must not be remembered — the next save has to retry it.
+    cache.delete(dataUrl);
+    throw err;
+  }
 }
 
 async function uploadSubmissionMedia(
   sub: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1,
+  cache?: UploadedMediaCache,
 ): Promise<import("@/lib/manager-listing-submission").ManagerListingSubmissionV1> {
   async function uploadAll(urls: string[]): Promise<string[]> {
-    return Promise.all(urls.map((u) => uploadDataUrl(u)));
+    return Promise.all(urls.map((u) => uploadDataUrl(u, cache)));
   }
   async function uploadOne(url: string | null | undefined): Promise<string | null> {
     if (!url) return url ?? null;
-    return uploadDataUrl(url);
+    return uploadDataUrl(url, cache);
   }
 
   const [housePhotos, houseVideo, leaseTemplateDocUrl, propertyFloorPlan, floorPlanByLabel, rooms, bathrooms, sharedSpaces] = await Promise.all([
@@ -1088,7 +1118,7 @@ async function uploadSubmissionMedia(
       const entries = Object.entries(sub.floorPlanByLabel ?? {});
       if (entries.length === 0) return {} as Record<string, string>;
       const uploaded = await Promise.all(
-        entries.map(async ([label, url]) => [label, await uploadDataUrl(url)] as const),
+        entries.map(async ([label, url]) => [label, await uploadDataUrl(url, cache)] as const),
       );
       return Object.fromEntries(uploaded) as Record<string, string>;
     })(),
@@ -1260,6 +1290,8 @@ export function ManagerAddListingForm({
   editListingOwnerUserId = null,
   editRequestChangeId = null,
   editDraftId = null,
+  initialStepIndex = null,
+  initialMaxStepReached = null,
   onSaved,
   initialSubmission = null,
   noteKey = null,
@@ -1278,6 +1310,10 @@ export function ManagerAddListingForm({
   editRequestChangeId?: string | null;
   /** Draft (in-progress wizard) id being resumed. On final submit the draft is published and removed. */
   editDraftId?: string | null;
+  /** Wizard step a resumed draft was saved on, so it reopens where the manager left off. */
+  initialStepIndex?: number | null;
+  /** Furthest step a resumed draft reached, so its step chips stay unlocked. */
+  initialMaxStepReached?: number | null;
   /** Fired after a draft is saved (Save draft) so the caller can refresh the drafts list. */
   onSaved?: () => void;
   initialSubmission?: ManagerListingSubmissionV1 | null;
@@ -1298,10 +1334,16 @@ export function ManagerAddListingForm({
   });
   const [busy, setBusy] = useState(false);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
+  // A resumed draft reopens on the step it was saved from, with every step it
+  // had already reached still unlocked — "save progress" has to restore the
+  // position, not just the content.
+  const resumedStepIndex = clampSavedWizardStep(initialStepIndex, wizardScope);
+  const [stepIndex, setStepIndex] = useState(resumedStepIndex);
   const [stepFieldErrors, setStepFieldErrors] = useState<Record<string, string>>({});
   const [maxStepReached, setMaxStepReached] = useState(() =>
-    (editPendingId ?? editListingId ?? editRequestChangeId) ? LISTING_STEP_COUNT - 1 : 0,
+    (editPendingId ?? editListingId ?? editRequestChangeId)
+      ? LISTING_STEP_COUNT - 1
+      : Math.max(resumedStepIndex, clampSavedWizardStep(initialMaxStepReached, wizardScope)),
   );
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
@@ -1362,6 +1404,9 @@ export function ManagerAddListingForm({
   // Remembers the draft id across saves so re-saving (or submitting) updates the
   // same record instead of spawning duplicates — seeded from a resumed draft.
   const draftIdRef = useRef<string | null>(editDraftId);
+  // Uploads already done in this session, keyed by source data URL, so repeated
+  // Save draft clicks (and the final submit) don't re-upload the same photos.
+  const uploadedMediaRef = useRef<UploadedMediaCache>(new Map());
   const isDraftMode = Boolean(editDraftId);
   const [savingDraft, setSavingDraft] = useState(false);
   // "Save draft" is only meaningful while creating a property (new or resumed
@@ -2341,13 +2386,20 @@ export function ManagerAddListingForm({
     try {
       let payload = buildSubmissionPayload();
       try {
-        payload = await uploadSubmissionMedia(payload);
+        payload = await uploadSubmissionMedia(payload, uploadedMediaRef.current);
       } catch (err) {
         console.error("manager-add-listing-form: draft media upload failed", err);
         payload = stripUnresolvedSubmissionMedia(payload);
         showToast("Saved your text — photos couldn't upload. Reopen the draft to retry.");
       }
-      const id = await saveManagerPropertyDraftToServer(payload, userId, draftIdRef.current ?? undefined);
+      const id = await saveManagerPropertyDraftToServer(payload, userId, {
+        existingDraftId: draftIdRef.current,
+        stepIndex,
+        maxStepReached,
+        // Only the wizard that minted the id may re-key it; a resumed draft is
+        // rendered by the drafts list, which would lose this open editor.
+        allowIdUpgrade: !editDraftId,
+      });
       if (!id) {
         showToast("Could not save draft. Check your connection and try again.");
         return;
@@ -2361,6 +2413,12 @@ export function ManagerAddListingForm({
   };
 
   const submitListing = async () => {
+    // A draft save in flight has not yet handed back the draft id, so publishing
+    // now would create a second record alongside the draft being written.
+    if (savingDraft) {
+      showToast("Saving your draft — try again in a moment.");
+      return;
+    }
     const invalid = (() => {
       if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
       for (const i of wizardSteps) {
@@ -2423,7 +2481,7 @@ export function ManagerAddListingForm({
       }
       let uploadedSubmission: typeof submission;
       try {
-        uploadedSubmission = await uploadSubmissionMedia(submission);
+        uploadedSubmission = await uploadSubmissionMedia(submission, uploadedMediaRef.current);
       } catch (err) {
         console.error("manager-add-listing-form: uploadSubmissionMedia failed", err);
         showToast("Could not upload photos. Check your connection and try again.");
@@ -4831,7 +4889,7 @@ export function ManagerAddListingForm({
                   className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
                   data-attr="listing-wizard-continue"
                   onClick={goNext}
-                  disabled={busy}
+                  disabled={busy || savingDraft}
                 >
                   {visibleStepPosition === visibleStepCount - 2
                     ? isPreviewWizard
@@ -4845,7 +4903,7 @@ export function ManagerAddListingForm({
                   className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
                   data-attr="listing-wizard-submit"
                   onClick={() => void submitListing()}
-                  disabled={busy}
+                  disabled={busy || savingDraft}
                 >
                   {busy
                     ? isPreviewWizard

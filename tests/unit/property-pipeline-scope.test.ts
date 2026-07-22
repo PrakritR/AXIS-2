@@ -51,6 +51,25 @@ describe("scopePropertyPipelineSnapshotForViewer", () => {
     const kept = scopePropertyPipelineSnapshotForViewer(snapshot, "viewer", ["mgr-brooklyn"]);
     expect(kept.extrasByUser.ambika).toHaveLength(1);
   });
+
+  it("never surfaces another owner's drafts, even when the draft id is linked", () => {
+    const ownerDraft = { adminRefId: "mgr-owner-draft", buildingName: "Unpublished" } as never;
+    const snapshot = {
+      pendingByUser: {},
+      extrasByUser: {},
+      sideGlobal: { requestChange: [], unlisted: [], rejected: [], drafts: [ownerDraft] },
+      sideByUser: {
+        viewer: { requestChange: [], unlisted: [], rejected: [], drafts: [{ adminRefId: "mgr-my-draft" } as never] },
+        ambika: { requestChange: [], unlisted: [], rejected: [], drafts: [ownerDraft] },
+      },
+    };
+
+    // Even a co-manager explicitly granted that property id must not see the draft.
+    const scoped = scopePropertyPipelineSnapshotForViewer(snapshot, "viewer", ["mgr-owner-draft"]);
+    expect(scoped.sideByUser.ambika).toBeUndefined();
+    expect(scoped.sideByUser.viewer?.drafts).toHaveLength(1);
+    expect(scoped.sideGlobal.drafts).toHaveLength(0);
+  });
 });
 
 describe("propertyRowsToSnapshot", () => {

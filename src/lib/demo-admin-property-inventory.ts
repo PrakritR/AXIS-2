@@ -5,6 +5,7 @@ import {
   buildMockPropertyFromAdminRow,
   buildMockPropertyFromDraft,
   deleteMirroredPropertyRecord,
+  deletePropertyRecordFromServer,
   deriveLegacyFields,
   LEGACY_MANAGER_SCOPE_USER_ID,
   PROPERTY_PIPELINE_EVENT,
@@ -71,6 +72,12 @@ export type AdminPropertyRow = {
   editRequestNote?: string;
   /** Full submission preserved so images and rich content survive the admin approval flow. */
   submission?: ManagerListingSubmissionV1;
+  /** Wizard step a draft was saved on, so resuming reopens where the manager left off. */
+  draftStepIndex?: number;
+  /** Furthest wizard step a draft reached, so the step chips stay unlocked on resume. */
+  draftMaxStepReached?: number;
+  /** True while a draft's id was minted before it had a property name (see `saveManagerPropertyDraftToServer`). */
+  draftIdProvisional?: boolean;
 };
 
 type SideBuckets = {
@@ -187,6 +194,10 @@ export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adm
     managerUserId: row.managerUserId,
     editRequestNote: row.editRequestNote,
     submission: row.submission,
+    draftStepIndex: row.draftStepIndex == null ? undefined : Math.max(0, Math.floor(n(row.draftStepIndex, 0))),
+    draftMaxStepReached:
+      row.draftMaxStepReached == null ? undefined : Math.max(0, Math.floor(n(row.draftMaxStepReached, 0))),
+    draftIdProvisional: row.draftIdProvisional === true ? true : undefined,
   };
 }
 
@@ -546,6 +557,7 @@ function submissionToDraftAdminRow(
   input: ManagerPropertyDraftInput,
   managerUserId: string,
   listingId: string,
+  opts?: { stepIndex?: number | null; maxStepReached?: number | null; provisionalId?: boolean },
 ): AdminPropertyRow {
   const legacy = deriveLegacyFields(input);
   const pendingLike: ManagerPendingPropertyRow = {
@@ -556,32 +568,79 @@ function submissionToDraftAdminRow(
     submittedByUserId: managerUserId,
   };
   const prop = buildMockPropertyFromDraft(pendingLike, listingId);
+  const step = (v: number | null | undefined) =>
+    typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : undefined;
   return {
     ...mockToAdminRow(prop, listingId),
     adminRefId: listingId,
     listingId,
     managerUserId,
     submission: normalizeManagerListingSubmissionV1(input),
+    draftStepIndex: step(opts?.stepIndex),
+    draftMaxStepReached: step(opts?.maxStepReached),
+    draftIdProvisional: opts?.provisionalId === true ? true : undefined,
   };
 }
+
+/** `mgr-<building>-<unit>-<rand>` once a property name exists, otherwise a neutral id. */
+function mintManagerPropertyId(legacy: { buildingName: string; unitLabel: string }): string {
+  const suffix = Date.now().toString(36).slice(-6);
+  const nameSlug = slugPart(legacy.buildingName);
+  return nameSlug ? `mgr-${nameSlug}-${slugPart(legacy.unitLabel)}-${suffix}` : `mgr-listing-${suffix}`;
+}
+
+export type SaveManagerPropertyDraftOptions = {
+  existingDraftId?: string | null;
+  /** Wizard position to restore when the draft is resumed. */
+  stepIndex?: number | null;
+  maxStepReached?: number | null;
+  /**
+   * Allow re-keying a draft whose id was minted before it had a property name.
+   * Only safe while the caller owns the draft id (the wizard that minted it) —
+   * a resumed draft keeps its id so the surface rendering it does not lose the
+   * open editor when the row key changes.
+   */
+  allowIdUpgrade?: boolean;
+};
 
 /**
  * Save (or update) an in-progress "add property" wizard as a private draft. The
  * DB record id doubles as the eventual live listingId, so publishing a draft
  * (see publishManagerPropertyDraftToServer) reuses the same id and simply flips
- * the status live. Returns the draft/listing id, or null on failure.
+ * the status live. Because of that, a draft saved before the manager typed a
+ * property name gets a neutral `mgr-listing-<rand>` id rather than a blank-slug
+ * one, and is re-keyed to the real name-derived id on the first later save that
+ * has a name. Returns the draft/listing id, or null on failure.
  */
 export async function saveManagerPropertyDraftToServer(
   input: ManagerPropertyDraftInput,
   managerUserId: string,
-  existingDraftId?: string | null,
+  opts?: SaveManagerPropertyDraftOptions,
 ): Promise<string | null> {
   if (!managerUserId.trim()) return null;
   const legacy = deriveLegacyFields(input);
-  const listingId =
-    existingDraftId?.trim() ||
-    `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${Date.now().toString(36).slice(-6)}`;
-  const row = submissionToDraftAdminRow(input, managerUserId, listingId);
+  const side = readSide(managerUserId);
+  const existingId = opts?.existingDraftId?.trim() ?? "";
+  const existingRow = existingId ? side.drafts.find((r) => r.adminRefId === existingId) ?? null : null;
+  const hasName = slugPart(legacy.buildingName).length > 0;
+
+  let listingId = existingId;
+  let provisionalId = existingRow?.draftIdProvisional === true;
+  let staleDraftId: string | null = null;
+  if (!existingId) {
+    listingId = mintManagerPropertyId(legacy);
+    provisionalId = !hasName;
+  } else if (provisionalId && hasName && opts?.allowIdUpgrade) {
+    listingId = mintManagerPropertyId(legacy);
+    provisionalId = false;
+    staleDraftId = existingId;
+  }
+
+  const row = submissionToDraftAdminRow(input, managerUserId, listingId, {
+    stepIndex: opts?.stepIndex,
+    maxStepReached: opts?.maxStepReached,
+    provisionalId,
+  });
   const ok = await upsertPropertyRecordToServer({
     id: listingId,
     managerUserId,
@@ -589,11 +648,13 @@ export async function saveManagerPropertyDraftToServer(
     rowData: row,
   });
   if (!ok) return null;
-  const side = readSide(managerUserId);
-  const idx = side.drafts.findIndex((r) => r.adminRefId === listingId);
-  if (idx === -1) side.drafts = [...side.drafts, row];
-  else side.drafts = side.drafts.map((r, i) => (i === idx ? row : r));
-  writeSideStorage(side, managerUserId);
+  const remaining = staleDraftId ? side.drafts.filter((r) => r.adminRefId !== staleDraftId) : side.drafts;
+  const idx = remaining.findIndex((r) => r.adminRefId === listingId);
+  const drafts = idx === -1 ? [...remaining, row] : remaining.map((r, i) => (i === idx ? row : r));
+  writeSideStorage({ ...side, drafts }, managerUserId);
+  // Drop the superseded draft row BEFORE re-syncing, so the server sync cannot
+  // resurrect it as a duplicate draft.
+  if (staleDraftId) await deletePropertyRecordFromServer(staleDraftId);
   await syncPropertyPipelineFromServer({ force: true });
   return listingId;
 }

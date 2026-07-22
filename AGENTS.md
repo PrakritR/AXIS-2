@@ -578,12 +578,27 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   from the drafts bucket — no orphaned duplicate. A brand-new wizard that used
   "Save draft" mid-way also publishes-in-place via the remembered id (`draftIdRef`
   in `manager-add-listing-form.tsx`), never a second row.
+- **That id is therefore a permanent public URL, so it is never minted from a
+  blank name.** A save made before the manager typed a property name gets a
+  neutral `mgr-listing-<rand>` id flagged `draftIdProvisional`, never a
+  blank-slug `mgr---<rand>`. The first later save *in the same wizard session*
+  re-keys it to the real `mgr-<building>-<unit>-<rand>` id (new draft row
+  written, old draft row deleted before the next sync). A **resumed** draft
+  keeps its id (`allowIdUpgrade: false`) — re-keying it would change the drafts
+  table row key and unmount the open editor. Publishing is always in place, so
+  the one-record invariant holds either way. Unnamed drafts render as "Untitled
+  draft" in the list.
 - **Save draft is unvalidated** (partial-friendly, on every step) and does NOT
   count toward the plan property limit; **publishing** runs full validation +
-  the limit gate like any new listing. The list surface is the "Drafts" stage in
-  `MANAGER_STAGES` (`manager-house-properties-panel.tsx`) with Continue editing /
-  Delete draft. Migration: `…_manager_property_records_draft_status.sql` adds
-  `'draft'` to the status CHECK.
+  the limit gate like any new listing — so the wizard's `skuTier`/`skuLoaded`
+  come from the one `/api/manager/subscription` load in `manager-properties.tsx`
+  (a null tier reads as "no limit", so Continue editing waits for `skuLoaded`).
+  Saving also persists the wizard position (`draftStepIndex` /
+  `draftMaxStepReached`) so resuming reopens on the saved step with the earlier
+  chips unlocked. The list surface is the "Drafts" stage in `MANAGER_STAGES`
+  (`manager-house-properties-panel.tsx`) with Continue editing / Delete draft.
+  Migration: `…_manager_property_records_draft_status.sql` adds `'draft'` to the
+  status CHECK.
 
 # Financials UI cleanup (Blue Steel consolidation)
 

@@ -98,9 +98,10 @@ export function scopePropertyPipelineSnapshotForViewer(
       requestChange: filterSideRows(side.requestChange, linked, ownerId, viewer),
       unlisted: filterSideRows(side.unlisted, linked, ownerId, viewer),
       rejected: filterSideRows(side.rejected, linked, ownerId, viewer),
-      // Drafts are private to the owner. A co-manager never has a draft in their
-      // linked-id set, so filterSideRows drops them for non-owner viewers.
-      drafts: filterSideRows(side.drafts ?? [], linked, ownerId, viewer),
+      // Drafts are private to the owner — unlike the other buckets, a linked
+      // property grant never exposes one, so this is owner-only by construction
+      // rather than by filterSideRows happening to find no matching linked id.
+      drafts: ownerId === viewer ? side.drafts ?? [] : [],
     };
     if (
       ownerId === viewer ||

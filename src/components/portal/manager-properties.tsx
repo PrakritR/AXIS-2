@@ -266,6 +266,8 @@ export function ManagerProperties() {
           activeStage={activeStage}
           onStageChange={setActiveStage}
           onSendToProspect={openShareListing}
+          skuTier={skuTier}
+          skuLoaded={skuLoaded}
         />
       </ManagerPortalPageShell>
       {wizardOpen ? (

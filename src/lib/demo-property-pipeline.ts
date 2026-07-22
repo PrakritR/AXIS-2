@@ -227,6 +227,24 @@ export function deleteMirroredPropertyRecord(id: string) {
   }).catch(() => {});
 }
 
+/** Awaited counterpart of `deleteMirroredPropertyRecord`, for callers that must
+ * know the row is gone before re-syncing (e.g. re-keying a draft record). */
+export async function deletePropertyRecordFromServer(id: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (isDemoModeActive()) return true;
+  try {
+    const res = await fetch("/api/property-records", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function cachePublicExtraListings(listings: MockProperty[], opts?: { silent?: boolean }) {
   if (!isBrowser()) return;
   const map = readExtrasMap();

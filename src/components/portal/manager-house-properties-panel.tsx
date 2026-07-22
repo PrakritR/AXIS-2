@@ -143,6 +143,11 @@ export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
   drafts: "No saved drafts. Start a new property and tap Save draft to finish it later.",
 };
 
+/** A draft can be saved before it has a name — never render an empty title cell. */
+function managerPropertyRowTitle(row: AdminPropertyRow, bucket: AdminPropertyBucketIndex): string {
+  return row.buildingName.trim() || (bucket === 5 ? "Untitled draft" : "Untitled property");
+}
+
 export function managerStageFromParam(raw: string | null): ManagerStageKey {
   return MANAGER_STAGES.some((stage) => stage.key === raw) ? (raw as ManagerStageKey) : "listed";
 }
@@ -156,6 +161,7 @@ function ManagerPropertyInlineDetails({
   showToast,
   managerUserId,
   skuTier,
+  skuLoaded,
   propCount,
   onSendToProspect,
 }: {
@@ -165,6 +171,7 @@ function ManagerPropertyInlineDetails({
   showToast: (m: string) => void;
   managerUserId: string | null;
   skuTier: string | null;
+  skuLoaded: boolean;
   propCount: number;
   onSendToProspect?: (listingId: string) => void;
 }) {
@@ -350,6 +357,8 @@ function ManagerPropertyInlineDetails({
           initialSubmission: managerSubmission,
           noteKey,
           editDraftId: row.adminRefId,
+          initialStepIndex: row.draftStepIndex ?? null,
+          initialMaxStepReached: row.draftMaxStepReached ?? null,
         }
       : null;
 
@@ -510,7 +519,16 @@ function ManagerPropertyInlineDetails({
             variant="primary"
             className={actionBtnClass}
             data-attr="draft-continue-editing"
-            onClick={() => setDraftEditorOpen(true)}
+            onClick={() => {
+              // Publishing from the wizard is gated on the plan property limit,
+              // and an unknown tier reads as "no limit" — so don't open until
+              // the subscription load has settled.
+              if (!skuLoaded) {
+                showToast("Loading subscription…");
+                return;
+              }
+              setDraftEditorOpen(true);
+            }}
           >
             Continue editing
           </Button>
@@ -620,34 +638,22 @@ export function ManagerHousePropertiesPanel({
   showToast,
   activeStage,
   onSendToProspect,
+  skuTier,
+  skuLoaded,
 }: {
   showToast: (m: string) => void;
   activeStage: ManagerStageKey;
   onStageChange: (stage: ManagerStageKey) => void;
   onSendToProspect?: (listingId: string) => void;
+  /** Plan tier from the page-level subscription load — publishing a draft is gated on it. */
+  skuTier: string | null;
+  /** False until that load settles; publishing must not proceed on an unknown plan. */
+  skuLoaded: boolean;
 }) {
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-  const [skuTier, setSkuTier] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isDemoModeActive()) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/manager/subscription", { credentials: "include" });
-        const body = (await res.json()) as { tier?: string | null };
-        if (res.ok && !cancelled) setSkuTier(body.tier ?? null);
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const propCount = useMemo(() => {
     void tick;
@@ -714,6 +720,7 @@ export function ManagerHousePropertiesPanel({
       showToast={showToast}
       managerUserId={managerUserId}
       skuTier={skuTier}
+      skuLoaded={skuLoaded}
       propCount={propCount}
       onSendToProspect={onSendToProspect}
     />
@@ -740,7 +747,7 @@ export function ManagerHousePropertiesPanel({
                   >
                     <div className="min-w-0 flex-1">
                       <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                        <span className="truncate">{row.buildingName}</span>
+                        <span className="truncate">{managerPropertyRowTitle(row, sourceBucket)}</span>
                       </PortalTableInlineExpand>
                       <p className="mt-0.5 text-xs leading-relaxed text-muted">
                         {row.address}
@@ -792,7 +799,7 @@ export function ManagerHousePropertiesPanel({
                         >
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                             <PortalTableInlineExpand expanded={expanded}>
-                              {row.buildingName}
+                              {managerPropertyRowTitle(row, sourceBucket)}
                             </PortalTableInlineExpand>
                             <p className="mt-0.5 text-xs leading-relaxed text-muted">
                               {row.address}
