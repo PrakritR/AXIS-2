@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
 import { PromotionAiDraftCard } from "@/components/portal/promotion-ai-draft-card";
+import { PromotionPropertyPicker } from "@/components/portal/promotion-form";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
 import {
   PROMOTION_TEXT_FORMAT_DEFAULT,
   PROMOTION_TEXT_FORMAT_OPTIONS,
@@ -65,6 +67,11 @@ export type PromotionTextGenerateOptions = {
  * unified "New promotion" modal, where the type dropdown swaps between the flyer
  * form and this composer. Reports "dirty" so the parent can warn before a type
  * switch discards typed content.
+ *
+ * Pass `propertyKey` + `onSelectProperty` to surface the property picker — the
+ * create surface needs it so a text promotion is attached to a real property
+ * instead of silently saving as "Untitled promotion" with no property. The
+ * standalone edit modal omits them: the asset's property is already fixed.
  */
 export function PromotionTextComposer({
   onGenerate,
@@ -74,6 +81,9 @@ export function PromotionTextComposer({
   initialImages,
   onDirtyChange,
   submitDataAttr = "promotion-text-generate-submit",
+  propertyKey,
+  listings,
+  onSelectProperty,
 }: {
   onGenerate: (opts: PromotionTextGenerateOptions) => void;
   busy?: boolean;
@@ -82,6 +92,9 @@ export function PromotionTextComposer({
   initialImages?: string[];
   onDirtyChange?: (dirty: boolean) => void;
   submitDataAttr?: string;
+  propertyKey?: string;
+  listings?: ManagerPromotionPropertyOption[];
+  onSelectProperty?: (key: string) => void;
 }) {
   const { showToast } = useAppUi();
   const baseFormat = initialFormat ?? PROMOTION_TEXT_FORMAT_DEFAULT;
@@ -138,6 +151,15 @@ export function PromotionTextComposer({
 
   return (
     <div className="space-y-4 text-sm">
+      {propertyKey !== undefined && onSelectProperty ? (
+        <PromotionPropertyPicker
+          id="promotion-text-property"
+          value={propertyKey}
+          listings={listings ?? []}
+          onSelect={onSelectProperty}
+          customLabel="Custom (no property)"
+        />
+      ) : null}
       <div>
         <label className="text-xs font-semibold text-muted" htmlFor="promotion-text-format">
           Channel / format

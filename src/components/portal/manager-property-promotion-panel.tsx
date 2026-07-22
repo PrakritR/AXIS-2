@@ -10,7 +10,7 @@ import {
   draftInputs,
   draftWithPropertyKey,
   type PromotionDraft,
-} from "@/components/portal/manager-promotion";
+} from "@/components/portal/promotion-form";
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
 import {
   PromotionFlyerAssetDetail,
@@ -162,9 +162,13 @@ export function ManagerPropertyPromotionPanel({
     [propertyId],
   );
 
+  // Closes every promotion compose surface — the unified new modal, the
+  // edit-flyer modal and the standalone text modal — so no caller can leave one
+  // of them open after a write.
   const closeForm = useCallback(() => {
     setShowForm(false);
     setShowNewModal(false);
+    setTextModalAssetId(null);
     setEditingRowId(null);
     setEditingEntryId(null);
     setDraft(EMPTY_DRAFT);
@@ -386,10 +390,10 @@ export function ManagerPropertyPromotionPanel({
 
   if (!propertyId) return null;
 
-  const textModalAsset =
-    textModalAssetId && textModalAssetId !== "__new__"
-      ? assets.find((a) => a.id === textModalAssetId) ?? null
-      : null;
+  // The standalone text modal is edit-only now — creating lives in PromotionNewModal.
+  const textModalAsset = textModalAssetId
+    ? assets.find((a) => a.id === textModalAssetId) ?? null
+    : null;
 
   const renderHeaderActions = (asset: PromotionAsset) => {
     if (asset.kind === "flyer") {

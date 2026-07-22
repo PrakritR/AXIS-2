@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
-import { PromotionForm, type PromotionDraft } from "@/components/portal/manager-promotion";
+import { PromotionForm, type PromotionDraft } from "@/components/portal/promotion-form";
 import {
   PromotionTextComposer,
   type PromotionTextGenerateOptions,
@@ -17,6 +17,39 @@ const PROMOTION_KIND_OPTIONS: { id: PromotionAssetKind; label: string; descripti
   { id: "flyer", label: "Flyer", description: "Printable or social-ready design." },
   { id: "text", label: "Text", description: "Caption, email, SMS, or listing blurb." },
 ];
+
+/** Flyer draft fields that count as manager-entered content for the discard
+ *  warning. `propertyKey` is deliberately absent: picking a property re-derives
+ *  most of the draft from the listing, so it re-baselines instead (see below). */
+const FLYER_CONTENT_FIELDS = [
+  "propertyLabel",
+  "address",
+  "title",
+  "headline",
+  "sellingPoints",
+  "customDetails",
+  "price",
+  "promo",
+  "cta",
+  "contact",
+  "schedulingUrl",
+  "includeSchedulingLink",
+  "theme",
+  "flyerSize",
+  "template",
+  "tone",
+  "aiPrompt",
+] as const;
+
+/** Field-by-field compare — `images` holds base64 data URLs, so serializing the
+ *  whole draft to compare it would cost megabytes on every type switch. */
+function flyerContentChanged(next: PromotionDraft, base: PromotionDraft): boolean {
+  for (const field of FLYER_CONTENT_FIELDS) {
+    if (next[field] !== base[field]) return true;
+  }
+  if (next.images.length !== base.images.length) return true;
+  return next.images.some((src, i) => src !== base.images[i]);
+}
 
 /**
  * The unified "New promotion" modal. Picking a type in the dropdown drops you
@@ -62,32 +95,42 @@ export function PromotionNewModal({
   textInitialImages?: string[];
 }) {
   const [kind, setKind] = useState<PromotionAssetKind>(initialKind);
-  // Snapshot of the flyer draft as it was seeded when the modal opened. Anything
-  // the user changes from this counts as "entered content" for the discard warn,
-  // and it's what we reset back to when the flyer form is abandoned on a switch.
+  // Snapshot of the flyer draft as it was seeded. Anything the user changes from
+  // this counts as "entered content" for the discard warn, and it's what we reset
+  // back to when the flyer form is abandoned on a switch.
   const flyerBaseRef = useRef<PromotionDraft>(draft);
+  const flyerBasePropertyRef = useRef<string>(draft.propertyKey);
   const textDirtyRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setKind(initialKind);
     flyerBaseRef.current = draft;
+    flyerBasePropertyRef.current = draft.propertyKey;
     textDirtyRef.current = false;
     // Intentionally only re-run on open — draft is captured as the opening seed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialKind]);
 
+  // Selecting a property (here or in the text composer) re-derives most of the
+  // draft from the listing, and a parent can re-seed the draft while the modal is
+  // already open (the demo autofill does). Both are autofill, not typed content,
+  // so they re-baseline rather than tripping the discard warning.
+  useEffect(() => {
+    if (!open || draft.propertyKey === flyerBasePropertyRef.current) return;
+    flyerBaseRef.current = draft;
+    flyerBasePropertyRef.current = draft.propertyKey;
+  }, [open, draft]);
+
   const handleTextDirty = useCallback((dirty: boolean) => {
     textDirtyRef.current = dirty;
   }, []);
 
-  const flyerDirty = () =>
-    JSON.stringify(draft) !== JSON.stringify(flyerBaseRef.current);
-
   function requestSwitch(next: PromotionAssetKind) {
     if (next === kind) return;
     if (flyerBusy || textBusy) return;
-    const leavingDirty = kind === "flyer" ? flyerDirty() : textDirtyRef.current;
+    const leavingDirty =
+      kind === "flyer" ? flyerContentChanged(draft, flyerBaseRef.current) : textDirtyRef.current;
     if (
       leavingDirty &&
       typeof window !== "undefined" &&
@@ -95,8 +138,8 @@ export function PromotionNewModal({
     ) {
       return;
     }
-    // Discard the form we're leaving: the flyer draft resets to its opening seed;
-    // the text composer unmounts (its state is dropped) when kind changes.
+    // Discard the form we're leaving: the flyer draft resets to its baseline
+    // (seed + property autofill); the text composer unmounts when kind changes.
     if (kind === "flyer") setDraft(flyerBaseRef.current);
     textDirtyRef.current = false;
     setKind(next);
@@ -121,7 +164,7 @@ export function PromotionNewModal({
             >
               {flyerBusy ? "Generating…" : "Generate flyer"}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={flyerBusy}>
               Cancel
             </Button>
           </div>
@@ -173,6 +216,9 @@ export function PromotionNewModal({
             initialTone={textInitialTone}
             initialImages={textInitialImages}
             onDirtyChange={handleTextDirty}
+            propertyKey={hidePropertyPicker ? undefined : draft.propertyKey}
+            listings={listings}
+            onSelectProperty={hidePropertyPicker ? undefined : onSelectProperty}
           />
         )}
       </div>
