@@ -89,10 +89,20 @@ function splashSvg() {
   </svg>`;
 }
 
-async function png(svg, size, out) {
+/**
+ * Both canvases are fully opaque by construction, so `flatten` is a no-op on
+ * pixel values — it exists to drop the alpha channel, which App Store Connect
+ * rejects on the marketing icon (ITMS-90717). The encoder then writes RGB
+ * (PNG colour type 2) rather than RGBA (colour type 6).
+ */
+async function png(svg, size, out, background) {
   mkdirSync(dirname(out), { recursive: true });
-  await sharp(Buffer.from(svg)).resize(size, size).png().toFile(out);
-  console.log(`  wrote ${out.replace(`${ROOT}/`, "")} (${size}x${size})`);
+  await sharp(Buffer.from(svg)).resize(size, size).flatten({ background }).png().toFile(out);
+  const { channels, hasAlpha } = await sharp(out).metadata();
+  if (hasAlpha || channels !== 3) {
+    throw new Error(`${out} kept an alpha channel (channels=${channels}, hasAlpha=${hasAlpha})`);
+  }
+  console.log(`  wrote ${out.replace(`${ROOT}/`, "")} (${size}x${size}, opaque RGB)`);
 }
 
 const SPLASH_CONTENTS = {
@@ -110,12 +120,12 @@ async function main() {
 
   console.log("Generating PropLane iOS brand assets:");
   // Sources for @capacitor/assets (docs/mobile-app.md).
-  await png(iconSvg(), 1024, join(ROOT, "resources/icon.png"));
-  await png(splashSvg(), 2732, join(ROOT, "resources/splash.png"));
+  await png(iconSvg(), 1024, join(ROOT, "resources/icon.png"), BLUE);
+  await png(splashSvg(), 2732, join(ROOT, "resources/splash.png"), APP_DARK);
   // The shipped iOS marketing icon (AppIcon.appiconset references this file).
-  await png(iconSvg(), 1024, join(appicon, "AppIcon-512@2x.png"));
+  await png(iconSvg(), 1024, join(appicon, "AppIcon-512@2x.png"), BLUE);
   // Launch-screen image referenced by Base.lproj/LaunchScreen.storyboard ("Splash").
-  await png(splashSvg(), 2732, join(splashset, "splash-2732.png"));
+  await png(splashSvg(), 2732, join(splashset, "splash-2732.png"), APP_DARK);
   writeFileSync(join(splashset, "Contents.json"), `${JSON.stringify(SPLASH_CONTENTS, null, 2)}\n`);
   console.log(`  wrote ${join(splashset, "Contents.json").replace(`${ROOT}/`, "")}`);
   console.log("Done.");

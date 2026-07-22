@@ -101,11 +101,11 @@ npx cap add android
 ```
 
 This scaffolds `ios/` and `android/` (committed to git; build artifacts are
-git-ignored). App icons and splash screens are generated from the **PropLane**
-paper-plane mark:
+git-ignored). The **iOS** app icon and splash screen are generated from the
+**PropLane** paper-plane mark:
 
 ```bash
-# Regenerate the PropLane defaults anytime (sharp is a repo dependency):
+# Regenerate the PropLane iOS defaults anytime (sharp is a devDependency):
 node scripts/generate-ios-brand-assets.mjs
 ```
 
@@ -121,10 +121,29 @@ steel/blue palette (`src/app/globals.css`) and writes, in one pass:
   by `Base.lproj/LaunchScreen.storyboard` (dark `#080b14` bg + centered brand
   tile + white plane).
 
+Every PNG it writes is **opaque RGB with no alpha channel** — App Store Connect
+rejects a marketing icon that carries one (ITMS-90717 "Invalid App Store
+Icon"), and a simulator build will not catch it. The script asserts this after
+each write, so keep any new output going through its `png()` helper.
+
 To swap in designer artwork instead, replace `resources/icon.png` +
-`resources/splash.png` and run `npx @capacitor/assets generate
---splashBackgroundColor '#080b14'` to fan them out to every derived size.
-Never ship the legacy "AX" mark — anything user-visible is PropLane.
+`resources/splash.png` and fan them out to every derived size:
+
+```bash
+# --assetPath is required, not cosmetic: @capacitor/assets prefers ./assets and
+# only falls back to ./resources when assets/ is absent. This repo has a stale
+# assets/ holding the old AX artwork, so the default would silently fan the
+# legacy mark back over the new icon. Always name resources/ explicitly.
+npx @capacitor/assets generate \
+  --assetPath resources \
+  --splashBackgroundColor '#080b14'
+```
+
+**Android still ships the legacy "AX" lettermark.** The generator above is iOS
+only; `android/app/src/main/res/mipmap-*/ic_launcher.png` and the
+`drawable-*/splash.png` variants are untouched Capacitor scaffolding and are
+tracked as a separate follow-up. Every non-Android user-visible surface should
+read PropLane.
 
 ---
 
