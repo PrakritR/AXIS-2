@@ -87,6 +87,9 @@ export function PublicNavbar() {
     () =>
       pathname.startsWith("/docs") ||
       pathname.startsWith("/why-proplane") ||
+      // /pricing is deliberately still highlighted here even though it is no
+      // longer a Resources dropdown entry — the page stays live and is linked
+      // from elsewhere, so the tab should light up when a visitor lands on it.
       pathname.startsWith("/pricing") ||
       pathname.startsWith("/about"),
     [pathname],
