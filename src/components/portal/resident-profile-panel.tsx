@@ -27,8 +27,6 @@ export function ResidentProfilePanel() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [axisId, setAxisId] = useState("");
-  const [emName, setEmName] = useState("");
-  const [emPhone, setEmPhone] = useState("");
 
   useEffect(() => {
     if (!session.userId) return;
@@ -77,11 +75,6 @@ export function ResidentProfilePanel() {
           profile?.phone?.trim() ||
           matchingApplication?.application?.phone?.trim() ||
           "";
-        const resolvedEmName =
-          (profile?.emergency_contact_name as string | null)?.trim() || "";
-        const resolvedEmPhone =
-          (profile?.emergency_contact_phone as string | null)?.trim() || "";
-
         const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
         const metaAxis = typeof meta?.axis_id === "string" ? meta.axis_id : null;
 
@@ -89,8 +82,6 @@ export function ResidentProfilePanel() {
         setEmail(session.email ?? "");
         setName((current) => current || resolvedName);
         setPhone((current) => current || resolvedPhone);
-        setEmName((current) => current || resolvedEmName);
-        setEmPhone((current) => current || resolvedEmPhone);
         setAxisId(
           resolveResidentPortalAxisId({
             profileManagerId: profile?.manager_id,
@@ -199,13 +190,13 @@ export function ResidentProfilePanel() {
             <label className="text-sm font-semibold text-foreground">PropLane ID</label>
             <Input value={axisId} readOnly className="bg-accent/30 font-mono text-sm" />
           </div>
-          <div className="space-y-2 sm:col-span-2">
-            <p className="text-sm font-semibold text-foreground">Emergency contact</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input value={emName} onChange={(e) => setEmName(e.target.value)} placeholder="Name" />
-              <Input value={emPhone} onChange={(e) => setEmPhone(e.target.value)} placeholder="Phone" />
-            </div>
-          </div>
+          {/*
+            No Emergency contact fields: `emergency_contact_name` /
+            `emergency_contact_phone` do not exist on `profiles`, so the inputs
+            accepted text, reported "Profile saved." and silently discarded it.
+            A form that lies about saving is worse than not offering the field.
+            Re-adding it is a tracked follow-up, pending those columns.
+          */}
           </div>
         </PortalCollapsibleSection>
 
