@@ -159,6 +159,12 @@
       "shared_spaces": { "source": "listing.sharedSpaces + room access" },
       "amenities": { "source": "listing.amenitiesText" },
       "house_rules": { "source": "listing.houseRulesText" },
+      "utilities_breakdown": {
+        "source": "listing.leaseUtilities",
+        "optional": true,
+        "shape": "per-utility rows: kind (+ custom label), paidBy (included_in_rent | resident | manager), setUpBy (resident | manager), optional allowance and notes",
+        "renders": "table in the Utilities & Services section; absent = standard prorated-share prose"
+      },
       "pet_policy": { "derived": "property.petFriendly" }
     },
     "metadata": {
@@ -178,7 +184,7 @@
         { "id": "prorate", "title": "5. Prorated First Month", "conditional": "lease_start not on 1st of month" },
         { "id": "deposit", "title": "Security Deposit & Move-In Charges", "merge_fields": ["security_deposit", "move_in_fee", "application_fee", "total_due_at_signing"], "disclosure_rules": ["wa-deposit-terms", "wa-movein-checklist", "seattle-deposit-installments", "wa-nonrefundable-fees"] },
         { "id": "returned_payments", "title": "Returned Payments" },
-        { "id": "utilities", "title": "Utilities & Services", "disclosure_rules": ["ca-shared-utility"] },
+        { "id": "utilities", "title": "Utilities & Services", "merge_fields": ["utilities_breakdown", "utilities_estimate"], "disclosure_rules": ["ca-shared-utility"] },
         { "id": "use_occupancy", "title": "Use, Occupancy & Guest Policy" },
         { "id": "shared_spaces", "title": "Shared Spaces", "merge_fields": ["shared_spaces", "amenities"] },
         { "id": "house_rules", "title": "House Rules", "merge_fields": ["house_rules"], "disclosure_rules": ["ca-smoking"] },
