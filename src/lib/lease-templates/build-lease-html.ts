@@ -10,11 +10,13 @@ import {
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import { formatUtilitiesListingLine, resolveListingUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import {
+  hasResidentPaidLeaseUtility,
   leaseUtilityAllowanceNote,
   leaseUtilityKindLabel,
   leaseUtilityPaidByLabel,
   leaseUtilitySetUpByLabel,
   normalizeLeaseUtilities,
+  type LeaseUtilityLine,
 } from "@/lib/lease-utilities";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
@@ -78,8 +80,7 @@ ${body}
  * included allowance" table for the lease's Utilities section. Empty string when the
  * manager configured no breakdown (the lease then falls back to its standard prose).
  */
-function utilitiesResponsibilityHtml(sub: ManagerListingSubmissionV1 | undefined): string {
-  const lines = normalizeLeaseUtilities(sub?.leaseUtilities);
+function utilitiesResponsibilityHtml(lines: readonly LeaseUtilityLine[] | undefined): string {
   if (!lines?.length) return "";
   const rows = lines
     .map((line) => {
@@ -366,7 +367,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const leaseTermsBody = escapeHtml(sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.");
   const houseOverview = escapeHtml(sub?.houseOverview?.trim() || list?.tagline || "Shared co-living housing as described on the listing.");
   const sharedSpacesText = sharedSpacesLeaseParagraph(sub);
-  const utilitiesBreakdown = utilitiesResponsibilityHtml(subNorm);
+  const leaseUtilityLines = normalizeLeaseUtilities(subNorm?.leaseUtilities);
+  const utilitiesBreakdown = utilitiesResponsibilityHtml(leaseUtilityLines);
+  const utilitiesEstimateSentence = !utilitiesBreakdown
+    ? "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property."
+    : hasResidentPaidLeaseUtility(leaseUtilityLines ?? [])
+      ? "This estimate reflects the utilities the Resident is responsible for above."
+      : "All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown.";
   const amenities = escapeHtml(sub?.amenitiesText?.trim() || "See listing amenities.");
   const houseRules = escapeHtml(sub?.houseRulesText?.trim() || "");
   const petPolicy = (room?.petFriendly ?? list?.petFriendly)
@@ -533,7 +540,7 @@ ${proratedSection || ""}
 
 <h2>${proratedSection ? "8" : "7"}. Utilities &amp; Services</h2>
 ${utilitiesBreakdown}
-<p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesBreakdown ? "This estimate reflects the utilities the Resident is responsible for above." : "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property."} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
+<p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesEstimateSentence} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
 
 <h2>${proratedSection ? "9" : "8"}. Use, Occupancy &amp; Guest Policy</h2>
 <p>The Premises shall be used exclusively as a private residence. The only authorized occupant(s) are: <strong>${tenantName}</strong> and <strong>${occupancy}</strong> additional authorized occupant(s) listed in writing at signing.</p>

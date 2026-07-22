@@ -29,6 +29,8 @@ export type LeaseUtilityPayment = "included_in_rent" | "resident" | "manager";
 export type LeaseUtilityResponsibleParty = "resident" | "manager";
 
 export type LeaseUtilityLine = {
+  /** Stable row identity, so editing/removing a row never re-binds another row's inputs. */
+  id: string;
   /** Which utility / service this row covers. */
   kind: LeaseUtilityKind;
   /** Custom label when `kind` is "other" (e.g. "Landscaping"). */
@@ -104,14 +106,27 @@ export function leaseUtilityDefaultsFor(model: UtilitiesPaymentModel | undefined
   }
 }
 
+let leaseUtilityIdCounter = 0;
+function leaseUtilityId(): string {
+  leaseUtilityIdCounter += 1;
+  return `lutil-${Date.now()}-${leaseUtilityIdCounter}`;
+}
+
+/** One utility row seeded with the defaults for the listing's aggregate model. */
+export function createLeaseUtilityLine(
+  kind: LeaseUtilityKind,
+  model?: UtilitiesPaymentModel,
+): LeaseUtilityLine {
+  return { id: leaseUtilityId(), kind, ...leaseUtilityDefaultsFor(model) };
+}
+
 /**
  * A sensible starting breakdown of the standard utilities, with payment/setup
  * defaults derived from the listing's aggregate utilities model so the two stay
  * consistent. The manager can then adjust any row.
  */
 export function defaultLeaseUtilities(model?: UtilitiesPaymentModel): LeaseUtilityLine[] {
-  const { paidBy, setUpBy } = leaseUtilityDefaultsFor(model);
-  return STANDARD_LEASE_UTILITY_KINDS.map((kind) => ({ kind, paidBy, setUpBy }));
+  return STANDARD_LEASE_UTILITY_KINDS.map((kind) => createLeaseUtilityLine(kind, model));
 }
 
 function normalizePayment(raw: unknown): LeaseUtilityPayment {
@@ -133,7 +148,13 @@ export function normalizeLeaseUtilities(raw: unknown): LeaseUtilityLine[] | unde
     if (!LEASE_UTILITY_KINDS.has(r.kind as LeaseUtilityKind)) continue;
     const kind = r.kind as LeaseUtilityKind;
     const paidBy = normalizePayment(r.paidBy);
-    const line: LeaseUtilityLine = { kind, paidBy, setUpBy: normalizeParty(r.setUpBy) };
+    const rawId = typeof r.id === "string" ? r.id.trim() : "";
+    const line: LeaseUtilityLine = {
+      id: rawId || leaseUtilityId(),
+      kind,
+      paidBy,
+      setUpBy: normalizeParty(r.setUpBy),
+    };
     if (kind === "other") {
       const label = typeof r.label === "string" ? r.label.trim() : "";
       if (label) line.label = label;
@@ -147,6 +168,11 @@ export function normalizeLeaseUtilities(raw: unknown): LeaseUtilityLine[] | unde
     out.push(line);
   }
   return out.length ? out : undefined;
+}
+
+/** True when at least one row leaves the resident responsible for paying a utility. */
+export function hasResidentPaidLeaseUtility(lines: readonly LeaseUtilityLine[]): boolean {
+  return lines.some((l) => l.paidBy === "resident");
 }
 
 /** Display label for a utility row (resolves the custom "other" label). */

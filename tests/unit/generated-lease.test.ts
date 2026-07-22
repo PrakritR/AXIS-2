@@ -124,31 +124,65 @@ describe("generated-lease", () => {
     expect(html).toContain("$2,150/mo");
   });
 
-  it("renders the per-utility responsibility breakdown in the lease when configured", () => {
-    const app = snapshotJordanLee();
-    const ctx = leaseContextFromApplication(app);
+  const RESIDENT_RESPONSIBLE_SENTENCE = "This estimate reflects the utilities the Resident is responsible for above.";
+  const NO_BREAKDOWN_SENTENCE =
+    "This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and high-speed internet as applicable to this property.";
+  const ALL_INCLUDED_SENTENCE =
+    "All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown.";
+
+  function leaseHtmlWithUtilities(leaseUtilities?: unknown[]): string {
+    const ctx = leaseContextFromApplication(snapshotJordanLee());
     const submission = {
       ...(ctx.submission ?? { v: 1, rooms: [], bundles: [], bathrooms: [] }),
       v: 1,
-      leaseUtilities: [
-        { kind: "electricity", paidBy: "resident", setUpBy: "resident" },
-        { kind: "water", paidBy: "included_in_rent", setUpBy: "manager", allowance: "$60/mo" },
-        { kind: "other", paidBy: "manager", setUpBy: "manager", label: "Landscaping", notes: "weekly service" },
-      ],
+      ...(leaseUtilities ? { leaseUtilities } : {}),
     } as unknown as NonNullable<typeof ctx.submission>;
-    const withSeattle = {
+    return buildAiGeneratedLeaseHtml({
       ...ctx,
       submission,
       leasedRoom: undefined,
       listingProperty: ctx.listingProperty
-        ? { ...ctx.listingProperty, address: "5259 Brooklyn Ave NE, Seattle, WA", neighborhood: "Seattle", listingSubmission: submission }
+        ? {
+            ...ctx.listingProperty,
+            address: "5259 Brooklyn Ave NE, Seattle, WA",
+            neighborhood: "Seattle",
+            listingSubmission: submission,
+          }
         : ctx.listingProperty,
-    };
-    const html = buildAiGeneratedLeaseHtml(withSeattle);
+    });
+  }
+
+  it("renders the per-utility responsibility breakdown in the lease when configured", () => {
+    const html = leaseHtmlWithUtilities([
+      { kind: "electricity", paidBy: "resident", setUpBy: "resident" },
+      { kind: "water", paidBy: "included_in_rent", setUpBy: "manager", allowance: "$60/mo" },
+      { kind: "other", paidBy: "manager", setUpBy: "manager", label: "Landscaping", notes: "weekly service" },
+    ]);
     expect(html).toContain("Account set up by");
     expect(html).toContain("Included up to $60/mo");
     expect(html).toContain("Landscaping");
     expect(html).toContain("Landlord pays");
+    expect(html).toContain(RESIDENT_RESPONSIBLE_SENTENCE);
+    expect(html).not.toContain(ALL_INCLUDED_SENTENCE);
+  });
+
+  it("keeps the standard utilities prose when no breakdown is configured", () => {
+    const html = leaseHtmlWithUtilities();
+    expect(html).toContain(NO_BREAKDOWN_SENTENCE);
+    expect(html).not.toContain(RESIDENT_RESPONSIBLE_SENTENCE);
+    expect(html).not.toContain("Account set up by");
+  });
+
+  it("does not claim the resident is responsible when no utility is resident-paid", () => {
+    const html = leaseHtmlWithUtilities([
+      { kind: "electricity", paidBy: "included_in_rent", setUpBy: "manager" },
+      { kind: "water", paidBy: "included_in_rent", setUpBy: "manager", allowance: "$60/mo" },
+      { kind: "trash", paidBy: "manager", setUpBy: "manager" },
+    ]);
+    expect(html).toContain("Account set up by");
+    expect(html).toContain(ALL_INCLUDED_SENTENCE);
+    expect(html).not.toContain(RESIDENT_RESPONSIBLE_SENTENCE);
+    expect(html).not.toContain(NO_BREAKDOWN_SENTENCE);
   });
 
   it("renders entire-home premises and rent for whole-house applications", () => {
