@@ -57,6 +57,13 @@ export type DemoApplicantRow = {
   backgroundCheckStatus?: ApplicationBackgroundCheckStatus;
   /** Vendor screening report (Certn) with manager-facing pros/cons summary. */
   screening?: ApplicationScreeningReport;
+  /**
+   * ISO timestamp set when the resident withdraws their own application. A
+   * withdrawn application is a REVERSIBLE, non-destructive state — it leaves the
+   * resident's active list but the manager keeps the record (screening, docs,
+   * answers, bucket) intact. Never a hard delete. Absent/null = active.
+   */
+  withdrawnAt?: string | null;
   /** Public Axis application id when linked to a resident account. */
   axisId?: string;
   /** Linked resident auth user id when known. */

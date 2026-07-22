@@ -55,6 +55,7 @@ import {
   inProgressApplicationResumeUrl,
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
   applicationHasGroup,
   buildApplicationGroups,
@@ -129,6 +130,9 @@ const APPLICATION_STATUS_PILL: Record<ApplicationGroupMemberStatus, ApplicationS
 };
 
 function applicationStatusPill(row: DemoApplicantRow): ApplicationStatusPill {
+  // A resident-withdrawn application keeps its record + bucket; the manager just
+  // sees it labelled Withdrawn instead of a blank/stale status.
+  if (isWithdrawnApplicationRow(row)) return { label: "Withdrawn", tone: "neutral" };
   return APPLICATION_STATUS_PILL[applicationStatusForRow(row)];
 }
 
