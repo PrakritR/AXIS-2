@@ -8,6 +8,7 @@ import {
 } from "@/lib/lead-invite-email";
 import {
   buildManagerApplyUrl,
+  buildManagerBrowseUrl,
   buildManagerListingUrl,
   buildManagerTourUrl,
 } from "@/lib/manager-property-links";
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
       to?: unknown;
       prospectName?: unknown;
       propertyId?: unknown;
+      propertyIds?: unknown;
       listingRoomId?: unknown;
       roomName?: unknown;
       note?: unknown;
@@ -60,14 +62,35 @@ export async function POST(req: Request) {
       body.kind === "tour" ? "tour" : body.kind === "listing" ? "listing" : body.kind === "apply" ? "apply" : null;
     const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
     const prospectName = typeof body.prospectName === "string" ? body.prospectName.trim() : "";
-    const propertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
+    const singlePropertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
     const listingRoomId = typeof body.listingRoomId === "string" ? body.listingRoomId.trim() : "";
     const roomName = typeof body.roomName === "string" ? body.roomName.trim() : "";
     const note = typeof body.note === "string" ? body.note.trim() : "";
 
     if (!kind) return NextResponse.json({ error: "kind must be apply, tour, or listing." }, { status: 400 });
     if (!to || !EMAIL_RE.test(to)) return NextResponse.json({ error: "A valid recipient email is required." }, { status: 400 });
-    if (!propertyId) return NextResponse.json({ error: "propertyId is required." }, { status: 400 });
+
+    // Multi-select is a "listing" affordance only — apply/tour target a single
+    // property/room flow. Normalize both shapes (array or legacy scalar) into a
+    // deduped id list; the room selector only applies to a single-property send.
+    const rawIds = Array.isArray(body.propertyIds)
+      ? body.propertyIds.filter((v): v is string => typeof v === "string")
+      : [];
+    const requestedIds: string[] = [];
+    const seenIds = new Set<string>();
+    for (const raw of [...rawIds, singlePropertyId]) {
+      const id = raw.trim();
+      if (id && !seenIds.has(id)) {
+        seenIds.add(id);
+        requestedIds.push(id);
+      }
+    }
+    if (requestedIds.length === 0) {
+      return NextResponse.json({ error: "propertyId is required." }, { status: 400 });
+    }
+    // Only a listing send fans out to several properties; apply/tour collapse to
+    // the first requested id so their single-property semantics are preserved.
+    const effectiveIds = kind === "listing" ? requestedIds : requestedIds.slice(0, 1);
 
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor, error: requestorError } = await svc
@@ -81,16 +104,29 @@ export async function POST(req: Request) {
     if (!canSendLeadInvite(requestor.role)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    // Server-side authorization: the manager may only share a property they own
+    // Server-side authorization: the manager may only share properties they own
     // (or are assigned as co-manager), verified against the Supabase source of
-    // truth — never trust the client-supplied propertyId. Also yields the live
-    // listing used to build the invite below.
-    const listing = await getShareablePropertyForUser(user.id, propertyId);
-    if (!listing) {
-      return NextResponse.json({ error: "You cannot share links for this property." }, { status: 403 });
+    // truth — never trust the client-supplied ids. Also yields the live listings
+    // used to build the invite below. Every requested id must be authorized.
+    const listings = await Promise.all(
+      effectiveIds.map(async (id) => ({ id, listing: await getShareablePropertyForUser(user.id, id) })),
+    );
+    const authorized = listings.filter((entry): entry is { id: string; listing: NonNullable<typeof entry.listing> } =>
+      Boolean(entry.listing),
+    );
+    if (authorized.length !== effectiveIds.length || authorized.length === 0) {
+      return NextResponse.json({ error: "You cannot share links for one or more of these properties." }, { status: 403 });
     }
-    const propertyTitle = (listing?.title || listing?.buildingName || listing?.address || propertyId).trim();
+
+    const isMultiListing = kind === "listing" && authorized.length > 1;
+    const primary = authorized[0];
+    const propertyId = primary.id;
+    const listing = primary.listing;
     const origin = appOrigin();
+
+    const propertyTitle = isMultiListing
+      ? `${authorized.length} homes`
+      : (listing?.title || listing?.buildingName || listing?.address || propertyId).trim();
     const applyUrl = buildManagerApplyUrl(origin, {
       propertyId,
       listingRoomId: listingRoomId || undefined,
@@ -98,44 +134,34 @@ export async function POST(req: Request) {
     });
     const tourUrl = buildManagerTourUrl(origin, propertyId);
     const listingPageUrl = buildManagerListingUrl(origin, propertyId);
-    const linkUrl = kind === "tour" ? tourUrl : applyUrl;
+    const listingCount = isMultiListing ? authorized.length : undefined;
+    // Multi-listing sends land the prospect on the browse grid pre-filtered to
+    // exactly these homes; a single send keeps the direct listing/apply link.
+    const linkUrl = isMultiListing
+      ? buildManagerBrowseUrl(origin, authorized.map((entry) => entry.id))
+      : kind === "tour"
+        ? tourUrl
+        : applyUrl;
     const listingSummary =
-      kind === "listing" && listing
+      kind === "listing" && !isMultiListing && listing
         ? buildListingShareSummary(listing, { roomChoice: roomName || undefined, roomId: listingRoomId || undefined })
         : undefined;
 
-    const subject = leadInviteSubject(kind, propertyTitle);
-    const text = buildLeadInviteEmailBody({
+    const subject = leadInviteSubject(kind, propertyTitle, listingCount);
+    const emailParams = {
       kind,
       prospectName: prospectName || undefined,
       propertyTitle,
       linkUrl,
-      listingPageUrl: kind === "listing" ? listingPageUrl : undefined,
-      tourUrl: kind === "listing" ? tourUrl : undefined,
+      listingPageUrl: kind === "listing" && !isMultiListing ? listingPageUrl : undefined,
+      tourUrl: kind === "listing" && !isMultiListing ? tourUrl : undefined,
       listingSummary,
       managerNote: note || undefined,
-    });
-    const html = buildLeadInviteEmailHtml({
-      kind,
-      prospectName: prospectName || undefined,
-      propertyTitle,
-      linkUrl,
-      listingPageUrl: kind === "listing" ? listingPageUrl : undefined,
-      tourUrl: kind === "listing" ? tourUrl : undefined,
-      listingSummary,
-      managerNote: note || undefined,
-    });
-    const mailtoHref = buildLeadInviteMailtoHref({
-      to,
-      kind,
-      prospectName: prospectName || undefined,
-      propertyTitle,
-      linkUrl,
-      listingPageUrl: kind === "listing" ? listingPageUrl : undefined,
-      tourUrl: kind === "listing" ? tourUrl : undefined,
-      listingSummary,
-      managerNote: note || undefined,
-    });
+      listingCount,
+    } satisfies Parameters<typeof buildLeadInviteEmailBody>[0];
+    const text = buildLeadInviteEmailBody(emailParams);
+    const html = buildLeadInviteEmailHtml(emailParams);
+    const mailtoHref = buildLeadInviteMailtoHref({ to, ...emailParams });
 
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) {
@@ -152,7 +178,7 @@ export async function POST(req: Request) {
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref }, { status: 502 });
     }
-    track("lead_invite_sent", user.id, { kind, property_id: propertyId });
+    track("lead_invite_sent", user.id, { kind, property_id: propertyId, property_count: authorized.length });
     return NextResponse.json({ ok: true, id: payload.id ?? null, linkUrl });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send invite." }, { status: 500 });

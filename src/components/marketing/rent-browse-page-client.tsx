@@ -7,6 +7,7 @@ import { ResidentHousingBrowse } from "@/components/marketing/resident-housing-b
 import { PublicPageAuthFooter } from "@/components/marketing/public-page-auth-footer";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalNavClick } from "@/lib/portal-nav-client";
+import { BROWSE_IDS_PARAM, parseBrowseIdsParam } from "@/lib/manager-property-links";
 import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 
 function authCreateResidentPath() {
@@ -19,6 +20,10 @@ export function RentBrowsePageClient() {
   const fromAuth = searchParams.get("from") === "auth";
   const fromApplication = searchParams.get("from") === "application";
   const applicationReturn = searchParams.get("return")?.trim() ?? "";
+  const browseIds = useMemo(
+    () => parseBrowseIdsParam(searchParams.get(BROWSE_IDS_PARAM)),
+    [searchParams],
+  );
   const { isNative } = useIsNativeApp();
   const backHref =
     fromApplication && applicationReturn.startsWith("/")
@@ -55,7 +60,7 @@ export function RentBrowsePageClient() {
         </header>
 
         <div className="mt-6 sm:mt-8">
-          <ResidentHousingBrowse />
+          <ResidentHousingBrowse propertyIds={browseIds} />
         </div>
 
         {isNative !== true ? (

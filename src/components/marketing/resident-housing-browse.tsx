@@ -373,8 +373,12 @@ function BrowseFiltersInline({
   );
 }
 
-export function ResidentHousingBrowse() {
+export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] } = {}) {
   const { listings, loading, occupancyReady } = usePublicListings();
+  const scopedIds = useMemo(
+    () => (propertyIds && propertyIds.length > 0 ? propertyIds : null),
+    [propertyIds],
+  );
   const [sort, setSort] = useState<BrowseSortId>("price-asc");
   const [moveIn, setMoveIn] = useState("");
   const [moveOut, setMoveOut] = useState("");
@@ -405,9 +409,10 @@ export function ResidentHousingBrowse() {
           moveIn,
           moveOut,
           neighborhood,
+          propertyIds: scopedIds,
         },
       }),
-    [listings, sort, budgetActive, budget, bathroom, roomType, moveIn, moveOut, neighborhood, occupancyReady],
+    [listings, sort, budgetActive, budget, bathroom, roomType, moveIn, moveOut, neighborhood, scopedIds, occupancyReady],
   );
 
   function applyChatFilters(applied: HousingChatAppliedFilters) {
@@ -430,6 +435,20 @@ export function ResidentHousingBrowse() {
 
   return (
     <div className="w-full">
+      {scopedIds ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">
+            Showing {scopedIds.length} home{scopedIds.length === 1 ? "" : "s"} shared with you
+          </p>
+          <a
+            href="/rent/browse"
+            data-attr="resident-browse-view-all"
+            className="text-xs font-semibold text-primary hover:opacity-90"
+          >
+            View all homes →
+          </a>
+        </div>
+      ) : null}
       <div className="mb-6 min-w-0 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 sm:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">

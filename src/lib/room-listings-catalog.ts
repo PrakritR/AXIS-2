@@ -441,6 +441,13 @@ export type PropertyBrowseFilters = {
   moveOut?: string;
   petFriendly?: boolean;
   neighborhood?: string;
+  /**
+   * Restrict the browse set to exactly these property ids (a shareable "these
+   * homes" link — e.g. a manager sending several listings to a prospect). When
+   * present, only listings whose id is in the set are considered; the other
+   * filters still apply within that set. Empty/undefined means no restriction.
+   */
+  propertyIds?: string[] | null;
 };
 
 export type BrowseSortId = "price-asc" | "price-desc" | "neighborhood";
@@ -511,7 +518,12 @@ export function buildPropertyBrowseCards(
   opts?: { filters?: PropertyBrowseFilters; sort?: BrowseSortId },
 ): PropertyBrowseCard[] {
   const filters = opts?.filters ?? {};
-  const roomRows = filterRoomListings(properties, {
+  const idSet =
+    filters.propertyIds && filters.propertyIds.length > 0
+      ? new Set(filters.propertyIds.map((id) => id.trim()).filter(Boolean))
+      : null;
+  const scopedProperties = idSet ? properties.filter((p) => idSet.has(p.id)) : properties;
+  const roomRows = filterRoomListings(scopedProperties, {
     zipRaw: "",
     radiusMiles: 50,
     maxBudgetNum: filters.maxBudgetNum ?? null,

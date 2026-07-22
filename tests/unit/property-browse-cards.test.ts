@@ -215,3 +215,33 @@ describe("buildPropertyBrowseCards", () => {
     expect(available.some((r) => r.roomId === "r3")).toBe(true);
   });
 });
+
+describe("buildPropertyBrowseCards — propertyIds filter (shared 'these homes' link)", () => {
+  it("restricts the browse set to exactly the given property ids", () => {
+    const properties = [
+      mockProperty({ id: "a", neighborhood: "Ballard" }),
+      mockProperty({ id: "b", neighborhood: "U District" }),
+      mockProperty({ id: "c", neighborhood: "Fremont" }),
+    ];
+
+    const cards = buildPropertyBrowseCards(properties, { filters: { propertyIds: ["a", "c"] } });
+    const ids = cards.map((card) => card.propertyId).sort();
+    expect(ids).toEqual(["a", "c"]);
+  });
+
+  it("is a no-op when propertyIds is empty or undefined (shows all)", () => {
+    const properties = [mockProperty({ id: "a" }), mockProperty({ id: "b" })];
+    expect(buildPropertyBrowseCards(properties, { filters: { propertyIds: [] } }).length).toBe(
+      buildPropertyBrowseCards(properties).length,
+    );
+    expect(buildPropertyBrowseCards(properties, { filters: { propertyIds: null } }).length).toBe(
+      buildPropertyBrowseCards(properties).length,
+    );
+  });
+
+  it("ignores ids that are not in the catalog", () => {
+    const properties = [mockProperty({ id: "a" }), mockProperty({ id: "b" })];
+    const cards = buildPropertyBrowseCards(properties, { filters: { propertyIds: ["a", "does-not-exist"] } });
+    expect(cards.map((c) => c.propertyId)).toEqual(["a"]);
+  });
+});

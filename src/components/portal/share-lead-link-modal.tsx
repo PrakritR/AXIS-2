@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
+import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/lead-invite-email";
 import {
   buildManagerApplyUrl,
+  buildManagerBrowseUrl,
   buildManagerListingUrl,
   buildManagerTourUrl,
   copyTextToClipboard,
@@ -37,7 +39,9 @@ export function ShareLeadLinkModal({
   preselectedPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
-  const [propertyId, setPropertyId] = useState("");
+  // Listing sends support several/all properties at once; apply/tour stay single.
+  const multiEnabled = kind === "listing";
+  const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
   const [prospectName, setProspectName] = useState("");
   const [prospectEmail, setProspectEmail] = useState("");
@@ -52,7 +56,7 @@ export function ShareLeadLinkModal({
         preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
           ? preselectedPropertyId
           : properties[0]?.id ?? "";
-      setPropertyId(initial);
+      setPropertyIds(initial ? [initial] : []);
       setRoomChoice("");
       setProspectName("");
       setProspectEmail("");
@@ -62,58 +66,77 @@ export function ShareLeadLinkModal({
     });
   }, [open, kind, preselectedPropertyId, properties]);
 
+  // The room selector and single-listing summary only make sense for exactly one
+  // property; a multi-property listing send links to the filtered browse grid.
+  const singlePropertyId = propertyIds.length === 1 ? propertyIds[0] : "";
+  const isMultiListing = multiEnabled && propertyIds.length > 1;
+
   const propertyTitle = useMemo(() => {
-    return properties.find((p) => p.id === propertyId)?.label ?? propertyId;
-  }, [properties, propertyId]);
+    if (isMultiListing) return `${propertyIds.length} homes`;
+    if (!singlePropertyId) return "";
+    return properties.find((p) => p.id === singlePropertyId)?.label ?? singlePropertyId;
+  }, [properties, singlePropertyId, isMultiListing, propertyIds.length]);
 
   const roomOptions = useMemo(() => {
-    if ((kind !== "apply" && kind !== "listing") || !propertyId) return [];
-    return getRoomOptionsForProperty(propertyId, { includeUnavailable: true }).filter((o) => o.value);
-  }, [kind, propertyId]);
+    if ((kind !== "apply" && kind !== "listing") || !singlePropertyId) return [];
+    return getRoomOptionsForProperty(singlePropertyId, { includeUnavailable: true }).filter((o) => o.value);
+  }, [kind, singlePropertyId]);
 
   const linkUrl = useMemo(() => {
-    if (!propertyId || typeof window === "undefined") return "";
+    if (propertyIds.length === 0 || typeof window === "undefined") return "";
     const origin = window.location.origin;
-    if (kind === "tour") return buildManagerTourUrl(origin, propertyId);
-    if (kind === "listing") return buildManagerListingUrl(origin, propertyId);
+    if (isMultiListing) return buildManagerBrowseUrl(origin, propertyIds);
+    if (!singlePropertyId) return "";
+    if (kind === "tour") return buildManagerTourUrl(origin, singlePropertyId);
+    if (kind === "listing") return buildManagerListingUrl(origin, singlePropertyId);
     const { listingRoomId } = roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
     const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
     return buildManagerApplyUrl(origin, {
-      propertyId,
+      propertyId: singlePropertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
     });
-  }, [kind, propertyId, roomChoice, roomOptions]);
+  }, [kind, propertyIds, singlePropertyId, isMultiListing, roomChoice, roomOptions]);
 
   const listingSummary = useMemo(() => {
-    if (kind !== "listing" || !propertyId) return null;
-    const property = getPropertyById(propertyId);
+    if (kind !== "listing" || isMultiListing || !singlePropertyId) return null;
+    const property = getPropertyById(singlePropertyId);
     if (!property) return null;
     const { listingRoomId } = roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
     const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
     return buildListingShareSummary(property, { roomChoice: roomName, roomId: listingRoomId });
-  }, [kind, propertyId, roomChoice, roomOptions]);
+  }, [kind, singlePropertyId, isMultiListing, roomChoice, roomOptions]);
 
   const invitePreviewBody = useMemo(() => {
     if (!linkUrl) return "";
+    if (isMultiListing) {
+      return buildLeadInviteEmailBody({
+        kind,
+        prospectName: prospectName.trim() || undefined,
+        propertyTitle,
+        linkUrl,
+        listingCount: propertyIds.length,
+        managerNote: note.trim() || undefined,
+      });
+    }
     return buildLeadInviteEmailBody({
       kind,
       prospectName: prospectName.trim() || undefined,
       propertyTitle,
       linkUrl: kind === "listing" ? buildManagerApplyUrl(typeof window !== "undefined" ? window.location.origin : "", {
-        propertyId,
+        propertyId: singlePropertyId,
         listingRoomId: roomChoice ? parseRoomChoiceValue(roomChoice).listingRoomId || undefined : undefined,
         roomName: roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined,
       }) : linkUrl,
       listingPageUrl: kind === "listing" ? linkUrl : undefined,
       tourUrl:
-        kind === "listing" && propertyId && typeof window !== "undefined"
-          ? buildManagerTourUrl(window.location.origin, propertyId)
+        kind === "listing" && singlePropertyId && typeof window !== "undefined"
+          ? buildManagerTourUrl(window.location.origin, singlePropertyId)
           : undefined,
       listingSummary: listingSummary ?? undefined,
       managerNote: note.trim() || undefined,
     });
-  }, [kind, prospectName, propertyTitle, linkUrl, propertyId, roomChoice, roomOptions, listingSummary, note]);
+  }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiListing, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
 
   const handleCopy = async () => {
     if (!linkUrl) {
@@ -125,7 +148,7 @@ export function ShareLeadLinkModal({
   };
 
   const openSendPreview = () => {
-    if (!propertyId) {
+    if (propertyIds.length === 0) {
       showToast("Select a property first.");
       return;
     }
@@ -137,15 +160,16 @@ export function ShareLeadLinkModal({
   };
 
   const sendInvite = async () => {
-    if (!propertyId || !prospectEmail.trim()) return;
-    const { listingRoomId } = roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
-    const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
+    if (propertyIds.length === 0 || !prospectEmail.trim()) return;
+    // Room targeting only applies to a single-property send.
+    const { listingRoomId } = !isMultiListing && roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
+    const roomName = !isMultiListing && roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
     setSendBusy(true);
     try {
       if (isDemoModeActive()) {
         logDemoOutboundEmail(
           prospectEmail.trim(),
-          leadInviteSubject(kind, propertyTitle),
+          leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined),
           invitePreviewBody,
         );
         showToast(kind === "listing" ? "Listing sent (demo)." : "Invite sent (demo).");
@@ -160,7 +184,8 @@ export function ShareLeadLinkModal({
           kind,
           to: prospectEmail.trim(),
           prospectName: prospectName.trim() || undefined,
-          propertyId,
+          propertyId: propertyIds[0],
+          propertyIds,
           listingRoomId: listingRoomId || undefined,
           roomName: roomName || undefined,
           note: note.trim() || undefined,
@@ -200,26 +225,74 @@ export function ShareLeadLinkModal({
           ) : (
             <>
               <div>
-                <label htmlFor="share-lead-property" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-                  Property
-                </label>
-                <Select
-                  id="share-lead-property"
-                  value={propertyId}
-                  onChange={(e) => {
-                    setPropertyId(e.target.value);
-                    setRoomChoice("");
-                  }}
-                >
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </Select>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="share-lead-property"
+                    className="block text-xs font-semibold uppercase tracking-wide text-muted"
+                  >
+                    {multiEnabled ? "Properties" : "Property"}
+                  </label>
+                  {multiEnabled ? (
+                    <div className="flex items-center gap-3 text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        className="text-primary hover:opacity-90 disabled:opacity-40"
+                        data-attr="share-lead-select-all"
+                        disabled={propertyIds.length === properties.length}
+                        onClick={() => {
+                          setPropertyIds(properties.map((p) => p.id));
+                          setRoomChoice("");
+                        }}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted hover:text-foreground disabled:opacity-40"
+                        data-attr="share-lead-clear"
+                        disabled={propertyIds.length === 0}
+                        onClick={() => {
+                          setPropertyIds([]);
+                          setRoomChoice("");
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                {multiEnabled ? (
+                  <CheckboxMultiSelect
+                    label="Properties"
+                    dataAttr="share-lead-property-multi"
+                    emptyLabel="Select properties"
+                    emptyMenuText="No properties"
+                    options={properties.map((p) => ({ value: p.id, label: p.label }))}
+                    selected={propertyIds}
+                    onChange={(next) => {
+                      setPropertyIds(next);
+                      setRoomChoice("");
+                    }}
+                  />
+                ) : (
+                  <Select
+                    id="share-lead-property"
+                    value={singlePropertyId}
+                    onChange={(e) => {
+                      setPropertyIds(e.target.value ? [e.target.value] : []);
+                      setRoomChoice("");
+                    }}
+                  >
+                    {properties.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
               </div>
 
-              {(kind === "apply" || kind === "listing") && roomOptions.length > 0 ? (
+              {(kind === "apply" || kind === "listing") && !isMultiListing && roomOptions.length > 0 ? (
                 <div>
                   <label htmlFor="share-lead-room" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
                     Room (optional)
@@ -237,10 +310,17 @@ export function ShareLeadLinkModal({
 
               {kind === "listing" ? (
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public listing link</p>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                    {isMultiListing ? "Public browse link" : "Public listing link"}
+                  </p>
                   <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
                     {linkUrl || "Select a property to generate a link."}
                   </div>
+                  {isMultiListing ? (
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                      Opens the browse page filtered to the {propertyIds.length} homes you selected.
+                    </p>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
@@ -248,7 +328,7 @@ export function ShareLeadLinkModal({
                     disabled={!linkUrl}
                     onClick={() => void handleCopy()}
                   >
-                    Copy listing link
+                    {isMultiListing ? "Copy browse link" : "Copy listing link"}
                   </Button>
                 </div>
               ) : null}
@@ -321,7 +401,7 @@ export function ShareLeadLinkModal({
                 <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
                   Close
                 </Button>
-                <Button type="button" variant="primary" className="rounded-full" disabled={!propertyId} onClick={openSendPreview}>
+                <Button type="button" variant="primary" className="rounded-full" disabled={propertyIds.length === 0} onClick={openSendPreview}>
                   Preview & send
                 </Button>
               </div>
@@ -335,7 +415,7 @@ export function ShareLeadLinkModal({
         title={kind === "listing" ? "Send listing" : "Send invite"}
         onClose={() => setSendPreviewOpen(false)}
         recipient={prospectEmail.trim()}
-        subject={leadInviteSubject(kind, propertyTitle)}
+        subject={leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined)}
         body={invitePreviewBody}
         intro="Review the email before sending."
         footerNote="Sent via PropLane when email delivery is configured."

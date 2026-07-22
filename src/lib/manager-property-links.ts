@@ -54,6 +54,38 @@ export function buildManagerListingUrl(origin: string, propertyId: string): stri
   return `${base}/rent/listings/${encodeURIComponent(id)}`;
 }
 
+/** Query param on `/rent/browse` that pre-filters the grid to a set of listings. */
+export const BROWSE_IDS_PARAM = "ids";
+
+/** Normalize a comma-separated `?ids=` value into a clean, deduped id list. */
+export function parseBrowseIdsParam(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const part of raw.split(",")) {
+    const id = part.trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Public browse link pre-filtered to a specific set of listings. Prefer
+ * {@link buildManagerListingUrl} for a single property (it links straight to
+ * that listing's detail page); use this when sharing several/all listings so
+ * the prospect lands on the browse grid showing exactly those homes.
+ */
+export function buildManagerBrowseUrl(origin: string, propertyIds: string[]): string {
+  const base = origin.replace(/\/$/, "");
+  const ids = parseBrowseIdsParam(propertyIds.join(","));
+  if (ids.length === 0) return `${base}/rent/browse`;
+  const q = new URLSearchParams({ [BROWSE_IDS_PARAM]: ids.join(",") });
+  return `${base}/rent/browse?${q.toString()}`;
+}
+
 export function managerPropertyIdForLinks(row: Pick<AdminPropertyRow, "listingId">): string | null {
   const id = row.listingId?.trim();
   if (!id || id.startsWith("preview-") || id.startsWith("demo-")) return null;

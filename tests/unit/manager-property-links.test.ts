@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildManagerApplyUrl, buildManagerTourUrl, buildPropertyMessageHref, buildTourContactHref } from "@/lib/manager-property-links";
+import {
+  buildManagerApplyUrl,
+  buildManagerBrowseUrl,
+  buildManagerTourUrl,
+  buildPropertyMessageHref,
+  buildTourContactHref,
+  parseBrowseIdsParam,
+} from "@/lib/manager-property-links";
 
 describe("manager-property-links", () => {
   const origin = "https://app.example.com";
@@ -44,5 +51,25 @@ describe("manager-property-links", () => {
   it("strips trailing slash from origin", () => {
     const url = buildManagerTourUrl("https://app.example.com/", "mgr-1");
     expect(url).toBe("https://app.example.com/rent/tours-contact?propertyId=mgr-1");
+  });
+
+  it("builds a browse link pre-filtered to a set of listing ids", () => {
+    const url = buildManagerBrowseUrl(origin, ["mgr-1", "mgr-2", "mgr-3"]);
+    expect(url).toBe("https://app.example.com/rent/browse?ids=mgr-1%2Cmgr-2%2Cmgr-3");
+  });
+
+  it("dedupes and trims ids in the browse link, dropping blanks", () => {
+    const url = buildManagerBrowseUrl(origin, [" mgr-1 ", "mgr-2", "mgr-1", ""]);
+    expect(url).toBe("https://app.example.com/rent/browse?ids=mgr-1%2Cmgr-2");
+  });
+
+  it("falls back to the plain browse page when no ids are given", () => {
+    expect(buildManagerBrowseUrl(origin, [])).toBe("https://app.example.com/rent/browse");
+  });
+
+  it("round-trips ids through parseBrowseIdsParam", () => {
+    expect(parseBrowseIdsParam("mgr-1,mgr-2,mgr-1, ,mgr-3")).toEqual(["mgr-1", "mgr-2", "mgr-3"]);
+    expect(parseBrowseIdsParam("")).toEqual([]);
+    expect(parseBrowseIdsParam(null)).toEqual([]);
   });
 });

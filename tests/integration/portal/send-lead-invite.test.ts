@@ -13,6 +13,7 @@ vi.mock("@/lib/manager-property-links", () => ({
   buildManagerApplyUrl: vi.fn((origin: string, params: { propertyId: string }) => `${origin}/rent/apply?propertyId=${params.propertyId}`),
   buildManagerTourUrl: vi.fn((origin: string, propertyId: string) => `${origin}/rent/tours-contact?propertyId=${propertyId}`),
   buildManagerListingUrl: vi.fn((origin: string, propertyId: string) => `${origin}/rent/listings/${propertyId}`),
+  buildManagerBrowseUrl: vi.fn((origin: string, ids: string[]) => `${origin}/rent/browse?ids=${ids.join(",")}`),
 }));
 
 vi.mock("@/lib/manager-property-share-access", () => ({
@@ -117,5 +118,67 @@ describe("POST /api/portal/send-lead-invite", () => {
       "https://api.resend.com/emails",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("sends a filtered browse link when several listings are shared at once", async () => {
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", email: "mgr@example.com" } } }) },
+    } as never);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: { role: "manager" }, error: null }),
+          }),
+        }),
+      }),
+    } as never);
+    // Every requested id is owned by this manager.
+    vi.mocked(getShareablePropertyForUser).mockImplementation(
+      async (_userId: string, id: string) => ({ id, title: `House ${id}`, adminPublishLive: true }) as never,
+    );
+    vi.stubEnv("RESEND_API_KEY", "re_test_key");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ id: "email_2" }), { status: 200 }));
+
+    const req = jsonRequest("http://localhost/api/portal/send-lead-invite", {
+      method: "POST",
+      body: { kind: "listing", to: "prospect@example.com", propertyIds: ["mgr-1", "mgr-2", "mgr-3"] },
+    });
+    const res = await sendLeadInvite(req);
+    const { status, data } = await parseJsonResponse<{ ok?: boolean; linkUrl?: string }>(res);
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.linkUrl).toContain("/rent/browse?ids=mgr-1,mgr-2,mgr-3");
+    // The email body must carry the browse link, not a single-listing apply link.
+    const sentBody = JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string) as { text: string };
+    expect(sentBody.text).toContain("/rent/browse?ids=mgr-1,mgr-2,mgr-3");
+    expect(sentBody.text).toContain("shared 3 homes");
+  });
+
+  it("rejects the whole multi-send if any requested listing is not authorized", async () => {
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", email: "mgr@example.com" } } }) },
+    } as never);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: { role: "manager" }, error: null }),
+          }),
+        }),
+      }),
+    } as never);
+    // mgr-2 belongs to another manager — the send must fail rather than silently drop it.
+    vi.mocked(getShareablePropertyForUser).mockImplementation(
+      async (_userId: string, id: string) =>
+        id === "mgr-2" ? null : ({ id, title: `House ${id}`, adminPublishLive: true } as never),
+    );
+
+    const req = jsonRequest("http://localhost/api/portal/send-lead-invite", {
+      method: "POST",
+      body: { kind: "listing", to: "prospect@example.com", propertyIds: ["mgr-1", "mgr-2"] },
+    });
+    const res = await sendLeadInvite(req);
+    expect(res.status).toBe(403);
   });
 });
