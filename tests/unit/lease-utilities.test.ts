@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultLeaseUtilities,
   leaseUtilityAllowanceNote,
+  leaseUtilityDefaultsFor,
   leaseUtilityKindLabel,
   leaseUtilityPaidByLabel,
   leaseUtilitySetUpByLabel,
@@ -24,8 +25,9 @@ describe("lease-utilities", () => {
     const billed = defaultLeaseUtilities("manager_billed");
     expect(billed.every((l) => l.paidBy === "resident" && l.setUpBy === "manager")).toBe(true);
 
-    // Undefined aggregate falls back to resident/resident.
-    expect(defaultLeaseUtilities().every((l) => l.paidBy === "resident")).toBe(true);
+    // Undefined aggregate resolves like normalizeUtilitiesPaymentModel does: manager_billed.
+    expect(defaultLeaseUtilities().every((l) => l.paidBy === "resident" && l.setUpBy === "manager")).toBe(true);
+    expect(leaseUtilityDefaultsFor(undefined)).toEqual({ paidBy: "resident", setUpBy: "manager" });
   });
 
   it("normalizes messy input and drops unknown kinds", () => {

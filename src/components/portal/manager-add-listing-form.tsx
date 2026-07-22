@@ -63,6 +63,9 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
+  resolveEntireHomeUtilitiesPaymentModel,
+  resolveListingUtilitiesPaymentModel,
+  resolveRoomUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
 import {
@@ -70,6 +73,7 @@ import {
   LEASE_UTILITY_PARTY_OPTIONS,
   LEASE_UTILITY_PAYMENT_OPTIONS,
   defaultLeaseUtilities,
+  leaseUtilityDefaultsFor,
   type LeaseUtilityKind,
   type LeaseUtilityLine,
   type LeaseUtilityPayment,
@@ -514,7 +518,7 @@ function LeaseUtilitiesEditor({
   onChange,
 }: {
   value: LeaseUtilityLine[] | undefined;
-  aggregateModel: UtilitiesPaymentModel | undefined;
+  aggregateModel: UtilitiesPaymentModel;
   onChange: (next: LeaseUtilityLine[]) => void;
 }) {
   const lines = value ?? [];
@@ -525,7 +529,7 @@ function LeaseUtilitiesEditor({
     const used = new Set(lines.map((l) => l.kind));
     const nextKind =
       LEASE_UTILITY_KIND_OPTIONS.find((o) => o.id !== "other" && !used.has(o.id))?.id ?? "other";
-    onChange([...lines, { kind: nextKind, paidBy: "resident", setUpBy: "resident" }]);
+    onChange([...lines, { kind: nextKind, ...leaseUtilityDefaultsFor(aggregateModel) }]);
   };
 
   if (!lines.length) {
@@ -594,7 +598,9 @@ function LeaseUtilitiesEditor({
               </GridField>
             ) : null}
             <GridField>
-              <FieldLabel>Who pays</FieldLabel>
+              <FieldLabel hint={LEASE_UTILITY_PAYMENT_OPTIONS.find((o) => o.id === line.paidBy)?.hint}>
+                Who pays
+              </FieldLabel>
               <Select
                 aria-label={`Utility ${i + 1} who pays`}
                 className={selectInputCls}
@@ -1301,6 +1307,12 @@ export function ManagerAddListingForm({
 
   const isEntireHome = isEntireHomeListing(sub);
   const entireHomeRent = entireHomeMonthlyRentAmount(sub);
+  const leaseUtilitiesAggregateModel: UtilitiesPaymentModel = (() => {
+    if (isEntireHome) return resolveEntireHomeUtilitiesPaymentModel(sub);
+    const rooms = sub.rooms.filter((r) => r.name.trim());
+    const models = [...new Set(rooms.map((r) => resolveRoomUtilitiesPaymentModel(r)))];
+    return models.length === 1 ? models[0]! : resolveListingUtilitiesPaymentModel(sub);
+  })();
 
   const clearListingFieldError = (key: string) => {
     setStepFieldErrors((prev) => {
@@ -2949,11 +2961,7 @@ export function ManagerAddListingForm({
               >
                 <LeaseUtilitiesEditor
                   value={sub.leaseUtilities}
-                  aggregateModel={
-                    isEntireHome
-                      ? sub.entireHomeUtilitiesPaymentModel
-                      : sub.rooms.find((r) => r.utilitiesPaymentModel)?.utilitiesPaymentModel
-                  }
+                  aggregateModel={leaseUtilitiesAggregateModel}
                   onChange={(next) => setSub((s) => ({ ...s, leaseUtilities: next }))}
                 />
               </ListingSubsection>
