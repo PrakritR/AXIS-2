@@ -30,7 +30,13 @@ uses **dynamic payment methods** scoped to card. `paymentMethodStripeConfig()`:
   `payment_method_types` and passes that **card-scoped** Payment Method
   Configuration (PMC). This is the recommended path and mirrors the subscription
   flow's dynamic payment methods. The PMC **must exclude bank/ACH** so a card
-  session never surfaces a different-fee method.
+  session never surfaces a different-fee method — and that is *enforced at
+  runtime*, not just documented: before using the PMC the builder retrieves it
+  from Stripe (cached 10 min) and checks that no method outside
+  card / Apple Pay / Google Pay is enabled. A PMC that also offers
+  `us_bank_account`, Klarna, Affirm, … (or a PMC that cannot be retrieved) logs a
+  `console.error` and falls back to the explicit `["card"]` allowlist rather than
+  creating a session whose baked fee line item could be wrong.
 - **Card, no PMC env** → explicit `payment_method_types: ["card"]`. Apple Pay
   still appears on one-time (`mode: "payment"`) Checkout once the domain is
   registered, and this never leaks a wrong-fee method. Safe default.

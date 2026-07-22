@@ -3683,7 +3683,8 @@ export function ManagerAddListingForm({
                       }
                     />
                     <span className="text-sm font-medium text-foreground">
-                      Bank (ACH) with Stripe — low {0.8}% processing fee
+                      PropLane payments with Stripe — rent by bank (ACH) at {0.8}% (capped $5), card or Link at 2.9% +
+                      $0.30; application fees by card / Apple Pay at 2.9% + $0.30
                     </span>
                   </label>
                   <div className="border-t border-border pt-3">

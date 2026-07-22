@@ -642,8 +642,10 @@ export function ResidentPaymentsPanel({
         {options.map((option) => {
           const selected = paymentMethod === option.id;
           // Apple Pay / Google Pay ride on the card method-class in Stripe
-          // Checkout — surface that so the wallet one-tap is discoverable.
-          const walletHint = option.id === "card";
+          // Checkout — surface that so the wallet one-tap is discoverable. Only
+          // on the web surface: the native WKWebView/WebView shell is not
+          // entitled for web wallets, so promising them there is a dead end.
+          const walletHint = option.id === "card" && !isNativeApp;
           return (
             <button
               key={option.id}

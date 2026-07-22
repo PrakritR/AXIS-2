@@ -772,6 +772,10 @@ function RentalApplicationWizardInner({
         return;
       }
       if (!data.paid) {
+        // Retained for legacy in-flight ACH application-fee sessions created
+        // before the fee channel switched to card: those still return
+        // complete-but-unpaid while the bank transfer clears. New sessions are
+        // card, so they come back paid.
         if (data.processing) {
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
