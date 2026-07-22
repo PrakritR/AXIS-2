@@ -4,14 +4,12 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { Modal } from "@/components/ui/modal";
-import { takePendingToast } from "@/lib/pending-toast";
 
 type Toast = { id: number; message: string };
 
@@ -39,13 +37,6 @@ export function AppUiProvider({ children }: { children: ReactNode }) {
       setToasts((t) => t.filter((x) => x.id !== id));
     }, 3200);
   }, []);
-
-  // Deliver anything a previous page queued before navigating away — this
-  // provider is mounted in the root layout, so it runs on every full page load.
-  useEffect(() => {
-    const pending = takePendingToast();
-    if (pending) showToast(pending);
-  }, [showToast]);
 
   const openModal = useCallback((payload: { title: string; body: string }) => {
     setModal(payload);

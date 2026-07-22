@@ -24,6 +24,7 @@ import {
   syncManagerWorkOrdersFromServer,
 } from "@/lib/manager-work-orders-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { takePendingNotice } from "@/lib/pending-notice";
 import {
   loadPersistedInbox,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -226,6 +227,16 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
   const [paymentsConnected, setPaymentsConnected] = useState(false);
   const [needsContact, setNeedsContact] = useState(false);
   const [contactNudgeDismissed, setContactNudgeDismissed] = useState(false);
+  const [signupNotice, setSignupNotice] = useState<string | null>(null);
+
+  // Signup can only tell the vendor WHY they arrived without a linked manager
+  // by handing the message to this page — the redirect that gets them here
+  // destroys anything shown before it. Rendered until they dismiss it: it is a
+  // standing fact about their account plus an action they have to take, not a
+  // confirmation that can auto-expire out from under them.
+  useEffect(() => {
+    setSignupNotice(takePendingNotice(window.location.pathname));
+  }, []);
 
   useEffect(() => {
     void Promise.allSettled([
@@ -318,6 +329,25 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
+        {signupNotice ? (
+          <div className={PORTAL_DASHBOARD_SECTION_CARD} role="status">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">You&apos;re not linked to a manager yet</p>
+                <p className="mt-1 text-sm text-muted">{signupNotice}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 rounded-full px-3 py-1 text-xs"
+                data-attr="vendor-signup-notice-dismiss"
+                onClick={() => setSignupNotice(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {/* Prompt the vendor to add a phone for job-offer texts (from vendor dispatch). */}
         {needsContact && !contactNudgeDismissed ? (
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>

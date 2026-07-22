@@ -8,7 +8,7 @@ import {
   readVendorSignupInviteToken,
   readVendorSignupNext,
 } from "@/lib/auth/vendor-oauth-storage";
-import { queuePendingToast } from "@/lib/pending-toast";
+import { queuePendingNotice, VENDOR_PORTAL_PATH } from "@/lib/pending-notice";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -58,11 +58,12 @@ function VendorOauthFinishContent() {
           return;
         }
 
-        if (body.unlinkedReason && body.unlinkedNotice) queuePendingToast(body.unlinkedNotice);
-
         clearVendorSignupInviteToken();
         const next = readVendorSignupNext();
         clearVendorSignupNext();
+        if (body.unlinkedReason && body.unlinkedNotice) {
+          queuePendingNotice({ message: body.unlinkedNotice, pathPrefix: VENDOR_PORTAL_PATH });
+        }
         window.location.replace(next ?? "/vendor/dashboard");
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish vendor signup.";

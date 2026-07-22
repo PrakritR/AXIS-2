@@ -10,7 +10,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { queuePendingToast } from "@/lib/pending-toast";
+import { queuePendingNotice, VENDOR_PORTAL_PATH } from "@/lib/pending-notice";
 import { FIELD_LABEL_CLASS } from "@/lib/ui-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
@@ -100,10 +100,6 @@ export function VendorSignupForm({
         return;
       }
 
-      // This branch ends in a full page load, which would destroy a toast fired
-      // here — hand the notice to the destination instead.
-      if (unlinkedNotice) queuePendingToast(unlinkedNotice);
-
       const supabase = createSupabaseBrowserClient();
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -115,6 +111,10 @@ export function VendorSignupForm({
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
       const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : resolvedNext;
+      // Queued only here, on the one exit that actually reloads the page — the
+      // sign-in-error and throw branches must not leave a notice behind for an
+      // unrelated navigation later in the session to surface.
+      if (unlinkedNotice) queuePendingNotice({ message: unlinkedNotice, pathPrefix: VENDOR_PORTAL_PATH });
       await navigateAfterRoleSignup(fallback);
     } catch {
       setError("Could not create vendor account.");
