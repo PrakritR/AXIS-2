@@ -662,6 +662,8 @@ export async function renderPortalSection(
     }
     if (tabParts.length > 1) notFound();
     const docTab = tabParts[0]!;
+    // "Shared with you" was merged into "Other documents" — keep old deep links alive.
+    if (docTab === "shared") redirect(`${def.basePath}/${section}/other`);
     if (!allowedTabs.includes(docTab)) notFound();
     return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
   }
