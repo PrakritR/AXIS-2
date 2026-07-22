@@ -68,11 +68,7 @@ export default function DocsPage() {
 
       {/* Header */}
       <header className="relative mx-auto max-w-6xl px-5 pb-10 pt-16 sm:px-6 sm:pt-20">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-[var(--secondary)] px-3 py-1 text-[12px] font-medium tracking-[0.06em] text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_10px_color-mix(in_srgb,var(--primary)_50%,transparent)]" />
-          PROPLANE · DOCS · IN BETA
-        </span>
-        <h1 className="mt-5 text-[2.4rem] font-semibold leading-[1.06] tracking-[-0.035em] sm:text-[3rem]">
+        <h1 className="text-[2.4rem] font-semibold leading-[1.06] tracking-[-0.035em] sm:text-[3rem]">
           Documentation
         </h1>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed text-muted">

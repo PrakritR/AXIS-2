@@ -1713,34 +1713,6 @@
   color: var(--lp-muted);
 }
 
-.lp-page-cta-band {
-  margin-top: 8px;
-  padding: 56px 0 24px;
-  text-align: center;
-  border-top: 1px solid var(--lp-line);
-}
-
-.lp-page-cta-band h2 {
-  margin: 0 auto;
-  max-width: 18ch;
-  font-size: clamp(1.65rem, 3.2vw, 2.25rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  color: var(--lp-ink);
-}
-
-.lp-page-cta-band p {
-  margin: 12px auto 0;
-  max-width: 40ch;
-  font-size: 14.5px;
-  color: var(--lp-muted);
-  line-height: 1.55;
-}
-
-.lp-page-cta-band .lp-cta-row {
-  margin-top: 24px;
-}
-
 .lp-page-list {
   margin: 0;
   padding: 0;

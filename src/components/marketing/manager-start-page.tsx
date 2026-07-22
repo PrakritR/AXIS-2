@@ -83,10 +83,6 @@ export function ManagerStartPage() {
     <MarketingPageShell className="native-hide">
       <header className="lp-page-hero">
         <div className="lp-w">
-          <p className="lp-page-eyebrow">
-            <span aria-hidden className="lp-page-eyebrow-dot" />
-            Manager plans
-          </p>
           <h1 className="lp-page-title lp-page-title-tight">Start with PropLane.</h1>
           <div className="mt-8 inline-flex items-center gap-1 rounded-full border border-[var(--lp-line)] bg-[var(--lp-card)] p-1">
             <button

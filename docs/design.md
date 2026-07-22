@@ -283,11 +283,11 @@ Five product surfaces. Per-route detail lives in [`docs/specs/`](specs/).
 **Key components:** `PublicNavbar`, `PublicFooter`, `ChromeSubstrate`, pricing tier cards.
 
 **Hero patterns:**
-- Eyebrow: glass pill + accent dot
 - Headline accent: `.text-gradient-accent`
 - Primary CTA: **Partner with Axis** → `/partner`
+- No eyebrow/badge pill above the headline — public marketing heroes open on the headline itself. The eyebrow pill primitives stay for non-marketing surfaces (listing detail modals, rental-application wizard, auth pages, portal paywalls).
 
-**Partner:** Stat row on full chrome; six glass feature cards; CTA band cobalt→sky gradient.
+**Partner:** Hero CTA pair; four glass capability cards; plan-tier price list linking to `/pricing`. No trailing CTA band.
 
 ---
 

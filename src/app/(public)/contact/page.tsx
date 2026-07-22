@@ -1,7 +1,6 @@
 "use client";
 
 import { PartnerMeetingScheduler } from "@/components/partner/partner-meeting-scheduler";
-import { MarketingEyebrow } from "@/components/marketing/marketing-cta";
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
@@ -50,7 +49,6 @@ function ContactInner() {
     <MarketingPageShell>
       <header className="lp-page-hero">
         <div className="lp-w max-w-[560px]">
-          <MarketingEyebrow>Contact</MarketingEyebrow>
           <h1 className="lp-page-title lp-page-title-wide">Connect with the PropLane team</h1>
           <p className="lp-page-lede">
             Schedule a demo or send a message — whatever works best for you.

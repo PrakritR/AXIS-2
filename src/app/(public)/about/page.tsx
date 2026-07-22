@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { MarketingCtaPair } from "@/components/marketing/marketing-cta";
 import {
   MarketingHero,
   MarketingPageShell,
@@ -42,7 +41,6 @@ export default function AboutPage() {
   return (
     <MarketingPageShell>
       <MarketingHero
-        eyebrow="Who we are"
         title="Built by managers tired of the busywork"
         subtitle="We manage real rental units in Seattle. PropLane is the platform we built to run them — AI drafts, we approve."
       />
@@ -101,18 +99,6 @@ export default function AboutPage() {
         </ul>
       </MarketingSection>
 
-      <div className="lp-page-cta-band">
-        <div className="lp-w">
-          <h2>Run your units the way we run ours</h2>
-          <p>Start free, no card required — or book a demo first.</p>
-          <MarketingCtaPair
-            primaryLabel="Get started for free"
-            primaryAttr="about-cta-get-started"
-            secondaryAttr="about-cta-book-demo"
-            large
-          />
-        </div>
-      </div>
     </MarketingPageShell>
   );
 }

@@ -24,7 +24,6 @@ export default function SupportPage() {
   return (
     <MarketingPageShell>
       <MarketingHero
-        eyebrow="Support"
         title="Help & Support"
         subtitle="Reach out directly, or browse common questions. We typically respond within one business day."
       />
