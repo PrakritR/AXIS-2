@@ -41,6 +41,8 @@ export async function GET(
         from: searchParams.get("from")?.trim() || undefined,
         to: searchParams.get("to")?.trim() || undefined,
       };
+      // Only the resident-ledger arm has a UI caller (Documents > Rent receipts);
+      // resident-balance is orphaned-but-kept — see the note in ../route.ts.
       report =
         reportId === "resident-balance"
           ? await queryResidentBalance(auth.db, auth.userId, auth.email)

@@ -18,7 +18,7 @@ Properties, tour scheduling, rental applications, resident & lease management, h
 
 ### Resident portal (`/resident`)
 
-Rent & utility payments (card incl. Apple Pay / Google Pay, ACH, Link via Stripe Connect), move-in checklist, services & work orders, inbox, lease & receipts, financial statements. Full workspace unlocks after lease approval.
+Rent & utility payments (card incl. Apple Pay / Google Pay, ACH, Link via Stripe Connect), move-in checklist, services & work orders, inbox, lease & receipts. Full workspace unlocks after lease approval.
 
 ### Platform capabilities
 
