@@ -461,6 +461,11 @@ function releaseInboundMessageClaims(messageIds: string[]): void {
   for (const messageId of messageIds) seenInboundMessageIds.delete(messageId);
 }
 
+/** Test-only: clear in-memory inbound dedupe between vitest cases. */
+export function __resetClawInboundSeenForTests(): void {
+  seenInboundMessageIds.clear();
+}
+
 async function persistClawInboundSms(args: {
   managerUserId: string;
   residentUserId?: string | null;

@@ -47,6 +47,10 @@ vi.mock("@/lib/agent/leasing-sms-agent.server", () => ({
   deliverLeasingSmsReply: vi.fn(async () => ({ ok: false })),
 }));
 
+vi.mock("@/lib/public-listings.server", () => ({
+  getPublicListings: vi.fn(async () => []),
+}));
+
 vi.mock("@/lib/supabase/service", () => {
   // Manager A's OWN verified phone — deliberately NOT the inbound "from" below.
   const MANAGER_A_PROFILE = {
@@ -87,8 +91,10 @@ vi.mock("@/lib/supabase/service", () => {
 });
 
 describe("handleClawLeasingInbound — per-manager work number stays scoped", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { __resetClawInboundSeenForTests } = await import("@/lib/claw-leasing-bot.server");
+    __resetClawInboundSeenForTests();
     sendFromManager.mockResolvedValue({ ok: true, channel: "twilio", sid: "SM1" });
     runManagerAgentCommand.mockResolvedValue(null);
     tryRelayManagerReplyViaClaw.mockResolvedValue({ relayed: false });

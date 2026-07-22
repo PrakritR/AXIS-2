@@ -24,6 +24,13 @@ describe("classifyResidentSmsIntent", () => {
   it("maps balance and pay asks", () => {
     expect(classifyResidentSmsIntent("how much do I owe?").intent).toBe("balance");
     expect(classifyResidentSmsIntent("I want to pay rent").intent).toBe("pay");
+    expect(classifyResidentSmsIntent("rent").intent).toBe("pay");
+  });
+
+  it("maps maintenance keywords and repair language", () => {
+    expect(classifyResidentSmsIntent("maintenance").intent).toBe("maintenance");
+    expect(classifyResidentSmsIntent("work order").intent).toBe("maintenance");
+    expect(classifyResidentSmsIntent("my toilet is broken can you fix").intent).toBe("maintenance");
   });
 
   it("maps offline payment reports", () => {

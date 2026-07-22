@@ -67,6 +67,10 @@ const MOVE_IN_RE =
 const INBOX_RE =
   /\b(message (my )?manager|talk to (my )?manager|inbox|reply to manager)\b/i;
 
+/** Standalone keywords residents text from the help menu. */
+const RENT_KEYWORD_RE = /^(rent|rent due)$/i;
+const MAINTENANCE_KEYWORD_RE = /^(maintenance|work[\s-]?order|repair|fix something)$/i;
+
 /**
  * Classify a known resident's inbound SMS.
  * Order matters: maintenance before amenity requests; i_paid before generic pay.
@@ -102,6 +106,26 @@ export function classifyResidentSmsIntent(text: string): ClassifiedResidentSms {
       wantsLabel: "help menu",
       managerPath: "/portal/communication/inbox/unopened",
       skipManagerBrief: true,
+    };
+  }
+
+  if (RENT_KEYWORD_RE.test(t)) {
+    return {
+      intent: "pay",
+      domain: "Payments",
+      wantsLabel: "pay rent / open payment link",
+      managerPath: "/portal/payments",
+      skipManagerBrief: false,
+    };
+  }
+
+  if (MAINTENANCE_KEYWORD_RE.test(t)) {
+    return {
+      intent: "maintenance",
+      domain: "Services",
+      wantsLabel: "file a maintenance work order",
+      managerPath: "/portal/services/work-orders",
+      skipManagerBrief: false,
     };
   }
 

@@ -74,6 +74,10 @@ vi.mock("@/lib/claw-resident-actions.server", () => ({
   buildManagerResidentBrief: vi.fn(() => "brief text"),
 }));
 
+vi.mock("@/lib/public-listings.server", () => ({
+  getPublicListings: vi.fn(async () => []),
+}));
+
 vi.mock("@/lib/supabase/service", () => {
   const chain = (): Record<string, unknown> => {
     const c: Record<string, unknown> = {};
@@ -91,8 +95,10 @@ vi.mock("@/lib/supabase/service", () => {
 });
 
 describe("handleClawLeasingInbound — known resident thread", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { __resetClawInboundSeenForTests } = await import("@/lib/claw-leasing-bot.server");
+    __resetClawInboundSeenForTests();
     sendFromManager.mockResolvedValue({ ok: true, channel: "claw", sid: "SM1" });
     logManagerSmsMessage.mockResolvedValue(true);
     findResidentProfileByPhone.mockResolvedValue({
