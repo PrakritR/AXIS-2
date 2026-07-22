@@ -8,6 +8,7 @@ import {
   propertyMatchesZipRadius,
 } from "@/lib/listings-search";
 import { isRoomChoiceAvailable, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { roomHeadlinePriceLabel, roomIsDailyPriced, roomMonthlyEquivalent } from "@/lib/room-pricing";
 
 export type RoomListingSlide = {
   roomName: string;
@@ -27,7 +28,12 @@ export type RoomListingRow = {
   streetUpper: string;
   neighborhood: string;
   priceLabel: string;
+  /** Comparable monthly-equivalent rent used for sorting and budget filters (daily rooms use daily × ~30). */
   rentNumeric: number | null;
+  /** The headline number to display: the daily price for daily rooms, the monthly rent otherwise. */
+  headlineRent: number | null;
+  /** "day" when priced by the day (priceLabel already carries "/day"); "month" (default) otherwise. */
+  pricePeriod: "day" | "month";
   availabilityLabel: string;
   bathroomHint: string;
   zip: string;
@@ -283,7 +289,13 @@ function browseRoomEntries(
           name: r.name,
           detail: r.utilitiesEstimate?.trim() ? `Utilities · ${r.utilitiesEstimate.trim()}` : "Listed by manager",
           utilitiesEstimate: r.utilitiesEstimate?.trim() || undefined,
-          price: r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : property.rentLabel || "—",
+          price: roomIsDailyPriced(r)
+            ? roomHeadlinePriceLabel(r)
+            : r.monthlyRent > 0
+              ? `$${r.monthlyRent}/mo`
+              : property.rentLabel || "—",
+          pricePeriod: roomIsDailyPriced(r) ? "day" : "month",
+          priceMonthlyEquivalent: roomIsDailyPriced(r) ? roomMonthlyEquivalent(r) : undefined,
           availability: "Available now",
           modal: BROWSE_ROOM_MODAL_STUB,
         };
@@ -360,7 +372,12 @@ export function filterRoomListings(
         continue;
       }
       if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
-      const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
+      // Daily-priced rooms carry a monthly-equivalent for budget/sort comparisons; their
+      // priceLabel already reads "$X/day" so we never parse the daily number as a monthly rent.
+      const rentNumeric =
+        room.pricePeriod === "day" && typeof room.priceMonthlyEquivalent === "number"
+          ? room.priceMonthlyEquivalent
+          : parseMonthlyRent(room.price.replace("/month", "/ mo"));
       const budgetOk =
         opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum)
           ? true
@@ -378,6 +395,9 @@ export function filterRoomListings(
         neighborhood: p.neighborhood,
         priceLabel: room.price,
         rentNumeric,
+        pricePeriod: room.pricePeriod === "day" ? "day" : "month",
+        headlineRent:
+          room.pricePeriod === "day" ? parseMonthlyRent(room.price.replace("/day", "")) : rentNumeric,
         availabilityLabel: availabilityLabel(room),
         bathroomHint: bathroomHintFromRoom(room),
         zip: p.zip,
@@ -428,6 +448,10 @@ export type PropertyBrowseCard = {
   /** Empty string means no genuine uploaded photo — render `NoImagePlaceholder` (production) or a demo-only fallback (see `demoOnlyBrowseCardPlaceholderImage`). */
   imageUrl: string;
   rentNumeric: number | null;
+  /** Headline number to display (daily price for daily rooms, monthly rent otherwise). */
+  headlineRent: number | null;
+  /** "day" when the cheapest room is priced by the day; "month" (default) otherwise. */
+  pricePeriod: "day" | "month";
   priceLabel: string;
   roomCount: number;
   petFriendly: boolean;
@@ -467,6 +491,8 @@ function aggregateRoomRowsToPropertyCards(roomRows: RoomListingRow[]): PropertyB
         neighborhood: row.neighborhood,
         imageUrl,
         rentNumeric: row.rentNumeric,
+        headlineRent: row.headlineRent,
+        pricePeriod: row.pricePeriod,
         priceLabel: row.priceLabel,
         roomCount: 1,
         petFriendly: row.petFriendly,
@@ -475,11 +501,15 @@ function aggregateRoomRowsToPropertyCards(roomRows: RoomListingRow[]): PropertyB
     }
 
     existing.roomCount += 1;
+    // The card shows the cheapest room by monthly-equivalent; carry that room's
+    // display number, period, and label together so they never desync.
     if (
       row.rentNumeric !== null &&
       (existing.rentNumeric === null || row.rentNumeric < existing.rentNumeric)
     ) {
       existing.rentNumeric = row.rentNumeric;
+      existing.headlineRent = row.headlineRent;
+      existing.pricePeriod = row.pricePeriod;
       existing.priceLabel = row.priceLabel;
     }
     if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;

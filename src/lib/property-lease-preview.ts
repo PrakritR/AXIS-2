@@ -11,6 +11,7 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { roomDailyRentPrice } from "@/lib/room-pricing";
 import { formatListingFeeDisplay } from "@/lib/rental-application/listing-fees-display";
 import { resolvePropertyLeaseSource, type PropertyLeaseSource } from "@/lib/property-lease-source";
 
@@ -91,7 +92,10 @@ export function leasePreviewContextFromSubmission(
   const unitLabel = hint?.unitLabel?.trim() || firstRoom?.name?.trim() || "Room 1";
 
   let rentFromListing: string | null = null;
-  if (firstRoom && firstRoom.monthlyRent > 0) {
+  const firstRoomDaily = roomDailyRentPrice(firstRoom);
+  if (firstRoomDaily !== undefined) {
+    rentFromListing = `$${firstRoomDaily.toFixed(2)} / day`;
+  } else if (firstRoom && firstRoom.monthlyRent > 0) {
     rentFromListing = `$${firstRoom.monthlyRent.toFixed(2)} / month`;
   } else if (isEntireHomeListing(normalized)) {
     const entireRent = entireHomeMonthlyRentAmount(normalized);

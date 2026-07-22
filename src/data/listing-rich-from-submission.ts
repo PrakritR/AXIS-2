@@ -93,6 +93,16 @@ import type {
   ListingRoomRow,
   ListingSharedRow,
 } from "@/data/listing-rich-content";
+import { roomDailyRentPrice, roomIsDailyPriced, roomMonthlyEquivalent } from "@/lib/room-pricing";
+
+/**
+ * Rent value for AGGREGATE labels (rent ranges, "starting at", estimated totals):
+ * daily-priced rooms contribute their monthly-equivalent so mixed listings stay
+ * coherent as "/mo". Each room's own row still shows its true "$X/day" price.
+ */
+function aggregateRoomRentValue(r: ManagerRoomSubmission): number {
+  return roomMonthlyEquivalent(r);
+}
 
 function splitAmenities(text: string): AmenityItem[] {
   const parts = text
@@ -228,7 +238,7 @@ function buildListingFloorCard(
 ): ListingFloorCard {
   const entireHome = isEntireHomeListing(sub);
   const entireRent = entireHomeMonthlyRentAmount(sub);
-  const rents = entireHome && entireRent > 0 ? [entireRent] : rs.map((r) => r.monthlyRent).filter((n) => n > 0);
+  const rents = entireHome && entireRent > 0 ? [entireRent] : rs.map(aggregateRoomRentValue).filter((n) => n > 0);
   const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 800;
   const roomRows: ListingRoomRow[] = rs.map((r) => {
     const setup = describeRoomBathroomSituation(r.id, sub);
@@ -247,7 +257,13 @@ function buildListingFloorCard(
       name: r.name.trim(),
       detail: roomListingTableSubtitle(r),
       utilitiesEstimate: utilDisplay,
-      price: entireHome ? (r.monthlyRent > 0 ? `$${r.monthlyRent}` : "Included") : `$${r.monthlyRent}`,
+      price: roomIsDailyPriced(r)
+        ? `$${roomDailyRentPrice(r)}/day`
+        : entireHome
+          ? (r.monthlyRent > 0 ? `$${r.monthlyRent}` : "Included")
+          : `$${r.monthlyRent}`,
+      pricePeriod: roomIsDailyPriced(r) ? "day" : "month",
+      priceMonthlyEquivalent: roomIsDailyPriced(r) ? roomMonthlyEquivalent(r) : undefined,
       availability: "Available now",
       bathroomShareCount: bathroomShareCountForRoom(r.id, sub),
       modal: {
@@ -381,7 +397,7 @@ function bundleSummaryItems(
 ): { label: string; value: string }[] {
   const entireRent = isEntireHomeListing(sub) ? entireHomeMonthlyRentAmount(sub) : 0;
   const rents =
-    entireRent > 0 ? [entireRent] : rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
+    entireRent > 0 ? [entireRent] : rooms.map(aggregateRoomRentValue).filter((n) => n > 0);
   const utilities = rooms.map((r) => r.utilitiesEstimate?.trim()).filter(Boolean);
   return [
     { label: "Rooms", value: String(rooms.length) },
@@ -409,7 +425,7 @@ function monthlyRangeLabel(values: number[], prefix = ""): string {
 }
 
 function twoOrMoreRoomRents(rooms: ManagerRoomSubmission[]): number[] {
-  return rooms.map((r) => r.monthlyRent).filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  return rooms.map(aggregateRoomRentValue).filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
 }
 
 function twoOrMoreRoomPriceLabel(rooms: ManagerRoomSubmission[]): string | null {
@@ -565,7 +581,7 @@ function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSub
     ];
   }
 
-  const mids = rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
+  const mids = rooms.map(aggregateRoomRentValue).filter((n) => n > 0);
   if (!mids.length) {
     return [
       {
@@ -875,7 +891,7 @@ export function listingRichFromManagerSubmission(
   const amenities = houseWideAmenityItems(sub.amenitiesText);
 
   const entireRent = isEntireHomeListing(sub) ? entireHomeMonthlyRentAmount(sub) : 0;
-  const mids = entireRent > 0 ? [entireRent] : rooms.map((r) => r.monthlyRent).filter((n) => n > 0);
+  const mids = entireRent > 0 ? [entireRent] : rooms.map(aggregateRoomRentValue).filter((n) => n > 0);
   const monthlyTotals =
     entireRent > 0
       ? rooms
@@ -886,10 +902,11 @@ export function listingRichFromManagerSubmission(
           })
           .slice(0, 1)
       : rooms
-          .filter((r) => r.monthlyRent > 0)
+          .filter((r) => aggregateRoomRentValue(r) > 0)
           .map((r) => {
             const utilities = parseMoneyAmount(r.utilitiesEstimate ?? "");
-            return utilities > 0 ? r.monthlyRent + utilities : null;
+            const base = aggregateRoomRentValue(r);
+            return utilities > 0 ? base + utilities : base > 0 ? base : null;
           })
           .filter((n): n is number => n !== null);
 
