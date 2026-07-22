@@ -83,19 +83,24 @@ const STANDARD_LEASE_UTILITY_KINDS: readonly LeaseUtilityKind[] = [
   "internet",
 ];
 
-function paymentDefaultFor(model: UtilitiesPaymentModel | undefined): {
+/**
+ * Payment / setup defaults for one utility row under a listing's aggregate model.
+ * An absent model resolves the same way `normalizeUtilitiesPaymentModel` does —
+ * `manager_billed` — so an untouched listing never seeds tenant-direct rows.
+ */
+export function leaseUtilityDefaultsFor(model: UtilitiesPaymentModel | undefined): {
   paidBy: LeaseUtilityPayment;
   setUpBy: LeaseUtilityResponsibleParty;
 } {
   switch (model) {
     case "included_in_rent":
       return { paidBy: "included_in_rent", setUpBy: "manager" };
+    case "tenant_direct":
+      return { paidBy: "resident", setUpBy: "resident" };
     case "manager_billed":
+    default:
       // Billed to the resident through the manager's portal — resident's cost, manager's account.
       return { paidBy: "resident", setUpBy: "manager" };
-    case "tenant_direct":
-    default:
-      return { paidBy: "resident", setUpBy: "resident" };
   }
 }
 
@@ -105,7 +110,7 @@ function paymentDefaultFor(model: UtilitiesPaymentModel | undefined): {
  * consistent. The manager can then adjust any row.
  */
 export function defaultLeaseUtilities(model?: UtilitiesPaymentModel): LeaseUtilityLine[] {
-  const { paidBy, setUpBy } = paymentDefaultFor(model);
+  const { paidBy, setUpBy } = leaseUtilityDefaultsFor(model);
   return STANDARD_LEASE_UTILITY_KINDS.map((kind) => ({ kind, paidBy, setUpBy }));
 }
 
