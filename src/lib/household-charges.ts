@@ -974,12 +974,17 @@ function intraMonthLeaseSpan(
 /**
  * Proration for the FIRST billed period. Normally that is the partial month from the
  * lease start; for a lease that also ends in the same month it is the whole lease term.
+ *
+ * Collapsing the two edges into one span is DAILY-ONLY (`collapseIntraMonth`): monthly
+ * rooms must bill exactly as they always have, so they keep the plain lease-start
+ * proration even when the lease ends in the same month.
  */
 function leaseFirstPeriodProration(
   leaseStart: string | undefined,
   leaseEnd: string | undefined,
+  collapseIntraMonth: boolean,
 ): ReturnType<typeof leaseStartProration> {
-  const span = intraMonthLeaseSpan(leaseStart, leaseEnd);
+  const span = collapseIntraMonth ? intraMonthLeaseSpan(leaseStart, leaseEnd) : null;
   if (!span) return leaseStartProration(leaseStart);
   return {
     prorated: true,
@@ -997,7 +1002,7 @@ function firstMonthRentChargeForLeaseStart(
   dailyRentRate?: number,
   /** Headline daily rate when the room is priced by the day — bills EVERY first month (full or partial) per day. */
   dailyBasisRate?: number,
-  /** Lease end, so a lease that starts and ends in one month bills its true span once. */
+  /** Lease end, so a DAILY-priced lease that starts and ends in one month bills its true span once. */
   leaseEnd?: string,
 ): {
   kind: HouseholdChargeKind;
@@ -1005,7 +1010,8 @@ function firstMonthRentChargeForLeaseStart(
   title: string;
   proration: ReturnType<typeof leaseStartProration>;
 } | null {
-  const proration = leaseFirstPeriodProration(leaseStart, leaseEnd);
+  const isDailyBasis = (dailyBasisRate ?? 0) > 0;
+  const proration = leaseFirstPeriodProration(leaseStart, leaseEnd, isDailyBasis);
   // Room priced by the day: the first month bills its billable days × daily rate
   // whether it is a full or partial month (billableDays is daysInMonth for a full month).
   if (dailyBasisRate && dailyBasisRate > 0) {
@@ -2197,9 +2203,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
 
   const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
-  // A lease that starts and ends in one calendar month is billed once, by the
-  // first-period charges below; its last-month charges would re-bill the same days.
-  const endsInsideFirstMonth = intraMonthLeaseSpan(leaseStart, leaseEnd) !== null;
+  // A DAILY-priced lease that starts and ends in one calendar month is billed once, by the
+  // first-period charges below; its last-month charges would re-bill the same days. Monthly
+  // rooms are left on their legacy two-charge path so their billing is unchanged.
+  const endsInsideFirstMonth =
+    (dailyBasisRate ?? 0) > 0 && intraMonthLeaseSpan(leaseStart, leaseEnd) !== null;
 
   const rentAmount = selectedRoomRentAmount(row);
   if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {
@@ -2209,7 +2217,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
 
   const utilities = selectedRoomUtilities(row);
   if (utilities.amount > 0) {
-    const proration = leaseFirstPeriodProration(leaseStart, leaseEnd);
+    const proration = leaseFirstPeriodProration(leaseStart, leaseEnd, endsInsideFirstMonth);
     let utilAmount: number;
     let utilTitle: string;
     if (proration.prorated && prorateMethod === "daily_rate" && dailyUtilitiesRate && dailyUtilitiesRate > 0) {
