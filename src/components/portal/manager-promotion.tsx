@@ -32,7 +32,7 @@ import {
   PromotionTextAssetDetail,
   PromotionTextHeaderActions,
 } from "@/components/portal/promotion-asset-detail";
-import { PromotionNewChooserModal } from "@/components/portal/promotion-new-chooser-modal";
+import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
 import { PromotionAiDraftCard } from "@/components/portal/promotion-ai-draft-card";
 import {
@@ -116,9 +116,11 @@ export type PromotionDraft = {
 
 export const CUSTOM_PROPERTY_KEY = "__custom__";
 
-/** Content-type sort/group pills at the top of the Promotion page. `image`
- *  maps to flyer assets (`kind: "flyer"`), `text` to text assets. */
-export type PromotionContentFilter = "all" | "text" | "image";
+/** Content-type filter pills at the top of the Promotion page. `image` maps to
+ *  flyer assets (`kind: "flyer"`), `text` to text assets. The pills are mutually
+ *  exclusive (no "All") — like the Applications/Services status pills, which
+ *  default to their first bucket rather than an aggregate. */
+export type PromotionContentFilter = "text" | "image";
 
 export const EMPTY_DRAFT: PromotionDraft = {
   propertyKey: CUSTOM_PROPERTY_KEY,
@@ -251,20 +253,20 @@ export function ManagerPromotion() {
   const handledFlyerDeepLink = useRef(false);
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [showChooser, setShowChooser] = useState(false);
+  // Unified "New promotion" modal (type dropdown + inline flyer/text form).
+  const [showNewModal, setShowNewModal] = useState(false);
+  // Edit-flyer modal (create-new now lives in the unified modal above).
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
   const [generating, setGenerating] = useState(false);
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
-  const [pendingTextDraft, setPendingTextDraft] = useState<PromotionDraft | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionExpanded, setSectionExpanded] = useState(true);
-  const [deepLinkPropertyId, setDeepLinkPropertyId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
-  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("all");
+  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("text");
   const [propertyFilter, setPropertyFilter] = useState("");
 
   useEffect(() => {
@@ -308,12 +310,11 @@ export function ManagerPromotion() {
       if (a.kind === "text") text += 1;
       else image += 1;
     }
-    return { all: propertyScopedAssets.length, text, image };
+    return { text, image };
   }, [propertyScopedAssets]);
 
   const contentTabs = useMemo(
     () => [
-      { id: "all", label: "All", count: contentCounts.all, dataAttr: "promotion-filter-all" },
       { id: "text", label: "Text", count: contentCounts.text, dataAttr: "promotion-filter-text" },
       { id: "image", label: "Image", count: contentCounts.image, dataAttr: "promotion-filter-image" },
     ],
@@ -321,7 +322,6 @@ export function ManagerPromotion() {
   );
 
   const filteredAssets = useMemo(() => {
-    if (contentFilter === "all") return propertyScopedAssets;
     const wantedKind: PromotionAssetKind = contentFilter === "image" ? "flyer" : "text";
     return propertyScopedAssets.filter((a) => a.kind === wantedKind);
   }, [propertyScopedAssets, contentFilter]);
@@ -352,28 +352,10 @@ export function ManagerPromotion() {
     [managerEmail],
   );
 
-  useEffect(() => {
-    if (!isDemoModeActive()) return;
-    const onAutofill = (e: Event) => {
-      const detail = (e as CustomEvent<{ propertyId?: string; generateAfter?: boolean }>).detail;
-      const pid = detail?.propertyId?.trim() || listings[0]?.id;
-      if (!pid) return;
-      setDraft(draftWithPropertyKey(EMPTY_DRAFT, pid, listings, autofillOpts));
-      setShowChooser(false);
-      setShowForm(true);
-      setEditingRowId(null);
-      setEditingEntryId(null);
-      if (detail?.generateAfter) setDemoPromotionGeneratePending(true);
-    };
-    window.addEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
-    return () => window.removeEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
-  }, [listings, autofillOpts]);
-
-  const openChooser = useCallback(() => {
-    setShowChooser(true);
-  }, []);
-
-  const openNewFlyerForm = useCallback(
+  // Seed the flyer draft (optionally from a property) and open the unified
+  // "New promotion" modal. It opens on the flyer form; the in-modal type
+  // dropdown swaps to the text composer without a separate "Continue" step.
+  const openNewPromotion = useCallback(
     (propertyId?: string) => {
       setEditingRowId(null);
       setEditingEntryId(null);
@@ -382,10 +364,26 @@ export function ManagerPromotion() {
       } else {
         setDraft(EMPTY_DRAFT);
       }
-      setShowForm(true);
+      setShowNewModal(true);
     },
     [listings, autofillOpts],
   );
+
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onAutofill = (e: Event) => {
+      const detail = (e as CustomEvent<{ propertyId?: string; generateAfter?: boolean }>).detail;
+      const pid = detail?.propertyId?.trim() || listings[0]?.id;
+      if (!pid) return;
+      setDraft(draftWithPropertyKey(EMPTY_DRAFT, pid, listings, autofillOpts));
+      setEditingRowId(null);
+      setEditingEntryId(null);
+      setShowNewModal(true);
+      if (detail?.generateAfter) setDemoPromotionGeneratePending(true);
+    };
+    window.addEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
+    return () => window.removeEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
+  }, [listings, autofillOpts]);
 
   useEffect(() => {
     if (handledFlyerDeepLink.current || searchParams.get("new") !== "1") return;
@@ -394,18 +392,18 @@ export function ManagerPromotion() {
     if (propertyId && listings.length === 0 && userId) return;
 
     handledFlyerDeepLink.current = true;
-    setDeepLinkPropertyId(propertyId || null);
-    setShowChooser(true);
+    openNewPromotion(propertyId || undefined);
 
     const next = new URLSearchParams(searchParams.toString());
     next.delete("new");
     next.delete("propertyId");
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }, [authReady, listings, userId, searchParams, pathname, router]);
+  }, [authReady, listings, userId, searchParams, pathname, router, openNewPromotion]);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
+    setShowNewModal(false);
     setEditingRowId(null);
     setEditingEntryId(null);
     setDraft(EMPTY_DRAFT);
@@ -425,22 +423,6 @@ export function ManagerPromotion() {
 
   function onSelectProperty(key: string) {
     setDraft((d) => draftWithPropertyKey(d, key, listings, autofillOpts));
-  }
-
-  function onChooseNewKind(kind: PromotionAssetKind) {
-    setShowChooser(false);
-    if (kind === "flyer") {
-      openNewFlyerForm(deepLinkPropertyId ?? undefined);
-      setDeepLinkPropertyId(null);
-      return;
-    }
-    const base =
-      deepLinkPropertyId && listings.some((l) => l.id === deepLinkPropertyId)
-        ? draftWithPropertyKey(EMPTY_DRAFT, deepLinkPropertyId, listings, autofillOpts)
-        : EMPTY_DRAFT;
-    setPendingTextDraft(base);
-    setTextModalAssetId("__new__");
-    setDeepLinkPropertyId(null);
   }
 
   async function generate() {
@@ -582,7 +564,9 @@ export function ManagerPromotion() {
     extraInstructions: string;
     images: string[];
   }) {
-    const base = pendingTextDraft ?? EMPTY_DRAFT;
+    // The unified new-promotion modal shares one `draft` for property context;
+    // the text composer contributes format/tone/notes/images via `opts`.
+    const base = draft;
     const label = base.propertyLabel.trim() || base.headline.trim() || "Untitled promotion";
     const propertyId = base.propertyKey === CUSTOM_PROPERTY_KEY ? null : base.propertyKey;
     const entryTitle = nextPromotionAssetDefaultTitle(assets, "text");
@@ -621,8 +605,7 @@ export function ManagerPromotion() {
         updatedAt: now,
       });
       upsertManagerPromotion(row);
-      setTextModalAssetId(null);
-      setPendingTextDraft(null);
+      closeForm();
       setExpandedId(makePromotionAssetId(row.id, "text", entry.id));
       showToast(source === "ai" ? "Promotion text created." : "Promotion text created (offline copy).");
     } catch {
@@ -725,7 +708,7 @@ export function ManagerPromotion() {
           type="button"
           variant="primary"
           className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={openChooser}
+          onClick={() => openNewPromotion()}
           data-attr="promotion-new"
         >
           New promotion
@@ -769,27 +752,29 @@ export function ManagerPromotion() {
         />
       </PortalCollapsibleSection>
 
-      <PromotionNewChooserModal
-        open={showChooser}
-        onClose={() => setShowChooser(false)}
-        onChoose={onChooseNewKind}
+      <PromotionNewModal
+        open={showNewModal}
+        onClose={closeForm}
+        draft={draft}
+        setDraft={setDraft}
+        listings={listings}
+        onSelectProperty={onSelectProperty}
+        onGenerateFlyer={() => void generate()}
+        flyerBusy={generating}
+        onGenerateText={(opts) => void createTextFromModal(opts)}
+        textBusy={generatingTextId !== null}
       />
 
+      {/* Edit an existing flyer (create-new lives in PromotionNewModal above). */}
       <Modal
         open={showForm}
-        title={editingEntryId ? "Edit flyer" : "New flyer"}
+        title="Edit flyer"
         onClose={closeForm}
         panelClassName="max-w-2xl"
         footer={
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-              {generating
-                ? editingEntryId
-                  ? "Updating…"
-                  : "Generating…"
-                : editingEntryId
-                  ? "Update flyer"
-                  : "Generate flyer"}
+              {generating ? "Updating…" : "Update flyer"}
             </Button>
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
@@ -812,19 +797,12 @@ export function ManagerPromotion() {
 
       <PromotionTextGenerateModal
         open={textModalAssetId !== null}
-        onClose={() => {
-          setTextModalAssetId(null);
-          setPendingTextDraft(null);
-        }}
+        onClose={() => setTextModalAssetId(null)}
         busy={generatingTextId !== null}
         initialFormat={textModalAsset?.textEntry?.copy.format}
-        initialTone={textModalAsset?.row.inputs.tone ?? pendingTextDraft?.tone}
-        initialImages={textModalAsset?.row.inputs.images ?? pendingTextDraft?.images}
+        initialTone={textModalAsset?.row.inputs.tone}
+        initialImages={textModalAsset?.row.inputs.images}
         onGenerate={(opts) => {
-          if (textModalAssetId === "__new__") {
-            void createTextFromModal(opts);
-            return;
-          }
           if (!textModalAsset?.textEntry) return;
           void regenerateText(textModalAsset.row, textModalAsset.textEntry.id, opts);
         }}
