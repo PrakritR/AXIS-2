@@ -3,7 +3,7 @@ import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import {
   findPendingVendorInviteByToken,
   provisionVendorAccountByEmail,
-  VENDOR_INVITE_EXPIRED_NOTICE,
+  vendorUnlinkedNotice,
   type VendorInviteRow,
 } from "@/lib/auth/provision-vendor-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
@@ -105,6 +105,8 @@ async function registerFromInvite(
     confirmed: true,
     axisId: provisioned.axisId,
     linkedManagerId: provisioned.linkedManagerId,
+    unlinkedReason: provisioned.unlinkedReason,
+    unlinkedNotice: vendorUnlinkedNotice(provisioned.unlinkedReason, { confirmed: true }),
     redirectTo: "/vendor/dashboard",
   });
 }
@@ -141,8 +143,8 @@ async function registerSelfServe(
       linkedManagerId: provisioned.linkedManagerId,
       // A stale invite never blocks an otherwise-legitimate sign-in; it is
       // reported so the vendor knows why no manager is attached.
-      inviteExpired: provisioned.inviteExpired,
-      ...(provisioned.inviteExpired ? { inviteNotice: VENDOR_INVITE_EXPIRED_NOTICE } : {}),
+      unlinkedReason: provisioned.unlinkedReason,
+      unlinkedNotice: vendorUnlinkedNotice(provisioned.unlinkedReason, { confirmed: true }),
       redirectTo: "/vendor/dashboard",
     });
   }
@@ -231,8 +233,8 @@ async function registerSelfServe(
     ok: true,
     confirmed: false,
     emailDeliveryConfigured: true,
-    inviteExpired: provisioned.inviteExpired,
-    ...(provisioned.inviteExpired ? { inviteNotice: VENDOR_INVITE_EXPIRED_NOTICE } : {}),
+    unlinkedReason: provisioned.unlinkedReason,
+    unlinkedNotice: vendorUnlinkedNotice(provisioned.unlinkedReason, { confirmed: false }),
   });
 }
 

@@ -4,7 +4,7 @@ import {
   findPendingVendorInviteByToken,
   lookupVendorInviteByEmail,
   provisionVendorAccountByEmail,
-  VENDOR_INVITE_EXPIRED_NOTICE,
+  vendorUnlinkedNotice,
 } from "@/lib/auth/provision-vendor-account";
 
 /**
@@ -168,40 +168,61 @@ describe("lookupVendorInviteByEmail — expired and never-invited are different 
 });
 
 /**
- * Signalling expiry must not become a wall. The caller creates the auth user
- * BEFORE provisioning, so failing here deletes the account and — because the
- * stale row stays `pending` — every retry fails identically. Signup succeeds
- * unlinked and reports `inviteExpired`, so the state self-heals and the vendor
- * is told why no manager is attached.
+ * Signalling a stale invite must not become a wall. The caller creates the auth
+ * user BEFORE provisioning, so failing here deletes the account and — because
+ * the stale row stays `pending` — every retry fails identically. Signup
+ * succeeds unlinked and reports WHY, so the state self-heals and the vendor is
+ * not left guessing. There is more than one way to finish unlinked, so the
+ * reason is discriminated rather than a single expiry boolean.
  */
-function provisioningDb(anyPending: Record<string, unknown> | null) {
+function provisioningDb(opts: {
+  anyPending?: Record<string, unknown> | null;
+  /** Owner of the invite's `vendor_directory_id` row, when one is named. */
+  directoryOwner?: string | null;
+} = {}) {
   const writes: { table: string; op: "upsert" | "update" }[] = [];
 
   const vendorInviteSelect = (columns: string) => {
     const maybeSingle = vi.fn().mockResolvedValue({
-      data: columns.trim() === "id" ? anyPending : null,
+      data: columns.trim() === "id" ? (opts.anyPending ?? null) : null,
       error: null,
     });
     const order = vi.fn(() => ({ limit: vi.fn(() => ({ maybeSingle })) }));
     return { eq: vi.fn(() => ({ eq: vi.fn(() => ({ order, gt: vi.fn(() => ({ order })) })) })) };
   };
 
+  const plainSelect = (table: string) => ({
+    eq: vi.fn(() => ({
+      maybeSingle: vi.fn().mockResolvedValue({
+        data:
+          table === "manager_vendor_records" && opts.directoryOwner !== undefined
+            ? { manager_user_id: opts.directoryOwner }
+            : null,
+        error: null,
+      }),
+    })),
+  });
+
   const from = vi.fn((table: string) => ({
     select: vi.fn((columns = "*") =>
-      table === "vendor_invites"
-        ? vendorInviteSelect(columns)
-        : { eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })) },
+      table === "vendor_invites" ? vendorInviteSelect(columns) : plainSelect(table),
     ),
     upsert: vi.fn(async () => {
       writes.push({ table, op: "upsert" });
       return { error: null };
     }),
-    update: vi.fn(() => ({
-      eq: vi.fn(async () => {
+    update: vi.fn(() => {
+      const record = async () => {
         writes.push({ table, op: "update" });
         return { error: null };
-      }),
-    })),
+      };
+      const terminal = {
+        is: vi.fn(record),
+        then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
+          record().then(resolve, reject),
+      };
+      return { eq: vi.fn(() => terminal) };
+    }),
   }));
 
   const client = {
@@ -217,38 +238,97 @@ function provisioningDb(anyPending: Record<string, unknown> | null) {
   return { db: client as never, writes };
 }
 
-describe("provisionVendorAccountByEmail — an expired invite reports, never blocks", () => {
-  it("still creates the account, unlinked, and flags the expiry", async () => {
-    const { db } = provisioningDb({ id: "inv-1" });
+const REVOKED_DIRECTORY_INVITE = {
+  id: "inv-9",
+  manager_user_id: "mgr-1",
+  vendor_directory_id: "dir-1",
+  vendor_email: "vendor@example.com",
+  vendor_name: null,
+  expires_at: new Date(Date.now() + HOUR).toISOString(),
+};
+
+describe("provisionVendorAccountByEmail — every way of finishing unlinked reports why", () => {
+  it("still creates the account, unlinked, when the invite has expired", async () => {
+    const { db } = provisioningDb({ anyPending: { id: "inv-1" } });
     await expect(
       provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" }),
-    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, inviteExpired: true });
+    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, unlinkedReason: "invite_expired" });
   });
 
   it("never redeems the stale invite", async () => {
-    const { db, writes } = provisioningDb({ id: "inv-1" });
+    const { db, writes } = provisioningDb({ anyPending: { id: "inv-1" } });
     await provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" });
     expect(writes.filter((w) => w.table === "vendor_invites")).toEqual([]);
   });
 
-  it("reports no expiry when there was simply never an invite", async () => {
-    const { db } = provisioningDb(null);
+  it("reports no reason when there was simply never an invite", async () => {
+    const { db } = provisioningDb();
     await expect(
       provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com" }),
-    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, inviteExpired: false });
+    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, unlinkedReason: null });
+  });
+
+  // The other way to end up unlinked: a redeemable invite naming a directory row
+  // that no longer belongs to its manager. It used to report nothing at all.
+  it("reports a revoked directory row rather than unlinking silently", async () => {
+    const { db } = provisioningDb({ directoryOwner: "someone-else" });
+    await expect(
+      provisionVendorAccountByEmail(db, {
+        userId: "user-1",
+        email: "vendor@example.com",
+        invite: REVOKED_DIRECTORY_INVITE,
+      }),
+    ).resolves.toMatchObject({ ok: true, linkedManagerId: null, unlinkedReason: "invite_revoked" });
+  });
+
+  it("still links when the directory row does belong to the inviting manager", async () => {
+    const { db } = provisioningDb({ directoryOwner: "mgr-1" });
+    await expect(
+      provisionVendorAccountByEmail(db, {
+        userId: "user-1",
+        email: "vendor@example.com",
+        invite: REVOKED_DIRECTORY_INVITE,
+      }),
+    ).resolves.toMatchObject({ ok: true, linkedManagerId: "mgr-1", unlinkedReason: null });
   });
 
   it("leaves the explicit-invite paths (token / OAuth) untouched", async () => {
-    const { db } = provisioningDb({ id: "inv-1" });
+    const { db } = provisioningDb({ anyPending: { id: "inv-1" } });
     const from = (db as unknown as { from: ReturnType<typeof vi.fn> }).from;
     await expect(
       provisionVendorAccountByEmail(db, { userId: "user-1", email: "vendor@example.com", invite: null }),
-    ).resolves.toMatchObject({ ok: true, inviteExpired: false });
+    ).resolves.toMatchObject({ ok: true, unlinkedReason: null });
     expect(from).not.toHaveBeenCalledWith("vendor_invites");
   });
+});
 
-  it("carries the user-facing reason so the vendor is not left guessing", () => {
-    expect(VENDOR_INVITE_EXPIRED_NOTICE).toMatch(/expired/i);
-    expect(VENDOR_INVITE_EXPIRED_NOTICE).toMatch(/new one/i);
+/**
+ * The awaiting-confirmation screen says "click the link to finish creating your
+ * account", so copy claiming the account already exists contradicts it.
+ */
+describe("vendorUnlinkedNotice", () => {
+  it("says nothing when the vendor was linked", () => {
+    expect(vendorUnlinkedNotice(null, { confirmed: true })).toBeNull();
+  });
+
+  it("distinguishes an expired invite from a revoked one", () => {
+    expect(vendorUnlinkedNotice("invite_expired", { confirmed: true })).toMatch(/expired/i);
+    expect(vendorUnlinkedNotice("invite_revoked", { confirmed: true })).toMatch(/no longer valid/i);
+  });
+
+  it("always tells the vendor how to recover", () => {
+    for (const reason of ["invite_expired", "invite_revoked"] as const) {
+      for (const confirmed of [true, false]) {
+        expect(vendorUnlinkedNotice(reason, { confirmed })).toMatch(/send a new one/i);
+      }
+    }
+  });
+
+  it("never claims the account is ready on the awaiting-confirmation screen", () => {
+    for (const reason of ["invite_expired", "invite_revoked"] as const) {
+      expect(vendorUnlinkedNotice(reason, { confirmed: false })).not.toMatch(/account is ready/i);
+      expect(vendorUnlinkedNotice(reason, { confirmed: false })).toMatch(/confirm your email/i);
+      expect(vendorUnlinkedNotice(reason, { confirmed: true })).toMatch(/account is ready/i);
+    }
   });
 });

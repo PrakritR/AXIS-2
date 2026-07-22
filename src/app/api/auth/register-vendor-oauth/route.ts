@@ -2,6 +2,7 @@ import { track } from "@/lib/analytics/posthog";
 import {
   findPendingVendorInviteByToken,
   provisionVendorAccountByEmail,
+  vendorUnlinkedNotice,
   type VendorInviteRow,
 } from "@/lib/auth/provision-vendor-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -72,6 +73,8 @@ export async function POST(req: Request) {
       ok: true,
       axisId: result.axisId,
       linkedManagerId: result.linkedManagerId,
+      unlinkedReason: result.unlinkedReason,
+      unlinkedNotice: vendorUnlinkedNotice(result.unlinkedReason, { confirmed: true }),
       redirectTo: "/vendor/dashboard",
     });
   } catch (e) {

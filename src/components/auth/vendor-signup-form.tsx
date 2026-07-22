@@ -10,6 +10,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { queuePendingToast } from "@/lib/pending-toast";
 import { FIELD_LABEL_CLASS } from "@/lib/ui-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
@@ -21,8 +22,8 @@ type RegisterResponse = {
   emailDeliveryConfigured?: boolean;
   confirmLinkLoggedLocally?: boolean;
   /** Signup succeeded but a stale invite could not be redeemed — say why. */
-  inviteExpired?: boolean;
-  inviteNotice?: string;
+  unlinkedReason?: string | null;
+  unlinkedNotice?: string | null;
 };
 
 /** Vendor account creation — Google or email/password; reused in auth hub, invite page, and public marketing. */
@@ -90,16 +91,18 @@ export function VendorSignupForm({
         return;
       }
 
-      const expiryNotice = body.inviteExpired ? (body.inviteNotice ?? null) : null;
+      const unlinkedNotice = body.unlinkedReason ? (body.unlinkedNotice ?? null) : null;
 
       if (body.confirmed === false) {
         setPendingConfirmation(true);
         setLocalDevConfirmHint(false);
-        setInviteNotice(expiryNotice);
+        setInviteNotice(unlinkedNotice);
         return;
       }
 
-      if (expiryNotice) showToast(expiryNotice);
+      // This branch ends in a full page load, which would destroy a toast fired
+      // here — hand the notice to the destination instead.
+      if (unlinkedNotice) queuePendingToast(unlinkedNotice);
 
       const supabase = createSupabaseBrowserClient();
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({

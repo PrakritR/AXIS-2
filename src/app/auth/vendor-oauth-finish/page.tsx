@@ -8,6 +8,7 @@ import {
   readVendorSignupInviteToken,
   readVendorSignupNext,
 } from "@/lib/auth/vendor-oauth-storage";
+import { queuePendingToast } from "@/lib/pending-toast";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -47,11 +48,17 @@ function VendorOauthFinishContent() {
           credentials: "include",
           body: JSON.stringify(storedToken ? { token: storedToken } : {}),
         });
-        const body = (await res.json()) as { error?: string };
+        const body = (await res.json()) as {
+          error?: string;
+          unlinkedReason?: string | null;
+          unlinkedNotice?: string | null;
+        };
         if (!res.ok) {
           setErrorText(body.error ?? "Could not finish vendor signup.");
           return;
         }
+
+        if (body.unlinkedReason && body.unlinkedNotice) queuePendingToast(body.unlinkedNotice);
 
         clearVendorSignupInviteToken();
         const next = readVendorSignupNext();

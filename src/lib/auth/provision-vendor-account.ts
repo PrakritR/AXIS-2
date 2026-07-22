@@ -62,8 +62,42 @@ export async function findPendingVendorInviteByEmail(
   return redeemableInvite((data as VendorInviteRow | null) ?? null);
 }
 
-export const VENDOR_INVITE_EXPIRED_NOTICE =
-  "That invite link has expired — ask your manager to send a new one. Your account was created, but it is not linked to them yet.";
+/**
+ * Why a vendor finished signup with no linked manager. There is more than one
+ * way to get here and every one of them must say so — landing in the portal
+ * unlinked with no explanation is the state this reporting exists to prevent.
+ */
+export type VendorUnlinkedReason = "invite_expired" | "invite_revoked";
+
+/**
+ * Two variants per reason: the account either exists already or is still
+ * waiting on an emailed confirmation link. Telling someone "your account was
+ * created" on the "click the link to finish creating your account" screen is a
+ * contradiction, so each screen gets copy that is true for it.
+ */
+const VENDOR_UNLINKED_NOTICES: Record<VendorUnlinkedReason, { confirmed: string; awaitingConfirmation: string }> = {
+  invite_expired: {
+    confirmed:
+      "That invite link has expired — ask your manager to send a new one. Your account is ready, but it is not linked to them yet.",
+    awaitingConfirmation:
+      "That invite link has expired — ask your manager to send a new one. Confirm your email to finish setting up, then they can link you.",
+  },
+  invite_revoked: {
+    confirmed:
+      "That invite is no longer valid — ask your manager to send a new one. Your account is ready, but it is not linked to them yet.",
+    awaitingConfirmation:
+      "That invite is no longer valid — ask your manager to send a new one. Confirm your email to finish setting up, then they can link you.",
+  },
+};
+
+export function vendorUnlinkedNotice(
+  reason: VendorUnlinkedReason | null | undefined,
+  opts: { confirmed: boolean },
+): string | null {
+  if (!reason) return null;
+  const copy = VENDOR_UNLINKED_NOTICES[reason];
+  return opts.confirmed ? copy.confirmed : copy.awaitingConfirmation;
+}
 
 export type VendorInviteEmailLookup =
   | { kind: "none" }
@@ -132,7 +166,7 @@ async function directoryBelongsToManager(
 }
 
 export type ProvisionVendorResult =
-  | { ok: true; axisId: string; linkedManagerId: string | null; inviteExpired: boolean }
+  | { ok: true; axisId: string; linkedManagerId: string | null; unlinkedReason: VendorUnlinkedReason | null }
   | { ok: false; status: number; error: string };
 
 /**
@@ -162,7 +196,7 @@ export async function provisionVendorAccountByEmail(
   }
 
   let invite: VendorInviteRow | null;
-  let inviteExpired = false;
+  let unlinkedReason: VendorUnlinkedReason | null = null;
   if (opts.invite !== undefined) {
     invite = opts.invite;
   } else {
@@ -171,7 +205,7 @@ export async function provisionVendorAccountByEmail(
     // either: the caller has already created the auth user by this point, so
     // refusing here deletes the account and every retry fails identically.
     // Provision unlinked and report it, so the vendor is told why.
-    inviteExpired = lookup.kind === "expired";
+    if (lookup.kind === "expired") unlinkedReason = "invite_expired";
     invite = lookup.kind === "redeemable" ? lookup.invite : null;
   }
 
@@ -183,6 +217,7 @@ export async function provisionVendorAccountByEmail(
       // no invite applied.
       await supabase.from("vendor_invites").update({ status: "cancelled" }).eq("id", invite.id);
       invite = null;
+      unlinkedReason = "invite_revoked";
     }
   }
 
@@ -266,5 +301,5 @@ export async function provisionVendorAccountByEmail(
       .eq("id", invite.id);
   }
 
-  return { ok: true, axisId, linkedManagerId, inviteExpired };
+  return { ok: true, axisId, linkedManagerId, unlinkedReason };
 }
