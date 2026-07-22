@@ -481,7 +481,7 @@ That distinction shipped a critical privilege escalation: `profiles_update_self`
 was `FOR UPDATE USING (auth.uid() = id)`, so
 `update profiles set role='admin' where id=<me>` satisfied the predicate
 perfectly. `profile_roles_insert_self` had the same shape. Closed in
-`20260722120000_lock_role_grant_surface.sql`.
+`20260722123000_lock_role_grant_surface.sql`.
 
 **Rules for any table the auth/permission layer reads as a trust signal**
 (`profiles`, `profile_roles`, `vendor_invites`, and anything like them):

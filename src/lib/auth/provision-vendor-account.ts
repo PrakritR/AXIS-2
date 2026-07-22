@@ -29,7 +29,7 @@ const VENDOR_INVITE_COLUMNS = "id, manager_user_id, vendor_directory_id, vendor_
  * `vendor_invites` was directly INSERT-able by any authenticated user, who could
  * therefore mint a never-expiring invite for an email they do not control and
  * redeem it into a pre-confirmed account. The grant is revoked in
- * 20260722120000_lock_role_grant_surface.sql and `expires_at` is now NOT NULL;
+ * 20260722123000_lock_role_grant_surface.sql and `expires_at` is now NOT NULL;
  * this keeps redemption safe regardless, and expiry is a revocation signal that
  * must hold on the self-serve email path too.
  */

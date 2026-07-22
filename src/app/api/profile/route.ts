@@ -47,7 +47,7 @@ export async function PATCH(req: Request) {
     //
     // The write runs on the service-role client, NOT the caller's session:
     // `authenticated` no longer holds UPDATE on `profiles` (see
-    // 20260722120000_lock_role_grant_surface.sql), because a self-service
+    // 20260722123000_lock_role_grant_surface.sql), because a self-service
     // UPDATE grant is indistinguishable from a self-service `role = 'admin'`
     // grant. This route is the authorization check — it has already resolved
     // `user` server-side, and every write below is pinned to `user.id`. The

@@ -11,7 +11,7 @@ import {
  * **pre-confirmed** account on the invite's email, so a forged row meant an
  * account on an email the attacker does not control.
  *
- * The grant is revoked in 20260722120000_lock_role_grant_surface.sql. This
+ * The grant is revoked in 20260722123000_lock_role_grant_surface.sql. This
  * covers the second half: the TTL check was `if (invite.expires_at && …)`, so a
  * NULL expiry skipped it entirely. Redemption must fail closed regardless of
  * how a row got there.

@@ -4,7 +4,7 @@ import { jsonRequest } from "../../helpers/api-request";
 /**
  * `PATCH /api/profile` is the *only* self-service write path onto `profiles`
  * now that `authenticated` holds no DML there
- * (20260722120000_lock_role_grant_surface.sql) — a self-service UPDATE grant is
+ * (20260722123000_lock_role_grant_surface.sql) — a self-service UPDATE grant is
  * indistinguishable from a self-service `role = 'admin'` grant, because column
  * authority cannot be expressed in an RLS row predicate.
  *

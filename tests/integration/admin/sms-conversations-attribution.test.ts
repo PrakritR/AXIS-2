@@ -8,7 +8,7 @@ import { jsonRequest } from "../../helpers/api-request";
  * every manager on the shared line, and sends *as* any manager.
  *
  * Its own admin gate is correct, and the escalation beneath it is closed in
- * 20260722120000_lock_role_grant_surface.sql. What remains here is the one
+ * 20260722123000_lock_role_grant_surface.sql. What remains here is the one
  * input it did trust: `residentUserId` came straight from the request body and
  * was used as the SMS log's attribution, threading a message under an
  * unrelated resident's conversation key and corrupting the audit trail.

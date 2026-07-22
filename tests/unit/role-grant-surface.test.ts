@@ -12,7 +12,7 @@ import { join } from "node:path";
  * column or value, so `update profiles set role='admin' where id=<me>` passed
  * `USING (auth.uid() = id)` cleanly.
  *
- * The fix is 20260722120000_lock_role_grant_surface.sql. This test asserts the
+ * The fix is 20260722123000_lock_role_grant_surface.sql. This test asserts the
  * *end state* across the whole migration directory, so a later migration that
  * re-adds a write policy or re-grants DML fails here rather than silently
  * reopening the hole. It is a static check — the live proof is

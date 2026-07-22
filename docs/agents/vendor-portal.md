@@ -44,7 +44,7 @@ just land with no linked manager until one exists.
 
 **Invites are server-issued and always expire.** `vendor_invites` is
 `SELECT`-only for `anon`/`authenticated` (owner-scoped read;
-`20260722120000_lock_role_grant_surface.sql`) — only the service-role issuing
+`20260722123000_lock_role_grant_surface.sql`) — only the service-role issuing
 route writes one. Redemption turns an invite into a **pre-confirmed** account on
 its `vendor_email`, so both lookup paths in `provision-vendor-account.ts` (by
 token and by email) go through `redeemableInvite`, which fails closed on a

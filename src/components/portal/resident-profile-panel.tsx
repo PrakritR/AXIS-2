@@ -139,7 +139,7 @@ export function ResidentProfilePanel() {
     try {
       // Security: `profiles` is not writable by `authenticated` — a self-service
       // UPDATE grant is indistinguishable from a self-service `role = 'admin'`
-      // grant (20260722120000_lock_role_grant_surface.sql). Saves go through
+      // grant (20260722123000_lock_role_grant_surface.sql). Saves go through
       // PATCH /api/profile, which authorizes the session server-side and pins
       // the write to that user's own row.
       const res = await fetch("/api/profile", {
