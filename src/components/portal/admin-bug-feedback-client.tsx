@@ -14,7 +14,13 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   PORTAL_TABLE_TD,
   PortalTableInlineExpand,
   createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
-import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  MANAGER_TABLE_TH,
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  PortalToolbarSortSelect,
+} from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -50,7 +56,7 @@ const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
-type StatusFilter = "all" | BugFeedbackStatus;
+type StatusFilter = BugFeedbackStatus;
 type SortFilter = "newest" | "oldest" | "status";
 type PortalFilter = "all" | "managers" | "residents" | "vendors" | "admin";
 
@@ -95,7 +101,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
   const [portalFilter, setPortalFilter] = useState<PortalFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [sortFilter, setSortFilter] = useState<SortFilter>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -124,44 +130,24 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   );
 
   const visibleRows = useMemo(() => {
-    const filtered = statusFilter === "all" ? portalRows : portalRows.filter((r) => r.status === statusFilter);
+    const filtered = portalRows.filter((r) => r.status === statusFilter);
     return sortFeedbackRows(filtered, sortFilter);
   }, [portalRows, statusFilter, sortFilter]);
 
-  const portalTabs = useMemo(
-    () => [
-      { id: "all" as const, label: "All", count: rows.length, dataAttr: "admin-feedback-portal-all" },
-      {
-        id: "managers" as const,
-        label: "Managers",
-        count: rows.filter((r) => portalForRole(r.reporterRole) === "managers").length,
-        dataAttr: "admin-feedback-portal-managers",
-      },
-      {
-        id: "residents" as const,
-        label: "Residents",
-        count: rows.filter((r) => portalForRole(r.reporterRole) === "residents").length,
-        dataAttr: "admin-feedback-portal-residents",
-      },
-      {
-        id: "vendors" as const,
-        label: "Vendors",
-        count: rows.filter((r) => portalForRole(r.reporterRole) === "vendors").length,
-        dataAttr: "admin-feedback-portal-vendors",
-      },
-      {
-        id: "admin" as const,
-        label: "Admin",
-        count: rows.filter((r) => portalForRole(r.reporterRole) === "admin").length,
-        dataAttr: "admin-feedback-portal-admin",
-      },
-    ],
-    [rows],
-  );
+  const portalOptions = useMemo(() => {
+    const countFor = (portal: Exclude<PortalFilter, "all">) =>
+      rows.filter((r) => portalForRole(r.reporterRole) === portal).length;
+    return [
+      { value: "all" as const, label: `All portals (${rows.length})` },
+      { value: "managers" as const, label: `Managers (${countFor("managers")})` },
+      { value: "residents" as const, label: `Residents (${countFor("residents")})` },
+      { value: "vendors" as const, label: `Vendors (${countFor("vendors")})` },
+      { value: "admin" as const, label: `Admin (${countFor("admin")})` },
+    ];
+  }, [rows]);
 
   const statusTabs = useMemo(
     () => [
-      { id: "all" as const, label: "All", count: portalRows.length, dataAttr: "admin-feedback-status-all" },
       {
         id: "open" as const,
         label: "Open",
@@ -271,41 +257,40 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   );
 
   const filterRow = (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <ManagerPortalFilterRow>
+      <div className="min-w-0">
         <ManagerPortalStatusPills
-          tabs={portalTabs}
-          activeId={portalFilter}
-          activeTone="primary"
+          tabs={statusTabs}
+          activeId={statusFilter}
+          compact
           onChange={(id) => {
-            setPortalFilter(id as PortalFilter);
+            setStatusFilter(id as StatusFilter);
             setExpandedId(null);
           }}
         />
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <span className="shrink-0 font-medium">Sort</span>
-          <Select
-            value={sortFilter}
-            onChange={(e) => setSortFilter(e.target.value as SortFilter)}
-            className="h-9 min-w-[10rem] rounded-full bg-card text-sm"
-            aria-label="Sort feedback"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="status">Status</option>
-          </Select>
-        </label>
       </div>
-      <ManagerPortalStatusPills
-        tabs={statusTabs}
-        activeId={statusFilter}
-        compact
+      <PortalToolbarSortSelect
+        label="Portal"
+        value={portalFilter}
         onChange={(id) => {
-          setStatusFilter(id as StatusFilter);
+          setPortalFilter(id);
           setExpandedId(null);
         }}
+        options={portalOptions}
+        ariaLabel="Filter feedback by portal"
       />
-    </div>
+      <PortalToolbarSortSelect
+        label="Sort"
+        value={sortFilter}
+        onChange={(value) => setSortFilter(value)}
+        options={[
+          { value: "newest", label: "Newest first" },
+          { value: "oldest", label: "Oldest first" },
+          { value: "status", label: "Status" },
+        ]}
+        ariaLabel="Sort feedback"
+      />
+    </ManagerPortalFilterRow>
   );
 
   const renderTable = (tableRows: PortalBugFeedbackRow[]) => (
