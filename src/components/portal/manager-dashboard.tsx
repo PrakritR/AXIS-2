@@ -76,7 +76,13 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { DashboardSectionId } from "@/lib/dashboard-preferences";
 import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
+import { DashboardAssistantDock } from "@/components/portal/dashboard-assistant-dock";
 import { useDashboardVisibility } from "@/hooks/use-dashboard-visibility";
+import { useAgentPendingActions } from "@/hooks/use-agent-pending-actions";
+import {
+  pendingActionChipContent,
+  type PendingActionListItem,
+} from "@/lib/axis-assistant/pending-action-display";
 import { SlidersHorizontal } from "lucide-react";
 import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { formatPacificDateTime } from "@/lib/pacific-time";
@@ -364,6 +370,144 @@ function AttentionGroup<T>({
   );
 }
 
+/**
+ * The "AI drafts" attention group: assistant-proposed write actions the manager
+ * can approve or discard inline. Approve/Discard route through the SAME gated
+ * confirm path used by the assistant chat (the server's `claimPendingAction`
+ * re-validates the stored input and runs the handler) — this row is presentation
+ * only. It never executes a write client-side and never bypasses the
+ * preview/confirm gate. Collapsible like every other attention group.
+ */
+function AiDraftsGroup({
+  items,
+  order = 0,
+  resolvingId,
+  onResolve,
+}: {
+  items: PendingActionListItem[];
+  order?: number;
+  resolvingId: string | null;
+  onResolve: (
+    id: string,
+    decision: "confirm" | "deny",
+  ) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const accent = ATTENTION_TONE.info;
+  const [override, setOverride] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const open = override ?? true;
+  const count = items.length;
+
+  const handle = async (id: string, decision: "confirm" | "deny") => {
+    setError(null);
+    const res = await onResolve(id, decision);
+    if (!res.ok && res.error) setError(res.error);
+  };
+
+  return (
+    <div
+      className="pl-attn-enter overflow-hidden rounded-lg border border-border bg-card"
+      style={{
+        animationDelay: `${Math.min(order, 8) * 55}ms`,
+        borderLeftWidth: 3,
+        borderLeftColor: accent.fg,
+      }}
+    >
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        data-attr="dashboard-attention-toggle-aiDrafts"
+        onClick={() => setOverride(!open)}
+        onKeyDown={(e) => {
+          if (isPortalRowClickIgnored(e.target)) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOverride(!open);
+          }
+        }}
+        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+      >
+        <PortalTableExpandChevron expanded={open} />
+        <h3
+          className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] [html[data-native]_&]:leading-snug"
+          style={{ color: accent.fg }}
+        >
+          AI drafts
+        </h3>
+        <span
+          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums"
+          style={{ background: accent.bg, color: accent.fg }}
+        >
+          {count}
+        </span>
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-primary [html[data-native]_&]:text-xs">
+          <span aria-hidden className="text-sm leading-none">
+            ✦
+          </span>
+          Pending approval
+        </span>
+      </div>
+      {open ? (
+        <div className="border-t border-border">
+          <div className="divide-y divide-border">
+            {items.map((item) => {
+              const { title, subtitle } = pendingActionChipContent(item);
+              const busy = resolvingId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  data-attr="dashboard-attention-ai-draft"
+                  className="flex items-center gap-3 px-3.5 py-2.5 [html[data-native]_&]:gap-2 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+                >
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ background: DOT_INFO }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">
+                      {title}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-muted [html[data-native]_&]:text-[11px]">
+                      {subtitle}
+                    </span>
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handle(item.id, "confirm")}
+                      data-attr="dashboard-ai-draft-approve"
+                      className="rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-white outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
+                    >
+                      {busy ? "…" : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handle(item.id, "deny")}
+                      data-attr="dashboard-ai-draft-discard"
+                      className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25 disabled:opacity-50"
+                    >
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {error ? (
+            <p className="border-t border-border px-3.5 py-2 text-xs text-danger [html[data-native]_&]:px-3">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
@@ -542,6 +686,17 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const [docExpirySummary, setDocExpirySummary] = useState<DocumentExpirationSummary | null>(null);
   const { visibility, setVisible, reset } = useDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+
+  // The assistant dock + AI-draft chips are live, auth-gated manager surfaces:
+  // off in the /demo sandbox (which uses its own scripted assistant and must
+  // never hit the real, authenticated `/api/agent/*` routes) and until the
+  // session is known.
+  const assistantEnabled = authReady && !!userId && !isDemoModeActive();
+  const {
+    items: pendingDrafts,
+    resolve: resolveDraft,
+    resolvingId: resolvingDraftId,
+  } = useAgentPendingActions({ enabled: assistantEnabled });
 
   useEffect(() => {
     if (!authReady || !userId || isDemoModeActive()) {
@@ -748,7 +903,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
   // Reflect only the sections the manager keeps visible, so the "N open" badge
   // matches what's actually on their dashboard.
+  const showAiDrafts = visibility.aiDrafts && pendingDrafts.length > 0;
   const openCount =
+    (showAiDrafts ? pendingDrafts.length : 0) +
     (visibility.tours ? pendingTours.length : 0) +
     (visibility.applications ? pendingApps.length : 0) +
     (visibility.leases ? pendingLeaseRows.length : 0) +
@@ -757,6 +914,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     (visibility.inbox ? inboxThreads.length : 0);
 
   const anyAttentionVisible =
+    visibility.aiDrafts ||
     visibility.tours ||
     visibility.applications ||
     visibility.leases ||
@@ -778,7 +936,12 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
     >
-      <div className={PORTAL_DASHBOARD_STACK}>
+      {/* Split: dashboard content left, docked assistant on a right rail (desktop
+          only). The rail is `hidden lg:block`, so on mobile/tablet the floating
+          FAB/popup stays the only assistant surface. `min-w-0` on the left keeps
+          the horizontally-scrolling KPI row from forcing page overflow. */}
+      <div className="flex items-start gap-5 xl:gap-6">
+        <div className={`min-w-0 flex-1 ${PORTAL_DASHBOARD_STACK}`}>
         {showDocExpiryBanner ? (
           <Link
             href={docExpiryHref}
@@ -885,6 +1048,15 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               <span className="[html[data-native]_&]:sr-only">Customize</span>
             </button>
           </div>
+
+          {showAiDrafts ? (
+            <AiDraftsGroup
+              items={pendingDrafts}
+              order={0}
+              resolvingId={resolvingDraftId}
+              onResolve={resolveDraft}
+            />
+          ) : null}
 
           {visibility.tours ? (
             <AttentionGroup
@@ -1099,6 +1271,20 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             </div>
           ) : null}
         </div>
+        </div>
+        {assistantEnabled ? (
+          <aside
+            className="hidden w-[21rem] shrink-0 lg:block xl:w-[23rem]"
+            data-attr="dashboard-assistant-rail"
+            aria-label="PropLane Assistant"
+          >
+            <div className="sticky top-6 h-[calc(100dvh-7rem)]">
+              <DashboardAssistantDock
+                managerName={displayName && displayName !== "there" ? displayName : null}
+              />
+            </div>
+          </aside>
+        ) : null}
       </div>
 
       <DashboardCustomizeModal

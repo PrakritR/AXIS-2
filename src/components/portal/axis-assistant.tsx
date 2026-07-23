@@ -18,6 +18,12 @@ import { createPortal } from "react-dom";
 import { track } from "@/lib/analytics/track-client";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
+import {
+  AssistantPendingActionCard,
+  AssistantSuggestionChips,
+  AxisAssistantSparkleIcon,
+} from "@/components/portal/assistant-shared";
+import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
@@ -43,17 +49,6 @@ export function useHasAxisAssistant() {
 
 function useAxisAssistantOpen() {
   return useSyncExternalStore(subscribeAxisAssistantOpen, getAxisAssistantOpen, () => false);
-}
-
-function AxisAssistantSparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden="true">
-      <path
-        d="M12 4.5l2.2 5.3 5.3 2.2-5.3 2.2L12 19.5l-2.2-5.3-5.3-2.2 5.3-2.2L12 4.5Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
 }
 
 function handleOpenAssistant() {
@@ -87,86 +82,6 @@ function AxisAssistantFixedTrigger() {
   );
 }
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
-type ToolTraceEntry = { tool: string; ok: boolean };
-type ActionPreview = {
-  kind: string;
-  title: string;
-  confirmLabel: string;
-  fields: { label: string; value: string }[];
-  warnings?: string[];
-};
-type PendingAction = { id: string; preview: ActionPreview };
-
-type Suggestion = { label: string; prompt: string; icon: ReactNode; toneClass: string };
-
-const SUGGESTIONS: Suggestion[] = [
-  {
-    label: "Late on rent",
-    prompt: "Who is late on rent right now?",
-    toneClass: "text-[var(--status-overdue-fg)]",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M12 8v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: "Leases to sign",
-    prompt: "How many leases are awaiting signature?",
-    toneClass: "text-primary",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h3"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: "Overdue balance",
-    prompt: "What's the total overdue balance across my portfolio?",
-    toneClass: "text-[var(--status-pending-fg)]",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 12h.01M3 10h18"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: "Draft a reminder",
-    prompt: "Draft a rent reminder message for tenants who are overdue.",
-    toneClass: "text-[var(--status-approved-fg)]",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-];
-
 const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { children: ReactNode }) {
   return children;
 });
@@ -180,12 +95,20 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
   const [panelReady, setPanelReady] = useState(false);
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Single shared conversation loop (same send/confirm/deny transport the
+  // dashboard dock uses), so the gated preview→confirm flow lives in one place.
+  const {
+    input,
+    setInput,
+    messages,
+    lastTools,
+    pendingAction,
+    loading,
+    error,
+    send,
+    resolvePendingAction,
+    reset,
+  } = useAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -253,81 +176,9 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     });
   }, []);
 
-  async function send(prompt?: string) {
-    const text = (prompt ?? input).trim();
-    if (!text || loading) return;
-    setError(null);
-    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
-    setMessages(next);
-    setInput("");
-    setLoading(true);
-    setLastTools([]);
-    setPendingAction(null);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
-      });
-      const data = (await res.json()) as {
-        reply?: string;
-        toolTrace?: ToolTraceEntry[];
-        pendingAction?: PendingAction;
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        setError(data.error ?? "Something went wrong.");
-      } else {
-        setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
-        setLastTools(data.toolTrace ?? []);
-        setPendingAction(data.pendingAction ?? null);
-      }
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function resetConversation() {
-    setMessages([]);
-    setLastTools([]);
-    setPendingAction(null);
-    setError(null);
-    setInput("");
+    reset();
     requestAnimationFrame(() => inputRef.current?.focus());
-  }
-
-  /** Confirm or cancel the proposed action; either way the outcome is appended
-   * to the conversation so the next turn stays coherent. */
-  async function resolvePendingAction(decision: "confirm" | "deny") {
-    if (!pendingAction || loading) return;
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          decision === "confirm"
-            ? { confirmActionId: pendingAction.id }
-            : { denyActionId: pendingAction.id },
-        ),
-      });
-      const data = (await res.json()) as { reply?: string; toolTrace?: ToolTraceEntry[]; error?: string };
-      if (!res.ok || data.error) {
-        setError(data.error ?? "Could not complete that action.");
-        setPendingAction(null);
-      } else {
-        setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
-        setLastTools(data.toolTrace ?? []);
-        setPendingAction(null);
-      }
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
   }
 
   // Keep the scripted-prompt sender pointing at the latest closure (updated
@@ -453,27 +304,14 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       Rent, leases, reminders. Grounded in your live portfolio data.
                     </p>
                   </div>
-                  <div
+                  <AssistantSuggestionChips
+                    onPick={(prompt) => void send(prompt)}
+                    disabled={loading}
                     className={cn(
                       "grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center",
                       keyboardOpen && "hidden",
                     )}
-                  >
-                    {SUGGESTIONS.map((s) => (
-                      <button
-                        key={s.label}
-                        type="button"
-                        onClick={() => void send(s.prompt)}
-                        disabled={loading}
-                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-border bg-foreground/[0.04] px-3 text-xs font-medium text-foreground outline-none transition-[border-color,background-color,transform] hover:border-primary/25 hover:bg-foreground/[0.07] focus-visible:ring-2 focus-visible:ring-primary/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-full"
-                      >
-                        <span className={`flex h-3.5 w-3.5 shrink-0 ${s.toneClass} [&_svg]:h-full [&_svg]:w-full`}>
-                          {s.icon}
-                        </span>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
+                  />
                 </div>
               ) : (
                 <div className="space-y-3 text-sm">
@@ -517,43 +355,11 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
             className="shrink-0 border-t border-border/60 bg-background/60 px-3 pb-3 pt-3 backdrop-blur-sm [html[data-native]_&]:pb-[max(0.75rem,var(--native-safe-bottom))]"
           >
             {pendingAction ? (
-              <div className="mb-3 max-h-64 overflow-y-auto rounded-2xl border border-primary/25 bg-primary/5 p-3">
-                <p className="text-xs font-semibold text-foreground">{pendingAction.preview.title}</p>
-                <dl className="mt-2 space-y-1.5">
-                  {pendingAction.preview.fields.map((f, i) => (
-                    <div key={i} className="text-xs leading-relaxed">
-                      <dt className="font-medium text-muted">{f.label}</dt>
-                      <dd className="whitespace-pre-wrap text-foreground">{f.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {pendingAction.preview.warnings?.map((w, i) => (
-                  <p
-                    key={i}
-                    className="mt-2 rounded-lg border border-[var(--status-pending-fg)]/25 bg-[var(--status-pending-fg)]/5 px-2 py-1.5 text-xs text-[var(--status-pending-fg)]"
-                  >
-                    {w}
-                  </p>
-                ))}
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => void resolvePendingAction("confirm")}
-                    className="flex-1 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  >
-                    {pendingAction.preview.confirmLabel}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => void resolvePendingAction("deny")}
-                    className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              <AssistantPendingActionCard
+                pendingAction={pendingAction}
+                loading={loading}
+                onResolve={(decision) => void resolvePendingAction(decision)}
+              />
             ) : null}
             <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
               <textarea
