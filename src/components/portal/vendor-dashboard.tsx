@@ -522,12 +522,12 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
           />
 
           <AttentionGroup
-            title="Inbox"
+            title="Communication"
             href={`${BASE}/inbox/unopened`}
-            linkLabel="Inbox →"
+            linkLabel="Communication →"
             dataAttr="vendor-dashboard-messages-inbox-link"
             items={inboxThreads}
-            emptyMessage="No unread messages. Inbox is clear."
+            emptyMessage="No unread messages. Communication is clear."
             keyForItem={(thread) => thread.id}
             renderRow={(thread) => (
               <IssueRow

@@ -6,6 +6,7 @@ import {
   INBOX_TAB_DEFS,
   PortalInboxEmptyState,
   PortalInboxMessageTable,
+  inboxTabEmptyCopy,
   type PortalInboxTableRow,
 } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -618,14 +619,7 @@ export const AdminInboxClient = forwardRef<
     }
   };
 
-  const emptyCopy =
-    tabId === "sent"
-      ? "No sent messages yet."
-      : tabId === "trash"
-        ? "No trash messages yet."
-        : tabId === "opened" && rows.length === 0
-          ? "No opened messages yet."
-          : "No messages yet.";
+  const emptyCopy = inboxTabEmptyCopy(tabId);
 
   const fromOrToHeader = tabId === "sent" ? "To" : "From";
 

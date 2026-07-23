@@ -789,9 +789,9 @@ export function ResidentDashboard({
           />
 
           <AttentionGroup
-            title="Inbox"
+            title="Communication"
             href={`${BASE}/inbox/unopened`}
-            linkLabel="Inbox →"
+            linkLabel="Communication →"
             badge={
               inbox > 0 ? (
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-approved-fg)]">
@@ -801,7 +801,7 @@ export function ResidentDashboard({
               ) : null
             }
             items={inboxThreads}
-            emptyMessage="No unread messages. Inbox is clear."
+            emptyMessage="No unread messages. Communication is clear."
             keyForItem={(thread) => thread.id}
             renderRow={(thread) => (
               <IssueRow

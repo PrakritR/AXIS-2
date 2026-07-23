@@ -8,6 +8,8 @@ import {
   normalizeManagerSmsConversationsPayload,
   smsThreadBucketForLatestMessage,
   sortSmsConversationRows,
+  isPhoneLikeLabel,
+  smsConversationDisplayName,
   MANAGER_SMS_TAB_DEFS,
 } from "@/lib/manager-sms-messages";
 
@@ -108,5 +110,36 @@ describe("manager-sms-messages types", () => {
     expect(sortSmsConversationRows(rows, "newest").map((r) => r.resident.name)).toEqual(["Zoe", "Amy", "Bob"]);
     expect(sortSmsConversationRows(rows, "name").map((r) => r.resident.name)).toEqual(["Amy", "Bob", "Zoe"]);
     expect(sortSmsConversationRows(rows, "house").map((r) => r.resident.name)).toEqual(["Amy", "Bob", "Zoe"]);
+  });
+});
+
+describe("smsConversationDisplayName — never surface a raw phone in Communication", () => {
+  it("detects phone-like labels", () => {
+    expect(isPhoneLikeLabel("+15105791976")).toBe(true);
+    expect(isPhoneLikeLabel("(206) 555-0142")).toBe(true);
+    expect(isPhoneLikeLabel("206-555-0142")).toBe(true);
+    expect(isPhoneLikeLabel("Jane Resident")).toBe(false);
+    expect(isPhoneLikeLabel("")).toBe(false);
+    expect(isPhoneLikeLabel(null)).toBe(false);
+    // Too few digits to be a phone number.
+    expect(isPhoneLikeLabel("12345")).toBe(false);
+  });
+
+  it("keeps a real name", () => {
+    expect(
+      smsConversationDisplayName({ name: "Jane Resident", propertyLabel: "Unit A", residentEmail: "jane@x.com" }),
+    ).toBe("Jane Resident");
+  });
+
+  it("falls back to unit, then email, then a neutral label when the name is just a phone", () => {
+    expect(
+      smsConversationDisplayName({ name: "+15105791976", propertyLabel: "Ballard Commons · 2B", residentEmail: "a@x.com" }),
+    ).toBe("Ballard Commons · 2B");
+    expect(
+      smsConversationDisplayName({ name: "+15105791976", propertyLabel: null, residentEmail: "a@x.com" }),
+    ).toBe("a@x.com");
+    expect(
+      smsConversationDisplayName({ name: "+15105791976", propertyLabel: null, residentEmail: null }),
+    ).toBe("Unknown contact");
   });
 });

@@ -154,6 +154,7 @@ import {
   INBOX_TAB_DEFS,
   PortalInboxEmptyState,
   PortalInboxMessageTable,
+  inboxTabEmptyCopy,
   type PortalInboxTableRow,
 } from "@/components/portal/portal-inbox-ui";
 import {
@@ -2546,17 +2547,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               ) : inboxSubTab === "schedule" ? (
                                 <ManagerInboxSchedulePanel portalBase={portalBase} filterResidentEmail={selected.email} />
                               ) : residentInboxTableRows.length === 0 ? (
-                                <PortalInboxEmptyState
-                                  title={
-                                    inboxSubTab === "trash"
-                                      ? "No trash messages yet."
-                                      : inboxSubTab === "sent"
-                                        ? "No sent messages yet."
-                                        : inboxSubTab === "opened"
-                                          ? "No opened messages yet."
-                                          : "No messages yet."
-                                  }
-                                />
+                                <PortalInboxEmptyState title={inboxTabEmptyCopy(inboxSubTab)} />
                               ) : (
                                 <div className="space-y-3">
                                   <PortalInboxSelectionToolbar

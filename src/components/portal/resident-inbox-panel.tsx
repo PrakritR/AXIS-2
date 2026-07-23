@@ -879,6 +879,7 @@ export const ResidentInboxPanel = forwardRef<
               }
               subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
               messages={activeBubbles}
+              threadKey={activeThread.id}
               onBack={() => setExpandedId(null)}
               headerActions={
                 renderExtraActions({
@@ -1000,6 +1001,7 @@ export const ResidentInboxPanel = forwardRef<
                 }
                 subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
                 messages={activeBubbles}
+                threadKey={activeThread.id}
                 onBack={() => setExpandedId(null)}
                 headerActions={
                   renderExtraActions({

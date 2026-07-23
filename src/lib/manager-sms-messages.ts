@@ -54,6 +54,36 @@ export type ManagerSmsResidentConversation = {
   messages: ManagerSmsMessageRow[];
 };
 
+/**
+ * True when a label is really just a phone number (an unknown texter whose
+ * `name` fell back to the phone). Used to keep raw `+1…` strings out of the
+ * Communication UI — see {@link smsConversationDisplayName}.
+ */
+export function isPhoneLikeLabel(value: string | null | undefined): boolean {
+  const t = value?.trim();
+  if (!t) return false;
+  if (!/^[+()\d\s.\-]+$/.test(t)) return false;
+  return t.replace(/\D/g, "").length >= 7;
+}
+
+/**
+ * A display name for an SMS conversation that never surfaces a raw phone number
+ * in the UI. Until the Twilio number is production-ready the product shows the
+ * resident's name (or their unit/email) instead of `+1…`. SMS threading still
+ * keys on the phone/conversation key internally — this only affects the label.
+ */
+export function smsConversationDisplayName(
+  resident: Pick<ManagerSmsResidentConversation, "name" | "propertyLabel" | "residentEmail">,
+): string {
+  const name = resident.name?.trim();
+  if (name && !isPhoneLikeLabel(name)) return name;
+  const property = resident.propertyLabel?.trim();
+  if (property) return property;
+  const email = resident.residentEmail?.trim();
+  if (email) return email;
+  return "Unknown contact";
+}
+
 /** How the Communication → SMS list is ordered (replaces Unopened/Opened/Sent folders). */
 export type ManagerSmsSortId = "newest" | "oldest" | "name" | "house";
 

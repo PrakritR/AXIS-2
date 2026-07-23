@@ -9,6 +9,7 @@ import {
   InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
+  inboxTabEmptyCopy,
 } from "@/components/portal/portal-inbox-ui";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
@@ -30,6 +31,7 @@ import {
 } from "@/lib/unified-inbox-merge";
 import {
   normalizeManagerSmsConversationsPayload,
+  smsConversationDisplayName,
   smsThreadHasUnread,
   type ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
@@ -160,16 +162,33 @@ export function ManagerUnifiedInbox({
 
   useEffect(() => {
     void loadSms();
-    const id = window.setInterval(() => void loadSms(), 20_000);
-    return () => window.clearInterval(id);
+    // Poll for inbound texts, but skip while the tab is backgrounded (no point
+    // spending egress on a hidden page) and refetch immediately on refocus so
+    // the list is fresh the moment the manager returns.
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void loadSms();
+    };
+    const id = window.setInterval(tick, 20_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadSms();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [loadSms]);
 
   // Stable identity: passed into ManagerSmsPanel's controlled-open effect, so an
   // inline callback here would change every render and loop the effect forever.
+  // Opening a conversation only changes local read state — refresh the opened-id
+  // set for the unread badges, but do NOT refetch (the server data is unchanged,
+  // and the open SMS panel already reloads on its own; a refetch here was a
+  // redundant round-trip on every thread open).
   const handleSmsConversationOpened = useCallback(() => {
     setSmsOpenedIds(loadSmsOpenedIds());
-    void loadSms();
-  }, [loadSms]);
+  }, []);
 
   const filteredEmail = useMemo(() => {
     const base = filterEmailInboxThreads(emailThreads);
@@ -225,9 +244,11 @@ export function ManagerUnifiedInbox({
     });
   }, [filteredEmail, query, tabId]);
 
-  const smsListItems = useMemo((): UnifiedInboxListItem[] => {
-    if (tabId === "trash" || tabId === "schedule") return [];
-    const q = query.trim().toLowerCase();
+  // Tab-INDEPENDENT SMS rows (scoped + de-hidden), each tagged with its haystack
+  // and last-message direction. Tab-count math and the visible list both derive
+  // from this so folder counts (unopened/opened/sent) are the FULL SMS totals,
+  // never the count of whatever the active tab happens to show.
+  const allSmsItems = useMemo((): { item: UnifiedInboxListItem; lastOutbound: boolean; haystack: string }[] => {
     const scoped = !threadFilters || !filterContacts
       ? smsResidents
       : smsResidents.filter((resident) =>
@@ -252,7 +273,8 @@ export function ManagerUnifiedInbox({
           key: unifiedInboxKey("sms", rowId),
           channel: "sms",
           threadId: rowId,
-          name: resident.name,
+          // Never surface a raw phone number in Communication — show name/unit.
+          name: smsConversationDisplayName(resident),
           subtitle: resident.propertyLabel?.trim() || resident.residentEmail || undefined,
           preview: previewLine(lastMessage.body, 80),
           previewPrefix: lastOutbound ? "You: " : undefined,
@@ -260,19 +282,24 @@ export function ManagerUnifiedInbox({
           unread,
           sortMs: Date.parse(lastMessage.createdAt) || 0,
         };
-        if (q) {
-          const hay = [resident.name, resident.phone, resident.residentEmail, resident.propertyLabel, lastMessage.body]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          if (!hay.includes(q)) return null;
-        } else if (!smsItemMatchesInboxTab(tabId, item, { lastOutbound })) {
-          return null;
-        }
-        return item;
+        const haystack = [resident.name, resident.residentEmail, resident.propertyLabel, lastMessage.body]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return { item, lastOutbound, haystack };
       })
-      .filter((x): x is UnifiedInboxListItem => x !== null);
-  }, [filterContacts, query, smsHiddenIds, smsOpenedIds, smsResidents, tabId, threadFilters]);
+      .filter((x): x is { item: UnifiedInboxListItem; lastOutbound: boolean; haystack: string } => x !== null);
+  }, [filterContacts, smsHiddenIds, smsOpenedIds, smsResidents, threadFilters]);
+
+  const smsListItems = useMemo((): UnifiedInboxListItem[] => {
+    if (tabId === "trash" || tabId === "schedule") return [];
+    const q = query.trim().toLowerCase();
+    return allSmsItems
+      .filter(({ item, lastOutbound, haystack }) =>
+        q ? haystack.includes(q) : smsItemMatchesInboxTab(tabId, item, { lastOutbound }),
+      )
+      .map(({ item }) => item);
+  }, [allSmsItems, query, tabId]);
 
   const mergedRows = useMemo(
     () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems]),
@@ -280,18 +307,19 @@ export function ManagerUnifiedInbox({
   );
 
   useEffect(() => {
+    // SMS folder counts come from the FULL set: unread → Unopened, read →
+    // Opened, last message outbound → Sent (an SMS thread has no Trash folder).
+    const smsUnopened = allSmsItems.filter((x) => x.item.unread).length;
+    const smsOpened = allSmsItems.filter((x) => !x.item.unread).length;
+    const smsSent = allSmsItems.filter((x) => x.lastOutbound).length;
     onTabCountsChange?.({
-      unopened:
-        filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length +
-        smsListItems.filter((r) => r.unread).length,
-      opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length,
+      unopened: filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length + smsUnopened,
+      opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length + smsOpened,
       schedule: scheduleCountRef.current,
-      sent:
-        filteredEmail.filter((t) => t.folder === "sent").length +
-        smsListItems.filter((r) => r.previewPrefix === "You: ").length,
+      sent: filteredEmail.filter((t) => t.folder === "sent").length + smsSent,
       trash: filteredEmail.filter((t) => t.folder === "trash").length,
     });
-  }, [filteredEmail, onTabCountsChange, smsListItems]);
+  }, [filteredEmail, onTabCountsChange, allSmsItems]);
 
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
@@ -339,7 +367,7 @@ export function ManagerUnifiedInbox({
       <div className={INBOX_LIST_SCROLL}>
         {mergedRows.length === 0 ? (
           <div className="p-4">
-            <PortalInboxEmptyState title={query.trim() ? `No messages match “${query.trim()}”.` : "No messages yet."} />
+            <PortalInboxEmptyState title={query.trim() ? `No messages match “${query.trim()}”.` : inboxTabEmptyCopy(tabId)} />
           </div>
         ) : (
           mergedRows.map((row) => (
