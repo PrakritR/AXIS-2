@@ -355,64 +355,65 @@ that prefer it, so editing only the SVG leaves the old mark visible.
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
-**Production Branch is `production`**, not `main`. Two branches, two roles:
+**Production Branch is `main`**. There is **no `production` branch** — it was
+deleted after the production branch was migrated to `main`; don't recreate it.
+Two branches, two roles:
 
-- **`production` — the live site.** Every push here triggers a **production
-  deploy** to the real domains: the canonical `prop-lane.space` /
-  `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
-  `www.axis-seattle-housing.com` (still live, still recognized as production by
-  `isProductionAxisHost`), and `axis-2.vercel.app`. Outbound email/SMS and
-  shareable links use the canonical origin (`PRODUCTION_APP_ORIGIN` in
-  `src/lib/app-url.ts`). Only ship-ready code reaches this branch. Never commit
-  straight to it.
-- **`main` — integration / staging.** Day-to-day work merges here. Every push
+- **`main` — the live site.** Every push here triggers a **production deploy** to
+  the real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
+  legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
+  still recognized as production by `isProductionAxisHost`), and
+  `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
+  (see below). Outbound email/SMS and shareable links use the canonical origin
+  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
+  this branch. Never commit straight to it.
+- **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
   produces a **preview deploy**, and Vercel keeps a stable staging alias that
-  always points at the latest `main` build:
-  `axis-2-git-main-prakritramachandran-6082s-projects.vercel.app`. Use this to
-  validate a release before promoting. Feature branches also get their own
-  preview URLs.
+  always points at the latest `prakrit` build. Use this to validate a release
+  before promoting. Feature branches also get their own preview URLs.
 
-**Promote `main` → `production` to ship.** When `main` is verified on staging and
+**Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
 you want it live:
 
 ```
-git checkout production
-git pull
-git merge --ff-only main   # production should stay a fast-forward of main
-git push origin production  # Vercel auto-deploys web + triggers iOS TestFlight
 git checkout main
+git pull
+git merge --ff-only prakrit   # main should stay a fast-forward of prakrit
+git push origin main          # Vercel auto-deploys web + triggers iOS TestFlight
+git checkout prakrit
 ```
 
-Keep `production` a strict fast-forward of `main` (never commit unique work to
-`production`); this keeps history linear and makes rollbacks obvious. To roll
-back, point `production` at the previous known-good commit and push, or use
-Vercel's **Instant Rollback** in the dashboard.
+Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
+`main`); this keeps history linear and makes rollbacks obvious. To roll back,
+point `main` at the previous known-good commit and push, or use Vercel's
+**Instant Rollback** in the dashboard.
 
-Yes, deploying `main` as a staging step is standard practice on Vercel: `main`'s
-preview/branch alias is your staging environment, and `production` is the gated
+Deploying `prakrit` as a staging step is standard practice on Vercel: its
+preview/branch alias is your staging environment, and `main` is the gated
 promotion target. Don't add a separate Vercel project for staging — the branch
 model above already gives you prod + staging from one project.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. Don't change it back to `main`.
+Git**. It is `main`; don't change it.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
-Every push to `production` must update **both** the live website **and** the
-mobile app pipeline:
+Every push to `main` must update **both** the live website **and** the mobile app
+pipeline:
 
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
-   runs on `push` to `production`: `npx cap sync ios` with
+   runs on `push` to `main`: `npx cap sync ios` with
    `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
-   `bundle exec fastlane beta` uploads a new build to **TestFlight**.
+   `bundle exec fastlane beta` uploads a new build to **TestFlight**. The
+   workflow also exposes `workflow_dispatch` for an on-demand build.
 
 Agents promoting to production **must**:
 
 - Confirm ASC secrets exist (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`) so the
   macOS job does not self-skip.
-- After `git push origin production`, watch the **iOS TestFlight** workflow until
-  green (or report the failure). Do not treat “web deployed” as done.
+- After `git push origin main`, watch the **iOS TestFlight** workflow until green
+  (or report the failure). Do not treat “web deployed” as done.
 - If native shell files changed (`ios/`, `capacitor.config.ts`, plugins,
   permissions), call out that TestFlight + App Store review may be required
   beyond the automatic upload.
@@ -427,9 +428,9 @@ Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).
 
 # Mandatory ship / change gate (agents)
 
-Before marking feature work done, and **always** before promoting to
-`production`, agents must complete this gate. Skipping is not allowed unless the
-user explicitly waives a named step.
+Before marking feature work done, and **always** before promoting `prakrit` →
+`main`, agents must complete this gate. Skipping is not allowed unless the user
+explicitly waives a named step.
 
 ## 1. Reviews (run in parallel when possible)
 
@@ -469,8 +470,8 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Reviews complete (security + bugbot + cache/rendering as applicable)
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
-[ ] main verified on staging preview
-[ ] ff-only merge main → production + push
+[ ] prakrit verified on staging preview
+[ ] ff-only merge prakrit → main + push
 [ ] Vercel production deploy healthy
 [ ] iOS TestFlight workflow green (or secrets gap reported)
 ```
@@ -818,3 +819,10 @@ Two routing gotchas this exposed, both of which silently break a section without
   `src/components/demo/demo-section-renderer.tsx` has its own per-section prop list. When you add
   sub-tabs to a section wired into the demo, forward `tabId`/`basePath` there too or the demo
   always shows the first tab no matter which `TabNav` link is clicked.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
