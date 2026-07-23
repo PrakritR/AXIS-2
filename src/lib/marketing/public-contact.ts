@@ -1,10 +1,10 @@
 /**
  * Public marketing contact — single source for footer, contact, support, legal.
- * Ops inbox still lives on the legacy axis-seattle-housing.com mail domain
- * (no PropLane mail domain in the product yet). Brand copy is PropLane;
- * the address is the real deliverable mailbox.
+ * Support mail is the PropLane brand domain (support@prop-lane.space); its
+ * forwarding to the founder inbox is handled outside the product. Brand copy is
+ * PropLane; the address is the real deliverable mailbox.
  */
-export const PUBLIC_SUPPORT_EMAIL = "info@axis-seattle-housing.com";
+export const PUBLIC_SUPPORT_EMAIL = "support@prop-lane.space";
 export const PUBLIC_SUPPORT_PHONE_DISPLAY = "(510) 309-8345";
 export const PUBLIC_SUPPORT_PHONE_TEL = "+15103098345";
 export const PUBLIC_SUPPORT_ADDRESS_LINE = "5259 Brooklyn Ave NE, Seattle, WA 98105";

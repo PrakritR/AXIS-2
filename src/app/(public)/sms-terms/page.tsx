@@ -54,8 +54,8 @@ export default function SmsTermsPage() {
             <p className="mt-2">
               Reply <strong className="font-medium text-foreground">HELP</strong> to any PropLane message for help, or
               contact our support team at{" "}
-              <a href="mailto:info@axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
-                info@axis-seattle-housing.com
+              <a href="mailto:support@prop-lane.space" className="font-medium text-primary hover:opacity-90">
+                support@prop-lane.space
               </a>
               .
             </p>
@@ -94,8 +94,8 @@ export default function SmsTermsPage() {
               <br />
               United States
               <br />
-              <a href="mailto:info@axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
-                info@axis-seattle-housing.com
+              <a href="mailto:support@prop-lane.space" className="font-medium text-primary hover:opacity-90">
+                support@prop-lane.space
               </a>
             </p>
           </section>
