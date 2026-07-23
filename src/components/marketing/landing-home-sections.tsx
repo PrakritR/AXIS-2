@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ApplicationsPipelinePanel } from "@/components/marketing/landing-applications-pipeline";
 import { LandingDashboardChatDemo } from "@/components/marketing/landing-dashboard-chat-demo";
+import { LandingInboxApproveDemo } from "@/components/marketing/landing-inbox-approve-demo";
 import { BOOK_DEMO_HREF, MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 import "./landing-proplane.css";
 
@@ -12,8 +12,8 @@ export function LandingHomeSections() {
   return (
     <>
       <LandingDashboardChatDemo />
+      <LandingInboxApproveDemo />
       <LearnSection />
-      <WeekRoadmapSection />
       <OpsSkySection />
       <ClosingCta />
     </>
@@ -113,28 +113,25 @@ export function LearnSection() {
   );
 }
 
-function WeekRoadmapSection() {
+const PORTFOLIO_BUILDINGS = ["Cascade Lofts", "Ballard Commons", "Cascade Court"] as const;
+
+function BuildingIcon() {
   return (
-    <section id="roadmap" className="lp-feature-band scroll-mt-20">
-      <div className="lp-w">
-        <div className="lp-intro">
-          <h2>Your week, one pipeline</h2>
-          <p>You approve. PropLane advances the rest.</p>
-        </div>
-        <div className="lp-split-feat">
-          <div className="lp-copy">
-            <div className="lp-icon-box" aria-hidden>
-              <span className="lp-icon-mark" />
-            </div>
-            <h3>Tour to keys · same flow</h3>
-            <Link href="/why-proplane" data-attr="home-roadmap-leasing" className="lp-more">
-              See leasing workflows →
-            </Link>
-          </div>
-          <ApplicationsPipelinePanel />
-        </div>
-      </div>
-    </section>
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
+      <path
+        d="M3.5 13.5V3.75a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 .75.75V13.5M9.5 13.5V6.75a.75.75 0 0 1 .75-.75h1.75a.75.75 0 0 1 .75.75v6.75M2.5 13.5h11.5"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 5.25h1M5 7.5h1M5 9.75h1"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
@@ -159,6 +156,14 @@ function OpsSkySection() {
         <TaskFloatRow status="review" label="Manager review" title="Lease · Cascade 4B" agent="Leases" />
         <TaskFloatRow status="run" label="Running" title="Rent reminder · April overdue" agent="Payments" />
         <TaskFloatRow status="done" label="Completed" title="Work order #142 · bids collected" agent="Work orders" />
+      </div>
+      <div className="lp-portfolio-strip" aria-hidden>
+        {PORTFOLIO_BUILDINGS.map((name) => (
+          <span key={name} className="lp-portfolio-chip">
+            <BuildingIcon />
+            {name}
+          </span>
+        ))}
       </div>
     </section>
   );
