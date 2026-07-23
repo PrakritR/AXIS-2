@@ -147,7 +147,6 @@ export function ManagerProperties() {
     return {
       listed: kpiValues[2],
       unlisted: kpiValues[3],
-      drafts: kpiValues[5],
     };
   }, [portfolioTick, scopeUserId]);
 
@@ -217,10 +216,10 @@ export function ManagerProperties() {
         data-attr="manager-properties-share"
         onClick={() => openShareListing()}
       >
-        Send to prospect
+        Share
       </Button>
       <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="manager-properties-create" onClick={tryOpenAdd}>
-        Create listing
+        Create
       </Button>
     </>
   );
@@ -266,8 +265,6 @@ export function ManagerProperties() {
           activeStage={activeStage}
           onStageChange={setActiveStage}
           onSendToProspect={openShareListing}
-          skuTier={skuTier}
-          skuLoaded={skuLoaded}
         />
       </ManagerPortalPageShell>
       {wizardOpen ? (

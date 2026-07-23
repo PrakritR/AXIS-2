@@ -19,11 +19,7 @@ import {
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
-import {
-  publishManagerPropertyDraftToServer,
-  saveManagerPropertyDraftToServer,
-  updateRequestChangeProperty,
-} from "@/lib/demo-admin-property-inventory";
+import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
@@ -38,11 +34,13 @@ import {
   applyListingBathroomSlots,
   listingTotalBathroomsIdFromCount,
   applyEntireHomeListingPricing,
+  applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
   customApplicationFieldKeyFromLabel,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
+  normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
   duplicateRoomEntry,
@@ -67,21 +65,8 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
-  leaseUtilitiesBillingConflictAmount,
-  resolveAggregateUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
-import {
-  LEASE_UTILITY_KIND_OPTIONS,
-  LEASE_UTILITY_PARTY_OPTIONS,
-  LEASE_UTILITY_PAYMENT_OPTIONS,
-  createLeaseUtilityLine,
-  defaultLeaseUtilities,
-  type LeaseUtilityKind,
-  type LeaseUtilityLine,
-  type LeaseUtilityPayment,
-  type LeaseUtilityResponsibleParty,
-} from "@/lib/lease-utilities";
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
@@ -117,6 +102,7 @@ import {
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
+  sanitizePaymentLinkInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,
@@ -126,8 +112,6 @@ import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
-  listingRoomDailyRentKey,
-  listingRoomHasRent,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
@@ -516,182 +500,6 @@ function UtilitiesPaymentModelPicker({
   );
 }
 
-/** Per-utility responsibility breakdown that flows onto the generated lease document. */
-function LeaseUtilitiesEditor({
-  value,
-  aggregateModel,
-  billingConflictAmount,
-  onChange,
-}: {
-  value: LeaseUtilityLine[] | undefined;
-  aggregateModel: UtilitiesPaymentModel;
-  billingConflictAmount: number;
-  onChange: (next: LeaseUtilityLine[]) => void;
-}) {
-  const lines = value ?? [];
-  const update = (id: string, patch: Partial<LeaseUtilityLine>) =>
-    onChange(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  const remove = (id: string) => onChange(lines.filter((l) => l.id !== id));
-  const add = () => {
-    const used = new Set(lines.map((l) => l.kind));
-    const nextKind =
-      LEASE_UTILITY_KIND_OPTIONS.find((o) => o.id !== "other" && !used.has(o.id))?.id ?? "other";
-    onChange([...lines, createLeaseUtilityLine(nextKind, aggregateModel)]);
-  };
-
-  if (!lines.length) {
-    return (
-      <div className="rounded-xl border border-dashed border-border bg-accent/20 p-4 text-center">
-        <p className="text-sm text-muted">
-          Add a per-utility breakdown so the generated lease states which utilities are included in rent, who pays each,
-          and any included allowance.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          className={`mt-3 ${LISTING_WIZARD_ACTION_BTN}`}
-          data-attr="lease-utilities-seed"
-          onClick={() => onChange(defaultLeaseUtilities(aggregateModel))}
-        >
-          + Add standard utilities
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {billingConflictAmount > 0 ? (
-        <div
-          role="status"
-          data-attr="lease-utilities-billing-conflict"
-          className="rounded-xl border border-[color-mix(in_srgb,var(--status-pending-fg)_30%,transparent)] bg-[var(--status-pending-bg)] px-4 py-3 text-[13px] leading-relaxed text-[var(--status-pending-fg)]"
-        >
-          <p className="font-semibold">This breakdown disagrees with how utilities are billed.</p>
-          <p className="mt-1">
-            No utility below is marked resident-paid, but rooms on this listing are billed through the manager at{" "}
-            {`$${Number.isInteger(billingConflictAmount) ? billingConflictAmount : billingConflictAmount.toFixed(2)}`}
-            /mo. The generated lease still shows that monthly estimate, and the portal still charges it. Reconcile the
-            per-room utilities model or this breakdown so the lease and the resident&apos;s charges agree.
-          </p>
-        </div>
-      ) : null}
-      {lines.map((line, i) => (
-        <div key={line.id} className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-semibold text-foreground">
-              {line.kind === "other"
-                ? line.label?.trim() || "Other utility"
-                : LEASE_UTILITY_KIND_OPTIONS.find((o) => o.id === line.kind)?.label}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className={LISTING_WIZARD_REMOVE_BTN}
-              onClick={() => remove(line.id)}
-            >
-              Remove
-            </Button>
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <GridField>
-              <FieldLabel>Utility / service</FieldLabel>
-              <Select
-                aria-label={`Utility ${i + 1} type`}
-                className={selectInputCls}
-                value={line.kind}
-                onChange={(e) => update(line.id, { kind: e.target.value as LeaseUtilityKind })}
-              >
-                {LEASE_UTILITY_KIND_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </GridField>
-            {line.kind === "other" ? (
-              <GridField>
-                <FieldLabel>Custom name</FieldLabel>
-                <Input
-                  value={line.label ?? ""}
-                  onChange={(e) => update(line.id, { label: e.target.value })}
-                  placeholder="e.g. Landscaping"
-                />
-              </GridField>
-            ) : null}
-            <GridField>
-              <FieldLabel hint={LEASE_UTILITY_PAYMENT_OPTIONS.find((o) => o.id === line.paidBy)?.hint}>
-                Who pays
-              </FieldLabel>
-              <Select
-                aria-label={`Utility ${i + 1} who pays`}
-                className={selectInputCls}
-                value={line.paidBy}
-                onChange={(e) =>
-                  update(line.id, {
-                    paidBy: e.target.value as LeaseUtilityPayment,
-                    ...(e.target.value === "included_in_rent" ? {} : { allowance: undefined }),
-                  })
-                }
-              >
-                {LEASE_UTILITY_PAYMENT_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </GridField>
-            <GridField>
-              <FieldLabel>Account set up by</FieldLabel>
-              <Select
-                aria-label={`Utility ${i + 1} account set up by`}
-                className={selectInputCls}
-                value={line.setUpBy}
-                onChange={(e) => update(line.id, { setUpBy: e.target.value as LeaseUtilityResponsibleParty })}
-              >
-                {LEASE_UTILITY_PARTY_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </GridField>
-            {line.paidBy === "included_in_rent" ? (
-              <GridField>
-                <FieldLabel hint="Optional. Resident pays any overage above this cap.">
-                  Included allowance / cap
-                </FieldLabel>
-                <Input
-                  value={line.allowance ?? ""}
-                  onChange={(e) => update(line.id, { allowance: e.target.value })}
-                  placeholder="e.g. $50/mo"
-                />
-              </GridField>
-            ) : null}
-            <div className="sm:col-span-2">
-              <FieldLabel>Notes (optional)</FieldLabel>
-              <Input
-                value={line.notes ?? ""}
-                onChange={(e) => update(line.id, { notes: e.target.value })}
-                placeholder="Provider, split arrangement, etc."
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-      <Button
-        type="button"
-        variant="outline"
-        className={`${LISTING_WIZARD_ACTION_BTN}`}
-        data-attr="lease-utilities-add"
-        onClick={add}
-      >
-        + Add utility
-      </Button>
-    </div>
-  );
-}
-
 function ProrationMethodFields({
   prorateMethod,
   monthlyRent,
@@ -778,72 +586,6 @@ function ProrationMethodFields({
   );
 }
 
-/**
- * Opt-in daily pricing for a single room. Off by default (monthly). When on, the
- * room is billed by the day at the entered rate and the listing shows "$X/day".
- */
-function RoomDailyPricingFields({
-  rentBasis,
-  dailyRentPrice,
-  monthlyRent,
-  fieldKey,
-  error,
-  onToggle,
-  onDailyPrice,
-}: {
-  rentBasis?: "monthly" | "daily";
-  dailyRentPrice?: number;
-  monthlyRent: number;
-  fieldKey: string;
-  error?: string;
-  onToggle: (daily: boolean) => void;
-  onDailyPrice: (n: number | undefined) => void;
-}) {
-  const daily = rentBasis === "daily";
-  return (
-    <div className="space-y-3 rounded-xl border border-border bg-accent/10 p-3">
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          checked={daily}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-primary"
-          data-attr="room-price-by-day-toggle"
-        />
-        <span>
-          <span className="block text-sm font-semibold text-foreground">Price this room by the day</span>
-          <span className="mt-0.5 block text-xs text-muted">
-            Rent is billed per day and the listing shows “/day”. Leave off for standard monthly rent.
-          </span>
-        </span>
-      </label>
-      {daily ? (
-        <GridField>
-          <FieldLabel hint="Every rent charge bills billable days × this rate using the real number of days in each month.">
-            Daily rent rate *
-          </FieldLabel>
-          <div className="relative" data-wizard-field={fieldKey}>
-            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-            <Input
-              inputMode="decimal"
-              className={wizardFieldErrorClass(Boolean(error), "pl-8")}
-              value={dailyRentPrice ?? ""}
-              onChange={(e) => onDailyPrice(parseOptionalSanitizedMoneyNumber(e.target.value))}
-              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "40"}
-            />
-            <StepFieldError msg={error} />
-          </div>
-          {dailyRentPrice && dailyRentPrice > 0 ? (
-            <p className="mt-1 text-xs text-muted">
-              ≈ ${(dailyRentPrice * 30).toLocaleString("en-US")} / month (30-day estimate; actual charges use each month’s real day count)
-            </p>
-          ) : null}
-        </GridField>
-      ) : null}
-    </div>
-  );
-}
-
 const SHARED_SPACE_TEMPLATES = [
   {
     label: "Kitchen & dining",
@@ -899,22 +641,11 @@ export function listingWizardStepIndices(scope: ListingWizardScope): number[] {
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
-/** Coerce a persisted wizard step onto a step this scope actually renders. */
-function clampSavedWizardStep(value: number | null | undefined, scope: ListingWizardScope): number {
-  const steps = listingWizardStepIndices(scope);
-  const first = steps[0] ?? 0;
-  if (typeof value !== "number" || !Number.isFinite(value)) return first;
-  const wanted = Math.floor(value);
-  if (steps.includes(wanted)) return wanted;
-  const earlier = steps.filter((i) => i <= wanted);
-  return earlier.length > 0 ? earlier[earlier.length - 1]! : first;
-}
-
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home:        "Property type, address, layout, move-in access, amenities, and photos.",
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
   bathrooms:   "Bathroom name, location, and amenities for the public listing.",
-  spaces:      "Shared areas: name, location, and amenities (kitchen, laundry, lounge, outdoor).",
+  spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
   lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
   finish:      "Sidebar quick facts and final submit.",
 };
@@ -1071,42 +802,23 @@ function extToMime(ext: string): string {
   return map[ext] ?? "application/octet-stream";
 }
 
-/**
- * Remembers the storage URL each `data:` URL was uploaded to, so saving a draft
- * repeatedly (and then submitting) re-uses the objects already in the bucket
- * instead of writing a fresh copy of every photo on every save.
- */
-type UploadedMediaCache = Map<string, Promise<string>>;
-
-async function uploadDataUrl(dataUrl: string, cache?: UploadedMediaCache): Promise<string> {
+async function uploadDataUrl(dataUrl: string): Promise<string> {
   if (!dataUrl.startsWith("data:")) return dataUrl;
   // /demo has no signed-in Supabase session to upload against — keep the
   // data URL as-is so demo photos and lease templates round-trip locally.
   if (isDemoModeActive()) return dataUrl;
-  if (!cache) return uploadToBucket(dataUrl);
-  const inFlight = cache.get(dataUrl);
-  if (inFlight) return inFlight;
-  const pending = uploadToBucket(dataUrl);
-  cache.set(dataUrl, pending);
-  try {
-    return await pending;
-  } catch (err) {
-    // A failed upload must not be remembered — the next save has to retry it.
-    cache.delete(dataUrl);
-    throw err;
-  }
+  return uploadToBucket(dataUrl);
 }
 
 async function uploadSubmissionMedia(
   sub: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1,
-  cache?: UploadedMediaCache,
 ): Promise<import("@/lib/manager-listing-submission").ManagerListingSubmissionV1> {
   async function uploadAll(urls: string[]): Promise<string[]> {
-    return Promise.all(urls.map((u) => uploadDataUrl(u, cache)));
+    return Promise.all(urls.map((u) => uploadDataUrl(u)));
   }
   async function uploadOne(url: string | null | undefined): Promise<string | null> {
     if (!url) return url ?? null;
-    return uploadDataUrl(url, cache);
+    return uploadDataUrl(url);
   }
 
   const [housePhotos, houseVideo, leaseTemplateDocUrl, propertyFloorPlan, floorPlanByLabel, rooms, bathrooms, sharedSpaces] = await Promise.all([
@@ -1118,7 +830,7 @@ async function uploadSubmissionMedia(
       const entries = Object.entries(sub.floorPlanByLabel ?? {});
       if (entries.length === 0) return {} as Record<string, string>;
       const uploaded = await Promise.all(
-        entries.map(async ([label, url]) => [label, await uploadDataUrl(url, cache)] as const),
+        entries.map(async ([label, url]) => [label, await uploadDataUrl(url)] as const),
       );
       return Object.fromEntries(uploaded) as Record<string, string>;
     })(),
@@ -1160,43 +872,6 @@ async function uploadSubmissionMedia(
 
 async function uploadVideoFile(file: File): Promise<string> {
   return uploadToBucket(file);
-}
-
-function isUnresolvedMediaUrl(url: string | null | undefined): boolean {
-  return Boolean(url && (url.startsWith("data:") || url.startsWith("blob:")));
-}
-
-function stripUnresolvedSubmissionMedia(
-  sub: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1,
-): import("@/lib/manager-listing-submission").ManagerListingSubmissionV1 {
-  const keepUrls = (urls: string[] | undefined) => (urls ?? []).filter((u) => !isUnresolvedMediaUrl(u));
-  const keepUrl = (url: string | null | undefined) => (isUnresolvedMediaUrl(url) ? null : url ?? null);
-  const floorPlanEntries = Object.entries(sub.floorPlanByLabel ?? {}).filter(
-    ([, url]) => !isUnresolvedMediaUrl(url),
-  );
-  return {
-    ...sub,
-    housePhotoDataUrls: keepUrls(sub.housePhotoDataUrls),
-    houseVideoDataUrl: keepUrl(sub.houseVideoDataUrl),
-    leaseTemplateDocUrl: keepUrl(sub.leaseTemplateDocUrl),
-    propertyFloorPlanDataUrl: keepUrl(sub.propertyFloorPlanDataUrl),
-    floorPlanByLabel: floorPlanEntries.length > 0 ? Object.fromEntries(floorPlanEntries) : undefined,
-    rooms: sub.rooms.map((r) => ({
-      ...r,
-      photoDataUrls: keepUrls(r.photoDataUrls),
-      videoDataUrl: keepUrl(r.videoDataUrl),
-    })),
-    bathrooms: sub.bathrooms.map((b) => ({
-      ...b,
-      photoDataUrls: keepUrls(b.photoDataUrls),
-      videoDataUrl: keepUrl(b.videoDataUrl),
-    })),
-    sharedSpaces: sub.sharedSpaces.map((s) => ({
-      ...s,
-      photoDataUrls: keepUrls(s.photoDataUrls),
-      videoDataUrl: keepUrl(s.videoDataUrl),
-    })),
-  };
 }
 
 function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
@@ -1289,10 +964,6 @@ export function ManagerAddListingForm({
   editListingId = null,
   editListingOwnerUserId = null,
   editRequestChangeId = null,
-  editDraftId = null,
-  initialStepIndex = null,
-  initialMaxStepReached = null,
-  onSaved,
   initialSubmission = null,
   noteKey = null,
   wizardScope = "full",
@@ -1308,14 +979,6 @@ export function ManagerAddListingForm({
   editListingOwnerUserId?: string | null;
   /** adminRefId of a "request change" (edits requested by admin) row to save back to. */
   editRequestChangeId?: string | null;
-  /** Draft (in-progress wizard) id being resumed. On final submit the draft is published and removed. */
-  editDraftId?: string | null;
-  /** Wizard step a resumed draft was saved on, so it reopens where the manager left off. */
-  initialStepIndex?: number | null;
-  /** Furthest step a resumed draft reached, so its step chips stay unlocked. */
-  initialMaxStepReached?: number | null;
-  /** Fired after a draft is saved (Save draft) so the caller can refresh the drafts list. */
-  onSaved?: () => void;
   initialSubmission?: ManagerListingSubmissionV1 | null;
   /** Stable key for legacy localStorage house-detail notes, used to backfill houseRulesText if empty on the submission. */
   noteKey?: string | null;
@@ -1334,16 +997,10 @@ export function ManagerAddListingForm({
   });
   const [busy, setBusy] = useState(false);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
-  // A resumed draft reopens on the step it was saved from, with every step it
-  // had already reached still unlocked — "save progress" has to restore the
-  // position, not just the content.
-  const resumedStepIndex = clampSavedWizardStep(initialStepIndex, wizardScope);
-  const [stepIndex, setStepIndex] = useState(resumedStepIndex);
+  const [stepIndex, setStepIndex] = useState(0);
   const [stepFieldErrors, setStepFieldErrors] = useState<Record<string, string>>({});
   const [maxStepReached, setMaxStepReached] = useState(() =>
-    (editPendingId ?? editListingId ?? editRequestChangeId)
-      ? LISTING_STEP_COUNT - 1
-      : Math.max(resumedStepIndex, clampSavedWizardStep(initialMaxStepReached, wizardScope)),
+    (editPendingId ?? editListingId ?? editRequestChangeId) ? LISTING_STEP_COUNT - 1 : 0,
   );
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
@@ -1396,35 +1053,14 @@ export function ManagerAddListingForm({
   const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
   const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
 
-  // A draft (in-progress wizard) publishes like a NEW listing on submit — full
-  // validation + plan-limit gate apply — so it is deliberately NOT part of
-  // isEditMode. The only draft-specific behaviour is the Save-draft button and
-  // publishing (instead of creating) the record on final submit.
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
-  // Remembers the draft id across saves so re-saving (or submitting) updates the
-  // same record instead of spawning duplicates — seeded from a resumed draft.
-  const draftIdRef = useRef<string | null>(editDraftId);
-  // Uploads already done in this session, keyed by source data URL, so repeated
-  // Save draft clicks (and the final submit) don't re-upload the same photos.
-  const uploadedMediaRef = useRef<UploadedMediaCache>(new Map());
-  const isDraftMode = Boolean(editDraftId);
-  const [savingDraft, setSavingDraft] = useState(false);
-  // "Save draft" is only meaningful while creating a property (new or resumed
-  // draft); an existing pending/listing/request-change edit is already persisted.
-  const canSaveDraft = wizardScope !== "preview" && !isEditMode;
   const wizardSteps = useMemo(() => listingWizardStepIndices(wizardScope), [wizardScope]);
   const lastStepIndex = wizardSteps[wizardSteps.length - 1] ?? LISTING_STEP_COUNT - 1;
   const visibleStepPosition = Math.max(0, wizardSteps.indexOf(stepIndex));
   const visibleStepCount = wizardSteps.length;
   const isFinalStep = stepIndex === lastStepIndex;
   const isPreviewWizard = wizardScope === "preview";
-  const wizardTitlePrefix = isPreviewWizard
-    ? "Edit preview"
-    : isDraftMode
-      ? "Continue draft"
-      : isEditMode
-        ? "Edit listing"
-        : "New listing";
+  const wizardTitlePrefix = isPreviewWizard ? "Edit preview" : isEditMode ? "Edit listing" : "New listing";
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
@@ -1501,8 +1137,6 @@ export function ManagerAddListingForm({
 
   const isEntireHome = isEntireHomeListing(sub);
   const entireHomeRent = entireHomeMonthlyRentAmount(sub);
-  const leaseUtilitiesAggregateModel = useMemo(() => resolveAggregateUtilitiesPaymentModel(sub), [sub]);
-  const leaseUtilitiesBillingConflict = useMemo(() => leaseUtilitiesBillingConflictAmount(sub), [sub]);
 
   const clearListingFieldError = (key: string) => {
     setStepFieldErrors((prev) => {
@@ -1713,7 +1347,7 @@ export function ManagerAddListingForm({
       ...s,
       rooms: [...s.rooms.slice(0, i + 1), copy, ...s.rooms.slice(i + 1)],
     }));
-    showToast("Room duplicated. Edit the copy below.");
+    showToast("Room duplicated — edit the copy below.");
   };
 
   const addBathroom = () => {
@@ -1830,7 +1464,7 @@ export function ManagerAddListingForm({
         strikethrough: "",
         promo:
           kind === "whole_house"
-            ? "Rent the full home as one lease. All rooms included."
+            ? "Rent the full home as one lease — all rooms included."
             : "Select any rooms that can be rented together.",
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
         includedRoomIds,
@@ -1852,6 +1486,7 @@ export function ManagerAddListingForm({
       const bundles = [...(s.bundles ?? [])];
       const cur = bundles[bundleIndex];
       if (!cur) return s;
+      const named = s.rooms.filter((r) => r.name.trim());
       const includedRoomIds = mode === "all_named" ? s.rooms.map((r) => r.id) : [];
       bundles[bundleIndex] = {
         ...cur,
@@ -2344,9 +1979,30 @@ export function ManagerAddListingForm({
     return out;
   };
 
-  // Assemble + normalize the current wizard state into a submission payload.
-  // Shared by submit (validated) and Save-draft (unvalidated, partial-friendly).
-  const buildSubmissionPayload = (): ManagerListingSubmissionV1 => {
+  const submitListing = async () => {
+    const invalid = (() => {
+      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
+      for (const i of wizardSteps) {
+        const errors = validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
+        if (Object.keys(errors).length > 0) return { stepIndex: i, errors };
+      }
+      return null;
+    })();
+    if (invalid) {
+      setStepIndex(invalid.stepIndex);
+      setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
+      setStepFieldErrors(invalid.errors);
+      showToast("Please fix the highlighted fields before submitting.");
+      queueMicrotask(() =>
+        scrollToFirstWizardFieldError(
+          buildListingStepFieldOrder(invalid.stepIndex, sub),
+          invalid.errors,
+          scrollRef.current,
+        ),
+      );
+      return;
+    }
+
     const submission: ManagerListingSubmissionV1 = {
       ...sub,
       serviceRequestOptions: serviceOffers,
@@ -2371,89 +2027,9 @@ export function ManagerAddListingForm({
       ...bath,
       name: bath.name.trim() || emptyBathroom(i).name,
     }));
-    return submission;
-  };
-
-  // Save the in-progress wizard as a private draft without validation, so a
-  // manager can leave from any step and return later. Best-effort media upload:
-  // if it fails we still save the text so no typing is lost.
-  const saveDraft = async () => {
-    if (!authReady || !userId) {
-      showToast("Sign in to save a draft.");
-      return;
-    }
-    setSavingDraft(true);
-    try {
-      let payload = buildSubmissionPayload();
-      let mediaFailed = false;
-      try {
-        payload = await uploadSubmissionMedia(payload, uploadedMediaRef.current);
-      } catch (err) {
-        console.error("manager-add-listing-form: draft media upload failed", err);
-        payload = stripUnresolvedSubmissionMedia(payload);
-        mediaFailed = true;
-      }
-      const id = await saveManagerPropertyDraftToServer(payload, userId, {
-        existingDraftId: draftIdRef.current,
-        stepIndex,
-        maxStepReached,
-        // Only the wizard that minted the id may re-key it; a resumed draft is
-        // rendered by the drafts list, which would lose this open editor.
-        allowIdUpgrade: !editDraftId,
-      });
-      if (!id) {
-        showToast("Could not save draft. Check your connection and try again.");
-        return;
-      }
-      draftIdRef.current = id;
-      // The failed uploads were stripped from what we just saved, so the photos
-      // exist only in this still-open wizard — reopening the draft will not have
-      // them back. Saying "save again here" is the only retry that works.
-      showToast(
-        mediaFailed
-          ? "Draft saved without your photos. The upload failed. Tap Save draft again before closing this window to retry them."
-          : "Draft saved. Continue anytime from Properties → Drafts.",
-      );
-      onSaved?.();
-    } finally {
-      setSavingDraft(false);
-    }
-  };
-
-  const submitListing = async () => {
-    // A draft save in flight has not yet handed back the draft id, so publishing
-    // now would create a second record alongside the draft being written.
-    if (savingDraft) {
-      showToast("Saving your draft. Try again in a moment.");
-      return;
-    }
-    const invalid = (() => {
-      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
-      for (const i of wizardSteps) {
-        const errors = validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
-        if (Object.keys(errors).length > 0) return { stepIndex: i, errors };
-      }
-      return null;
-    })();
-    if (invalid) {
-      setStepIndex(invalid.stepIndex);
-      setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
-      setStepFieldErrors(invalid.errors);
-      showToast("Please fix the highlighted fields before submitting.");
-      queueMicrotask(() =>
-        scrollToFirstWizardFieldError(
-          buildListingStepFieldOrder(invalid.stepIndex, sub),
-          invalid.errors,
-          scrollRef.current,
-        ),
-      );
-      return;
-    }
-
-    const submission = buildSubmissionPayload();
     const roomsOk = isEntireHomeListing(submission)
       ? entireHomeMonthlyRentAmount(submission) > 0 && submission.rooms.some((r) => r.name.trim())
-      : submission.rooms.some((r) => r.name.trim() && listingRoomHasRent(r));
+      : submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
     if (!submission.address.trim() || !submission.zip.trim()) {
       showToast("Fill in address and ZIP.");
       return;
@@ -2462,7 +2038,7 @@ export function ManagerAddListingForm({
       showToast(
         isEntireHomeListing(submission)
           ? "Add at least one bedroom and the monthly rent for the entire home."
-          : "Add at least one room with a name and a monthly or daily rent.",
+          : "Add at least one room with a name and monthly rent.",
       );
       return;
     }
@@ -2489,7 +2065,7 @@ export function ManagerAddListingForm({
       }
       let uploadedSubmission: typeof submission;
       try {
-        uploadedSubmission = await uploadSubmissionMedia(submission, uploadedMediaRef.current);
+        uploadedSubmission = await uploadSubmissionMedia(submission);
       } catch (err) {
         console.error("manager-add-listing-form: uploadSubmissionMedia failed", err);
         showToast("Could not upload photos. Check your connection and try again.");
@@ -2529,18 +2105,11 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
-      // If this wizard is (or became, via Save draft) a draft, publish that
-      // draft record in place — same id flips draft → live — and remove it from
-      // the drafts bucket, rather than creating a second listing.
-      const existingDraftId = draftIdRef.current;
-      const id = existingDraftId
-        ? await publishManagerPropertyDraftToServer(existingDraftId, uploadedSubmission, userId)
-        : await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
+      const id = await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
       if (!id) {
         showToast("Could not submit listing.");
         return;
       }
-      draftIdRef.current = null;
       if (isDemoModeActive()) {
         window.dispatchEvent(new CustomEvent(DEMO_LISTING_SUBMITTED_EVENT, { detail: { id } }));
       }
@@ -2852,7 +2421,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Optional. Only if the layout is unusual.">Extra layout note</FieldLabel>
+                <FieldLabel hint="Optional — only if the layout is unusual.">Extra layout note</FieldLabel>
                 <Input
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
@@ -2901,7 +2470,7 @@ export function ManagerAddListingForm({
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional for draft. Recommended before you go live.</p>
+                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional for draft — recommended before you go live.</p>
                   )}
                 </div>
                 <div
@@ -2921,7 +2490,7 @@ export function ManagerAddListingForm({
                       <button type="button" onClick={clearHouseVideo} className="text-xs font-medium text-rose-600 hover:text-rose-800">Remove video</button>
                     </div>
                   ) : (
-                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional. MP4, MOV, or WebM.</p>
+                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
                   )}
                 </div>
               </div>
@@ -2973,7 +2542,7 @@ export function ManagerAddListingForm({
             id="edit-lease"
             title="Pricing"
             description={
-              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount. Enter 0 when you do not charge it, and it stays off the public listing.</>
+              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount — enter 0 when you do not charge it, and it stays off the public listing.</>
             }
           >
             <div className="space-y-5">
@@ -2999,7 +2568,7 @@ export function ManagerAddListingForm({
                 title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
                 description={
                   isEntireHome
-                    ? "One monthly lease for the full unit. Utilities and proration apply to the whole home."
+                    ? "One monthly lease for the full unit — utilities and proration apply to the whole home."
                     : "Set rent, utilities estimate, and proration for each bedroom you are listing."
                 }
               >
@@ -3051,7 +2620,7 @@ export function ManagerAddListingForm({
                           (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
                             ? "Not billed separately when included in rent."
                             : (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                              ? "Optional. Typical monthly cost shown on the listing."
+                              ? "Optional — typical monthly cost shown on the listing."
                               : "Monthly estimate used in signing totals."
                         }
                       >
@@ -3092,19 +2661,15 @@ export function ManagerAddListingForm({
                     {sub.rooms.map((room, i) => {
                       const roomRentKey = listingRoomRentKey(room.id);
                       const roomRentErr = stepFieldErrors[roomRentKey];
-                      const roomDailyRentKey = listingRoomDailyRentKey(room.id);
-                      const roomDailyRentErr = stepFieldErrors[roomDailyRentKey];
                       return (
                       <div
                         key={room.id}
-                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
+                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
                       >
                         <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <GridField>
-                            <FieldLabel hint={room.rentBasis === "daily" ? "Optional when this room is priced by the day. Shown only as an estimate." : undefined}>
-                              {room.rentBasis === "daily" ? "Monthly rent (optional)" : "Monthly rent *"}
-                            </FieldLabel>
+                            <FieldLabel>Monthly rent *</FieldLabel>
                             <div className="relative" data-wizard-field={roomRentKey}>
                               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                               <Input
@@ -3127,7 +2692,7 @@ export function ManagerAddListingForm({
                                 (room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
                                   ? "Not billed separately when included in rent."
                                   : (room.utilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                                    ? "Optional. Typical monthly cost shown on the listing."
+                                    ? "Optional — typical monthly cost shown on the listing."
                                     : "Monthly estimate billed with rent through the portal."
                               }
                             >
@@ -3157,47 +2722,16 @@ export function ManagerAddListingForm({
                             />
                           </div>
                           <div className="sm:col-span-2">
-                            <RoomDailyPricingFields
-                              rentBasis={room.rentBasis}
-                              dailyRentPrice={room.dailyRentPrice}
+                            <ProrationMethodFields
+                              prorateMethod={room.prorateMethod ?? "auto"}
                               monthlyRent={room.monthlyRent}
-                              fieldKey={roomDailyRentKey}
-                              error={roomDailyRentErr}
-                              onToggle={(daily) => {
-                                clearListingFieldError(roomRentKey);
-                                clearListingFieldError(roomDailyRentKey);
-                                setRoom(
-                                  i,
-                                  daily
-                                    ? {
-                                        rentBasis: "daily",
-                                        dailyRentPrice:
-                                          room.dailyRentPrice ??
-                                          (room.monthlyRent > 0 ? Math.ceil(room.monthlyRent / 30) : undefined),
-                                      }
-                                    : { rentBasis: "monthly" },
-                                );
-                              }}
-                              onDailyPrice={(n) => {
-                                clearListingFieldError(roomRentKey);
-                                clearListingFieldError(roomDailyRentKey);
-                                setRoom(i, { dailyRentPrice: n });
-                              }}
+                              dailyRentRate={room.dailyRentRate}
+                              dailyUtilitiesRate={room.dailyUtilitiesRate}
+                              onMethod={(m) => setRoom(i, { prorateMethod: m })}
+                              onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                              onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
                             />
                           </div>
-                          {room.rentBasis === "daily" ? null : (
-                            <div className="sm:col-span-2">
-                              <ProrationMethodFields
-                                prorateMethod={room.prorateMethod ?? "auto"}
-                                monthlyRent={room.monthlyRent}
-                                dailyRentRate={room.dailyRentRate}
-                                dailyUtilitiesRate={room.dailyUtilitiesRate}
-                                onMethod={(m) => setRoom(i, { prorateMethod: m })}
-                                onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
-                                onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
-                              />
-                            </div>
-                          )}
                         </div>
                       </div>
                       );
@@ -3247,18 +2781,6 @@ export function ManagerAddListingForm({
               </ListingSubsection>
 
               <ListingSubsection
-                title="Utilities on the lease"
-                description="Which utilities are included in rent vs. paid separately, who sets up each account, and any included allowance. This renders in the Utilities section of the generated lease."
-              >
-                <LeaseUtilitiesEditor
-                  value={sub.leaseUtilities}
-                  aggregateModel={leaseUtilitiesAggregateModel}
-                  billingConflictAmount={leaseUtilitiesBillingConflict}
-                  onChange={(next) => setSub((s) => ({ ...s, leaseUtilities: next }))}
-                />
-              </ListingSubsection>
-
-              <ListingSubsection
                 title="Short-term stays"
                 description="Enable this only if this property may host temporary lodger / guest stays."
               >
@@ -3300,7 +2822,7 @@ export function ManagerAddListingForm({
                       </div>
                     </GridField>
                     <GridField>
-                      <FieldLabel hint="Move-in fee for short-term stays. Used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
+                      <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
@@ -3331,15 +2853,15 @@ export function ManagerAddListingForm({
                 title="Lease bundles"
                 description={
                   isEntireHome
-                    ? "Optional. The public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
-                    : "Optional packages on the public listing: whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
+                    ? "Optional — the public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
+                    : "Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
                 }
               >
                 {!isEntireHome ? (
                 <div className="rounded-xl border border-border p-4 sm:p-5">
                   <p className="text-sm font-semibold text-foreground">Build from your rooms</p>
                   <p className="mt-1 text-xs leading-5 text-muted">
-                    Bundle rent defaults to the sum of selected room rents; edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
+                    Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
@@ -3370,8 +2892,8 @@ export function ManagerAddListingForm({
                 {(sub.bundles ?? []).length === 0 ? (
                   <p className="mt-3 rounded-xl border border-dashed border-border bg-accent/30 px-4 py-5 text-sm text-muted">
                     {isEntireHome
-                      ? "No extra bundles. The listing uses your entire-home rent from Lease & pricing."
-                      : "No bundles yet. Renters will still see per-room pricing from Lease & pricing. Add a bundle when you want to advertise a combined lease."}
+                      ? "No extra bundles — the listing uses your entire-home rent from Lease & pricing."
+                      : "No bundles yet — renters will still see per-room pricing from Lease & pricing. Add a bundle when you want to advertise a combined lease."}
                   </p>
                 ) : (
                   <div className="mt-4 space-y-4">
@@ -3445,7 +2967,7 @@ export function ManagerAddListingForm({
                               </div>
                             </GridField>
                             <GridField>
-                              <FieldLabel hint="Optional. Shows crossed out on the listing.">Original price</FieldLabel>
+                              <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
                               <div className="relative">
                                 <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                                 <Input
@@ -3462,7 +2984,7 @@ export function ManagerAddListingForm({
                               <Input
                                 value={bundle.promo}
                                 onChange={(e) => setBundle(i, { promo: e.target.value })}
-                                placeholder="Best for groups · limited availability"
+                                placeholder="Best for groups — limited availability"
                               />
                             </GridField>
                             <div className="sm:col-span-2">
@@ -3683,8 +3205,7 @@ export function ManagerAddListingForm({
                       }
                     />
                     <span className="text-sm font-medium text-foreground">
-                      PropLane payments with Stripe: rent by bank (ACH) at {0.8}% (capped $5), card or Link at 2.9% +
-                      $0.30; application fees by card / Apple Pay at 2.9% + $0.30
+                      Bank (ACH) with Stripe — low {0.8}% processing fee
                     </span>
                   </label>
                   <div className="border-t border-border pt-3">
@@ -3827,13 +3348,13 @@ export function ManagerAddListingForm({
             title="Rooms"
             description={
               isEntireHome
-                ? "List each bedroom: name, floor, furnishing, and amenities. Rent and utilities are set on Pricing. House move-in instructions are on Home."
+                ? "List each bedroom — name, floor, furnishing, and amenities. Rent and utilities are set on Pricing. House move-in instructions are on Home."
                 : "Name, floor, furnishing, amenities, and per-room move-in notes. Rent is set on Pricing."
             }
           >
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
               <p className="text-sm text-muted">
-                Layout details only. Add optional photos per room if helpful.
+                Layout details only — add optional photos per room if helpful.
               </p>
               <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addRoom}>
                 + Add room
@@ -3902,7 +3423,7 @@ export function ManagerAddListingForm({
                     }
                   >
                       <GridField>
-                        <FieldLabel hint="Autofilled. Edit anytime.">Room name</FieldLabel>
+                        <FieldLabel hint="Autofilled — edit anytime.">Room name</FieldLabel>
                         <div data-wizard-field={roomNameKey}>
                           <Input
                             value={room.name}
@@ -3989,7 +3510,7 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Check common room amenities; use the field below for anything not listed.">Room amenities</FieldLabel>
+                        <FieldLabel hint="Check common room amenities — use the field below for anything not listed.">Room amenities</FieldLabel>
                         <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-3">
                           {dedupedPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
@@ -4062,7 +3583,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet. Up to 8 images. Images are auto-compressed.</p>
+                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -4084,7 +3605,7 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video. This may take a moment…</p>
+                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
                           <p className="mt-3 text-sm text-muted">Drag and drop one room video here, or use the button above.</p>
                           )}
@@ -4105,7 +3626,7 @@ export function ManagerAddListingForm({
                               </button>
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-muted">Optional. MP4, MOV, or WebM. Preview appears after you choose a file.</p>
+                            <p className="mt-3 text-[11px] text-muted">Optional — MP4, MOV, or WebM. Preview appears after you choose a file.</p>
                           )}
                         </div>
                       </div>
@@ -4158,7 +3679,7 @@ export function ManagerAddListingForm({
                       </button>
                     </div>
                   ) : (
-                    <p className="mt-2 text-[11px] text-muted">Optional. JPG or PNG, up to 10 MB.</p>
+                    <p className="mt-2 text-[11px] text-muted">Optional — JPG or PNG, up to 10 MB.</p>
                   )}
                 </div>
 
@@ -4255,7 +3776,7 @@ export function ManagerAddListingForm({
                     }
                   >
                       <div className="sm:col-span-2" data-wizard-field={bathNameKey}>
-                        <FieldLabel hint="Autofilled. Edit anytime.">Name</FieldLabel>
+                        <FieldLabel hint="Autofilled — edit anytime.">Name</FieldLabel>
                         <Input
                           value={b.name}
                           className={wizardFieldErrorClass(Boolean(bathNameErr))}
@@ -4336,7 +3857,7 @@ export function ManagerAddListingForm({
                             }}
                           />
                           <span className="text-sm font-medium text-foreground">
-                            Whole-house / hall bathroom (all listed bedrooms use it, no per-room checkboxes)
+                            Whole-house / hall bathroom — all listed bedrooms use it (no per-room checkboxes)
                           </span>
                         </label>
                       </div>
@@ -4373,7 +3894,7 @@ export function ManagerAddListingForm({
                                           setBathRoomAccessKind(i, room.id, e.target.value as "" | ManagerBathroomRoomAccessKind)
                                         }
                                       >
-                                        <option value="">Optional (auto from shared vs private)</option>
+                                        <option value="">Optional — auto from shared vs private</option>
                                         <option value="ensuite">En suite (private to this room)</option>
                                         <option value="shared">Shared (other checked rooms use it too)</option>
                                         <option value="hall">Hall / common (not private to this room)</option>
@@ -4451,7 +3972,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet. Up to 8 images. Images are auto-compressed.</p>
+                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -4472,7 +3993,7 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video. This may take a moment…</p>
+                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                           ) : (
                           <p className="mt-3 text-sm text-muted">Drag and drop one bathroom video here, or use the button above.</p>
                           )}
@@ -4493,7 +4014,7 @@ export function ManagerAddListingForm({
                               </button>
                             </div>
                           ) : (
-                            <p className="mt-2 text-[11px] text-muted">Optional. MP4, MOV, or WebM.</p>
+                            <p className="mt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
                           )}
                         </div>
                       </div>
@@ -4519,7 +4040,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-shared"
             title="Shared spaces"
-            description="Optional. Add kitchens, living rooms, and other common areas if you want them on the listing. You can skip this step."
+            description="Optional — add kitchens, living rooms, and other common areas if you want them on the listing. You can skip this step."
           >
               <div className="mb-5 rounded-2xl border p-4 portal-banner-info">
                 <p className="text-sm font-semibold text-blue-950">Quick add</p>
@@ -4545,7 +4066,7 @@ export function ManagerAddListingForm({
               {sub.sharedSpaces.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-8 text-center">
                   <p className="text-sm font-semibold text-foreground">No shared spaces added yet.</p>
-                  <p className="mt-1 text-xs text-muted">Optional. Continue without adding any, or use Quick add above.</p>
+                  <p className="mt-1 text-xs text-muted">Optional — continue without adding any, or use Quick add above.</p>
                 </div>
               ) : (
                 <div
@@ -4669,7 +4190,7 @@ export function ManagerAddListingForm({
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()}; check all that apply.`}>
+                          <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()} — check all that apply.`}>
                             Amenities
                           </FieldLabel>
                           <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -4740,7 +4261,7 @@ export function ManagerAddListingForm({
                                 ))}
                               </div>
                             ) : (
-                              <p className="mt-3 text-[11px] text-muted">No photos yet. Up to 8 images. Images are auto-compressed.</p>
+                              <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
                             )}
                           </div>
                         </div>
@@ -4761,7 +4282,7 @@ export function ManagerAddListingForm({
                               {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
                             </MediaPickTrigger>
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
-                              <p className="mt-3 text-sm text-primary">Uploading video. This may take a moment…</p>
+                              <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
                             ) : (
                               <p className="mt-3 text-sm text-muted">Drag and drop one video here, or use the button above.</p>
                             )}
@@ -4857,9 +4378,7 @@ export function ManagerAddListingForm({
                 <p className="mt-1 text-sm leading-6 text-muted">
                   {isEditMode
                     ? "Review each step, then submit your changes when the listing is ready for review."
-                    : canSaveDraft
-                      ? "Not ready to go live? Tap Save draft to store your progress and finish later from Properties → Drafts. Or click Submit listing when it’s complete, and it will go live on Rent with PropLane right away."
-                      : "Click Submit listing below when the listing is complete, and it will go live on Rent with PropLane right away."}
+                    : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete — it will go live on Rent with PropLane right away."}
                 </p>
               </div>
             </div>
@@ -4870,24 +4389,12 @@ export function ManagerAddListingForm({
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy || savingDraft}>
+              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy}>
                 Close
               </Button>
               {visibleStepPosition > 0 ? (
-                <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy || savingDraft}>
+                <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>
                   Back
-                </Button>
-              ) : null}
-              {canSaveDraft ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
-                  data-attr="listing-wizard-save-draft"
-                  onClick={() => void saveDraft()}
-                  disabled={busy || savingDraft}
-                >
-                  {savingDraft ? "Saving draft…" : "Save draft"}
                 </Button>
               ) : null}
             </div>
@@ -4898,7 +4405,7 @@ export function ManagerAddListingForm({
                   className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
                   data-attr="listing-wizard-continue"
                   onClick={goNext}
-                  disabled={busy || savingDraft}
+                  disabled={busy}
                 >
                   {visibleStepPosition === visibleStepCount - 2
                     ? isPreviewWizard
@@ -4912,7 +4419,7 @@ export function ManagerAddListingForm({
                   className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
                   data-attr="listing-wizard-submit"
                   onClick={() => void submitListing()}
-                  disabled={busy || savingDraft}
+                  disabled={busy}
                 >
                   {busy
                     ? isPreviewWizard

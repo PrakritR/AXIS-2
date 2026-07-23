@@ -42,7 +42,7 @@ import {
   toLocalDateStr,
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
-import { mondayBasedDayIndex, resolveBlockBaseDates, AVAILABILITY_WEEK_DAY_COUNT, buildMondayWeekDates } from "@/lib/portal/availability-block";
+import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
 import {
   plannedTourVisibleToViewer,
   tourInquiryVisibleToViewer,
@@ -63,10 +63,7 @@ const SLOT_ROW_START = 0;
 const SLOT_ROW_END = SLOTS_PER_DAY - 1;
 const DEFAULT_VISIBLE_START_SLOT = 16;
 const DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE = 40;
-// Mon–Sun week for admin, manager, and vendor availability grids.
-const COMPACT_BLOCK_DAYS = AVAILABILITY_WEEK_DAY_COUNT;
-const AVAILABILITY_WEEK_GRID_CLASS =
-  "grid w-full grid-cols-[minmax(56px,76px)_repeat(7,minmax(0,1fr))] text-xs";
+const COMPACT_BLOCK_DAYS = 5;
 const WEEKDAY_OPTIONS = [
   { value: 0, label: "Mon" },
   { value: 1, label: "Tue" },
@@ -132,6 +129,18 @@ function formatWeekRangeMonSun(monday: Date): string {
   const sunday = addDays(monday, 6);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   return `${formatPacificDate(monday, opts)}–${formatPacificDate(sunday, { ...opts, year: "numeric" })}`;
+}
+
+function formatBlockRange(start: Date, dayCount: number): string {
+  const end = addDays(start, dayCount - 1);
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  return `${formatPacificDate(start, opts)}–${formatPacificDate(end, { ...opts, year: "numeric" })}`;
+}
+
+function startOfLocalDay(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(12, 0, 0, 0);
+  return copy;
 }
 
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
@@ -205,7 +214,6 @@ function weekdayLabelList(days: number[]) {
     .join(", ");
 }
 
-/** Admin, manager, and vendor schedule/availability UI (one shared week grid). */
 export function PortalCalendarPanels({
   storageKey,
   calendarRefreshSignal,
@@ -272,9 +280,6 @@ export function PortalCalendarPanels({
   // same React batch on a fast click, so finishDragSelection would otherwise
   // read a stale `null` and the click would silently do nothing.
   const dragSelectionRef = useRef<DragSelection | null>(null);
-  // Vendor calendar: single-slot activation opens the add-work draft via
-  // openSlotDetails, so the block modal only opens for multi-slot drags there.
-  const isVendorCalendar = Boolean(vendorCalendarActions);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
@@ -335,10 +340,16 @@ export function PortalCalendarPanels({
   }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
-  const fullWeekDates = useMemo(() => buildMondayWeekDates(weekMonday), [weekMonday]);
+  const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
-  const activeBlockDates = fullWeekDates;
-  const activeBlockDateStrs = fullWeekDateStrs;
+  const compactBlockStart = useMemo(() => startOfLocalDay(anchorDate), [anchorDate]);
+  const compactBlockDates = useMemo(
+    () => [0, 1, 2, 3, 4].map((i) => addDays(compactBlockStart, i)),
+    [compactBlockStart],
+  );
+  const compactBlockDateStrs = useMemo(() => compactBlockDates.map(toLocalDateStr), [compactBlockDates]);
+  const activeBlockDates = compactAvailability ? compactBlockDates : fullWeekDates;
+  const activeBlockDateStrs = compactAvailability ? compactBlockDateStrs : fullWeekDateStrs;
 
   const meetings = useMemo<DemoMeeting[]>(() => {
     void calendarRefreshSignal;
@@ -737,13 +748,15 @@ export function PortalCalendarPanels({
   }, [today]);
 
   const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
-    setAnchorDate((d) => addDays(startOfWeekMonday(d), dir * COMPACT_BLOCK_DAYS));
+    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
+    setAnchorDate((d) => addDays(d, dir * shiftDays));
     if (compactAvailability) setMobileDayIndex(0);
   }, [compactAvailability]);
 
   const copyPreviousWeek = useCallback(() => {
     const currentDates = activeBlockDates;
-    const previousBlockDates = currentDates.map((date) => addDays(date, -COMPACT_BLOCK_DAYS));
+    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
+    const previousBlockDates = currentDates.map((date) => addDays(date, -shiftDays));
     const next = new Set(activeSlots);
 
     for (const targetDate of currentDates) {
@@ -764,7 +777,7 @@ export function PortalCalendarPanels({
     });
 
     writeAvailability(next);
-  }, [activeBlockDates, activeSlots, writeAvailability]);
+  }, [activeBlockDates, activeSlots, compactAvailability, writeAvailability]);
 
   const toggleBlockWeekday = useCallback((weekday: number) => {
     setBlockWeekdays((current) =>
@@ -818,13 +831,9 @@ export function PortalCalendarPanels({
     const pending = dragSelectionRef.current;
     if (!pending) return;
     dragSelectionRef.current = null;
-    setDragSelection(null);
-    // A single-slot press on the vendor calendar is a click, not a drag: let the
-    // click event reach openSlotDetails → onAddFromSlot so exactly one modal
-    // (the work draft) opens instead of stacking the block modal on top of it.
-    if (isVendorCalendar && pending.endSlotExclusive - pending.startSlot === 1) return;
     prefillBlockModal(pending);
-  }, [isVendorCalendar, prefillBlockModal]);
+    setDragSelection(null);
+  }, [prefillBlockModal]);
 
   const cancelDragSelection = useCallback(() => {
     dragSelectionRef.current = null;
@@ -857,7 +866,8 @@ export function PortalCalendarPanels({
 
     const next = new Set(activeSlots);
     const occurrences = blockCadence === "once" ? 1 : Math.max(1, blockOccurrences);
-    // Anchor each selected weekday to the date visible in the active week window.
+    // Anchor each selected weekday to the real date visible in the active block window
+    // (compact mode may start mid-week and even straddle a Monday boundary).
     const baseDates = resolveBlockBaseDates(activeBlockDates, weekMonday, blockWeekdays);
 
     for (let occurrenceIndex = 0; occurrenceIndex < occurrences; occurrenceIndex += 1) {
@@ -1120,7 +1130,7 @@ export function PortalCalendarPanels({
   const tourConfirmPreviewModal = (
     <PortalNotificationPreviewModal
       open={tourConfirmPreview !== null}
-      title="Confirm tour · guest notification preview"
+      title="Confirm tour — guest notification preview"
       onClose={() => setTourConfirmPreview(null)}
       recipient={tourConfirmPreview?.meeting.email ?? ""}
       subject={tourConfirmPreview?.subject ?? ""}
@@ -1160,12 +1170,12 @@ export function PortalCalendarPanels({
               {vendorMode ? (
                 <div className="min-w-0 px-1">
                   <p className="text-xs font-semibold text-foreground sm:text-sm">{availabilityHeading}</p>
-                  <p className="truncate text-[11px] text-muted">{formatWeekRangeMonSun(weekMonday)}</p>
+                  <p className="truncate text-[11px] text-muted">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
                 </div>
               ) : (
                 <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
                   <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
-                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatWeekRangeMonSun(weekMonday)}</p>
+                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
                   {tourScopeLabel ? <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p> : null}
                 </div>
               )}
@@ -1295,9 +1305,8 @@ export function PortalCalendarPanels({
                     // Keyboard activation (Enter / Space) fires click without any
                     // mousedown/mouseup, so the drag-select path never runs. Open the
                     // block modal directly for an empty slot so the grid is usable
-                    // without a mouse. On the vendor calendar an empty-slot activation
-                    // already works via openSlotDetails → onAddFromSlot instead.
-                    if (!isVendorCalendar && !readOnly && !meeting && !active && !coManagerOpen && e.detail === 0) {
+                    // without a mouse.
+                    if (!readOnly && !meeting && !active && !coManagerOpen && e.detail === 0) {
                       openBlockModalForSlot(ds, mondayBasedDayIndex(new Date(`${ds}T12:00:00`)), slotIdx);
                       return;
                     }
@@ -1410,10 +1419,10 @@ export function PortalCalendarPanels({
                   </div>
                 </div>
 
-                {/* Desktop: Mon-Sun week grid. */}
+                {/* Desktop: 5-day block grid. */}
                 <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
-                  <div className="w-full" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-                    <div className={`${AVAILABILITY_WEEK_GRID_CLASS} ${CALENDAR_GRID_GAP}`} data-attr="availability-week-grid">
+                  <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
+                    <div className={`grid min-w-[680px] grid-cols-[76px_repeat(5,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                       {activeBlockDates.map((d) => {
                         const ds = toLocalDateStr(d);
@@ -1568,7 +1577,7 @@ export function PortalCalendarPanels({
           >
             <div className="space-y-5">
               <p className="text-sm text-muted">
-                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones; nothing is removed.
+                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones — nothing is removed.
               </p>
               <div className="space-y-2">
                 {otherProperties.map((p) => (
@@ -1862,17 +1871,7 @@ export function PortalCalendarPanels({
                         if (active) return;
                         finishDragSelection();
                       }}
-                      onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                        // Same keyboard-activation path as the schedule-card grid:
-                        // Enter / Space fires click alone, so open the block modal
-                        // directly for an empty slot (vendor mode routes through
-                        // openSlotDetails instead).
-                        if (!isVendorCalendar && !active && e.detail === 0) {
-                          openBlockModalForSlot(ds, weekday, slotIdx);
-                          return;
-                        }
-                        openSlotDetails(ds, slotIdx, e.currentTarget);
-                      }}
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget)}
                       className={`flex min-h-10 items-center justify-between rounded-xl border px-3 text-left text-xs font-semibold transition ${
                         selected
                           ? "border-primary/40 bg-primary/[0.12] text-primary"
