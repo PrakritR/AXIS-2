@@ -3,6 +3,11 @@ import { isPhoneOptedOut } from "@/lib/sms-consent";
 import { normalizeE164 } from "@/lib/phone-e164";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
+/**
+ * Back-compat re-export for the server-side callers that already import it from here.
+ * The helper itself lives in `@/lib/phone-e164` because this module pulls in the Twilio
+ * SDK and the Supabase service-role client — client components must import it from there.
+ */
 export { normalizeE164 };
 
 /**
