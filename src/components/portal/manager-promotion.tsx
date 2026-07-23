@@ -616,30 +616,6 @@ export function ManagerPromotion() {
     );
   };
 
-  // #region agent log
-  useEffect(() => {
-    const direct = typeof document !== "undefined"
-      ? Boolean(document.querySelector('[data-attr="promotion-content-direct"]'))
-      : false;
-    const legacy = typeof document !== "undefined"
-      ? Boolean(document.querySelector('[data-attr="promotion-section-toggle"]'))
-      : false;
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        runId: "promotion-flat",
-        hypothesisId: "H1-your-promotions-wrapper",
-        location: "manager-promotion.tsx:render",
-        message: "Promotion panel mounted",
-        data: { direct, legacy, href: typeof window !== "undefined" ? window.location.href : null },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, []);
-  // #endregion
-
   return (
     <ManagerPortalPageShell
       title="Promotion"

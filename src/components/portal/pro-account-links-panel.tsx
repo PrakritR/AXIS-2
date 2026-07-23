@@ -1417,7 +1417,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-4" data-attr="co-manager-unified-view">
         {loadError ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
             <span className="text-[var(--status-overdue-fg)]">
