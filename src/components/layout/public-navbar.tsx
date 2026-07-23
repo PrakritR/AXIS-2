@@ -28,10 +28,9 @@ function persistSignedIn(value: boolean) {
   } catch {}
 }
 
-function portalLinkLabel(role: AuthRole): string {
-  if (role === "resident") return "Resident portal";
-  if (role === "vendor") return "Vendor portal";
-  if (role === "admin") return "Admin";
+// One consistent label for every logged-in role — clicking it takes the user
+// straight into their portal home (see portalLink below).
+function portalLinkLabel(): string {
   return "Portal";
 }
 
@@ -180,9 +179,9 @@ export function PublicNavbar() {
 
   const portalLink = useMemo(() => {
     if (!signedIn || !primaryRole) return undefined;
-    const url = primaryRole === "resident" ? "/resident/applications" : portalDashboardPath(primaryRole);
+    const url = portalDashboardPath(primaryRole);
     return {
-      text: portalLinkLabel(primaryRole),
+      text: portalLinkLabel(),
       url,
     };
   }, [signedIn, primaryRole]);
