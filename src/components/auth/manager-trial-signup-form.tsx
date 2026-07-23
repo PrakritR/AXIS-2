@@ -18,34 +18,16 @@ import {
   handleGoogleSignedInReturn,
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
-import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import {
+  clearManagerPricingOffer,
+  readManagerPricingOffer,
+} from "@/lib/auth/manager-pricing-oauth-storage";
+import { persistPreOAuthUser, readPreOAuthUser } from "@/lib/auth/pre-oauth-user";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { normalizeE164 } from "@/lib/phone-e164";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
-
-/** Identity of the session that was active before an OAuth hand-off left this page. */
-const PRE_OAUTH_USER_KEY = "axis:create-account-prior-user";
-
-function rememberPriorUser(userId: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (userId) window.sessionStorage.setItem(PRE_OAUTH_USER_KEY, userId);
-    else window.sessionStorage.removeItem(PRE_OAUTH_USER_KEY);
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-function readPriorUser(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage.getItem(PRE_OAUTH_USER_KEY);
-  } catch {
-    return null;
-  }
-}
 
 function trialSignupSubtitle(tier: PlanTierId): string {
   if (tier === "free") return "Free plan · no card required";
@@ -62,6 +44,7 @@ export function ManagerTrialSignupForm({
   disabled = false,
   hideLegalFooter = false,
   googleReturn = false,
+  sameAccountReturn = false,
   trialSignup = true,
 }: {
   tier: PlanTierId;
@@ -70,6 +53,7 @@ export function ManagerTrialSignupForm({
   disabled?: boolean;
   hideLegalFooter?: boolean;
   googleReturn?: boolean;
+  sameAccountReturn?: boolean;
   trialSignup?: boolean;
 }) {
   const router = useRouter();
@@ -82,9 +66,13 @@ export function ManagerTrialSignupForm({
   const [finishingGoogle, setFinishingGoogle] = useState(googleReturn);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
-  const [oauthReturnedSameAccount, setOauthReturnedSameAccount] = useState(false);
+  const [oauthReturnedSameAccount, setOauthReturnedSameAccount] = useState(sameAccountReturn);
 
   const locked = disabled || busy || finishingGoogle;
+
+  useEffect(() => {
+    if (sameAccountReturn) clearManagerPricingOffer();
+  }, [sameAccountReturn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,16 +82,20 @@ export function ManagerTrialSignupForm({
       const user = data.session?.user ?? null;
       if (cancelled) return;
       setSignedInUser(user ? { id: user.id, email: user.email ?? null } : null);
-      if (!googleReturn) rememberPriorUser(user?.id ?? null);
+      persistPreOAuthUser(user?.id ?? null);
     })();
     return () => {
       cancelled = true;
     };
-  }, [googleReturn]);
+  }, []);
 
   const applyPricingResult = useCallback(
-    (result: ContinuePartnerPricingResult) => {
+    (result: ContinuePartnerPricingResult, sameAccount: boolean) => {
       if (result.status === "portal") {
+        if (sameAccount) {
+          setOauthReturnedSameAccount(true);
+          return;
+        }
         void navigateAfterRoleSignup("/portal/dashboard");
         return;
       }
@@ -117,7 +109,7 @@ export function ManagerTrialSignupForm({
 
   useEffect(() => {
     if (!googleReturn) return;
-    const priorUserId = readPriorUser();
+    const priorUserId = readPreOAuthUser();
     let cancelled = false;
     void (async () => {
       setFinishingGoogle(true);
@@ -131,24 +123,8 @@ export function ManagerTrialSignupForm({
           ? await waitForAuthUser(createSupabaseBrowserClient())
           : null;
         if (cancelled) return;
+        const sameAccount = Boolean(returnedUser && returnedUser.id === priorUserId);
 
-        if (returnedUser && priorUserId && returnedUser.id === priorUserId) {
-          rememberPriorUser(null);
-          setSignedInUser({ id: returnedUser.id, email: returnedUser.email ?? null });
-          setOauthReturnedSameAccount(true);
-          if (typeof window !== "undefined") {
-            const params = new URLSearchParams({
-              mode: "create",
-              role: "manager",
-              tier: offer.tier,
-              billing: offer.billing,
-            });
-            window.history.replaceState({}, "", `/auth/create-account?${params}`);
-          }
-          return;
-        }
-
-        rememberPriorUser(null);
         const result = await handleGoogleSignedInReturn(offer);
         if (cancelled) return;
         if (result.status !== "provisioned") {
@@ -159,7 +135,7 @@ export function ManagerTrialSignupForm({
           return;
         }
         const continued = await continuePartnerPricingWithOffer(offer);
-        if (!cancelled) applyPricingResult(continued);
+        if (!cancelled) applyPricingResult(continued, sameAccount);
       } finally {
         if (!cancelled) setFinishingGoogle(false);
       }
@@ -217,13 +193,13 @@ export function ManagerTrialSignupForm({
         password,
       });
       if (signInError) {
-        if (signedInUser) await supabase.auth.signOut().catch(() => undefined);
-        rememberPriorUser(null);
+        if (signedInUser) await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        persistPreOAuthUser(null);
         showToast("Account created. Sign in to continue.");
         router.push("/auth/sign-in?role=manager");
         return;
       }
-      rememberPriorUser(null);
+      persistPreOAuthUser(signInData?.user?.id ?? null);
       if (signInData?.user) posthog.identify(signInData.user.id);
       const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard";
       await navigateAfterRoleSignup(fallback);
@@ -248,7 +224,7 @@ export function ManagerTrialSignupForm({
         <>
           {signedInUser ? (
             <div className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-[12px] leading-snug text-muted">
-              {oauthReturnedSameAccount ? <>That&apos;s the account you&apos;re already using. </> : null}
+              {oauthReturnedSameAccount ? <>Your property account is ready. </> : null}
               {signedInUser.email ? (
                 <>You&apos;re signed in as <span className="font-semibold text-foreground">{signedInUser.email}</span>. </>
               ) : (
