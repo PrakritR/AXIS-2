@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
-import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
+import {
+  createDefaultListingSubmission,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
 
 // A fresh manager per test — the side-bucket draft store is module-level memory
 // that outlives a single test.
@@ -20,12 +23,38 @@ vi.mock("@/hooks/use-manager-user-id", () => ({
   useManagerUserId: () => ({ userId: MANAGER_ID, ready: true }),
 }));
 
-vi.mock("@/lib/supabase/browser", () => ({
-  createSupabaseBrowserClient: () => ({
-    auth: { getSession: async () => ({ data: { session: null } }) },
-    storage: { from: () => ({ remove: async () => ({ data: null, error: null }) }) },
-  }),
-}));
+// No session by default: every attachment upload fails, which is what the
+// all-attachments-failed tests want. Set `SESSION_USER_ID` to upload for real.
+let SESSION_USER_ID: string | null = null;
+// Keyed on the blob's content type so a test can fail one attachment and land
+// the rest, independent of upload ordering.
+let uploadFails: (contentType: string) => boolean = () => false;
+
+// Stubbed one layer below `createSupabaseBrowserClient`: the wizard imports that
+// module dynamically once per upload, and concurrent dynamic imports do not all
+// resolve to a module-level mock.
+vi.mock("@supabase/ssr", () => {
+  const client = {
+    auth: {
+      getSession: async () => ({
+        data: {
+          session: SESSION_USER_ID ? { user: { id: SESSION_USER_ID }, access_token: "test-token" } : null,
+        },
+      }),
+    },
+    storage: {
+      from: () => ({
+        remove: async () => ({ data: null, error: null }),
+        upload: async (_path: string, _body: unknown, opts?: { contentType?: string }) =>
+          uploadFails(opts?.contentType ?? "")
+            ? { error: { message: "upload failed" } }
+            : { error: null },
+        getPublicUrl: (path: string) => ({ data: { publicUrl: `https://storage.test/${path}` } }),
+      }),
+    },
+  };
+  return { createBrowserClient: () => client, createServerClient: () => client };
+});
 
 type RecordedCall = { action: string; id: string; status?: string };
 let calls: RecordedCall[];
@@ -35,14 +64,23 @@ Element.prototype.scrollTo = Element.prototype.scrollTo ?? (() => {});
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? (() => {});
 
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test-anon-key");
   // "/" reads as the public demo surface, where every server write short-circuits.
   window.history.replaceState(null, "", "/portal/properties");
   window.sessionStorage?.clear();
   MANAGER_ID = `mgr-wizard-autosave-${(seq += 1)}`;
+  SESSION_USER_ID = null;
+  uploadFails = () => false;
   calls = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_url: unknown, init?: { body?: string }) => {
+    vi.fn(async (url: unknown, init?: { body?: string }) => {
+      // `uploadToBucket` reads the bytes of a data URL back through `fetch`.
+      if (typeof url === "string" && url.startsWith("data:")) {
+        const mime = url.slice("data:".length, url.indexOf(";")) || "application/octet-stream";
+        return { ok: true, blob: async () => new Blob(["bytes"], { type: mime }) } as unknown as Response;
+      }
       const body = init?.body ? (JSON.parse(init.body) as RecordedCall) : ({} as RecordedCall);
       if (body.action) calls.push({ action: body.action, id: body.id, status: body.status });
       return { ok: true, status: 200, json: async () => ({ records: [] }) } as unknown as Response;
@@ -53,6 +91,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function renderWizard(over: Partial<React.ComponentProps<typeof ManagerAddListingForm>> = {}) {
@@ -209,7 +248,7 @@ describe("closing the add-listing wizard saves the work in progress", () => {
 
   it("saves the typed listing without any base64 when the media upload fails", async () => {
     // The stubbed Supabase client has no session, so every data-URL upload
-    // throws — the draft must still land, minus the raw bytes.
+    // fails — the draft must still land, minus the raw bytes.
     const { onClose, showToast } = renderWizard({
       initialSubmission: {
         ...createDefaultListingSubmission(),
@@ -228,7 +267,52 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.buildingName).toBe("Ravenna Craftsman");
     expect(JSON.stringify(drafts[0]!.submission)).not.toContain("data:");
-    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/photos could not be uploaded/i));
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/attachments couldn't be saved/i));
+  });
+
+  it("keeps the attachments that uploaded when only one of them fails", async () => {
+    // One flaky object must cost that object alone — the siblings already in the
+    // bucket keep their URLs instead of being thrown away with it.
+    SESSION_USER_ID = "supabase-user-1";
+    uploadFails = (contentType) => contentType === "image/png";
+    const { onClose, showToast } = renderWizard({
+      initialSubmission: {
+        ...createDefaultListingSubmission(),
+        housePhotoDataUrls: ["data:image/jpeg;base64,AAAA", "data:image/png;base64,BBBB"],
+        leaseTemplateDocUrl: "data:application/pdf;base64,CCCC",
+      },
+    });
+
+    typePropertyName("Ravenna Craftsman");
+    clickClose();
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+
+    const saved = readAdminPropertyRows(5, MANAGER_ID)[0]!.submission!;
+    expect(saved.housePhotoDataUrls).toHaveLength(1);
+    expect(saved.housePhotoDataUrls[0]).toMatch(/^https:\/\/storage\.test\//);
+    expect(saved.leaseTemplateDocUrl).toMatch(/^https:\/\/storage\.test\//);
+    expect(JSON.stringify(saved)).not.toContain("data:");
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/attachments couldn't be saved/i));
+  });
+
+  it("reports plain success when every attachment uploads", async () => {
+    SESSION_USER_ID = "supabase-user-1";
+    const { onClose, showToast } = renderWizard({
+      initialSubmission: {
+        ...createDefaultListingSubmission(),
+        housePhotoDataUrls: ["data:image/jpeg;base64,AAAA", "data:image/png;base64,BBBB"],
+      },
+    });
+
+    typePropertyName("Ravenna Craftsman");
+    clickClose();
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+
+    const saved = readAdminPropertyRows(5, MANAGER_ID)[0]!.submission!;
+    expect(saved.housePhotoDataUrls).toHaveLength(2);
+    expect(showToast).toHaveBeenCalledWith("Progress saved to Drafts.");
   });
 
   it("never drafts an edit of an existing listing", async () => {
@@ -240,6 +324,74 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(readAdminPropertyRows(5, MANAGER_ID)).toHaveLength(0);
     expect(calls).toEqual([]);
+  });
+});
+
+describe("submitting the wizard", () => {
+  /** Passes every step's validation, so the wizard reaches the upload stage. */
+  function validSubmission(): ManagerListingSubmissionV1 {
+    const base = createDefaultListingSubmission();
+    return {
+      ...base,
+      buildingName: "Ravenna Craftsman",
+      address: "5200 Ravenna Ave NE",
+      zip: "98105",
+      listingPropertyTypeId: "house",
+      listingStoriesId: "two",
+      listingTotalBathroomsId: "one",
+      listingBedroomSlots: 1,
+      listingPlaceCategoryId: "shared_home",
+      allowedLeaseTerms: ["12-Month"],
+      applicationFee: "0",
+      securityDeposit: "0",
+      moveInFee: "0",
+      parkingMonthly: "0",
+      hoaMonthly: "0",
+      otherMonthlyFees: "0",
+      monthToMonthSurcharge: "0",
+      rooms: base.rooms.map((r) => ({ ...r, name: "Room 1", monthlyRent: 1200 })),
+      housePhotoDataUrls: ["data:image/jpeg;base64,AAAA", "data:image/png;base64,BBBB"],
+    };
+  }
+
+  function clickSubmit() {
+    const btn = document.querySelector('[data-attr="listing-wizard-submit"]');
+    if (!btn) throw new Error("no wizard submit button");
+    fireEvent.click(btn);
+  }
+
+  it("does not publish a listing whose attachments did not all upload", async () => {
+    SESSION_USER_ID = "supabase-user-1";
+    uploadFails = (contentType) => contentType === "image/png";
+    const onSubmitted = vi.fn();
+    const { showToast } = renderWizard({
+      initialSubmission: validSubmission(),
+      initialStepIndex: 5,
+      initialMaxStepReached: 5,
+      onSubmitted,
+    });
+
+    clickSubmit();
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/could not upload photos/i)));
+    expect(onSubmitted).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it("publishes when every attachment uploads", async () => {
+    SESSION_USER_ID = "supabase-user-1";
+    const onSubmitted = vi.fn();
+    renderWizard({
+      initialSubmission: validSubmission(),
+      initialStepIndex: 5,
+      initialMaxStepReached: 5,
+      onSubmitted,
+    });
+
+    clickSubmit();
+
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
+    expect(calls.some((c) => c.action === "upsert" && c.status === "live")).toBe(true);
   });
 });
 

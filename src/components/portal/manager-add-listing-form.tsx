@@ -825,15 +825,34 @@ async function uploadDataUrl(dataUrl: string): Promise<string> {
   return uploadToBucket(dataUrl);
 }
 
+type SubmissionMediaUpload = {
+  submission: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1;
+  /** Attachments whose upload failed. They are dropped, never kept as base64. */
+  failedCount: number;
+};
+
+/**
+ * Uploads settle per attachment: one flaky object costs that object alone, and
+ * every sibling that did land keeps its storage URL. A failed item is dropped
+ * rather than left as a `data:` URL, so no caller can persist base64.
+ */
 async function uploadSubmissionMedia(
   sub: import("@/lib/manager-listing-submission").ManagerListingSubmissionV1,
-): Promise<import("@/lib/manager-listing-submission").ManagerListingSubmissionV1> {
-  async function uploadAll(urls: string[]): Promise<string[]> {
-    return Promise.all(urls.map((u) => uploadDataUrl(u)));
-  }
+): Promise<SubmissionMediaUpload> {
+  let failedCount = 0;
   async function uploadOne(url: string | null | undefined): Promise<string | null> {
     if (!url) return url ?? null;
-    return uploadDataUrl(url);
+    try {
+      return await uploadDataUrl(url);
+    } catch (err) {
+      console.error("manager-add-listing-form: attachment upload failed", err);
+      failedCount += 1;
+      return null;
+    }
+  }
+  async function uploadAll(urls: string[]): Promise<string[]> {
+    const settled = await Promise.all(urls.map((u) => uploadOne(u)));
+    return settled.filter((u): u is string => typeof u === "string" && u.length > 0);
   }
 
   const [housePhotos, houseVideo, leaseTemplateDocUrl, propertyFloorPlan, floorPlanByLabel, rooms, bathrooms, sharedSpaces] = await Promise.all([
@@ -845,9 +864,11 @@ async function uploadSubmissionMedia(
       const entries = Object.entries(sub.floorPlanByLabel ?? {});
       if (entries.length === 0) return {} as Record<string, string>;
       const uploaded = await Promise.all(
-        entries.map(async ([label, url]) => [label, await uploadDataUrl(url)] as const),
+        entries.map(async ([label, url]) => [label, await uploadOne(url)] as const),
       );
-      return Object.fromEntries(uploaded) as Record<string, string>;
+      return Object.fromEntries(
+        uploaded.filter((entry): entry is readonly [string, string] => typeof entry[1] === "string"),
+      ) as Record<string, string>;
     })(),
     Promise.all(
       sub.rooms.map(async (r) => ({
@@ -873,15 +894,18 @@ async function uploadSubmissionMedia(
   ]);
 
   return {
-    ...sub,
-    housePhotoDataUrls: housePhotos,
-    houseVideoDataUrl: houseVideo,
-    leaseTemplateDocUrl,
-    propertyFloorPlanDataUrl: propertyFloorPlan,
-    floorPlanByLabel: Object.keys(floorPlanByLabel).length > 0 ? floorPlanByLabel : undefined,
-    rooms,
-    bathrooms,
-    sharedSpaces,
+    submission: {
+      ...sub,
+      housePhotoDataUrls: housePhotos,
+      houseVideoDataUrl: houseVideo,
+      leaseTemplateDocUrl,
+      propertyFloorPlanDataUrl: propertyFloorPlan,
+      floorPlanByLabel: Object.keys(floorPlanByLabel).length > 0 ? floorPlanByLabel : undefined,
+      rooms,
+      bathrooms,
+      sharedSpaces,
+    },
+    failedCount,
   };
 }
 
@@ -2080,7 +2104,9 @@ export function ManagerAddListingForm({
       let submission = current;
       let mediaFailed = false;
       try {
-        submission = await uploadSubmissionMedia(current);
+        const uploaded = await uploadSubmissionMedia(current);
+        submission = uploaded.submission;
+        mediaFailed = uploaded.failedCount > 0;
         // Keep the uploaded URLs so a retried close does not re-upload the same
         // bytes and orphan the first copies in the bucket.
         setSub(submission);
@@ -2107,7 +2133,7 @@ export function ManagerAddListingForm({
       onSaved?.();
       showToast(
         mediaFailed
-          ? "Progress saved to Drafts, but the photos could not be uploaded — add them again next time."
+          ? "Progress saved to Drafts. Some attachments couldn't be saved — add them again next time."
           : "Progress saved to Drafts.",
       );
       onClose();
@@ -2202,7 +2228,13 @@ export function ManagerAddListingForm({
       }
       let uploadedSubmission: typeof submission;
       try {
-        uploadedSubmission = await uploadSubmissionMedia(submission);
+        const uploaded = await uploadSubmissionMedia(submission);
+        // A published listing must never quietly go live missing an attachment.
+        if (uploaded.failedCount > 0) {
+          showToast("Could not upload photos. Check your connection and try again.");
+          return;
+        }
+        uploadedSubmission = uploaded.submission;
       } catch (err) {
         console.error("manager-add-listing-form: uploadSubmissionMedia failed", err);
         showToast("Could not upload photos. Check your connection and try again.");
