@@ -712,6 +712,8 @@ Schedule tab bar. Manager + resident use the chat two-pane
   vanishing into the hidden SMS panel. Coverage:
   `tests/unit/unified-conversation-inbox.test.tsx`,
   `tests/unit/resident-conversation-inbox.test.tsx`,
+  `tests/unit/vendor-conversation-inbox.test.tsx`,
+  `tests/unit/portal-nav-communication-count.test.tsx`,
   `tests/unit/inbox-scheduled-thread.test.ts`,
   `tests/unit/inbox-thread-omnichannel.test.tsx`,
   `tests/unit/sms-comm-ui-flag.test.ts`.

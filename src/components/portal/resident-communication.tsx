@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ResidentInboxPanel, type ResidentInboxPanelHandle, type ResidentInboxTabCounts } from "@/components/portal/resident-inbox-panel";
+import { ResidentInboxPanel, type ResidentInboxPanelHandle } from "@/components/portal/resident-inbox-panel";
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
 import {
   INBOX_LIST_SCROLL,
@@ -12,7 +12,6 @@ import {
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   mergeUnifiedInboxItems,
