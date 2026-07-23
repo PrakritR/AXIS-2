@@ -1,9 +1,5 @@
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
-import {
-  readManagerApplicationRows,
-  syncManagerApplicationsFromServer,
-  writeManagerApplicationRows,
-} from "@/lib/manager-applications-storage";
+import { readManagerApplicationRows, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
 import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
@@ -192,9 +188,8 @@ export async function transitionApplicationBucket(
   // client-side only. `writeManagerApplicationRows` above already fired the
   // fire-and-forget `action: "replace"` mirror with this row as `approved`, and on
   // the server `persistNormalizedRow` provisions the resident account for an
-  // approved row. So for a NON-withdrawn refusal the account may already exist even
-  // though the local state reverts. The withdrawn case is covered — that mirror is
-  // refused by the same guard — but the two writes are otherwise unordered.
+  // approved row. So for a NON-withdrawn approve the account may already exist even
+  // though the local state reverts; the two writes are unordered.
   if (nextBucket === "approved") {
     let res: Response | null;
     try {
@@ -217,17 +212,6 @@ export async function transitionApplicationBucket(
         message = serverMessage || "Could not confirm this approval on the server. Nothing was changed.";
       }
       rollbackApprovedTransition(id, row, opts.userId ?? null, { stampWithdrawn: confirmedWithdrawn });
-      if (unconfirmedWithdrawn) {
-        // The refusal names a record we cannot tie to this row, so nothing local can
-        // be stamped from it. Pull authoritative state now instead of waiting out the
-        // sync TTL, or the manager's only visible move is to retry the same doomed
-        // Approve.
-        try {
-          await syncManagerApplicationsFromServer({ force: true, managerUserId: opts.userId ?? null });
-        } catch {
-          /* the rollback already stands; the next scheduled sync will converge */
-        }
-      }
       return {
         row,
         welcomeSent: false,
