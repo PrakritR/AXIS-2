@@ -1148,32 +1148,6 @@
   flex-shrink: 0;
 }
 
-.lp-portfolio-strip {
-  position: relative;
-  z-index: 3;
-  width: min(520px, calc(100% - 24px));
-  margin: 14px auto 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-
-.lp-portfolio-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
-  font-weight: 500;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
 .lp-end {
   padding: 56px 20px 72px;
   text-align: center;

@@ -16,6 +16,7 @@ import {
 } from "@/components/marketing/resident-listing-search";
 import { usePublicListings } from "@/hooks/use-public-listings";
 import { HousingBrowseSwipeStack } from "@/components/marketing/housing-browse-swipe-stack";
+import { HousingBrowseCardOverlay } from "@/components/marketing/housing-browse-card-overlay";
 import {
   buildPropertyBrowseCards,
   demoOnlyBrowseCardPlaceholderImage,
@@ -67,7 +68,7 @@ function BrowseSkeleton() {
         {Array.from({ length: 3 }, (_, i) => (
           <div
             key={i}
-            className="aspect-[3/4] min-h-[320px] animate-pulse rounded-2xl bg-gradient-to-br from-accent/40 to-accent/10"
+            className="aspect-[3/4] animate-pulse rounded-2xl bg-gradient-to-br from-accent/40 to-accent/10"
           />
         ))}
       </div>
@@ -87,19 +88,18 @@ function HousingBrowseCard({
   const resolvedImageUrl =
     card.imageUrl || (isDemoModeActive() ? demoOnlyBrowseCardPlaceholderImage(card.propertyId) : "");
   const isDataUrl = resolvedImageUrl.startsWith("data:");
+  const hasPhoto = Boolean(resolvedImageUrl);
 
   return (
     <Link
       href={`/rent/listings/${encodeURIComponent(card.propertyId)}`}
       data-attr="resident-browse-listing-card"
       className={`group relative block overflow-hidden rounded-2xl bg-accent/20 shadow-sm ring-1 ring-border/40 transition duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:ring-primary/30 ${
-        isCarousel
-          ? "h-full w-full"
-          : "w-[min(42vw,220px)] shrink-0 snap-start sm:w-[220px]"
+        isCarousel ? "w-full" : "w-[min(42vw,220px)] shrink-0 snap-start sm:w-[220px]"
       }`}
     >
-      <div className={`relative w-full overflow-hidden ${isCarousel ? "aspect-[3/4] min-h-[320px]" : "aspect-[3/4]"}`}>
-        {resolvedImageUrl ? (
+      <div className="relative aspect-[3/4] w-full overflow-hidden">
+        {hasPhoto ? (
           <Image
             src={resolvedImageUrl}
             alt=""
@@ -109,21 +109,17 @@ function HousingBrowseCard({
             unoptimized={isDataUrl}
           />
         ) : (
-          <NoImagePlaceholder />
+          <NoImagePlaceholder className="bg-gradient-to-br from-muted/15 to-accent/25" />
         )}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-        <div className={`absolute inset-x-0 bottom-0 ${isCarousel ? "p-4 sm:p-5" : "p-3 sm:p-3.5"}`}>
-          {isCarousel ? (
-            <>
-              <p className="text-sm font-semibold text-white/90">{card.neighborhood}</p>
-              <p className="mt-0.5 line-clamp-1 text-base font-semibold text-white">{card.headlineAddress}</p>
-            </>
-          ) : null}
-          <p className={`font-bold tracking-tight text-white ${isCarousel ? "mt-2 text-2xl sm:text-3xl" : "text-lg sm:text-xl"}`}>
-            {rent}
-          </p>
-          <p className="text-[11px] font-medium text-white/75 sm:text-xs">{periodSuffix(card)}</p>
-        </div>
+        {hasPhoto ? (
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+        ) : null}
+        <HousingBrowseCardOverlay
+          card={card}
+          rent={rent}
+          periodLabel={periodSuffix(card)}
+          layout={isCarousel ? "carousel" : "compact"}
+        />
         {card.petFriendly ? (
           <span className="absolute left-2.5 top-2.5 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
             Pets OK
@@ -556,7 +552,7 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
           <div className="lg:hidden">
             <HousingBrowseSwipeStack cards={cards} />
           </div>
-          <div className="hidden lg:block">
+          <div className="hidden pb-8 lg:block">
             <HousingBrowseCarousel cards={cards} />
           </div>
         </>

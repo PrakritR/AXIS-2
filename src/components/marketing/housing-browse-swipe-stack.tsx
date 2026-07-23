@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { demoOnlyBrowseCardPlaceholderImage, type PropertyBrowseCard } from "@/lib/room-listings-catalog";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
+import { HousingBrowseCardOverlay } from "@/components/marketing/housing-browse-card-overlay";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 
 const SWIPE_THRESHOLD_PX = 72;
@@ -32,6 +33,7 @@ function SwipeCardFace({
   const resolvedImageUrl =
     card.imageUrl || (isDemoModeActive() ? demoOnlyBrowseCardPlaceholderImage(card.propertyId) : "");
   const isDataUrl = resolvedImageUrl.startsWith("data:");
+  const hasPhoto = Boolean(resolvedImageUrl);
 
   return (
     <div
@@ -39,7 +41,7 @@ function SwipeCardFace({
       style={style}
     >
       <div className="relative h-full w-full overflow-hidden">
-        {resolvedImageUrl ? (
+        {hasPhoto ? (
           <Image
             src={resolvedImageUrl}
             alt=""
@@ -50,21 +52,22 @@ function SwipeCardFace({
             draggable={false}
           />
         ) : (
-          <NoImagePlaceholder />
+          <NoImagePlaceholder className="bg-gradient-to-br from-muted/15 to-accent/25" />
         )}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
-
-        <div className="absolute inset-x-0 bottom-0 p-5">
-          <p className="text-sm font-semibold text-white/90">{card.neighborhood}</p>
-          <p className="mt-0.5 text-xl font-bold tracking-tight text-white">{card.headlineAddress}</p>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-white">{rent}</p>
-          <p className="text-xs font-medium text-white/75">{card.pricePeriod === "day" ? " / day" : " / month"}</p>
-          {card.petFriendly ? (
-            <span className="mt-3 inline-block rounded-full bg-black/45 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
-              Pets OK
-            </span>
-          ) : null}
-        </div>
+        {hasPhoto ? (
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+        ) : null}
+        <HousingBrowseCardOverlay
+          card={card}
+          rent={rent}
+          periodLabel={card.pricePeriod === "day" ? " / day" : " / month"}
+          layout="swipe"
+        />
+        {card.petFriendly ? (
+          <span className="absolute left-2.5 top-2.5 rounded-full bg-black/45 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+            Pets OK
+          </span>
+        ) : null}
       </div>
     </div>
   );

@@ -59,7 +59,7 @@ export function RentBrowsePageClient() {
           </h1>
         </header>
 
-        <div className="mt-6 sm:mt-8">
+        <div className="mb-10 mt-6 sm:mb-12 sm:mt-8">
           <ResidentHousingBrowse propertyIds={browseIds} />
         </div>
 

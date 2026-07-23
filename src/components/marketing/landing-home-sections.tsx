@@ -138,28 +138,6 @@ function WeekRoadmapSection() {
   );
 }
 
-const PORTFOLIO_BUILDINGS = ["Cascade Lofts", "Ballard Commons", "Cascade Court"] as const;
-
-function BuildingIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
-      <path
-        d="M3.5 13.5V3.75a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 .75.75V13.5M9.5 13.5V6.75a.75.75 0 0 1 .75-.75h1.75a.75.75 0 0 1 .75.75v6.75M2.5 13.5h11.5"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5 5.25h1M5 7.5h1M5 9.75h1"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function OpsSkySection() {
   return (
     <section className="lp-ops-sky">
@@ -181,14 +159,6 @@ function OpsSkySection() {
         <TaskFloatRow status="review" label="Manager review" title="Lease · Cascade 4B" agent="Leases" />
         <TaskFloatRow status="run" label="Running" title="Rent reminder · April overdue" agent="Payments" />
         <TaskFloatRow status="done" label="Completed" title="Work order #142 · bids collected" agent="Work orders" />
-      </div>
-      <div className="lp-portfolio-strip" aria-hidden>
-        {PORTFOLIO_BUILDINGS.map((name) => (
-          <span key={name} className="lp-portfolio-chip">
-            <BuildingIcon />
-            {name}
-          </span>
-        ))}
       </div>
     </section>
   );
