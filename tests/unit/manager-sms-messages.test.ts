@@ -96,21 +96,52 @@ describe("manager-sms-messages types", () => {
   it("sorts SMS threads by newest, name, and house", () => {
     const rows = [
       {
-        resident: { name: "Zoe", propertyLabel: "B House", phone: "+1" },
+        resident: { name: "Zoe", propertyLabel: "B House", residentEmail: null, phone: "+1" },
         lastMessage: { createdAt: "2026-07-16T10:00:00.000Z" } as ManagerSmsMessageRow,
       },
       {
-        resident: { name: "Amy", propertyLabel: "A House", phone: "+2" },
+        resident: { name: "Amy", propertyLabel: "A House", residentEmail: null, phone: "+2" },
         lastMessage: { createdAt: "2026-07-15T10:00:00.000Z" } as ManagerSmsMessageRow,
       },
       {
-        resident: { name: "Bob", propertyLabel: "A House", phone: "+3" },
+        resident: { name: "Bob", propertyLabel: "A House", residentEmail: null, phone: "+3" },
         lastMessage: null,
       },
     ];
     expect(sortSmsConversationRows(rows, "newest").map((r) => r.resident.name)).toEqual(["Zoe", "Amy", "Bob"]);
     expect(sortSmsConversationRows(rows, "name").map((r) => r.resident.name)).toEqual(["Amy", "Bob", "Zoe"]);
     expect(sortSmsConversationRows(rows, "house").map((r) => r.resident.name)).toEqual(["Amy", "Bob", "Zoe"]);
+  });
+
+  it("sorts by the label the row renders, not the raw phone-like name", () => {
+    const at = (iso: string) => ({ createdAt: iso }) as ManagerSmsMessageRow;
+    const rows = [
+      {
+        // Renders "Texter ····1976" — must not sort under "+".
+        resident: { name: "+15105791976", propertyLabel: null, residentEmail: null, phone: "+15105791976" },
+        lastMessage: at("2026-07-16T10:00:00.000Z"),
+      },
+      {
+        // Renders "Ballard Commons · 2B" — must not sort by its phone digits.
+        resident: { name: "+12065550142", propertyLabel: "Ballard Commons · 2B", residentEmail: null, phone: "+12065550142" },
+        lastMessage: at("2026-07-15T10:00:00.000Z"),
+      },
+      {
+        resident: { name: "Amy", propertyLabel: null, residentEmail: null, phone: "+3" },
+        lastMessage: at("2026-07-14T10:00:00.000Z"),
+      },
+    ];
+    expect(sortSmsConversationRows(rows, "name").map((r) => smsConversationDisplayName(r.resident))).toEqual([
+      "Amy",
+      "Ballard Commons · 2B",
+      "Texter ····1976",
+    ]);
+    // Newest/oldest ordering is untouched by the label change.
+    expect(sortSmsConversationRows(rows, "newest").map((r) => r.resident.name)).toEqual([
+      "+15105791976",
+      "+12065550142",
+      "Amy",
+    ]);
   });
 });
 
