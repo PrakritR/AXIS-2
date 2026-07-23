@@ -33,8 +33,12 @@ export async function GET(request: NextRequest) {
       if (tier === "free") {
         // The user explicitly chose the Free manager plan — provision so the account
         // is ready the moment they choose to open the portal.
-        await ensureFreeManagerPortalAccess(service, user);
-        return createAccountPath({ tier, billing });
+        const provisioned = await ensureFreeManagerPortalAccess(service, user);
+        if (provisioned.status !== "portal_ready") {
+          console.warn("Free manager provisioning skipped on partner-pricing callback:", provisioned.reason);
+          return createAccountPath({ tier, billing });
+        }
+        return createAccountPath({ account_ready: "1", tier, billing });
       }
       if (offer?.returnSurface === "mobile-plan") {
         return "/auth/manager/plan?google_signed_in=1";

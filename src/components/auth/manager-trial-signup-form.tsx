@@ -15,10 +15,12 @@ import type { PlanTierId } from "@/data/manager-plan-tiers";
 import {
   buildPricingOffer,
   continuePartnerPricingWithOffer,
+  fetchPartnerPricingSession,
   handleGoogleSignedInReturn,
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { normalizeE164 } from "@/lib/phone-e164";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -39,6 +41,7 @@ export function ManagerTrialSignupForm({
   disabled = false,
   hideLegalFooter = false,
   googleReturn = false,
+  accountReadyReturn = false,
   trialSignup = true,
 }: {
   tier: PlanTierId;
@@ -47,6 +50,7 @@ export function ManagerTrialSignupForm({
   disabled?: boolean;
   hideLegalFooter?: boolean;
   googleReturn?: boolean;
+  accountReadyReturn?: boolean;
   trialSignup?: boolean;
 }) {
   const router = useRouter();
@@ -60,22 +64,29 @@ export function ManagerTrialSignupForm({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
   const [accountReady, setAccountReady] = useState(false);
+  const [creatingAnother, setCreatingAnother] = useState(false);
 
+  const oauthReturn = googleReturn || accountReadyReturn;
   const locked = disabled || busy || finishingGoogle;
+
+  const readSignedInUser = useCallback(async (awaitOAuthSession: boolean): Promise<SignedInUser | null> => {
+    const supabase = createSupabaseBrowserClient();
+    const user = awaitOAuthSession
+      ? await waitForAuthUser(supabase)
+      : (await supabase.auth.getSession()).data.session?.user ?? null;
+    return user ? { id: user.id, email: user.email ?? null } : null;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const supabase = createSupabaseBrowserClient();
-      const { data } = await supabase.auth.getSession();
-      const user = data.session?.user ?? null;
-      if (cancelled) return;
-      setSignedInUser(user ? { id: user.id, email: user.email ?? null } : null);
+      const user = await readSignedInUser(oauthReturn);
+      if (!cancelled) setSignedInUser(user);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [oauthReturn, readSignedInUser]);
 
   const applyPricingResult = useCallback(
     (result: ContinuePartnerPricingResult) => {
@@ -90,6 +101,19 @@ export function ManagerTrialSignupForm({
     },
     [showToast],
   );
+
+  useEffect(() => {
+    if (!accountReadyReturn) return;
+    let cancelled = false;
+    void (async () => {
+      const session = await fetchPartnerPricingSession();
+      if (cancelled) return;
+      if (session.authenticated && !session.needsPricing) setAccountReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountReadyReturn]);
 
   useEffect(() => {
     if (!googleReturn) return;
@@ -114,6 +138,7 @@ export function ManagerTrialSignupForm({
         const continued = await continuePartnerPricingWithOffer(offer);
         if (cancelled) return;
         applyPricingResult(continued);
+        setSignedInUser(await readSignedInUser(true));
         if (typeof window !== "undefined") {
           const params = new URLSearchParams({
             mode: "create",
@@ -205,6 +230,35 @@ export function ManagerTrialSignupForm({
         <p className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-sm text-muted">
           Finishing sign-in…
         </p>
+      ) : accountReady && !creatingAnother ? (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-border bg-card/50 px-3 py-3 text-center text-[13px] leading-snug text-muted">
+            Your property account is ready
+            {signedInUser?.email ? (
+              <>
+                {" "}
+                for <span className="font-semibold text-foreground">{signedInUser.email}</span>
+              </>
+            ) : null}
+            .
+          </div>
+          <Button
+            type="button"
+            data-attr="manager-trial-signup-go-to-portal"
+            className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+            onClick={() => void navigateAfterRoleSignup("/portal/dashboard")}
+          >
+            Go to your portal
+          </Button>
+          <button
+            type="button"
+            data-attr="manager-trial-signup-create-another"
+            className="w-full text-center text-[12px] font-semibold text-primary hover:opacity-90"
+            onClick={() => setCreatingAnother(true)}
+          >
+            Create a different property account
+          </button>
+        </div>
       ) : (
         <>
           {signedInUser || accountReady ? (
