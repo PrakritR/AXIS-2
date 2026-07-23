@@ -160,7 +160,7 @@ export function LandingDashboardChatDemo() {
     <section
       ref={rootRef}
       id="product"
-      className="lp-dash-demo lp-blueprint scroll-mt-20"
+      className="lp-dash-demo scroll-mt-20"
       aria-label="Manager dashboard and PropLane Assistant demo"
     >
       <div className="lp-w-wide">

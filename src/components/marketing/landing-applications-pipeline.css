@@ -221,8 +221,15 @@
 /* Circular profile avatar: a filled brand-accent chip with white initials that
  * reads like a real profile picture (Chrome-style), not flat text. Single hue
  * per the "never mix blue and purple" brand rule — the accent is blue in light,
- * purple in dark. A card-colored ring + soft shadow lift it off the row. */
+ * purple in dark. A card-colored ring + soft shadow lift it off the row.
+ *
+ * The fill is built from the DEEP accent, not --pl-accent: the initials are
+ * 14px/700 (not WCAG "large" text, so they need 4.5:1), and plain --pl-accent
+ * is only ~3.4:1 against white in dark theme. The highlight stop is kept to a
+ * 12% white mix so every stop of the gradient — not just the mid-tone — clears
+ * AA in both themes. */
 .lp-pipe-avatar {
+  --lp-pipe-avatar-fill: color-mix(in srgb, var(--pl-accent-deep) 92%, black);
   flex-shrink: 0;
   width: 42px;
   height: 42px;
@@ -236,9 +243,9 @@
   color: var(--pl-white);
   background: linear-gradient(
     140deg,
-    color-mix(in srgb, var(--lp-pipe-accent) 78%, white),
-    var(--lp-pipe-accent) 52%,
-    color-mix(in srgb, var(--lp-pipe-accent) 82%, black)
+    color-mix(in srgb, var(--lp-pipe-avatar-fill) 88%, white),
+    var(--lp-pipe-avatar-fill) 52%,
+    color-mix(in srgb, var(--lp-pipe-avatar-fill) 78%, black)
   );
   border: 2px solid var(--lp-card);
   box-shadow:
@@ -623,7 +630,8 @@
   }
 
   .lp-pipe-detail {
-    padding-left: 12px;
+    /* Matches the row's own 16px content edge (see .lp-pipe-row padding). */
+    padding-left: 16px;
   }
 
   .lp-pipe-detail-link {

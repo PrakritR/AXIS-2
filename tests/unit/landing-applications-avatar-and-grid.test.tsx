@@ -54,6 +54,14 @@ const globalsCss = flat(read("../../src/app/globals.css"));
 const demoHeroTsx = read("../../src/components/marketing/landing-demo-hero.tsx");
 const dashDemoTsx = read("../../src/components/marketing/landing-dashboard-chat-demo.tsx");
 const ibxDemoTsx = read("../../src/components/marketing/landing-inbox-approve-demo.tsx");
+const homeSectionsTsx = read("../../src/components/marketing/landing-home-sections.tsx");
+
+// Scope every assertion to the one rule / element under test — a whole-file grep
+// fails on unrelated future rules that legitimately reuse a value.
+const avatarRule = pipeCss.match(/\.lp-pipe-avatar \{([^}]*)\}/)?.[1] ?? "";
+const heroGridClass = demoHeroTsx.match(/className="(relative mx-auto grid[^"]*)"/)?.[1] ?? "";
+const panelWrapClass =
+  demoHeroTsx.match(/className="([^"]*)"\s*>\s*<ApplicationsPipelinePanel/)?.[1] ?? "";
 
 describe("landing applications avatars", () => {
   it("renders each applicant's initials inside a circular avatar chip", () => {
@@ -67,12 +75,23 @@ describe("landing applications avatars", () => {
   });
 
   it("styles the avatar as a filled brand-accent circle with white initials", () => {
-    // Pull just the base `.lp-pipe-avatar { ... }` rule.
-    const rule = pipeCss.match(/\.lp-pipe-avatar \{([^}]*)\}/)?.[1] ?? "";
-    expect(rule).toContain("border-radius: 999px"); // circular
-    expect(rule).toContain("var(--lp-pipe-accent)"); // brand-accent fill
-    expect(rule).toContain("color: var(--pl-white)"); // high-contrast initials
-    expect(rule).toContain("box-shadow"); // lifts off the row so it "pops"
+    expect(avatarRule).toContain("border-radius: 999px"); // circular
+    expect(avatarRule).toContain("var(--lp-pipe-avatar-fill)"); // brand-accent fill
+    expect(avatarRule).toContain("color: var(--pl-white)"); // high-contrast initials
+    expect(avatarRule).toContain("box-shadow"); // lifts off the row so it "pops"
+  });
+
+  it("builds the fill from the DEEP accent so white initials clear WCAG AA", () => {
+    // --pl-accent alone is only ~3.4:1 against white in dark theme; the deep
+    // accent clears 4.5:1 in both themes, and the highlight stop is capped so
+    // the lightest part of the gradient clears it too.
+    expect(avatarRule).toContain(
+      "--lp-pipe-avatar-fill: color-mix(in srgb, var(--pl-accent-deep) 92%, black)",
+    );
+    const highlight = Number(
+      avatarRule.match(/color-mix\(in srgb, var\(--lp-pipe-avatar-fill\) (\d+)%, white\)/)?.[1],
+    );
+    expect(highlight).toBeGreaterThanOrEqual(88);
   });
 });
 
@@ -83,9 +102,36 @@ describe("landing applications demo is enlarged", () => {
     expect(pipeCss).toMatch(/\.lp-pipe-row \{[^}]*padding: 14px 16px/);
   });
 
+  it("indents the expanded detail to the row's own content edge on mobile", () => {
+    const mobileDetail = pipeCss.match(
+      /@media \(max-width: 640px\) \{.*?\.lp-pipe-detail \{([^}]*)\}/,
+    )?.[1];
+    expect(mobileDetail).toContain("padding-left: 16px");
+  });
+
   it("widens the applications panel column in the hero", () => {
-    expect(demoHeroTsx).toContain("max-w-[524px]");
-    expect(demoHeroTsx).not.toContain("max-w-[468px]");
+    expect(panelWrapClass).toContain("max-w-[524px]");
+    expect(panelWrapClass).not.toContain("max-w-[468px]");
+  });
+
+  it("gives the panel a hero grid track wide enough for that cap to bind", () => {
+    // A `max-w` the track can never reach is a no-op; derive the track width
+    // from the same tokens the markup declares.
+    const containerMax = Number(heroGridClass.match(/max-w-\[(\d+)px\]/)?.[1]);
+    const inlinePad = Number(heroGridClass.match(/sm:px-(\d+)/)?.[1]) * 4;
+    const gap = Number(heroGridClass.match(/lg:gap-(\d+)/)?.[1]) * 4;
+    const cols = heroGridClass.match(
+      /lg:grid-cols-\[minmax\(0,([\d.]+)fr\)_minmax\(0,([\d.]+)fr\)\]/,
+    );
+    const leftFr = Number(cols?.[1]);
+    const rightFr = Number(cols?.[2]);
+    const panelMax = Number(panelWrapClass.match(/max-w-\[(\d+)px\]/)?.[1]);
+
+    const freeSpace = containerMax - inlinePad * 2 - gap;
+    const rightTrack = (freeSpace * rightFr) / (leftFr + rightFr);
+
+    expect(panelMax).toBe(524);
+    expect(rightTrack).toBeGreaterThanOrEqual(panelMax);
   });
 });
 
@@ -95,23 +141,33 @@ describe("landing blueprint grid is one consistent size", () => {
   });
 
   it("drives the hero lattice from the shared token (no hard-coded pitch)", () => {
-    expect(globalsCss).toContain("transparent 1px var(--lp-grid-size)");
-    expect(globalsCss).not.toContain("transparent 1px 56px");
+    const rule = globalsCss.match(/\.landing-hero-grid \{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("transparent 1px var(--lp-grid-size)");
+    expect(rule).not.toContain("transparent 1px 56px");
   });
 
   it("drives the blueprint grid from the shared token (no 24px square)", () => {
-    expect(proplaneCss).toMatch(
-      /\.lp-blueprint \{[^}]*background-size: var\(--lp-grid-size\) var\(--lp-grid-size\)/,
-    );
-    expect(proplaneCss).not.toContain("background-size: 24px 24px");
+    const rule = proplaneCss.match(/\.lp-blueprint \{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("background-size: var(--lp-grid-size) var(--lp-grid-size)");
+    expect(rule).not.toContain("background-size: 24px 24px");
   });
 
-  it("applies the blueprint as a continuous motif across the flow-band sections", () => {
-    expect(dashDemoTsx).toContain("lp-dash-demo lp-blueprint");
-    expect(ibxDemoTsx).toContain("lp-ibx-demo lp-blueprint");
-    // The learn section keeps its blueprint class too.
-    expect(read("../../src/components/marketing/landing-home-sections.tsx")).toContain(
-      "lp-learn lp-blueprint",
+  it("paints the grid once on the flow-band wrapper, not per section", () => {
+    // A per-section background restarts its tiling origin at each section's own
+    // top edge, leaving an off-pitch row at every seam. One wrapper = one grid.
+    expect(homeSectionsTsx).toContain('className="lp-flow-band lp-blueprint"');
+    expect(homeSectionsTsx).toMatch(
+      /lp-flow-band lp-blueprint[\s\S]*?<LandingDashboardChatDemo \/>[\s\S]*?<LandingInboxApproveDemo \/>[\s\S]*?<LearnSection \/>[\s\S]*?<\/div>/,
     );
+    expect(dashDemoTsx).not.toContain("lp-blueprint");
+    expect(ibxDemoTsx).not.toContain("lp-blueprint");
+    expect(homeSectionsTsx).not.toContain("lp-learn lp-blueprint");
+  });
+
+  it("leaves the flow-band sections transparent so the one grid shows through", () => {
+    for (const selector of ["\\.lp-dash-demo", "\\.lp-ibx-demo", "\\.lp-learn"]) {
+      const rule = proplaneCss.match(new RegExp(`${selector} \\{([^}]*)\\}`))?.[1] ?? "";
+      expect(rule).not.toContain("background: var(--lp-surface)");
+    }
   });
 });
