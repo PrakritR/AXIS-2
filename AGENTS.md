@@ -628,6 +628,43 @@ destructive actions and column labels from the ROW's folder, not the active tab
 inheriting it for a live inbox row destroys real mail. Coverage:
 `tests/unit/manager-inbox-search.test.tsx`.
 
+### Manager Communication is one unified, conversation-based inbox (no folder tabs)
+
+The real manager Communication surface (`manager-communication.tsx` →
+`manager-unified-inbox.tsx`) is a single conversation list + chat threads, NOT
+the old Unopened / Opened / Sent / Trash / Schedule tab bar. Invariants:
+
+- **No folder tabs.** `ManagerUnifiedInbox` shows ALL live conversations
+  (inbox + sent) in one list; the `tabId` route param is legacy and does not
+  segregate the list. Archived (trashed) conversations are reachable via the
+  `unified-inbox-archived-toggle`, and trash/restore live in the open thread
+  header — never re-add a top-level Schedule/Trash tab. `INBOX_TAB_DEFS` and the
+  standalone tabbed `ManagerInbox` shell survive only for the /demo path and
+  legacy route redirects.
+- **Scheduled messages render INLINE in the recipient's thread** as
+  "Scheduled · sends <when>" cards (`InboxScheduledCard`), cancel/send-now/edit
+  in place — the standalone Schedule table is gone from production. Matching is
+  pure: `scheduledItemsForRecipient(email, manual, automation)` in
+  `src/lib/inbox-scheduled-thread.ts`. Manager-vs-resident edit permissions are
+  unchanged (resident-originated rows are cancel-only).
+- **Thread messages are channel-tagged** (`InboxBubbleMessage.channel`,
+  `InboxChannel = email|sms|whatsapp|gmail`). Email is the only live channel; the
+  tag exists so SMS/WhatsApp/Gmail tag into the SAME per-person thread (built on
+  the one-thread-per-person `portal-inbox-delivery.ts` foundation) rather than a
+  parallel list. Bubbles render the FULL body (pre-wrap, no clamp).
+- **SMS UI is gated by `isSmsCommUiEnabled()`** (`src/lib/sms-comm-ui-flag.server.ts`,
+  env `SMS_COMM_UI_ENABLED`, default OFF, server-resolved and threaded as the
+  `smsUiEnabled` prop through `manager-communication.tsx` → `manager-unified-inbox.tsx`
+  → `manager-communication-compose-modal.tsx`). It gates ONLY the UI — SMS
+  transport, both SMS agents, and phone provisioning stay live. ⚠️ While hidden,
+  inbound-SMS notices must stay visible: `filterEmailInboxThreads(rows,
+  { keepSmsLike: !smsUiEnabled })` lets them fall through into the conversation
+  list instead of vanishing into the hidden SMS panel. Coverage:
+  `tests/unit/unified-conversation-inbox.test.tsx`,
+  `tests/unit/inbox-scheduled-thread.test.ts`,
+  `tests/unit/inbox-thread-omnichannel.test.tsx`,
+  `tests/unit/sms-comm-ui-flag.test.ts`.
+
 # Feature architecture notes (mandatory pre-reads)
 
 The deep per-feature history lives in `docs/agents/` — one file per area.

@@ -20,7 +20,8 @@ export function PortalCommunicationShell({
   /** Email/SMS channel tabs removed — unified inbox uses folder pills only. */
   channelNav?: ReactNode;
   threadFilters?: ReactNode;
-  statusPills: ReactNode;
+  /** Legacy folder tabs; omitted in the unified conversation inbox. */
+  statusPills?: ReactNode;
   children: ReactNode;
 }) {
   return (

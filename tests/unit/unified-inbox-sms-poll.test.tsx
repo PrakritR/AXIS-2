@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 //
-// Egress guard for the unified Communication inbox: the SMS poll must not run
-// while the tab is backgrounded (we are on the Supabase free plan — a hidden
-// page polling every 20s is pure waste), and it must refetch immediately when
-// the manager comes back so the list is fresh on return.
+// Egress guard for the unified Communication inbox: with the SMS UI enabled the
+// SMS poll must not run while the tab is backgrounded (we are on the Supabase
+// free plan — a hidden page polling every 20s is pure waste), and it must
+// refetch immediately when the manager comes back so the list is fresh on
+// return. (When the SMS UI flag is OFF the poll never runs at all — covered by
+// unified-conversation-inbox.test.tsx.)
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, cleanup, waitFor } from "@testing-library/react";
 
@@ -41,7 +43,7 @@ describe("unified Communication SMS poll", () => {
     vi.stubGlobal("fetch", fetchMock);
     setVisibility("visible");
 
-    render(<ManagerUnifiedInbox tabId="unopened" commBase="/portal/communication" />);
+    render(<ManagerUnifiedInbox tabId="unopened" commBase="/portal/communication" smsUiEnabled />);
 
     const smsCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes(SMS_URL)).length;
     await waitFor(() => expect(smsCalls()).toBe(1));

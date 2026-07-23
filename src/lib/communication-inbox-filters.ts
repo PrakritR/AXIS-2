@@ -18,9 +18,20 @@ export function isSmsLikeInboxThread(thread: Pick<PersistedInboxThread, "from" |
   return false;
 }
 
-/** Email-channel threads only (exclude SMS-like rows). */
+/**
+ * Email-channel threads only (exclude SMS-like rows).
+ *
+ * When the SMS Communication UI is hidden (A2P not yet cleared), pass
+ * `{ keepSmsLike: true }` so inbound-SMS notices FALL THROUGH into the unified
+ * conversation list instead of vanishing: they are normally routed to the SMS
+ * panel, which is hidden, so filtering them here too would make an inbound text
+ * invisible in both places. See `isSmsCommUiEnabled()` and the report's
+ * `isSmsLikeInboxThread` warning.
+ */
 export function filterEmailInboxThreads<T extends Pick<PersistedInboxThread, "from" | "email" | "subject">>(
   threads: T[],
+  opts?: { keepSmsLike?: boolean },
 ): T[] {
+  if (opts?.keepSmsLike) return threads;
   return threads.filter((thread) => !isSmsLikeInboxThread(thread));
 }

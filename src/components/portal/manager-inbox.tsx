@@ -31,6 +31,7 @@ import {
   AiDraftReplyCard,
   InboxComposer,
   InboxConversationRow,
+  InboxScheduledCard,
   InboxThreadEmpty,
   InboxThreadView,
   InboxTwoPane,
@@ -38,9 +39,20 @@ import {
   inboxTabEmptyCopy,
   type InboxBubbleMessage,
 } from "./portal-inbox-ui";
-import { useInboxRowSelection } from "@/components/portal/portal-inbox-selection";
+import {
+  useInboxRowSelection,
+  sendManualScheduledMessageNow,
+  sendAutomationScheduledMessageNow,
+} from "@/components/portal/portal-inbox-selection";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
-import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
+import { ScheduleInboxComposeForm } from "@/components/portal/schedule-inbox-compose-modal";
+import {
+  ScheduledMessageEditForm,
+  patchScheduledMessage,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import { scheduledItemsForRecipient } from "@/lib/inbox-scheduled-thread";
+import { readPortalApiError } from "@/lib/portal-api-error";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
 import {
@@ -143,22 +155,22 @@ export const ManagerInbox = forwardRef<
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const inboxBase = embeddedInCommunication && commBase ? `${commBase}/inbox` : `${portalBase}/inbox`;
-  const { messages: scheduledMessages } = useScheduledPaymentMessages({ includeHidden: false });
+  const { messages: scheduledMessages, reload: reloadAutomationScheduled } = useScheduledPaymentMessages({
+    includeHidden: false,
+  });
   const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
 
-  useEffect(() => {
+  const reloadManualScheduled = useCallback(async () => {
     if (isDemoModeActive()) return;
-    let cancelled = false;
-    void (async () => {
-      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
-      if (!res.ok || cancelled) return;
-      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
-      setManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
+    if (!res.ok) return;
+    const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+    setManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
   }, []);
+
+  useEffect(() => {
+    void reloadManualScheduled();
+  }, [reloadManualScheduled]);
 
   const scheduleCount = useMemo(() => {
     const upcoming = (status: string, sendAt: string) =>
@@ -609,9 +621,83 @@ export const ManagerInbox = forwardRef<
         body: m.body,
         at: m.at,
         direction: outbound ? "outbound" : "inbound",
+        // Email is the only live channel today; the tag makes the thread
+        // omnichannel-ready so SMS/WhatsApp/Gmail can join the same person-thread.
+        channel: "email",
       } satisfies InboxBubbleMessage;
     });
   }, [activeThread, activeFolder]);
+
+  // ---- Scheduled / automated messages, INLINE in the person's thread --------
+  // The old standalone Schedule table is gone; upcoming messages to this person
+  // render as "Scheduled · sends <when>" cards at the tail of their conversation,
+  // cancelable / send-now / editable in place.
+  const [expandedScheduledId, setExpandedScheduledId] = useState<string | null>(null);
+  const [scheduledBusyId, setScheduledBusyId] = useState<string | null>(null);
+
+  const threadScheduledItems = useMemo(
+    () =>
+      activeThread
+        ? scheduledItemsForRecipient(activeThread.email, manualScheduledMessages, scheduledMessages)
+        : [],
+    [activeThread, manualScheduledMessages, scheduledMessages],
+  );
+
+  // A fresh scheduled-edit panel per conversation.
+  useEffect(() => {
+    setExpandedScheduledId(null);
+  }, [expandedId]);
+
+  const reloadScheduled = useCallback(() => {
+    void reloadManualScheduled();
+    void reloadAutomationScheduled();
+  }, [reloadManualScheduled, reloadAutomationScheduled]);
+
+  const cancelScheduledItem = useCallback(
+    async (item: { id: string; source: "manual" | "automation" }) => {
+      setScheduledBusyId(item.id);
+      try {
+        if (item.source === "manual") {
+          const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ cancelled: true }),
+          });
+          if (!res.ok) throw new Error(await readPortalApiError(res, "Could not cancel send."));
+        } else {
+          await patchScheduledMessage(item.id, { cancelled: true });
+        }
+        showToast("Scheduled send cancelled.");
+        setExpandedScheduledId((cur) => (cur === item.id ? null : cur));
+        reloadScheduled();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not cancel send.");
+      } finally {
+        setScheduledBusyId(null);
+      }
+    },
+    [reloadScheduled, showToast],
+  );
+
+  const sendScheduledItemNow = useCallback(
+    async (item: { id: string; source: "manual" | "automation" }) => {
+      setScheduledBusyId(item.id);
+      try {
+        if (item.source === "manual") await sendManualScheduledMessageNow(item.id);
+        else await sendAutomationScheduledMessageNow(item.id);
+        showToast("Message sent.");
+        setExpandedScheduledId((cur) => (cur === item.id ? null : cur));
+        reloadScheduled();
+        reloadInbox();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not send message.");
+      } finally {
+        setScheduledBusyId(null);
+      }
+    },
+    [reloadScheduled, reloadInbox, showToast],
+  );
 
   const openThread = useCallback(
     (thread: InboxThread) => {
@@ -973,6 +1059,70 @@ export const ManagerInbox = forwardRef<
     )
   ) : null;
 
+  const scheduledCards =
+    activeThread && activeThread.folder !== "trash" && threadScheduledItems.length > 0 ? (
+      <div className="space-y-2 pt-1">
+        {threadScheduledItems.map((item) => {
+          const editPanel =
+            item.editable && expandedScheduledId === item.id
+              ? item.source === "manual"
+                ? (() => {
+                    const record = manualScheduledMessages.find((m) => m.id === item.id);
+                    return record ? (
+                      <ScheduleInboxComposeForm
+                        contacts={liveContacts}
+                        editMessage={record}
+                        onSaved={reloadScheduled}
+                        onClose={() => setExpandedScheduledId(null)}
+                        onToggleCancelled={async (cancelled) => {
+                          if (cancelled) await cancelScheduledItem(item);
+                        }}
+                        onSendNow={async () => {
+                          await sendScheduledItemNow(item);
+                        }}
+                      />
+                    ) : null;
+                  })()
+                : (() => {
+                    const record = scheduledMessages.find((m) => m.id === item.id);
+                    return record ? (
+                      <ScheduledMessageEditForm
+                        message={record}
+                        onSaved={reloadScheduled}
+                        onClose={() => setExpandedScheduledId(null)}
+                        onSendNow={async () => {
+                          await sendScheduledItemNow(item);
+                        }}
+                      />
+                    ) : null;
+                  })()
+              : null;
+          return (
+            <InboxScheduledCard
+              key={item.id}
+              sendLabel={item.sendLabel}
+              subject={item.subject}
+              body={item.body}
+              meta={item.meta}
+              channel={item.channel}
+              source={item.source}
+              editable={item.editable}
+              busy={scheduledBusyId === item.id}
+              expanded={expandedScheduledId === item.id}
+              onToggleExpand={
+                item.editable
+                  ? () => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))
+                  : undefined
+              }
+              onCancel={() => void cancelScheduledItem(item)}
+              onSendNow={() => void sendScheduledItemNow(item)}
+              editPanel={editPanel}
+            />
+          );
+        })}
+      </div>
+    ) : null;
+
   const threadPane = activeThread ? (
     <InboxThreadView
       title={
@@ -982,6 +1132,7 @@ export const ManagerInbox = forwardRef<
       }
       subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
       messages={activeBubbles}
+      afterMessages={scheduledCards}
       threadKey={activeThread.id}
       onBack={() => setExpandedId(null)}
       headerActions={threadHeaderActions}
