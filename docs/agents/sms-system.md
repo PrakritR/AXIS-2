@@ -45,6 +45,19 @@ threads the same way across the mapped-manager cohort instead of returning one
 flat feed. The manager/admin SMS UI keys rows on `conversationKey` and sorts via
 `sortSmsConversationRows` (Newest / Oldest / Name A–Z / House).
 
+**No Communication surface renders a raw phone number.** Every manager/admin SMS
+row and thread header — the SMS panel and the unified Communication list alike —
+takes its label from `smsConversationDisplayName` /
+`smsConversationSubtitle` (`src/lib/manager-sms-messages.ts`): name → property
+/ unit → email → a masked `Texter ····1234` handle → `Unknown contact`, where a
+`name` that is itself a number (`isPhoneLikeLabel`) counts as no name. This is
+a LABEL rule only — threading, replies and deletes still key on the phone /
+`conversationKey`, and both search boxes keep the phone in their haystack, so a
+manager typing a number still finds the thread. `sortSmsConversationRows` orders Name A–Z and
+House on that rendered label rather than the raw `name` for the same reason:
+sorting a value the list does not display makes the visible order look random.
+Coverage: `tests/unit/manager-sms-messages.test.ts`.
+
 **The backfill orders IDENTITY before TOPIC — never the other way round.**
 `claw_messaging_threads` holds exactly ONE mutable row per (manager, phone)
 (`unique (manager_user_id, resident_phone)`) and `topic` is overwritten on every

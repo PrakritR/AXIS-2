@@ -1,0 +1,68 @@
+// @vitest-environment jsdom
+//
+// Egress guard for the unified Communication inbox: the SMS poll must not run
+// while the tab is backgrounded (we are on the Supabase free plan — a hidden
+// page polling every 20s is pure waste), and it must refetch immediately when
+// the manager comes back so the list is fresh on return.
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, render, cleanup, waitFor } from "@testing-library/react";
+
+vi.mock("@/lib/portal-inbox-storage", () => ({
+  MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
+  PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
+  loadPersistedInbox: () => [],
+  inboxThreadMessages: () => [],
+}));
+vi.mock("@/components/portal/manager-inbox", () => ({ ManagerInbox: () => <div /> }));
+vi.mock("@/components/portal/manager-sms-panel", () => ({ ManagerSmsPanel: () => <div /> }));
+
+import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
+
+const SMS_URL = "/api/manager/sms-conversations";
+
+function setVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  setVisibility("visible");
+});
+
+describe("unified Communication SMS poll", () => {
+  it("skips the poll while the tab is hidden and refetches on refocus", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ residents: [] }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    setVisibility("visible");
+
+    render(<ManagerUnifiedInbox tabId="unopened" commBase="/portal/communication" />);
+
+    const smsCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes(SMS_URL)).length;
+    await waitFor(() => expect(smsCalls()).toBe(1));
+
+    // One visible tick -> one more fetch.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(smsCalls()).toBe(2);
+
+    // Backgrounded: three ticks, no fetches.
+    setVisibility("hidden");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(smsCalls()).toBe(2);
+
+    // Back in the foreground: refetch immediately, no waiting for the next tick.
+    await act(async () => {
+      setVisibility("visible");
+    });
+    await waitFor(() => expect(smsCalls()).toBe(3));
+  });
+});
