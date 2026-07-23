@@ -25,7 +25,7 @@ Where each brand surface lives — and the rule that `src/app/icon.svg` and `src
 
 | Principle | Meaning |
 |-----------|---------|
-| **Chrome where it matters** | Full animated substrate on heroes, auth, and billing success. Quiet static base everywhere else. |
+| **Chrome where it matters** | Full animated substrate on the partner hero, auth, and billing success. Quiet static base everywhere else (see “Where to use each”). |
 | **Calm where data lives** | Tables, forms, wizards, and ledgers sit on solid or near-solid surfaces — never over moving metal. |
 | **One accent, many neutrals** | Cobalt carries all interactive emphasis. Surfaces differ by neutral temperature and default theme, not new colors. |
 | **Geometry is shared** | Light and dark share radii, type scale, motion curves, and component structure — only substrate and foreground invert. |
