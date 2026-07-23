@@ -4,9 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_TOOLBAR_SELECT,
@@ -85,6 +83,9 @@ const LINKED_COUNT_TRIGGER =
 
 const OWNER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+
+const PENDING_ROLE_BADGE =
+  "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
 type InviteDraft = {
   assignedPropertyIds: string[];
@@ -335,7 +336,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
   const [addPropertySelect, setAddPropertySelect] = useState<Record<string, string>>({});
-  const [coManagerBucket, setCoManagerBucket] = useState<"active" | "pending">("active");
   const [linkedPropertiesPopup, setLinkedPropertiesPopup] = useState<{
     label: string;
     propertyIds: string[];
@@ -490,21 +490,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const outgoingPending = useMemo(
     () => remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing"),
     [remoteInvites],
-  );
-
-  const coManagerBucketCounts = useMemo(() => {
-    const active = useRemote ? activeRemote.length : localRows.length;
-    const pending = useRemote ? incomingPending.length + outgoingPending.length : 0;
-    return { active, pending };
-  }, [useRemote, activeRemote, localRows, incomingPending, outgoingPending]);
-
-  const coManagerBucketTabs = useMemo(
-    () =>
-      [
-        { id: "pending" as const, label: "Pending", count: coManagerBucketCounts.pending, dataAttr: "co-manager-filter-pending" },
-        { id: "active" as const, label: "Active", count: coManagerBucketCounts.active, dataAttr: "co-manager-filter-active" },
-      ] as const,
-    [coManagerBucketCounts],
   );
 
   const propertyOptions = useMemo(() => {
@@ -1253,6 +1238,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   }, [activeRemote, remoteLoaded, useRemote, userId]);
 
   const activeCards = useRemote ? activeRemote : localRows;
+  const hasTeamRows =
+    managedPropertyCount > 0 ||
+    activeCards.length > 0 ||
+    (useRemote && (incomingPending.length > 0 || outgoingPending.length > 0));
   const selectedPropIds = Object.entries(selectedProps)
     .filter(([, v]) => v)
     .map(([k]) => k);
@@ -1405,29 +1394,30 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     <ManagerPortalPageShell
       title="Co-managers"
       titleAside={
-        <Button
-          type="button"
-          variant="primary"
-          className={PORTAL_HEADER_ACTION_BTN}
-          disabled={atLinkCap}
-          onClick={openLinkModal}
-          title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
-          data-attr="co-manager-link-account"
-        >
-          Link account
-        </Button>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            tabs={[...coManagerBucketTabs]}
-            activeId={coManagerBucket}
-            onChange={(id) => setCoManagerBucket(id as typeof coManagerBucket)}
-          />
-        </ManagerPortalFilterRow>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {linkCap != null ? (
+            <span
+              className={`text-sm tabular-nums ${atLinkCap ? "font-semibold text-[var(--status-overdue-fg)]" : "text-muted"}`}
+              title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+            >
+              {linksUsed}/{linkCap} links
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_HEADER_ACTION_BTN}
+            disabled={atLinkCap}
+            onClick={openLinkModal}
+            title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+            data-attr="co-manager-link-account"
+          >
+            Link account
+          </Button>
+        </div>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         {loadError ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
             <span className="text-[var(--status-overdue-fg)]">
@@ -1449,97 +1439,38 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </div>
         ) : null}
 
-        {linkCap != null ? (
-          <div
-            className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${
-              atLinkCap ? "portal-banner-danger" : "border-border bg-accent/30"
-            }`}
-          >
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span
-                className={`font-semibold tabular-nums ${atLinkCap ? "text-[var(--status-overdue-fg)]" : "text-foreground"}`}
-              >
-                {linksUsed}/{linkCap}
-              </span>
-              <span className="text-muted">links in use</span>
-            </div>
-          </div>
-        ) : null}
-
-        {atLinkCap ? (
-          <p className="text-xs font-medium text-[var(--status-overdue-fg)]">
-            {/* Web keeps the "change plan" option; native drops it (App Store 2.1(b)). */}
-            <span className="native-hide">At limit. Remove a link or change plan.</span>
-            <span className="native-only">At limit. Remove a link to add another.</span>
-          </p>
-        ) : null}
         {inviteeAtCap ? (
           <p className="text-xs font-medium text-[var(--status-overdue-fg)]">
             That account is already at its link limit and cannot accept new links.
           </p>
         ) : null}
 
-        {coManagerBucket !== "active" && useRemote && incomingPending.length > 0 ? (
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">Pending approvals (incoming)</p>
-            <ul className="space-y-2">
-              {incomingPending.map((inv) => (
-                <li
-                  key={inv.id}
-                  className="flex flex-wrap items-start justify-start gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3"
-                >
-                  <div>
-                    <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
-                    <p className="font-mono text-xs text-muted">{inv.linkedAxisId}</p>
-                    <p className="mt-2 text-xs text-muted">
-                      {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
-                      Approve
-                    </Button>
-                    <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
-                      Decline
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {coManagerBucket !== "active" && useRemote && outgoingPending.length > 0 ? (
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">Waiting on them</p>
-            <ul className="space-y-2">
-              {outgoingPending.map((inv) => (
-                <li
-                  key={inv.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted"
-                >
-                  <div>
-                    <span className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
-                    <span className="ml-2 font-mono text-xs text-muted">{inv.linkedAxisId}</span>
-                  </div>
-                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
-                    Withdraw invite
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {coManagerBucket === "pending" ? (
-          incomingPending.length === 0 && outgoingPending.length === 0 ? (
-            <PortalDataTableEmpty message="No pending invites." icon="team" />
-          ) : null
-        ) : activeCards.length === 0 && managedPropertyCount === 0 ? (
+        {!hasTeamRows ? (
           <PortalDataTableEmpty message="No team members yet." icon="team" />
         ) : (
           <>
             <div className="space-y-2 lg:hidden">
+              {useRemote
+                ? incomingPending.map((inv) => (
+                    <PortalMobileSummaryCard
+                      key={`pending-in-${inv.id}`}
+                      title={inv.linkedDisplayName ?? inv.linkedAxisId}
+                      subtitle={inv.linkedAxisId}
+                      meta={`${inv.assignedPropertyIds.length} propert${inv.assignedPropertyIds.length === 1 ? "y" : "ies"}`}
+                      badge={<span className={PENDING_ROLE_BADGE}>Needs approval</span>}
+                    >
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                        <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
+                          Approve
+                        </Button>
+                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
+                          Decline
+                        </Button>
+                      </div>
+                    </PortalMobileSummaryCard>
+                  ))
+                : null}
+
               {managedPropertyCount > 0 ? (
                 <PortalMobileSummaryCard
                   key="__self__"
@@ -1625,6 +1556,23 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       </PortalMobileSummaryCard>
                     );
                   })}
+
+              {useRemote
+                ? outgoingPending.map((inv) => (
+                    <PortalMobileSummaryCard
+                      key={`pending-out-${inv.id}`}
+                      title={inv.linkedDisplayName ?? inv.linkedAxisId}
+                      subtitle={inv.linkedAxisId}
+                      badge={<span className={PENDING_ROLE_BADGE}>Invite sent</span>}
+                    >
+                      <div className="mt-3 border-t border-border pt-3">
+                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
+                          Withdraw invite
+                        </Button>
+                      </div>
+                    </PortalMobileSummaryCard>
+                  ))
+                : null}
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
@@ -1637,6 +1585,33 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                     </tr>
                   </thead>
                   <tbody>
+                    {useRemote
+                      ? incomingPending.map((inv) => (
+                          <tr key={`pending-in-${inv.id}`}>
+                            <td className={PORTAL_TABLE_TD}>
+                              <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
+                              <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
+                            </td>
+                            <td className={PORTAL_TABLE_TD}>
+                              <span className={PENDING_ROLE_BADGE}>Needs approval</span>
+                            </td>
+                            <td className={PORTAL_TABLE_TD}>
+                              <p className="text-xs text-muted">
+                                {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
+                                  Approve
+                                </Button>
+                                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
+                                  Decline
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      : null}
+
                     {managedPropertyCount > 0 ? (
                       <Fragment key="__self__">
                         <tr
@@ -1783,6 +1758,25 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             </Fragment>
                           );
                         })}
+
+                    {useRemote
+                      ? outgoingPending.map((inv) => (
+                          <tr key={`pending-out-${inv.id}`}>
+                            <td className={PORTAL_TABLE_TD}>
+                              <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
+                              <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
+                            </td>
+                            <td className={PORTAL_TABLE_TD}>
+                              <span className={PENDING_ROLE_BADGE}>Invite sent</span>
+                            </td>
+                            <td className={PORTAL_TABLE_TD}>
+                              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
+                                Withdraw invite
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      : null}
                   </tbody>
                 </table>
               </div>

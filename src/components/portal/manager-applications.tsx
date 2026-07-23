@@ -23,6 +23,7 @@ import {
   PortalTableDetailActions,
   PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
+import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
@@ -156,14 +157,6 @@ function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput {
     groupSize: row.application?.groupSize ?? "",
     status: applicationStatusForRow(row),
   };
-}
-
-/** Up-to-two-letter initials for the Linear-style circular row avatar. */
-function applicantInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase();
 }
 
 /** Client-resolved room label used by both the PDF download and the inline document view. */
@@ -879,12 +872,7 @@ export function ManagerApplications() {
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                   aria-expanded={expanded}
                 >
-                  <span
-                    aria-hidden
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-[var(--secondary)] text-[11px] font-semibold uppercase tracking-[0.02em] text-muted"
-                  >
-                    {applicantInitials(row.name)}
-                  </span>
+                  <InboxAvatar name={row.name} className="h-9 w-9 text-[11px]" />
                   {/* Floor the name column so a long group badge wraps to its own line
                       instead of squeezing the applicant's name down to one letter. */}
                   <span className="flex min-w-24 flex-1 flex-col">
