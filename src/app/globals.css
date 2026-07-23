@@ -2377,7 +2377,9 @@ html[data-native] [data-listing-sections-root] {
   color: var(--pl-muted-fg);
 }
 
-/* Soft bridge: dark hero → theme surface (cool white or black, never cream) */
+/* Soft bridge: dark hero → theme surface (cool white or black, never cream).
+   Tightened on desktop (≥1024px) so the hero + stats strip land in one viewport;
+   mobile keeps the fuller fade. */
 .landing-hero-bridge {
   height: 48px;
   margin-top: -1px;
@@ -2387,6 +2389,12 @@ html[data-native] [data-listing-sections-root] {
     color-mix(in srgb, var(--pl-black) 40%, var(--pl-surface)) 45%,
     var(--pl-surface) 100%
   );
+}
+
+@media (min-width: 1024px) {
+  .landing-hero-bridge {
+    height: 32px;
+  }
 }
 
 /* —— Light mode: fully light hero (blue brand only, no purple) —— */

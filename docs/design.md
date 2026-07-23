@@ -406,7 +406,7 @@ Inherits portal shell. Differentiators:
 - **Page frame:** `.axis-page-frame` — light gradient stack or dark solid
 - **Portal sidebar:** 266px fixed; content scrolls independently
 - **Border radius scale:** 14px nav/cards, 18px cards/photo, 24px auth card, 9999px pills/buttons
-- **Grid gaps:** 14–18px component gaps; 40–54px section padding on marketing pages
+- **Grid gaps:** 14–18px component gaps; 40–54px section padding on marketing pages. Exception: the home hero + its portfolio stats strip run a deliberately tighter desktop-only rhythm (`lg:` padding, `lg:py-9`/36px on the stats strip, and a 32px `.landing-hero-bridge` at ≥1024px) so both fit one ~900px viewport — see `landing-demo-hero.tsx`.
 
 ---
 

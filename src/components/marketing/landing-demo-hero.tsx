@@ -12,7 +12,19 @@ const STATS = [
   { value: "2", label: "managers" },
 ] as const;
 
-/** Theme-aware split hero + sparse portfolio stats. Dark keeps near-black; light is soft white. */
+/**
+ * Theme-aware split hero + sparse portfolio stats. Dark keeps near-black; light is soft white.
+ *
+ * Vertical rhythm invariant: the hero AND the stats strip must fit one ~900px
+ * desktop viewport so the portfolio numbers are visible without scrolling. The
+ * `lg:` padding here (`lg:pt-12 lg:pb-14` on the grid, `lg:py-9` on the stats
+ * strip) — plus the 32px `.landing-hero-bridge` at ≥1024px in `globals.css` — is
+ * deliberately tighter than the standard marketing rhythm (docs/design.md,
+ * "Layout & spacing") for exactly that reason. Hero height is driven by the left
+ * text column, not `ApplicationsPipelinePanel`, so trim padding rather than type
+ * or the demo card if this needs to shrink further. Sub-`lg` spacing is left at
+ * the fuller mobile rhythm on purpose — mobile stacks and scrolls normally.
+ */
 export function LandingDemoHero() {
   return (
     <>
@@ -30,7 +42,7 @@ export function LandingDemoHero() {
           <div className="landing-hero-wash" />
         </div>
 
-        <div className="relative mx-auto grid w-full max-w-[1120px] items-center gap-12 px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-14 lg:pb-24 lg:pt-20">
+        <div className="relative mx-auto grid w-full max-w-[1120px] items-center gap-12 px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-14 lg:pb-14 lg:pt-12">
           <div className="min-w-0 max-w-[34rem]">
             <h1 className="text-[clamp(2.35rem,5.2vw,3.65rem)] font-semibold leading-[1.05] tracking-[-0.035em]">
               <span className="landing-hero-line block">The AI does</span>
@@ -79,7 +91,7 @@ export function LandingDemoHero() {
 
       <div aria-hidden className="landing-hero-bridge" />
 
-      <section className="landing-stats-strip relative border-b py-12 sm:py-14">
+      <section className="landing-stats-strip relative border-b py-12 sm:py-14 lg:py-9">
         <div className="mx-auto flex w-full max-w-[720px] items-start justify-between gap-6 px-5 sm:px-6">
           {STATS.map((stat) => (
             <div key={stat.label} className="min-w-0 flex-1 text-center">
