@@ -42,7 +42,7 @@ import {
   toLocalDateStr,
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
-import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
+import { mondayBasedDayIndex, resolveBlockBaseDates, AVAILABILITY_WEEK_DAY_COUNT, buildMondayWeekDates } from "@/lib/portal/availability-block";
 import {
   plannedTourVisibleToViewer,
   tourInquiryVisibleToViewer,
@@ -63,11 +63,10 @@ const SLOT_ROW_START = 0;
 const SLOT_ROW_END = SLOTS_PER_DAY - 1;
 const DEFAULT_VISIBLE_START_SLOT = 16;
 const DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE = 40;
-// A scheduling block is a full Mon–Sun week. Desktop renders all seven columns;
-// narrow screens still page one day at a time via mobileDayIndex. This was 5,
-// which hid Sat/Sun entirely on web across the admin, manager, and vendor
-// calendars — availability on a weekend was unreachable.
-const COMPACT_BLOCK_DAYS = 7;
+// Mon–Sun week for admin, manager, and vendor availability grids.
+const COMPACT_BLOCK_DAYS = AVAILABILITY_WEEK_DAY_COUNT;
+const AVAILABILITY_WEEK_GRID_CLASS =
+  "grid w-full grid-cols-[minmax(56px,76px)_repeat(7,minmax(0,1fr))] text-xs";
 const WEEKDAY_OPTIONS = [
   { value: 0, label: "Mon" },
   { value: 1, label: "Tue" },
@@ -206,6 +205,7 @@ function weekdayLabelList(days: number[]) {
     .join(", ");
 }
 
+/** Admin, manager, and vendor schedule/availability UI (one shared week grid). */
 export function PortalCalendarPanels({
   storageKey,
   calendarRefreshSignal,
@@ -335,7 +335,7 @@ export function PortalCalendarPanels({
   }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
-  const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
+  const fullWeekDates = useMemo(() => buildMondayWeekDates(weekMonday), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
   const activeBlockDates = fullWeekDates;
   const activeBlockDateStrs = fullWeekDateStrs;
@@ -857,8 +857,7 @@ export function PortalCalendarPanels({
 
     const next = new Set(activeSlots);
     const occurrences = blockCadence === "once" ? 1 : Math.max(1, blockOccurrences);
-    // Anchor each selected weekday to the real date visible in the active block window
-    // (compact mode may start mid-week and even straddle a Monday boundary).
+    // Anchor each selected weekday to the date visible in the active week window.
     const baseDates = resolveBlockBaseDates(activeBlockDates, weekMonday, blockWeekdays);
 
     for (let occurrenceIndex = 0; occurrenceIndex < occurrences; occurrenceIndex += 1) {
@@ -1414,7 +1413,7 @@ export function PortalCalendarPanels({
                 {/* Desktop: Mon-Sun week grid. */}
                 <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
                   <div className="w-full" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-                    <div className={`grid w-full grid-cols-[minmax(56px,76px)_repeat(7,minmax(0,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
+                    <div className={`${AVAILABILITY_WEEK_GRID_CLASS} ${CALENDAR_GRID_GAP}`} data-attr="availability-week-grid">
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                       {activeBlockDates.map((d) => {
                         const ds = toLocalDateStr(d);

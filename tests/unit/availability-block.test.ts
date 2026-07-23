@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AVAILABILITY_WEEK_DAY_COUNT,
+  buildMondayWeekDates,
   mondayBasedDayIndex,
   resolveBlockBaseDates,
 } from "@/lib/portal/availability-block";
@@ -82,5 +84,33 @@ describe("resolveBlockBaseDates", () => {
     // to weekMonday (Jul 13).
     const compact = [0, 1, 2, 3, 4].map((i) => d(iso(new Date(2026, 6, 15 + i))));
     expect(resolveBlockBaseDates(compact, weekMonday, [0]).map(iso)).toEqual(["2026-07-13"]);
+  });
+});
+
+describe("buildMondayWeekDates", () => {
+  it("returns seven contiguous Mon–Sun dates", () => {
+    const weekMonday = d("2026-08-24");
+    expect(buildMondayWeekDates(weekMonday).map(iso)).toEqual([
+      "2026-08-24",
+      "2026-08-25",
+      "2026-08-26",
+      "2026-08-27",
+      "2026-08-28",
+      "2026-08-29",
+      "2026-08-30",
+    ]);
+  });
+
+  it("advancing one week has no gap between Sunday and the next Monday", () => {
+    const weekMonday = d("2026-08-24");
+    const dates = buildMondayWeekDates(weekMonday);
+    const nextMonday = d("2026-08-31");
+    const nextDates = buildMondayWeekDates(nextMonday);
+    const lastDay = dates[dates.length - 1]!;
+    const firstNext = nextDates[0]!;
+    const gapMs = firstNext.getTime() - lastDay.getTime();
+    expect(gapMs).toBe(24 * 60 * 60 * 1000);
+    expect(dates).toHaveLength(AVAILABILITY_WEEK_DAY_COUNT);
+    expect(nextDates).toHaveLength(AVAILABILITY_WEEK_DAY_COUNT);
   });
 });
