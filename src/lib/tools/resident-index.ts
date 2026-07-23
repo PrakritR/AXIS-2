@@ -8,6 +8,8 @@ import { buildRegistry, type ToolDefinition, type ToolRegistry } from "./registr
 import type { ResidentAgentContext } from "./resident-context";
 import { residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { getMyBalanceTool, listMyChargesTool, getMyPaymentMethodsTool } from "./domains/resident/balance";
+import { listMySharedDocumentsTool } from "./domains/resident/documents";
+import { reportMaintenanceIssueTool } from "./domains/resident/maintenance";
 import {
   getMyLeaseTool,
   getMyApplicationStatusTool,
@@ -47,6 +49,9 @@ const ALL_RESIDENT_TOOLS: ResidentTool[] = [
   listMyWorkOrdersTool,
   createServiceRequestTool,
   addServiceRequestNoteTool,
+  reportMaintenanceIssueTool,
+  // Documents shared with the resident
+  listMySharedDocumentsTool,
   // Inbox / messaging
   listMyInboxThreadsTool,
   getMyScheduledMessagesTool,
@@ -68,6 +73,8 @@ const TOOL_SECTION: Record<string, string> = {
   [listMyWorkOrdersTool.name]: "services",
   [createServiceRequestTool.name]: "services",
   [addServiceRequestNoteTool.name]: "services",
+  [reportMaintenanceIssueTool.name]: "services",
+  [listMySharedDocumentsTool.name]: "documents",
   [listMyInboxThreadsTool.name]: "inbox",
   [getMyScheduledMessagesTool.name]: "inbox",
   [sendMessageToManagerTool.name]: "inbox",
@@ -78,7 +85,11 @@ const TOOL_SECTION: Record<string, string> = {
 /** Tools available while the resident is still in the application phase. */
 const APPLICATION_PHASE_TOOLS = new Set(["get_my_application_status", "send_message_to_manager"]);
 
-/** Full registry (every resident tool) — used by the gated confirm endpoint. */
+/**
+ * Full registry (every resident tool), unfiltered by phase/tier. The chat route
+ * builds its own per-request registry with `buildResidentRegistry`, so this is
+ * the catalog-level view used by tests and any caller that needs every tool.
+ */
 export const residentAgentRegistry: ToolRegistry<ResidentAgentContext> = buildRegistry(ALL_RESIDENT_TOOLS);
 
 /**

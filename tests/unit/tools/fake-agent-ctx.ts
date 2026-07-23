@@ -1,4 +1,5 @@
 import type { AgentContext } from "@/lib/tools/context";
+import { buildRegistry, previewWriteTool, type ActionPreview } from "@/lib/tools/registry";
 
 /**
  * A record as stored in a `portal_*` / `manager_*` table: the scope columns the
@@ -262,4 +263,36 @@ export function makeWritableCtx(
     ...overrides,
   } as unknown as AgentContext;
   return { ctx, store };
+}
+
+/**
+ * Test adapters for the one framework's write contract. `previewWrite` drives
+ * the REAL `previewWriteTool` gate (Zod validation, the throw→error mapping,
+ * and the `confirmedInput` pin), so a test sees exactly what the model loop
+ * would; `executeWrite` wraps the gated handler back into a result object so a
+ * failure message can be asserted without try/catch.
+ */
+export async function previewWrite<Ctx>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tool: any,
+  ctx: Ctx,
+  input: unknown,
+): Promise<{ ok: true; input: unknown; preview: ActionPreview; destructive: boolean } | { ok: false; error: string }> {
+  const registry = buildRegistry<Ctx>([tool]);
+  return previewWriteTool(registry, ctx, tool.name, input);
+}
+
+/** Run a write tool's gated handler, mapping a throw back to `{ ok: false }`. */
+export async function executeWrite<Ctx>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tool: any,
+  ctx: Ctx,
+  input: unknown,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  try {
+    return { ok: true, ...((await tool.handler(ctx, input)) as Record<string, unknown>) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

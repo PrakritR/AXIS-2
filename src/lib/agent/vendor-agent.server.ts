@@ -10,7 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { track } from "@/lib/analytics/posthog";
 import { runAgentTurn } from "@/lib/agent/loop";
 import { TIER_MODELS } from "@/lib/agent/model";
-import { VENDOR_AGENT_SYSTEM_PROMPT } from "@/lib/agent/vendor-system-prompt";
+import { VENDOR_AGENT_SYSTEM_PROMPT } from "@/lib/agent/vendor-agent-system-prompt";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { buildVendorAgentContext } from "@/lib/tools/context";
 import { vendorWorkOrderAgentRegistry } from "@/lib/tools";
@@ -234,6 +234,7 @@ export async function runVendorAgentSessionTurn(
         observer,
         system: VENDOR_AGENT_SYSTEM_PROMPT,
         model: { model: TIER_MODELS.standard, tier: "standard" },
+        readOnly: true,
         allowWriteTools: [ESCALATE_TOOL_NAME],
       }),
     { name: "vendor-agent-turn", sessionId: session.id },

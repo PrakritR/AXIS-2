@@ -81,6 +81,47 @@ async function accountLinkCoManagerIdsForManagers(
   return ids;
 }
 
+/**
+ * Emails of the sender's HOUSEMATES: other approved residents assigned to the
+ * same property, under one of the same managers. Derived from the manager's own
+ * application records — never from client input — and deliberately narrow: a
+ * resident may reach the people they live with, not every resident the manager
+ * has.
+ */
+async function housemateEmailsForResident(
+  db: SupabaseClient,
+  managerIds: string[],
+  residentEmail: string,
+): Promise<Set<string>> {
+  const emails = new Set<string>();
+  if (managerIds.length === 0 || !residentEmail) return emails;
+  const { data } = await db
+    .from("manager_application_records")
+    .select("resident_email, row_data")
+    .in("manager_user_id", managerIds);
+  const rows = ((data ?? []) as { resident_email: unknown; row_data: unknown }[])
+    .map((r) => ({
+      email: String(r.resident_email ?? "").trim().toLowerCase(),
+      data: (r.row_data ?? {}) as Record<string, unknown>,
+    }))
+    .filter((r) => r.email && String(r.data.bucket ?? "") === "approved");
+
+  const ownPropertyIds = new Set(
+    rows
+      .filter((r) => r.email === residentEmail)
+      .map((r) => String(r.data.assignedPropertyId ?? r.data.propertyId ?? "").trim())
+      .filter(Boolean),
+  );
+  if (ownPropertyIds.size === 0) return emails;
+
+  for (const row of rows) {
+    if (row.email === residentEmail) continue;
+    const propertyId = String(row.data.assignedPropertyId ?? row.data.propertyId ?? "").trim();
+    if (propertyId && ownPropertyIds.has(propertyId)) emails.add(row.email);
+  }
+  return emails;
+}
+
 /** Emails of vendors in the given managers' own vendor directory. */
 async function vendorEmailsForManagers(
   db: SupabaseClient,
@@ -151,6 +192,17 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
 
   if (isManagerRole(sender.role)) {
     const coManagers = await coManagerEmailsForManagers(db, [sender.id]);
+    // `portal_pro_relationship_records` is a client-writable mirror, so the
+    // authoritative accepted account_link_invites are resolved too — the same
+    // source the vendor and resident branches use.
+    const coManagerIds = await accountLinkCoManagerIdsForManagers(db, [sender.id]);
+    if (coManagerIds.size > 0) {
+      const { data: coProfiles } = await db.from("profiles").select("id, email").in("id", [...coManagerIds]);
+      for (const row of coProfiles ?? []) {
+        const email = String(row.email ?? "").trim().toLowerCase();
+        if (email) coManagers.add(email);
+      }
+    }
     const vendors = await vendorEmailsForManagers(db, [sender.id]);
     const keep = await Promise.all(
       recipients.map(async (recipient) => {
@@ -158,6 +210,7 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
         if (!email) return false;
         if (email === ADMIN_EMAIL) return true;
         if (coManagers.has(email)) return true;
+        if (recipient.userId && coManagerIds.has(recipient.userId)) return true;
         if (vendors.has(email)) return true;
         return managerOwnsResident(db, sender.id, {
           email,
@@ -199,8 +252,12 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
   const managerIds = await managerIdsOwningResident(db, senderEmail);
   const managerIdSet = new Set(managerIds);
   const allowedEmails = await coManagerEmailsForManagers(db, managerIds);
-  if (managerIds.length > 0) {
-    const { data } = await db.from("profiles").select("id, email").in("id", managerIds);
+  // Same authoritative co-manager source as the manager/vendor branches.
+  const coManagerIds = await accountLinkCoManagerIdsForManagers(db, managerIds);
+  const housemateEmails = await housemateEmailsForResident(db, managerIds, senderEmail);
+  const lookupIds = [...new Set([...managerIds, ...coManagerIds])];
+  if (lookupIds.length > 0) {
+    const { data } = await db.from("profiles").select("id, email").in("id", lookupIds);
     for (const row of data ?? []) {
       const email = String(row.email ?? "").trim().toLowerCase();
       if (email) allowedEmails.add(email);
@@ -211,7 +268,8 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
     if (email === ADMIN_EMAIL) return true;
     if (email && allowedEmails.has(email)) return true;
     if (recipient.userId && managerIdSet.has(recipient.userId)) return true;
-    return false;
+    if (recipient.userId && coManagerIds.has(recipient.userId)) return true;
+    return Boolean(email) && housemateEmails.has(email);
   });
   return partition(recipients, keep);
 }

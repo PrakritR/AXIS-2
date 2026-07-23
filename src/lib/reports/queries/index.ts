@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { HouseholdCharge } from "@/lib/household-charges";
-import type { RecurringRentProfile } from "@/lib/household-charges";
+import type { HouseholdCharge, RecurringRentProfile } from "@/lib/household-charges";
+import { householdChargeDueDate } from "@/lib/household-charges";
 import {
   chartAccountLabel,
   chartAccountScheduleE,
@@ -15,6 +15,7 @@ import { resolveDocumentScope } from "@/lib/reports/parse-filters";
 import type { DocumentScope, ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { rentMonthlyEquivalent } from "@/lib/room-pricing";
+import { householdChargeAmountCents } from "@/lib/stripe-household-charge";
 import {
   queryBalanceSheet,
   queryCashFlowStatement,
@@ -897,6 +898,87 @@ export async function query1099Candidates(
   };
 }
 
+
+/**
+ * The resident's own balance summary. The amount owed comes from the resident's
+ * `pending` household CHARGES — the exact filter the resident Payments screen
+ * and dashboard use, so a cancelled/refunded/failed or in-flight `processing`
+ * charge is never billed into a balance the portal shows as $0 — and the
+ * assistant and the portal can never disagree; the ledger supplies the last
+ * recorded payment. Scoped exactly like
+ * {@link queryResidentLedger}: the resident's own user id OR their verified
+ * email, so one resident can never read another's balance.
+ *
+ * `meta.balanceCents` is the authoritative number; the rows are the display
+ * projection the assistant reads back.
+ */
+export async function queryResidentBalance(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+): Promise<ReportResult> {
+  const [{ data: chargeRows }, { data: ledgerRows }] = await Promise.all([
+    db
+      .from("portal_household_charge_records")
+      .select("row_data")
+      .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`),
+    db
+      .from("ledger_entries")
+      .select("entry_type, amount_cents, posted_date")
+      .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`)
+      .order("posted_date", { ascending: true }),
+  ]);
+
+  const charges = ((chargeRows ?? []) as { row_data: unknown }[]).map((r) => r.row_data as HouseholdCharge);
+  const outstanding = charges.filter((c) => String(c.status ?? "") === "pending");
+  const balanceCents = outstanding.reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
+  const paidCents = charges
+    .filter((c) => String(c.status ?? "") === "paid")
+    .reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
+
+  // Soonest unpaid charge by its REAL due date — the label is a display string
+  // ("By Sep 3, 2026") that sorts alphabetically, not chronologically.
+  const next = outstanding
+    .map((c) => ({ charge: c, due: householdChargeDueDate(c) }))
+    .filter((c): c is { charge: HouseholdCharge; due: Date } => c.due !== null)
+    .sort((a, b) => a.due.getTime() - b.due.getTime())[0];
+  const nextDueLabel = next
+    ? next.charge.dueDateLabel || next.due.toISOString().slice(0, 10)
+    : "";
+
+  const lastPayment = ((ledgerRows ?? []) as { entry_type: string; amount_cents: number | string | null; posted_date: string | null }[])
+    .filter((e) => e.entry_type === "payment")
+    .at(-1);
+
+  const rows = [
+    { label: "Balance due", value: centsToUsd(balanceCents) },
+    { label: "Open charges", value: String(outstanding.length) },
+    { label: "Paid to date", value: centsToUsd(paidCents) },
+    {
+      label: "Next charge",
+      value: next
+        ? `${next.charge.title || next.charge.kind || "Charge"} — ${next.charge.balanceLabel || next.charge.amountLabel || "—"} due ${nextDueLabel}`
+        : "None scheduled",
+    },
+    {
+      label: "Last payment",
+      value: lastPayment
+        ? `${centsToUsd(Number(lastPayment.amount_cents ?? 0))} on ${lastPayment.posted_date ?? "—"}`
+        : "No payments recorded",
+    },
+  ];
+
+  return {
+    id: "resident-balance",
+    title: "Balance summary",
+    columns: [
+      { key: "label", label: "Item" },
+      { key: "value", label: "Amount", align: "right" },
+    ],
+    rows,
+    meta: { balanceCents, openCharges: outstanding.length, paidCents },
+  };
+}
 
 export async function queryResidentLedger(
   db: SupabaseClient,

@@ -91,7 +91,6 @@ export const updateAutomationSettingsTool = defineWriteTool({
   name: "update_automation_settings",
   description:
     "Change the landlord's payment-reminder automation settings: pre-due reminder days, same-day reminder, daily overdue reminders and their start day, late-fee notice and its grace days, and schedule visibility. Reminder message templates cannot be edited with this tool.",
-  kind: "write",
   inputSchema: z
     .object({
       preDueReminderDays: z
@@ -133,7 +132,7 @@ export const updateAutomationSettingsTool = defineWriteTool({
     const patch = definedPatch(input);
     const keys = Object.keys(patch) as (keyof SettingsPatch)[];
     if (keys.length === 0) {
-      return { ok: false, error: "Nothing to update — pass at least one automation setting field." };
+      throw new Error("Nothing to update — pass at least one automation setting field.");
     }
     const current = await loadManagerAutomationSettings(ctx.db, ctx.landlordId);
     const next = normalizeManagerAutomationSettings({ ...current, ...patch });
@@ -145,19 +144,16 @@ export const updateAutomationSettingsTool = defineWriteTool({
     }));
     lines.push({ label: "New cadence", value: formatStandardReminderSchedule(next) });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Update automation settings",
-        summary: `Update ${keys.length} payment-automation setting${keys.length === 1 ? "" : "s"}.`,
-        lines,
-        confirmLabel: "Update settings",
-      },
+      kind: "update_automation_settings",
+      title: "Update automation settings",
+      summary: `Update ${keys.length} payment-automation setting${keys.length === 1 ? "" : "s"}.`,
+      fields: lines,
+      confirmLabel: "Update settings",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const patch = definedPatch(input);
-    if (Object.keys(patch).length === 0) return { ok: false, error: "Nothing to update." };
+    if (Object.keys(patch).length === 0) throw new Error("Nothing to update.");
 
     const dedupeKey = `update_automation_settings:${ctx.landlordId}:${stableInputHash(patch)}`;
     const audit = await writeAuditLog(ctx, {
@@ -167,8 +163,8 @@ export const updateAutomationSettingsTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "Those automation settings were already applied by this action." };
-      return { ok: false, error: "Could not record the action; settings were not changed." };
+      if (audit.duplicate) return { reply: "Those automation settings were already applied by this action." };
+      throw new Error("Could not record the action; settings were not changed.");
     }
 
     // Merge onto the CURRENT stored settings, then normalize + save (save
@@ -183,15 +179,11 @@ export const updateAutomationSettingsTool = defineWriteTool({
       );
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "settings_save_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "The settings could not be saved." };
+      throw new Error(e instanceof Error ? e.message : "The settings could not be saved.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { fields: Object.keys(patch), saved: true });
-    return {
-      ok: true,
-      reply: `Updated payment automation settings. Reminder cadence is now: ${formatStandardReminderSchedule(saved)}.`,
-      resultSummary: { fields: Object.keys(patch) },
-    };
+    return { reply: `Updated payment automation settings. Reminder cadence is now: ${formatStandardReminderSchedule(saved)}.`, resultSummary: { fields: Object.keys(patch) } };
   },
 });
 
@@ -273,32 +265,28 @@ export const cancelScheduledReminderTool = defineWriteTool({
   name: "cancel_scheduled_reminder",
   description:
     "Cancel one upcoming automatic payment reminder for a specific charge (e.g. skip the 3-days-before reminder for one resident). Pass the charge id from list_charges or get_overdue_charges plus the reminder kind; other reminders for the charge are unaffected.",
-  kind: "write",
   inputSchema: z.object(scheduledSlotInput).strict(),
   preview: async (ctx, input) => {
     const resolved = await resolveScheduledSlot(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { slot } = resolved;
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Cancel scheduled reminder",
-        summary: `Cancel the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}".`,
-        lines: [
+      kind: "cancel_scheduled_reminder",
+      title: "Cancel scheduled reminder",
+      summary: `Cancel the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}".`,
+      fields: [
           { label: "Resident", value: slot.residentName },
           { label: "Charge", value: slot.chargeTitle },
           { label: "Reminder", value: slot.typeLabel },
           { label: "Was scheduled for", value: slotSendLabel(slot) },
         ],
-        confirmLabel: "Cancel reminder",
-      },
+      confirmLabel: "Cancel reminder",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve against the live projected schedule at execute time.
     const resolved = await resolveScheduledSlot(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { slot } = resolved;
 
     const dedupeKey = `cancel_scheduled_reminder:${ctx.landlordId}:${slot.chargeId}:${slot.kind}:${slotDayPart(slot)}`;
@@ -309,8 +297,8 @@ export const cancelScheduledReminderTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That reminder was already cancelled by this action." };
-      return { ok: false, error: "Could not record the action; the reminder was not cancelled." };
+      if (audit.duplicate) return { reply: "That reminder was already cancelled by this action." };
+      throw new Error("Could not record the action; the reminder was not cancelled.");
     }
 
     try {
@@ -323,15 +311,11 @@ export const cancelScheduledReminderTool = defineWriteTool({
       });
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "override_write_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "The reminder could not be cancelled." };
+      throw new Error(e instanceof Error ? e.message : "The reminder could not be cancelled.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { cancelled: true });
-    return {
-      ok: true,
-      reply: `Cancelled the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" (was scheduled for ${slotSendLabel(slot)}).`,
-      resultSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue },
-    };
+    return { reply: `Cancelled the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" (was scheduled for ${slotSendLabel(slot)}).`, resultSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue } };
   },
 });
 
@@ -339,7 +323,6 @@ export const rescheduleReminderTool = defineWriteTool({
   name: "reschedule_reminder",
   description:
     "Move one upcoming automatic payment reminder for a specific charge to a new send time. Pass the charge id from list_charges plus the reminder kind, and the new time as an ISO datetime in the future.",
-  kind: "write",
   inputSchema: z
     .object({
       ...scheduledSlotInput,
@@ -352,37 +335,34 @@ export const rescheduleReminderTool = defineWriteTool({
   preview: async (ctx, input) => {
     const newSendAt = new Date(input.newSendAtIso);
     if (Number.isNaN(newSendAt.getTime())) {
-      return { ok: false, error: `Invalid newSendAtIso "${input.newSendAtIso}" — pass an ISO 8601 datetime.` };
+      throw new Error(`Invalid newSendAtIso "${input.newSendAtIso}" — pass an ISO 8601 datetime.`);
     }
     if (newSendAt.getTime() <= Date.now()) {
-      return { ok: false, error: "newSendAtIso is in the past — pass a future send time." };
+      throw new Error("newSendAtIso is in the past — pass a future send time.");
     }
     const resolved = await resolveScheduledSlot(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { slot } = resolved;
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Reschedule reminder",
-        summary: `Move the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" to ${newSendAt.toLocaleString()}.`,
-        lines: [
+      kind: "reschedule_reminder",
+      title: "Reschedule reminder",
+      summary: `Move the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" to ${newSendAt.toLocaleString()}.`,
+      fields: [
           { label: "Resident", value: slot.residentName },
           { label: "Charge", value: slot.chargeTitle },
           { label: "Reminder", value: slot.typeLabel },
           { label: "Send time", value: `${slotSendLabel(slot)} → ${newSendAt.toLocaleString()}` },
         ],
-        confirmLabel: "Reschedule reminder",
-      },
+      confirmLabel: "Reschedule reminder",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const newSendAt = new Date(input.newSendAtIso);
     if (Number.isNaN(newSendAt.getTime()) || newSendAt.getTime() <= Date.now()) {
-      return { ok: false, error: "newSendAtIso must be a valid ISO datetime in the future." };
+      throw new Error("newSendAtIso must be a valid ISO datetime in the future.");
     }
     const resolved = await resolveScheduledSlot(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { slot } = resolved;
 
     const dedupeKey = `reschedule_reminder:${ctx.landlordId}:${slot.chargeId}:${slot.kind}:${slotDayPart(slot)}:${stableInputHash(newSendAt.toISOString())}`;
@@ -398,8 +378,8 @@ export const rescheduleReminderTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That reminder was already rescheduled to that time by this action." };
-      return { ok: false, error: "Could not record the action; the reminder was not rescheduled." };
+      if (audit.duplicate) return { reply: "That reminder was already rescheduled to that time by this action." };
+      throw new Error("Could not record the action; the reminder was not rescheduled.");
     }
 
     try {
@@ -412,14 +392,10 @@ export const rescheduleReminderTool = defineWriteTool({
       });
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "override_write_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "The reminder could not be rescheduled." };
+      throw new Error(e instanceof Error ? e.message : "The reminder could not be rescheduled.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { rescheduled: true });
-    return {
-      ok: true,
-      reply: `Rescheduled the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" from ${slotSendLabel(slot)} to ${newSendAt.toLocaleString()}.`,
-      resultSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue },
-    };
+    return { reply: `Rescheduled the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" from ${slotSendLabel(slot)} to ${newSendAt.toLocaleString()}.`, resultSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue } };
   },
 });

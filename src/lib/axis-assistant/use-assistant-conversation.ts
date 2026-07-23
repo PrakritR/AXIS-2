@@ -22,6 +22,17 @@ export type ActionPreview = {
 export type PendingAction = { id: string; preview: ActionPreview };
 
 /**
+ * Confirm outcomes the server answers WITHOUT claiming the proposal, so the
+ * action is still live and pressing Confirm again is genuinely valid: the
+ * fail-closed peek's 503, plus rate limiting and any other transient 5xx.
+ * Everything else (410 gone/expired/replayed, 400 refused, 401/403) is
+ * terminal — the row is spent or unreachable and the card must clear.
+ */
+function isRetryableConfirmStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+/**
  * Headless conversation state + transport for the PropLane assistant. Both the
  * floating modal (`axis-assistant.tsx`) and the dashboard right-dock consume
  * this so there is ONE send/confirm loop, not two.
@@ -111,14 +122,18 @@ export function useAssistantConversation(endpoint: string) {
         };
         if (!res.ok || data.error) {
           setError(data.error ?? "Could not complete that action.");
+          // A retryable failure never claimed the row — it is still `proposed`
+          // server-side, so keep the card rather than orphaning a live proposal
+          // (resident and vendor portals have no AI-drafts list to recover it).
+          if (!isRetryableConfirmStatus(res.status)) setPendingAction(null);
         } else {
           setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
           setLastTools(data.toolTrace ?? []);
+          setPendingAction(null);
         }
       } catch {
         setError("Network error.");
       } finally {
-        setPendingAction(null);
         setLoading(false);
         notifyAgentPendingActionsChanged();
       }

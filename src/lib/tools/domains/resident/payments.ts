@@ -27,7 +27,6 @@ export const reportManualPaymentTool = defineWriteTool({
   name: "report_manual_payment",
   description:
     "Report that the resident already sent payment for one or more of their pending charges via Zelle or Venmo, so the manager can verify and mark them paid. Pass charge ids from list_my_charges. The charges stay pending until the manager confirms receipt.",
-  kind: "write",
   inputSchema: z
     .object({
       chargeIds: z
@@ -50,36 +49,28 @@ export const reportManualPaymentTool = defineWriteTool({
         continue;
       }
       if (!canPayHouseholdChargeWithManualChannel(charge, input.channel)) {
-        return {
-          ok: false,
-          error: `Charge ${id} ("${charge.title}") cannot be paid with ${channelLabel(input.channel)} — that channel is not offered on this charge. Check zelleAvailable/venmoAvailable in list_my_charges.`,
-        };
+        throw new Error(`Charge ${id} ("${charge.title}") cannot be paid with ${channelLabel(input.channel)} — that channel is not offered on this charge. Check zelleAvailable/venmoAvailable in list_my_charges.`);
       }
       resolved.push(charge);
     }
     if (invalid.length > 0) {
-      return {
-        ok: false,
-        error: `These ids are not your pending charges: ${invalid.join(", ")}. Use list_my_charges to get valid charge ids.`,
-      };
+      throw new Error(`These ids are not your pending charges: ${invalid.join(", ")}. Use list_my_charges to get valid charge ids.`);
     }
     const totalCents = resolved.reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
     return {
-      ok: true,
-      input: { chargeIds: resolved.map((c) => c.id), channel: input.channel },
-      preview: {
-        title: `Report ${channelLabel(input.channel)} payment`,
-        summary: `Tell your manager you sent ${centsLabel(totalCents)} via ${channelLabel(input.channel)} for ${resolved.length} charge${resolved.length === 1 ? "" : "s"}. The charge${resolved.length === 1 ? "" : "s"} stay pending until they confirm receipt.`,
-        lines: [
-          ...resolved.map((c) => ({ label: c.title || c.id, value: c.balanceLabel || c.amountLabel || "—" })),
-          { label: "Total", value: centsLabel(totalCents) },
-        ],
-        confirmLabel: "Report payment",
-        ...(resolved.length > 1 ? { batchCount: resolved.length } : {}),
-      },
+      confirmedInput: { chargeIds: resolved.map((c) => c.id), channel: input.channel },
+      kind: "report_manual_payment",
+      title: `Report ${channelLabel(input.channel)} payment`,
+      summary: `Tell your manager you sent ${centsLabel(totalCents)} via ${channelLabel(input.channel)} for ${resolved.length} charge${resolved.length === 1 ? "" : "s"}. The charge${resolved.length === 1 ? "" : "s"} stay pending until they confirm receipt.`,
+      fields: [
+        ...resolved.map((c) => ({ label: c.title || c.id, value: c.balanceLabel || c.amountLabel || "—" })),
+        { label: "Total", value: centsLabel(totalCents) },
+      ],
+      confirmLabel: "Report payment",
+      ...(resolved.length > 1 ? { batchCount: resolved.length } : {}),
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     // Re-resolve every id against the resident's own pending charges.
     const own = await loadOwnCharges(ctx);
     const uniqueIds = [...new Set(input.chargeIds.map((id) => id.trim()).filter(Boolean))];
@@ -106,7 +97,7 @@ export const reportManualPaymentTool = defineWriteTool({
           alreadyReported += 1;
           continue;
         }
-        return { ok: false, error: "Could not record the action; no payment was reported." };
+        throw new Error("Could not record the action; no payment was reported.");
       }
       fresh.push(id);
       freshKeys.push(dedupeKey);
@@ -114,9 +105,9 @@ export const reportManualPaymentTool = defineWriteTool({
 
     if (fresh.length === 0) {
       if (alreadyReported > 0) {
-        return { ok: true, reply: "These payments were already reported today — your manager has been notified." };
+        return { reply: "These payments were already reported today — your manager has been notified." };
       }
-      return { ok: false, error: "No matching pending charges remained to report. Use list_my_charges to check ids." };
+      throw new Error("No matching pending charges remained to report. Use list_my_charges to check ids.");
     }
 
     const result = await reportResidentManualPayment(ctx.db, {
@@ -130,7 +121,7 @@ export const reportManualPaymentTool = defineWriteTool({
       for (const key of freshKeys) {
         await updateAuditResult(ctx, key, { failed: true }, { clearDedupeKey: true });
       }
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
     for (const key of freshKeys) {
       await updateAuditResult(ctx, key, { channel: input.channel, reported: true });
@@ -141,11 +132,7 @@ export const reportManualPaymentTool = defineWriteTool({
     ];
     if (alreadyReported) parts.push(`${alreadyReported} already reported today`);
     if (skipped) parts.push(`${skipped} no longer pending and skipped`);
-    return {
-      ok: true,
-      reply: `Done — ${parts.join("; ")}. Your manager will verify and mark the charge${result.charges.length === 1 ? "" : "s"} paid.`,
-      resultSummary: { reported: result.charges.length, alreadyReported, skipped, channel: input.channel },
-    };
+    return { reply: `Done — ${parts.join("; ")}. Your manager will verify and mark the charge${result.charges.length === 1 ? "" : "s"} paid.`, resultSummary: { reported: result.charges.length, alreadyReported, skipped, channel: input.channel } };
   },
 });
 
@@ -153,7 +140,6 @@ export const startRentPaymentTool = defineWriteTool({
   name: "start_rent_payment",
   description:
     "Start an online bank (ACH) payment for one or more of the resident's pending charges by creating a secure Stripe Checkout session and returning its link. Pass charge ids from list_my_charges; all charges must belong to the same property manager.",
-  kind: "write",
   inputSchema: z
     .object({
       chargeIds: z
@@ -171,41 +157,39 @@ export const startRentPaymentTool = defineWriteTool({
       userEmail: ctx.email,
       chargeIds: input.chargeIds,
     });
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
 
     // Honest preview error when the manager's Stripe payouts aren't ready.
     try {
       const connect = await resolveAndValidateManagerConnectForPayments(getStripe(), ctx.db, resolved.managerUserId);
-      if (!connect.ok) return { ok: false, error: connect.error };
+      if (!connect.ok) throw new Error(connect.error);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Stripe validation failed.";
       if (stripeNotConfiguredError(message)) {
-        return { ok: false, error: "Online payments are not configured on this server." };
+        throw new Error("Online payments are not configured on this server.");
       }
-      return { ok: false, error: message };
+      throw new Error(message);
     }
 
     const totalCents = resolved.loaded.reduce((sum, row) => sum + householdChargeAmountCents(row.charge), 0);
     return {
-      ok: true,
-      input: { chargeIds: resolved.loaded.map((row) => row.id) },
-      preview: {
-        title: "Pay charges online",
-        summary: `Pay ${centsLabel(totalCents)} for ${resolved.loaded.length} charge${resolved.loaded.length === 1 ? "" : "s"} — this opens a secure Stripe checkout (plus processing fees shown there).`,
-        lines: [
-          ...resolved.loaded.map((row) => ({
-            label: row.charge.title || row.id,
-            value: row.charge.balanceLabel || row.charge.amountLabel || "—",
-          })),
-          { label: "Total (before fees)", value: centsLabel(totalCents) },
-          { label: "Payment", value: "Opens secure Stripe checkout" },
-        ],
-        confirmLabel: "Open checkout",
-        ...(resolved.loaded.length > 1 ? { batchCount: resolved.loaded.length } : {}),
-      },
+      confirmedInput: { chargeIds: resolved.loaded.map((row) => row.id) },
+      kind: "start_rent_payment",
+      title: "Pay charges online",
+      summary: `Pay ${centsLabel(totalCents)} for ${resolved.loaded.length} charge${resolved.loaded.length === 1 ? "" : "s"} — this opens a secure Stripe checkout (plus processing fees shown there).`,
+      fields: [
+        ...resolved.loaded.map((row) => ({
+          label: row.charge.title || row.id,
+          value: row.charge.balanceLabel || row.charge.amountLabel || "—",
+        })),
+        { label: "Total (before fees)", value: centsLabel(totalCents) },
+        { label: "Payment", value: "Opens secure Stripe checkout" },
+      ],
+      confirmLabel: "Open checkout",
+      ...(resolved.loaded.length > 1 ? { batchCount: resolved.loaded.length } : {}),
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     // Repeatable action (sessions expire unused) — audit-logged without a
     // dedupe key so a fresh checkout can always be created.
     const audit = await writeAuditLog(ctx, {
@@ -214,7 +198,7 @@ export const startRentPaymentTool = defineWriteTool({
       inputSummary: { chargeIds: input.chargeIds, chargeCount: input.chargeIds.length },
     });
     if (!audit.recorded) {
-      return { ok: false, error: "Could not record the action; no checkout was created." };
+      throw new Error("Could not record the action; no checkout was created.");
     }
 
     // The lib re-validates ownership/paid/manager/Connect from live data.
@@ -226,16 +210,11 @@ export const startRentPaymentTool = defineWriteTool({
       paymentMethod: "ach",
       appOrigin: resolveShareableAppOrigin(),
     });
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) throw new Error(result.error);
     if (result.mode !== "hosted" || !result.url) {
-      return { ok: false, error: "Checkout session was created without a hosted payment link." };
+      throw new Error("Checkout session was created without a hosted payment link.");
     }
 
-    return {
-      ok: true,
-      reply: `Your secure Stripe checkout is ready — ${centsLabel(result.totalCents)} total (including fees) for ${result.chargeIds.length} charge${result.chargeIds.length === 1 ? "" : "s"}. Open the link to pay.`,
-      checkoutUrl: result.url,
-      resultSummary: { chargeCount: result.chargeIds.length, totalCents: result.totalCents },
-    };
+    return { reply: `Your secure Stripe checkout is ready — ${centsLabel(result.totalCents)} total (including fees) for ${result.chargeIds.length} charge${result.chargeIds.length === 1 ? "" : "s"}. Open the link to pay.`, checkoutUrl: result.url, resultSummary: { chargeCount: result.chargeIds.length, totalCents: result.totalCents } };
   },
 });

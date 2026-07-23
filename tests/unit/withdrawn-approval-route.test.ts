@@ -31,6 +31,9 @@ let LINKED_PROPERTY_IDS: string[];
 let PROFILE_UPDATE_CALLS: number;
 
 vi.mock("@/lib/analytics/posthog", () => ({ track: vi.fn() }));
+// Admin resolution is not what these tests pin; the guard runs for every
+// manager role. REQUESTOR.role === "admin" already short-circuits in the route.
+vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: async () => false }));
 vi.mock("@/lib/application-lifecycle-sms.server", () => ({ notifyApplicantApplicationSms: vi.fn() }));
 vi.mock("@/lib/auth/co-manager-module-scope", () => ({
   linkedPropertyIdsForModule: async () => new Set(LINKED_PROPERTY_IDS),
@@ -267,13 +270,18 @@ describe("PATCH /api/portal/resident-approval — withdrawn applications are not
     expect(PROFILE_UPDATE_CALLS).toBe(1);
   });
 
-  it("approves when no application record exists at all — cannot block what does not exist", async () => {
+  it("with no application record at all the withdrawn guard stays silent — the ownership check refuses instead", async () => {
+    // The guard cannot block what does not exist, so it passes through. The
+    // approval still fails closed: setResidentApprovalForManager refuses a
+    // resident the caller has no application/charge/lease relationship to, and
+    // nothing is written.
     APP_ROWS = [];
     const { PATCH } = await import("@/app/api/portal/resident-approval/route");
     const res = await PATCH(
       patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
     );
-    expect(res.status).toBe(200);
-    expect(PROFILE_UPDATE_CALLS).toBe(1);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/portfolio/i);
+    expect(PROFILE_UPDATE_CALLS).toBe(0);
   });
 });

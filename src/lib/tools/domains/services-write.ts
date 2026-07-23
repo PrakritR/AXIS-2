@@ -1,6 +1,7 @@
 /**
- * Gated manager WRITE tools for the Services section: opening a work order and
- * deciding on a resident's add-on service request.
+ * Gated manager WRITE tool for the Services section: deciding on a resident's
+ * add-on service request. (Opening a work order is `create_work_order` in
+ * `work-orders.ts`, alongside the rest of the work-order lifecycle.)
  *
  * Both re-resolve their target from the landlord's OWN rows
  * (`manager_user_id = ctx.landlordId`) at preview AND execute time, so a
@@ -8,157 +9,11 @@
  * resident-authored text (a request's notes, a maintenance description) is data
  * that gets rendered on the confirmation card — never an instruction.
  */
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { defineWriteTool } from "../registry";
 import type { ActionPreview } from "../registry";
 import type { AgentContext } from "../context";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { ServiceRequest } from "@/lib/service-requests-storage";
-import { loadManagerApplications } from "./residents";
-import { findOwnedResident } from "./residents-logic";
-
-const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High", "Emergency"] as const;
-
-const createWorkOrderSchema = z
-  .object({
-    title: z.string().min(1).max(120).describe("Short job title, e.g. 'Kitchen faucet leak'."),
-    description: z
-      .string()
-      .min(1)
-      .max(2000)
-      .describe("What needs doing — the detail the vendor will read."),
-    priority: z.enum(WORK_ORDER_PRIORITIES).optional().describe("Defaults to Medium."),
-    category: z
-      .string()
-      .max(60)
-      .optional()
-      .describe("Trade/category used to auto-match vendors, e.g. 'plumbing' or 'electrical'."),
-    residentEmail: z
-      .string()
-      .optional()
-      .describe(
-        "Optional: the resident this job is for, as returned by list_residents. Must be one of the landlord's own residents.",
-      ),
-    propertyName: z.string().max(160).optional().describe("Optional property label for the job."),
-    unit: z.string().max(60).optional().describe("Optional unit/room label."),
-  })
-  .strict();
-
-type CreateWorkOrderInput = z.infer<typeof createWorkOrderSchema>;
-
-/**
- * Gated write: open a maintenance work order, the manager-side equivalent of
- * the Services -> Work orders "Create work order" action. Persists straight to
- * `portal_work_order_records` (the server-side source of truth) and then runs
- * the same `prepareDispatch` vendor-matching pass the UI path triggers, so the
- * job lands with a dispatch proposal ready for review.
- */
-export const createWorkOrderTool = defineWriteTool<CreateWorkOrderInput, { reply: string }>({
-  name: "create_work_order",
-  description:
-    "Open a new maintenance work order for the landlord (the Services -> Work orders create action). Optionally tie it to one of their residents with residentEmail from list_residents. After it is created, PropLane runs vendor auto-matching so a dispatch proposal is ready. The landlord sees the exact job and must confirm before it is created.",
-  inputSchema: createWorkOrderSchema,
-  preview: async (ctx, input): Promise<ActionPreview> => {
-    const resident = input.residentEmail
-      ? findOwnedResident(await loadManagerApplications(ctx), input.residentEmail)
-      : null;
-    if (input.residentEmail && !resident) {
-      throw new Error("No resident with that email in this landlord's portfolio.");
-    }
-    return {
-      kind: "create_work_order",
-      title: "Open this work order",
-      confirmLabel: "Create work order",
-      fields: [
-        { label: "Title", value: input.title },
-        { label: "Priority", value: input.priority ?? "Medium" },
-        ...(input.category ? [{ label: "Category", value: input.category }] : []),
-        {
-          label: "Property",
-          value: input.propertyName || resident?.property || "Not specified",
-        },
-        ...(resident ? [{ label: "Resident", value: `${resident.name} (${resident.email})` }] : []),
-        { label: "Details", value: input.description },
-      ],
-    };
-  },
-  handler: async (ctx, input) => {
-    const resident = input.residentEmail
-      ? findOwnedResident(await loadManagerApplications(ctx), input.residentEmail)
-      : null;
-    if (input.residentEmail && !resident) {
-      throw new Error("No resident with that email in this landlord's portfolio.");
-    }
-    const nowIso = new Date().toISOString();
-    const id = `WO-AI-${randomUUID().slice(0, 8).toUpperCase()}`;
-    const propertyName = input.propertyName || resident?.property || "—";
-    const row: DemoManagerWorkOrderRow = {
-      id,
-      title: input.title,
-      description: input.description,
-      priority: input.priority ?? "Medium",
-      status: "Submitted",
-      bucket: "open",
-      category: input.category,
-      propertyName,
-      unit: input.unit,
-      scheduled: "—",
-      cost: "—",
-      managerUserId: ctx.landlordId,
-      managerInitiated: true,
-      residentName: resident?.name,
-      residentEmail: resident?.email?.trim().toLowerCase(),
-    } as DemoManagerWorkOrderRow;
-
-    // Record intent first, idempotently: the same title for the same landlord on
-    // the same day is treated as a replayed confirm, not a second job.
-    const dedupeKey = `create_work_order:${ctx.landlordId}:${input.title.trim().toLowerCase()}:${nowIso.slice(0, 10)}`;
-    const { error: auditError } = await ctx.db.from("audit_log").insert({
-      actor_user_id: ctx.userId,
-      landlord_id: ctx.landlordId,
-      action: "create_work_order",
-      tool_name: "create_work_order",
-      input_summary: { title: input.title, priority: row.priority },
-      result_summary: { workOrderId: id },
-      dedupe_key: dedupeKey,
-      created_at: nowIso,
-    });
-    if (auditError) {
-      if (auditError.code === "23505") {
-        return { reply: `A work order titled "${input.title}" was already created today; nothing new was opened.` };
-      }
-      throw new Error("Could not record the action; no work order was created.");
-    }
-
-    const { error } = await ctx.db.from("portal_work_order_records").upsert(
-      {
-        id,
-        manager_user_id: ctx.landlordId,
-        resident_email: row.residentEmail ?? null,
-        vendor_user_id: null,
-        row_data: row,
-        updated_at: nowIso,
-      },
-      { onConflict: "id" },
-    );
-    if (error) {
-      await ctx.db
-        .from("audit_log")
-        .update({ dedupe_key: null, result_summary: { workOrderId: id, saved: false } })
-        .eq("dedupe_key", dedupeKey);
-      throw new Error("Could not save the work order.");
-    }
-    // Imported lazily: `work-order-dispatch.server` reaches the vendor agent,
-    // which imports this registry — a static import would close that cycle and
-    // leave the registry half-initialised at module load.
-    // Vendor matching is best-effort: a failed match must not undo a saved job.
-    await import("@/lib/work-order-dispatch.server")
-      .then((m) => m.prepareDispatch(ctx.db, id))
-      .catch(() => undefined);
-    return { reply: `Opened "${input.title}" (${id}) at ${propertyName}. Vendor matching is running now.` };
-  },
-});
 
 const decideServiceRequestSchema = z
   .object({
@@ -256,4 +111,4 @@ export const decideServiceRequestTool = defineWriteTool<DecideServiceRequestInpu
   },
 });
 
-export const managerServicesWriteTools = [createWorkOrderTool, decideServiceRequestTool];
+export const managerServicesWriteTools = [decideServiceRequestTool];

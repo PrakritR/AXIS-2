@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { buildAlternatingHistory } from "@/lib/agent/vendor-agent.server";
-import { buildRegistry, defineTool, runReadTool, toAnthropicTools } from "@/lib/tools/registry";
+import { buildRegistry, defineTool, defineWriteTool, runReadTool, toAnthropicTools } from "@/lib/tools/registry";
 import { buildVendorAgentContext } from "@/lib/tools/context";
 
 describe("buildAlternatingHistory", () => {
@@ -33,11 +33,11 @@ describe("write-tool allowlist", () => {
     inputSchema: z.object({}).strict(),
     handler: async () => ({ ok: true }),
   });
-  const writeTool = defineTool({
+  const writeTool = defineWriteTool({
     name: "write_thing",
     description: "write",
-    kind: "write",
     inputSchema: z.object({}).strict(),
+    preview: async () => ({ kind: "write_thing", title: "Write", confirmLabel: "Do it", fields: [] }),
     handler: async () => ({ wrote: true }),
   });
   const registry = buildRegistry([readTool, writeTool]);

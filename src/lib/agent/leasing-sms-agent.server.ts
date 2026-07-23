@@ -196,6 +196,7 @@ export async function runLeasingSmsAgentTurn(
           observer,
           system: LEASING_SMS_SYSTEM_PROMPT,
           model: { model: TIER_MODELS.standard, tier: "standard" },
+          readOnly: true,
           allowWriteTools: [LEASING_ESCALATE_TOOL_NAME],
         }),
       { name: "leasing-sms-agent-turn", sessionId: session.id },

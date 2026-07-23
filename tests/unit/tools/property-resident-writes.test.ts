@@ -27,6 +27,7 @@ import {
   recordMoveOutTool,
 } from "@/lib/tools/domains/residents";
 import { updateApplicationBucketTool, orderBackgroundCheckTool } from "@/lib/tools/domains/applications";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
 type Row = Record<string, unknown>;
 type WriteLogEntry = { table: string; values: Row; filters: [string, unknown][] };
@@ -242,7 +243,7 @@ describe("create_property", () => {
 
   it("preview discloses the pending admin-review status", async () => {
     const { ctx } = makeWriteCtx({});
-    const res = await createPropertyTool.preview(ctx, {
+    const res = await previewWrite(createPropertyTool, ctx, {
       title: "Loft",
       address: "9 Z St",
       beds: 3,
@@ -251,13 +252,13 @@ describe("create_property", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(JSON.stringify(res.preview.lines)).toContain("admin");
-    expect(res.preview.lines.some((l) => l.value.includes("$1800/mo"))).toBe(true);
+    expect(JSON.stringify(res.preview.fields)).toContain("admin");
+    expect(res.preview.fields.some((l) => l.value.includes("$1800/mo"))).toBe(true);
   });
 
   it("execute inserts a landlord-scoped pending record and audits with the address+day dedupe key", async () => {
     const { ctx, tables } = makeWriteCtx({});
-    const res = await createPropertyTool.execute(ctx, {
+    const res = await executeWrite(createPropertyTool, ctx, {
       title: "Loft",
       address: "9  Z St",
       beds: 3,
@@ -278,8 +279,8 @@ describe("create_property", () => {
   it("execute is idempotent per address per day", async () => {
     const { ctx, tables } = makeWriteCtx({});
     const input = { title: "Loft", address: "9 Z St", beds: 3, baths: 1, rentUsd: 1800 };
-    await createPropertyTool.execute(ctx, input);
-    const second = await createPropertyTool.execute(ctx, input);
+    await executeWrite(createPropertyTool, ctx, input);
+    const second = await executeWrite(createPropertyTool, ctx, input);
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
     expect(tables.manager_property_records).toHaveLength(1);
@@ -317,7 +318,7 @@ function liveProperty(managerUserId: string, id: string): Row {
 describe("update_property", () => {
   it("preview rejects a foreign property id", async () => {
     const { ctx } = makeWriteCtx({ manager_property_records: [liveProperty("manager_b", "p_foreign")] });
-    const res = await updatePropertyTool.preview(ctx, { propertyId: "p_foreign", rentUsd: 100 });
+    const res = await previewWrite(updatePropertyTool, ctx, { propertyId: "p_foreign", rentUsd: 100 });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("list_properties");
   });
@@ -328,23 +329,23 @@ describe("update_property", () => {
         { id: "p2", manager_user_id: "manager_a", status: "pending", row_data: { buildingName: "Draft" }, property_data: null },
       ],
     });
-    const res = await updatePropertyTool.preview(ctx, { propertyId: "p2", status: "live" });
+    const res = await previewWrite(updatePropertyTool, ctx, { propertyId: "p2", status: "live" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error.toLowerCase()).toContain("admin review");
   });
 
   it("preview shows a field diff for owned live listings", async () => {
     const { ctx } = makeWriteCtx({ manager_property_records: [liveProperty("manager_a", "p1")] });
-    const res = await updatePropertyTool.preview(ctx, { propertyId: "p1", rentUsd: 2200 });
+    const res = await previewWrite(updatePropertyTool, ctx, { propertyId: "p1", rentUsd: 2200 });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const rentLine = res.preview.lines.find((l) => l.label === "Monthly rent");
+    const rentLine = res.preview.fields.find((l) => l.label === "Monthly rent");
     expect(rentLine?.value).toBe("$2,000/mo → $2,200/mo");
   });
 
   it("execute read-merge-writes BOTH payloads and audits with the patch-hash dedupe key", async () => {
     const { ctx, tables } = makeWriteCtx({ manager_property_records: [liveProperty("manager_a", "p1")] });
-    const res = await updatePropertyTool.execute(ctx, { propertyId: "p1", rentUsd: 2200, description: "New tagline" });
+    const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p1", rentUsd: 2200, description: "New tagline" });
     expect(res.ok).toBe(true);
 
     const rec = tables.manager_property_records![0]!;
@@ -359,20 +360,20 @@ describe("update_property", () => {
     const audit = auditRows(tables)[0]!;
     expect(String(audit.dedupe_key)).toMatch(/^update_property:manager_a:p1:[a-z0-9]+$/);
     // Repeating the exact same patch is a no-op.
-    const again = await updatePropertyTool.execute(ctx, { propertyId: "p1", rentUsd: 2200, description: "New tagline" });
+    const again = await executeWrite(updatePropertyTool, ctx, { propertyId: "p1", rentUsd: 2200, description: "New tagline" });
     expect(again).toMatchObject({ ok: true });
     if (again.ok) expect(again.reply).toContain("already");
   });
 
   it("execute unlists a live listing, synthesizing the admin-row payload", async () => {
     const { ctx, tables } = makeWriteCtx({ manager_property_records: [liveProperty("manager_a", "p1")] });
-    const res = await updatePropertyTool.execute(ctx, { propertyId: "p1", status: "unlisted" });
+    const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p1", status: "unlisted" });
     expect(res.ok).toBe(true);
     const rec = tables.manager_property_records![0]!;
     expect(rec.status).toBe("unlisted");
     expect(rec.row_data as Row).toMatchObject({ adminRefId: "p1", buildingName: "Sunset Lofts", monthlyRent: 2000 });
     // relisting flips it back and keeps the published payload live-approved
-    const relist = await updatePropertyTool.execute(ctx, { propertyId: "p1", status: "live" });
+    const relist = await executeWrite(updatePropertyTool, ctx, { propertyId: "p1", status: "live" });
     expect(relist.ok).toBe(true);
     expect(rec.status).toBe("live");
     expect((rec.property_data as Row).adminPublishLive).toBe(true);
@@ -380,7 +381,7 @@ describe("update_property", () => {
 
   it("execute never matches another landlord's record", async () => {
     const { ctx, tables } = makeWriteCtx({ manager_property_records: [liveProperty("manager_b", "p_foreign")] });
-    const res = await updatePropertyTool.execute(ctx, { propertyId: "p_foreign", rentUsd: 1 });
+    const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p_foreign", rentUsd: 1 });
     expect(res).toMatchObject({ ok: false });
     expect((tables.manager_property_records![0]!.row_data as Row).monthlyRent).toBe(2000);
     expect(auditRows(tables)).toHaveLength(0);
@@ -396,25 +397,25 @@ describe("share_property_link", () => {
 
   it("preview rejects an unshareable/foreign property", async () => {
     const { ctx } = makeWriteCtx({ profiles: [managerProfile] });
-    const res = await sharePropertyLinkTool.preview(ctx, { kind: "apply", propertyId: "p_foreign", toEmail: "lead@x.com" });
+    const res = await previewWrite(sharePropertyLinkTool, ctx, { kind: "apply", propertyId: "p_foreign", toEmail: "lead@x.com" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("live listings");
   });
 
   it("preview normalizes the email and discloses email-delivery configuration honestly", async () => {
     const { ctx } = makeWriteCtx({ profiles: [managerProfile] });
-    const res = await sharePropertyLinkTool.preview(ctx, { kind: "apply", propertyId: "p1", toEmail: " Lead@X.com " });
+    const res = await previewWrite(sharePropertyLinkTool, ctx, { kind: "apply", propertyId: "p1", toEmail: " Lead@X.com " });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect((res.input as { toEmail: string }).toEmail).toBe("lead@x.com");
-    const delivery = res.preview.lines.find((l) => l.label === "Email delivery");
+    const delivery = res.preview.fields.find((l) => l.label === "Email delivery");
     expect(delivery?.value).toContain("NOT configured");
-    expect(res.preview.lines.find((l) => l.label === "Link")?.value).toContain("http");
+    expect(res.preview.fields.find((l) => l.label === "Link")?.value).toContain("http");
   });
 
   it("execute without Resend returns the link honestly and audits with the day-bucketed dedupe key", async () => {
     const { ctx, tables } = makeWriteCtx({ profiles: [managerProfile] });
-    const res = await sharePropertyLinkTool.execute(ctx, { kind: "apply", propertyId: "p1", toEmail: "lead@x.com" });
+    const res = await executeWrite(sharePropertyLinkTool, ctx, { kind: "apply", propertyId: "p1", toEmail: "lead@x.com" });
     expect(res).toMatchObject({ ok: true });
     if (res.ok) {
       expect(res.reply).toContain("isn't configured");
@@ -423,7 +424,7 @@ describe("share_property_link", () => {
     const audit = auditRows(tables)[0]!;
     expect(audit.dedupe_key).toBe(`share_property_link:manager_a:p1:lead@x.com:apply:${auditDayBucket()}`);
 
-    const second = await sharePropertyLinkTool.execute(ctx, { kind: "apply", propertyId: "p1", toEmail: "lead@x.com" });
+    const second = await executeWrite(sharePropertyLinkTool, ctx, { kind: "apply", propertyId: "p1", toEmail: "lead@x.com" });
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
     expect(auditRows(tables)).toHaveLength(1);
@@ -435,7 +436,7 @@ describe("share_property_link", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(JSON.stringify({ id: "email_1" }), { status: 200 }));
     const { ctx, tables } = makeWriteCtx({ profiles: [managerProfile] });
-    const res = await sharePropertyLinkTool.execute(ctx, { kind: "tour", propertyId: "p1", toEmail: "lead@x.com" });
+    const res = await executeWrite(sharePropertyLinkTool, ctx, { kind: "tour", propertyId: "p1", toEmail: "lead@x.com" });
     expect(res).toMatchObject({ ok: true });
     if (res.ok) expect(res.reply).toContain("Emailed");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -445,7 +446,7 @@ describe("share_property_link", () => {
 
   it("execute refuses a property the landlord cannot share", async () => {
     const { ctx, tables } = makeWriteCtx({ profiles: [managerProfile] });
-    const res = await sharePropertyLinkTool.execute(ctx, { kind: "apply", propertyId: "p_foreign", toEmail: "lead@x.com" });
+    const res = await executeWrite(sharePropertyLinkTool, ctx, { kind: "apply", propertyId: "p_foreign", toEmail: "lead@x.com" });
     expect(res).toMatchObject({ ok: false });
     expect(auditRows(tables)).toHaveLength(0);
   });
@@ -491,23 +492,23 @@ function residentSeed() {
 describe("set_resident_approval", () => {
   it("preview rejects a resident outside the landlord's portfolio", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await setResidentApprovalTool.preview(ctx, { residentEmail: "other@x.com", approved: false });
+    const res = await previewWrite(setResidentApprovalTool, ctx, { residentEmail: "other@x.com", approved: false });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("portfolio");
   });
 
   it("preview shows the from→to transition and portal-access effect", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await setResidentApprovalTool.preview(ctx, { residentEmail: "T@X.com", approved: true });
+    const res = await previewWrite(setResidentApprovalTool, ctx, { residentEmail: "T@X.com", approved: true });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines.find((l) => l.label === "Approval")?.value).toBe("Not approved → Approved");
-    expect(res.preview.lines.find((l) => l.label === "Effect")?.value).toContain("on");
+    expect(res.preview.fields.find((l) => l.label === "Approval")?.value).toBe("Not approved → Approved");
+    expect(res.preview.fields.find((l) => l.label === "Effect")?.value).toContain("on");
   });
 
   it("execute updates the resident profile and audits with the email+value dedupe key", async () => {
     const { ctx, tables, log } = makeWriteCtx(residentSeed());
-    const res = await setResidentApprovalTool.execute(ctx, { residentEmail: "t@x.com", approved: true });
+    const res = await executeWrite(setResidentApprovalTool, ctx, { residentEmail: "t@x.com", approved: true });
     expect(res).toMatchObject({ ok: true });
 
     const profile = tables.profiles!.find((p) => p.id === "u1")!;
@@ -522,14 +523,14 @@ describe("set_resident_approval", () => {
 
     expect(auditRows(tables)[0]!.dedupe_key).toBe("set_resident_approval:manager_a:t@x.com:true");
 
-    const second = await setResidentApprovalTool.execute(ctx, { residentEmail: "t@x.com", approved: true });
+    const second = await executeWrite(setResidentApprovalTool, ctx, { residentEmail: "t@x.com", approved: true });
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
   });
 
   it("execute refuses (and does not touch profiles) for a foreign resident", async () => {
     const { ctx, tables, log } = makeWriteCtx(residentSeed());
-    const res = await setResidentApprovalTool.execute(ctx, { residentEmail: "other@x.com", approved: false });
+    const res = await executeWrite(setResidentApprovalTool, ctx, { residentEmail: "other@x.com", approved: false });
     expect(res).toMatchObject({ ok: false });
     expect(tables.profiles!.find((p) => p.id === "u2")!.application_approved).toBe(true);
     expect(log.updates.filter((u) => u.table === "profiles")).toHaveLength(0);
@@ -543,13 +544,13 @@ describe("set_resident_approval", () => {
 describe("send_resident_welcome", () => {
   it("preview rejects a foreign application id", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await sendResidentWelcomeTool.preview(ctx, { applicationId: "app_foreign" });
+    const res = await previewWrite(sendResidentWelcomeTool, ctx, { applicationId: "app_foreign" });
     expect(res).toMatchObject({ ok: false });
   });
 
   it("preview returns an honest error when email delivery is not configured", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await sendResidentWelcomeTool.preview(ctx, { applicationId: "app_1" });
+    const res = await previewWrite(sendResidentWelcomeTool, ctx, { applicationId: "app_1" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("not configured");
   });
@@ -558,17 +559,17 @@ describe("send_resident_welcome", () => {
     process.env.RESEND_API_KEY = "re_test_key";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "email_1" }), { status: 200 }));
     const { ctx, tables, log } = makeWriteCtx(residentSeed());
-    const res = await sendResidentWelcomeTool.execute(ctx, { applicationId: "app_1" });
+    const res = await executeWrite(sendResidentWelcomeTool, ctx, { applicationId: "app_1" });
     expect(res).toMatchObject({ ok: true });
     if (res.ok) {
       expect(res.reply).toContain("t@x.com");
-      expect(res.reply).toContain("AXIS-");
+      expect(res.reply).toContain("PROPLANE-");
     }
     expect(auditRows(tables)[0]!.dedupe_key).toBe(`send_resident_welcome:manager_a:app_1:${auditDayBucket()}`);
     // The manager's Sent inbox record was written.
     expect(log.upserts.some((u) => u.table === "portal_inbox_thread_records")).toBe(true);
 
-    const second = await sendResidentWelcomeTool.execute(ctx, { applicationId: "app_1" });
+    const second = await executeWrite(sendResidentWelcomeTool, ctx, { applicationId: "app_1" });
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
   });
@@ -582,28 +583,28 @@ describe("revoke_resident_access", () => {
   it("is a destructive tool with a preview warning describing what is removed", async () => {
     expect(revokeResidentAccessTool.destructive).toBe(true);
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await revokeResidentAccessTool.preview(ctx, { residentEmail: "t@x.com" });
+    const res = await previewWrite(revokeResidentAccessTool, ctx, { residentEmail: "t@x.com" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.warning).toContain("permanently");
-    expect(res.preview.warning).toContain("NOT deleted");
+    expect(res.preview.warnings?.[0]).toContain("permanently");
+    expect(res.preview.warnings?.[0]).toContain("NOT deleted");
   });
 
   it("preview rejects a resident outside the landlord's portfolio", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await revokeResidentAccessTool.preview(ctx, { residentEmail: "other@x.com" });
+    const res = await previewWrite(revokeResidentAccessTool, ctx, { residentEmail: "other@x.com" });
     expect(res).toMatchObject({ ok: false });
   });
 
   it("execute removes the login, audits one-shot, and is idempotent forever", async () => {
     const { ctx, tables, log } = makeWriteCtx(residentSeed());
-    const res = await revokeResidentAccessTool.execute(ctx, { residentEmail: "t@x.com" });
+    const res = await executeWrite(revokeResidentAccessTool, ctx, { residentEmail: "t@x.com" });
     expect(res).toMatchObject({ ok: true });
     // Resident-only role → the auth user is deleted entirely.
     expect(log.authDeletedUserIds).toEqual(["u1"]);
     expect(auditRows(tables)[0]!.dedupe_key).toBe("revoke_resident_access:manager_a:t@x.com");
 
-    const second = await revokeResidentAccessTool.execute(ctx, { residentEmail: "t@x.com" });
+    const second = await executeWrite(revokeResidentAccessTool, ctx, { residentEmail: "t@x.com" });
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
     expect(log.authDeletedUserIds).toHaveLength(1);
@@ -611,7 +612,7 @@ describe("revoke_resident_access", () => {
 
   it("execute refuses a foreign resident without touching anything", async () => {
     const { ctx, tables, log } = makeWriteCtx(residentSeed());
-    const res = await revokeResidentAccessTool.execute(ctx, { residentEmail: "other@x.com" });
+    const res = await executeWrite(revokeResidentAccessTool, ctx, { residentEmail: "other@x.com" });
     expect(res).toMatchObject({ ok: false });
     expect(log.authDeletedUserIds).toHaveLength(0);
     // Intent was recorded then stamped failed with the dedupe key cleared.
@@ -626,11 +627,11 @@ describe("revoke_resident_access", () => {
 describe("record_move_out", () => {
   it("preview warns that it does not amend a signed lease and rejects foreign ids", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const ok = await recordMoveOutTool.preview(ctx, { applicationId: "app_1", moveOutDate: "2026-09-30" });
+    const ok = await previewWrite(recordMoveOutTool, ctx, { applicationId: "app_1", moveOutDate: "2026-09-30" });
     expect(ok.ok).toBe(true);
-    if (ok.ok) expect(ok.preview.warning).toContain("amend_lease");
+    if (ok.ok) expect(ok.preview.warnings?.[0]).toContain("amend_lease");
 
-    const foreign = await recordMoveOutTool.preview(ctx, { applicationId: "app_foreign", moveOutDate: "2026-09-30" });
+    const foreign = await previewWrite(recordMoveOutTool, ctx, { applicationId: "app_foreign", moveOutDate: "2026-09-30" });
     expect(foreign).toMatchObject({ ok: false });
   });
 
@@ -641,7 +642,7 @@ describe("record_move_out", () => {
 
   it("execute read-merge-writes the exact lease-amendment fields and audits", async () => {
     const { ctx, tables } = makeWriteCtx(residentSeed());
-    const res = await recordMoveOutTool.execute(ctx, { applicationId: "app_1", moveOutDate: "2026-09-30" });
+    const res = await executeWrite(recordMoveOutTool, ctx, { applicationId: "app_1", moveOutDate: "2026-09-30" });
     expect(res).toMatchObject({ ok: true });
 
     const rowData = tables.manager_application_records![0]!.row_data as Row;
@@ -654,14 +655,14 @@ describe("record_move_out", () => {
 
     expect(auditRows(tables)[0]!.dedupe_key).toBe("record_move_out:manager_a:app_1:2026-09-30");
 
-    const second = await recordMoveOutTool.execute(ctx, { applicationId: "app_1", moveOutDate: "2026-09-30" });
+    const second = await executeWrite(recordMoveOutTool, ctx, { applicationId: "app_1", moveOutDate: "2026-09-30" });
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
   });
 
   it("execute never touches a foreign application", async () => {
     const { ctx, tables } = makeWriteCtx(residentSeed());
-    const res = await recordMoveOutTool.execute(ctx, { applicationId: "app_foreign", moveOutDate: "2026-09-30" });
+    const res = await executeWrite(recordMoveOutTool, ctx, { applicationId: "app_foreign", moveOutDate: "2026-09-30" });
     expect(res).toMatchObject({ ok: false });
     const foreignRow = tables.manager_application_records![1]!.row_data as Row;
     expect(foreignRow.manualResidentDetails).toBeUndefined();
@@ -676,10 +677,10 @@ describe("record_move_out", () => {
 describe("update_application_bucket", () => {
   it("preview rejects foreign ids and same-bucket no-ops", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const foreign = await updateApplicationBucketTool.preview(ctx, { applicationId: "app_foreign", bucket: "approved" });
+    const foreign = await previewWrite(updateApplicationBucketTool, ctx, { applicationId: "app_foreign", bucket: "approved" });
     expect(foreign).toMatchObject({ ok: false });
 
-    const noop = await updateApplicationBucketTool.preview(ctx, { applicationId: "app_1", bucket: "pending" });
+    const noop = await previewWrite(updateApplicationBucketTool, ctx, { applicationId: "app_1", bucket: "pending" });
     expect(noop).toMatchObject({ ok: false });
   });
 
@@ -689,16 +690,16 @@ describe("update_application_bucket", () => {
 
   it("preview notes the portal-access side effect on approval", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await updateApplicationBucketTool.preview(ctx, { applicationId: "app_1", bucket: "approved" });
+    const res = await previewWrite(updateApplicationBucketTool, ctx, { applicationId: "app_1", bucket: "approved" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const side = res.preview.lines.find((l) => l.label === "Side effect");
+    const side = res.preview.fields.find((l) => l.label === "Side effect");
     expect(side?.value).toContain("turned on");
   });
 
   it("execute sets bucket + UI stage label, syncs profile approval, and audits", async () => {
     const { ctx, tables, log } = makeWriteCtx(residentSeed());
-    const res = await updateApplicationBucketTool.execute(ctx, { applicationId: "app_1", bucket: "approved" });
+    const res = await executeWrite(updateApplicationBucketTool, ctx, { applicationId: "app_1", bucket: "approved" });
     expect(res).toMatchObject({ ok: true });
 
     const rowData = tables.manager_application_records![0]!.row_data as Row;
@@ -713,14 +714,14 @@ describe("update_application_bucket", () => {
 
     expect(auditRows(tables)[0]!.dedupe_key).toBe("update_application_bucket:manager_a:app_1:approved");
 
-    const second = await updateApplicationBucketTool.execute(ctx, { applicationId: "app_1", bucket: "approved" });
+    const second = await executeWrite(updateApplicationBucketTool, ctx, { applicationId: "app_1", bucket: "approved" });
     expect(second).toMatchObject({ ok: true });
     if (second.ok) expect(second.reply).toContain("already");
   });
 
   it("execute never moves a foreign application", async () => {
     const { ctx, tables } = makeWriteCtx(residentSeed());
-    const res = await updateApplicationBucketTool.execute(ctx, { applicationId: "app_foreign", bucket: "approved" });
+    const res = await executeWrite(updateApplicationBucketTool, ctx, { applicationId: "app_foreign", bucket: "approved" });
     expect(res).toMatchObject({ ok: false });
     expect((tables.manager_application_records![1]!.row_data as Row).bucket).toBe("pending");
     expect(auditRows(tables)).toHaveLength(0);
@@ -734,7 +735,7 @@ describe("update_application_bucket", () => {
 describe("order_background_check", () => {
   it("preview returns an honest error when no screening provider is configured", async () => {
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await orderBackgroundCheckTool.preview(ctx, { applicationId: "app_1" });
+    const res = await previewWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_1" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("not configured");
   });
@@ -742,7 +743,7 @@ describe("order_background_check", () => {
   it("preview rejects an explicitly requested unconfigured provider", async () => {
     process.env.CERTN_API_KEY = "certn_test";
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await orderBackgroundCheckTool.preview(ctx, { applicationId: "app_1", provider: "checkr" });
+    const res = await previewWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_1", provider: "checkr" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("CHECKR_API_KEY");
   });
@@ -750,7 +751,7 @@ describe("order_background_check", () => {
   it("preview rejects foreign ids even when configured", async () => {
     process.env.CERTN_API_KEY = "certn_test";
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await orderBackgroundCheckTool.preview(ctx, { applicationId: "app_foreign", provider: "certn" });
+    const res = await previewWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_foreign", provider: "certn" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("list_applications");
   });
@@ -758,12 +759,12 @@ describe("order_background_check", () => {
   it("preview shows applicant, provider, cost warning, and consent when configured", async () => {
     process.env.CERTN_API_KEY = "certn_test";
     const { ctx } = makeWriteCtx(residentSeed());
-    const res = await orderBackgroundCheckTool.preview(ctx, { applicationId: "app_1", provider: "certn" });
+    const res = await previewWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_1", provider: "certn" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines.find((l) => l.label === "Provider")?.value).toBe("certn");
-    expect(res.preview.lines.find((l) => l.label === "Consent on file")?.value).toBe("Yes");
-    expect(res.preview.warning).toContain("$");
+    expect(res.preview.fields.find((l) => l.label === "Provider")?.value).toBe("certn");
+    expect(res.preview.fields.find((l) => l.label === "Consent on file")?.value).toBe("Yes");
+    expect(res.preview.warnings?.[0]).toContain("$");
   });
 
   it("preview refuses when the applicant did not consent", async () => {
@@ -771,7 +772,7 @@ describe("order_background_check", () => {
     const seed = residentSeed();
     (seed.manager_application_records[0]!.row_data as { application: Row }).application.consentCredit = false;
     const { ctx } = makeWriteCtx(seed);
-    const res = await orderBackgroundCheckTool.preview(ctx, { applicationId: "app_1", provider: "certn" });
+    const res = await previewWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_1", provider: "certn" });
     expect(res).toMatchObject({ ok: false });
     if (!res.ok) expect(res.error).toContain("authorize");
   });
@@ -779,7 +780,7 @@ describe("order_background_check", () => {
   it("execute refuses a foreign application before ordering or auditing anything", async () => {
     process.env.CERTN_API_KEY = "certn_test";
     const { ctx, tables } = makeWriteCtx(residentSeed());
-    const res = await orderBackgroundCheckTool.execute(ctx, { applicationId: "app_foreign", provider: "certn" });
+    const res = await executeWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_foreign", provider: "certn" });
     expect(res).toMatchObject({ ok: false });
     expect(auditRows(tables)).toHaveLength(0);
   });

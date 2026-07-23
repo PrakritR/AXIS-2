@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { agentRegistry } from "@/lib/tools";
+import { agentRegistry, MANAGER_INLINE_WRITE_TOOLS } from "@/lib/tools";
 import { toAnthropicTools, buildRegistry, defineWriteTool, runReadTool } from "@/lib/tools/registry";
 import type { AgentContext } from "@/lib/tools/context";
 
@@ -28,12 +28,12 @@ describe("agent registry", () => {
     }
   });
 
-  it("write tools expose preview + execute and are two-phase", () => {
+  it("write tools expose preview + handler and are two-phase", () => {
     const writes = tools.filter((t) => t.kind === "write");
     expect(writes.length).toBeGreaterThan(0);
     for (const tool of writes) {
       expect(typeof tool.preview).toBe("function");
-      expect(typeof tool.execute).toBe("function");
+      expect(typeof tool.handler).toBe("function");
     }
   });
 
@@ -48,14 +48,14 @@ describe("agent registry", () => {
   it("appends the confirmation notice to gated write-tool descriptions", () => {
     const schemas = toAnthropicTools(agentRegistry);
     for (const tool of tools) {
-      if (tool.kind !== "write" || tool.confirm === "none") continue;
+      if (tool.kind !== "write" || MANAGER_INLINE_WRITE_TOOLS.includes(tool.name)) continue;
       const schema = schemas.find((s) => s.name === tool.name)!;
       expect(schema.description).toContain("must explicitly confirm");
     }
   });
 
   it("refuses to execute write tools through the read path (defense in depth)", async () => {
-    const write = tools.find((t) => t.kind === "write" && t.confirm !== "none");
+    const write = tools.find((t) => t.kind === "write" && !MANAGER_INLINE_WRITE_TOOLS.includes(t.name));
     expect(write).toBeTruthy();
     const result = await runReadTool(agentRegistry, {} as AgentContext, write!.name, {});
     expect(result.ok).toBe(false);

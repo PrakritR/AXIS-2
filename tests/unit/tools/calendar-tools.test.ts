@@ -10,6 +10,7 @@ import {
   updateManagerAvailabilityTool,
 } from "@/lib/tools/domains/calendar";
 import { acceptTourInquiry } from "@/lib/tour-inquiry.server";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
 /**
  * The shared fake-agent-ctx FakeQuery is read-only; the calendar write tools
@@ -339,7 +340,7 @@ describe("list_tour_inquiries", () => {
 describe("update_manager_availability", () => {
   it("preview shows date, human window, slot count, and property scope", async () => {
     const ctx = makeCtx(seedTables());
-    const res = await updateManagerAvailabilityTool.preview(ctx, {
+    const res = await previewWrite(updateManagerAvailabilityTool, ctx, {
       date: "2026-07-22",
       startTime: "07:00",
       endTime: "10:00",
@@ -348,7 +349,7 @@ describe("update_manager_availability", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const values = res.preview.lines.map((l) => l.value);
+    const values = res.preview.fields.map((l) => l.value);
     expect(values).toContain("2026-07-22");
     expect(values).toContain("7:00 AM – 10:00 AM");
     expect(values).toContain("6 half-hour slots");
@@ -357,7 +358,7 @@ describe("update_manager_availability", () => {
 
   it("preview labels portfolio-wide changes as all properties", async () => {
     const ctx = makeCtx(seedTables());
-    const res = await updateManagerAvailabilityTool.preview(ctx, {
+    const res = await previewWrite(updateManagerAvailabilityTool, ctx, {
       date: "2026-07-22",
       startTime: "07:00",
       endTime: "07:30",
@@ -365,19 +366,19 @@ describe("update_manager_availability", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines.map((l) => l.value)).toContain("All properties");
+    expect(res.preview.fields.map((l) => l.value)).toContain("All properties");
   });
 
   it("preview rejects foreign or unknown property ids and bad inputs", async () => {
     const ctx = makeCtx(seedTables());
     const base = { date: "2026-07-22", startTime: "07:00", endTime: "10:00", mode: "add" as const };
-    const foreign = await updateManagerAvailabilityTool.preview(ctx, { ...base, propertyId: "prop_foreign" });
+    const foreign = await previewWrite(updateManagerAvailabilityTool, ctx, { ...base, propertyId: "prop_foreign" });
     expect(foreign.ok).toBe(false);
-    const unknown = await updateManagerAvailabilityTool.preview(ctx, { ...base, propertyId: "nope" });
+    const unknown = await previewWrite(updateManagerAvailabilityTool, ctx, { ...base, propertyId: "nope" });
     expect(unknown.ok).toBe(false);
-    const badDate = await updateManagerAvailabilityTool.preview(ctx, { ...base, date: "2026-02-31" });
+    const badDate = await previewWrite(updateManagerAvailabilityTool, ctx, { ...base, date: "2026-02-31" });
     expect(badDate.ok).toBe(false);
-    const badWindow = await updateManagerAvailabilityTool.preview(ctx, { ...base, startTime: "10:00", endTime: "07:00" });
+    const badWindow = await previewWrite(updateManagerAvailabilityTool, ctx, { ...base, startTime: "10:00", endTime: "07:00" });
     expect(badWindow.ok).toBe(false);
   });
 
@@ -398,7 +399,7 @@ describe("update_manager_availability", () => {
       },
     });
     const ctx = makeCtx(tables);
-    const res = await updateManagerAvailabilityTool.execute(ctx, {
+    const res = await executeWrite(updateManagerAvailabilityTool, ctx, {
       date: "2026-07-22",
       startTime: "07:00",
       endTime: "08:00",
@@ -424,7 +425,7 @@ describe("update_manager_availability", () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
     const input = { date: "2026-07-23", startTime: "09:00", endTime: "10:00", mode: "add" as const };
-    const first = await updateManagerAvailabilityTool.execute(ctx, input);
+    const first = await executeWrite(updateManagerAvailabilityTool, ctx, input);
     expect(first.ok).toBe(true);
 
     const key = "axis_mgr_avail_slots_v2_manager_a";
@@ -433,7 +434,7 @@ describe("update_manager_availability", () => {
     expect(row.manager_user_id).toBe("manager_a");
     expect((row.row_data as { payload: string[] }).payload).toEqual(["2026-07-23:18", "2026-07-23:19"]);
 
-    const second = await updateManagerAvailabilityTool.execute(ctx, input);
+    const second = await executeWrite(updateManagerAvailabilityTool, ctx, input);
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("Already");
     expect(tables.audit_log.filter((r) => r.tool_name === "update_manager_availability")).toHaveLength(1);
@@ -442,7 +443,7 @@ describe("update_manager_availability", () => {
   it("execute refuses a foreign property id before writing anything", async () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
-    const res = await updateManagerAvailabilityTool.execute(ctx, {
+    const res = await executeWrite(updateManagerAvailabilityTool, ctx, {
       date: "2026-07-22",
       startTime: "07:00",
       endTime: "08:00",
@@ -465,24 +466,24 @@ describe("create_calendar_event", () => {
 
   it("preview validates the window and property ownership", async () => {
     const ctx = makeCtx(seedTables());
-    const ok = await createCalendarEventTool.preview(ctx, input);
+    const ok = await previewWrite(createCalendarEventTool, ctx, input);
     expect(ok.ok).toBe(true);
-    if (ok.ok) expect(ok.preview.lines.map((l) => l.value)).toContain("12 Main St");
+    if (ok.ok) expect(ok.preview.fields.map((l) => l.value)).toContain("12 Main St");
 
-    const badWindow = await createCalendarEventTool.preview(ctx, {
+    const badWindow = await previewWrite(createCalendarEventTool, ctx, {
       ...input,
       endsAtIso: "2026-07-25T16:00:00.000Z",
     });
     expect(badWindow.ok).toBe(false);
 
-    const foreign = await createCalendarEventTool.preview(ctx, { ...input, propertyId: "prop_foreign" });
+    const foreign = await previewWrite(createCalendarEventTool, ctx, { ...input, propertyId: "prop_foreign" });
     expect(foreign.ok).toBe(false);
   });
 
   it("execute appends the event, preserving other managers' events, and audits", async () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
-    const res = await createCalendarEventTool.execute(ctx, input);
+    const res = await executeWrite(createCalendarEventTool, ctx, input);
     expect(res.ok).toBe(true);
 
     const rowData = tables.portal_schedule_records.find((r) => r.id === PLANNED_ID)!.row_data as {
@@ -498,7 +499,7 @@ describe("create_calendar_event", () => {
     expect(String(audit?.dedupe_key)).toMatch(/^create_calendar_event:manager_a:2026-07-25T17:00:00\.000Z:/);
 
     // Same start + title dedupes to already-done, no second event appended.
-    const again = await createCalendarEventTool.execute(ctx, input);
+    const again = await executeWrite(createCalendarEventTool, ctx, input);
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("Already");
     expect(rowData.payload.filter((e) => e.title === "Roof inspection")).toHaveLength(1);
@@ -508,26 +509,26 @@ describe("create_calendar_event", () => {
 describe("cancel_calendar_event", () => {
   it("preview rejects foreign and unknown event ids", async () => {
     const ctx = makeCtx(seedTables());
-    const foreign = await cancelCalendarEventTool.preview(ctx, { eventId: "pe_b" });
+    const foreign = await previewWrite(cancelCalendarEventTool, ctx, { eventId: "pe_b" });
     expect(foreign.ok).toBe(false);
-    const unknown = await cancelCalendarEventTool.preview(ctx, { eventId: "nope" });
+    const unknown = await previewWrite(cancelCalendarEventTool, ctx, { eventId: "nope" });
     expect(unknown.ok).toBe(false);
   });
 
   it("preview shows the owned event with a destructive warning", async () => {
     const ctx = makeCtx(seedTables());
-    const res = await cancelCalendarEventTool.preview(ctx, { eventId: "pe_a" });
+    const res = await previewWrite(cancelCalendarEventTool, ctx, { eventId: "pe_a" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines.map((l) => l.value)).toContain("Tour · Jane");
-    expect(res.preview.warning).toBeTruthy();
+    expect(res.preview.fields.map((l) => l.value)).toContain("Tour · Jane");
+    expect(res.preview.warnings?.[0]).toBeTruthy();
     expect(cancelCalendarEventTool.destructive).toBe(true);
   });
 
   it("execute removes only the owned event and audits with a one-shot key", async () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
-    const res = await cancelCalendarEventTool.execute(ctx, { eventId: "pe_a" });
+    const res = await executeWrite(cancelCalendarEventTool, ctx, { eventId: "pe_a" });
     expect(res.ok).toBe(true);
 
     const rowData = tables.portal_schedule_records.find((r) => r.id === PLANNED_ID)!.row_data as {
@@ -542,7 +543,7 @@ describe("cancel_calendar_event", () => {
   it("execute refuses another manager's event and writes no audit row", async () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
-    const res = await cancelCalendarEventTool.execute(ctx, { eventId: "pe_b" });
+    const res = await executeWrite(cancelCalendarEventTool, ctx, { eventId: "pe_b" });
     expect(res.ok).toBe(false);
     expect(tables.audit_log).toHaveLength(0);
     const rowData = tables.portal_schedule_records.find((r) => r.id === PLANNED_ID)!.row_data as {
@@ -555,25 +556,25 @@ describe("cancel_calendar_event", () => {
 describe("accept_tour_inquiry", () => {
   it("preview shows guest, property, and window for an owned pending inquiry", async () => {
     const ctx = makeCtx(seedTables());
-    const res = await acceptTourInquiryTool.preview(ctx, { inquiryId: "inq_a" });
+    const res = await previewWrite(acceptTourInquiryTool, ctx, { inquiryId: "inq_a" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const values = res.preview.lines.map((l) => l.value);
+    const values = res.preview.fields.map((l) => l.value);
     expect(values).toContain("Sam Guest");
     expect(values).toContain("12 Main St");
   });
 
   it("preview rejects foreign, unknown, and non-pending inquiries", async () => {
     const ctx = makeCtx(seedTables());
-    expect((await acceptTourInquiryTool.preview(ctx, { inquiryId: "inq_b" })).ok).toBe(false);
-    expect((await acceptTourInquiryTool.preview(ctx, { inquiryId: "nope" })).ok).toBe(false);
-    expect((await acceptTourInquiryTool.preview(ctx, { inquiryId: "inq_declined" })).ok).toBe(false);
+    expect((await previewWrite(acceptTourInquiryTool, ctx, { inquiryId: "inq_b" })).ok).toBe(false);
+    expect((await previewWrite(acceptTourInquiryTool, ctx, { inquiryId: "nope" })).ok).toBe(false);
+    expect((await previewWrite(acceptTourInquiryTool, ctx, { inquiryId: "inq_declined" })).ok).toBe(false);
   });
 
   it("execute accepts the tour, preserves foreign inquiries, and audits", async () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
-    const res = await acceptTourInquiryTool.execute(ctx, { inquiryId: "inq_a" });
+    const res = await executeWrite(acceptTourInquiryTool, ctx, { inquiryId: "inq_a" });
     expect(res.ok).toBe(true);
 
     const inquiries = (tables.portal_schedule_records.find((r) => r.id === INQ_ID)!.row_data as {
@@ -594,14 +595,14 @@ describe("accept_tour_inquiry", () => {
     expect(audit?.dedupe_key).toBe("accept_tour_inquiry:manager_a:inq_a");
 
     // One-shot transition: a retry reports already-done instead of re-running.
-    const again = await acceptTourInquiryTool.execute(ctx, { inquiryId: "inq_a" });
+    const again = await executeWrite(acceptTourInquiryTool, ctx, { inquiryId: "inq_a" });
     expect(again.ok).toBe(false); // inquiry no longer pending → refused before audit
   });
 
   it("execute refuses another manager's inquiry without writing", async () => {
     const tables = seedTables();
     const ctx = makeCtx(tables);
-    const res = await acceptTourInquiryTool.execute(ctx, { inquiryId: "inq_b" });
+    const res = await executeWrite(acceptTourInquiryTool, ctx, { inquiryId: "inq_b" });
     expect(res.ok).toBe(false);
     expect(tables.audit_log).toHaveLength(0);
     const inquiries = (tables.portal_schedule_records.find((r) => r.id === INQ_ID)!.row_data as {

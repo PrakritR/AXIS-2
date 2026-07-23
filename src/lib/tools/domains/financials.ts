@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineTool, defineWriteTool } from "../registry";
+import { defineTool, defineWriteTool, type ActionPreview } from "../registry";
 import type { AgentContext } from "../context";
 import type { ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { assertFinancialsTier } from "@/lib/reports/auth";
@@ -227,7 +227,7 @@ function manualEntryPreview(
   kind: ManualEntryKind,
   input: ManualEntryInput,
   resolved: ResolvedManualEntry,
-): { title: string; summary: string; lines: { label: string; value: string }[]; confirmLabel: string } {
+): ActionPreview {
   const meta = MANUAL_ENTRY_META[kind];
   const lines = [
     { label: "Amount", value: centsToUsd(resolved.amountCents) },
@@ -242,9 +242,10 @@ function manualEntryPreview(
   }
   if (input.description?.trim()) lines.push({ label: "Description", value: input.description.trim() });
   return {
+    kind: meta.toolName,
     title: kind === "expense" ? "Record expense" : "Record income",
     summary: `Record a ${centsToUsd(resolved.amountCents)} ${resolved.categoryLabel} ${meta.noun} entry dated ${input.postedDate}${resolved.propertyLabel ? ` for ${resolved.propertyLabel}` : ""}.`,
-    lines,
+    fields: lines,
     confirmLabel: kind === "expense" ? "Record expense" : "Record income",
   };
 }
@@ -258,7 +259,7 @@ function manualEntryPreview(
 async function executeManualEntry(ctx: AgentContext, kind: ManualEntryKind, input: ManualEntryInput) {
   const meta = MANUAL_ENTRY_META[kind];
   const check = await resolveManualEntry(ctx, kind, input);
-  if (!check.ok) return { ok: false as const, error: check.error };
+  if (!check.ok) throw new Error(check.error);
   const { resolved } = check;
   const categoryCode = input.categoryCode.trim();
 
@@ -278,12 +279,11 @@ async function executeManualEntry(ctx: AgentContext, kind: ManualEntryKind, inpu
   if (!audit.recorded) {
     if (audit.duplicate) {
       return {
-        ok: true as const,
         reply: `An identical ${meta.noun} entry (same amount, category, date, and description) was already recorded — nothing new was added.`,
         resultSummary: { alreadyRecorded: true },
       };
     }
-    return { ok: false as const, error: `Could not record the action; the ${meta.noun} was not booked.` };
+    throw new Error(`Could not record the action; the ${meta.noun} was not booked.`);
   }
 
   const result =
@@ -309,13 +309,12 @@ async function executeManualEntry(ctx: AgentContext, kind: ManualEntryKind, inpu
     // Clear the dedupe key so a retry can record a fresh attempt instead of
     // short-circuiting to "already recorded" for an entry that never booked.
     await updateAuditResult(ctx, dedupeKey, { booked: false }, { clearDedupeKey: true });
-    return { ok: false as const, error: result.error };
+    throw new Error(result.error);
   }
 
   const entryId = typeof result.entry.id === "string" || typeof result.entry.id === "number" ? String(result.entry.id) : null;
   await updateAuditResult(ctx, dedupeKey, { booked: true, entryId });
   return {
-    ok: true as const,
     reply: `Recorded a ${centsToUsd(resolved.amountCents)} ${resolved.categoryLabel} ${meta.noun} entry dated ${input.postedDate}${resolved.propertyLabel ? ` for ${resolved.propertyLabel}` : ""}.`,
     resultSummary: { entryId, amountCents: resolved.amountCents, categoryCode },
   };
@@ -330,7 +329,6 @@ export const recordExpenseTool = defineWriteTool({
   name: "record_expense",
   description:
     "Record a manual expense entry in the landlord's books (same bookkeeping as the Financials page). Requires an expense category code; get propertyId from list_properties/find_records and vendorId from list_vendors/find_records when the expense should be attributed to one.",
-  kind: "write",
   inputSchema: z
     .object({
       amountUsd: z.number().positive().describe("Expense amount in US dollars, e.g. 125.5 for $125.50."),
@@ -346,17 +344,16 @@ export const recordExpenseTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const check = await resolveManualEntry(ctx, "expense", input);
-    if (!check.ok) return check;
-    return { ok: true, input, preview: manualEntryPreview("expense", input, check.resolved) };
+    if (!check.ok) throw new Error(check.error);
+    return manualEntryPreview("expense", input, check.resolved);
   },
-  execute: (ctx, input) => executeManualEntry(ctx, "expense", input),
+  handler: (ctx, input) => executeManualEntry(ctx, "expense", input),
 });
 
 export const recordIncomeTool = defineWriteTool({
   name: "record_income",
   description:
     "Record a manual income entry in the landlord's books (rent collected outside Axis, fees, other income — same bookkeeping as the Financials page). Requires an income category code; get propertyId from list_properties/find_records when the income belongs to a property.",
-  kind: "write",
   inputSchema: z
     .object({
       amountUsd: z.number().positive().describe("Income amount in US dollars, e.g. 1500 for $1,500.00."),
@@ -372,8 +369,8 @@ export const recordIncomeTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const check = await resolveManualEntry(ctx, "income", input);
-    if (!check.ok) return check;
-    return { ok: true, input, preview: manualEntryPreview("income", input, check.resolved) };
+    if (!check.ok) throw new Error(check.error);
+    return manualEntryPreview("income", input, check.resolved);
   },
-  execute: (ctx, input) => executeManualEntry(ctx, "income", input),
+  handler: (ctx, input) => executeManualEntry(ctx, "income", input),
 });

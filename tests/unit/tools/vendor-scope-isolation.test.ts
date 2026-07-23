@@ -13,6 +13,7 @@ import { getJobDetailsTool, listMyBidsTool, listMyJobsTool, listMyOffersTool } f
 import { contentHash } from "@/lib/tools/domains/vendor/load-vendor-rows";
 import { listMyInboxThreadsTool, sendMessageToManagerTool } from "@/lib/tools/domains/vendor/messaging";
 import { getMyProfileTool, listMyPayoutsTool } from "@/lib/tools/domains/vendor/profile";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
 /**
  * Fake supabase surface for VENDOR tool tests. Extends the FakeQuery idea from
@@ -408,11 +409,11 @@ beforeEach(() => {
 });
 
 describe("vendor registry acceptance", () => {
-  it("registers all 13 tools without a banned identity input field", () => {
+  it("registers all 17 tools without a banned identity input field", () => {
     // vendor-index.ts calls buildRegistry at module load, which throws if any
     // write tool declares landlordId/vendorUserId/managerId/etc — importing it
     // is itself the assertion; verify the expected surface is present.
-    expect(vendorAgentRegistry.size).toBe(13);
+    expect(vendorAgentRegistry.size).toBe(17);
     expect(vendorAgentRegistry.get("submit_bid")?.kind).toBe("write");
     expect(vendorAgentRegistry.get("list_my_jobs")?.kind).toBe("read");
   });
@@ -513,9 +514,9 @@ describe("vendor write tools: previews reject foreign/invalid targets", () => {
   it("submit_bid refuses a work order assigned to another vendor, in preview and execute", async () => {
     const { ctx, mutations } = seed();
     const input = { workOrderId: "WO-B", amountUsd: 100 };
-    const preview = await submitBidTool.preview(ctx, input);
+    const preview = await previewWrite(submitBidTool, ctx, input);
     expect(preview.ok).toBe(false);
-    const exec = await submitBidTool.execute(ctx, input);
+    const exec = await executeWrite(submitBidTool, ctx, input);
     expect(exec.ok).toBe(false);
     expect(mutations.filter((m) => m.table === "work_order_bids")).toEqual([]);
     expect(auditRows(mutations)).toEqual([]);
@@ -523,7 +524,7 @@ describe("vendor write tools: previews reject foreign/invalid targets", () => {
 
   it("submit_bid refuses when bidding is not open", async () => {
     const { ctx } = seed();
-    const preview = await submitBidTool.preview(ctx, { workOrderId: "WO-E", amountUsd: 100 });
+    const preview = await previewWrite(submitBidTool, ctx, { workOrderId: "WO-E", amountUsd: 100 });
     expect(preview.ok).toBe(false);
     if (!preview.ok) expect(preview.error).toContain("Bidding is not open");
   });
@@ -531,10 +532,10 @@ describe("vendor write tools: previews reject foreign/invalid targets", () => {
   it("set_my_price refuses when the vendor's bid is already accepted (the locked payout anchor)", async () => {
     const { ctx, mutations, tables } = seed();
     const input = { workOrderId: "WO-D", amountUsd: 999 };
-    const preview = await setMyPriceTool.preview(ctx, input);
+    const preview = await previewWrite(setMyPriceTool, ctx, input);
     expect(preview.ok).toBe(false);
     if (!preview.ok) expect(preview.error).toContain("accepted bid amount is locked");
-    const exec = await setMyPriceTool.execute(ctx, input);
+    const exec = await executeWrite(setMyPriceTool, ctx, input);
     expect(exec.ok).toBe(false);
     // Neither the accepted bid nor the work order price moved.
     expect(tables.work_order_bids!.find((b) => b.id === "BID-D")!.amount_cents).toBe(40000);
@@ -545,18 +546,18 @@ describe("vendor write tools: previews reject foreign/invalid targets", () => {
 
   it("set_my_price and mark_job_done refuse another vendor's work order", async () => {
     const { ctx } = seed();
-    const price = await setMyPriceTool.preview(ctx, { workOrderId: "WO-B", amountUsd: 50 });
+    const price = await previewWrite(setMyPriceTool, ctx, { workOrderId: "WO-B", amountUsd: 50 });
     expect(price.ok).toBe(false);
-    const done = await markJobDoneTool.preview(ctx, { workOrderId: "WO-B" });
+    const done = await previewWrite(markJobDoneTool, ctx, { workOrderId: "WO-B" });
     expect(done.ok).toBe(false);
   });
 
   it("send_message_to_manager rejects a manager not linked to this vendor", async () => {
     const { ctx, mutations } = seed();
     const input = { subject: "Hello", body: "Hi", recipientManagerId: FOREIGN_MANAGER };
-    const preview = await sendMessageToManagerTool.preview(ctx, input);
+    const preview = await previewWrite(sendMessageToManagerTool, ctx, input);
     expect(preview.ok).toBe(false);
-    const exec = await sendMessageToManagerTool.execute(ctx, input);
+    const exec = await executeWrite(sendMessageToManagerTool, ctx, input);
     expect(exec.ok).toBe(false);
     expect(mutations.filter((m) => m.table === "portal_inbox_thread_records")).toEqual([]);
   });
@@ -566,11 +567,11 @@ describe("vendor write tools: happy paths write audited, scoped rows", () => {
   it("submit_bid upserts a bid pinned to the vendor + owning manager and audits with the amount/time hash", async () => {
     const { ctx, mutations, tables } = seed();
     const input = { workOrderId: "WO-A", amountUsd: 450, proposedTimeIso: "2026-07-22T17:00:00.000Z", note: "Can start Wednesday" };
-    const preview = await submitBidTool.preview(ctx, input);
+    const preview = await previewWrite(submitBidTool, ctx, input);
     expect(preview.ok).toBe(true);
-    if (preview.ok) expect(preview.preview.lines.some((l) => l.value === "$450.00")).toBe(true);
+    if (preview.ok) expect(preview.preview.fields.some((l) => l.value === "$450.00")).toBe(true);
 
-    const exec = await submitBidTool.execute(ctx, input);
+    const exec = await executeWrite(submitBidTool, ctx, input);
     expect(exec.ok).toBe(true);
 
     const audit = auditRows(mutations)[0];
@@ -589,14 +590,14 @@ describe("vendor write tools: happy paths write audited, scoped rows", () => {
     });
 
     // Same bid again: idempotent per amount+time.
-    const again = await submitBidTool.execute(ctx, input);
+    const again = await executeWrite(submitBidTool, ctx, input);
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("Already done");
   });
 
   it("set_my_price updates the work order costs and audits per work order + amount", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await setMyPriceTool.execute(ctx, { workOrderId: "WO-C", amountUsd: 50, materialsUsd: 10 });
+    const exec = await executeWrite(setMyPriceTool, ctx, { workOrderId: "WO-C", amountUsd: 50, materialsUsd: 10 });
     expect(exec.ok).toBe(true);
 
     const audit = auditRows(mutations)[0];
@@ -612,7 +613,7 @@ describe("vendor write tools: happy paths write audited, scoped rows", () => {
 
   it("mark_job_done sets the vendor-marked-done flag, notifies the manager, and audits one-shot", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await markJobDoneTool.execute(ctx, { workOrderId: "WO-C", workDoneSummary: "Replaced trap" });
+    const exec = await executeWrite(markJobDoneTool, ctx, { workOrderId: "WO-C", workDoneSummary: "Replaced trap" });
     expect(exec.ok).toBe(true);
 
     const audit = auditRows(mutations)[0];
@@ -630,11 +631,11 @@ describe("vendor write tools: happy paths write audited, scoped rows", () => {
   it("send_message_to_manager delivers through the vendor-scoped inbox pipeline and audits per content per day", async () => {
     const { ctx, mutations } = seed();
     const input = { subject: "Question", body: "Which unit has the leak?" };
-    const preview = await sendMessageToManagerTool.preview(ctx, input);
+    const preview = await previewWrite(sendMessageToManagerTool, ctx, input);
     expect(preview.ok).toBe(true);
-    if (preview.ok) expect(preview.preview.lines.some((l) => l.value.includes("mgr@axis.test"))).toBe(true);
+    if (preview.ok) expect(preview.preview.fields.some((l) => l.value.includes("mgr@axis.test"))).toBe(true);
 
-    const exec = await sendMessageToManagerTool.execute(ctx, input);
+    const exec = await executeWrite(sendMessageToManagerTool, ctx, input);
     expect(exec.ok).toBe(true);
 
     const audit = auditRows(mutations)[0];
@@ -647,7 +648,7 @@ describe("vendor write tools: happy paths write audited, scoped rows", () => {
 
   it("update_my_availability read-merge-writes the vendor's own slot record with a windowed dedupe key", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await updateMyAvailabilityTool.execute(ctx, {
+    const exec = await executeWrite(updateMyAvailabilityTool, ctx, {
       date: "2026-07-21",
       startTime: "08:00",
       endTime: "10:00",

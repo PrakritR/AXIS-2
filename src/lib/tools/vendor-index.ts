@@ -10,6 +10,12 @@ import { markJobDoneTool, setMyPriceTool, submitBidTool } from "./domains/vendor
 import { getJobDetailsTool, listMyBidsTool, listMyJobsTool, listMyOffersTool } from "./domains/vendor/jobs";
 import { listMyInboxThreadsTool, sendMessageToManagerTool } from "./domains/vendor/messaging";
 import { getMyProfileTool, listMyPayoutsTool } from "./domains/vendor/profile";
+import { listMyScheduleTool } from "./domains/vendor/schedule";
+import {
+  listVendorInvoicesTool,
+  listVendorPayoutsTool,
+  submitVendorInvoiceTool,
+} from "./domains/vendor-financials";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type VendorTool = ToolDefinition<any, any, VendorAgentContext>;
@@ -26,9 +32,14 @@ const ALL_VENDOR_TOOLS: VendorTool[] = [
   // Payouts / profile
   listMyPayoutsTool,
   getMyProfileTool,
-  // Availability
+  // Invoicing (Phase 4): totals are recomputed server-side from line items.
+  listVendorInvoicesTool,
+  submitVendorInvoiceTool,
+  listVendorPayoutsTool,
+  // Availability + calendar
   getMyAvailabilityTool,
   updateMyAvailabilityTool,
+  listMyScheduleTool,
   // Inbox / messaging
   listMyInboxThreadsTool,
   sendMessageToManagerTool,

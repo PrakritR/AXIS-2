@@ -153,7 +153,6 @@ export const createChargeTool = defineWriteTool({
   name: "create_charge",
   description:
     "Create a new pending charge (rent, deposit, fee, etc.) for one of the landlord's approved residents. Pass the resident's email from list_residents; the amount is in USD. Payment reminders auto-schedule from the landlord's automation settings.",
-  kind: "write",
   inputSchema: z
     .object({
       residentEmail: z
@@ -175,25 +174,24 @@ export const createChargeTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const resolved = await resolveChargeTarget(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { target } = resolved;
 
     let dueLabel: string | null = null;
     if (input.dueDate) {
       dueLabel = dueDateLabelFromIso(input.dueDate);
       if (!dueLabel) {
-        return { ok: false, error: `Invalid dueDate "${input.dueDate}" — pass a real date as YYYY-MM-DD.` };
+        throw new Error(`Invalid dueDate "${input.dueDate}" — pass a real date as YYYY-MM-DD.`);
       }
     }
 
     const amountLabel = formatUsd(input.amountUsd);
     return {
-      ok: true,
-      input: { ...input, residentEmail: target.residentEmail, title: input.title.trim() },
-      preview: {
-        title: "Create charge",
-        summary: `Create a ${amountLabel} "${input.title.trim()}" charge for ${target.residentName}.`,
-        lines: [
+      confirmedInput: { ...input, residentEmail: target.residentEmail, title: input.title.trim() },
+      kind: "create_charge",
+      title: "Create charge",
+      summary: `Create a ${amountLabel} "${input.title.trim()}" charge for ${target.residentName}.`,
+      fields: [
           { label: "Resident", value: `${target.residentName} (${target.residentEmail})` },
           { label: "Property", value: target.propertyLabel || "—" },
           { label: "Charge", value: `${input.title.trim()} (${input.kind})` },
@@ -201,20 +199,19 @@ export const createChargeTool = defineWriteTool({
           { label: "Due date", value: dueLabel ?? "Auto (from the reminder cadence)" },
           { label: "Reminders", value: "Payment reminders will be scheduled automatically" },
         ],
-        confirmLabel: "Create charge",
-      },
+      confirmLabel: "Create charge",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve the target from the landlord's own data at execute time —
     // stored input is never trusted as ownership proof.
     const resolved = await resolveChargeTarget(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { target } = resolved;
 
     const dueLabel = input.dueDate ? dueDateLabelFromIso(input.dueDate) : null;
     if (input.dueDate && !dueLabel) {
-      return { ok: false, error: `Invalid dueDate "${input.dueDate}" — pass a real date as YYYY-MM-DD.` };
+      throw new Error(`Invalid dueDate "${input.dueDate}" — pass a real date as YYYY-MM-DD.`);
     }
     const amountLabel = formatUsd(input.amountUsd);
 
@@ -234,9 +231,9 @@ export const createChargeTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: "An identical charge was already created by this action — nothing new was added." };
+        return { reply: "An identical charge was already created by this action — nothing new was added." };
       }
-      return { ok: false, error: "Could not record the action; no charge was created." };
+      throw new Error("Could not record the action; no charge was created.");
     }
 
     // Best-effort resident account link: the email was verified above to belong
@@ -271,15 +268,11 @@ export const createChargeTool = defineWriteTool({
       await upsertManagerCharges(ctx.db, ctx.landlordId, [charge]);
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "charge_upsert_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "The charge could not be created." };
+      throw new Error(e instanceof Error ? e.message : "The charge could not be created.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { chargeId: charge.id });
-    return {
-      ok: true,
-      reply: `Created a ${amountLabel} "${charge.title}" charge for ${target.residentName}${dueLabel ? ` due ${dueLabel}` : " with an automatic due date"}. Payment reminders are scheduled automatically.`,
-      resultSummary: { chargeId: charge.id },
-    };
+    return { reply: `Created a ${amountLabel} "${charge.title}" charge for ${target.residentName}${dueLabel ? ` due ${dueLabel}` : " with an automatic due date"}. Payment reminders are scheduled automatically.`, resultSummary: { chargeId: charge.id } };
   },
 });
 
@@ -287,7 +280,6 @@ export const updateChargeTool = defineWriteTool({
   name: "update_charge",
   description:
     "Update the amount, due date, or title of one of the landlord's existing unpaid charges. Pass the charge id from list_charges or get_overdue_charges. Paid charges cannot be edited.",
-  kind: "write",
   inputSchema: z
     .object({
       chargeId: z.string().min(1).describe("Id of the charge to update (from list_charges)."),
@@ -299,19 +291,19 @@ export const updateChargeTool = defineWriteTool({
   preview: async (ctx, input) => {
     const charge = findOwnedCharge(await loadManagerCharges(ctx), input.chargeId);
     if (!charge) {
-      return { ok: false, error: `No charge with id ${input.chargeId} belongs to this landlord. Use list_charges to find valid charge ids.` };
+      throw new Error(`No charge with id ${input.chargeId} belongs to this landlord. Use list_charges to find valid charge ids.`);
     }
     if (charge.status === "paid") {
-      return { ok: false, error: `Charge ${charge.id} is already paid — paid charges cannot be edited.` };
+      throw new Error(`Charge ${charge.id} is already paid — paid charges cannot be edited.`);
     }
     if (input.amountUsd == null && input.dueDate == null && input.title == null) {
-      return { ok: false, error: "Nothing to update — pass at least one of amountUsd, dueDate, or title." };
+      throw new Error("Nothing to update — pass at least one of amountUsd, dueDate, or title.");
     }
     let dueLabel: string | null = null;
     if (input.dueDate) {
       dueLabel = dueDateLabelFromIso(input.dueDate);
       if (!dueLabel) {
-        return { ok: false, error: `Invalid dueDate "${input.dueDate}" — pass a real date as YYYY-MM-DD.` };
+        throw new Error(`Invalid dueDate "${input.dueDate}" — pass a real date as YYYY-MM-DD.`);
       }
     }
 
@@ -327,25 +319,23 @@ export const updateChargeTool = defineWriteTool({
       lines.push({ label: "Title", value: `${charge.title || "—"} → ${input.title.trim()}` });
     }
     return {
-      ok: true,
-      input: { ...input, ...(input.title != null ? { title: input.title.trim() } : {}) },
-      preview: {
-        title: "Update charge",
-        summary: `Update "${charge.title}" for ${charge.residentName || charge.residentEmail}.`,
-        lines,
-        confirmLabel: "Update charge",
-      },
+      confirmedInput: { ...input, ...(input.title != null ? { title: input.title.trim() } : {}) },
+      kind: "update_charge",
+      title: "Update charge",
+      summary: `Update "${charge.title}" for ${charge.residentName || charge.residentEmail}.`,
+      fields: lines,
+      confirmLabel: "Update charge",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const charge = findOwnedCharge(await loadManagerCharges(ctx), input.chargeId);
-    if (!charge) return { ok: false, error: "No charge with that id belongs to this landlord." };
-    if (charge.status === "paid") return { ok: false, error: "This charge is already paid and cannot be edited." };
+    if (!charge) throw new Error("No charge with that id belongs to this landlord.");
+    if (charge.status === "paid") throw new Error("This charge is already paid and cannot be edited.");
     if (input.amountUsd == null && input.dueDate == null && input.title == null) {
-      return { ok: false, error: "Nothing to update." };
+      throw new Error("Nothing to update.");
     }
     const dueLabel = input.dueDate ? dueDateLabelFromIso(input.dueDate) : null;
-    if (input.dueDate && !dueLabel) return { ok: false, error: `Invalid dueDate "${input.dueDate}".` };
+    if (input.dueDate && !dueLabel) throw new Error(`Invalid dueDate "${input.dueDate}".`);
 
     const patch = { amountUsd: input.amountUsd ?? null, dueDate: input.dueDate ?? null, title: input.title ?? null };
     const dedupeKey = `update_charge:${ctx.landlordId}:${charge.id}:${stableInputHash(patch)}`;
@@ -356,8 +346,8 @@ export const updateChargeTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That exact update was already applied to this charge." };
-      return { ok: false, error: "Could not record the action; the charge was not updated." };
+      if (audit.duplicate) return { reply: "That exact update was already applied to this charge." };
+      throw new Error("Could not record the action; the charge was not updated.");
     }
 
     // Read-merge-write: start from the CURRENT stored row_data, never rebuild.
@@ -372,7 +362,7 @@ export const updateChargeTool = defineWriteTool({
       await upsertManagerCharges(ctx.db, ctx.landlordId, [merged]);
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "charge_upsert_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "The charge could not be updated." };
+      throw new Error(e instanceof Error ? e.message : "The charge could not be updated.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { chargeId: charge.id });
@@ -380,11 +370,7 @@ export const updateChargeTool = defineWriteTool({
     if (amountLabel) changed.push(`amount → ${amountLabel}`);
     if (dueLabel) changed.push(`due date → ${dueLabel}`);
     if (input.title != null) changed.push(`title → "${input.title.trim()}"`);
-    return {
-      ok: true,
-      reply: `Updated "${merged.title}" for ${merged.residentName || merged.residentEmail}: ${changed.join(", ")}.`,
-      resultSummary: { chargeId: charge.id },
-    };
+    return { reply: `Updated "${merged.title}" for ${merged.residentName || merged.residentEmail}: ${changed.join(", ")}.`, resultSummary: { chargeId: charge.id } };
   },
 });
 
@@ -392,7 +378,6 @@ export const deleteChargeTool = defineWriteTool({
   name: "delete_charge",
   description:
     "Permanently delete one of the landlord's charges and its ledger entries. Pass the charge id from list_charges. Use only for charges created in error — deletion is irreversible.",
-  kind: "write",
   destructive: true,
   inputSchema: z
     .object({
@@ -402,29 +387,26 @@ export const deleteChargeTool = defineWriteTool({
   preview: async (ctx, input) => {
     const charge = findOwnedCharge(await loadManagerCharges(ctx), input.chargeId);
     if (!charge) {
-      return { ok: false, error: `No charge with id ${input.chargeId} belongs to this landlord. Use list_charges to find valid charge ids.` };
+      throw new Error(`No charge with id ${input.chargeId} belongs to this landlord. Use list_charges to find valid charge ids.`);
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Delete charge",
-        summary: `Permanently delete "${charge.title}" for ${charge.residentName || charge.residentEmail}.`,
-        lines: [
+      kind: "delete_charge",
+      title: "Delete charge",
+      summary: `Permanently delete "${charge.title}" for ${charge.residentName || charge.residentEmail}.`,
+      fields: [
           { label: "Resident", value: `${charge.residentName || "—"} (${(charge.residentEmail || "").trim().toLowerCase() || "—"})` },
           { label: "Charge", value: charge.title || "—" },
           { label: "Amount", value: charge.amountLabel || "—" },
           { label: "Status", value: charge.status || "—" },
         ],
-        confirmLabel: "Delete charge",
-        warning: "This permanently deletes the charge and its ledger entries. It cannot be undone.",
-      },
+      confirmLabel: "Delete charge",
+      warnings: ["This permanently deletes the charge and its ledger entries. It cannot be undone."],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const charge = findOwnedCharge(await loadManagerCharges(ctx), input.chargeId);
     if (!charge) {
-      return { ok: false, error: "No charge with that id belongs to this landlord (it may already be deleted)." };
+      throw new Error("No charge with that id belongs to this landlord (it may already be deleted).");
     }
 
     const dedupeKey = `delete_charge:${ctx.landlordId}:${charge.id}`;
@@ -435,8 +417,8 @@ export const deleteChargeTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That charge was already deleted by this action." };
-      return { ok: false, error: "Could not record the action; the charge was not deleted." };
+      if (audit.duplicate) return { reply: "That charge was already deleted by this action." };
+      throw new Error("Could not record the action; the charge was not deleted.");
     }
 
     // Ledger entries first (the legacy route path leaks these as orphans);
@@ -449,7 +431,7 @@ export const deleteChargeTool = defineWriteTool({
       .eq("source_charge_id", charge.id);
     if (ledgerError) {
       await updateAuditResult(ctx, dedupeKey, { error: "ledger_delete_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: `Could not delete the charge's ledger entries: ${ledgerError.message}` };
+      throw new Error(`Could not delete the charge's ledger entries: ${ledgerError.message}`);
     }
     const { error: chargeError } = await ctx.db
       .from("portal_household_charge_records")
@@ -458,15 +440,11 @@ export const deleteChargeTool = defineWriteTool({
       .eq("id", charge.id);
     if (chargeError) {
       await updateAuditResult(ctx, dedupeKey, { error: "charge_delete_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: `Could not delete the charge: ${chargeError.message}` };
+      throw new Error(`Could not delete the charge: ${chargeError.message}`);
     }
 
     await updateAuditResult(ctx, dedupeKey, { chargeId: charge.id, deleted: true });
-    return {
-      ok: true,
-      reply: `Deleted "${charge.title}" (${charge.amountLabel || "no amount"}) for ${charge.residentName || charge.residentEmail} and removed its ledger entries.`,
-      resultSummary: { chargeId: charge.id },
-    };
+    return { reply: `Deleted "${charge.title}" (${charge.amountLabel || "no amount"}) for ${charge.residentName || charge.residentEmail} and removed its ledger entries.`, resultSummary: { chargeId: charge.id } };
   },
 });
 
@@ -476,7 +454,6 @@ export const markChargePaidTool = defineWriteTool({
   name: "mark_charge_paid",
   description:
     "Record that a resident paid one of the landlord's charges outside Axis (Zelle, Venmo, cash, or check). Pass the charge id from list_charges; this cancels the charge's future payment reminders and records the payment in the ledger.",
-  kind: "write",
   inputSchema: z
     .object({
       chargeId: z.string().min(1).describe("Id of the unpaid charge to mark paid (from list_charges)."),
@@ -489,10 +466,10 @@ export const markChargePaidTool = defineWriteTool({
   preview: async (ctx, input) => {
     const charge = findOwnedCharge(await loadManagerCharges(ctx), input.chargeId);
     if (!charge) {
-      return { ok: false, error: `No charge with id ${input.chargeId} belongs to this landlord. Use list_charges to find valid charge ids.` };
+      throw new Error(`No charge with id ${input.chargeId} belongs to this landlord. Use list_charges to find valid charge ids.`);
     }
     if (charge.status === "paid") {
-      return { ok: false, error: `Charge ${charge.id} is already marked paid.` };
+      throw new Error(`Charge ${charge.id} is already marked paid.`);
     }
     const lines: { label: string; value: string }[] = [
       { label: "Resident", value: `${charge.residentName || "—"} (${(charge.residentEmail || "").trim().toLowerCase() || "—"})` },
@@ -510,20 +487,17 @@ export const markChargePaidTool = defineWriteTool({
     if (input.channel) lines.push({ label: "Payment method", value: input.channel });
     lines.push({ label: "Effect", value: "Future reminders cancelled; payment recorded in the ledger" });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Mark charge paid",
-        summary: `Mark "${charge.title}" (${charge.balanceLabel || charge.amountLabel}) for ${charge.residentName || charge.residentEmail} as paid.`,
-        lines,
-        confirmLabel: "Mark paid",
-      },
+      kind: "mark_charge_paid",
+      title: "Mark charge paid",
+      summary: `Mark "${charge.title}" (${charge.balanceLabel || charge.amountLabel}) for ${charge.residentName || charge.residentEmail} as paid.`,
+      fields: lines,
+      confirmLabel: "Mark paid",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const charge = findOwnedCharge(await loadManagerCharges(ctx), input.chargeId);
-    if (!charge) return { ok: false, error: "No charge with that id belongs to this landlord." };
-    if (charge.status === "paid") return { ok: false, error: "This charge is already marked paid." };
+    if (!charge) throw new Error("No charge with that id belongs to this landlord.");
+    if (charge.status === "paid") throw new Error("This charge is already marked paid.");
 
     // One-shot transition: marking the same charge paid twice returns already-done.
     const dedupeKey = `mark_charge_paid:${ctx.landlordId}:${charge.id}`;
@@ -534,8 +508,8 @@ export const markChargePaidTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That charge was already marked paid by this action." };
-      return { ok: false, error: "Could not record the action; the charge was not marked paid." };
+      if (audit.duplicate) return { reply: "That charge was already marked paid by this action." };
+      throw new Error("Could not record the action; the charge was not marked paid.");
     }
 
     // Read-merge-write on the current row (same shape markHouseholdChargePaid
@@ -551,14 +525,10 @@ export const markChargePaidTool = defineWriteTool({
       await upsertManagerCharges(ctx.db, ctx.landlordId, [merged]);
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "charge_upsert_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "The charge could not be marked paid." };
+      throw new Error(e instanceof Error ? e.message : "The charge could not be marked paid.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { chargeId: charge.id, channel: input.channel ?? null, paid: true });
-    return {
-      ok: true,
-      reply: `Marked "${charge.title}" (${charge.amountLabel}) for ${charge.residentName || charge.residentEmail} as paid${input.channel ? ` via ${input.channel}` : ""}. Future reminders were cancelled and the payment was recorded in the ledger.`,
-      resultSummary: { chargeId: charge.id, channel: input.channel ?? null },
-    };
+    return { reply: `Marked "${charge.title}" (${charge.amountLabel}) for ${charge.residentName || charge.residentEmail} as paid${input.channel ? ` via ${input.channel}` : ""}. Future reminders were cancelled and the payment was recorded in the ledger.`, resultSummary: { chargeId: charge.id, channel: input.channel ?? null } };
   },
 });

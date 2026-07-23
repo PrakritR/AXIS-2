@@ -17,6 +17,7 @@ import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { sendVendorInvite } from "@/lib/vendor-invite.server";
 import { listLeasesTool, amendLeaseTool, voidLeaseTool, sendLeaseForSignatureTool } from "@/lib/tools/domains/leases";
 import { addVendorTool, updateVendorTool, inviteVendorTool } from "@/lib/tools/domains/vendors";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
 /**
  * Local fake db, richer than tests/unit/tools/fake-agent-ctx.ts (which must not
@@ -213,7 +214,7 @@ describe("amend_lease", () => {
     const { ctx } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_b", fullySignedLease("lease_foreign"))],
     });
-    const res = await amendLeaseTool.preview(ctx, { leaseId: "lease_foreign", newLeaseEnd: "2026-12-31" });
+    const res = await previewWrite(amendLeaseTool, ctx, { leaseId: "lease_foreign", newLeaseEnd: "2026-12-31" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("list_leases");
   });
@@ -224,7 +225,7 @@ describe("amend_lease", () => {
         leaseRecord("manager_a", fullySignedLease("lease_draft", { managerSignature: null, bucket: "manager" })),
       ],
     });
-    const res = await amendLeaseTool.preview(ctx, { leaseId: "lease_draft", newLeaseEnd: "2026-12-31" });
+    const res = await previewWrite(amendLeaseTool, ctx, { leaseId: "lease_draft", newLeaseEnd: "2026-12-31" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("fully signed");
   });
@@ -248,7 +249,7 @@ describe("amend_lease", () => {
         ),
       ],
     });
-    const res = await amendLeaseTool.preview(ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
+    const res = await previewWrite(amendLeaseTool, ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error).toContain("already booked");
@@ -260,11 +261,11 @@ describe("amend_lease", () => {
     const { ctx } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", fullySignedLease("lease_a"))],
     });
-    const res = await amendLeaseTool.preview(ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
+    const res = await previewWrite(amendLeaseTool, ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.preview.warning).toBe("Both signatures reset; the lease returns to review and must be re-signed.");
-      expect(res.preview.lines).toContainEqual({ label: "New end", value: "2026-12-31" });
+      expect(res.preview.warnings?.[0]).toBe("Both signatures reset; the lease returns to review and must be re-signed.");
+      expect(res.preview.fields).toContainEqual({ label: "New end", value: "2026-12-31" });
     }
   });
 
@@ -272,7 +273,7 @@ describe("amend_lease", () => {
     const { ctx, store } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", fullySignedLease("lease_a"))],
     });
-    const res = await amendLeaseTool.execute(ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
+    const res = await executeWrite(amendLeaseTool, ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
     expect(res.ok).toBe(true);
 
     const audit = store.tables.audit_log ?? [];
@@ -291,12 +292,12 @@ describe("amend_lease", () => {
     const { ctx, store } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", fullySignedLease("lease_a"))],
     });
-    await amendLeaseTool.execute(ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
+    await executeWrite(amendLeaseTool, ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
     // Restore signatures as if nothing changed, to prove the dedupe key (not
     // lease state) is what blocks the retry.
     const record = store.tables.portal_lease_pipeline_records!.find((r) => r.id === "lease_a")!;
     record.row_data = fullySignedLease("lease_a");
-    const second = await amendLeaseTool.execute(ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
+    const second = await executeWrite(amendLeaseTool, ctx, { leaseId: "lease_a", newLeaseEnd: "2026-12-31" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already");
     expect(store.tables.audit_log).toHaveLength(1);
@@ -306,7 +307,7 @@ describe("amend_lease", () => {
     const { ctx, store } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_b", fullySignedLease("lease_foreign"))],
     });
-    const res = await amendLeaseTool.execute(ctx, { leaseId: "lease_foreign", newLeaseEnd: "2026-12-31" });
+    const res = await executeWrite(amendLeaseTool, ctx, { leaseId: "lease_foreign", newLeaseEnd: "2026-12-31" });
     expect(res.ok).toBe(false);
     expect(store.tables.audit_log ?? []).toHaveLength(0);
     const rowData = store.tables.portal_lease_pipeline_records![0]!.row_data as Row;
@@ -320,11 +321,11 @@ describe("void_lease", () => {
     const { ctx } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", fullySignedLease("lease_v"))],
     });
-    const res = await voidLeaseTool.preview(ctx, { leaseId: "lease_v", reason: "Tenant broke the agreement" });
+    const res = await previewWrite(voidLeaseTool, ctx, { leaseId: "lease_v", reason: "Tenant broke the agreement" });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.preview.warning).toBe("Voiding is permanent; the resident keeps portal access.");
-      expect(res.preview.lines).toContainEqual({ label: "Reason", value: "Tenant broke the agreement" });
+      expect(res.preview.warnings?.[0]).toBe("Voiding is permanent; the resident keeps portal access.");
+      expect(res.preview.fields).toContainEqual({ label: "Reason", value: "Tenant broke the agreement" });
     }
   });
 
@@ -332,9 +333,9 @@ describe("void_lease", () => {
     const { ctx } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_b", fullySignedLease("lease_foreign"))],
     });
-    const foreign = await voidLeaseTool.preview(ctx, { leaseId: "lease_foreign" });
+    const foreign = await previewWrite(voidLeaseTool, ctx, { leaseId: "lease_foreign" });
     expect(foreign.ok).toBe(false);
-    const unknown = await voidLeaseTool.preview(ctx, { leaseId: "nope" });
+    const unknown = await previewWrite(voidLeaseTool, ctx, { leaseId: "nope" });
     expect(unknown.ok).toBe(false);
   });
 
@@ -344,7 +345,7 @@ describe("void_lease", () => {
         leaseRecord("manager_a", fullySignedLease("lease_v", { customField: "keep-me", bucket: "signed" })),
       ],
     });
-    const res = await voidLeaseTool.execute(ctx, { leaseId: "lease_v", reason: "Unit sold" });
+    const res = await executeWrite(voidLeaseTool, ctx, { leaseId: "lease_v", reason: "Unit sold" });
     expect(res.ok).toBe(true);
 
     const record = store.tables.portal_lease_pipeline_records![0]!;
@@ -367,8 +368,8 @@ describe("void_lease", () => {
     const { ctx, store } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", fullySignedLease("lease_v"))],
     });
-    await voidLeaseTool.execute(ctx, { leaseId: "lease_v" });
-    const second = await voidLeaseTool.execute(ctx, { leaseId: "lease_v" });
+    await executeWrite(voidLeaseTool, ctx, { leaseId: "lease_v" });
+    const second = await executeWrite(voidLeaseTool, ctx, { leaseId: "lease_v" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already voided");
     expect(store.tables.audit_log).toHaveLength(1);
@@ -396,7 +397,7 @@ describe("send_lease_for_signature", () => {
         leaseRecord("manager_a", draftLease("lease_s", { generatedHtml: null, managerUploadedPdf: null })),
       ],
     });
-    const res = await sendLeaseForSignatureTool.preview(ctx, { leaseId: "lease_s" });
+    const res = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_s" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("no lease document yet");
   });
@@ -408,9 +409,9 @@ describe("send_lease_for_signature", () => {
         leaseRecord("manager_b", draftLease("lease_foreign")),
       ],
     });
-    const done = await sendLeaseForSignatureTool.preview(ctx, { leaseId: "lease_done" });
+    const done = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_done" });
     expect(done.ok).toBe(false);
-    const foreign = await sendLeaseForSignatureTool.preview(ctx, { leaseId: "lease_foreign" });
+    const foreign = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_foreign" });
     expect(foreign.ok).toBe(false);
   });
 
@@ -418,7 +419,7 @@ describe("send_lease_for_signature", () => {
     const { ctx, store } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", draftLease("lease_s"))],
     });
-    const res = await sendLeaseForSignatureTool.execute(ctx, { leaseId: "lease_s" });
+    const res = await executeWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_s" });
     expect(res.ok).toBe(true);
 
     const record = store.tables.portal_lease_pipeline_records![0]!;
@@ -442,8 +443,8 @@ describe("send_lease_for_signature", () => {
     const { ctx, store } = makeCtx({
       portal_lease_pipeline_records: [leaseRecord("manager_a", draftLease("lease_s"))],
     });
-    await sendLeaseForSignatureTool.execute(ctx, { leaseId: "lease_s" });
-    const second = await sendLeaseForSignatureTool.execute(ctx, { leaseId: "lease_s" });
+    await executeWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_s" });
+    const second = await executeWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_s" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already sent");
     expect(store.tables.audit_log).toHaveLength(1);
@@ -458,14 +459,14 @@ describe("add_vendor", () => {
         vendorRecord("manager_a", { id: "v1", name: "Ace Plumbing", trade: "plumbing", email: "ace@x.com", phone: "", notes: "", active: true }),
       ],
     });
-    const res = await addVendorTool.preview(ctx, { name: "Ace Co", trade: "hvac", email: "ace@x.com" });
+    const res = await previewWrite(addVendorTool, ctx, { name: "Ace Co", trade: "hvac", email: "ace@x.com" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("already in the vendor directory");
   });
 
   it("execute inserts an owned, active directory row and audits with the email dedupe key", async () => {
     const { ctx, store } = makeCtx({ manager_vendor_records: [] });
-    const res = await addVendorTool.execute(ctx, {
+    const res = await executeWrite(addVendorTool, ctx, {
       name: "Ace Plumbing",
       trade: "plumbing",
       email: "Ace@X.com",
@@ -494,8 +495,8 @@ describe("add_vendor", () => {
 
   it("execute short-circuits when the vendor already exists (no duplicate row)", async () => {
     const { ctx, store } = makeCtx({ manager_vendor_records: [] });
-    await addVendorTool.execute(ctx, { name: "Ace Plumbing", trade: "plumbing", email: "ace@x.com" });
-    const second = await addVendorTool.execute(ctx, { name: "Ace Plumbing", trade: "plumbing", email: "ace@x.com" });
+    await executeWrite(addVendorTool, ctx, { name: "Ace Plumbing", trade: "plumbing", email: "ace@x.com" });
+    const second = await executeWrite(addVendorTool, ctx, { name: "Ace Plumbing", trade: "plumbing", email: "ace@x.com" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already");
     expect(store.tables.manager_vendor_records).toHaveLength(1);
@@ -530,29 +531,29 @@ describe("update_vendor", () => {
     const { ctx } = makeCtx({
       manager_vendor_records: [vendorRecord("manager_b", { id: "v_foreign", name: "Other", trade: "hvac", email: "", phone: "", notes: "", active: true })],
     });
-    const foreign = await updateVendorTool.preview(ctx, { vendorId: "v_foreign", active: false });
+    const foreign = await previewWrite(updateVendorTool, ctx, { vendorId: "v_foreign", active: false });
     expect(foreign.ok).toBe(false);
     if (!foreign.ok) expect(foreign.error).toContain("list_vendors");
 
     const { ctx: ctx2 } = makeCtx({ manager_vendor_records: [ownedVendor()] });
-    const empty = await updateVendorTool.preview(ctx2, { vendorId: "v1" });
+    const empty = await previewWrite(updateVendorTool, ctx2, { vendorId: "v1" });
     expect(empty.ok).toBe(false);
   });
 
   it("preview shows an old → new diff for provided fields only", async () => {
     const { ctx } = makeCtx({ manager_vendor_records: [ownedVendor()] });
-    const res = await updateVendorTool.preview(ctx, { vendorId: "v1", active: false, notes: "new notes" });
+    const res = await previewWrite(updateVendorTool, ctx, { vendorId: "v1", active: false, notes: "new notes" });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.preview.lines).toContainEqual({ label: "Status", value: "active → inactive" });
-      expect(res.preview.lines).toContainEqual({ label: "Notes", value: "old notes → new notes" });
-      expect(res.preview.lines).toHaveLength(2);
+      expect(res.preview.fields).toContainEqual({ label: "Status", value: "active → inactive" });
+      expect(res.preview.fields).toContainEqual({ label: "Notes", value: "old notes → new notes" });
+      expect(res.preview.fields).toHaveLength(2);
     }
   });
 
   it("execute merges only allowlisted fields and preserves payment/sharing data", async () => {
     const { ctx, store } = makeCtx({ manager_vendor_records: [ownedVendor()] });
-    const res = await updateVendorTool.execute(ctx, { vendorId: "v1", active: false, notes: "new notes" });
+    const res = await executeWrite(updateVendorTool, ctx, { vendorId: "v1", active: false, notes: "new notes" });
     expect(res.ok).toBe(true);
 
     const rowData = store.tables.manager_vendor_records![0]!.row_data as Row;
@@ -571,8 +572,8 @@ describe("update_vendor", () => {
 
   it("execute dedupes the identical patch (already applied)", async () => {
     const { ctx, store } = makeCtx({ manager_vendor_records: [ownedVendor()] });
-    await updateVendorTool.execute(ctx, { vendorId: "v1", notes: "new notes" });
-    const second = await updateVendorTool.execute(ctx, { vendorId: "v1", notes: "new notes" });
+    await executeWrite(updateVendorTool, ctx, { vendorId: "v1", notes: "new notes" });
+    const second = await executeWrite(updateVendorTool, ctx, { vendorId: "v1", notes: "new notes" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already applied");
     expect(store.tables.audit_log).toHaveLength(1);
@@ -595,7 +596,7 @@ describe("invite_vendor", () => {
     const { ctx } = makeCtx({
       manager_vendor_records: [vendorRecord("manager_a", { id: "v3", name: "No Email Co", trade: "hvac", email: "", phone: "", notes: "", active: true })],
     });
-    const res = await inviteVendorTool.preview(ctx, { vendorId: "v3" });
+    const res = await previewWrite(inviteVendorTool, ctx, { vendorId: "v3" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("email");
   });
@@ -607,10 +608,10 @@ describe("invite_vendor", () => {
         vendorRecord("manager_b", { id: "v_foreign", name: "Other", trade: "hvac", email: "o@x.com", phone: "", notes: "", active: true }),
       ],
     });
-    const linked = await inviteVendorTool.preview(ctx, { vendorId: "v4" });
+    const linked = await previewWrite(inviteVendorTool, ctx, { vendorId: "v4" });
     expect(linked.ok).toBe(false);
     if (!linked.ok) expect(linked.error).toContain("already has a linked Axis account");
-    const foreign = await inviteVendorTool.preview(ctx, { vendorId: "v_foreign" });
+    const foreign = await previewWrite(inviteVendorTool, ctx, { vendorId: "v_foreign" });
     expect(foreign.ok).toBe(false);
   });
 
@@ -619,7 +620,7 @@ describe("invite_vendor", () => {
       manager_vendor_records: [invitableVendor()],
       profiles: [{ id: "manager_a", full_name: "Pat Manager", email: "manager@axis.test" }],
     });
-    const res = await inviteVendorTool.execute(ctx, { vendorId: "v2" });
+    const res = await executeWrite(inviteVendorTool, ctx, { vendorId: "v2" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.reply).toContain("spark@x.com");
 
@@ -640,8 +641,8 @@ describe("invite_vendor", () => {
 
   it("execute dedupes a repeat invite and never calls the invite pipeline again", async () => {
     const { ctx, store } = makeCtx({ manager_vendor_records: [invitableVendor()] });
-    await inviteVendorTool.execute(ctx, { vendorId: "v2" });
-    const second = await inviteVendorTool.execute(ctx, { vendorId: "v2" });
+    await executeWrite(inviteVendorTool, ctx, { vendorId: "v2" });
+    const second = await executeWrite(inviteVendorTool, ctx, { vendorId: "v2" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already invited");
     expect(sendVendorInvite).toHaveBeenCalledTimes(1);
@@ -652,7 +653,7 @@ describe("invite_vendor", () => {
     const { ctx, store } = makeCtx({
       manager_vendor_records: [vendorRecord("manager_b", { id: "v_foreign", name: "Other", trade: "hvac", email: "o@x.com", phone: "", notes: "", active: true })],
     });
-    const res = await inviteVendorTool.execute(ctx, { vendorId: "v_foreign" });
+    const res = await executeWrite(inviteVendorTool, ctx, { vendorId: "v_foreign" });
     expect(res.ok).toBe(false);
     expect(sendVendorInvite).not.toHaveBeenCalled();
     expect(store.tables.audit_log ?? []).toHaveLength(0);

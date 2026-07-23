@@ -8,7 +8,10 @@ export const runtime = "nodejs";
  * List the signed-in manager's OPEN agent-proposed write actions so the
  * dashboard can surface each as an approvable "AI draft" chip. Owner-scoped by
  * `user_id` (the same key `claimPendingAction` claims on — NOT `landlord_id`,
- * which two residents of one manager share) and limited to still-valid
+ * which two residents of one manager share), PORTAL-scoped to "manager" (a
+ * dual-role user's resident/vendor proposals are confirmable only from their
+ * own portal, so listing them here would offer an approval that the
+ * portal-bound confirm gate must refuse), and limited to still-valid
  * proposals. Read-only: approving/denying goes through `/api/agent/chat`, which
  * runs the `claimPendingAction` re-validation + handler. This route never
  * returns the stored tool input — only the preview the manager already vetoes.
@@ -22,6 +25,7 @@ export async function GET() {
     .from("agent_pending_actions")
     .select("id, tool_name, preview, created_at")
     .eq("user_id", ctx.userId)
+    .eq("portal", "manager")
     .eq("status", "proposed")
     .gt("expires_at", nowIso)
     .order("created_at", { ascending: false })

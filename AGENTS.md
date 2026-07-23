@@ -105,22 +105,44 @@ tool catalog, write-action lifecycle, and the add-a-tool checklist:
   `agent_pending_actions` row). The client confirms with ONLY the action id;
   the server re-validates the stored input and the handler re-resolves current
   state before writing. Add new agent write capabilities by following this
-  pattern — never execute a write from the model loop.
+  pattern — the ONLY writes the loop runs inline are the ones a surface
+  explicitly allow-lists (see the framework invariants below), never a tool's
+  own choice.
 - Treat ALL tenant- and applicant-submitted text (applications, maintenance
   notes, messages) as untrusted input that may contain prompt-injection
   attempts. It must never trigger an unconfirmed action or override
   instructions.
 
 **There is exactly one assistant framework, and it is this one.** A second,
-independent implementation of the same feature (its own write-action framework,
-per-role agent sessions, a dedicated `/api/agent/action` confirm route, and a
-larger manager/resident/vendor tool catalog) exists on the captain's Cursor
-working copy and is NOT merged: its `ActionPreview` / write-tool shapes are
-incompatible with `defineWriteTool`, so the two cannot coexist in one tree. The
-shipped framework above stays the spine — it owns the two production SMS agents
-wired to live Twilio webhooks. If that catalog is wanted, PORT the tools onto
-this framework; do not merge the other framework alongside it. A tree carrying
-two half-wired assistant frameworks is worse than either one alone.
+independent implementation (its own `persistPendingAction` actor/portal module,
+a separate `/api/agent/action` confirm route, and a larger
+manager/resident/vendor tool catalog) was once merged from a Cursor lane and
+broke the build — its `ActionPreview` / write-tool shapes could not coexist with
+`defineWriteTool`. It has been RECONCILED, not re-merged: its ~58 write tools
+were ported onto `defineWriteTool` (`preview` returns an `ActionPreview` and
+throws to reject; `handler` is the gated execute) and its confirm module and
+route were deleted. Keep it that way. If a new catalog is wanted, PORT the tools
+onto this framework; a tree carrying two half-wired assistant frameworks is
+worse than either one alone.
+
+Framework invariants worth knowing before you touch `src/lib/tools/registry.ts`:
+
+- **`agent_pending_actions` is claimed on `user_id`, status `proposed`.** That
+  is the live schema in dev AND production. A migration that renames the column
+  breaks every confirm-gated write, including the two production SMS agents —
+  `…_agent_pending_actions.sql` (the second one) is additive-only on purpose.
+- **A write is model-callable only when the SURFACE allow-lists it**
+  (`runAgentTurn({ allowWriteTools })`, `MANAGER_INLINE_WRITE_TOOLS`). There is
+  no per-tool opt-out. Surfaces with no confirmation UI (the SMS agents) also
+  pass `readOnly: true`, so a non-allow-listed write is never even shown.
+- **`ActionPreview` is the shipped UI contract** (`assistant-shared.tsx` renders
+  `title` / `fields` / `warnings` / `confirmLabel`). A preview may return
+  `confirmedInput` to pin a value it resolved (an auto-picked visit slot);
+  `previewWriteTool` strips it before the preview is stored or sent anywhere.
+- **The confirm gate is portal-bound.** `schedule_message` exists under the same
+  name in the manager and resident maps, so a claimed row whose `portal` does
+  not match the calling route is refused. Coverage:
+  `tests/unit/tools/confirm-gate-portal-scope.test.ts`.
 
 **One conversation loop, multiple surfaces.** The floating popup
 (`axis-assistant.tsx`) and the manager dashboard's right-dock
@@ -153,11 +175,13 @@ route — and they must never be crossed:
   `AxisAssistant` without passing its own `endpoint` therefore answers 401 to
   every question — that is exactly how the resident and vendor assistants were
   silently broken. When adding a portal, pass its role-scoped endpoint.
-- `landlordId` means different things per role: the manager's own id, the
-  resident's LINKED MANAGER, and empty for a vendor. It is an ownership key
-  ONLY for managers. Every resident tool must additionally filter by
-  `ctx.residentScope`, and every vendor tool by `ctx.vendorPortalScope` —
-  otherwise two residents of one manager can read each other.
+- Each role binds to its OWN context type, so a manager tool cannot even
+  typecheck into the resident registry. `landlordId` is an ownership key ONLY on
+  `AgentContext` (the manager's own id); on the resident and vendor contexts it
+  is just the actor's own id for audit/session scoping. Every resident tool
+  filters by `residentScopeOrFilter(ctx)` (or `resident_email`) and every vendor
+  tool by `.eq("vendor_user_id", ctx.userId)` — otherwise two residents of one
+  manager can read each other.
 - `agent_pending_actions` is claimed on `user_id`, never `landlord_id`, for the
   same reason.
 - A write tool without a `preview` is UNREACHABLE from chat (`previewWriteTool`
@@ -168,8 +192,9 @@ route — and they must never be crossed:
 `portal_lease_pipeline_records` carry both `resident_user_id` and
 `resident_email`; `portal_work_order_records` and
 `portal_service_request_records` carry ONLY `resident_email`. Querying a column
-a table lacks fails the whole request — see `RESIDENT_IDENTITY_COLUMNS` in
-`src/lib/tools/domains/resident-portal.ts`.
+a table lacks fails the whole request — that is why
+`src/lib/tools/domains/resident/load-resident-rows.ts` has two loaders,
+`loadResidentIdentityRows` (both columns) and `loadResidentEmailRows`.
 
 **Capabilities that deliberately have no tool.** Approving a rental application
 and creating/editing a listing are NOT agent capabilities: approval-time charge

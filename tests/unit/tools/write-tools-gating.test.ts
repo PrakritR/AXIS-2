@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 // The messaging tool delivers through the shared portal-inbox lib; mock it so
@@ -19,9 +19,6 @@ vi.mock("@/lib/reports/ledger-sync", () => ({
     reconcileDuplicateHouseholdChargeRecords(...(args as [])),
 }));
 
-import { sendResidentMessageTool } from "@/lib/tools/domains/messaging";
-import { buildResidentMessagePreview } from "@/lib/tools/domains/messaging-logic";
-import { createChargeTool } from "@/lib/tools/domains/payments";
 import {
   buildBulkReminderPreview,
   buildChargeFromInput,
@@ -58,8 +55,6 @@ function seededCtx(residents: DemoApplicantRow[] = [resident()]) {
   });
 }
 
-const msgInput = { residentEmail: "pat@example.com", subject: "Hello", body: "Hi Pat" };
-
 describe("findOwnedResident", () => {
   it("matches approved residents case-insensitively and rejects everyone else", () => {
     const rows = [resident(), resident({ id: "app_2", email: "pending@x.com", bucket: "pending" as never })];
@@ -70,136 +65,13 @@ describe("findOwnedResident", () => {
   });
 });
 
-describe("buildResidentMessagePreview", () => {
-  it("shows the resolved recipient, subject, and FULL untruncated body", () => {
-    const body = "line one\n".repeat(100);
-    const preview = buildResidentMessagePreview(resident(), { ...msgInput, body });
-    expect(preview.fields.find((f) => f.label === "To")?.value).toBe("Pat Resident <pat@example.com>");
-    expect(preview.fields.find((f) => f.label === "Message")?.value).toBe(body);
-    expect(preview.warnings).toBeUndefined();
-  });
-
-  it("warns when the body contains a link", () => {
-    const preview = buildResidentMessagePreview(resident(), { ...msgInput, body: "pay at https://evil.example" });
-    expect(preview.warnings?.length).toBe(1);
-  });
-});
-
-describe("send_resident_message (gated execute)", () => {
-  beforeEach(() => {
-    deliverPortalInboxMessage.mockClear();
-    appendInboxThreadReply.mockClear();
-  });
-
-  it("refuses an email that is not one of the landlord's own residents", async () => {
-    const { ctx } = seededCtx();
-    await expect(
-      sendResidentMessageTool.handler(ctx, { ...msgInput, residentEmail: "attacker@evil.example" }),
-    ).rejects.toThrow(/No resident/);
-    expect(deliverPortalInboxMessage).not.toHaveBeenCalled();
-  });
-
-  it("delivers to the server-resolved resident and writes an audit row", async () => {
-    const { ctx, store } = seededCtx();
-    const result = await sendResidentMessageTool.handler(ctx, msgInput);
-    expect(result.reply).toContain("Pat Resident");
-    expect(deliverPortalInboxMessage).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ toEmails: ["pat@example.com"], subject: "Hello", text: "Hi Pat" }),
-    );
-    expect(store.audit_log).toHaveLength(1);
-    expect(store.audit_log![0]).toMatchObject({
-      landlord_id: "manager_a",
-      tool_name: "send_resident_message",
-      result_summary: { residentEmail: "pat@example.com", delivered: true },
-    });
-  });
-
-  it("dedupes an identical same-day message (replayed confirm)", async () => {
-    const { ctx, store } = seededCtx();
-    await sendResidentMessageTool.handler(ctx, msgInput);
-    const second = await sendResidentMessageTool.handler(ctx, msgInput);
-    expect(second.reply).toContain("already sent");
-    expect(deliverPortalInboxMessage).toHaveBeenCalledTimes(1);
-    expect(store.audit_log).toHaveLength(1);
-
-    // A genuinely different message still goes out.
-    await sendResidentMessageTool.handler(ctx, { ...msgInput, body: "Different message" });
-    expect(deliverPortalInboxMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it("clears the dedupe key when delivery fails so a retry can succeed", async () => {
-    deliverPortalInboxMessage.mockResolvedValueOnce({ ok: false, error: "smtp down" } as never);
-    const { ctx, store } = seededCtx();
-    const first = await sendResidentMessageTool.handler(ctx, msgInput);
-    expect(first.reply).toContain("could not be delivered");
-    expect(store.audit_log![0]!.dedupe_key).toBeNull();
-
-    const retry = await sendResidentMessageTool.handler(ctx, msgInput);
-    expect(retry.reply).toContain("Message sent");
-  });
-
-  function seededCtxWithThread() {
-    const seeded = seededCtx();
-    seeded.store.portal_inbox_thread_records = [
-      {
-        id: "thread_pat",
-        owner_user_id: "manager_a",
-        participant_email: null,
-        row_data: { email: "pat@example.com", subject: "Rent question" },
-      },
-      {
-        id: "thread_other",
-        owner_user_id: "manager_a",
-        participant_email: null,
-        row_data: { email: "other.resident@example.com", subject: "Maintenance" },
-      },
-      {
-        id: "thread_foreign",
-        owner_user_id: "manager_b",
-        participant_email: null,
-        row_data: { email: "pat@example.com", subject: "Foreign" },
-      },
-    ];
-    return seeded;
-  }
-
-  it("appends a thread reply only when a threadId is supplied", async () => {
-    const { ctx } = seededCtxWithThread();
-    await sendResidentMessageTool.handler(ctx, msgInput);
-    expect(appendInboxThreadReply).not.toHaveBeenCalled();
-    await sendResidentMessageTool.handler(ctx, { ...msgInput, body: "reply body", threadId: "thread_pat" });
-    expect(appendInboxThreadReply).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ threadId: "thread_pat", senderUserId: "manager_a" }),
-    );
-  });
-
-  it("refuses a threadId that belongs to a different resident (misdirection)", async () => {
-    const { ctx } = seededCtxWithThread();
-    await expect(
-      sendResidentMessageTool.handler(ctx, { ...msgInput, threadId: "thread_other" }),
-    ).rejects.toThrow(/not a conversation with this resident/);
-    await expect(
-      sendResidentMessageTool.preview!(ctx, { ...msgInput, threadId: "thread_other" }),
-    ).rejects.toThrow(/not a conversation with this resident/);
-    expect(appendInboxThreadReply).not.toHaveBeenCalled();
-    expect(deliverPortalInboxMessage).not.toHaveBeenCalled();
-  });
-
-  it("refuses a threadId owned by another landlord", async () => {
-    const { ctx } = seededCtxWithThread();
-    await expect(
-      sendResidentMessageTool.handler(ctx, { ...msgInput, threadId: "thread_foreign" }),
-    ).rejects.toThrow(/not a conversation with this resident/);
-  });
-
-  it("shows the thread subject (not the opaque id) in the reply preview", async () => {
-    const { ctx } = seededCtxWithThread();
-    const preview = await sendResidentMessageTool.preview!(ctx, { ...msgInput, threadId: "thread_pat" });
-    expect(preview.fields.find((f) => f.label === "Reply in thread")?.value).toBe("Rent question");
-  });
-});
+// send_resident_message was superseded by the richer `send_message` tool, and
+// its preview builder went with it. Everything that builder pinned now lives on
+// the surviving tools and is covered in tests/unit/tools/messaging.test.ts:
+// preview recipient resolution, the full untruncated body field and the link
+// warning (send_message / schedule_message / reply_to_thread), plus the
+// gated-execute behaviour (scope refusal, audit, dedupe, delivery-failure
+// rollback, thread misdirection).
 
 function charge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
   return {
@@ -231,22 +103,15 @@ describe("buildBulkReminderPreview", () => {
   });
 });
 
-describe("create_charge (gated execute)", () => {
-  beforeEach(() => {
-    syncLedgerChargeEntry.mockClear();
-    reconcileDuplicateHouseholdChargeRecords.mockClear();
-  });
-
-  const input = {
-    residentEmail: "pat@example.com",
-    kind: "late_fee" as const,
-    title: "Late fee",
-    amount: 50,
-    dueDate: "2026-07-15",
-  };
-
+describe("buildChargeFromInput", () => {
   it("builds the charge row from server data with formatted labels", () => {
-    const row = buildChargeFromInput(resident(), input, "manager_a", "id_1", "2026-07-01T00:00:00.000Z");
+    const row = buildChargeFromInput(
+      resident(),
+      { residentEmail: "pat@example.com", kind: "late_fee", title: "Late fee", amount: 50, dueDate: "2026-07-15" },
+      "manager_a",
+      "id_1",
+      "2026-07-01T00:00:00.000Z",
+    );
     expect(row).toMatchObject({
       id: "id_1",
       residentEmail: "pat@example.com",
@@ -260,39 +125,12 @@ describe("create_charge (gated execute)", () => {
       dueDateLabel: "Jul 15, 2026",
     });
   });
-
-  it("refuses a resident outside the landlord's portfolio", async () => {
-    const { ctx, store } = seededCtx();
-    await expect(
-      createChargeTool.handler(ctx, { ...input, residentEmail: "stranger@x.com" }),
-    ).rejects.toThrow(/No resident/);
-    expect(store.portal_household_charge_records ?? []).toHaveLength(0);
-  });
-
-  it("persists through the UI's column mapping and syncs the ledger", async () => {
-    const { ctx, store } = seededCtx();
-    const result = await createChargeTool.handler(ctx, input);
-    expect(result.reply).toContain("$50.00");
-    expect(store.portal_household_charge_records).toHaveLength(1);
-    expect(store.portal_household_charge_records![0]).toMatchObject({
-      manager_user_id: "manager_a",
-      resident_email: "pat@example.com",
-      kind: "late_fee",
-      status: "pending",
-    });
-    expect(syncLedgerChargeEntry).toHaveBeenCalledTimes(1);
-    expect(reconcileDuplicateHouseholdChargeRecords).toHaveBeenCalledTimes(1);
-    expect(store.audit_log).toHaveLength(1);
-  });
-
-  it("dedupes an identical same-day charge (double-confirm)", async () => {
-    const { ctx, store } = seededCtx();
-    await createChargeTool.handler(ctx, input);
-    const second = await createChargeTool.handler(ctx, input);
-    expect(second.reply).toContain("already created");
-    expect(store.portal_household_charge_records).toHaveLength(1);
-  });
 });
+
+// The gated create_charge tool itself (ownership refusal, column mapping,
+// ledger write-through, audit dedupe on double-confirm) is covered end to end
+// against the surviving tool in tests/unit/tools/charges-automation.test.ts.
+
 
 describe("lease draft tools", () => {
   it("builds a normalized Draft-stage row for an owned resident", () => {

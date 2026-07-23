@@ -384,7 +384,6 @@ export const updateManagerAvailabilityTool = defineWriteTool({
   name: "update_manager_availability",
   description:
     "Add or remove the current landlord's tour-availability slots for one date and time window, either portfolio-wide or for a single property (propertyId from list_properties). Times are half-hour aligned; the window covers [startTime, endTime).",
-  kind: "write",
   inputSchema: z
     .object({
       date: z.string().describe("Calendar date to change, as YYYY-MM-DD."),
@@ -399,30 +398,27 @@ export const updateManagerAvailabilityTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const resolved = await resolveAvailabilityScope(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { scope } = resolved;
     const slotCount = scope.slotKeys.length;
     return {
-      ok: true,
-      input,
-      preview: {
-        title: input.mode === "add" ? "Add tour availability" : "Remove tour availability",
-        summary: `${input.mode === "add" ? "Open" : "Close"} ${slotCount} half-hour slot${slotCount === 1 ? "" : "s"} on ${input.date}, ${scope.windowLabel}, for ${scope.scopeLabel.toLowerCase() === "all properties" ? "all properties" : scope.scopeLabel}.`,
-        lines: [
+      kind: "update_manager_availability",
+      title: input.mode === "add" ? "Add tour availability" : "Remove tour availability",
+      summary: `${input.mode === "add" ? "Open" : "Close"} ${slotCount} half-hour slot${slotCount === 1 ? "" : "s"} on ${input.date}, ${scope.windowLabel}, for ${scope.scopeLabel.toLowerCase() === "all properties" ? "all properties" : scope.scopeLabel}.`,
+      fields: [
           { label: "Date", value: input.date },
           { label: "Time", value: scope.windowLabel },
           { label: "Slots", value: `${slotCount} half-hour slot${slotCount === 1 ? "" : "s"}` },
           { label: "Scope", value: scope.scopeLabel },
         ],
-        confirmLabel: input.mode === "add" ? "Add availability" : "Remove availability",
-      },
+      confirmLabel: input.mode === "add" ? "Add availability" : "Remove availability",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve at execute time — property ownership and inputs are never
     // trusted from the stored preview input.
     const resolved = await resolveAvailabilityScope(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const { scope } = resolved;
 
     const dedupeKey = `update_manager_availability:${ctx.landlordId}:${scope.storageKey}:${input.date}:${input.mode}:${input.startTime}-${input.endTime}`;
@@ -440,9 +436,9 @@ export const updateManagerAvailabilityTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `Already done — that ${input.mode === "add" ? "availability" : "removal"} was applied for ${input.date}, ${scope.windowLabel}.` };
+        return { reply: `Already done — that ${input.mode === "add" ? "availability" : "removal"} was applied for ${input.date}, ${scope.windowLabel}.` };
       }
-      return { ok: false, error: "Could not record the action; availability was not changed." };
+      throw new Error("Could not record the action; availability was not changed.");
     }
 
     // Read-merge-write the current slot set (never construct from scratch).
@@ -454,7 +450,7 @@ export const updateManagerAvailabilityTool = defineWriteTool({
       .limit(1);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { error: "read_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     const currentRowData = asObject(((data ?? []) as { row_data: unknown }[])[0]?.row_data);
     const currentPayload = Array.isArray(currentRowData?.payload) ? currentRowData.payload : [];
@@ -491,18 +487,14 @@ export const updateManagerAvailabilityTool = defineWriteTool({
     );
     if (writeError) {
       await updateAuditResult(ctx, dedupeKey, { error: "write_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: String(writeError.message ?? "Could not save availability.") };
+      throw new Error(String(writeError.message ?? "Could not save availability."));
     }
 
     await updateAuditResult(ctx, dedupeKey, { changed, totalSlots: slots.size });
     const already = scope.slotKeys.length - changed;
     const verb = input.mode === "add" ? "Opened" : "Removed";
     const alreadyNote = already > 0 ? ` (${already} slot${already === 1 ? " was" : "s were"} already ${input.mode === "add" ? "open" : "closed"})` : "";
-    return {
-      ok: true,
-      reply: `${verb} ${changed} half-hour slot${changed === 1 ? "" : "s"} on ${input.date}, ${scope.windowLabel}, for ${scope.scopeLabel}${alreadyNote}.`,
-      resultSummary: { changed, totalSlots: slots.size },
-    };
+    return { reply: `${verb} ${changed} half-hour slot${changed === 1 ? "" : "s"} on ${input.date}, ${scope.windowLabel}, for ${scope.scopeLabel}${alreadyNote}.`, resultSummary: { changed, totalSlots: slots.size } };
   },
 });
 
@@ -552,7 +544,6 @@ export const createCalendarEventTool = defineWriteTool({
   name: "create_calendar_event",
   description:
     "Create a calendar event (tour, inspection, meeting, …) on the current landlord's calendar with a title, start/end time, and optional property (id from list_properties), attendee, and notes. No email is sent — this only places the event on the calendar.",
-  kind: "write",
   inputSchema: z
     .object({
       title: z.string().min(1).max(200).describe("Event title shown on the calendar, e.g. 'Roof inspection · 12 Main'."),
@@ -566,7 +557,7 @@ export const createCalendarEventTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const resolved = await resolveCreateEventInput(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const lines = [
       { label: "Title", value: input.title.trim() },
       { label: "When", value: resolved.whenLabel },
@@ -575,19 +566,16 @@ export const createCalendarEventTool = defineWriteTool({
     if (input.attendeeName?.trim()) lines.push({ label: "Attendee", value: input.attendeeName.trim() });
     if (input.attendeeEmail?.trim()) lines.push({ label: "Attendee email", value: input.attendeeEmail.trim().toLowerCase() });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Create calendar event",
-        summary: `Add "${input.title.trim()}" to your calendar on ${resolved.whenLabel}.`,
-        lines,
-        confirmLabel: "Create event",
-      },
+      kind: "create_calendar_event",
+      title: "Create calendar event",
+      summary: `Add "${input.title.trim()}" to your calendar on ${resolved.whenLabel}.`,
+      fields: lines,
+      confirmLabel: "Create event",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const resolved = await resolveCreateEventInput(ctx, input);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
 
     const dedupeKey = `create_calendar_event:${ctx.landlordId}:${input.startsAtIso}:${hashText(input.title.trim())}`;
     const audit = await writeAuditLog(ctx, {
@@ -602,8 +590,8 @@ export const createCalendarEventTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `Already done — "${input.title.trim()}" is on your calendar for ${resolved.whenLabel}.` };
-      return { ok: false, error: "Could not record the action; no event was created." };
+      if (audit.duplicate) return { reply: `Already done — "${input.title.trim()}" is on your calendar for ${resolved.whenLabel}.` };
+      throw new Error("Could not record the action; no event was created.");
     }
 
     // Read-merge-write the WHOLE singleton array: other managers' events are
@@ -627,15 +615,11 @@ export const createCalendarEventTool = defineWriteTool({
     });
     if (writeError) {
       await updateAuditResult(ctx, dedupeKey, { error: "write_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: writeError };
+      throw new Error(writeError);
     }
 
     await updateAuditResult(ctx, dedupeKey, { eventId: event.id });
-    return {
-      ok: true,
-      reply: `Created "${event.title}" on ${resolved.whenLabel}.`,
-      resultSummary: { eventId: event.id },
-    };
+    return { reply: `Created "${event.title}" on ${resolved.whenLabel}.`, resultSummary: { eventId: event.id } };
   },
 });
 
@@ -650,7 +634,6 @@ export const cancelCalendarEventTool = defineWriteTool({
   name: "cancel_calendar_event",
   description:
     "Cancel (delete) one of the current landlord's confirmed calendar events. Pass the event id of a planned_event item from list_calendar_events. The attendee is not notified automatically.",
-  kind: "write",
   destructive: true,
   inputSchema: z
     .object({
@@ -663,10 +646,7 @@ export const cancelCalendarEventTool = defineWriteTool({
     // showing anything.
     const event = findOwnedPlannedEvent(items, ctx.landlordId, input.eventId.trim());
     if (!event) {
-      return {
-        ok: false,
-        error: `No calendar event "${input.eventId}" found for this landlord. Use list_calendar_events for valid planned_event ids.`,
-      };
+      throw new Error(`No calendar event "${input.eventId}" found for this landlord. Use list_calendar_events for valid planned_event ids.`);
     }
     const whenLabel = formatTourRangeLabel(str(event, "start") ?? "", str(event, "end") ?? "");
     const lines = [
@@ -676,24 +656,22 @@ export const cancelCalendarEventTool = defineWriteTool({
     if (str(event, "attendeeName")) lines.push({ label: "Attendee", value: str(event, "attendeeName")! });
     if (str(event, "propertyTitle")) lines.push({ label: "Property", value: str(event, "propertyTitle")! });
     return {
-      ok: true,
-      input: { eventId: input.eventId.trim() },
-      preview: {
-        title: "Cancel calendar event",
-        summary: `Remove "${str(event, "title") ?? "Event"}" (${whenLabel}) from your calendar.`,
-        lines,
-        confirmLabel: "Cancel event",
-        warning: "This permanently removes the event from the calendar. The attendee will NOT be notified automatically.",
-      },
+      confirmedInput: { eventId: input.eventId.trim() },
+      kind: "cancel_calendar_event",
+      title: "Cancel calendar event",
+      summary: `Remove "${str(event, "title") ?? "Event"}" (${whenLabel}) from your calendar.`,
+      fields: lines,
+      confirmLabel: "Cancel event",
+      warnings: ["This permanently removes the event from the calendar. The attendee will NOT be notified automatically."],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const eventId = input.eventId.trim();
     // Re-resolve against the live singleton — never trust the stored input as
     // ownership proof.
     const { rowData, items } = await readSingletonRecord(ctx, PLANNED_RECORD_ID);
     const event = findOwnedPlannedEvent(items, ctx.landlordId, eventId);
-    if (!event) return { ok: false, error: "No matching calendar event for this landlord — it may already be cancelled." };
+    if (!event) throw new Error("No matching calendar event for this landlord — it may already be cancelled.");
 
     const dedupeKey = `cancel_calendar_event:${ctx.landlordId}:${eventId}`;
     const audit = await writeAuditLog(ctx, {
@@ -703,8 +681,8 @@ export const cancelCalendarEventTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "Already done — that event was already cancelled." };
-      return { ok: false, error: "Could not record the action; the event was not cancelled." };
+      if (audit.duplicate) return { reply: "Already done — that event was already cancelled." };
+      throw new Error("Could not record the action; the event was not cancelled.");
     }
 
     // Filter out only the verified owned event; every other manager's events
@@ -713,16 +691,12 @@ export const cancelCalendarEventTool = defineWriteTool({
     const { error: writeError } = await writePlannedEventsPayload(ctx, rowData, nextPayload);
     if (writeError) {
       await updateAuditResult(ctx, dedupeKey, { error: "write_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: writeError };
+      throw new Error(writeError);
     }
 
     await updateAuditResult(ctx, dedupeKey, { cancelled: true });
     const whenLabel = formatTourRangeLabel(str(event, "start") ?? "", str(event, "end") ?? "");
-    return {
-      ok: true,
-      reply: `Cancelled "${str(event, "title") ?? "Event"}" (${whenLabel}).`,
-      resultSummary: { eventId },
-    };
+    return { reply: `Cancelled "${str(event, "title") ?? "Event"}" (${whenLabel}).`, resultSummary: { eventId } };
   },
 });
 
@@ -744,7 +718,6 @@ export const acceptTourInquiryTool = defineWriteTool({
   name: "accept_tour_inquiry",
   description:
     "Accept a pending tour request (id from list_tour_inquiries), putting the tour on the calendar and clearing competing requests for the same slot. Optionally pick one of the requested windows via startIso (defaults to the first) and a custom endIso. No email is sent to the guest by this action.",
-  kind: "write",
   inputSchema: z
     .object({
       inquiryId: z.string().min(1).describe("Id of a pending tour request from list_tour_inquiries."),
@@ -763,15 +736,12 @@ export const acceptTourInquiryTool = defineWriteTool({
   preview: async (ctx, input) => {
     const inquiry = await findOwnedPendingTourInquiry(ctx, input.inquiryId.trim());
     if (!inquiry) {
-      return {
-        ok: false,
-        error: `No pending tour request "${input.inquiryId}" found for this landlord. Use list_tour_inquiries with status "pending" for valid ids.`,
-      };
+      throw new Error(`No pending tour request "${input.inquiryId}" found for this landlord. Use list_tour_inquiries with status "pending" for valid ids.`);
     }
     // Mirror the acceptance's window selection so the preview shows exactly
     // what will be confirmed.
     const window = selectTourWindow(inquiry, input.startIso?.trim() ?? "", input.endIso?.trim() ?? "");
-    if (!window) return { ok: false, error: "This tour request has no valid requested window." };
+    if (!window) throw new Error("This tour request has no valid requested window.");
     const end = resolveConfirmedTourEnd(window.start, window.end, input.endIso?.trim() ?? "");
     const whenLabel = formatTourRangeLabel(window.start, end);
     const guestName = str(inquiry, "name") ?? "Guest";
@@ -784,22 +754,19 @@ export const acceptTourInquiryTool = defineWriteTool({
     if (input.instructions?.trim()) lines.push({ label: "Instructions", value: input.instructions.trim() });
     lines.push({ label: "Guest notification", value: "None — no email is sent by this action." });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Accept tour request",
-        summary: `Accept ${guestName}'s tour request for ${whenLabel} and add it to your calendar.`,
-        lines,
-        confirmLabel: "Accept tour",
-      },
+      kind: "accept_tour_inquiry",
+      title: "Accept tour request",
+      summary: `Accept ${guestName}'s tour request for ${whenLabel} and add it to your calendar.`,
+      fields: lines,
+      confirmLabel: "Accept tour",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const inquiryId = input.inquiryId.trim();
     // Re-resolve for the reply values; acceptTourInquiry re-checks status and
     // ownership again internally before writing anything.
     const inquiry = await findOwnedPendingTourInquiry(ctx, inquiryId);
-    if (!inquiry) return { ok: false, error: "No matching pending tour request for this landlord — it may already be handled." };
+    if (!inquiry) throw new Error("No matching pending tour request for this landlord — it may already be handled.");
 
     const dedupeKey = `accept_tour_inquiry:${ctx.landlordId}:${inquiryId}`;
     const audit = await writeAuditLog(ctx, {
@@ -809,8 +776,8 @@ export const acceptTourInquiryTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "Already done — that tour request was already accepted." };
-      return { ok: false, error: "Could not record the action; the tour was not accepted." };
+      if (audit.duplicate) return { reply: "Already done — that tour request was already accepted." };
+      throw new Error("Could not record the action; the tour was not accepted.");
     }
 
     const result = await acceptTourInquiry(ctx.db, ctx.landlordId, {
@@ -821,16 +788,12 @@ export const acceptTourInquiryTool = defineWriteTool({
     });
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { error: "accept_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { plannedEventId: String(result.plannedEvent.id ?? "") });
     const guestName = str(inquiry, "name") ?? "Guest";
-    return {
-      ok: true,
-      reply: `Accepted ${guestName}'s tour for ${result.message} — it's on your calendar. The guest was not emailed automatically.`,
-      resultSummary: { plannedEventId: String(result.plannedEvent.id ?? "") },
-    };
+    return { reply: `Accepted ${guestName}'s tour for ${result.message} — it's on your calendar. The guest was not emailed automatically.`, resultSummary: { plannedEventId: String(result.plannedEvent.id ?? "") } };
   },
 });
 

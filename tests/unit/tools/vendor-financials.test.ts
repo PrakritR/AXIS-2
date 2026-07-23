@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { agentRegistry, vendorAgentRegistry } from "@/lib/tools";
+import { agentRegistry } from "@/lib/tools";
+import { vendorAgentRegistry } from "@/lib/tools/vendor-index";
 import {
   listVendorInvoicesTool,
   listVendorPayoutsTool,
@@ -54,9 +55,17 @@ function payoutRow(vendorUserId: string, id: string, status: string) {
 describe("vendor-financials tool map safety", () => {
   it("never exposes a W-9 / TIN / tax-profile / 1099 tool in either registry", () => {
     const names = [...agentRegistry.values(), ...vendorAgentRegistry.values()].map((t) => t.name.toLowerCase());
-    // No tool NAME may surface a tax-identifier capability to the model.
-    for (const forbidden of ["tax", "w9", "w_9", "1099", "tin", "ssn"]) {
-      expect(names.some((n) => n.includes(forbidden))).toBe(false);
+    // No tool NAME may surface a tax-identifier capability to the model. Matched
+    // on whole name SEGMENTS, not raw substrings, so an innocent name like
+    // get_automation_set-tin-gs is not a false positive.
+    const forbiddenSegments = new Set(["tax", "taxes", "w9", "tin", "ssn", "1099"]);
+    for (const name of names) {
+      for (const segment of name.split(/[_-]/)) {
+        expect(forbiddenSegments.has(segment), `${name} exposes a tax-identifier capability`).toBe(false);
+      }
+      for (const token of ["1099", "w_9", "w-9", "w9"]) {
+        expect(name.includes(token), `${name} exposes a tax-identifier capability`).toBe(false);
+      }
     }
   });
 
@@ -65,11 +74,22 @@ describe("vendor-financials tool map safety", () => {
     expect(vendorNames).toEqual(
       new Set([
         "list_my_jobs",
+        "get_job_details",
         "list_my_bids",
-        "list_my_schedule",
+        "list_my_offers",
+        "submit_bid",
+        "set_my_price",
+        "mark_job_done",
+        "list_my_payouts",
+        "get_my_profile",
         "list_vendor_invoices",
         "submit_vendor_invoice",
         "list_vendor_payouts",
+        "get_my_availability",
+        "update_my_availability",
+        "list_my_schedule",
+        "list_my_inbox_threads",
+        "send_message_to_manager",
       ]),
     );
     // The manager map must not inherit the vendor-scoped tools.

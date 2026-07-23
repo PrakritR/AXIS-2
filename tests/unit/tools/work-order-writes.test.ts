@@ -21,6 +21,7 @@ import { buildRegistry } from "@/lib/tools/registry";
 import { assertFinancialsTier } from "@/lib/reports/auth";
 import { payoutVendorForWorkOrder } from "@/lib/stripe-vendor-payout";
 import { sendVendorNotification } from "@/lib/vendor-notification-delivery";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 import {
   acceptBidTool,
   approveAndPayWorkOrderTool,
@@ -285,9 +286,34 @@ describe("create_work_order", () => {
     const ctx = makeCtx({
       manager_property_records: [{ id: "prop_b", manager_user_id: "manager_b", row_data: { title: "Foreign" }, property_data: null }],
     });
-    const res = await createWorkOrderTool.preview(ctx, { title: "Leak", propertyId: "prop_b" });
+    const res = await previewWrite(createWorkOrderTool, ctx, { title: "Leak", propertyId: "prop_b" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("not one of this landlord's properties");
+  });
+
+  it("preview shows the COMPLETE description as quoted data, and warns on a link", async () => {
+    const ctx = makeCtx({
+      manager_property_records: [{ id: "prop_a", manager_user_id: "manager_a", row_data: { title: "Pioneer Flats" }, property_data: null }],
+    });
+    const description = `Water under the sink. ${"Tenant reports it started Tuesday. ".repeat(20)}Needs a plumber.`;
+    const res = await previewWrite(createWorkOrderTool, ctx, { title: "Leak", propertyId: "prop_a", description });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const field = res.preview.fields.find((f) => f.label === "Description")!;
+    expect(field.value).toContain(description);
+    expect(field.value).toContain("EXTERNAL");
+    expect(res.preview.warnings).toBeUndefined();
+
+    const linked = await previewWrite(createWorkOrderTool, ctx, {
+      title: "Leak",
+      propertyId: "prop_a",
+      description: "see photos at https://evil.example",
+    });
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.preview.warnings).toEqual([
+      "The work order description contains a link. Verify it before continuing.",
+    ]);
   });
 
   it("execute inserts a landlord-bound row and writes a day-bucketed audit intent first", async () => {
@@ -295,7 +321,7 @@ describe("create_work_order", () => {
       manager_property_records: [{ id: "prop_a", manager_user_id: "manager_a", row_data: { title: "Pioneer Flats" }, property_data: null }],
     };
     const ctx = makeCtx(tables);
-    const res = await createWorkOrderTool.execute(ctx, { title: "Kitchen leak", propertyId: "prop_a", priority: "High" });
+    const res = await executeWrite(createWorkOrderTool, ctx, { title: "Kitchen leak", propertyId: "prop_a", priority: "High" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.reply).toContain("Kitchen leak");
 
@@ -312,8 +338,8 @@ describe("create_work_order", () => {
   it("execute is idempotent per title+property per day", async () => {
     const tables: Record<string, Row[]> = {};
     const ctx = makeCtx(tables);
-    const first = await createWorkOrderTool.execute(ctx, { title: "Repaint hallway" });
-    const second = await createWorkOrderTool.execute(ctx, { title: "Repaint hallway" });
+    const first = await executeWrite(createWorkOrderTool, ctx, { title: "Repaint hallway" });
+    const second = await executeWrite(createWorkOrderTool, ctx, { title: "Repaint hallway" });
     expect(first.ok && second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already created");
     expect((tables.portal_work_order_records ?? []).length).toBe(1);
@@ -333,12 +359,12 @@ describe("assign_vendor", () => {
   });
 
   it("preview rejects a foreign work order id", async () => {
-    const res = await assignVendorTool.preview(makeCtx(baseTables()), { workOrderId: "wo_foreign", vendorId: "v1" });
+    const res = await previewWrite(assignVendorTool, makeCtx(baseTables()), { workOrderId: "wo_foreign", vendorId: "v1" });
     expect(res.ok).toBe(false);
   });
 
   it("preview rejects a foreign (unshared) vendor id", async () => {
-    const res = await assignVendorTool.preview(makeCtx(baseTables()), { workOrderId: "wo1", vendorId: "v_foreign" });
+    const res = await previewWrite(assignVendorTool, makeCtx(baseTables()), { workOrderId: "wo1", vendorId: "v_foreign" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("vendor");
   });
@@ -346,7 +372,7 @@ describe("assign_vendor", () => {
   it("execute assigns, links vendor_user_id, and audits with a one-shot dedupe key", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await assignVendorTool.execute(ctx, { workOrderId: "wo1", vendorId: "v1" });
+    const res = await executeWrite(assignVendorTool, ctx, { workOrderId: "wo1", vendorId: "v1" });
     expect(res.ok).toBe(true);
 
     const wo = tables.portal_work_order_records![0]!;
@@ -355,7 +381,7 @@ describe("assign_vendor", () => {
     expect(wo.vendor_user_id).toBe("vendor_user_1");
     expect(auditRows(tables)[0]!.dedupe_key).toBe("assign_vendor:manager_a:wo1:v1");
 
-    const again = await assignVendorTool.execute(ctx, { workOrderId: "wo1", vendorId: "v1" });
+    const again = await executeWrite(assignVendorTool, ctx, { workOrderId: "wo1", vendorId: "v1" });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already assigned");
   });
@@ -372,7 +398,7 @@ describe("offer_to_vendors", () => {
   });
 
   it("preview rejects any vendor id outside the landlord's directory", async () => {
-    const res = await offerToVendorsTool.preview(makeCtx(baseTables()), { workOrderId: "wo1", vendorIds: ["v1", "v_foreign"] });
+    const res = await previewWrite(offerToVendorsTool, makeCtx(baseTables()), { workOrderId: "wo1", vendorIds: ["v1", "v_foreign"] });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("v_foreign");
   });
@@ -380,7 +406,7 @@ describe("offer_to_vendors", () => {
   it("execute creates offers, opens bidding, and audits once per vendor set", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await offerToVendorsTool.execute(ctx, { workOrderId: "wo1", vendorIds: ["v2", "v1"] });
+    const res = await executeWrite(offerToVendorsTool, ctx, { workOrderId: "wo1", vendorIds: ["v2", "v1"] });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.reply).toContain("Invited 2 vendors");
 
@@ -388,7 +414,7 @@ describe("offer_to_vendors", () => {
     expect((tables.portal_work_order_records![0]!.row_data as Row).biddingOpen).toBe(true);
     expect(String(auditRows(tables)[0]!.dedupe_key)).toMatch(/^offer_to_vendors:manager_a:wo1:[a-z0-9]+$/);
 
-    const again = await offerToVendorsTool.execute(ctx, { workOrderId: "wo1", vendorIds: ["v1", "v2"] });
+    const again = await executeWrite(offerToVendorsTool, ctx, { workOrderId: "wo1", vendorIds: ["v1", "v2"] });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already invited");
   });
@@ -405,13 +431,13 @@ describe("schedule_vendor_visit", () => {
   it("preview requires an assigned vendor", async () => {
     const tables = baseTables();
     (tables.portal_work_order_records![0]!.row_data as Row).vendorId = undefined;
-    const res = await scheduleVendorVisitTool.preview(makeCtx(tables), { workOrderId: "wo1", auto: true });
+    const res = await previewWrite(scheduleVendorVisitTool, makeCtx(tables), { workOrderId: "wo1", auto: true });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("No vendor is assigned");
   });
 
   it("preview pins the auto-resolved slot into the confirmed input", async () => {
-    const res = await scheduleVendorVisitTool.preview(makeCtx(baseTables()), { workOrderId: "wo1", auto: true });
+    const res = await previewWrite(scheduleVendorVisitTool, makeCtx(baseTables()), { workOrderId: "wo1", auto: true });
     expect(res.ok).toBe(true);
     if (res.ok) expect((res.input as { whenIso?: string }).whenIso).toBe("2026-07-20T17:00:00.000Z");
   });
@@ -419,7 +445,7 @@ describe("schedule_vendor_visit", () => {
   it("execute schedules, notifies the vendor, and audits keyed by the exact time", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await scheduleVendorVisitTool.execute(ctx, { workOrderId: "wo1", whenIso: "2026-07-22T18:00:00.000Z" });
+    const res = await executeWrite(scheduleVendorVisitTool, ctx, { workOrderId: "wo1", whenIso: "2026-07-22T18:00:00.000Z" });
     expect(res.ok).toBe(true);
 
     const row = tables.portal_work_order_records![0]!.row_data as Row;
@@ -429,7 +455,7 @@ describe("schedule_vendor_visit", () => {
     expect(auditRows(tables)[0]!.dedupe_key).toBe("schedule_vendor_visit:manager_a:wo1:2026-07-22T18:00:00.000Z");
     expect(vi.mocked(sendVendorNotification)).toHaveBeenCalledTimes(1);
 
-    const again = await scheduleVendorVisitTool.execute(ctx, { workOrderId: "wo1", whenIso: "2026-07-22T18:00:00.000Z" });
+    const again = await executeWrite(scheduleVendorVisitTool, ctx, { workOrderId: "wo1", whenIso: "2026-07-22T18:00:00.000Z" });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already scheduled");
   });
@@ -469,31 +495,31 @@ describe("accept_bid", () => {
   });
 
   it("preview rejects a foreign bid id", async () => {
-    const res = await acceptBidTool.preview(makeCtx(baseTables()), { bidId: "bid_foreign" });
+    const res = await previewWrite(acceptBidTool, makeCtx(baseTables()), { bidId: "bid_foreign" });
     expect(res.ok).toBe(false);
   });
 
   it("preview rejects an unpriced (consultation-pending) bid", async () => {
     const tables = baseTables();
     tables.work_order_bids![0]!.amount_cents = null;
-    const res = await acceptBidTool.preview(makeCtx(tables), { bidId: "bid1" });
+    const res = await previewWrite(acceptBidTool, makeCtx(tables), { bidId: "bid1" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("hasn't priced");
   });
 
   it("preview shows the stored amount and competing bid count", async () => {
-    const res = await acceptBidTool.preview(makeCtx(baseTables()), { bidId: "bid1" });
+    const res = await previewWrite(acceptBidTool, makeCtx(baseTables()), { bidId: "bid1" });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.preview.lines.find((l) => l.label === "Labor")!.value).toBe("$400.00");
-      expect(res.preview.lines.find((l) => l.label === "Competing bids")!.value).toContain("1");
+      expect(res.preview.fields.find((l) => l.label === "Labor")!.value).toBe("$400.00");
+      expect(res.preview.fields.find((l) => l.label === "Competing bids")!.value).toContain("1");
     }
   });
 
   it("execute accepts at the stored amount, declines siblings, closes bidding, and audits one-shot", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await acceptBidTool.execute(ctx, { bidId: "bid1" });
+    const res = await executeWrite(acceptBidTool, ctx, { bidId: "bid1" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.reply).toContain("$400.00");
 
@@ -506,13 +532,13 @@ describe("accept_bid", () => {
     expect(row.biddingOpen).toBe(false);
     expect(auditRows(tables)[0]!.dedupe_key).toBe("accept_bid:manager_a:bid1");
 
-    const again = await acceptBidTool.execute(ctx, { bidId: "bid1" });
+    const again = await executeWrite(acceptBidTool, ctx, { bidId: "bid1" });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already accepted");
   });
 
   it("execute refuses a foreign bid id", async () => {
-    const res = await acceptBidTool.execute(makeCtx(baseTables()), { bidId: "bid_foreign" });
+    const res = await executeWrite(acceptBidTool, makeCtx(baseTables()), { bidId: "bid_foreign" });
     expect(res.ok).toBe(false);
   });
 });
@@ -526,7 +552,7 @@ describe("complete_work_order", () => {
 
   it("preview surfaces the tier-gate error verbatim", async () => {
     vi.mocked(assertFinancialsTier).mockResolvedValueOnce({ ok: false, code: "tier_required", error: "Recording financials requires the Pro or Business plan. Upgrade in Settings → Subscription." });
-    const res = await completeWorkOrderTool.preview(makeCtx(baseTables()), { workOrderId: "wo1", category: "plumbing" });
+    const res = await previewWrite(completeWorkOrderTool, makeCtx(baseTables()), { workOrderId: "wo1", category: "plumbing" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("Pro or Business");
   });
@@ -536,19 +562,19 @@ describe("complete_work_order", () => {
     tables.work_order_bids = [
       { id: "bid1", work_order_id: "wo1", manager_user_id: "manager_a", amount_cents: 40000, materials_cents: 2500, status: "accepted" },
     ];
-    const res = await completeWorkOrderTool.preview(makeCtx(tables), {
+    const res = await previewWrite(completeWorkOrderTool, makeCtx(tables), {
       workOrderId: "wo1",
       category: "plumbing",
       vendorCostUsd: 9999, // must be ignored — the bid is the anchor
     });
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.preview.lines.find((l) => l.label === "Labor")!.value).toContain("$400.00");
+    if (res.ok) expect(res.preview.fields.find((l) => l.label === "Labor")!.value).toContain("$400.00");
   });
 
   it("execute logs expenses, completes the row, and audits one-shot", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await completeWorkOrderTool.execute(ctx, {
+    const res = await executeWrite(completeWorkOrderTool, ctx, {
       workOrderId: "wo1",
       category: "plumbing",
       vendorCostUsd: 400,
@@ -564,7 +590,7 @@ describe("complete_work_order", () => {
     expect(row.vendorCostCents).toBe(40000);
     expect(auditRows(tables)[0]!.dedupe_key).toBe("complete_work_order:manager_a:wo1");
 
-    const again = await completeWorkOrderTool.execute(ctx, { workOrderId: "wo1", category: "plumbing" });
+    const again = await executeWrite(completeWorkOrderTool, ctx, { workOrderId: "wo1", category: "plumbing" });
     expect(again.ok).toBe(false); // re-resolved row is now completed
   });
 });
@@ -594,26 +620,26 @@ describe("approve_and_pay_work_order", () => {
   });
 
   it("preview rejects a foreign work order id", async () => {
-    const res = await approveAndPayWorkOrderTool.preview(makeCtx(baseTables()), { workOrderId: "wo_foreign", category: "plumbing" });
+    const res = await previewWrite(approveAndPayWorkOrderTool, makeCtx(baseTables()), { workOrderId: "wo_foreign", category: "plumbing" });
     expect(res.ok).toBe(false);
   });
 
   it("preview states the bid-anchored amount and the money-moving warning", async () => {
-    const res = await approveAndPayWorkOrderTool.preview(makeCtx(baseTables()), { workOrderId: "wo1", category: "plumbing" });
+    const res = await previewWrite(approveAndPayWorkOrderTool, makeCtx(baseTables()), { workOrderId: "wo1", category: "plumbing" });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.preview.warning).toBe(
+      expect(res.preview.warnings?.[0]).toBe(
         "Moves real money: labor cost is transferred to the vendor's bank account. Materials are your own expense and are not transferred.",
       );
-      expect(res.preview.lines.find((l) => l.label === "Labor payout")!.value).toContain("$400.00");
-      expect(res.preview.lines.find((l) => l.label === "Labor payout")!.value).toContain("accepted bid");
+      expect(res.preview.fields.find((l) => l.label === "Labor payout")!.value).toContain("$400.00");
+      expect(res.preview.fields.find((l) => l.label === "Labor payout")!.value).toContain("accepted bid");
     }
   });
 
   it("execute pays out once, marks paid, and short-circuits on retry", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await approveAndPayWorkOrderTool.execute(ctx, { workOrderId: "wo1", category: "plumbing" });
+    const res = await executeWrite(approveAndPayWorkOrderTool, ctx, { workOrderId: "wo1", category: "plumbing" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.reply).toContain("Approved and paid");
 
@@ -628,7 +654,7 @@ describe("approve_and_pay_work_order", () => {
       vendorUserId: "vendor_user_1",
     });
 
-    const again = await approveAndPayWorkOrderTool.execute(ctx, { workOrderId: "wo1", category: "plumbing" });
+    const again = await executeWrite(approveAndPayWorkOrderTool, ctx, { workOrderId: "wo1", category: "plumbing" });
     expect(again.ok).toBe(false); // re-resolved row is already paid
     expect(vi.mocked(payoutVendorForWorkOrder)).toHaveBeenCalledTimes(1);
   });
@@ -636,7 +662,7 @@ describe("approve_and_pay_work_order", () => {
   it("execute tier-gates before anything happens", async () => {
     vi.mocked(assertFinancialsTier).mockResolvedValueOnce({ ok: false, code: "tier_required", error: "Recording financials requires the Pro or Business plan. Upgrade in Settings → Subscription." });
     const tables = baseTables();
-    const res = await approveAndPayWorkOrderTool.execute(makeCtx(tables), { workOrderId: "wo1", category: "plumbing" });
+    const res = await executeWrite(approveAndPayWorkOrderTool, makeCtx(tables), { workOrderId: "wo1", category: "plumbing" });
     expect(res.ok).toBe(false);
     expect(auditRows(tables).length).toBe(0);
     expect(vi.mocked(payoutVendorForWorkOrder)).not.toHaveBeenCalled();
@@ -654,19 +680,19 @@ describe("send_work_order_reminder", () => {
   it("preview requires an assigned vendor", async () => {
     const tables = baseTables();
     (tables.portal_work_order_records![0]!.row_data as Row).vendorId = undefined;
-    const res = await sendWorkOrderReminderTool.preview(makeCtx(tables), { workOrderId: "wo1" });
+    const res = await previewWrite(sendWorkOrderReminderTool, makeCtx(tables), { workOrderId: "wo1" });
     expect(res.ok).toBe(false);
   });
 
   it("execute sends via the vendor pipeline with a day-bucketed dedupe key", async () => {
     const tables = baseTables();
     const ctx = makeCtx(tables);
-    const res = await sendWorkOrderReminderTool.execute(ctx, { workOrderId: "wo1" });
+    const res = await executeWrite(sendWorkOrderReminderTool, ctx, { workOrderId: "wo1" });
     expect(res.ok).toBe(true);
     expect(vi.mocked(sendVendorNotification)).toHaveBeenCalledTimes(1);
     expect(String(auditRows(tables)[0]!.dedupe_key)).toMatch(/^send_work_order_reminder:manager_a:wo1:\d{4}-\d{2}-\d{2}$/);
 
-    const again = await sendWorkOrderReminderTool.execute(ctx, { workOrderId: "wo1" });
+    const again = await executeWrite(sendWorkOrderReminderTool, ctx, { workOrderId: "wo1" });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already sent");
     expect(vi.mocked(sendVendorNotification)).toHaveBeenCalledTimes(1);

@@ -199,7 +199,7 @@ type TracedResult = {
   model?: string;
   tier?: string;
   usage?: TurnUsage;
-  proposedAction?: { toolName: string };
+  pendingAction?: { toolName: string };
 };
 
 /**
@@ -213,6 +213,9 @@ export async function traceAgentTurn<T extends TracedResult>(
   actor: TraceActor,
   messages: TurnInput,
   run: (observer?: AgentObserver) => Promise<T>,
+  /** Non-chat surfaces (the SMS agents, inbox draft replies) name their trace
+   * and bind it to their own session id. */
+  opts?: { name?: string; sessionId?: string },
 ): Promise<T> {
   const lf = getClient();
   if (!lf) return run();
@@ -221,9 +224,9 @@ export async function traceAgentTurn<T extends TracedResult>(
   let trace: ReturnType<Langfuse["trace"]> | null = null;
   try {
     trace = lf.trace({
-      name: "axis-agent-turn",
+      name: opts?.name ?? "axis-agent-turn",
       userId: actor.userId,
-      sessionId: actor.sessionId ?? actor.userId,
+      sessionId: opts?.sessionId ?? actor.sessionId ?? actor.userId,
       metadata: actor.metadata ?? {},
       input: lastUser,
     });
@@ -250,7 +253,7 @@ export async function traceAgentTurn<T extends TracedResult>(
           inputTokens: result.usage?.inputTokens,
           outputTokens: result.usage?.outputTokens,
           estimatedCostUsd: costUsd,
-          pendingAction: result.proposedAction?.toolName,
+          pendingAction: result.pendingAction?.toolName,
         },
       });
     } catch {
@@ -274,11 +277,21 @@ export async function traceAgentTurn<T extends TracedResult>(
 }
 
 /**
+ * The confirm gate's wrapped call — the same discriminated union
+ * `executeWriteTool` returns. Typed exactly (not a loose `{ reply?: string }`,
+ * which every object satisfies structurally) so a future shape change fails to
+ * compile instead of silently tracing "done" for every confirmed action.
+ */
+export type TracedActionResult =
+  | { ok: true; result: { reply: string } }
+  | { ok: false; error: string };
+
+/**
  * Wrap the confirm endpoint's execute/cancel of a pending action in its own
  * small trace, so every state change is attributable and replayable alongside
  * the turn that proposed it.
  */
-export async function traceAgentAction<T extends { ok?: boolean; reply?: string }>(
+export async function traceAgentAction<T extends TracedActionResult>(
   actor: TraceActor,
   info: { toolName: string; actionId: string; decision: "confirm" | "cancel" },
   run: () => Promise<T>,
@@ -301,7 +314,7 @@ export async function traceAgentAction<T extends { ok?: boolean; reply?: string 
 
   try {
     const result = await run();
-    safe(() => trace?.update({ output: result.reply ?? (result.ok === false ? "failed" : "done") }));
+    safe(() => trace?.update({ output: result.ok ? result.result.reply : result.error }));
     return result;
   } catch (e) {
     safe(() => trace?.update({ output: e instanceof Error ? e.message : "error" }));

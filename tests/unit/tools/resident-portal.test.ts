@@ -1,183 +1,107 @@
 import { describe, it, expect } from "vitest";
-import { residentAgentRegistry, agentRegistry, vendorAgentRegistry } from "@/lib/tools";
-import { toAnthropicTools } from "@/lib/tools/registry";
-import {
-  listMyChargesTool,
-  listMyServiceRequestsTool,
-  listMyWorkOrdersTool,
-  requireResidentScope,
-} from "@/lib/tools/domains/resident-portal";
-import type { AgentContext, ResidentAgentScope } from "@/lib/tools/context";
-import { makeManagerRowsCtx, type FakeRecord } from "./fake-agent-ctx";
+import { listMySharedDocumentsTool } from "@/lib/tools/domains/resident/documents";
+import { reportMaintenanceIssueTool } from "@/lib/tools/domains/resident/maintenance";
+import { residentAgentRegistry } from "@/lib/tools/resident-index";
+import { makeResidentToolCtx, type FakeRow } from "./fake-resident-ctx";
 
-const SCOPE: ResidentAgentScope = {
-  residentUserId: "resident_a",
-  residentEmail: "a@example.com",
-  residentName: "Ada",
-  managerUserId: "manager_a",
-  propertyId: "prop1",
-};
+/**
+ * The two resident tools ported onto the one framework's ResidentAgentContext:
+ * shared documents (Pro-gated read) and maintenance filing (a WORK ORDER, not
+ * an add-on service request). Cross-resident isolation for the rest of the
+ * catalog lives in tests/unit/tools/resident-scope-isolation.test.ts.
+ */
+const RESIDENT = { userId: "resident_a", email: "resa@axis.test" };
 
-/** A resident-owned row as the portal tables store it. */
-function residentRow(
-  residentUserId: string | null,
-  residentEmail: string | null,
-  rowData: Record<string, unknown>,
-): FakeRecord {
+function docRow(over: Partial<FakeRow>): FakeRow {
   return {
-    id: String(rowData.id ?? ""),
-    resident_user_id: residentUserId,
-    resident_email: residentEmail,
-    row_data: rowData,
+    id: "doc_1",
+    visibility: "resident",
+    display_name: "Lease.pdf",
+    category: "lease",
+    created_at: "2026-07-01T00:00:00.000Z",
+    deleted_at: null,
+    ...over,
   };
 }
 
-function residentCtx(tables: Record<string, FakeRecord[]>, scope: ResidentAgentScope = SCOPE): AgentContext {
-  return makeManagerRowsCtx(tables, {
-    landlordId: scope.managerUserId ?? "",
-    userId: scope.residentUserId,
-    email: scope.residentEmail,
-    roles: ["resident"],
-    residentScope: scope,
+describe("list_my_shared_documents", () => {
+  it("returns only documents shared with this resident, by user id or email", async () => {
+    const { ctx } = makeResidentToolCtx({
+      manager_documents: [
+        docRow({ id: "mine_by_id", resident_user_id: RESIDENT.userId }),
+        docRow({ id: "mine_by_email", resident_email: RESIDENT.email }),
+        docRow({ id: "theirs", resident_user_id: "resident_b" }),
+      ],
+    });
+    const res = (await listMySharedDocumentsTool.handler(ctx, {})) as {
+      count: number;
+      documents: { id: string }[];
+    };
+    expect(res.documents.map((d) => d.id).sort()).toEqual(["mine_by_email", "mine_by_id"]);
+    expect(JSON.stringify(res)).not.toContain("theirs");
   });
-}
 
-describe("resident agent registry", () => {
+  it("excludes soft-deleted rows and anything not shared with residents", async () => {
+    const { ctx } = makeResidentToolCtx({
+      manager_documents: [
+        docRow({ id: "deleted", resident_user_id: RESIDENT.userId, deleted_at: "2026-07-02T00:00:00.000Z" }),
+        docRow({ id: "internal", resident_user_id: RESIDENT.userId, visibility: "manager" }),
+        docRow({ id: "ok", resident_user_id: RESIDENT.userId }),
+      ],
+    });
+    const res = (await listMySharedDocumentsTool.handler(ctx, {})) as { documents: { id: string }[] };
+    expect(res.documents.map((d) => d.id)).toEqual(["ok"]);
+  });
+});
+
+describe("report_maintenance_issue", () => {
+  function seeded(managerIds: string[] = ["manager_1"]) {
+    return makeResidentToolCtx(
+      {
+        manager_application_records: [
+          {
+            manager_user_id: "manager_1",
+            resident_email: RESIDENT.email,
+            updated_at: "2026-07-01T00:00:00.000Z",
+            row_data: { bucket: "approved", name: "Res A", property: "Maple House", propertyId: "prop_1" },
+          },
+        ],
+        profiles: [{ id: "manager_1", email: "mgr@axis.test", full_name: "Mgr One" }],
+      },
+      { managerIds },
+    );
+  }
+
+  it("shows the resident exactly what will be filed", async () => {
+    const { ctx } = seeded();
+    const preview = await reportMaintenanceIssueTool.preview(ctx, { description: "Kitchen sink is leaking" });
+    expect(preview.fields.some((f) => f.value.includes("Kitchen sink is leaking"))).toBe(true);
+    expect(preview.fields.some((f) => f.value.includes(RESIDENT.email))).toBe(true);
+    expect(preview.warnings?.[0]).toMatch(/manager is notified/i);
+  });
+
+  it("refuses to file anything for a resident with no linked manager", async () => {
+    const { ctx } = seeded([]);
+    await expect(
+      reportMaintenanceIssueTool.preview(ctx, { description: "Kitchen sink is leaking" }),
+    ).rejects.toThrow(/linked to a property manager/i);
+  });
+});
+
+describe("resident registry shape", () => {
   const tools = [...residentAgentRegistry.values()];
-
-  it("registers the resident portal's capabilities", () => {
-    const names = new Set(tools.map((t) => t.name));
-    for (const expected of [
-      "list_my_charges",
-      "list_my_work_orders",
-      "list_my_service_requests",
-      "list_my_lease",
-      "list_my_messages",
-      "list_my_shared_documents",
-      "report_maintenance_issue",
-      "request_add_on_service",
-      "message_my_manager",
-    ]) {
-      expect(names.has(expected)).toBe(true);
-    }
-  });
-
-  it("shares no tool with the manager or vendor registries", () => {
-    const residentNames = new Set(tools.map((t) => t.name));
-    for (const other of [agentRegistry, vendorAgentRegistry]) {
-      for (const tool of other.values()) expect(residentNames.has(tool.name)).toBe(false);
-    }
-  });
 
   it("gives every resident write tool a preview so nothing executes unseen", () => {
     for (const tool of tools) {
-      if (tool.kind === "write") expect(typeof tool.preview).toBe("function");
+      if (tool.kind !== "write") continue;
+      expect(typeof tool.preview, `${tool.name} needs a preview`).toBe("function");
+      expect(typeof tool.handler, `${tool.name} needs a handler`).toBe("function");
     }
   });
 
   it("has unique, Anthropic-valid tool names", () => {
-    const schemas = toAnthropicTools(residentAgentRegistry);
-    expect(schemas).toHaveLength(tools.length);
-    for (const s of schemas) expect(s.name).toMatch(/^[a-z0-9_]{1,64}$/);
-  });
-});
-
-describe("resident scope enforcement", () => {
-  it("refuses to run without a resident scope", () => {
-    const ctx = makeManagerRowsCtx({});
-    expect(() => requireResidentScope(ctx)).toThrow(/signed-in resident/i);
-  });
-
-  it("list_my_charges returns only this resident's charges", async () => {
-    // The foreign rows share the same manager, which is exactly the case a
-    // landlordId-only filter would leak.
-    const ctx = residentCtx({
-      portal_household_charge_records: [
-        residentRow("resident_a", "a@example.com", { id: "c1", title: "July rent", status: "pending" }),
-        residentRow(null, "a@example.com", { id: "c2", title: "Utilities", status: "processing" }),
-        residentRow("resident_b", "b@example.com", { id: "c3", title: "Their rent", status: "pending" }),
-      ],
-    });
-    const res = (await listMyChargesTool.handler(ctx, {})) as {
-      count: number;
-      charges: { id: string; status: string | null }[];
-    };
-    expect(res.charges.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
-    expect(res.count).toBe(2);
-  });
-
-  it("list_my_charges filters by status and preserves the ACH 'processing' state", async () => {
-    const ctx = residentCtx({
-      portal_household_charge_records: [
-        residentRow("resident_a", "a@example.com", { id: "c1", title: "July rent", status: "pending" }),
-        residentRow("resident_a", "a@example.com", { id: "c2", title: "Utilities", status: "processing" }),
-      ],
-    });
-    const res = (await listMyChargesTool.handler(ctx, { status: "processing" })) as {
-      charges: { id: string; status: string | null }[];
-    };
-    expect(res.charges).toHaveLength(1);
-    expect(res.charges[0]).toMatchObject({ id: "c2", status: "processing" });
-  });
-
-  it("de-duplicates a row matched by both user id and email", async () => {
-    const ctx = residentCtx({
-      portal_household_charge_records: [
-        residentRow("resident_a", "a@example.com", { id: "c1", title: "Rent", status: "pending" }),
-      ],
-    });
-    const res = (await listMyChargesTool.handler(ctx, {})) as { count: number };
-    expect(res.count).toBe(1);
-  });
-
-  it("matches work orders on resident_email only — that table has no resident_user_id", async () => {
-    // Regression: querying resident_user_id on portal_work_order_records /
-    // portal_service_request_records errors, because neither table has the
-    // column. Both are email-keyed; charges and leases carry both.
-    const ctx = residentCtx({
-      portal_work_order_records: [
-        { id: "w1", resident_email: "a@example.com", row_data: { id: "w1", title: "Leak", bucket: "open" } },
-        { id: "w2", resident_email: "b@example.com", row_data: { id: "w2", title: "Theirs", bucket: "open" } },
-      ],
-    });
-    const res = (await listMyWorkOrdersTool.handler(ctx, {})) as {
-      count: number;
-      workOrders: { id: string }[];
-    };
-    expect(res.workOrders.map((w) => w.id)).toEqual(["w1"]);
-  });
-
-  it("list_my_service_requests scopes to the resident and filters by status", async () => {
-    const ctx = residentCtx({
-      portal_service_request_records: [
-        { id: "s1", resident_email: "a@example.com", row_data: { id: "s1", offerName: "Parking", status: "pending" } },
-        { id: "s2", resident_email: "a@example.com", row_data: { id: "s2", offerName: "Storage", status: "approved" } },
-        { id: "s3", resident_email: "b@example.com", row_data: { id: "s3", offerName: "Theirs", status: "pending" } },
-      ],
-    });
-    const all = (await listMyServiceRequestsTool.handler(ctx, {})) as { count: number };
-    expect(all.count).toBe(2);
-    const pending = (await listMyServiceRequestsTool.handler(ctx, { status: "pending" })) as {
-      serviceRequests: { id: string }[];
-    };
-    expect(pending.serviceRequests.map((s) => s.id)).toEqual(["s1"]);
-  });
-});
-
-describe("resident write previews", () => {
-  const byName = new Map([...residentAgentRegistry.values()].map((t) => [t.name, t]));
-
-  it("shows the resident exactly what will be filed", async () => {
-    const ctx = residentCtx({});
-    const tool = byName.get("report_maintenance_issue")!;
-    const preview = await tool.preview!(ctx, { description: "Kitchen sink is leaking" });
-    expect(preview.fields.some((f) => f.value.includes("Kitchen sink is leaking"))).toBe(true);
-    expect(preview.fields.some((f) => f.value.includes("a@example.com"))).toBe(true);
-  });
-
-  it("refuses to file anything for a resident with no linked manager", async () => {
-    const ctx = residentCtx({}, { ...SCOPE, managerUserId: null });
-    const tool = byName.get("request_add_on_service")!;
-    await expect(tool.preview!(ctx, { request: "a parking spot" })).rejects.toThrow(/linked to a property manager/i);
+    const names = tools.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(name).toMatch(/^[a-z][a-z0-9_]*$/);
   });
 });

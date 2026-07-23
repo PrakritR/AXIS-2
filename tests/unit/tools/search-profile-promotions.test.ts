@@ -64,6 +64,7 @@ import {
   deletePromotionTool,
 } from "@/lib/tools/domains/promotions";
 import { listCoManagersTool } from "@/lib/tools/domains/team";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
 type AnyRow = Record<string, unknown>;
 
@@ -336,19 +337,19 @@ describe("record_expense / record_income", () => {
       error: "Recording financials requires the Pro or Business plan. Upgrade in Settings → Subscription.",
     });
     const { ctx } = makeWritableCtx(seedTables());
-    const res = await recordExpenseTool.preview(ctx, expenseInput);
+    const res = await previewWrite(recordExpenseTool, ctx, expenseInput);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Pro or Business/);
   });
 
   it("preview rejects unknown or wrong-side category codes", async () => {
     const { ctx } = makeWritableCtx(seedTables());
-    const bad = await recordExpenseTool.preview(ctx, { ...expenseInput, categoryCode: "not_a_code" });
+    const bad = await previewWrite(recordExpenseTool, ctx, { ...expenseInput, categoryCode: "not_a_code" });
     expect(bad.ok).toBe(false);
     // Income codes are not expense codes and vice versa.
-    const crossed = await recordExpenseTool.preview(ctx, { ...expenseInput, categoryCode: "rent_income" });
+    const crossed = await previewWrite(recordExpenseTool, ctx, { ...expenseInput, categoryCode: "rent_income" });
     expect(crossed.ok).toBe(false);
-    const incomeCrossed = await recordIncomeTool.preview(ctx, {
+    const incomeCrossed = await previewWrite(recordIncomeTool, ctx, {
       amountUsd: 100,
       categoryCode: "maintenance",
       postedDate: "2026-07-01",
@@ -358,18 +359,18 @@ describe("record_expense / record_income", () => {
 
   it("preview rejects a foreign propertyId and foreign vendorId", async () => {
     const { ctx } = makeWritableCtx(seedTables());
-    const foreignProperty = await recordExpenseTool.preview(ctx, { ...expenseInput, propertyId: "p_foreign" });
+    const foreignProperty = await previewWrite(recordExpenseTool, ctx, { ...expenseInput, propertyId: "p_foreign" });
     expect(foreignProperty.ok).toBe(false);
-    const foreignVendor = await recordExpenseTool.preview(ctx, { ...expenseInput, vendorId: "v_foreign" });
+    const foreignVendor = await previewWrite(recordExpenseTool, ctx, { ...expenseInput, vendorId: "v_foreign" });
     expect(foreignVendor.ok).toBe(false);
   });
 
   it("preview shows server-derived amount, category label, and property", async () => {
     const { ctx } = makeWritableCtx(seedTables());
-    const res = await recordExpenseTool.preview(ctx, { ...expenseInput, vendorId: "v1" });
+    const res = await previewWrite(recordExpenseTool, ctx, { ...expenseInput, vendorId: "v1" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const byLabel = new Map(res.preview.lines.map((l) => [l.label, l.value]));
+    const byLabel = new Map(res.preview.fields.map((l) => [l.label, l.value]));
     expect(byLabel.get("Amount")).toBe("$125.50");
     expect(byLabel.get("Category")).toBe("Maintenance");
     expect(byLabel.get("Schedule E")).toBe("Sch. E, Line 14");
@@ -379,7 +380,7 @@ describe("record_expense / record_income", () => {
 
   it("execute books the expense, audits first, and is idempotent on retry", async () => {
     const { ctx, store } = makeWritableCtx(seedTables());
-    const res = await recordExpenseTool.execute(ctx, expenseInput);
+    const res = await executeWrite(recordExpenseTool, ctx, expenseInput);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.reply).toContain("$125.50");
 
@@ -396,7 +397,7 @@ describe("record_expense / record_income", () => {
     expect(vi.mocked(track)).toHaveBeenCalledWith("expense_created", "manager_a", expect.any(Object));
 
     // Same amount/category/date/description again → already recorded, no new row.
-    const again = await recordExpenseTool.execute(ctx, expenseInput);
+    const again = await executeWrite(recordExpenseTool, ctx, expenseInput);
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toMatch(/already/i);
     expect(store.manager_expense_entries).toHaveLength(1);
@@ -404,7 +405,7 @@ describe("record_expense / record_income", () => {
 
   it("execute books income into ledger_entries with the income dedupe key", async () => {
     const { ctx, store } = makeWritableCtx(seedTables());
-    const res = await recordIncomeTool.execute(ctx, {
+    const res = await executeWrite(recordIncomeTool, ctx, {
       amountUsd: 1500,
       categoryCode: "rent_income",
       postedDate: "2026-07-02",
@@ -583,14 +584,14 @@ describe("promotions tools", () => {
         { id: "pF", manager_user_id: "manager_b", status: "live", row_data: { title: "Foreign" } },
       ],
     });
-    const foreign = await createPromotionTool.preview(ctx, { title: "Summer special", propertyId: "pF" });
+    const foreign = await previewWrite(createPromotionTool, ctx, { title: "Summer special", propertyId: "pF" });
     expect(foreign.ok).toBe(false);
 
-    const preview = await createPromotionTool.preview(ctx, { title: "Summer special", propertyId: "p1" });
+    const preview = await previewWrite(createPromotionTool, ctx, { title: "Summer special", propertyId: "p1" });
     expect(preview.ok).toBe(true);
     if (preview.ok) expect(preview.preview.summary).toContain("Promotions page");
 
-    const res = await createPromotionTool.execute(ctx, { title: "Summer special", propertyId: "p1", notes: "Near park" });
+    const res = await executeWrite(createPromotionTool, ctx, { title: "Summer special", propertyId: "p1", notes: "Near park" });
     expect(res.ok).toBe(true);
     expect(store.manager_promotion_records).toHaveLength(1);
     const created = store.manager_promotion_records![0]!;
@@ -604,7 +605,7 @@ describe("promotions tools", () => {
     expect(String(store.audit_log![0]!.dedupe_key)).toMatch(/^create_promotion:manager_a:[0-9a-f]+:\d{4}-\d{2}-\d{2}$/);
 
     // Same title+property again today → duplicate short-circuit, no second row.
-    const again = await createPromotionTool.execute(ctx, { title: "Summer special", propertyId: "p1" });
+    const again = await executeWrite(createPromotionTool, ctx, { title: "Summer special", propertyId: "p1" });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toMatch(/already/i);
     expect(store.manager_promotion_records).toHaveLength(1);
@@ -614,12 +615,12 @@ describe("promotions tools", () => {
     const { ctx, store } = makeWritableCtx({
       manager_promotion_records: [promoRow("promo-1", "manager_a"), promoRow("promo-F", "manager_b")],
     });
-    const foreign = await updatePromotionTool.preview(ctx, { promotionId: "promo-F", title: "Hacked" });
+    const foreign = await previewWrite(updatePromotionTool, ctx, { promotionId: "promo-F", title: "Hacked" });
     expect(foreign.ok).toBe(false);
-    const noChange = await updatePromotionTool.preview(ctx, { promotionId: "promo-1" });
+    const noChange = await previewWrite(updatePromotionTool, ctx, { promotionId: "promo-1" });
     expect(noChange.ok).toBe(false);
 
-    const res = await updatePromotionTool.execute(ctx, { promotionId: "promo-1", title: "Renamed", status: "generated" });
+    const res = await executeWrite(updatePromotionTool, ctx, { promotionId: "promo-1", title: "Renamed", status: "generated" });
     expect(res.ok).toBe(true);
     const rowData = store.manager_promotion_records![0]!.row_data as {
       title: string;
@@ -644,15 +645,15 @@ describe("promotions tools", () => {
     });
     expect(deletePromotionTool.destructive).toBe(true);
 
-    const foreign = await deletePromotionTool.execute(ctx, { promotionId: "promo-F" });
+    const foreign = await executeWrite(deletePromotionTool, ctx, { promotionId: "promo-F" });
     expect(foreign.ok).toBe(false);
     expect(store.manager_promotion_records).toHaveLength(2);
 
-    const preview = await deletePromotionTool.preview(ctx, { promotionId: "promo-1" });
+    const preview = await previewWrite(deletePromotionTool, ctx, { promotionId: "promo-1" });
     expect(preview.ok).toBe(true);
-    if (preview.ok) expect(preview.preview.warning).toMatch(/permanently/i);
+    if (preview.ok) expect(preview.preview.warnings?.[0]).toMatch(/permanently/i);
 
-    const res = await deletePromotionTool.execute(ctx, { promotionId: "promo-1" });
+    const res = await executeWrite(deletePromotionTool, ctx, { promotionId: "promo-1" });
     expect(res.ok).toBe(true);
     expect(store.manager_promotion_records!.map((r) => r.id)).toEqual(["promo-F"]);
     expect(store.audit_log![0]!.dedupe_key).toBe("delete_promotion:manager_a:promo-1");

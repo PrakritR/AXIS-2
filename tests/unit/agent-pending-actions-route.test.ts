@@ -70,7 +70,7 @@ describe("GET /api/agent/pending-actions", () => {
     expect(res.status).toBe(401);
   });
 
-  it("scopes by user_id + proposed + unexpired and never returns the stored input", async () => {
+  it("scopes by user_id + manager portal + proposed + unexpired and never returns the stored input", async () => {
     resolveAgentContext.mockResolvedValue({
       userId: "manager_a",
       landlordId: "manager_a",
@@ -87,6 +87,10 @@ describe("GET /api/agent/pending-actions", () => {
     // Owner key is user_id (not landlord_id), plus the proposed/unexpired guards.
     expect(filters).toContainEqual({ kind: "eq", col: "user_id", value: "manager_a" });
     expect(filters).toContainEqual({ kind: "eq", col: "status", value: "proposed" });
+    // Portal-scoped: a dual-role user's resident/vendor proposals are only
+    // confirmable from their own portal, so listing them as manager AI drafts
+    // would offer an approval the portal-bound confirm gate must refuse.
+    expect(filters).toContainEqual({ kind: "eq", col: "portal", value: "manager" });
     expect(filters.some((f) => f.col === "landlord_id")).toBe(false);
     expect(filters.some((f) => f.kind === "gt" && f.col === "expires_at")).toBe(true);
 

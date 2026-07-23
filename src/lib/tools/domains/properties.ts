@@ -203,7 +203,6 @@ export const createPropertyTool = defineWriteTool({
   name: "create_property",
   description:
     "Create a new draft property listing for the current landlord from basic facts (title, address, beds/baths, rent). The draft is saved with status 'pending' — an Axis admin must review and approve it before it goes live; it does not publish anything immediately.",
-  kind: "write",
   inputSchema: z
     .object({
       title: z.string().min(1).describe("Listing title / building name."),
@@ -231,17 +230,14 @@ export const createPropertyTool = defineWriteTool({
       { label: "After creation", value: "Draft (pending) — an Axis admin reviews it before it can go live" },
     ];
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Create draft listing",
-        summary: `Create a draft listing "${input.title.trim()}" at ${input.address.trim()} ($${Math.round(input.rentUsd)}/mo). It goes to admin review before publishing.`,
-        lines,
-        confirmLabel: "Create draft",
-      },
+      kind: "create_property",
+      title: "Create draft listing",
+      summary: `Create a draft listing "${input.title.trim()}" at ${input.address.trim()} ($${Math.round(input.rentUsd)}/mo). It goes to admin review before publishing.`,
+      fields: lines,
+      confirmLabel: "Create draft",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const rowData = buildDraftPropertyRowData(input, ctx.landlordId);
     const normalizedAddress = input.address.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -256,9 +252,9 @@ export const createPropertyTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: "A draft listing for this address was already created today — nothing new was added." };
+        return { reply: "A draft listing for this address was already created today — nothing new was added." };
       }
-      return { ok: false, error: "Could not record the action; no listing was created." };
+      throw new Error("Could not record the action; no listing was created.");
     }
 
     const { error } = await ctx.db.from("manager_property_records").insert({
@@ -271,15 +267,11 @@ export const createPropertyTool = defineWriteTool({
     });
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { error: "insert_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
 
     await updateAuditResult(ctx, dedupeKey, { propertyId: rowData.id, status: "pending" });
-    return {
-      ok: true,
-      reply: `Created draft listing "${rowData.buildingName}" at ${rowData.address} ($${rowData.monthlyRent}/mo). It's pending admin review before it can go live.`,
-      resultSummary: { propertyId: rowData.id, status: "pending" },
-    };
+    return { reply: `Created draft listing "${rowData.buildingName}" at ${rowData.address} ($${rowData.monthlyRent}/mo). It's pending admin review before it can go live.`, resultSummary: { propertyId: rowData.id, status: "pending" } };
   },
 });
 
@@ -372,7 +364,6 @@ export const updatePropertyTool = defineWriteTool({
   name: "update_property",
   description:
     "Update one of the current landlord's properties: monthly rent, beds, baths, description, or toggle a listing between live and unlisted. Pass a property id from list_properties. Cannot publish a pending/in-review listing — that requires Axis admin review.",
-  kind: "write",
   inputSchema: z
     .object({
       propertyId: z.string().min(1).describe("The property id, from list_properties."),
@@ -389,14 +380,14 @@ export const updatePropertyTool = defineWriteTool({
   preview: async (ctx, input) => {
     const rec = await loadOwnedPropertyRecord(ctx, input.propertyId);
     if (!rec) {
-      return { ok: false, error: "No property with that id belongs to this landlord. Use list_properties to get valid ids." };
+      throw new Error("No property with that id belongs to this landlord. Use list_properties to get valid ids.");
     }
     if (!hasFieldPatch(input) && !input.status) {
-      return { ok: false, error: "Nothing to update — pass at least one of rentUsd, beds, baths, description, or status." };
+      throw new Error("Nothing to update — pass at least one of rentUsd, beds, baths, description, or status.");
     }
     if (input.status) {
       const statusError = validatePropertyStatusChange(rec, input.status);
-      if (statusError) return { ok: false, error: statusError };
+      if (statusError) throw new Error(statusError);
     }
 
     const src = asObject(rec.property_data) ?? asObject(rec.row_data);
@@ -412,28 +403,25 @@ export const updatePropertyTool = defineWriteTool({
     if (input.status) lines.push({ label: "Status", value: `${String(rec.status ?? "—")} → ${input.status}` });
 
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Update property",
-        summary: `Update ${title}${input.status ? ` (set ${input.status})` : ""}.`,
-        lines,
-        confirmLabel: "Apply update",
-        ...(input.status === "unlisted"
-          ? { warning: "Unlisting removes this property from the public rental site until you relist it." }
-          : {}),
-      },
+      kind: "update_property",
+      title: "Update property",
+      summary: `Update ${title}${input.status ? ` (set ${input.status})` : ""}.`,
+      fields: lines,
+      confirmLabel: "Apply update",
+      ...(input.status === "unlisted"
+        ? { warnings: ["Unlisting removes this property from the public rental site until you relist it."] }
+        : {}),
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve at execute time: the record and its status may have changed
     // since preview, and ownership is never trusted from stored input.
     const rec = await loadOwnedPropertyRecord(ctx, input.propertyId);
-    if (!rec) return { ok: false, error: "No property with that id belongs to this landlord." };
-    if (!hasFieldPatch(input) && !input.status) return { ok: false, error: "Nothing to update." };
+    if (!rec) throw new Error("No property with that id belongs to this landlord.");
+    if (!hasFieldPatch(input) && !input.status) throw new Error("Nothing to update.");
     if (input.status) {
       const statusError = validatePropertyStatusChange(rec, input.status);
-      if (statusError) return { ok: false, error: statusError };
+      if (statusError) throw new Error(statusError);
     }
 
     const changedFields = (["rentUsd", "beds", "baths", "description", "status"] as const).filter(
@@ -447,8 +435,8 @@ export const updatePropertyTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That exact update was already applied to this property." };
-      return { ok: false, error: "Could not record the action; nothing was updated." };
+      if (audit.duplicate) return { reply: "That exact update was already applied to this property." };
+      throw new Error("Could not record the action; nothing was updated.");
     }
 
     // Read-merge-write BOTH payloads: `property_data` drives the published
@@ -500,7 +488,7 @@ export const updatePropertyTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { error: "update_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
 
     await updateAuditResult(ctx, dedupeKey, { propertyId: rec.id, fields: changedFields, status: nextStatus });
@@ -512,11 +500,7 @@ export const updatePropertyTool = defineWriteTool({
     if (input.baths !== undefined) parts.push(`baths to ${input.baths}`);
     if (input.description !== undefined) parts.push("the description");
     if (input.status) parts.push(`status to ${input.status}`);
-    return {
-      ok: true,
-      reply: `Updated ${title}: ${parts.join(", ")}.`,
-      resultSummary: { propertyId: rec.id, fields: changedFields, status: nextStatus },
-    };
+    return { reply: `Updated ${title}: ${parts.join(", ")}.`, resultSummary: { propertyId: rec.id, fields: changedFields, status: nextStatus } };
   },
 });
 
@@ -535,7 +519,6 @@ export const sharePropertyLinkTool = defineWriteTool({
   name: "share_property_link",
   description:
     "Email a prospect an apply link, tour-scheduling link, or full listing details for one of the landlord's LIVE listings. Pass a property id from list_properties (status 'live') and the prospect's email. Only live listings the landlord owns (or co-manages) can be shared.",
-  kind: "write",
   inputSchema: z
     .object({
       kind: z
@@ -550,28 +533,23 @@ export const sharePropertyLinkTool = defineWriteTool({
   preview: async (ctx, input) => {
     const toEmail = input.toEmail.trim().toLowerCase();
     if (!EMAIL_RE.test(toEmail)) {
-      return { ok: false, error: "A valid recipient email is required." };
+      throw new Error("A valid recipient email is required.");
     }
     // Server-side share authorization against the live Supabase record — the
     // model-supplied propertyId proves nothing.
     const property = await getShareablePropertyForUser(ctx.landlordId, input.propertyId);
     if (!property) {
-      return {
-        ok: false,
-        error:
-          "This property can't be shared by you — only live listings you own (or co-manage) are shareable. Use list_properties with status 'live' to find one.",
-      };
+      throw new Error("This property can't be shared by you — only live listings you own (or co-manage) are shareable. Use list_properties with status 'live' to find one.");
     }
     const title = (property.title || property.buildingName || property.address || input.propertyId).trim();
     const linkUrl = buildLeadInviteLinkUrl(leadInviteAppOrigin(), input.kind, input.propertyId);
     const emailConfigured = leadInviteEmailConfigured();
     return {
-      ok: true,
-      input: { ...input, toEmail },
-      preview: {
-        title: "Share property link",
-        summary: `Email ${toEmail} ${input.kind === "listing" ? "the listing details" : `a ${input.kind} link`} for ${title}.`,
-        lines: [
+      confirmedInput: { ...input, toEmail },
+      kind: "share_property_link",
+      title: "Share property link",
+      summary: `Email ${toEmail} ${input.kind === "listing" ? "the listing details" : `a ${input.kind} link`} for ${title}.`,
+      fields: [
           { label: "Property", value: title },
           { label: "Send to", value: input.prospectName?.trim() ? `${input.prospectName.trim()} <${toEmail}>` : toEmail },
           { label: "Invite", value: SHARE_KIND_LABELS[input.kind] },
@@ -583,17 +561,16 @@ export const sharePropertyLinkTool = defineWriteTool({
               : "NOT configured on this deployment — you'll get the link to send yourself",
           },
         ],
-        confirmLabel: "Send invite",
-      },
+      confirmLabel: "Send invite",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const toEmail = input.toEmail.trim().toLowerCase();
-    if (!EMAIL_RE.test(toEmail)) return { ok: false, error: "A valid recipient email is required." };
+    if (!EMAIL_RE.test(toEmail)) throw new Error("A valid recipient email is required.");
     // Re-verify sharability at execute time (listing may have been unlisted
     // since preview; ownership is never trusted from stored input).
     const property = await getShareablePropertyForUser(ctx.landlordId, input.propertyId);
-    if (!property) return { ok: false, error: "This property is no longer shareable by you." };
+    if (!property) throw new Error("This property is no longer shareable by you.");
     const title = (property.title || property.buildingName || property.address || input.propertyId).trim();
 
     // Record intent first, idempotent per prospect/property/kind per day.
@@ -607,9 +584,9 @@ export const sharePropertyLinkTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `A ${input.kind} invite for ${title} was already sent to ${toEmail} today.` };
+        return { reply: `A ${input.kind} invite for ${title} was already sent to ${toEmail} today.` };
       }
-      return { ok: false, error: "Could not record the action; no invite was sent." };
+      throw new Error("Could not record the action; no invite was sent.");
     }
 
     const result = await sendLeadInvite(ctx.db, { userId: ctx.landlordId }, {
@@ -623,23 +600,15 @@ export const sharePropertyLinkTool = defineWriteTool({
 
     if (result.ok) {
       await updateAuditResult(ctx, dedupeKey, { toEmail, delivery: "emailed" });
-      return {
-        ok: true,
-        reply: `Emailed the ${input.kind} invite for ${title} to ${toEmail}. Link: ${result.linkUrl}`,
-        resultSummary: { delivery: "emailed", propertyId: input.propertyId },
-      };
+      return { reply: `Emailed the ${input.kind} invite for ${title} to ${toEmail}. Link: ${result.linkUrl}`, resultSummary: { delivery: "emailed", propertyId: input.propertyId } };
     }
     if (result.status === 503) {
       // Honest fallback: nothing was emailed, but the link itself is valid —
       // hand it to the manager to send manually.
       await updateAuditResult(ctx, dedupeKey, { toEmail, delivery: "link_only" });
-      return {
-        ok: true,
-        reply: `Email isn't configured on this deployment, so nothing was emailed. Share this ${input.kind} link with ${toEmail} yourself: ${result.linkUrl}`,
-        resultSummary: { delivery: "link_only", propertyId: input.propertyId },
-      };
+      return { reply: `Email isn't configured on this deployment, so nothing was emailed. Share this ${input.kind} link with ${toEmail} yourself: ${result.linkUrl}`, resultSummary: { delivery: "link_only", propertyId: input.propertyId } };
     }
     await updateAuditResult(ctx, dedupeKey, { toEmail, delivery: "failed" }, { clearDedupeKey: true });
-    return { ok: false, error: `The invite email could not be sent: ${result.error}` };
+    throw new Error(`The invite email could not be sent: ${result.error}`);
   },
 });

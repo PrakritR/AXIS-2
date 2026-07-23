@@ -138,7 +138,6 @@ export const addVendorTool = defineWriteTool({
   name: "add_vendor",
   description:
     "Add a new vendor (contractor / service provider) to the landlord's vendor directory with a name, trade, and optional contact details. Use when the user wants a new plumber, electrician, cleaner, etc. on file.",
-  kind: "write",
   inputSchema: z
     .object({
       name: z.string().min(1).max(120).describe("Vendor or company name."),
@@ -152,52 +151,47 @@ export const addVendorTool = defineWriteTool({
     const name = input.name.trim();
     const trade = input.trade.trim();
     const email = input.email?.trim().toLowerCase() || "";
-    if (!name || !trade) return { ok: false, error: "Provide both a vendor name and a trade." };
+    if (!name || !trade) throw new Error("Provide both a vendor name and a trade.");
     if (email && !EMAIL_RE.test(email)) {
-      return { ok: false, error: `"${email}" is not a valid email address.` };
+      throw new Error(`"${email}" is not a valid email address.`);
     }
     const existing = findExistingVendor(await loadManagerVendors(ctx), name, trade, email);
     if (existing) {
-      return {
-        ok: false,
-        error: `${existing.name} is already in the vendor directory (id ${existing.id}). Use update_vendor to change it.`,
-      };
+      throw new Error(`${existing.name} is already in the vendor directory (id ${existing.id}). Use update_vendor to change it.`);
     }
     const phone = input.phone?.trim() || "";
     const notes = input.notes?.trim() || "";
     return {
-      ok: true,
-      input: {
+      confirmedInput: {
         name,
         trade,
         ...(email ? { email } : {}),
         ...(phone ? { phone } : {}),
         ...(notes ? { notes } : {}),
       },
-      preview: {
-        title: "Add vendor",
-        summary: `Add ${name} (${trade}) to the vendor directory.`,
-        lines: [
+      kind: "add_vendor",
+      title: "Add vendor",
+      summary: `Add ${name} (${trade}) to the vendor directory.`,
+      fields: [
           { label: "Name", value: name },
           { label: "Trade", value: trade },
           ...(email ? [{ label: "Email", value: email }] : []),
           ...(phone ? [{ label: "Phone", value: phone }] : []),
           ...(notes ? [{ label: "Notes", value: notes }] : []),
         ],
-        confirmLabel: "Add vendor",
-      },
+      confirmLabel: "Add vendor",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const name = input.name.trim();
     const trade = input.trade.trim();
     const email = input.email?.trim().toLowerCase() || "";
-    if (!name || !trade) return { ok: false, error: "Provide both a vendor name and a trade." };
-    if (email && !EMAIL_RE.test(email)) return { ok: false, error: "The vendor email is not valid." };
+    if (!name || !trade) throw new Error("Provide both a vendor name and a trade.");
+    if (email && !EMAIL_RE.test(email)) throw new Error("The vendor email is not valid.");
     // Re-check against live directory data — the vendor may have been added
     // (by the UI or a concurrent action) since the preview.
     const existing = findExistingVendor(await loadManagerVendors(ctx), name, trade, email);
-    if (existing) return { ok: true, reply: `${existing.name} is already in your vendor directory.` };
+    if (existing) return { reply: `${existing.name} is already in your vendor directory.` };
 
     // Record intent first, idempotently. The dedupe key is content-derived
     // (email, else name+trade) since the row id doesn't exist yet.
@@ -210,8 +204,8 @@ export const addVendorTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "This vendor was already added." };
-      return { ok: false, error: "Could not record the action; the vendor was not added." };
+      if (audit.duplicate) return { reply: "This vendor was already added." };
+      throw new Error("Could not record the action; the vendor was not added.");
     }
 
     const nowIso = new Date().toISOString();
@@ -235,14 +229,10 @@ export const addVendorTool = defineWriteTool({
     });
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { created: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { vendorId, created: true });
-    return {
-      ok: true,
-      reply: `Added ${name} (${trade}) to your vendor directory.`,
-      resultSummary: { vendorId },
-    };
+    return { reply: `Added ${name} (${trade}) to your vendor directory.`, resultSummary: { vendorId } };
   },
 });
 
@@ -268,7 +258,6 @@ export const updateVendorTool = defineWriteTool({
   name: "update_vendor",
   description:
     "Update a vendor's trade, active status, notes, or phone in the landlord's vendor directory. Pass the vendor id from list_vendors and only the fields to change. Use active:false to deactivate a vendor instead of deleting it.",
-  kind: "write",
   inputSchema: z
     .object({
       vendorId: z.string().min(1).describe("Id of the vendor to update, from list_vendors."),
@@ -281,14 +270,11 @@ export const updateVendorTool = defineWriteTool({
   preview: async (ctx, input) => {
     const found = await findOwnedVendorRecord(ctx, input.vendorId);
     if (!found) {
-      return {
-        ok: false,
-        error: `No vendor with id ${input.vendorId} belongs to this landlord. Use list_vendors to get valid vendor ids.`,
-      };
+      throw new Error(`No vendor with id ${input.vendorId} belongs to this landlord. Use list_vendors to get valid vendor ids.`);
     }
     const patch = buildVendorPatch(input);
     if (Object.keys(patch).length === 0) {
-      return { ok: false, error: "Nothing to update — provide at least one of trade, active, notes, or phone." };
+      throw new Error("Nothing to update — provide at least one of trade, active, notes, or phone.");
     }
     const v = found.row;
     const lines: { label: string; value: string }[] = [];
@@ -302,21 +288,19 @@ export const updateVendorTool = defineWriteTool({
     if (patch.phone !== undefined) lines.push({ label: "Phone", value: `${v.phone || "—"} → ${patch.phone || "—"}` });
     if (patch.notes !== undefined) lines.push({ label: "Notes", value: `${v.notes || "—"} → ${patch.notes || "—"}` });
     return {
-      ok: true,
-      input: { vendorId: found.record.id, ...patch },
-      preview: {
-        title: "Update vendor",
-        summary: `Update ${v.name || "this vendor"} (${lines.length} field${lines.length === 1 ? "" : "s"}).`,
-        lines,
-        confirmLabel: "Update vendor",
-      },
+      confirmedInput: { vendorId: found.record.id, ...patch },
+      kind: "update_vendor",
+      title: "Update vendor",
+      summary: `Update ${v.name || "this vendor"} (${lines.length} field${lines.length === 1 ? "" : "s"}).`,
+      fields: lines,
+      confirmLabel: "Update vendor",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const found = await findOwnedVendorRecord(ctx, input.vendorId);
-    if (!found) return { ok: false, error: "No matching vendor for this landlord." };
+    if (!found) throw new Error("No matching vendor for this landlord.");
     const patch = buildVendorPatch(input);
-    if (Object.keys(patch).length === 0) return { ok: false, error: "Nothing to update." };
+    if (Object.keys(patch).length === 0) throw new Error("Nothing to update.");
     const fields = Object.keys(patch);
 
     // Idempotent per vendor per exact patch content.
@@ -331,8 +315,8 @@ export const updateVendorTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "This exact vendor update was already applied." };
-      return { ok: false, error: "Could not record the action; the vendor was not updated." };
+      if (audit.duplicate) return { reply: "This exact vendor update was already applied." };
+      throw new Error("Could not record the action; the vendor was not updated.");
     }
 
     // Read-merge-write the CURRENT row_data: only allowlisted fields change;
@@ -349,14 +333,10 @@ export const updateVendorTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { updated: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { updated: true, fields });
-    return {
-      ok: true,
-      reply: `Updated ${found.row.name || "the vendor"} (${fields.join(", ")}).`,
-      resultSummary: { vendorId: found.record.id, fields },
-    };
+    return { reply: `Updated ${found.row.name || "the vendor"} (${fields.join(", ")}).`, resultSummary: { vendorId: found.record.id, fields } };
   },
 });
 
@@ -364,7 +344,6 @@ export const inviteVendorTool = defineWriteTool({
   name: "invite_vendor",
   description:
     "Email a vendor from the directory an invite link to create their own Axis vendor portal account. Pass the vendor id from list_vendors; the invite goes to the email already on the vendor's directory record.",
-  kind: "write",
   inputSchema: z
     .object({
       vendorId: z.string().min(1).describe("Id of the vendor to invite, from list_vendors."),
@@ -373,45 +352,37 @@ export const inviteVendorTool = defineWriteTool({
   preview: async (ctx, input) => {
     const found = await findOwnedVendorRecord(ctx, input.vendorId);
     if (!found) {
-      return {
-        ok: false,
-        error: `No vendor with id ${input.vendorId} belongs to this landlord. Use list_vendors to get valid vendor ids.`,
-      };
+      throw new Error(`No vendor with id ${input.vendorId} belongs to this landlord. Use list_vendors to get valid vendor ids.`);
     }
     if (found.record.vendor_user_id) {
-      return { ok: false, error: `${found.row.name || "This vendor"} already has a linked Axis account — no invite is needed.` };
+      throw new Error(`${found.row.name || "This vendor"} already has a linked Axis account — no invite is needed.`);
     }
     const email = String(found.row.email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(email)) {
-      return {
-        ok: false,
-        error: `${found.row.name || "This vendor"} has no valid email on file — add one to the vendor record in Services → Vendors first.`,
-      };
+      throw new Error(`${found.row.name || "This vendor"} has no valid email on file — add one to the vendor record in Services → Vendors first.`);
     }
     return {
-      ok: true,
-      input: { vendorId: found.record.id },
-      preview: {
-        title: "Invite vendor to Axis",
-        summary: `Email ${found.row.name || email} a link to create their Axis vendor account.`,
-        lines: [
+      confirmedInput: { vendorId: found.record.id },
+      kind: "invite_vendor",
+      title: "Invite vendor to Axis",
+      summary: `Email ${found.row.name || email} a link to create their Axis vendor account.`,
+      fields: [
           { label: "Vendor", value: found.row.name || "—" },
           { label: "Email", value: email },
           { label: "Effect", value: "Sends a signup link (valid 7 days); replaces any pending invite" },
         ],
-        confirmLabel: "Send invite",
-      },
+      confirmLabel: "Send invite",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const found = await findOwnedVendorRecord(ctx, input.vendorId);
-    if (!found) return { ok: false, error: "No matching vendor for this landlord." };
+    if (!found) throw new Error("No matching vendor for this landlord.");
     if (found.record.vendor_user_id) {
-      return { ok: true, reply: `${found.row.name || "This vendor"} already has a linked Axis account.` };
+      return { reply: `${found.row.name || "This vendor"} already has a linked Axis account.` };
     }
     // The invite email always comes from the directory row, never model input.
     const email = String(found.row.email ?? "").trim().toLowerCase();
-    if (!EMAIL_RE.test(email)) return { ok: false, error: "This vendor has no valid email on file." };
+    if (!EMAIL_RE.test(email)) throw new Error("This vendor has no valid email on file.");
 
     // One-shot per vendor: record intent first; retries return already-done.
     const dedupeKey = `invite_vendor:${ctx.landlordId}:${found.record.id}`;
@@ -422,8 +393,8 @@ export const inviteVendorTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `${found.row.name || "This vendor"} was already invited.` };
-      return { ok: false, error: "Could not record the action; no invite was sent." };
+      if (audit.duplicate) return { reply: `${found.row.name || "This vendor"} was already invited.` };
+      throw new Error("Could not record the action; no invite was sent.");
     }
 
     const { data: profile } = await ctx.db
@@ -445,13 +416,9 @@ export const inviteVendorTool = defineWriteTool({
       // A failed send is retryable — clear the dedupe key so a retry records a
       // fresh attempt instead of short-circuiting to "already invited".
       await updateAuditResult(ctx, dedupeKey, { sent: false }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
     await updateAuditResult(ctx, dedupeKey, { sent: true });
-    return {
-      ok: true,
-      reply: `Sent an Axis signup invite to ${found.row.name || "the vendor"} at ${email}.`,
-      resultSummary: { vendorId: found.record.id, sent: true },
-    };
+    return { reply: `Sent an Axis signup invite to ${found.row.name || "the vendor"} at ${email}.`, resultSummary: { vendorId: found.record.id, sent: true } };
   },
 });

@@ -23,6 +23,7 @@ import {
   addServiceRequestNoteTool,
 } from "@/lib/tools/domains/resident/services";
 import { makeResidentToolCtx, type FakeRow } from "./fake-resident-ctx";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
 const RES_A = { id: "resident_a", email: "resa@axis.test" };
 const RES_B = { id: "resident_b", email: "resb@axis.test" };
@@ -362,17 +363,17 @@ describe("resident read tools: cross-resident isolation", () => {
 describe("resident write tools: previews reject foreign/invalid ids", () => {
   it("add_service_request_note rejects another resident's request", async () => {
     const { ctx } = seed();
-    const preview = await addServiceRequestNoteTool.preview(ctx, { requestId: "SR-B", note: "hi" });
+    const preview = await previewWrite(addServiceRequestNoteTool, ctx, { requestId: "SR-B", note: "hi" });
     expect(preview.ok).toBe(false);
-    const exec = await addServiceRequestNoteTool.execute(ctx, { requestId: "SR-B", note: "hi" });
+    const exec = await executeWrite(addServiceRequestNoteTool, ctx, { requestId: "SR-B", note: "hi" });
     expect(exec.ok).toBe(false);
   });
 
   it("report_manual_payment rejects another resident's charge in preview and execute", async () => {
     const { ctx, mutations } = seed();
-    const preview = await reportManualPaymentTool.preview(ctx, { chargeIds: ["CH-B"], channel: "zelle" });
+    const preview = await previewWrite(reportManualPaymentTool, ctx, { chargeIds: ["CH-B"], channel: "zelle" });
     expect(preview.ok).toBe(false);
-    const exec = await reportManualPaymentTool.execute(ctx, { chargeIds: ["CH-B"], channel: "zelle" });
+    const exec = await executeWrite(reportManualPaymentTool, ctx, { chargeIds: ["CH-B"], channel: "zelle" });
     expect(exec.ok).toBe(false);
     // The foreign charge row was never touched.
     expect(mutations.filter((m) => m.table === "portal_household_charge_records")).toEqual([]);
@@ -380,20 +381,20 @@ describe("resident write tools: previews reject foreign/invalid ids", () => {
 
   it("start_rent_payment rejects another resident's charge", async () => {
     const { ctx } = seed();
-    const preview = await startRentPaymentTool.preview(ctx, { chargeIds: ["CH-B"] });
+    const preview = await previewWrite(startRentPaymentTool, ctx, { chargeIds: ["CH-B"] });
     expect(preview.ok).toBe(false);
     if (!preview.ok) expect(preview.error).toContain("do not have access");
   });
 
   it("send_message_to_manager rejects a manager not linked to this resident", async () => {
     const { ctx } = seed();
-    const preview = await sendMessageToManagerTool.preview(ctx, {
+    const preview = await previewWrite(sendMessageToManagerTool, ctx, {
       subject: "Hello",
       body: "Hi",
       recipientManagerId: FOREIGN_MANAGER,
     });
     expect(preview.ok).toBe(false);
-    const exec = await sendMessageToManagerTool.execute(ctx, {
+    const exec = await executeWrite(sendMessageToManagerTool, ctx, {
       subject: "Hello",
       body: "Hi",
       recipientManagerId: FOREIGN_MANAGER,
@@ -403,9 +404,9 @@ describe("resident write tools: previews reject foreign/invalid ids", () => {
 
   it("cancel_scheduled_message rejects another resident's scheduled message", async () => {
     const { ctx } = seed();
-    const preview = await cancelScheduledMessageTool.preview(ctx, { messageId: "SM-B" });
+    const preview = await previewWrite(cancelScheduledMessageTool, ctx, { messageId: "SM-B" });
     expect(preview.ok).toBe(false);
-    const exec = await cancelScheduledMessageTool.execute(ctx, { messageId: "SM-B" });
+    const exec = await executeWrite(cancelScheduledMessageTool, ctx, { messageId: "SM-B" });
     expect(exec.ok).toBe(false);
   });
 
@@ -413,9 +414,9 @@ describe("resident write tools: previews reject foreign/invalid ids", () => {
     const { ctx } = makeResidentToolCtx({
       portal_lease_pipeline_records: [lease(RES_B, "LB", "Unit B9")],
     });
-    const preview = await requestLeaseExtensionTool.preview(ctx, { newLeaseEnd: "2026-12-31" });
+    const preview = await previewWrite(requestLeaseExtensionTool, ctx, { newLeaseEnd: "2026-12-31" });
     expect(preview.ok).toBe(false);
-    const exec = await requestLeaseExtensionTool.execute(ctx, { newLeaseEnd: "2026-12-31" });
+    const exec = await executeWrite(requestLeaseExtensionTool, ctx, { newLeaseEnd: "2026-12-31" });
     expect(exec.ok).toBe(false);
   });
 });
@@ -424,10 +425,10 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
   it("create_service_request pins resident_email + manager routing and audits with the title/day key", async () => {
     const { ctx, mutations } = seed();
     const input = { title: "Extra parking", description: "Need a second spot", priority: "high" as const };
-    const preview = await createServiceRequestTool.preview(ctx, input);
+    const preview = await previewWrite(createServiceRequestTool, ctx, input);
     expect(preview.ok).toBe(true);
 
-    const exec = await createServiceRequestTool.execute(ctx, input);
+    const exec = await executeWrite(createServiceRequestTool, ctx, input);
     expect(exec.ok).toBe(true);
 
     const audit = mutations.find((m) => m.table === "audit_log" && m.kind === "insert");
@@ -441,14 +442,14 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
     expect(upsert?.values.manager_user_id).toBe(MANAGER);
 
     // Same title, same day: idempotent.
-    const again = await createServiceRequestTool.execute(ctx, input);
+    const again = await executeWrite(createServiceRequestTool, ctx, input);
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already");
   });
 
   it("add_service_request_note appends to the current notes and audits per request+note", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await addServiceRequestNoteTool.execute(ctx, { requestId: "SR-A", note: "Please expedite" });
+    const exec = await executeWrite(addServiceRequestNoteTool, ctx, { requestId: "SR-A", note: "Please expedite" });
     expect(exec.ok).toBe(true);
 
     const audit = mutations.find((m) => m.table === "audit_log" && m.kind === "insert");
@@ -464,7 +465,7 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
 
   it("report_manual_payment patches own charge, audits per charge per day, notifies manager", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await reportManualPaymentTool.execute(ctx, { chargeIds: ["CH-A"], channel: "zelle" });
+    const exec = await executeWrite(reportManualPaymentTool, ctx, { chargeIds: ["CH-A"], channel: "zelle" });
     expect(exec.ok).toBe(true);
 
     const audit = mutations.find((m) => m.table === "audit_log" && m.kind === "insert");
@@ -476,7 +477,7 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
     expect(mutations.some((m) => m.table === "portal_inbox_thread_records")).toBe(true);
 
     // Same charge, same day: idempotent, no error.
-    const again = await reportManualPaymentTool.execute(ctx, { chargeIds: ["CH-A"], channel: "zelle" });
+    const again = await executeWrite(reportManualPaymentTool, ctx, { chargeIds: ["CH-A"], channel: "zelle" });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toContain("already");
   });
@@ -484,11 +485,11 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
   it("send_message_to_manager delivers through the scoped inbox pipeline and audits per content per day", async () => {
     const { ctx, mutations } = seed();
     const input = { subject: "Question", body: "When is trash day?" };
-    const preview = await sendMessageToManagerTool.preview(ctx, input);
+    const preview = await previewWrite(sendMessageToManagerTool, ctx, input);
     expect(preview.ok).toBe(true);
-    if (preview.ok) expect(preview.preview.lines.some((l) => l.value.includes("mgr@axis.test"))).toBe(true);
+    if (preview.ok) expect(preview.preview.fields.some((l) => l.value.includes("mgr@axis.test"))).toBe(true);
 
-    const exec = await sendMessageToManagerTool.execute(ctx, input);
+    const exec = await executeWrite(sendMessageToManagerTool, ctx, input);
     expect(exec.ok).toBe(true);
 
     const audit = mutations.find((m) => m.table === "audit_log" && m.kind === "insert");
@@ -502,10 +503,10 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
   it("schedule_message stores a resident-originated scheduled row for the linked manager", async () => {
     const { ctx, mutations } = seed();
     const input = { subject: "Reminder", body: "Lease question", sendAtIso: "2027-01-01T09:00:00.000Z" };
-    const preview = await scheduleMessageTool.preview(ctx, input);
+    const preview = await previewWrite(scheduleMessageTool, ctx, input);
     expect(preview.ok).toBe(true);
 
-    const exec = await scheduleMessageTool.execute(ctx, input);
+    const exec = await executeWrite(scheduleMessageTool, ctx, input);
     expect(exec.ok).toBe(true);
 
     const insert = mutations.find((m) => m.table === "portal_scheduled_inbox_message_records" && m.kind === "insert");
@@ -519,7 +520,7 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
 
   it("cancel_scheduled_message cancels own message with a one-shot dedupe key", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await cancelScheduledMessageTool.execute(ctx, { messageId: "SM-A" });
+    const exec = await executeWrite(cancelScheduledMessageTool, ctx, { messageId: "SM-A" });
     expect(exec.ok).toBe(true);
 
     const audit = mutations.find((m) => m.table === "audit_log" && m.kind === "insert");
@@ -531,7 +532,7 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
 
   it("request_lease_extension amends own lease with a lease+date dedupe key", async () => {
     const { ctx, mutations, tables } = seed();
-    const exec = await requestLeaseExtensionTool.execute(ctx, { newLeaseEnd: "2026-12-31" });
+    const exec = await executeWrite(requestLeaseExtensionTool, ctx, { newLeaseEnd: "2026-12-31" });
     expect(exec.ok).toBe(true);
 
     const audit = mutations.find((m) => m.table === "audit_log" && m.kind === "insert");
@@ -544,7 +545,7 @@ describe("resident write tools: happy paths write audited, scoped rows", () => {
     expect(rowData.managerSignature).toBeNull();
 
     // Same lease + same date again: idempotent.
-    const again = await requestLeaseExtensionTool.execute(ctx, { newLeaseEnd: "2026-12-31" });
+    const again = await executeWrite(requestLeaseExtensionTool, ctx, { newLeaseEnd: "2026-12-31" });
     expect(again.ok).toBe(false); // lease is no longer fully signed after the amendment
   });
 });

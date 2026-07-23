@@ -18,8 +18,8 @@ export const runtime = "nodejs";
  *    real assistant — but this route NEVER persists it. It returns a
  *    `simulated` pending action; confirming from the demo UI posts back here
  *    and receives a canned "nothing was actually sent" reply. Nothing can
- *    execute because /api/agent/action requires an authenticated actor and a
- *    real persisted row.
+ *    execute because the one confirm gate requires an authenticated actor and
+ *    a real persisted row, and this route never writes one.
  *  - The stub DB has no real rows, so a prompt-injection attempt in the (fake)
  *    tenant text can neither read real data nor trigger an action. The system
  *    prompt additionally treats tool-result text as untrusted data.
@@ -66,16 +66,17 @@ export async function POST(req: Request) {
   try {
     const ctx = buildDemoAgentContext();
     const result = await runAgentTurn({ ctx, registry: agentRegistry, messages });
-    if (result.proposedAction) {
+    if (result.pendingAction) {
+      // /demo never persists a proposal: the id is the literal "demo", which no
+      // confirm path can ever claim, so the card is a preview and nothing else.
       return NextResponse.json({
         reply: result.reply,
         toolTrace: result.toolTrace,
         pendingAction: {
           id: "demo",
-          toolName: result.proposedAction.toolName,
-          destructive: result.proposedAction.destructive,
-          expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
-          preview: result.proposedAction.preview,
+          toolName: result.pendingAction.toolName,
+          destructive: result.pendingAction.destructive,
+          preview: result.pendingAction.preview,
           simulated: true,
         },
       });
