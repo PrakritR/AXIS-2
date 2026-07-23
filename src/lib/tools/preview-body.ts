@@ -8,13 +8,18 @@
 
 export const MESSAGE_LINK_WARNING = "The message body contains a link. Verify it before sending.";
 
-/** Warn when agent-drafted text carries a URL the approver should check. */
-export function bodyLinkWarnings(body: string): string[] {
-  return /https?:\/\//i.test(body) ? [MESSAGE_LINK_WARNING] : [];
+/**
+ * Warn when agent-drafted text carries a URL the approver should check. Pass a
+ * `noun` when the text is not an outgoing message body, so the copy names what
+ * the approver is actually looking at.
+ */
+export function bodyLinkWarnings(body: string, noun?: string): string[] {
+  if (!/https?:\/\//i.test(body)) return [];
+  return [noun ? `The ${noun} contains a link. Verify it before continuing.` : MESSAGE_LINK_WARNING];
 }
 
 /** Spread onto a preview: `...withBodyWarnings(body)` adds `warnings` only when there are any. */
-export function withBodyWarnings(body: string): { warnings?: string[] } {
-  const warnings = bodyLinkWarnings(body);
+export function withBodyWarnings(body: string, noun?: string): { warnings?: string[] } {
+  const warnings = bodyLinkWarnings(body, noun);
   return warnings.length > 0 ? { warnings } : {};
 }

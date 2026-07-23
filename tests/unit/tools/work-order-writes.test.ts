@@ -291,6 +291,31 @@ describe("create_work_order", () => {
     if (!res.ok) expect(res.error).toContain("not one of this landlord's properties");
   });
 
+  it("preview shows the COMPLETE description as quoted data, and warns on a link", async () => {
+    const ctx = makeCtx({
+      manager_property_records: [{ id: "prop_a", manager_user_id: "manager_a", row_data: { title: "Pioneer Flats" }, property_data: null }],
+    });
+    const description = `Water under the sink. ${"Tenant reports it started Tuesday. ".repeat(20)}Needs a plumber.`;
+    const res = await previewWrite(createWorkOrderTool, ctx, { title: "Leak", propertyId: "prop_a", description });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const field = res.preview.fields.find((f) => f.label === "Description")!;
+    expect(field.value).toContain(description);
+    expect(field.value).toContain("EXTERNAL");
+    expect(res.preview.warnings).toBeUndefined();
+
+    const linked = await previewWrite(createWorkOrderTool, ctx, {
+      title: "Leak",
+      propertyId: "prop_a",
+      description: "see photos at https://evil.example",
+    });
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.preview.warnings).toEqual([
+      "The work order description contains a link. Verify it before continuing.",
+    ]);
+  });
+
   it("execute inserts a landlord-bound row and writes a day-bucketed audit intent first", async () => {
     const tables: Record<string, Row[]> = {
       manager_property_records: [{ id: "prop_a", manager_user_id: "manager_a", row_data: { title: "Pioneer Flats" }, property_data: null }],

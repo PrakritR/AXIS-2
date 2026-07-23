@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool, defineWriteTool } from "../registry";
+import { withBodyWarnings } from "../preview-body";
 import type { AgentContext } from "../context";
 import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
@@ -386,11 +387,12 @@ export const createWorkOrderTool = defineWriteTool({
       { label: "Category", value: input.category ?? "—" },
       { label: "Resident", value: resident ? `${resident.name || resident.email}` : "—" },
     ];
-    if (input.description?.trim()) {
+    const description = input.description?.trim() ?? "";
+    if (description) {
       // Echoed as quoted data: the description may relay tenant-reported text.
       lines.push({
         label: "Description",
-        value: wrapUntrusted("work order description", input.description.trim().slice(0, 300)).untrustedContent,
+        value: wrapUntrusted("work order description", description).untrustedContent,
       });
     }
     return {
@@ -399,6 +401,7 @@ export const createWorkOrderTool = defineWriteTool({
       title: "Create work order",
       summary: `Create the work order "${title}"${property ? ` at ${property.label}` : ""}.`,
       fields: lines,
+      ...withBodyWarnings(description, "work order description"),
       confirmLabel: "Create work order",
     };
   },
