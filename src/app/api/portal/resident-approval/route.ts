@@ -70,23 +70,38 @@ export async function PATCH(req: Request) {
     // Money-path guard (defense in depth — the manager UI already hides Approve for
     // withdrawn rows): a manager must never approve a resident-withdrawn application.
     // Approving it provisions a resident account + rent/deposit charges for someone
-    // who explicitly pulled out. Scoped to the ACTING manager's own record so it can
-    // never read another landlord's data. A withdrawal is a reversible stamp, so
-    // re-submission (not un-withdraw) is the intended path back to approvable.
+    // who explicitly pulled out. A withdrawal is a reversible stamp, so re-submission
+    // (not un-withdraw) is the intended path back to approvable.
+    //
+    // The lookup is deliberately NOT scoped to `manager_user_id`: a co-managed row
+    // keeps the linked OWNER's id, and an admin never owns the record, so scoping
+    // made the guard silently never fire for exactly the callers the UI check cannot
+    // be trusted for. The row is reduced to a single boolean here and no part of it
+    // is ever returned to the client. A bogus/unknown `applicationId` must not
+    // disable the guard either, so it falls back to the resident-email lookup, and a
+    // query error fails CLOSED (matching `resolveApplicationWriteOwner`).
     if (requestor.role !== "resident" && approved) {
-      let appQuery = svc
-        .from("manager_application_records")
-        .select("id, row_data, resident_email")
-        .eq("manager_user_id", user.id);
-      appQuery = applicationId
-        ? appQuery.in("id", idVariants(applicationId))
-        : appQuery.eq("resident_email", email);
-      const { data: appRow } = await appQuery
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const stored = (appRow?.row_data ?? null) as DemoApplicantRow | null;
-      if (stored && isWithdrawnApplicationRow(stored)) {
+      const loadStoredRow = async (
+        by: "id" | "email",
+      ): Promise<{ error: boolean; stored: DemoApplicantRow | null }> => {
+        const base = svc.from("manager_application_records").select("id, row_data");
+        const scoped = by === "id" ? base.in("id", idVariants(applicationId)) : base.eq("resident_email", email);
+        const { data, error } = await scoped.order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        if (error) return { error: true, stored: null };
+        return { error: false, stored: (data?.row_data ?? null) as DemoApplicantRow | null };
+      };
+
+      let lookup = applicationId ? await loadStoredRow("id") : null;
+      if (lookup?.error) {
+        return NextResponse.json({ error: "Could not verify the application status." }, { status: 500 });
+      }
+      if (!lookup?.stored) {
+        lookup = await loadStoredRow("email");
+        if (lookup.error) {
+          return NextResponse.json({ error: "Could not verify the application status." }, { status: 500 });
+        }
+      }
+      if (lookup.stored && isWithdrawnApplicationRow(lookup.stored)) {
         return NextResponse.json(
           { error: "This application was withdrawn by the applicant and can no longer be approved." },
           { status: 409 },

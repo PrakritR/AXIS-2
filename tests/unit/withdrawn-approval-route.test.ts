@@ -15,7 +15,9 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 
 const getUser = vi.fn();
 let REQUESTOR: { role: string; email: string; sms_from_number: string | null } | null;
-let APP_ROW: { id: string; row_data: DemoApplicantRow | null; resident_email: string } | null;
+/** Application records the stub "stores", keyed the way the route filters them. */
+let APP_ROWS: { id: string; row_data: DemoApplicantRow | null; resident_email: string }[];
+let APP_QUERY_ERROR: { message: string } | null;
 let PROFILE_UPDATE_CALLS: number;
 
 vi.mock("@/lib/analytics/posthog", () => ({ track: vi.fn() }));
@@ -31,29 +33,31 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 /**
- * Minimal chainable Supabase stub. `maybeSingle()` resolves per-table (the
- * requestor profile, then the application record the guard inspects); the update
- * chain is awaited directly, so the builder is also thenable and records that a
- * profile write was attempted — a withdrawn approval must never reach it.
+ * Minimal chainable Supabase stub. The application-record builder HONORS its
+ * filters (`.in("id", …)` vs `.eq("resident_email", …)`) so the id lookup and the
+ * email fallback are genuinely distinct paths — a stub that answered with the same
+ * row regardless would pass whether or not the fallback exists. The update chain is
+ * awaited directly, so the builder is also thenable and records that a profile write
+ * was attempted — a withdrawn approval must never reach it.
  */
 function makeServiceClient() {
   return {
     from(table: string) {
-      let op: "select" | "update" = "select";
+      const filters: { ids: string[] | null; residentEmail: string | null } = { ids: null, residentEmail: null };
       const builder: Record<string, unknown> = {
         select() {
-          op = "select";
           return builder;
         },
         update() {
-          op = "update";
           if (table === "profiles") PROFILE_UPDATE_CALLS += 1;
           return builder;
         },
-        eq() {
+        eq(column: string, value: string) {
+          if (column === "resident_email") filters.residentEmail = value;
           return builder;
         },
-        in() {
+        in(column: string, values: string[]) {
+          if (column === "id") filters.ids = values;
           return builder;
         },
         order() {
@@ -64,11 +68,17 @@ function makeServiceClient() {
         },
         maybeSingle() {
           if (table === "profiles") return Promise.resolve({ data: REQUESTOR, error: null });
-          if (table === "manager_application_records") return Promise.resolve({ data: APP_ROW, error: null });
-          return Promise.resolve({ data: null, error: null });
+          if (table !== "manager_application_records") return Promise.resolve({ data: null, error: null });
+          if (APP_QUERY_ERROR) return Promise.resolve({ data: null, error: APP_QUERY_ERROR });
+          const match =
+            APP_ROWS.find((row) => {
+              if (filters.ids) return filters.ids.includes(row.id);
+              if (filters.residentEmail) return row.resident_email === filters.residentEmail;
+              return false;
+            }) ?? null;
+          return Promise.resolve({ data: match, error: null });
         },
         then(resolve: (v: { error: null }) => unknown) {
-          void op;
           return Promise.resolve({ error: null }).then(resolve);
         },
       };
@@ -98,21 +108,24 @@ function appRow(over: Partial<DemoApplicantRow>): DemoApplicantRow {
   };
 }
 
+const WITHDRAWN_ROW = {
+  id: "AXIS-9001",
+  row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }),
+  resident_email: "applicant@example.com",
+};
+
 describe("PATCH /api/portal/resident-approval — withdrawn applications are not approvable", () => {
   beforeEach(() => {
     getUser.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: "mgr-1" } } });
     REQUESTOR = { role: "manager", email: "mgr@example.com", sms_from_number: null };
-    APP_ROW = { id: "AXIS-9001", row_data: appRow({}), resident_email: "applicant@example.com" };
+    APP_ROWS = [{ id: "AXIS-9001", row_data: appRow({}), resident_email: "applicant@example.com" }];
+    APP_QUERY_ERROR = null;
     PROFILE_UPDATE_CALLS = 0;
   });
 
   it("rejects approving a withdrawn application (409) and never writes application_approved", async () => {
-    APP_ROW = {
-      id: "AXIS-9001",
-      row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }),
-      resident_email: "applicant@example.com",
-    };
+    APP_ROWS = [WITHDRAWN_ROW];
     const { PATCH } = await import("@/app/api/portal/resident-approval/route");
     const res = await PATCH(
       patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
@@ -123,26 +136,66 @@ describe("PATCH /api/portal/resident-approval — withdrawn applications are not
     expect(PROFILE_UPDATE_CALLS).toBe(0);
   });
 
-  it("rejects even when the client omits applicationId (falls back to the manager's latest record)", async () => {
-    APP_ROW = {
-      id: "AXIS-9001",
-      row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }),
-      resident_email: "applicant@example.com",
-    };
+  it("rejects even when the client omits applicationId (falls back to the latest record by email)", async () => {
+    APP_ROWS = [WITHDRAWN_ROW];
     const { PATCH } = await import("@/app/api/portal/resident-approval/route");
     const res = await PATCH(patch({ email: "applicant@example.com", approved: true }));
     expect(res.status).toBe(409);
     expect(PROFILE_UPDATE_CALLS).toBe(0);
   });
 
+  it("rejects when the client sends a bogus applicationId — the email fallback still finds the withdrawal", async () => {
+    APP_ROWS = [WITHDRAWN_ROW];
+    const { PATCH } = await import("@/app/api/portal/resident-approval/route");
+    const res = await PATCH(
+      patch({ email: "applicant@example.com", approved: true, applicationId: "not-a-real-id" }),
+    );
+    expect(res.status).toBe(409);
+    expect(PROFILE_UPDATE_CALLS).toBe(0);
+  });
+
+  it("fails CLOSED on a lookup error instead of letting the approval through", async () => {
+    APP_QUERY_ERROR = { message: "connection reset" };
+    const { PATCH } = await import("@/app/api/portal/resident-approval/route");
+    const res = await PATCH(
+      patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
+    );
+    expect(res.status).toBe(500);
+    expect(PROFILE_UPDATE_CALLS).toBe(0);
+  });
+
+  it("fires for a co-manager/admin approving a row owned by another manager", async () => {
+    // The record keeps the linked OWNER's manager_user_id; scoping the lookup to the
+    // acting user would have made the guard silently never fire for these callers.
+    getUser.mockResolvedValue({ data: { user: { id: "co-manager-2" } } });
+    REQUESTOR = { role: "admin", email: "admin@example.com", sms_from_number: null };
+    APP_ROWS = [WITHDRAWN_ROW];
+    const { PATCH } = await import("@/app/api/portal/resident-approval/route");
+    const res = await PATCH(
+      patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
+    );
+    expect(res.status).toBe(409);
+    expect(PROFILE_UPDATE_CALLS).toBe(0);
+  });
+
   it("still approves a normal (non-withdrawn) application — the guard does not over-block", async () => {
-    APP_ROW = { id: "AXIS-9001", row_data: appRow({ withdrawnAt: null }), resident_email: "applicant@example.com" };
+    APP_ROWS = [{ id: "AXIS-9001", row_data: appRow({ withdrawnAt: null }), resident_email: "applicant@example.com" }];
     const { PATCH } = await import("@/app/api/portal/resident-approval/route");
     const res = await PATCH(
       patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
     );
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
+    expect(PROFILE_UPDATE_CALLS).toBe(1);
+  });
+
+  it("approves when no application record exists at all — cannot block what does not exist", async () => {
+    APP_ROWS = [];
+    const { PATCH } = await import("@/app/api/portal/resident-approval/route");
+    const res = await PATCH(
+      patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
+    );
+    expect(res.status).toBe(200);
     expect(PROFILE_UPDATE_CALLS).toBe(1);
   });
 });

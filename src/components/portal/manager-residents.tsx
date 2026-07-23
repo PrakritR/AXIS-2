@@ -122,6 +122,7 @@ import {
 } from "@/lib/service-requests-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
   invalidatePersistedInboxCache,
   loadPersistedInbox,
@@ -1865,15 +1866,20 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <div className="space-y-8">
                                   <PortalTableDetailActions placement="top">
                                     {selectedApplicationRow.bucket === "pending" ? (
+                                      // A withdrawn application keeps `bucket === "pending"` but is
+                                      // not approvable (the shared transition refuses it), so Approve
+                                      // is hidden here too rather than rendering a silent no-op.
                                       <>
-                                        <Button
-                                          type="button"
-                                          variant="primary"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => setApprovePreviewRow(selectedApplicationRow)}
-                                        >
-                                          Approve
-                                        </Button>
+                                        {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
+                                          <Button
+                                            type="button"
+                                            variant="primary"
+                                            className={PORTAL_DETAIL_BTN}
+                                            onClick={() => setApprovePreviewRow(selectedApplicationRow)}
+                                          >
+                                            Approve
+                                          </Button>
+                                        )}
                                         <Button
                                           type="button"
                                           variant="outline"

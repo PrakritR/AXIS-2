@@ -1,0 +1,172 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DemoApplicantRow } from "@/data/demo-portal";
+
+/**
+ * Server-owned withdrawal stamp on POST /api/manager-applications.
+ *
+ * The manager panel mirrors its whole cached row into this route, and the same
+ * write provisions the resident account once the row lands in `approved`. So a
+ * manager whose panel went stale before the resident withdrew would otherwise
+ * (a) erase `withdrawnAt` from the stored blob and (b) provision the account for
+ * someone who explicitly pulled out — making every downstream check that reads
+ * that blob fail with it. `withdrawnAt` is therefore re-anchored from the STORED
+ * row, and an approve on a withdrawn record is refused outright.
+ */
+
+const getUser = vi.fn();
+let PROFILE: { role: string; email: string } | null;
+let STORED_ROWS: { id: string; row_data: DemoApplicantRow }[];
+let STORED_ERROR: { message: string } | null;
+let UPSERTS: { id: string; row_data: DemoApplicantRow }[];
+const provisionApprovedResidentAccount = vi.fn(async () => ({ ok: true }));
+
+vi.mock("@/lib/auth/guest-application-upsert", () => ({
+  prepareGuestApplicationUpsert: vi.fn(),
+}));
+vi.mock("@/lib/auth/link-resident-on-application-submit", () => ({
+  linkResidentOnApplicationSubmit: vi.fn(async (_db: unknown, args: { row: DemoApplicantRow }) => args.row),
+}));
+vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: vi.fn(async () => true) }));
+vi.mock("@/lib/auth/manager-lease-scope", () => ({
+  managerHasCoManagerPermissionForProperty: vi.fn(async () => true),
+}));
+vi.mock("@/lib/auth/co-manager-module-scope", () => ({
+  linkedOwnerForProperty: vi.fn(async () => null),
+  linkedPropertyIdsForModule: vi.fn(async () => []),
+}));
+vi.mock("@/lib/auth/provision-approved-resident", () => ({ provisionApprovedResidentAccount }));
+vi.mock("@/lib/manager-applications-storage", () => ({
+  isDraftApplicationRow: () => false,
+  normalizeApplicationAxisId: (id: string) => id.trim(),
+}));
+vi.mock("@/lib/screening/order-screening", () => ({ tryAutoOrderScreening: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({ auth: { getUser } }),
+}));
+vi.mock("@/lib/supabase/service", () => ({ createSupabaseServiceRoleClient: () => makeDb() }));
+
+/** Chainable Supabase stub honoring `.in("id", …)` so the stored-row load is real. */
+function makeDb() {
+  return {
+    from(table: string) {
+      const state: { ids: string[] | null } = { ids: null };
+      const builder: Record<string, unknown> = {
+        select() {
+          return builder;
+        },
+        update() {
+          return builder;
+        },
+        insert() {
+          return Promise.resolve({ error: null });
+        },
+        upsert(values: { id: string; row_data: DemoApplicantRow }) {
+          UPSERTS.push(values);
+          return Promise.resolve({ error: null });
+        },
+        delete() {
+          return builder;
+        },
+        eq() {
+          return builder;
+        },
+        ilike() {
+          return builder;
+        },
+        in(column: string, values: string[]) {
+          if (column === "id") state.ids = values;
+          return builder;
+        },
+        order() {
+          return builder;
+        },
+        limit() {
+          return builder;
+        },
+        maybeSingle() {
+          if (table === "profiles") return Promise.resolve({ data: PROFILE, error: null });
+          return Promise.resolve({ data: null, error: null });
+        },
+        then(resolve: (v: { data: unknown; error: unknown }) => unknown) {
+          if (table === "manager_application_records") {
+            if (STORED_ERROR) return Promise.resolve({ data: null, error: STORED_ERROR }).then(resolve);
+            const rows = state.ids ? STORED_ROWS.filter((r) => state.ids?.includes(r.id)) : STORED_ROWS;
+            return Promise.resolve({ data: rows, error: null }).then(resolve);
+          }
+          return Promise.resolve({ data: null, error: null }).then(resolve);
+        },
+      };
+      return builder;
+    },
+  };
+}
+
+function appRow(over: Partial<DemoApplicantRow>): DemoApplicantRow {
+  return {
+    id: "AXIS-9001",
+    name: "Withdrawn Applicant",
+    property: "The Pioneer",
+    propertyId: "mgr-demo-pioneer",
+    stage: "Submitted",
+    bucket: "pending",
+    detail: "",
+    email: "applicant@example.com",
+    ...over,
+  };
+}
+
+function post(body: unknown) {
+  return new Request("http://localhost/api/manager-applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /api/manager-applications — withdrawnAt is server-owned on a manager write", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "mgr-1", email: "mgr@example.com", user_metadata: {} } } });
+    PROFILE = { role: "manager", email: "mgr@example.com" };
+    STORED_ROWS = [{ id: "AXIS-9001", row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }) }];
+    STORED_ERROR = null;
+    UPSERTS = [];
+    provisionApprovedResidentAccount.mockClear();
+  });
+
+  it("refuses a stale-cache approve of a withdrawn row and never provisions the account", async () => {
+    const { POST } = await import("@/app/api/manager-applications/route");
+    // The manager's cached blob predates the withdrawal, so it carries no stamp.
+    const res = await POST(post({ row: appRow({ bucket: "approved", stage: "Approved", withdrawnAt: undefined }) }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/withdrawn/i);
+    expect(UPSERTS).toHaveLength(0);
+    expect(provisionApprovedResidentAccount).not.toHaveBeenCalled();
+  });
+
+  it("re-anchors the stored stamp so a stale mirror cannot erase the withdrawal", async () => {
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(post({ row: appRow({ detail: "Manager note", withdrawnAt: undefined }) }));
+    expect(res.status).toBe(200);
+    expect(UPSERTS).toHaveLength(1);
+    expect(UPSERTS[0].row_data.withdrawnAt).toBe("2026-07-22T00:00:00.000Z");
+  });
+
+  it("fails CLOSED when the stored row cannot be read", async () => {
+    STORED_ERROR = { message: "connection reset" };
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(post({ row: appRow({ bucket: "approved", stage: "Approved" }) }));
+    expect(res.status).toBe(500);
+    expect(UPSERTS).toHaveLength(0);
+    expect(provisionApprovedResidentAccount).not.toHaveBeenCalled();
+  });
+
+  it("still approves a normal (non-withdrawn) application", async () => {
+    STORED_ROWS = [{ id: "AXIS-9001", row_data: appRow({}) }];
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(post({ row: appRow({ bucket: "approved", stage: "Approved" }) }));
+    expect(res.status).toBe(200);
+    expect(UPSERTS).toHaveLength(1);
+    expect(provisionApprovedResidentAccount).toHaveBeenCalledTimes(1);
+  });
+});
