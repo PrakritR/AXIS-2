@@ -114,6 +114,10 @@ export function ApplicationsPipelinePanel() {
   const [paused, setPaused] = useState(false);
   const resumeRef = useRef<number | null>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Tracks the deferred timers fired by manual handlers (runScreening,
+  // sendReminder) so they are cleared on unmount instead of firing setState
+  // after the component is gone. Same discipline as the auto-loop's pool.
+  const [handlerTimers] = useState(() => createTimerPool());
 
   // Counts derive straight from the stages, so the tab numbers always equal the
   // actual filtered lists — approving an applicant moves her and updates both.
@@ -133,12 +137,13 @@ export function ApplicationsPipelinePanel() {
     setPressed(null);
   }, [reducedMotion]);
 
-  // Clean up any pending resume timer on unmount.
+  // Clean up any pending resume timer and deferred handler timers on unmount.
   useEffect(() => {
     return () => {
       if (resumeRef.current) window.clearTimeout(resumeRef.current);
+      handlerTimers.cancel();
     };
-  }, []);
+  }, [handlerTimers]);
 
   // Self-playing loop: one applicant, open → screen → approve → she moves out of
   // Pending into Approved (counts update), rest, then reset and repeat.
@@ -229,10 +234,11 @@ export function ApplicationsPipelinePanel() {
   const runScreening = (id: string) => {
     takeControl();
     setScreening((s) => ({ ...s, [id]: "running" }));
-    window.setTimeout(() => {
+    void handlerTimers.wait(900).then(() => {
+      if (handlerTimers.cancelled) return;
       setScreening((s) => ({ ...s, [id]: "complete" }));
       setStages((s) => ({ ...s, [id]: s[id] === "new" || s[id] === "screening" ? "screened" : s[id] }));
-    }, 900);
+    });
   };
 
   const approve = (id: string) => {
@@ -248,7 +254,10 @@ export function ApplicationsPipelinePanel() {
   const sendReminder = (id: string) => {
     takeControl();
     setReminderId(id);
-    window.setTimeout(() => setReminderId((current) => (current === id ? null : current)), 1800);
+    void handlerTimers.wait(1800).then(() => {
+      if (handlerTimers.cancelled) return;
+      setReminderId((current) => (current === id ? null : current));
+    });
   };
 
   return (
