@@ -19,14 +19,40 @@ import {
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
+import { normalizeE164 } from "@/lib/phone-e164";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
+
+/** Identity of the session that was active before an OAuth hand-off left this page. */
+const PRE_OAUTH_USER_KEY = "axis:create-account-prior-user";
+
+function rememberPriorUser(userId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (userId) window.sessionStorage.setItem(PRE_OAUTH_USER_KEY, userId);
+    else window.sessionStorage.removeItem(PRE_OAUTH_USER_KEY);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function readPriorUser(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(PRE_OAUTH_USER_KEY);
+  } catch {
+    return null;
+  }
+}
 
 function trialSignupSubtitle(tier: PlanTierId): string {
   if (tier === "free") return "Free plan · no card required";
   return `${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial · no card required`;
 }
+
+type SignedInUser = { id: string; email: string | null };
 
 /** Manager account creation — OAuth or email, no inline plan UI. */
 export function ManagerTrialSignupForm({
@@ -48,13 +74,15 @@ export function ManagerTrialSignupForm({
 }) {
   const router = useRouter();
   const { showToast } = useAppUi();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(initialEmail);
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [finishingGoogle, setFinishingGoogle] = useState(googleReturn);
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [signedInSession, setSignedInSession] = useState(false);
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
+  const [oauthReturnedSameAccount, setOauthReturnedSameAccount] = useState(false);
 
   const locked = disabled || busy || finishingGoogle;
 
@@ -63,15 +91,15 @@ export function ManagerTrialSignupForm({
     void (async () => {
       const supabase = createSupabaseBrowserClient();
       const { data } = await supabase.auth.getSession();
-      if (!cancelled) {
-        setSignedInSession(Boolean(data.session?.user));
-        setSignedInEmail(data.session?.user?.email ?? null);
-      }
+      const user = data.session?.user ?? null;
+      if (cancelled) return;
+      setSignedInUser(user ? { id: user.id, email: user.email ?? null } : null);
+      if (!googleReturn) rememberPriorUser(user?.id ?? null);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [googleReturn]);
 
   const applyPricingResult = useCallback(
     (result: ContinuePartnerPricingResult) => {
@@ -89,6 +117,7 @@ export function ManagerTrialSignupForm({
 
   useEffect(() => {
     if (!googleReturn) return;
+    const priorUserId = readPriorUser();
     let cancelled = false;
     void (async () => {
       setFinishingGoogle(true);
@@ -97,6 +126,29 @@ export function ManagerTrialSignupForm({
         const offer =
           stored ??
           buildPricingOffer({ tier, billing, returnSurface: "mobile-plan", trialSignup: true });
+
+        const returnedUser = priorUserId
+          ? await waitForAuthUser(createSupabaseBrowserClient())
+          : null;
+        if (cancelled) return;
+
+        if (returnedUser && priorUserId && returnedUser.id === priorUserId) {
+          rememberPriorUser(null);
+          setSignedInUser({ id: returnedUser.id, email: returnedUser.email ?? null });
+          setOauthReturnedSameAccount(true);
+          if (typeof window !== "undefined") {
+            const params = new URLSearchParams({
+              mode: "create",
+              role: "manager",
+              tier: offer.tier,
+              billing: offer.billing,
+            });
+            window.history.replaceState({}, "", `/auth/create-account?${params}`);
+          }
+          return;
+        }
+
+        rememberPriorUser(null);
         const result = await handleGoogleSignedInReturn(offer);
         if (cancelled) return;
         if (result.status !== "provisioned") {
@@ -119,8 +171,17 @@ export function ManagerTrialSignupForm({
   }, [googleReturn]);
 
   const submit = async () => {
+    if (!fullName.trim()) {
+      showToast("Enter your full name.");
+      return;
+    }
     if (!email.trim() || password.length < 8) {
       showToast("Enter your email and an 8+ character password.");
+      return;
+    }
+    const normalizedPhone = normalizeE164(phone);
+    if (!normalizedPhone) {
+      showToast("Enter a valid phone number.");
       return;
     }
     setErrorText(null);
@@ -132,6 +193,8 @@ export function ManagerTrialSignupForm({
         body: JSON.stringify({
           email: email.trim(),
           password,
+          fullName: fullName.trim(),
+          phone: normalizedPhone,
           tier,
         }),
       });
@@ -142,15 +205,25 @@ export function ManagerTrialSignupForm({
         return;
       }
       const supabase = createSupabaseBrowserClient();
+      if (signedInUser) {
+        try {
+          posthog.reset();
+        } catch {
+          /* best-effort analytics reset */
+        }
+      }
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
       if (signInError) {
+        if (signedInUser) await supabase.auth.signOut().catch(() => undefined);
+        rememberPriorUser(null);
         showToast("Account created. Sign in to continue.");
         router.push("/auth/sign-in?role=manager");
         return;
       }
+      rememberPriorUser(null);
       if (signInData?.user) posthog.identify(signInData.user.id);
       const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard";
       await navigateAfterRoleSignup(fallback);
@@ -173,16 +246,17 @@ export function ManagerTrialSignupForm({
         </p>
       ) : (
         <>
-          {signedInSession ? (
+          {signedInUser ? (
             <div className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-[12px] leading-snug text-muted">
-              {signedInEmail ? (
-                <>You&apos;re signed in as <span className="font-semibold text-foreground">{signedInEmail}</span>. </>
+              {oauthReturnedSameAccount ? <>That&apos;s the account you&apos;re already using. </> : null}
+              {signedInUser.email ? (
+                <>You&apos;re signed in as <span className="font-semibold text-foreground">{signedInUser.email}</span>. </>
               ) : (
                 <>You&apos;re already signed in. </>
               )}
               Create a new property account below, or{" "}
-              <Link href="/portal/dashboard" className="font-semibold text-primary hover:opacity-90">
-                go to your dashboard
+              <Link href="/auth/continue" className="font-semibold text-primary hover:opacity-90">
+                continue to your portal
               </Link>
               .
             </div>
@@ -207,11 +281,28 @@ export function ManagerTrialSignupForm({
           <AuthDivider label="or enter your details" />
 
           <Input
+            type="text"
+            autoComplete="name"
+            placeholder="Full name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            disabled={locked}
+          />
+          <Input
             type="email"
             autoComplete="email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={locked}
+          />
+          <Input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="Phone number"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             disabled={locked}
           />
           <PasswordInput
