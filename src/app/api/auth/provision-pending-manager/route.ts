@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-/** Ensures the signed-in user has a free manager portal account (idempotent). */
-export async function POST() {
+/** Ensures the signed-in user has a manager portal account (idempotent). */
+export async function POST(request: Request) {
   try {
     const supabaseAuth = await createSupabaseServerClient();
     const {
@@ -17,8 +17,14 @@ export async function POST() {
       return NextResponse.json({ error: "Sign in with Google first." }, { status: 401 });
     }
 
+    // Manager OAuth registration ("Create account → Manager → Google") opts a
+    // genuinely-new account onto a 14-day Pro trial; the pricing free-select /
+    // paid pre-step caller posts no body and stays free.
+    const body = (await request.json().catch(() => null)) as { trial?: unknown } | null;
+    const trialForNewManager = body?.trial === true;
+
     const service = createSupabaseServiceRoleClient();
-    const result = await ensureFreeManagerPortalAccess(service, user);
+    const result = await ensureFreeManagerPortalAccess(service, user, { trialForNewManager });
 
     if (result.status === "skipped") {
       return NextResponse.json({ ok: false, skipped: true, reason: result.reason }, { status: 409 });
