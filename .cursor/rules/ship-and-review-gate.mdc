@@ -6,7 +6,7 @@ alwaysApply: true
 # Ship & review gate (Axis)
 
 This rule always applies. Do not mark feature work complete or promote to
-`production` without following it (unless the user explicitly waives a named step).
+production without following it (unless the user explicitly waives a named step).
 
 ## When pushing / promoting to production
 

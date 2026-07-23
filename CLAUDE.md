@@ -16,7 +16,7 @@ open the Lavish view immediately after exiting.)
 
 ## Ship gate (mandatory)
 
-Before finishing features or promoting to `production`, follow
+Before finishing features or promoting to production, follow
 [`docs/ship-gate.md`](docs/ship-gate.md) and `.cursor/rules/ship-and-review-gate.mdc`:
 
 1. **Reviews** — security-review + bugbot (+ cache/rendering/perf for UI/routes)
