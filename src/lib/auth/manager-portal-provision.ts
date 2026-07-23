@@ -46,12 +46,24 @@ async function isResidentOnlyAccount(supabase: SupabaseClient, userId: string): 
 }
 
 /**
- * Ensures a brand-new or incomplete auth user has a free manager portal account.
+ * Ensures a brand-new or incomplete auth user has a manager portal account.
  * Idempotent — safe on every OAuth callback and pricing return.
+ *
+ * `trialForNewManager` (opt-in) upgrades the default for a GENUINELY NEW account
+ * — one with no `manager_purchases` row for this user or email — from free to a
+ * 14-day Pro trial (no card, no Stripe; `tier: "pro"`, `billing: "trial"`, which
+ * the existing date-based expiry in `manager-tier-expiry.ts` /
+ * `applyExpiredManagerPurchaseDowngrade` downgrades back to free after
+ * `MANAGER_SUBSCRIPTION_TRIAL_DAYS`). Only the new-account branch honors it, so a
+ * second sign-in / any already-provisioned account returns unchanged. The manager
+ * OAuth registration path passes `true`; every other caller (pricing free-select,
+ * paid pre-step, admin backfill) leaves it false and provisions free exactly as
+ * before.
  */
 export async function ensureFreeManagerPortalAccess(
   supabase: SupabaseClient,
   user: User,
+  opts?: { trialForNewManager?: boolean },
 ): Promise<EnsureFreeManagerResult> {
   const email = user.email?.trim().toLowerCase() ?? "";
   if (!email) return { status: "skipped", reason: "no_email" };
@@ -110,18 +122,18 @@ export async function ensureFreeManagerPortalAccess(
     managerId = purchase.manager_id;
     provisioned = true;
   } else if (!purchase) {
+    // Genuinely new account: no manager_purchases row for this user or email.
     const { managerId: pendingId } = await provisionPendingManagerAccount(supabase, {
       userId: user.id,
       email,
       fullName,
     });
-    await finalizePendingManagerFreeTier(supabase, {
-      userId: user.id,
-      email,
-      tier: "free",
-      billing: "monthly",
-      fullName,
-    });
+    await finalizePendingManagerFreeTier(
+      supabase,
+      opts?.trialForNewManager
+        ? { userId: user.id, email, tier: "pro", billing: "trial", fullName }
+        : { userId: user.id, email, tier: "free", billing: "monthly", fullName },
+    );
     managerId = pendingId;
     provisioned = true;
   } else {
