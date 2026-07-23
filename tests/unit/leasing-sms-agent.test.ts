@@ -21,7 +21,7 @@ import {
   type RawPropertyRecord,
 } from "@/lib/tools/domains/leasing-sms";
 
-const PROD_ORIGIN = "https://www.axis-seattle-housing.com";
+const PROD_ORIGIN = "https://prop-lane.space";
 
 /** Minimal chainable Supabase mock: owned queries resolve to the given result. */
 function makeDb(result: { many?: unknown; single?: unknown }) {

@@ -34,7 +34,7 @@ export function buildResidentSetupHref(token: string, axisId: string): string {
 }
 
 export function residentSetupAccountUrl(origin: string, token: string, axisId: string): string {
-  const base = origin.replace(/\/$/, "") || "https://www.axis-seattle-housing.com";
+  const base = origin.replace(/\/$/, "") || "https://prop-lane.space";
   return `${base}${buildResidentSetupHref(token, axisId)}`;
 }
 

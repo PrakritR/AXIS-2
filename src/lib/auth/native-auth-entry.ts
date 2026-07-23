@@ -51,5 +51,10 @@ export function nativeAuthEntryPathForHost(_hostname: string): string {
 
 export function isProductionAxisHost(hostname: string): boolean {
   const h = hostname.toLowerCase();
-  return h === "www.axis-seattle-housing.com" || h === "axis-seattle-housing.com";
+  return (
+    h === "prop-lane.space" ||
+    h === "www.prop-lane.space" ||
+    h === "www.axis-seattle-housing.com" ||
+    h === "axis-seattle-housing.com"
+  );
 }

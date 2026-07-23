@@ -1,7 +1,8 @@
 import { isProductionAxisHost } from "@/lib/auth/native-auth-entry";
 
 /**
- * True on the live production site (axis-seattle-housing.com) and on Vercel
+ * True on the live production site (prop-lane.space, and the legacy
+ * axis-seattle-housing.com which still resolves) and on Vercel
  * Production deploys. Used to filter sandbox listings from the public rent
  * catalog — not to hide the /demo sandbox itself.
  */

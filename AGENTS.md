@@ -358,9 +358,13 @@ The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so t
 **Production Branch is `production`**, not `main`. Two branches, two roles:
 
 - **`production` — the live site.** Every push here triggers a **production
-  deploy** to the real domains: `axis-seattle-housing.com`,
-  `www.axis-seattle-housing.com`, and `axis-2.vercel.app`. Only ship-ready code
-  reaches this branch. Never commit straight to it.
+  deploy** to the real domains: the canonical `prop-lane.space` /
+  `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
+  `www.axis-seattle-housing.com` (still live, still recognized as production by
+  `isProductionAxisHost`), and `axis-2.vercel.app`. Outbound email/SMS and
+  shareable links use the canonical origin (`PRODUCTION_APP_ORIGIN` in
+  `src/lib/app-url.ts`). Only ship-ready code reaches this branch. Never commit
+  straight to it.
 - **`main` — integration / staging.** Day-to-day work merges here. Every push
   produces a **preview deploy**, and Vercel keeps a stable staging alias that
   always points at the latest `main` build:

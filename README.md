@@ -1,6 +1,6 @@
 # Axis Housing
 
-Property management software for listing units, screening applicants, signing leases, collecting rent, and running day-to-day operations. The product ships as a **Next.js** web app at [axis-seattle-housing.com](https://www.axis-seattle-housing.com), plus **iOS and Android** native shells (Capacitor) that load the live site.
+Property management software for listing units, screening applicants, signing leases, collecting rent, and running day-to-day operations. The product ships as a **Next.js** web app at [prop-lane.space](https://prop-lane.space), plus **iOS and Android** native shells (Capacitor) that load the live site. The legacy `axis-seattle-housing.com` domain still resolves and is still treated as production.
 
 ## Product surfaces
 

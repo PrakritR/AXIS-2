@@ -1,6 +1,6 @@
 /**
  * Public marketing contact — single source for footer, contact, support, legal.
- * Ops inbox still lives on the production axis-seattle-housing.com domain
+ * Ops inbox still lives on the legacy axis-seattle-housing.com mail domain
  * (no PropLane mail domain in the product yet). Brand copy is PropLane;
  * the address is the real deliverable mailbox.
  */
