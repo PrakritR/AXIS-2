@@ -9,6 +9,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
+  PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
@@ -89,6 +90,51 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
+const DOCUMENT_LIBRARY_FILTER_SELECT =
+  "col-start-1 row-start-1 h-8 w-full min-w-0 max-w-full appearance-none truncate rounded-full border border-border bg-card px-2.5 pr-7 text-xs text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:border-primary focus:ring-2 focus:ring-ring";
+
+/** Toolbar select that shrinks to the current option label (not a fixed width). */
+function DocumentLibraryFilterSelect({
+  "aria-label": ariaLabel,
+  value,
+  onChange,
+  options,
+}: {
+  "aria-label": string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const selectedLabel = options.find((o) => o.value === value)?.label ?? options[0]?.label ?? "";
+
+  return (
+    <div className="w-fit max-w-full shrink-0">
+      <PortalToolbarSelectWrap className="w-fit max-w-full">
+        <div className="grid w-fit max-w-full [&>select]:col-start-1 [&>select]:row-start-1">
+          <span
+            aria-hidden
+            className="invisible col-start-1 row-start-1 max-w-full truncate whitespace-nowrap px-2.5 pr-7 text-xs"
+          >
+            {selectedLabel}
+          </span>
+          <select
+            className={DOCUMENT_LIBRARY_FILTER_SELECT}
+            aria-label={ariaLabel}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            {options.map((o) => (
+              <option key={o.value || "__all__"} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </PortalToolbarSelectWrap>
+    </div>
+  );
+}
+
 export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
@@ -110,6 +156,27 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const [vendorRows, setVendorRows] = useState<ManagerVendorRow[]>([]);
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
+
+  const categoryFilterOptions = useMemo(
+    () => [
+      { value: "", label: "All categories" },
+      ...DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
+    ],
+    [],
+  );
+
+  const scopeFilterOptions = useMemo(
+    () => SCOPE_FILTERS.map((s) => ({ value: s.id, label: s.label })),
+    [],
+  );
+
+  const propertyFilterOptions = useMemo(
+    () => [
+      { value: "", label: "All properties" },
+      ...propertyOptions.map((p) => ({ value: p.id, label: p.label })),
+    ],
+    [propertyOptions],
+  );
 
   useEffect(() => {
     const q = searchParams.get("expiry") ?? "";
@@ -436,45 +503,25 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
           aria-label="Search documents"
           data-attr="document-search"
         />
-        <Select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="h-8 max-w-[9rem] shrink-0 text-sm"
+        <DocumentLibraryFilterSelect
           aria-label="Filter by category"
-        >
-          <option value="">All categories</option>
-          {DOCUMENT_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {DOCUMENT_CATEGORY_LABELS[c]}
-            </option>
-          ))}
-        </Select>
-        <Select
-          value={scopeFilter}
-          onChange={(e) => setScopeFilter(e.target.value)}
-          className="h-8 max-w-[8.5rem] shrink-0 text-sm"
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          options={categoryFilterOptions}
+        />
+        <DocumentLibraryFilterSelect
           aria-label="Filter by scope"
-        >
-          {SCOPE_FILTERS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </Select>
+          value={scopeFilter}
+          onChange={setScopeFilter}
+          options={scopeFilterOptions}
+        />
         {propertyOptions.length > 0 ? (
-          <Select
-            value={propertyFilter}
-            onChange={(e) => setPropertyFilter(e.target.value)}
-            className="h-8 max-w-[9.5rem] shrink-0 text-sm"
+          <DocumentLibraryFilterSelect
             aria-label="Filter by property"
-          >
-            <option value="">All properties</option>
-            {propertyOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
+            value={propertyFilter}
+            onChange={setPropertyFilter}
+            options={propertyFilterOptions}
+          />
         ) : null}
         <Button
           type="button"
