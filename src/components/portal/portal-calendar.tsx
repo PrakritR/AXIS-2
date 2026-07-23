@@ -32,6 +32,7 @@ import {
 import { buildManagerPropertyFilterOptions, MANAGER_PORTFOLIO_REFRESH_EVENTS } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
+import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
 
 type CopyRange = "week" | "future" | "all";
 
@@ -485,6 +486,11 @@ export function PortalCalendar({
           ) : undefined
         }
       >
+        {portal === "manager" ? (
+          <div className="mb-4">
+            <TourProposalsPanel />
+          </div>
+        ) : null}
         {propertiesLoading && managerProperties.length === 0 ? (
           <p className="text-sm text-muted">Loading houses from the backend…</p>
         ) : (

@@ -22,6 +22,13 @@ export type ManagerAutomationSettings = {
   lateFeeNoticeEnabled: boolean;
   lateFeeNoticeDaysAfterDue: number;
   sameDayReminderEnabled: boolean;
+  /**
+   * Opt-in (default OFF): when a new pending tour inquiry arrives, PropLane
+   * proposes confirming it into the first matching open slot as an approval item
+   * the manager must accept. It NEVER books or emails the tenant on its own —
+   * approval flows through the same preview/confirm gate as every other write.
+   */
+  proposeTourConfirmations: boolean;
   templates: {
     preDue: ReminderTemplate;
     overdue: ReminderTemplate;
@@ -45,6 +52,7 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   lateFeeNoticeEnabled: true,
   lateFeeNoticeDaysAfterDue: 5,
   sameDayReminderEnabled: true,
+  proposeTourConfirmations: false,
   templates: {
     preDue: {
       subject: "Payment due in {daysUntilDue}: {chargeTitle}",
@@ -220,6 +228,9 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
       Math.min(30, Math.round(Number(row.lateFeeNoticeDaysAfterDue ?? base.lateFeeNoticeDaysAfterDue) || base.lateFeeNoticeDaysAfterDue)),
     ),
     sameDayReminderEnabled: row.sameDayReminderEnabled !== false,
+    // Opt-in: OFF unless the manager explicitly saved `true`. Same idiom as
+    // overdueDailyEnabled — no saved value must never auto-enable a proposal.
+    proposeTourConfirmations: row.proposeTourConfirmations === true,
     templates: {
       preDue: normalizeTemplate(templatesRaw.preDue, base.templates.preDue),
       overdue: normalizeTemplate(templatesRaw.overdue, base.templates.overdue),

@@ -3,14 +3,13 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { resolveAgentContext, type AgentContext } from "@/lib/tools/context";
 import { agentRegistry } from "@/lib/tools";
 import {
-  claimPendingAction,
   createPendingAction,
   denyPendingAction,
-  markPendingActionFailed,
 } from "@/lib/tools/pending-actions";
+import { runConfirmedPendingAction } from "@/lib/tools/confirm-gate.server";
 import { runAgentTurn } from "@/lib/agent/loop";
 import { track } from "@/lib/analytics/posthog";
-import { traceAgentAction, traceAgentTurn } from "@/lib/observability/langfuse";
+import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { executeDispatch } from "@/lib/work-order-dispatch.server";
 
 export const runtime = "nodejs";
@@ -25,37 +24,12 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
  * never trusted at confirm time.
  */
 async function confirmAction(ctx: AgentContext, actionId: string) {
-  const claimed = await claimPendingAction(ctx, actionId);
-  if (!claimed) {
-    return NextResponse.json(
-      { error: "This action is no longer available. Ask the assistant again." },
-      { status: 410 },
-    );
+  const result = await runConfirmedPendingAction(ctx, actionId);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
-  const tool = agentRegistry.get(claimed.toolName);
-  const parsed = tool?.kind === "write" ? tool.inputSchema.safeParse(claimed.input) : null;
-  if (!tool || !parsed?.success) {
-    await markPendingActionFailed(ctx, actionId);
-    return NextResponse.json({ error: "This action could not be executed." }, { status: 400 });
-  }
-  try {
-    const result = (await traceAgentAction(ctx, claimed.toolName, { actionId, toolInput: parsed.data }, () =>
-      tool.handler(ctx, parsed.data),
-    )) as { reply?: string };
-    track("assistant_action_confirmed", ctx.userId, { action: claimed.toolName });
-    return NextResponse.json({
-      reply: result.reply ?? "Done.",
-      toolTrace: [{ tool: claimed.toolName, ok: true }],
-    });
-  } catch (e) {
-    console.error("[agent/chat] confirm action failed:", e);
-    // The claim already flipped the row to "executed"; record the truth. The
-    // user re-asks the assistant for a fresh proposal (no blind retry of a
-    // possibly partially-executed handler).
-    await markPendingActionFailed(ctx, actionId);
-    const message = e instanceof Error ? e.message : "The assistant ran into an error. Please try again.";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
+  track("assistant_action_confirmed", ctx.userId, { action: result.toolName });
+  return NextResponse.json({ reply: result.reply, toolTrace: [{ tool: result.toolName, ok: true }] });
 }
 
 export async function POST(req: Request) {
