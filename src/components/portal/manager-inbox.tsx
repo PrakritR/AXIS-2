@@ -919,7 +919,7 @@ export const ManagerInbox = forwardRef<
             const msgs = inboxThreadMessages(thread);
             const lastMsg = msgs[msgs.length - 1];
             const folder = thread.folder === "trash" ? inferPreviousFolder(thread) : thread.folder;
-            const lastOutbound = msgs.length > 1 ? true : folder === "sent";
+            const lastOutbound = lastMsg?.outbound ?? (msgs.length > 1 ? true : folder === "sent");
             return (
               <InboxConversationRow
                 key={thread.id}

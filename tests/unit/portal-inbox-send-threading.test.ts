@@ -28,7 +28,17 @@ function makeFakeDb() {
   function makeQuery(table: string) {
     const rows = () => (tables[table] ??= []);
     const filters: [string, unknown][] = [];
-    const match = (r: StoredRow) => filters.every(([c, v]) => (r as Record<string, unknown>)[c] === v);
+    const resolveColumn = (r: StoredRow, col: string): unknown => {
+      const jsonPath = col.match(/^(\w+)->>(\w+)$/);
+      if (jsonPath) {
+        const [, column, key] = jsonPath;
+        const nested = (r as Record<string, unknown>)[column!];
+        const value = nested && typeof nested === "object" ? (nested as Record<string, unknown>)[key!] : undefined;
+        return value == null ? value : String(value);
+      }
+      return (r as Record<string, unknown>)[col];
+    };
+    const match = (r: StoredRow) => filters.every(([c, v]) => resolveColumn(r, c) === v);
     const builder = {
       select() {
         return builder;

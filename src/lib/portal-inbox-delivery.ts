@@ -176,12 +176,15 @@ async function findExistingPortalMessageThread(
   const matchVal = side.folder === "sent" ? side.ownerUserId : side.participantEmail;
   if (!matchVal) return null;
 
+  const otherPartyNormalized = side.otherPartyEmail.trim().toLowerCase();
   const { data } = await db
     .from("portal_inbox_thread_records")
     .select("id, row_data, owner_user_id, participant_email, scope, updated_at")
     .eq("scope", side.scope)
     .eq("thread_type", "portal_message")
     .eq(matchCol, matchVal)
+    .eq("row_data->>folder", side.folder)
+    .eq("row_data->>email", otherPartyNormalized)
     .order("updated_at", { ascending: false })
     .limit(100);
 
