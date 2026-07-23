@@ -326,19 +326,29 @@ describe("backfillInboundEmailBody", () => {
     expect(storedRowData(db, "abc-123").body).toBe("The actual support question");
   });
 
-  it("leaves the placeholder in place when the fetch fails, so a redelivery can backfill it", async () => {
+  it("rides out a transient blip within one pass — no redelivery needed", async () => {
     const db = fakeDb();
     await ingestInboundEmail(PARSED_NO_BODY, db as never);
 
-    mockBodyFetch(null);
-    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
-    expect(storedRowData(db, "abc-123").body).toBe(INBOUND_EMAIL_BODY_PLACEHOLDER);
+    let call = 0;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      call += 1;
+      return call < 3 ? new Response("nope", { status: 502 }) : Response.json({ data: { text: "healed" } });
+    });
 
-    // Redelivery: the insert no-ops, but the enrichment still lands the body.
-    expect((await ingestInboundEmail(PARSED_NO_BODY, db as never)).created).toBe(false);
-    mockBodyFetch("Arrived on the retry");
     expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(true);
-    expect(storedRowData(db, "abc-123").body).toBe("Arrived on the retry");
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(storedRowData(db, "abc-123").body).toBe("healed");
+  });
+
+  it("leaves the placeholder in place once the bounded retry is exhausted", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+
+    const fetchSpy = mockBodyFetch(null);
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
+    expect(fetchSpy).toHaveBeenCalledTimes(3); // bounded, not indefinite
+    expect(storedRowData(db, "abc-123").body).toBe(INBOUND_EMAIL_BODY_PLACEHOLDER);
   });
 
   it("never clobbers a body that already landed, nor the admin's read/thread state", async () => {
@@ -368,6 +378,24 @@ describe("backfillInboundEmailBody", () => {
     await ingestInboundEmail(PARSED, db as never);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     expect((await backfillInboundEmailBody(PARSED, db as never)).updated).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("checks the stored row before spending a Resend round trip on an enriched thread", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+    const fetchSpy = mockBodyFetch("already here");
+    await backfillInboundEmailBody(PARSED_NO_BODY, db as never);
+
+    fetchSpy.mockClear();
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch for a thread that was never inserted", async () => {
+    const db = fakeDb();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

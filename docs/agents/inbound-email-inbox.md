@@ -72,18 +72,27 @@ used for outbound, and that fetch is **best-effort** with an 8s timeout.
 The order matters and is deliberate:
 
 1. `ingestInboundEmail` inserts the thread from metadata alone, with
-   `INBOUND_EMAIL_BODY_PLACEHOLDER` as the body. A hung or failing body lookup can
-   therefore never cost us the email, and the ≤8s fetch stays off the webhook
-   response path (an over-long response makes Svix record a failed delivery).
-2. `backfillInboundEmailBody` then runs in `after()` and swaps in the real body —
-   **only if the stored body is still exactly the placeholder** (guarded again in
-   the `UPDATE` itself). That is what keeps a backfill from clobbering a body that
-   already landed, or the admin's `read`/`thread` state around it.
+   `INBOUND_EMAIL_BODY_PLACEHOLDER` as the body. **That is what the split buys:** a
+   hung or failing body lookup can never cost us the email, and the ≤8s fetch stays
+   off the webhook response path (an over-long response makes Svix record a failed
+   delivery). Do not resolve the body before the insert again.
+2. `backfillInboundEmailBody` then runs in `after()`: it reads the row, bails
+   immediately unless the stored body is still exactly the placeholder (so an
+   already-enriched thread costs no Resend round trip), resolves the body with a
+   **bounded retry** — 3 attempts, ~500ms then ~1s apart, each keeping its own 8s
+   timeout — and swaps it in. The `UPDATE` re-checks the placeholder in its own
+   `WHERE`, which is what keeps a backfill from clobbering a body that already
+   landed.
 
-Because the guard is the placeholder and not a "done" flag, a **redelivery
-backfills a body an earlier transient failure could not retrieve**: the insert
-no-ops on the unique violation, and the enrichment pass still runs. Do not resolve
-the body before the insert again — that bakes the placeholder in permanently.
+The retry is load-bearing, not belt-and-braces: the route acks **200**, so Resend
+does **not** redeliver, and nothing else will come along later to fill in a body
+that a transient blip lost. A redelivery only happens if the insert itself 500s.
+
+Known residual: the `UPDATE` writes back the `row_data` snapshot read a round trip
+earlier, so an admin who marks the thread read (or replies) inside that sub-second
+window on a brand-new row would have it undone. Accepted — recoverable, not lost
+mail, and closing it needs a jsonb-merge RPC plus the migration this feature
+deliberately ships without.
 
 If Resend routes received mail through a different API base for your account, set
 `RESEND_INBOUND_API_BASE`.

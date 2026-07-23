@@ -12,8 +12,8 @@
  * Resend inbound webhooks carry metadata only (from/to/subject/id); the body is
  * fetched separately from Resend's received-email API. The thread row is written
  * from the metadata FIRST and the body is filled in by a best-effort second pass,
- * so a slow or failing lookup can never cost us the email — and a redelivery can
- * still backfill a body an earlier attempt failed to retrieve.
+ * so a slow or failing lookup can never cost us the email nor stall the webhook
+ * response; that pass retries a bounded number of times to ride out a blip.
  */
 import { buildPortalInboxThreadUpsert } from "@/lib/portal-inbox-thread-upsert";
 import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
@@ -248,20 +248,35 @@ export async function ingestInboundEmail(
 }
 
 /**
+ * Backoff between body-resolution attempts. Bounded on purpose: the enrichment
+ * runs in after(), so a blip should self-heal here rather than wait for a
+ * redelivery that — because the webhook already acked 200 — normally never comes.
+ */
+const INBOUND_EMAIL_BODY_RETRY_DELAYS_MS = [500, 1_000];
+
+async function resolveInboundEmailBodyWithRetry(parsed: ParsedInboundEmail): Promise<string> {
+  for (let attempt = 0; ; attempt += 1) {
+    const body = await resolveInboundEmailBody(parsed);
+    if (body) return body;
+    const delay = INBOUND_EMAIL_BODY_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined) return "";
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
+/**
  * Best-effort second pass that replaces the placeholder body with the real one
- * once Resend's received-email API answers. Safe to run on every delivery,
- * including a redelivery of an email whose first body fetch failed: it writes
- * only when the stored body is STILL the placeholder, so a body that already
- * landed — and the admin's read/thread state around it — is never overwritten.
+ * once Resend's received-email API answers, retrying a few times so a transient
+ * blip heals itself. It reads the stored row first and writes only while the
+ * body is STILL the placeholder, so a body that already landed — and the admin's
+ * read/thread state around it — is never overwritten, and an already-enriched
+ * thread costs no Resend round trip at all.
  */
 export async function backfillInboundEmailBody(
   parsed: ParsedInboundEmail,
   db = createSupabaseServiceRoleClient(),
 ): Promise<{ updated: boolean }> {
   if (inlineInboundEmailBody(parsed)) return { updated: false };
-
-  const body = await resolveInboundEmailBody(parsed);
-  if (!body) return { updated: false };
 
   const id = inboundEmailThreadId(parsed.emailId);
   const { data, error } = await db
@@ -276,6 +291,17 @@ export async function backfillInboundEmailBody(
   const current = rowData as Record<string, unknown>;
   if (current.body !== INBOUND_EMAIL_BODY_PLACEHOLDER) return { updated: false };
 
+  const body = await resolveInboundEmailBodyWithRetry(parsed);
+  if (!body) return { updated: false };
+
+  // The `row_data->>body` filter is the real guard: it makes the write lose to
+  // anything that already replaced the placeholder. It does not cover the rest
+  // of row_data, so an admin who marks this thread read (or replies) in the
+  // sub-second gap between the select above and this update would have that
+  // undone — accepted, because it can only happen on a brand-new row before any
+  // realistic admin interaction, it is recoverable rather than lost mail, and
+  // closing it would need a jsonb-merge RPC and the migration this feature
+  // deliberately ships without.
   const { error: updateError } = await db
     .from("portal_inbox_thread_records")
     .update({ row_data: { ...current, body }, updated_at: new Date().toISOString() })

@@ -95,8 +95,8 @@ export async function POST(req: Request) {
   }
 
   // The mail is safely stored; fetching its body is enrichment, so it runs off
-  // the response path. Runs on a redelivery too, to backfill a body an earlier
-  // attempt could not retrieve.
+  // the response path — where it can afford to retry, since acking 200 means no
+  // redelivery is coming to try again for us.
   const enrich = () =>
     backfillInboundEmailBody(parsed).catch((e) =>
       console.warn("inbound-email body backfill errored", parsed.emailId, e),
