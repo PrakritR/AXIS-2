@@ -5,7 +5,8 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
-import { INBOX_TAB_DEFS, INBOX_LIST_SCROLL, InboxBubbleMessage, InboxComposer, InboxConversationRow, InboxThreadEmpty, InboxThreadView, InboxTwoPane, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import { INBOX_TAB_DEFS, INBOX_LIST_SCROLL, InboxBubbleMessage, InboxComposer, InboxConversationRow, InboxScheduledCard, InboxThreadEmpty, InboxThreadView, InboxTwoPane, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import { scheduledItemsForRecipient } from "@/lib/inbox-scheduled-thread";
 import {
   PortalInboxSelectionToolbar,
   sendManualScheduledMessageNow,
@@ -279,6 +280,9 @@ export const ResidentInboxPanel = forwardRef<
   }, [embeddedInCommunication, onTabCountsChange, tabCountsForParent]);
 
   const rowsForTab = useMemo(() => {
+    // "all" = the unified conversation list (inbox + sent, no trash) for the
+    // tabless Communication view.
+    if (tabId === "all") return emailThreads.filter((t) => t.folder !== "trash");
     if (tabId === "unopened")
       return emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
     if (tabId === "opened") return emailThreads.filter((t) => t.folder === "inbox" && !t.unread);
@@ -763,9 +767,77 @@ export const ResidentInboxPanel = forwardRef<
         body: m.body,
         at: m.at,
         direction: outbound ? "outbound" : "inbound",
+        channel: "email",
       } satisfies InboxBubbleMessage;
     });
   }, [activeThread, activeFolder]);
+
+  // Scheduled messages the resident has queued to this conversation's manager —
+  // shown inline as compact cards. Residents may cancel or send now, but not
+  // edit content (the resident scheduled-message route only patches status).
+  const [expandedScheduledId, setExpandedScheduledId] = useState<string | null>(null);
+  const [scheduledBusyId, setScheduledBusyId] = useState<string | null>(null);
+  useEffect(() => {
+    setExpandedScheduledId(null);
+  }, [expandedId]);
+
+  const threadScheduledItems = useMemo(
+    () => (activeThread ? scheduledItemsForRecipient(activeThread.email, scheduledMessages, []) : []),
+    [activeThread, scheduledMessages],
+  );
+
+  const cancelResidentScheduled = useCallback(
+    async (id: string) => {
+      setScheduledBusyId(id);
+      try {
+        await toggleScheduledCancelled(id, true);
+        setExpandedScheduledId((cur) => (cur === id ? null : cur));
+      } finally {
+        setScheduledBusyId(null);
+      }
+    },
+    [toggleScheduledCancelled],
+  );
+
+  const sendResidentScheduledNow = useCallback(
+    async (id: string) => {
+      setScheduledBusyId(id);
+      try {
+        await sendManualScheduledMessageNow(id, { asResident: true });
+        showToast("Message sent.");
+        setExpandedScheduledId((cur) => (cur === id ? null : cur));
+        void reloadScheduledMessages();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not send message.");
+      } finally {
+        setScheduledBusyId(null);
+      }
+    },
+    [reloadScheduledMessages, showToast],
+  );
+
+  const residentScheduledCards =
+    activeThread && activeThread.folder !== "trash" && threadScheduledItems.length > 0 ? (
+      <div className="space-y-1.5 pt-1">
+        {threadScheduledItems.map((item) => (
+          <InboxScheduledCard
+            key={item.id}
+            sendLabel={item.sendLabel}
+            subject={item.subject}
+            body={item.body}
+            meta={item.meta}
+            channel={item.channel}
+            source={item.source}
+            editable={false}
+            busy={scheduledBusyId === item.id}
+            expanded={expandedScheduledId === item.id}
+            onToggleExpand={() => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))}
+            onCancel={() => void cancelResidentScheduled(item.id)}
+            onSendNow={() => void sendResidentScheduledNow(item.id)}
+          />
+        ))}
+      </div>
+    ) : null;
 
   const openThread = useCallback(
     (thread: InboxThread) => {
@@ -879,6 +951,7 @@ export const ResidentInboxPanel = forwardRef<
               }
               subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
               messages={activeBubbles}
+              afterMessages={residentScheduledCards}
               threadKey={activeThread.id}
               onBack={() => setExpandedId(null)}
               headerActions={
@@ -1001,6 +1074,7 @@ export const ResidentInboxPanel = forwardRef<
                 }
                 subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
                 messages={activeBubbles}
+                afterMessages={residentScheduledCards}
                 threadKey={activeThread.id}
                 onBack={() => setExpandedId(null)}
                 headerActions={

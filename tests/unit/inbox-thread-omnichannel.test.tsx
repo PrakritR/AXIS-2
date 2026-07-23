@@ -41,7 +41,30 @@ describe("inbox thread omnichannel primitives", () => {
     expect(screen.getByText("Email")).toBeTruthy();
   });
 
-  it("renders a scheduled message inline with cancel + send-now actions", () => {
+  it("renders a scheduled message COMPACT by default — summary only, no body/actions", () => {
+    const { container } = render(
+      <InboxScheduledCard
+        sendLabel="Jul 25, 2026, 9:00 AM"
+        subject="Rent reminder"
+        body={LONG}
+        source="manual"
+        editable
+        expanded={false}
+        onToggleExpand={vi.fn()}
+        onCancel={vi.fn()}
+        onSendNow={vi.fn()}
+        onSaveEdit={vi.fn()}
+      />,
+    );
+    // Compact summary row is present and clickable to expand…
+    expect(container.querySelector('[data-attr="inbox-scheduled-toggle"]')).toBeTruthy();
+    // …but the full body and actions are hidden until expanded (compact).
+    expect(screen.queryByText(LONG)).toBeNull();
+    expect(screen.queryByText("Send now")).toBeNull();
+    expect(screen.queryByText("Cancel send")).toBeNull();
+  });
+
+  it("expanded, shows the full body and Cancel/Send-now actions that fire", () => {
     const onCancel = vi.fn();
     const onSendNow = vi.fn();
     render(
@@ -51,16 +74,43 @@ describe("inbox thread omnichannel primitives", () => {
         body={LONG}
         source="manual"
         editable
+        expanded
+        onToggleExpand={vi.fn()}
         onCancel={onCancel}
         onSendNow={onSendNow}
+        onSaveEdit={vi.fn()}
       />,
     );
-    expect(screen.getByText(/Scheduled · sends Jul 25/)).toBeTruthy();
     // Full scheduled body is shown, not truncated.
     expect(screen.getByText(LONG)).toBeTruthy();
     fireEvent.click(screen.getByText("Cancel send"));
     fireEvent.click(screen.getByText("Send now"));
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onSendNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("expanded + editable, Edit swaps to inline textareas and Save persists edits", () => {
+    const onSaveEdit = vi.fn();
+    render(
+      <InboxScheduledCard
+        sendLabel="Jul 25"
+        subject="Rent reminder"
+        body="Original body"
+        source="manual"
+        editable
+        expanded
+        onToggleExpand={vi.fn()}
+        onCancel={vi.fn()}
+        onSendNow={vi.fn()}
+        onSaveEdit={onSaveEdit}
+      />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+    const bodyField = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
+    expect(bodyField).toBeTruthy();
+    fireEvent.change(bodyField, { target: { value: "Edited body" } });
+    fireEvent.click(screen.getByText("Save"));
+    expect(onSaveEdit).toHaveBeenCalledTimes(1);
+    expect(onSaveEdit.mock.calls[0][0]).toMatchObject({ body: "Edited body" });
   });
 });

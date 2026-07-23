@@ -5,45 +5,39 @@ import { Button } from "@/components/ui/button";
 import { AdminInboxClient, type AdminInboxClientHandle, type AdminInboxTabCounts } from "@/components/portal/admin-inbox-client";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 
 export type AdminEmailTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 
 const ADMIN_COMM_BASE = "/admin/communication";
 
-export function AdminCommunication({ inboxTabId = "unopened" }: { inboxTabId?: AdminEmailTabId }) {
-  const navigate = usePortalNavigate();
+export function AdminCommunication({
+  smsUiEnabled = false,
+}: {
+  /** @deprecated Folder tabs removed — kept so legacy routes still resolve. */
+  inboxTabId?: AdminEmailTabId;
+  /**
+   * Server-resolved SMS Communication UI flag. When false (default) the "Text
+   * messages" panel is hidden entirely — transport, webhooks, and both SMS
+   * agents are unaffected.
+   */
+  smsUiEnabled?: boolean;
+}) {
   const inboxRef = useRef<AdminInboxClientHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);
-  const [emailTabCounts, setEmailTabCounts] = useState<AdminInboxTabCounts>({
-    unopened: 0,
-    opened: 0,
-    schedule: 0,
-    sent: 0,
-    trash: 0,
-  });
+  // Trashed/archived conversations are reachable via a toggle, not a folder tab.
+  const [showArchived, setShowArchived] = useState(false);
+  const [trashCount, setTrashCount] = useState(0);
   const handleEmailTabCountsChange = useCallback((counts: AdminInboxTabCounts) => {
-    setEmailTabCounts(counts);
+    setTrashCount(counts.trash);
   }, []);
 
-  const statusPills = (
-    <ManagerPortalStatusPills
-      activeTone="primary"
-      tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-        id,
-        label,
-        count: emailTabCounts[id as keyof AdminInboxTabCounts],
-      }))}
-      activeId={inboxTabId}
-      onChange={(id) => navigate(`${ADMIN_COMM_BASE}/inbox/${id}`)}
-    />
-  );
+  // "all" = one list of every live conversation; "trash" = the archived view.
+  const viewTabId: "all" | "trash" = showArchived ? "trash" : "all";
 
   const titleAside = (
     <>
-      {inboxTabId === "trash" && emailTabCounts.trash > 0 ? (
+      {showArchived && trashCount > 0 ? (
         <Button
           type="button"
           variant="outline"
@@ -53,6 +47,16 @@ export function AdminCommunication({ inboxTabId = "unopened" }: { inboxTabId?: A
           Delete all trash
         </Button>
       ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="admin-inbox-archived-toggle"
+        aria-pressed={showArchived}
+        onClick={() => setShowArchived((v) => !v)}
+      >
+        {showArchived ? "← Conversations" : `Archived${trashCount > 0 ? ` (${trashCount})` : ""}`}
+      </Button>
       <Button
         type="button"
         variant="primary"
@@ -65,17 +69,17 @@ export function AdminCommunication({ inboxTabId = "unopened" }: { inboxTabId?: A
   );
 
   return (
-    <PortalCommunicationShell title="Communication" titleAside={titleAside} statusPills={statusPills}>
+    <PortalCommunicationShell title="Communication" titleAside={titleAside}>
       <div className="space-y-6">
         <AdminInboxClient
           ref={inboxRef}
-          tabId={inboxTabId}
+          tabId={viewTabId}
           commBase={`${ADMIN_COMM_BASE}/inbox`}
           embeddedInCommunication
           externalTitleActions
           onTabCountsChange={handleEmailTabCountsChange}
         />
-        {inboxTabId !== "trash" ? (
+        {smsUiEnabled && !showArchived ? (
           <section className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-foreground">Text messages</h2>

@@ -50,6 +50,13 @@ function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
   }));
 }
 
+function threadSortMs(t: InboxThread): number {
+  const idMatch = t.id.match(/(\d{10,})/);
+  if (idMatch) return parseInt(idMatch[1]!, 10);
+  const parsed = Date.parse(t.time ?? "");
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function countThreads(threads: InboxThread[]) {
   return {
     unopened: threads.filter((t) => t.folder === "inbox" && t.unread).length,
@@ -199,6 +206,13 @@ export const VendorInboxPanel = forwardRef<
   }, [embeddedInCommunication, onTabCountsChange, tabCountsForParent]);
 
   const rowsForTab = useMemo(() => {
+    // "all" = one unified list of every live conversation (inbox + sent),
+    // excluding trash, sorted newest-first. Trash stays reachable on its own tab.
+    if (tabId === "all")
+      return emailThreads
+        .filter((t) => t.folder !== "trash")
+        .slice()
+        .sort((a, b) => threadSortMs(b) - threadSortMs(a));
     if (tabId === "unopened")
       return emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
     if (tabId === "opened") return emailThreads.filter((t) => t.folder === "inbox" && !t.unread);

@@ -425,7 +425,7 @@ export async function renderPortalSection(
       const emailTab = tabParts[1] ?? "unopened";
       if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
       if (tabParts.length > 2) notFound();
-      return <AdminCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} />;
+      return <AdminCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} smsUiEnabled={isSmsCommUiEnabled()} />;
     }
     notFound();
   }
@@ -742,7 +742,7 @@ export async function renderPortalSection(
       if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
       if (tabParts.length > 2) notFound();
       return (
-        <ResidentCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} />
+        <ResidentCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} smsUiEnabled={isSmsCommUiEnabled()} />
       );
     }
     notFound();
@@ -810,7 +810,7 @@ export async function renderPortalSection(
       const emailTab = tabParts[1] ?? "unopened";
       if (!["unopened", "opened", "sent", "trash"].includes(emailTab)) notFound();
       if (tabParts.length > 2) notFound();
-      return <VendorCommunication inboxTabId={emailTab as "unopened" | "opened" | "sent" | "trash"} />;
+      return <VendorCommunication inboxTabId={emailTab as "unopened" | "opened" | "sent" | "trash"} smsUiEnabled={isSmsCommUiEnabled()} />;
     }
     notFound();
   }

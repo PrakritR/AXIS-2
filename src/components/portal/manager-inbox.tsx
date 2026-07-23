@@ -45,9 +45,7 @@ import {
   sendAutomationScheduledMessageNow,
 } from "@/components/portal/portal-inbox-selection";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
-import { ScheduleInboxComposeForm } from "@/components/portal/schedule-inbox-compose-modal";
 import {
-  ScheduledMessageEditForm,
   patchScheduledMessage,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
@@ -699,6 +697,37 @@ export const ManagerInbox = forwardRef<
     [reloadScheduled, reloadInbox, showToast],
   );
 
+  // Inline edit of a scheduled message's subject/body, saved in place.
+  const saveScheduledEdit = useCallback(
+    async (
+      item: { id: string; source: "manual" | "automation" },
+      next: { subject: string; body: string },
+    ) => {
+      if (item.source === "manual") {
+        const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ subject: next.subject, body: next.body }),
+        });
+        if (!res.ok) {
+          showToast(await readPortalApiError(res, "Could not save changes."));
+          return;
+        }
+      } else {
+        try {
+          await patchScheduledMessage(item.id, { customSubject: next.subject, customBody: next.body });
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : "Could not save changes.");
+          return;
+        }
+      }
+      showToast("Scheduled message updated.");
+      reloadScheduled();
+    },
+    [reloadScheduled, showToast],
+  );
+
   const openThread = useCallback(
     (thread: InboxThread) => {
       setExpandedId(thread.id);
@@ -1061,65 +1090,25 @@ export const ManagerInbox = forwardRef<
 
   const scheduledCards =
     activeThread && activeThread.folder !== "trash" && threadScheduledItems.length > 0 ? (
-      <div className="space-y-2 pt-1">
-        {threadScheduledItems.map((item) => {
-          const editPanel =
-            item.editable && expandedScheduledId === item.id
-              ? item.source === "manual"
-                ? (() => {
-                    const record = manualScheduledMessages.find((m) => m.id === item.id);
-                    return record ? (
-                      <ScheduleInboxComposeForm
-                        contacts={liveContacts}
-                        editMessage={record}
-                        onSaved={reloadScheduled}
-                        onClose={() => setExpandedScheduledId(null)}
-                        onToggleCancelled={async (cancelled) => {
-                          if (cancelled) await cancelScheduledItem(item);
-                        }}
-                        onSendNow={async () => {
-                          await sendScheduledItemNow(item);
-                        }}
-                      />
-                    ) : null;
-                  })()
-                : (() => {
-                    const record = scheduledMessages.find((m) => m.id === item.id);
-                    return record ? (
-                      <ScheduledMessageEditForm
-                        message={record}
-                        onSaved={reloadScheduled}
-                        onClose={() => setExpandedScheduledId(null)}
-                        onSendNow={async () => {
-                          await sendScheduledItemNow(item);
-                        }}
-                      />
-                    ) : null;
-                  })()
-              : null;
-          return (
-            <InboxScheduledCard
-              key={item.id}
-              sendLabel={item.sendLabel}
-              subject={item.subject}
-              body={item.body}
-              meta={item.meta}
-              channel={item.channel}
-              source={item.source}
-              editable={item.editable}
-              busy={scheduledBusyId === item.id}
-              expanded={expandedScheduledId === item.id}
-              onToggleExpand={
-                item.editable
-                  ? () => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))
-                  : undefined
-              }
-              onCancel={() => void cancelScheduledItem(item)}
-              onSendNow={() => void sendScheduledItemNow(item)}
-              editPanel={editPanel}
-            />
-          );
-        })}
+      <div className="space-y-1.5 pt-1">
+        {threadScheduledItems.map((item) => (
+          <InboxScheduledCard
+            key={item.id}
+            sendLabel={item.sendLabel}
+            subject={item.subject}
+            body={item.body}
+            meta={item.meta}
+            channel={item.channel}
+            source={item.source}
+            editable={item.editable}
+            busy={scheduledBusyId === item.id}
+            expanded={expandedScheduledId === item.id}
+            onToggleExpand={() => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))}
+            onCancel={() => void cancelScheduledItem(item)}
+            onSendNow={() => void sendScheduledItemNow(item)}
+            onSaveEdit={item.editable ? (next) => saveScheduledEdit(item, next) : undefined}
+          />
+        ))}
       </div>
     ) : null;
 

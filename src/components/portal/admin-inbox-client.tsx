@@ -46,21 +46,26 @@ function formatWhen(iso: string) {
   }
 }
 
-function toAdminTableRows(list: InboxMessage[], tabId: string): PortalInboxTableRow[] {
-  return list.map((row) => ({
-    id: row.id,
-    name: tabId === "sent" ? row.composeRecipientLabel ?? row.name : row.name,
-    email:
-      tabId === "sent" &&
-      (row.composeAudience === "all" ||
-        row.composeAudience === "all_managers" ||
-        row.composeAudience === "all_residents")
-        ? ""
-        : row.email,
-    subject: row.topic,
-    whenLabel: formatWhen(row.createdAt),
-    read: row.read,
-  }));
+function toAdminTableRows(list: InboxMessage[]): PortalInboxTableRow[] {
+  // Display semantics are per-ROW folder, not the active tab — the unified "all"
+  // list mixes inbox (show sender) and sent (show recipient label) rows.
+  return list.map((row) => {
+    const isSent = row.folder === "sent";
+    return {
+      id: row.id,
+      name: isSent ? row.composeRecipientLabel ?? row.name : row.name,
+      email:
+        isSent &&
+        (row.composeAudience === "all" ||
+          row.composeAudience === "all_managers" ||
+          row.composeAudience === "all_residents")
+          ? ""
+          : row.email,
+      subject: row.topic,
+      whenLabel: formatWhen(row.createdAt),
+      read: row.read,
+    };
+  });
 }
 
 const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }[] = [
@@ -539,6 +544,13 @@ export const AdminInboxClient = forwardRef<
   }, [tick]);
 
   const rows = useMemo(() => {
+    // Unified Communication view: ONE list of every live conversation (inbox +
+    // sent), newest first, no folder tabs. Trash is reachable via the archive
+    // toggle. The legacy per-tab callers keep their exact behavior.
+    if (tabId === "all")
+      return all
+        .filter((m) => m.folder === "inbox" || m.folder === "sent")
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     if (tabId === "unopened")
       return all.filter((m) => m.folder === "inbox" && (!m.read || retainedIds.has(m.id)));
     if (tabId === "opened") return all.filter((m) => m.folder === "inbox" && m.read);
@@ -605,7 +617,7 @@ export const AdminInboxClient = forwardRef<
     }
   }, [rows, expandedId]);
 
-  const tableRows = useMemo(() => toAdminTableRows(rows, tabId), [rows, tabId]);
+  const tableRows = useMemo(() => toAdminTableRows(rows), [rows]);
 
   // Opening a message no longer marks it read — reading keeps it in Unopened.
   const toggleExpand = (id: string) => {
@@ -621,7 +633,7 @@ export const AdminInboxClient = forwardRef<
 
   const emptyCopy = inboxTabEmptyCopy(tabId);
 
-  const fromOrToHeader = tabId === "sent" ? "To" : "From";
+  const fromOrToHeader = tabId === "all" ? "From / To" : tabId === "sent" ? "To" : "From";
 
   const bodyById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -688,7 +700,7 @@ export const AdminInboxClient = forwardRef<
           <PortalInboxMessageTable
             rows={tableRows}
             primaryPartyHeader={fromOrToHeader}
-            onMarkRead={tabId === "unopened" ? markRead : undefined}
+            onMarkRead={tabId === "unopened" || tabId === "all" ? markRead : undefined}
             getDetailBody={(row) => bodyById[row.id]}
             getThreadMessages={(row) => {
               const message = rows.find((r) => r.id === row.id);
