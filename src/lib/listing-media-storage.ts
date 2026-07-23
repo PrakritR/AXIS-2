@@ -70,12 +70,13 @@ export function collectSubmissionMediaPaths(sub: ManagerListingSubmissionV1 | nu
  * Egress and storage are a real constraint on the free plan, so deleting a draft
  * must not strand its uploads in the bucket.
  *
- * Uploads are deduplicated per data URL, so two records can legitimately point at
- * the same object — most visibly the two draft rows a partially-failed id re-key
- * leaves behind. `stillReferencedBy` must therefore carry every submission that
- * survives the delete; a path any of them still uses is left alone, because
- * stripping a surviving record's photos is worse than stranding an object.
- * Never throws — losing the cleanup is strictly better than failing the delete
+ * An uploaded object's URL is carried on the submission, not owned by the record
+ * that stored it, so two records can legitimately point at the same object — most
+ * visibly the two draft rows a partially-failed id re-key leaves behind, which
+ * hold the very same submission. `stillReferencedBy` must therefore carry every
+ * submission that survives the delete; a path any of them still uses is left
+ * alone, because stripping a surviving record's photos is worse than stranding
+ * an object. Never throws — losing the cleanup is strictly better than failing the delete
  * the manager asked for.
  */
 export async function deleteSubmissionMediaObjects(
