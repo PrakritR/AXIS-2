@@ -28,8 +28,8 @@ export default function PrivacyPolicyPage() {
               PropLane (&ldquo;we,&rdquo; &ldquo;us&rdquo;) provides property management software operated by PropLane Seattle
               Housing. This policy describes how we collect, use, and protect information when you use the PropLane website
               at{" "}
-              <a href="https://www.axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
-                axis-seattle-housing.com
+              <a href="https://prop-lane.space" className="font-medium text-primary hover:opacity-90">
+                prop-lane.space
               </a>{" "}
               and our iOS and Android mobile applications (collectively, the &ldquo;Service&rdquo;).
             </p>

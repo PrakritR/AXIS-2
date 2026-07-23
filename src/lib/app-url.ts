@@ -12,7 +12,7 @@ function isVercelDeploymentHost(hostname: string): boolean {
 }
 
 /** Canonical, user-facing production domain — the only host outbound emails link to. */
-export const PRODUCTION_APP_ORIGIN = "https://www.axis-seattle-housing.com";
+export const PRODUCTION_APP_ORIGIN = "https://prop-lane.space";
 
 /**
  * Base URL for links embedded in OUTBOUND EMAILS (and other shareable, on-platform

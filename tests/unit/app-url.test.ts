@@ -53,7 +53,7 @@ describe("resolveEmailLinkBaseUrl", () => {
   it("never returns a vercel.app host", () => {
     delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
     process.env.NEXT_PUBLIC_APP_URL = "https://axis-2.vercel.app";
-    expect(resolveEmailLinkBaseUrl()).toBe("https://www.axis-seattle-housing.com");
+    expect(resolveEmailLinkBaseUrl()).toBe("https://prop-lane.space");
   });
 });
 
