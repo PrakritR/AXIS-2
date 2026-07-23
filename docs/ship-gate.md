@@ -1,12 +1,12 @@
 # Ship gate — web + iOS + reviews + feature testing
 
-Use this checklist whenever promoting `main` → `production`, or when finishing a
+Use this checklist whenever promoting `prakrit` → `main`, or when finishing a
 substantial feature. Agents must follow it (see `AGENTS.md` and
 `.cursor/rules/ship-and-review-gate.mdc`).
 
 ## Why
 
-- **Web** deploys from Vercel on every push to `production`.
+- **Web** deploys from Vercel on every push to `main` (the production branch).
 - **iOS** uploads to TestFlight from GitHub Actions on the same push
   (`.github/workflows/ios-testflight.yml`), keeping the Capacitor shell aligned
   with the repo while the WebView loads the live site.
@@ -22,7 +22,7 @@ npm run ship:preflight
 Checks:
 
 - On a clean promote path (or warns about dirty tree)
-- `ios-testflight.yml` present and triggers on `production`
+- `ios-testflight.yml` present and triggers on `main`
 - Capacitor prod URL guard script present
 - Reminds about App Store Connect secrets
 
@@ -60,11 +60,11 @@ Do **not** use `/demo` as the only proof for production-like flows.
 ## Promote
 
 ```bash
-git checkout production
-git pull
-git merge --ff-only main
-git push origin production
 git checkout main
+git pull
+git merge --ff-only prakrit
+git push origin main
+git checkout prakrit
 ```
 
 Then verify:

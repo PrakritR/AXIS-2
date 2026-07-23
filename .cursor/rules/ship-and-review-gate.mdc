@@ -10,9 +10,10 @@ This rule always applies. Do not mark feature work complete or promote to
 
 ## When pushing / promoting to production
 
-1. Promote only via fast-forward: `main` → `production` → `git push origin production`.
+1. Promote only via fast-forward: `prakrit` → `main` → `git push origin main`
+   (`main` is the production branch; there is no `production` branch).
 2. That push must update **web (Vercel)** and **iOS (TestFlight)**:
-   - Workflow: `.github/workflows/ios-testflight.yml` (runs on `push` to `production`).
+   - Workflow: `.github/workflows/ios-testflight.yml` (runs on `push` to `main`).
    - After push, watch the **iOS TestFlight** GitHub Action until success (or report
      missing `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` secrets).
 3. Run `npm run ship:preflight` before promote when the script is available.

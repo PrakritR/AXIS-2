@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Preflight before promoting main → production.
+# Preflight before promoting prakrit → main (main is the production branch).
 # Ensures the iOS TestFlight path exists and reminds agents of the ship gate.
 set -euo pipefail
 
@@ -18,13 +18,13 @@ echo "== Axis ship preflight =="
 
 WF=".github/workflows/ios-testflight.yml"
 if [[ -f "$WF" ]]; then
-  if grep -q "branches: \[production\]" "$WF" && grep -q "fastlane beta" "$WF"; then
-    pass "iOS TestFlight workflow triggers on production and runs fastlane beta"
+  if grep -q "branches: \[main\]" "$WF" && grep -q "fastlane beta" "$WF"; then
+    pass "iOS TestFlight workflow triggers on main and runs fastlane beta"
   else
-    bad "iOS TestFlight workflow missing production trigger or fastlane beta step"
+    bad "iOS TestFlight workflow missing main trigger or fastlane beta step"
   fi
 else
-  bad "missing $WF — production pushes will not upload to TestFlight"
+  bad "missing $WF — pushes to main will not upload to TestFlight"
 fi
 
 if [[ -f "scripts/verify-cap-prod-config.sh" ]]; then
@@ -41,8 +41,8 @@ fi
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 echo "INFO current branch: $BRANCH"
-if [[ "$BRANCH" == "production" ]]; then
-  note "you are on production — prefer merging from main, do not commit unique work here"
+if [[ "$BRANCH" == "main" ]]; then
+  note "you are on main — prefer merging from prakrit, do not commit unique work here"
 fi
 
 if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
