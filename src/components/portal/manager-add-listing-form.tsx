@@ -1119,6 +1119,10 @@ export function ManagerAddListingForm({
   // once a property name exists. A RESUMED draft's id is the drafts-table row
   // key the list surface is rendering, so re-keying it would unmount the editor.
   const draftIdMintedHereRef = useRef(!editDraftId?.trim());
+  // Sticky for the whole wizard session: a dropped attachment is already gone
+  // from the form, so the manager has to be told even when the close that
+  // dropped it went on to fail. Cleared only once a save actually reports it.
+  const droppedAttachmentsRef = useRef(false);
   // Snapshot of what the wizard opened with, captured on the first render and
   // never recomputed. Closing only persists a draft when the manager actually
   // changed something since then — an untouched wizard must not litter the
@@ -2102,22 +2106,22 @@ export function ManagerAddListingForm({
     setClosingDraft(true);
     try {
       let submission = current;
-      let mediaFailed = false;
       try {
         const uploaded = await uploadSubmissionMedia(current);
         submission = uploaded.submission;
-        mediaFailed = uploaded.failedCount > 0;
+        if (uploaded.failedCount > 0) droppedAttachmentsRef.current = true;
         // Keep the uploaded URLs so a retried close does not re-upload the same
         // bytes and orphan the first copies in the bucket.
         setSub(submission);
       } catch (err) {
+        // Per-attachment settling means only a programming error lands here.
         // Photos are worth less than the typed listing: save the draft anyway
         // rather than losing everything to a failed upload — but strip the raw
         // base64 first, so the text saves as a small payload instead of a
         // multi-megabyte blob that would likely fail the write too.
         console.error("manager-add-listing-form: draft media upload failed", err);
         submission = stripSubmissionDataUrls(current);
-        mediaFailed = true;
+        droppedAttachmentsRef.current = true;
       }
       const savedId = await saveManagerPropertyDraftToServer(submission, userId, {
         existingDraftId,
@@ -2126,13 +2130,19 @@ export function ManagerAddListingForm({
         allowIdUpgrade: draftIdMintedHereRef.current,
       });
       if (!savedId) {
-        showToast("Could not save your progress. It is still here — check your connection and close again.");
+        showToast(
+          droppedAttachmentsRef.current
+            ? "Could not save your progress. Your listing is still here, but some attachments couldn't be saved — check your connection and close again."
+            : "Could not save your progress. It is still here — check your connection and close again.",
+        );
         return;
       }
       draftIdRef.current = savedId;
       onSaved?.();
+      const droppedAttachments = droppedAttachmentsRef.current;
+      droppedAttachmentsRef.current = false;
       showToast(
-        mediaFailed
+        droppedAttachments
           ? "Progress saved to Drafts. Some attachments couldn't be saved — add them again next time."
           : "Progress saved to Drafts.",
       );
