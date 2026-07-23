@@ -40,6 +40,24 @@ function projectRefFromUrl(url) {
   return match?.[1] ?? "";
 }
 
+/**
+ * True only when `url` actually points at Apple's OAuth host. Parse the URL and
+ * compare the real hostname against an allowlist — a substring check such as
+ * `url.includes("appleid.apple.com")` would be fooled by a look-alike like
+ * `https://evil.example.net/appleid.apple.com` or
+ * `https://appleid.apple.com.evil.com/` (CodeQL
+ * js/incomplete-url-substring-sanitization).
+ */
+export function isAppleRedirectHost(url) {
+  let host = null;
+  try {
+    host = url ? new URL(url).hostname.toLowerCase() : null;
+  } catch {
+    return false;
+  }
+  return host === "appleid.apple.com" || (host?.endsWith(".appleid.apple.com") ?? false);
+}
+
 async function main() {
   const { supabaseUrl, anonKey } = loadEnv();
   const projectRef = projectRefFromUrl(supabaseUrl);
@@ -72,7 +90,7 @@ async function main() {
   }
 
   const appleUrl = supabaseRes.headers.get("location");
-  if (!appleUrl?.includes("appleid.apple.com")) {
+  if (!isAppleRedirectHost(appleUrl)) {
     console.log(`FAIL — Supabase did not redirect to Apple (status ${supabaseRes.status})`);
     process.exit(1);
   }
@@ -122,7 +140,11 @@ async function main() {
   console.log("Next: open http://localhost:3000/auth/sign-in and click Continue with Apple.");
 }
 
-main().catch((err) => {
-  console.error(err.message ?? err);
-  process.exit(1);
-});
+// Only run the probe when executed directly, so tests can import the exported
+// helpers above without triggering network calls or reading .env.local.
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error(err.message ?? err);
+    process.exit(1);
+  });
+}

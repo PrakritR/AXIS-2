@@ -31,10 +31,21 @@ export function stripManagerAgentCommandWord(text: string): { isCommand: boolean
   return { isCommand: true, rest: raw.replace(re, "").trim() };
 }
 
+/**
+ * Strip trailing sentence punctuation (`.?!,`) in a single linear scan.
+ * A `/[.?!,]+$/` regex backtracks polynomially on a long interior run of those
+ * characters (CodeQL js/polynomial-redos), so trim by hand instead.
+ */
+function stripTrailingPunctuation(value: string): string {
+  let end = value.length;
+  while (end > 0 && ".?!,".includes(value.charAt(end - 1))) end -= 1;
+  return value.slice(0, end);
+}
+
 function extractResidentHint(rest: string, patterns: RegExp[]): string | null {
   for (const re of patterns) {
     const m = rest.match(re);
-    if (m?.[1]?.trim()) return m[1].trim().replace(/[.?!,]+$/g, "").trim() || null;
+    if (m?.[1]?.trim()) return stripTrailingPunctuation(m[1].trim()).trim() || null;
   }
   return null;
 }
@@ -56,10 +67,15 @@ export function classifyManagerAgentCommand(text: string): ClassifiedManagerAgen
 
   // mark payment for X paid | mark X paid | mark payment paid
   if (/\bmark\b/.test(lower) && /\bpaid\b/.test(lower)) {
+    // Capture group anchored to non-whitespace on both ends (`\S(?:.*?\S)?`)
+    // rather than `(.+?)` sitting between two `\s+` delimiters that can all
+    // match the same whitespace — that overlap backtracks polynomially
+    // (CodeQL js/polynomial-redos). The hint is trimmed anyway, so the captured
+    // text is identical for every legitimate command.
     const residentHint = extractResidentHint(rest, [
-      /\bmark\s+payment\s+for\s+(.+?)\s+paid\b/i,
-      /\bmark\s+(.+?)\s+paid\b/i,
-      /\bfor\s+(.+?)\s+paid\b/i,
+      /\bmark\s+payment\s+for\s+(\S(?:.*?\S)?)\s+paid\b/i,
+      /\bmark\s+(\S(?:.*?\S)?)\s+paid\b/i,
+      /\bfor\s+(\S(?:.*?\S)?)\s+paid\b/i,
     ]);
     // Drop the literal word "payment" if it was captured as the hint.
     const cleaned =

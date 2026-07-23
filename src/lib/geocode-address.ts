@@ -53,8 +53,13 @@ export function listingGeocodeQuery(
   // geocodable token and measurably degrades the match - Nominatim either misses
   // or returns a lower-confidence centroid. Strip a unit already embedded in the
   // street line for the same reason; the unit is still shown in the UI.
+  // Match a SINGLE leading separator (`[,\s]`, not `[,\s]+`) before the unit
+  // token: the immediately-following `.replace(/[,\s]+$/, "")` strips any extra
+  // trailing separators the same way, so the final output is identical while the
+  // regex stays linear-time (the `[,\s]+` variant backtracks polynomially on a
+  // long run of whitespace — CodeQL js/polynomial-redos).
   const streetLine = (street || unit)
-    .replace(/[,\s]+(?:apt|apartment|unit|ste|suite|#)\s*[\w-]+\s*$/i, "")
+    .replace(/[,\s](?:apt|apartment|unit|ste|suite|#)\s*[\w-]+\s*$/i, "")
     .replace(/[,\s]+$/, "")
     .trim() || street;
 

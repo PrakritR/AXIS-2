@@ -33,7 +33,11 @@ export function htmlToBlocks(html: string): Block[] {
   const blocks: Block[] = [];
   // Normalize <br> to newlines for the plain-text fallback. Paired block tags
   // are matched intact below, so we must NOT strip their closing tags here.
-  const withBreaks = html.replace(/<\s*br\s*\/?\s*>/gi, "\n");
+  // Single `[\s/]*` class instead of `\s*\/?\s*` (two whitespace quantifiers
+  // straddling an optional slash), which backtracks polynomially on a long run
+  // of spaces inside a `<br …` tag (CodeQL js/polynomial-redos). Matching all
+  // `<br>` / `<br/>` / `< br / >` shapes is unchanged.
+  const withBreaks = html.replace(/<\s*br[\s/]*>/gi, "\n");
   const tagPattern = /<(h1|h2|h3|h4|li|p)[^>]*>([\s\S]*?)<\/\1>/gi;
   let match: RegExpExecArray | null;
   while ((match = tagPattern.exec(withBreaks)) !== null) {
