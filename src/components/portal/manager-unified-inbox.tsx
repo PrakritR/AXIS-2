@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
@@ -32,6 +32,7 @@ import {
 import {
   normalizeManagerSmsConversationsPayload,
   smsConversationDisplayName,
+  smsConversationSubtitle,
   smsThreadHasUnread,
   type ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
@@ -140,7 +141,7 @@ export function ManagerUnifiedInbox({
   const [smsHiddenIds, setSmsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const scheduleCountRef = useRef(0);
+  const [scheduleCount, setScheduleCount] = useState(0);
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
@@ -188,6 +189,14 @@ export function ManagerUnifiedInbox({
   // redundant round-trip on every thread open).
   const handleSmsConversationOpened = useCallback(() => {
     setSmsOpenedIds(loadSmsOpenedIds());
+  }, []);
+
+  // The embedded ManagerInbox only knows about EMAIL, so forwarding its counts
+  // to the parent would wipe the SMS half of every folder badge the moment a
+  // thread pane mounts. Take only the schedule count (which is email-side data
+  // this component never fetches) and let the effect below own the badges.
+  const handleEmbeddedTabCounts = useCallback((counts: { schedule: number }) => {
+    setScheduleCount(counts.schedule);
   }, []);
 
   const filteredEmail = useMemo(() => {
@@ -275,14 +284,22 @@ export function ManagerUnifiedInbox({
           threadId: rowId,
           // Never surface a raw phone number in Communication — show name/unit.
           name: smsConversationDisplayName(resident),
-          subtitle: resident.propertyLabel?.trim() || resident.residentEmail || undefined,
+          subtitle: smsConversationSubtitle(resident) || undefined,
           preview: previewLine(lastMessage.body, 80),
           previewPrefix: lastOutbound ? "You: " : undefined,
           time: iosListTimestamp(lastMessage.createdAt),
           unread,
           sortMs: Date.parse(lastMessage.createdAt) || 0,
         };
-        const haystack = [resident.name, resident.residentEmail, resident.propertyLabel, lastMessage.body]
+        // The phone is hidden in the UI but stays in the search index — a
+        // manager who types a resident's number must still find the thread.
+        const haystack = [
+          resident.name,
+          resident.phone,
+          resident.residentEmail,
+          resident.propertyLabel,
+          lastMessage.body,
+        ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -315,11 +332,11 @@ export function ManagerUnifiedInbox({
     onTabCountsChange?.({
       unopened: filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length + smsUnopened,
       opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length + smsOpened,
-      schedule: scheduleCountRef.current,
+      schedule: scheduleCount,
       sent: filteredEmail.filter((t) => t.folder === "sent").length + smsSent,
       trash: filteredEmail.filter((t) => t.folder === "trash").length,
     });
-  }, [filteredEmail, onTabCountsChange, allSmsItems]);
+  }, [filteredEmail, onTabCountsChange, allSmsItems, scheduleCount]);
 
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
@@ -339,7 +356,7 @@ export function ManagerUnifiedInbox({
         commBase={commBase}
         threadFilters={threadFilters}
         filterContacts={filterContacts}
-        onTabCountsChange={onTabCountsChange}
+        onTabCountsChange={handleEmbeddedTabCounts}
       />
     );
   }
@@ -405,10 +422,7 @@ export function ManagerUnifiedInbox({
         onControlledExpandedIdChange={(id) => {
           if (!id) setSelectedKey(null);
         }}
-        onTabCountsChange={(counts) => {
-          scheduleCountRef.current = counts.schedule;
-          onTabCountsChange?.(counts);
-        }}
+        onTabCountsChange={handleEmbeddedTabCounts}
       />
     ) : selection?.channel === "sms" ? (
       <ManagerSmsPanel

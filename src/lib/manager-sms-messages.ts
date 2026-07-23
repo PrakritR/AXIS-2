@@ -66,22 +66,53 @@ export function isPhoneLikeLabel(value: string | null | undefined): boolean {
   return t.replace(/\D/g, "").length >= 7;
 }
 
+/** What {@link smsConversationDisplayName} and its subtitle read from a row. */
+export type SmsConversationLabelSource = Pick<
+  ManagerSmsResidentConversation,
+  "name" | "propertyLabel" | "residentEmail"
+> &
+  Partial<Pick<ManagerSmsResidentConversation, "phone">>;
+
+/**
+ * A stable, non-raw handle for a conversation with no name, unit or email —
+ * prospect/leasing threads, which would otherwise all collapse onto one shared
+ * label and be indistinguishable from each other in the list. Only the last four
+ * digits appear; the full `+1…` never reaches the UI.
+ */
+function maskedTexterLabel(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (digits.length < 4) return null;
+  return `Texter ····${digits.slice(-4)}`;
+}
+
 /**
  * A display name for an SMS conversation that never surfaces a raw phone number
  * in the UI. Until the Twilio number is production-ready the product shows the
  * resident's name (or their unit/email) instead of `+1…`. SMS threading still
  * keys on the phone/conversation key internally — this only affects the label.
  */
-export function smsConversationDisplayName(
-  resident: Pick<ManagerSmsResidentConversation, "name" | "propertyLabel" | "residentEmail">,
-): string {
+export function smsConversationDisplayName(resident: SmsConversationLabelSource): string {
   const name = resident.name?.trim();
   if (name && !isPhoneLikeLabel(name)) return name;
   const property = resident.propertyLabel?.trim();
   if (property) return property;
   const email = resident.residentEmail?.trim();
   if (email) return email;
-  return "Unknown contact";
+  return maskedTexterLabel(resident.phone) ?? maskedTexterLabel(name) ?? "Unknown contact";
+}
+
+/**
+ * The secondary line under {@link smsConversationDisplayName}. It skips whatever
+ * field the display name already consumed, so a thread whose name fell back to
+ * the unit (or the email) does not print the same string twice.
+ */
+export function smsConversationSubtitle(resident: SmsConversationLabelSource): string {
+  const name = smsConversationDisplayName(resident);
+  const property = resident.propertyLabel?.trim();
+  if (property && property !== name) return property;
+  const email = resident.residentEmail?.trim();
+  if (email && email !== name) return email;
+  return "";
 }
 
 /** How the Communication → SMS list is ordered (replaces Unopened/Opened/Sent folders). */

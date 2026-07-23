@@ -440,7 +440,7 @@ function DemoDashboardShell({
           />
         </AttentionGroup>
 
-        <AttentionGroup title="Inbox" linkLabel="Inbox →">
+        <AttentionGroup title="Communication" linkLabel="Communication →">
           {dashLive ? (
             <IssueRow
               dot={DOT_INFO}

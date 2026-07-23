@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, ChevronLeft, Check, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
@@ -932,20 +932,29 @@ export function InboxThreadView({
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevThreadKeyRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
+  // Stickiness has to be sampled BEFORE the new message is committed — measuring
+  // it inside the effect reads the post-append geometry, which reports "far from
+  // the bottom" for a reader who was in fact pinned there. Default true so a
+  // thread that has never been scrolled follows its tail.
+  const stickToBottomRef = useRef(true);
+  const handleThreadScroll = useCallback(() => {
     const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
+  useEffect(() => {
     const threadChanged = prevThreadKeyRef.current !== threadKey;
     prevThreadKeyRef.current = threadKey;
     // Optional call: scrollIntoView is absent in jsdom / non-DOM environments.
-    if (threadChanged || !el) {
+    if (threadChanged) {
       // Opening a conversation lands at the newest message, no animation.
+      stickToBottomRef.current = true;
       endRef.current?.scrollIntoView?.({ block: "end" });
       return;
     }
-    // Same thread, a message arrived — only follow the tail if the reader is
-    // already near the bottom, so reading older messages isn't interrupted.
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (nearBottom) endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
+    // Same thread, a message arrived — only follow the tail if the reader was
+    // near the bottom before it landed, so reading history isn't interrupted.
+    if (stickToBottomRef.current) endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
   }, [messages.length, threadKey]);
 
   return (
@@ -975,6 +984,7 @@ export function InboxThreadView({
 
       <div
         ref={scrollRef}
+        onScroll={handleThreadScroll}
         className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
       >
         {messages.length === 0 ? (

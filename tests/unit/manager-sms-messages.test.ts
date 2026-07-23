@@ -10,6 +10,7 @@ import {
   sortSmsConversationRows,
   isPhoneLikeLabel,
   smsConversationDisplayName,
+  smsConversationSubtitle,
   MANAGER_SMS_TAB_DEFS,
 } from "@/lib/manager-sms-messages";
 
@@ -131,7 +132,7 @@ describe("smsConversationDisplayName — never surface a raw phone in Communicat
     ).toBe("Jane Resident");
   });
 
-  it("falls back to unit, then email, then a neutral label when the name is just a phone", () => {
+  it("falls back to unit, then email, then a masked last-4 handle when the name is just a phone", () => {
     expect(
       smsConversationDisplayName({ name: "+15105791976", propertyLabel: "Ballard Commons · 2B", residentEmail: "a@x.com" }),
     ).toBe("Ballard Commons · 2B");
@@ -140,6 +141,35 @@ describe("smsConversationDisplayName — never surface a raw phone in Communicat
     ).toBe("a@x.com");
     expect(
       smsConversationDisplayName({ name: "+15105791976", propertyLabel: null, residentEmail: null }),
+    ).toBe("Texter ····1976");
+    expect(
+      smsConversationDisplayName({ name: "", propertyLabel: null, residentEmail: null, phone: "+12065550142" }),
+    ).toBe("Texter ····0142");
+    expect(
+      smsConversationDisplayName({ name: "", propertyLabel: null, residentEmail: null, phone: null }),
     ).toBe("Unknown contact");
+  });
+
+  it("keeps prospect threads distinguishable from one another", () => {
+    const a = smsConversationDisplayName({ name: "+15105791976", propertyLabel: null, residentEmail: null });
+    const b = smsConversationDisplayName({ name: "+12065550142", propertyLabel: null, residentEmail: null });
+    expect(a).not.toBe(b);
+    expect(a).not.toContain("+1");
+    expect(b).not.toContain("+1");
+  });
+
+  it("does not repeat the field the display name already used as the subtitle", () => {
+    // Named resident: the unit is still new information under the name.
+    expect(
+      smsConversationSubtitle({ name: "Jane Resident", propertyLabel: "Unit A", residentEmail: "jane@x.com" }),
+    ).toBe("Unit A");
+    // Phone-like name promoted the unit to the title — fall through to the email.
+    expect(
+      smsConversationSubtitle({ name: "+15105791976", propertyLabel: "Unit A", residentEmail: "jane@x.com" }),
+    ).toBe("jane@x.com");
+    // Email became the title; nothing left to show.
+    expect(
+      smsConversationSubtitle({ name: "+15105791976", propertyLabel: null, residentEmail: "jane@x.com" }),
+    ).toBe("");
   });
 });
