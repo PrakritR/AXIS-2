@@ -348,6 +348,7 @@ function ManagerPropertyInlineDetails({
           onClose: () => setDraftEditorOpen(false),
           onSubmitted: () => {
             setDraftEditorOpen(false);
+            showToast("Listing submitted and published.");
             onUpdated();
           },
           onSaved: onUpdated,

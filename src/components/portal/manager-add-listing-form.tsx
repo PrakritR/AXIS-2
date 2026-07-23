@@ -27,6 +27,7 @@ import {
 import {
   listingSubmissionFingerprint,
   listingWizardHasUnsavedInput,
+  stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
@@ -2068,14 +2069,16 @@ export function ManagerAddListingForm({
       return;
     }
     if (!authReady || !userId) {
-      showToast("Sign in to save your progress.");
-      onClose();
+      // Same rule as a failed write below: never close on a lie. The work stays
+      // in the open wizard so signing in again and closing still saves it.
+      showToast("Could not save your progress — sign in again, then close. Your work is still here.");
       return;
     }
 
     setClosingDraft(true);
     try {
       let submission = current;
+      let mediaFailed = false;
       try {
         submission = await uploadSubmissionMedia(current);
         // Keep the uploaded URLs so a retried close does not re-upload the same
@@ -2083,8 +2086,12 @@ export function ManagerAddListingForm({
         setSub(submission);
       } catch (err) {
         // Photos are worth less than the typed listing: save the draft anyway
-        // rather than losing everything to a failed upload.
+        // rather than losing everything to a failed upload — but strip the raw
+        // base64 first, so the text saves as a small payload instead of a
+        // multi-megabyte blob that would likely fail the write too.
         console.error("manager-add-listing-form: draft media upload failed", err);
+        submission = stripSubmissionDataUrls(current);
+        mediaFailed = true;
       }
       const savedId = await saveManagerPropertyDraftToServer(submission, userId, {
         existingDraftId,
@@ -2098,7 +2105,11 @@ export function ManagerAddListingForm({
       }
       draftIdRef.current = savedId;
       onSaved?.();
-      showToast("Progress saved to Drafts.");
+      showToast(
+        mediaFailed
+          ? "Progress saved to Drafts, but the photos could not be uploaded — add them again next time."
+          : "Progress saved to Drafts.",
+      );
       onClose();
     } finally {
       setClosingDraft(false);
@@ -2296,7 +2307,7 @@ export function ManagerAddListingForm({
             <button
               type="button"
               onClick={closeWizard}
-              disabled={closingDraft}
+              disabled={busy || closingDraft}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/30 text-muted hover:bg-accent/40 disabled:opacity-60"
               aria-label="Close"
             >

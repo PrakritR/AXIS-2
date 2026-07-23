@@ -50,3 +50,41 @@ export function listingWizardHasUnsavedInput(
 ): boolean {
   return listingSubmissionFingerprint(current) !== baselineFingerprint;
 }
+
+function isDataUrl(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("data:");
+}
+
+function withoutDataUrls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.filter((entry) => !isDataUrl(entry)).map(withoutDataUrls);
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(source)) {
+      out[key] = isDataUrl(entry) ? null : withoutDataUrls(entry);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Every base64 `data:` URL removed from a submission, whole-submission rather
+ * than field by field for the same reason the fingerprint is: a media field
+ * added to the wizard tomorrow is covered without touching this.
+ *
+ * Used only when the media upload failed. The typed listing is still worth
+ * saving, but the raw bytes are not — a lease template alone is capped at 8 MB,
+ * so persisting the base64 into `row_data` would push a multi-megabyte JSON
+ * body at the records API and store it in Postgres if it landed.
+ */
+export function stripSubmissionDataUrls(sub: ManagerListingSubmissionV1): ManagerListingSubmissionV1 {
+  const stripped = withoutDataUrls(sub) as ManagerListingSubmissionV1;
+  const floorPlans = Object.entries(stripped.floorPlanByLabel ?? {}).filter(
+    ([, url]) => typeof url === "string" && url.trim().length > 0,
+  );
+  return {
+    ...stripped,
+    floorPlanByLabel: floorPlans.length > 0 ? Object.fromEntries(floorPlans) : undefined,
+  };
+}
