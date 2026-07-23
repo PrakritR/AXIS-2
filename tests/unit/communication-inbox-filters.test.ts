@@ -30,4 +30,18 @@ describe("communication-inbox-filters", () => {
     expect(filterEmailInboxThreads(rows).map((r) => r.id)).toEqual(["email-1"]);
     expect(isSmsLikeInboxThread(rows[1]!)).toBe(true);
   });
+
+  it("keeps sms-like inbound notices visible when the SMS UI is hidden (keepSmsLike)", () => {
+    // When SMS is hidden (A2P not cleared) the SMS panel is gone, so an inbound
+    // text must fall through into the unified conversation list rather than be
+    // filtered into nowhere and silently disappear.
+    const rows = [
+      thread({ id: "email-1", from: "Test Resident", email: "resident@test.axis.local" }),
+      thread({ id: "sms-notice", from: "+15105794001", subject: "New SMS in your inbox" }),
+    ];
+    expect(filterEmailInboxThreads(rows, { keepSmsLike: true }).map((r) => r.id)).toEqual([
+      "email-1",
+      "sms-notice",
+    ]);
+  });
 });

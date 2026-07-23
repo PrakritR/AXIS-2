@@ -1,3 +1,4 @@
+import { isSmsCommUiEnabled } from "@/lib/sms-comm-ui-flag.server";
 import { AdminDashboard } from "@/components/portal/admin-dashboard";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerLeases } from "@/components/portal/manager-leases";
@@ -512,7 +513,7 @@ export async function renderPortalSection(
         if (tabParts.length > 2) notFound();
         const ManagerCommunication = await loadManagerCommunication();
         return subscriptionGated(
-          <ManagerCommunication inboxTabId={inboxTab} />,
+          <ManagerCommunication inboxTabId={inboxTab} smsUiEnabled={isSmsCommUiEnabled()} />,
           kind,
           "communication",
           managerOwnerSubscriptionTier,

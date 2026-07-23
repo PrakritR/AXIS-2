@@ -92,6 +92,7 @@ export function ManagerCommunicationComposeModal({
   initialChannel = "email",
   liveContacts = [],
   smsRecipients = [],
+  smsUiEnabled = false,
   senderName = "Property manager",
   senderEmail = "manager@example.com",
   onSent,
@@ -101,6 +102,8 @@ export function ManagerCommunicationComposeModal({
   initialChannel?: CommunicationComposeChannel;
   liveContacts?: InboxScopedContact[];
   smsRecipients?: ManagerSmsResidentConversation[];
+  /** When false, the "via SMS" channel is hidden — email-only compose. */
+  smsUiEnabled?: boolean;
   senderName?: string;
   senderEmail?: string;
   onSent?: (channels: { email: boolean; sms: boolean }) => void;
@@ -161,11 +164,12 @@ export function ManagerCommunicationComposeModal({
       setOtherTokens([]);
       setSubject("");
       setBody("");
-      setViaEmail(initialChannel === "email");
-      setViaSms(initialChannel === "sms");
+      // SMS hidden → always email-only, whatever channel was requested.
+      setViaEmail(smsUiEnabled ? initialChannel === "email" : true);
+      setViaSms(smsUiEnabled ? initialChannel === "sms" : false);
       setSending(false);
     });
-  }, [open, initialChannel]);
+  }, [open, initialChannel, smsUiEnabled]);
 
   useEffect(() => {
     setSelectedKeys((prev) => prev.filter((key) => validPersonKeys.has(key)));
@@ -568,6 +572,7 @@ export function ManagerCommunicationComposeModal({
           ) : null}
         </div>
 
+        {smsUiEnabled ? (
         <div className="shrink-0 border-t border-border pt-2.5">
           <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send via</p>
           <div className={PORTAL_TOOLBAR_GROUP} role="group" aria-label="Send platform">
@@ -594,6 +599,7 @@ export function ManagerCommunicationComposeModal({
             Pick one or both. SMS uses your work number; recipients need a phone on file or under Other.
           </p>
         </div>
+        ) : null}
       </div>
     </Modal>
   );

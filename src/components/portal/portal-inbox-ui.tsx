@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, ChevronLeft, Check, Pencil, Sparkles, X } from "lucide-react";
+import { ArrowUp, ChevronLeft, Check, Clock, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -517,6 +517,21 @@ export function PortalInboxMessageTable({
 
 export type InboxMessageDirection = "inbound" | "outbound";
 
+/**
+ * Channel a thread message arrived / sent on. Email is the only live channel
+ * today; the union carries the post-A2P channels so a per-person conversation
+ * can AGGREGATE email + SMS + WhatsApp + Gmail in one thread — adding a channel
+ * is additive (tag the message), never a new parallel thread.
+ */
+export type InboxChannel = "email" | "sms" | "whatsapp" | "gmail";
+
+export const INBOX_CHANNEL_LABEL: Record<InboxChannel, string> = {
+  email: "Email",
+  sms: "SMS",
+  whatsapp: "WhatsApp",
+  gmail: "Gmail",
+};
+
 export type InboxBubbleMessage = {
   id: string;
   /** Display name of the author (shown above inbound bubbles when grouped). */
@@ -527,7 +542,18 @@ export type InboxBubbleMessage = {
   direction: InboxMessageDirection;
   /** Optional delivery/status caption under the bubble (e.g. "Scheduled"). */
   status?: string;
+  /** Channel this message belongs to. Defaults to "email" when omitted. */
+  channel?: InboxChannel;
 };
+
+/** Small omnichannel channel tag rendered on a bubble / scheduled card. */
+export function InboxChannelTag({ channel }: { channel: InboxChannel }) {
+  return (
+    <span className="rounded-full border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+      {INBOX_CHANNEL_LABEL[channel]}
+    </span>
+  );
+}
 
 /** Scrollable body for a conversation list pane. */
 export const INBOX_LIST_SCROLL =
@@ -636,6 +662,7 @@ export function InboxBubble({
   showAuthor?: boolean;
 }) {
   const outbound = message.direction === "outbound";
+  const channel = message.channel ?? "email";
   return (
     <div className={`flex flex-col ${outbound ? "items-end" : "items-start"}`}>
       {showAuthor && !outbound ? (
@@ -649,11 +676,16 @@ export function InboxBubble({
         }`}
         style={outbound ? { background: "var(--btn-primary)" } : undefined}
       >
+        {/* Full text, always — pre-wrap + break-words + overflow-wrap so a long
+            reply or a URL wraps inside the bubble instead of being clipped. */}
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
       </div>
-      <span className="mt-1 px-1 text-[11px] text-muted">
-        {message.at}
-        {message.status ? ` · ${message.status}` : ""}
+      <span className={`mt-1 flex items-center gap-1.5 px-1 text-[11px] text-muted ${outbound ? "flex-row-reverse" : ""}`}>
+        <InboxChannelTag channel={channel} />
+        <span>
+          {message.at}
+          {message.status ? ` · ${message.status}` : ""}
+        </span>
       </span>
     </div>
   );
@@ -879,6 +911,104 @@ export function AiDraftReplyCard({
   );
 }
 
+/**
+ * Inline "Scheduled · sends <when>" card shown at the tail of a person's
+ * conversation. Replaces the standalone Schedule table: past + pending +
+ * scheduled communication with one person now lives in one thread. The full
+ * body is shown (no clamp), and the manager can cancel / send now / edit
+ * (edit expands `editPanel`) without leaving the conversation.
+ */
+export function InboxScheduledCard({
+  sendLabel,
+  subject,
+  body,
+  meta,
+  channel = "email",
+  source,
+  editable,
+  busy = false,
+  expanded = false,
+  onToggleExpand,
+  onCancel,
+  onSendNow,
+  editPanel,
+}: {
+  sendLabel: string;
+  subject: string;
+  body: string;
+  meta?: string;
+  channel?: InboxChannel;
+  source: "manual" | "automation";
+  editable: boolean;
+  busy?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  onCancel: () => void;
+  onSendNow: () => void;
+  editPanel?: ReactNode;
+}) {
+  return (
+    <div
+      className="portal-inbox-scheduled-card ml-auto max-w-[min(92%,34rem)] rounded-2xl border border-dashed border-primary/30 bg-primary/[0.06] px-3.5 py-3"
+      data-attr="inbox-scheduled-card"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+          <Clock className="h-3 w-3 text-primary" strokeWidth={2.25} />
+        </span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+          Scheduled · sends {sendLabel}
+        </span>
+        <InboxChannelTag channel={channel} />
+        <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[10px] font-medium text-muted">
+          {source === "manual" ? "Manual" : "Automated"}
+        </span>
+      </div>
+      {subject ? <p className="mt-2 text-sm font-semibold text-foreground">{subject}</p> : null}
+      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">
+        {body || " "}
+      </p>
+      {meta ? <p className="mt-1 text-[11px] text-muted">{meta}</p> : null}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 min-h-0 px-3 text-[12px]"
+          onClick={onSendNow}
+          disabled={busy}
+          data-attr="inbox-scheduled-send-now"
+        >
+          Send now
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-8 min-h-0 px-3 text-[12px] text-muted hover:text-danger"
+          onClick={onCancel}
+          disabled={busy}
+          data-attr="inbox-scheduled-cancel"
+        >
+          Cancel send
+        </Button>
+        {editable && onToggleExpand ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 min-h-0 gap-1.5 px-3 text-[12px]"
+            onClick={onToggleExpand}
+            disabled={busy}
+            data-attr="inbox-scheduled-edit"
+          >
+            <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
+            {expanded ? "Close" : "Edit"}
+          </Button>
+        ) : null}
+      </div>
+      {expanded && editPanel ? <div className="mt-3 border-t border-border pt-3">{editPanel}</div> : null}
+    </div>
+  );
+}
+
 /** Right-pane placeholder shown when no conversation is selected. */
 export function InboxThreadEmpty({
   title = "Select a conversation",
@@ -907,6 +1037,7 @@ export function InboxThreadView({
   onBack,
   headerActions,
   composer,
+  afterMessages,
   emptyLabel = "No messages yet.",
   threadKey,
 }: {
@@ -920,6 +1051,12 @@ export function InboxThreadView({
   headerActions?: ReactNode;
   /** Pass an <InboxComposer/>; omit for a read-only thread (e.g. Trash). */
   composer?: ReactNode;
+  /**
+   * Rendered inside the scroll body AFTER the message bubbles — used for inline
+   * "Scheduled · sends <when>" cards so a person's future/pending communication
+   * sits at the tail of their own conversation timeline.
+   */
+  afterMessages?: ReactNode;
   emptyLabel?: string;
   /**
    * Identity of the open conversation. When it changes we jump to the latest
@@ -987,13 +1124,14 @@ export function InboxThreadView({
         onScroll={handleThreadScroll}
         className="portal-inbox-thread-body min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
       >
-        {messages.length === 0 ? (
+        {messages.length === 0 && !afterMessages ? (
           <div className="flex min-h-full items-center justify-center py-6">
             <PortalInboxEmptyState title={emptyLabel} />
           </div>
         ) : (
           messages.map((m) => <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />)
         )}
+        {afterMessages}
         <div ref={endRef} />
       </div>
 
@@ -1048,28 +1186,6 @@ export function InboxTwoPane({
       window.removeEventListener("resize", measure);
     };
   }, []);
-
-  // #region agent log
-  useEffect(() => {
-    const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        runId: "inbox-dark-ui",
-        hypothesisId: "H1-nested-surfaces",
-        location: "portal-inbox-ui.tsx:InboxTwoPane",
-        message: "Inbox two-pane mounted",
-        data: {
-          dark,
-          hasPane: Boolean(rootRef.current?.querySelector(".portal-inbox-list-pane")),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, []);
-  // #endregion
 
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
   const height = measuredHeight ? `${measuredHeight}px` : fallback;

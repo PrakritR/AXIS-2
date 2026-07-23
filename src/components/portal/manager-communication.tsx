@@ -11,8 +11,7 @@ import {
 } from "@/components/portal/manager-communication-compose-modal";
 import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number-button";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import {
   axisAdminFilterContact,
@@ -29,7 +28,6 @@ import {
   type ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 export type ManagerInboxTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
@@ -47,14 +45,21 @@ const ROLE_OPTIONS: { value: CommunicationFilterRole; label: string }[] = [
 
 export function ManagerCommunication({
   inboxTabId = "unopened",
+  smsUiEnabled = false,
 }: {
   /** @deprecated Channel is always unified; kept for route compatibility. */
   channel?: ManagerCommunicationChannel;
+  /** @deprecated Folder tabs removed — kept so legacy routes still resolve. */
   inboxTabId?: ManagerInboxTabId;
   /** @deprecated SMS folders merged into unified inbox. */
   smsTabId?: ManagerSmsTabId;
+  /**
+   * Server-resolved SMS Communication UI flag (`isSmsCommUiEnabled()`). When
+   * false, SMS compose channel / rows / panel are hidden — transport, webhooks,
+   * and both SMS agents are unaffected. Default false ("hide now").
+   */
+  smsUiEnabled?: boolean;
 }) {
-  const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const commBase = `${portalBase}/communication`;
   const { userId } = useManagerUserId();
@@ -64,19 +69,6 @@ export function ManagerCommunication({
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
-  const [inboxTabCounts, setInboxTabCounts] = useState({
-    unopened: 0,
-    opened: 0,
-    schedule: 0,
-    sent: 0,
-    trash: 0,
-  });
-  const handleInboxTabCountsChange = useCallback(
-    (counts: { unopened: number; opened: number; schedule: number; sent: number; trash: number }) => {
-      setInboxTabCounts(counts);
-    },
-    [],
-  );
 
   const filterContacts = useMemo(() => {
     const live = buildManagerInboxLiveContacts(userId);
@@ -104,6 +96,9 @@ export function ManagerCommunication({
   }, [filterContacts, filters.roles]);
 
   const loadSmsRecipients = useCallback(async () => {
+    // SMS UI hidden until A2P clears — never fetch SMS recipients or expose them
+    // in compose. Transport/webhooks/agents are unaffected.
+    if (!smsUiEnabled) return;
     try {
       const res = await fetch("/api/manager/sms-conversations", { credentials: "include", cache: "no-store" });
       if (!res.ok) return;
@@ -113,7 +108,7 @@ export function ManagerCommunication({
     } catch {
       /* keep prior list */
     }
-  }, []);
+  }, [smsUiEnabled]);
 
   useEffect(() => {
     void loadSmsRecipients();
@@ -130,17 +125,17 @@ export function ManagerCommunication({
 
   const handleComposeSent = useCallback(
     (channels: { email: boolean; sms: boolean }) => {
+      // No folder tabs to navigate to anymore — the new message appends to the
+      // recipient's conversation in the unified list. Just refresh the data.
       if (channels.email) {
         inboxRef.current?.reloadInbox?.();
-        navigate(`${commBase}/inbox/sent`);
       }
       if (channels.sms) {
         smsRef.current?.reload?.();
         void loadSmsRecipients();
-        if (!channels.email) navigate(`${commBase}/inbox/unopened`);
       }
     },
-    [commBase, loadSmsRecipients, navigate],
+    [loadSmsRecipients],
   );
 
   const threadFilters = (
@@ -184,31 +179,9 @@ export function ManagerCommunication({
     </div>
   );
 
-  const statusPills = (
-    <ManagerPortalStatusPills
-      tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-        id,
-        label,
-        count: inboxTabCounts[id as keyof typeof inboxTabCounts],
-      }))}
-      activeId={inboxTabId}
-      onChange={(id) => navigate(`${commBase}/inbox/${id}`)}
-    />
-  );
-
   const titleAside = (
     <>
-      <ManagerWorkNumberButton />
-      {inboxTabId === "trash" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-          onClick={() => inboxRef.current?.deleteAllTrash()}
-        >
-          Delete all trash
-        </Button>
-      ) : null}
+      {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
       <Button
         type="button"
         variant="primary"
@@ -222,18 +195,14 @@ export function ManagerCommunication({
   );
 
   return (
-    <PortalCommunicationShell
-      title="Communication"
-      titleAside={titleAside}
-      threadFilters={threadFilters}
-      statusPills={statusPills}
-    >
+    <PortalCommunicationShell title="Communication" titleAside={titleAside} threadFilters={threadFilters}>
       <ManagerCommunicationComposeModal
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
         initialChannel={composeChannel}
         liveContacts={liveContacts}
         smsRecipients={smsRecipients}
+        smsUiEnabled={smsUiEnabled}
         onSent={handleComposeSent}
       />
 
@@ -242,7 +211,7 @@ export function ManagerCommunication({
         commBase={commBase}
         threadFilters={filters}
         filterContacts={filterContacts}
-        onTabCountsChange={handleInboxTabCountsChange}
+        smsUiEnabled={smsUiEnabled}
         inboxRef={inboxRef}
         smsRef={smsRef}
       />
