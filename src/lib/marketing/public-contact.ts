@@ -3,6 +3,11 @@
  * Support mail is the PropLane brand domain (support@prop-lane.space); its
  * forwarding to the founder inbox is handled outside the product. Brand copy is
  * PropLane; the address is the real deliverable mailbox.
+ *
+ * The legal + reviews pages (`/privacy`, `/tos`, `/sms-terms`, `/reviews`) still
+ * hardcode this address rather than importing it, so changing it here is not
+ * enough — `tests/unit/public-support-email.test.ts` pins those pages so a
+ * half-done rename fails instead of shipping two addresses.
  */
 export const PUBLIC_SUPPORT_EMAIL = "support@prop-lane.space";
 export const PUBLIC_SUPPORT_PHONE_DISPLAY = "(510) 309-8345";
