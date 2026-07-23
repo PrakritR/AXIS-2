@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { userHoldsAdminRole } from "@/lib/auth/admin-role";
 import { backfillOrphanGoogleOAuthManagers } from "@/lib/auth/provision-free-manager-oauth";
 import { deleteManagerAccount } from "@/lib/auth/delete-portal-account";
 import { normalizeManagerSkuTier, pickBestManagerPurchaseRow } from "@/lib/manager-access";
@@ -193,11 +194,12 @@ export async function DELETE(req: Request) {
     }
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    if (id === auth.actorId) {
+
+    const supabase = createSupabaseServiceRoleClient();
+    if (id === auth.actorId && !(await userHoldsAdminRole(supabase, auth.actorId))) {
       return NextResponse.json({ error: "You cannot delete your own account while signed in." }, { status: 400 });
     }
 
-    const supabase = createSupabaseServiceRoleClient();
     const result = await deleteManagerAccount(supabase, id);
     return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {

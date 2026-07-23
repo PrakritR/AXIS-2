@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PortalRole = "admin" | "manager" | "resident" | "pro";
+export type PortalRole = "admin" | "manager" | "resident" | "pro" | "vendor";
 
 function nextPrimaryRole(roles: string[]): string | null {
   if (roles.includes("admin")) return "admin";
   if (roles.includes("manager")) return "manager";
   if (roles.includes("pro")) return "pro";
   if (roles.includes("resident")) return "resident";
+  if (roles.includes("vendor")) return "vendor";
   return roles[0] ?? null;
 }
 

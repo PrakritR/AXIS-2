@@ -49,13 +49,14 @@ type SimpleRow = {
   joinedAt: string | null;
 };
 
-type AccountKind = "manager" | "resident";
+type AccountKind = "manager" | "resident" | "vendor";
 
 type UnifiedRow =
   | ({ kind: "manager" } & ManagerRow)
-  | ({ kind: "resident" } & SimpleRow);
+  | ({ kind: "resident" } & SimpleRow)
+  | ({ kind: "vendor" } & SimpleRow);
 
-type CategoryFilter = "management" | "resident";
+type CategoryFilter = "management" | "resident" | "vendor";
 type StatusTab = "active" | "disabled";
 type TierFilter = "all" | "free" | "pro" | "business";
 type ManagerPlan = "free" | "pro" | "business";
@@ -104,10 +105,12 @@ function RolePill({ kind }: { kind: AccountKind }) {
   const styles: Record<AccountKind, string> = {
     manager: "portal-badge-info border",
     resident: "portal-badge-info border",
+    vendor: "portal-badge-info border",
   };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
     resident: "Resident",
+    vendor: "Vendor",
   };
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[kind]}`}>
@@ -320,8 +323,8 @@ function SimpleAccountDetailContent({
   onRefresh,
   showToast,
 }: {
-  row: { kind: "resident" } & SimpleRow;
-  apiPath: "/api/admin/residents";
+  row: { kind: "resident" | "vendor" } & SimpleRow;
+  apiPath: "/api/admin/residents" | "/api/admin/vendors";
   accountLabel: string;
   onRefresh: () => void;
   showToast: (m: string) => void;
@@ -397,7 +400,9 @@ function SimpleAccountDetailContent({
             <span className="text-xs font-semibold text-rose-800">
               {apiPath === "/api/admin/residents"
                 ? "Delete resident, leases, and payments?"
-                : "Delete permanently?"}
+                : apiPath === "/api/admin/vendors"
+                  ? "Delete vendor bids, invoices, and payouts?"
+                  : "Delete permanently?"}
             </span>
             <button
               type="button"
@@ -439,8 +444,8 @@ function SimpleAccountDetailRow({
   onRefresh,
   showToast,
 }: {
-  row: { kind: "resident" } & SimpleRow;
-  apiPath: "/api/admin/residents";
+  row: { kind: "resident" | "vendor" } & SimpleRow;
+  apiPath: "/api/admin/residents" | "/api/admin/vendors";
   accountLabel: string;
   onRefresh: () => void;
   showToast: (m: string) => void;
@@ -472,6 +477,17 @@ function ExpandedRow({
   if (row.kind === "manager") {
     return <ManagerDetailRow row={row} onRefresh={onRefresh} showToast={showToast} />;
   }
+  if (row.kind === "vendor") {
+    return (
+      <SimpleAccountDetailRow
+        row={row}
+        apiPath="/api/admin/vendors"
+        accountLabel="Vendor"
+        onRefresh={onRefresh}
+        showToast={showToast}
+      />
+    );
+  }
   return <SimpleAccountDetailRow row={row} apiPath="/api/admin/residents" accountLabel="Resident" onRefresh={onRefresh} showToast={showToast} />;
 }
 
@@ -486,6 +502,17 @@ function ExpandedContent({
 }) {
   if (row.kind === "manager") {
     return <ManagerDetailContent row={row} onRefresh={onRefresh} showToast={showToast} />;
+  }
+  if (row.kind === "vendor") {
+    return (
+      <SimpleAccountDetailContent
+        row={row}
+        apiPath="/api/admin/vendors"
+        accountLabel="Vendor"
+        onRefresh={onRefresh}
+        showToast={showToast}
+      />
+    );
   }
   return (
     <SimpleAccountDetailContent
@@ -502,6 +529,7 @@ export function AdminAxisUsersClient() {
   const { showToast } = useAppUi();
   const [managers, setManagers] = useState<ManagerRow[]>([]);
   const [residents, setResidents] = useState<SimpleRow[]>([]);
+  const [vendors, setVendors] = useState<SimpleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -517,9 +545,14 @@ export function AdminAxisUsersClient() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [mRes, rRes] = await Promise.all([fetch("/api/admin/managers"), fetch("/api/admin/residents")]);
+      const [mRes, rRes, vRes] = await Promise.all([
+        fetch("/api/admin/managers"),
+        fetch("/api/admin/residents"),
+        fetch("/api/admin/vendors"),
+      ]);
       const mJson = (await mRes.json()) as { managers?: ManagerRow[]; error?: string };
       const rJson = (await rRes.json()) as { residents?: SimpleRow[]; error?: string };
+      const vJson = (await vRes.json()) as { vendors?: SimpleRow[]; error?: string };
       if (!mRes.ok) {
         setLoadError(mJson.error ?? "Could not load manager accounts.");
         return;
@@ -528,8 +561,13 @@ export function AdminAxisUsersClient() {
         setLoadError(rJson.error ?? "Could not load resident accounts.");
         return;
       }
+      if (!vRes.ok) {
+        setLoadError(vJson.error ?? "Could not load vendor accounts.");
+        return;
+      }
       setManagers(mJson.managers ?? []);
       setResidents(rJson.residents ?? []);
+      setVendors(vJson.vendors ?? []);
     } catch {
       setLoadError("Could not reach the server. Check that Supabase env vars are configured.");
     } finally {
@@ -545,28 +583,35 @@ export function AdminAxisUsersClient() {
   const unified = useMemo((): UnifiedRow[] => {
     const m: UnifiedRow[] = managers.map((r) => ({ kind: "manager" as const, ...r }));
     const res: UnifiedRow[] = residents.map((r) => ({ kind: "resident" as const, ...r }));
-    return [...m, ...res].sort((a, b) => {
+    const ven: UnifiedRow[] = vendors.map((r) => ({ kind: "vendor" as const, ...r }));
+    return [...m, ...res, ...ven].sort((a, b) => {
       const an = (a.email || a.kind).toLowerCase();
       const bn = (b.email || b.kind).toLowerCase();
       return an.localeCompare(bn);
     });
-  }, [managers, residents]);
+  }, [managers, residents, vendors]);
 
   const categoryCounts = useMemo(() => {
-    const c = { management: 0, resident: 0 };
+    const c = { management: 0, resident: 0, vendor: 0 };
     for (const row of unified) {
       if (row.kind === "resident") c.resident += 1;
+      else if (row.kind === "vendor") c.vendor += 1;
       else c.management += 1;
     }
     return c;
   }, [unified]);
 
+  const rowMatchesCategory = (row: UnifiedRow, cat: CategoryFilter) => {
+    if (cat === "resident") return row.kind === "resident";
+    if (cat === "vendor") return row.kind === "vendor";
+    return row.kind === "manager";
+  };
+
   const { activeCount, disabledCount } = useMemo(() => {
     let a = 0;
     let d = 0;
     for (const row of unified) {
-      if (category === "resident" && row.kind !== "resident") continue;
-      if (category === "management" && row.kind === "resident") continue;
+      if (!rowMatchesCategory(row, category)) continue;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) continue;
       if (row.active) a += 1;
       else d += 1;
@@ -578,8 +623,7 @@ export function AdminAxisUsersClient() {
     return unified.filter((row) => {
       if (statusTab === "active" && !row.active) return false;
       if (statusTab === "disabled" && row.active) return false;
-      if (category === "resident" && row.kind !== "resident") return false;
-      if (category === "management" && row.kind === "resident") return false;
+      if (!rowMatchesCategory(row, category)) return false;
       if (row.kind === "manager" && tierFilter !== "all" && row.tier.toLowerCase() !== tierFilter) return false;
       return true;
     });
@@ -594,6 +638,7 @@ export function AdminAxisUsersClient() {
 
   const ROLE_TABS: { id: CategoryFilter; label: string; count: number }[] = [
     { id: "management", label: "Management", count: categoryCounts.management },
+    { id: "vendor", label: "Vendors", count: categoryCounts.vendor },
     { id: "resident", label: "Residents", count: categoryCounts.resident },
   ];
 
@@ -701,7 +746,7 @@ export function AdminAxisUsersClient() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-semibold text-foreground">{row.fullName || row.email}</p>
                         <p className="mt-0.5 truncate text-xs text-muted">
-                          {row.kind === "manager" ? "Management" : "Resident"}
+                          {row.kind === "manager" ? "Management" : row.kind === "vendor" ? "Vendor" : "Resident"}
                           {row.kind === "manager" ? ` · ${row.tier}` : ""}
                         </p>
                         {row.managerId ? (

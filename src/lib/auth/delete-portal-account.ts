@@ -231,5 +231,24 @@ export async function deleteManagerAccount(db: ServiceDb, managerUserId: string)
   return { ok: true as const, mode: result.mode };
 }
 
+/**
+ * Remove vendor portal data and revoke vendor access. Manager-owned directory
+ * rows are disassociated, not deleted — same contract as self-delete cleanup.
+ */
+export async function deleteVendorAccount(db: ServiceDb, vendorUserId: string) {
+  const trimmedId = vendorUserId.trim();
+  if (!trimmedId) throw new Error("User id is required.");
+
+  await db.from("manager_vendor_records").update({ vendor_user_id: null }).eq("vendor_user_id", trimmedId);
+  await db.from("portal_work_order_records").update({ vendor_user_id: null }).eq("vendor_user_id", trimmedId);
+  await db.from("vendor_tax_profiles").delete().eq("vendor_user_id", trimmedId);
+  await db.from("work_order_bids").delete().eq("vendor_user_id", trimmedId);
+  await db.from("vendor_invoices").delete().eq("vendor_user_id", trimmedId);
+  await db.from("vendor_payouts").delete().eq("vendor_user_id", trimmedId);
+
+  const result = await removePortalAccess(db, trimmedId, "vendor");
+  return { ok: true as const, mode: result.mode };
+}
+
 
 export type { PortalRole };
