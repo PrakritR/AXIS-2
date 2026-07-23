@@ -169,4 +169,83 @@ describe("POST /api/manager-applications — withdrawnAt is server-owned on a ma
     expect(UPSERTS).toHaveLength(1);
     expect(provisionApprovedResidentAccount).toHaveBeenCalledTimes(1);
   });
+
+  it("leaves an ALREADY-approved row that carries a withdrawnAt stamp editable", async () => {
+    // Production residue of the gap this closes. The guard keys on the transition
+    // into approved, so an edit that keeps the row approved must still save.
+    STORED_ROWS = [
+      { id: "AXIS-9001", row_data: appRow({ bucket: "approved", withdrawnAt: "2026-07-22T00:00:00.000Z" }) },
+    ];
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(
+      post({ row: appRow({ bucket: "approved", stage: "Approved", detail: "Edited resident" }) }),
+    );
+    expect(res.status).toBe(200);
+    expect(UPSERTS).toHaveLength(1);
+    expect(UPSERTS[0].row_data.withdrawnAt).toBe("2026-07-22T00:00:00.000Z");
+  });
+});
+
+describe("POST /api/manager-applications action:\"replace\" — the path the manager Approve actually takes", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "mgr-1", email: "mgr@example.com", user_metadata: {} } } });
+    PROFILE = { role: "manager", email: "mgr@example.com" };
+    STORED_ROWS = [{ id: "AXIS-9001", row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }) }];
+    STORED_ERROR = null;
+    UPSERTS = [];
+    provisionApprovedResidentAccount.mockClear();
+  });
+
+  it("does not persist or provision a withdrawn row the mirror marks approved, and keeps the other rows", async () => {
+    STORED_ROWS = [
+      { id: "AXIS-9001", row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }) },
+      { id: "AXIS-9002", row_data: appRow({ id: "AXIS-9002", email: "other@example.com" }) },
+    ];
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(
+      post({
+        action: "replace",
+        rows: [
+          appRow({ bucket: "approved", stage: "Approved", withdrawnAt: undefined }),
+          appRow({ id: "AXIS-9002", email: "other@example.com", detail: "Still pending" }),
+        ],
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(provisionApprovedResidentAccount).not.toHaveBeenCalled();
+    expect(UPSERTS.map((u) => u.id)).toEqual(["AXIS-9002"]);
+  });
+
+  it("preserves the stored withdrawnAt when the mirror writes a stale blob", async () => {
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(
+      post({ action: "replace", rows: [appRow({ detail: "Stale mirror", withdrawnAt: undefined })] }),
+    );
+    expect(res.status).toBe(200);
+    expect(UPSERTS).toHaveLength(1);
+    expect(UPSERTS[0].row_data.withdrawnAt).toBe("2026-07-22T00:00:00.000Z");
+  });
+
+  it("fails CLOSED when the batched stored-row read errors", async () => {
+    STORED_ERROR = { message: "connection reset" };
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(
+      post({ action: "replace", rows: [appRow({ bucket: "approved", stage: "Approved" })] }),
+    );
+    expect(res.status).toBe(500);
+    expect(UPSERTS).toHaveLength(0);
+    expect(provisionApprovedResidentAccount).not.toHaveBeenCalled();
+  });
+
+  it("still mirrors an approve of a non-withdrawn application", async () => {
+    STORED_ROWS = [{ id: "AXIS-9001", row_data: appRow({}) }];
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(
+      post({ action: "replace", rows: [appRow({ bucket: "approved", stage: "Approved" })] }),
+    );
+    expect(res.status).toBe(200);
+    expect(UPSERTS).toHaveLength(1);
+    expect(provisionApprovedResidentAccount).toHaveBeenCalledTimes(1);
+  });
 });

@@ -531,6 +531,10 @@ export function ManagerApplications() {
     });
     if (!result) return;
     setRows(readManagerApplicationRows());
+    if (result.blocked) {
+      showToast(result.message ?? "That change could not be saved.");
+      return;
+    }
 
     setExpandedId(null);
     setBucket(nextBucket);

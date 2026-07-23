@@ -40,11 +40,11 @@ export async function approveDemoApplication(axisId: string): Promise<boolean> {
     userId: managerUserId,
     skipWelcomeEmail: true,
   });
-  if (result) {
+  if (result && !result.blocked) {
     window.dispatchEvent(new Event(MANAGER_APPLICATIONS_EVENT));
     window.dispatchEvent(new Event(LEASE_PIPELINE_EVENT));
   }
-  return Boolean(result);
+  return Boolean(result && !result.blocked);
 }
 
 export function runDemoGenerateLease(axisId: string): boolean {
