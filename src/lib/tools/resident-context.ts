@@ -1,0 +1,85 @@
+/**
+ * ResidentAgentContext is resolved server-side from the authenticated Supabase
+ * session (admin preview supported via the same effective-session helper the
+ * resident portal layout uses). The resident's user id + normalized email are
+ * the only scope keys, and every resident tool applies them itself — the model
+ * can never supply an identity. This is the resident portal's single security
+ * choke point, mirroring `resolveAgentContext` for managers.
+ */
+import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { managerIdsOwningResident } from "@/lib/resident-manager-scope";
+import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
+import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
+import type { ManagerSubscriptionTier } from "@/lib/manager-access";
+
+export type ResidentAgentContext = {
+  kind: "resident";
+  userId: string;
+  /** Normalized lowercase email — the primary residency scope key. */
+  email: string;
+  /** Managers linked to this resident (approved applications / charges / leases). */
+  managerIds: string[];
+  /** Application-phase residents get a reduced toolset. */
+  phase: "application" | "approved";
+  /** The linked manager's subscription tier gates services/inbox tools. */
+  managerTier: ManagerSubscriptionTier;
+  /**
+   * audit_log/agent_sessions scope column value for resident actions: the
+   * resident's own user id (there may be zero or many linked managers).
+   */
+  landlordId: string;
+  /**
+   * Service-role client. It bypasses RLS, so every query built from it MUST
+   * scope by resident identity: `.or("resident_user_id.eq.<uid>,resident_email.eq.<email>")`
+   * or `.eq("resident_email", email)` — matching the corresponding API routes.
+   */
+  db: ReturnType<typeof createSupabaseServiceRoleClient>;
+};
+
+/**
+ * Returns the resident agent context for the current request, or null when the
+ * caller is unauthenticated or is not a resident.
+ */
+export async function resolveResidentAgentContext(): Promise<ResidentAgentContext | null> {
+  const { user, profile } = await getEffectiveSessionForPortal("resident");
+  if (!user) return null;
+
+  const db = createSupabaseServiceRoleClient();
+  const { data: roleRows } = await db.from("profile_roles").select("role").eq("user_id", user.id);
+  const roleList = (roleRows ?? []).map((r) => String(r.role).toLowerCase());
+  const legacyRole = String(profile?.role ?? "").toLowerCase();
+  const roles = roleList.length > 0 ? roleList : legacyRole ? [legacyRole] : [];
+  if (!roles.includes("resident")) return null;
+
+  const email = String(profile?.email ?? user.email ?? "").trim().toLowerCase();
+  if (!email) return null;
+
+  const managerId = String(profile?.manager_id ?? "").trim();
+  const [managerIds, managerTier, access] = await Promise.all([
+    managerIdsOwningResident(db, email),
+    managerId ? getManagerSubscriptionTierByManagerId(managerId) : Promise.resolve(null),
+    loadResidentPortalAccessState({
+      userId: user.id,
+      role: profile?.role,
+      email,
+      managerSubscriptionTier: null,
+    }),
+  ]);
+
+  return {
+    kind: "resident",
+    userId: user.id,
+    email,
+    managerIds,
+    phase: access.leaseAccessUnlocked ? "approved" : "application",
+    managerTier,
+    landlordId: user.id,
+    db,
+  };
+}
+
+/** The `.or()` filter string matching the resident-scoped API routes. */
+export function residentScopeOrFilter(ctx: ResidentAgentContext): string {
+  return `resident_user_id.eq.${ctx.userId},resident_email.eq.${ctx.email}`;
+}

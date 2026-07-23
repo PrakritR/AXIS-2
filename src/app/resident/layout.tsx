@@ -37,7 +37,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   const sidebarCollapsed = await getSidebarCollapsed();
 
   return (
-    <AxisAssistant managerName={profile?.full_name ?? null} endpoint="/api/agent/resident-chat">
+    <AxisAssistant portal="resident" managerName={profile?.full_name ?? null}>
     <div className={PORTAL_SHELL_ROOT_CLASS}>
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
@@ -64,10 +64,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
                 name={profile?.full_name ?? null}
                 email={profile?.email ?? null}
               />
-              <ResidentPreApplicationGuard
-                leaseAccessUnlocked={access.leaseAccessUnlocked}
-                hasCompletedApplicationSubmission={access.hasCompletedApplicationSubmission}
-              >
+              <ResidentPreApplicationGuard leaseAccessUnlocked={access.leaseAccessUnlocked}>
                 {children}
               </ResidentPreApplicationGuard>
             </div>

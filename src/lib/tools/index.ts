@@ -1,144 +1,160 @@
 /**
- * The agent's tool registry: the single contract the agent loop calls through.
- * Add new site capabilities here as typed, permission-scoped ToolDefinitions.
+ * The manager agent's tool registry: the single contract the agent loop calls
+ * through. Add new site capabilities here as typed, permission-scoped
+ * ToolDefinitions. Write tools are confirm-gated by the framework (preview →
+ * user confirmation → execute); see docs/ai-assistant.md.
  */
 import { buildRegistry } from "./registry";
+import { getOverdueChargesTool, listChargesTool, sendRentReminderTool } from "./domains/payments";
 import {
-  getOverdueChargesTool,
-  listChargesTool,
-  sendRentRemindersTool,
   createChargeTool,
-} from "./domains/payments";
-import { createLeaseDraftTool, listLeasesTool, updateLeaseDraftTool } from "./domains/leases";
-import { sendResidentMessageTool } from "./domains/messaging";
-import { listWorkOrdersTool, suggestVendorsForWorkOrderTool } from "./domains/work-orders";
-import { listVendorsTool } from "./domains/vendors";
-import { runFinancialReportTool } from "./domains/financials";
-import { listResidentsTool } from "./domains/residents";
-import { listApplicationsTool } from "./domains/applications";
-import { listPropertiesTool } from "./domains/properties";
-import { listInboxThreadsTool } from "./domains/inbox";
-import { listCalendarEventsTool, listScheduledMessagesTool } from "./domains/calendar";
+  updateChargeTool,
+  deleteChargeTool,
+  markChargePaidTool,
+} from "./domains/charges";
+import {
+  getAutomationSettingsTool,
+  updateAutomationSettingsTool,
+  cancelScheduledReminderTool,
+  rescheduleReminderTool,
+} from "./domains/automation";
+import { listLeasesTool, amendLeaseTool, voidLeaseTool, sendLeaseForSignatureTool } from "./domains/leases";
+import {
+  listWorkOrdersTool,
+  suggestVendorsForWorkOrderTool,
+  listWorkOrderBidsTool,
+  createWorkOrderTool,
+  assignVendorTool,
+  offerToVendorsTool,
+  scheduleVendorVisitTool,
+  acceptBidTool,
+  completeWorkOrderTool,
+  approveAndPayWorkOrderTool,
+  sendWorkOrderReminderTool,
+} from "./domains/work-orders";
+import { listVendorsTool, addVendorTool, updateVendorTool, inviteVendorTool } from "./domains/vendors";
+import { runFinancialReportTool, recordExpenseTool, recordIncomeTool } from "./domains/financials";
+import {
+  listResidentsTool,
+  setResidentApprovalTool,
+  sendResidentWelcomeTool,
+  revokeResidentAccessTool,
+  recordMoveOutTool,
+} from "./domains/residents";
+import {
+  listApplicationsTool,
+  getApplicationDetailsTool,
+  updateApplicationBucketTool,
+  orderBackgroundCheckTool,
+} from "./domains/applications";
+import {
+  listPropertiesTool,
+  getPropertyDetailsTool,
+  createPropertyTool,
+  updatePropertyTool,
+  sharePropertyLinkTool,
+} from "./domains/properties";
+import { listInboxThreadsTool, getThreadMessagesTool, updateThreadTool } from "./domains/inbox";
+import {
+  sendMessageTool,
+  replyToThreadTool,
+  scheduleMessageTool,
+  cancelScheduledMessageTool,
+} from "./domains/messaging";
+import {
+  listCalendarEventsTool,
+  listScheduledMessagesTool,
+  listTourInquiriesTool,
+  updateManagerAvailabilityTool,
+  createCalendarEventTool,
+  cancelCalendarEventTool,
+  acceptTourInquiryTool,
+} from "./domains/calendar";
 import { listServiceRequestsTool } from "./domains/services";
+import { findRecordsTool } from "./domains/search";
+import { getManagerProfileTool, getDashboardSummaryTool } from "./domains/profile";
 import {
-  listVendorInvoicesTool,
-  listVendorPayoutsTool,
-  submitVendorInvoiceTool,
-} from "./domains/vendor-financials";
-import {
-  escalateToManagerTool,
-  getJobAccessInfoTool,
-  getJobDetailsTool,
-  listMyJobsWithThisManagerTool,
-} from "./domains/vendor-work-order";
-import {
-  buildProspectLinksTool,
-  escalateLeasingToManagerTool,
-  getListingDetailsTool,
-  getSiteLinksTool,
-  listLiveListingsTool,
-} from "./domains/leasing-sms";
-import { managerFinancialsWriteTools } from "./domains/financials-write";
-import { listDocumentsTool, listPromotionsTool } from "./domains/documents";
-import { managerServicesWriteTools } from "./domains/services-write";
-import { confirmTourInquiryTool } from "./domains/tours-write";
-import { residentPortalTools } from "./domains/resident-portal";
-import { vendorPortalTools } from "./domains/vendor-portal";
+  listPromotionsTool,
+  createPromotionTool,
+  updatePromotionTool,
+  deletePromotionTool,
+} from "./domains/promotions";
+import { listCoManagersTool } from "./domains/team";
 
 export const agentRegistry = buildRegistry([
+  // Cross-domain entity search — the model's first stop for loose names
+  findRecordsTool,
+  // Reads
   getOverdueChargesTool,
   listChargesTool,
   listLeasesTool,
   listWorkOrdersTool,
   suggestVendorsForWorkOrderTool,
+  listWorkOrderBidsTool,
   listVendorsTool,
   runFinancialReportTool,
   listResidentsTool,
   listApplicationsTool,
+  getApplicationDetailsTool,
   listPropertiesTool,
+  getPropertyDetailsTool,
   listInboxThreadsTool,
+  getThreadMessagesTool,
   listCalendarEventsTool,
   listScheduledMessagesTool,
+  listTourInquiriesTool,
   listServiceRequestsTool,
-  listDocumentsTool,
+  getManagerProfileTool,
+  getDashboardSummaryTool,
+  getAutomationSettingsTool,
   listPromotionsTool,
-  // Write tools: previewed from the model loop, executed only via the gated
-  // confirm endpoint after explicit user confirmation.
-  sendRentRemindersTool,
-  sendResidentMessageTool,
+  listCoManagersTool,
+  // Write tools (confirm-gated; the loop halts on these and the user approves)
+  sendRentReminderTool,
   createChargeTool,
-  createLeaseDraftTool,
-  updateLeaseDraftTool,
-  // Confirm a proposed tour into a booked event + notify the guest. Backs the
-  // approval-first auto-tour flow, executed only through the confirm gate.
-  confirmTourInquiryTool,
-  ...managerServicesWriteTools,
-  // The accounting writes (bills, budgets, deposit dispositions, owner
-  // distributions, bank reconciliation). They were previously registry-only and
-  // unreachable from chat; each now carries a preview, which is what makes it
-  // safe to expose — the model can propose, only the landlord can execute.
-  ...managerFinancialsWriteTools,
+  updateChargeTool,
+  deleteChargeTool,
+  markChargePaidTool,
+  updateAutomationSettingsTool,
+  cancelScheduledReminderTool,
+  rescheduleReminderTool,
+  sendMessageTool,
+  replyToThreadTool,
+  scheduleMessageTool,
+  cancelScheduledMessageTool,
+  updateThreadTool, // confirm:"none" — low-risk inbox housekeeping
+  updateManagerAvailabilityTool,
+  createCalendarEventTool,
+  cancelCalendarEventTool,
+  acceptTourInquiryTool,
+  createWorkOrderTool,
+  assignVendorTool,
+  offerToVendorsTool,
+  scheduleVendorVisitTool,
+  acceptBidTool,
+  completeWorkOrderTool,
+  approveAndPayWorkOrderTool,
+  sendWorkOrderReminderTool,
+  addVendorTool,
+  updateVendorTool,
+  inviteVendorTool,
+  createPropertyTool,
+  updatePropertyTool,
+  sharePropertyLinkTool,
+  setResidentApprovalTool,
+  sendResidentWelcomeTool,
+  revokeResidentAccessTool,
+  recordMoveOutTool,
+  updateApplicationBucketTool,
+  orderBackgroundCheckTool,
+  amendLeaseTool,
+  voidLeaseTool,
+  sendLeaseForSignatureTool,
+  recordExpenseTool,
+  recordIncomeTool,
+  createPromotionTool,
+  updatePromotionTool,
+  deletePromotionTool,
 ]);
 
-/**
- * Vendor-scoped registry, kept separate from the manager `agentRegistry` so the
- * manager agent never inherits vendor-scoped tools (and vice-versa). It is
- * consumed by the vendor agent surface; every tool here scopes to
- * `vendor_user_id = ctx.userId`. No W-9 / TIN-bearing tool appears in either map.
- */
-export const vendorAgentRegistry = buildRegistry([
-  ...vendorPortalTools,
-  listVendorInvoicesTool,
-  submitVendorInvoiceTool,
-  listVendorPayoutsTool,
-]);
-
-/**
- * Resident-portal assistant registry. Kept separate from every other map so the
- * resident agent can never see a manager, vendor, or leasing tool. Each tool
- * pins itself to `ctx.residentScope` (built from the authenticated session), so
- * one resident can never reach another resident's charges, jobs, or documents.
- */
-export const residentAgentRegistry = buildRegistry([...residentPortalTools]);
-
-/**
- * The 24/7 vendor work-order agent's registry: three reads pinned to ONE work
- * order via ctx.vendorScope plus escalate_to_manager (the only write, allow-
- * listed for autonomous calls). Deliberately tiny and separate from every other
- * registry — the SMS/inbox agent must never see invoices, financials, or any
- * manager tool.
- */
-export const vendorWorkOrderAgentRegistry = buildRegistry([
-  getJobDetailsTool,
-  getJobAccessInfoTool,
-  listMyJobsWithThisManagerTool,
-  escalateToManagerTool,
-]);
-
-/**
- * Prospect-facing leasing SMS agent on each manager's Twilio work number.
- * Separate registry so it never sees financials, residents, or vendor tools.
- */
-export const leasingSmsAgentRegistry = buildRegistry([
-  listLiveListingsTool,
-  getListingDetailsTool,
-  buildProspectLinksTool,
-  getSiteLinksTool,
-  escalateLeasingToManagerTool,
-]);
-
-/**
- * The manager-financials WRITE tools on their own, for tests and for any caller
- * that needs just the accounting writes. These are ALSO part of `agentRegistry`
- * now: every one carries a preview, so the model can propose them and only the
- * landlord's explicit confirmation executes them — the same gate every other
- * write tool goes through.
- */
-export const managerWriteRegistry = buildRegistry([...managerFinancialsWriteTools]);
-
-export {
-  resolveAgentContext,
-  resolveResidentAgentContext,
-  resolveVendorAgentContext,
-  type AgentContext,
-} from "./context";
+export { resolveAgentContext, type AgentContext } from "./context";

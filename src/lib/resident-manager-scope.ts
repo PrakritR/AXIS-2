@@ -15,6 +15,42 @@ type ServiceRoleDb = ReturnType<typeof createSupabaseServiceRoleClient>;
  * are publicly selectable, so any resident could discover an unrelated manager's
  * property id and inject a row into that manager's queue.
  */
+/**
+ * Manager user ids that own the given resident: approved application records
+ * plus any charge/lease records keyed by the resident's email. This is the
+ * authoritative "who are my managers" resolver, shared by the inbox recipient
+ * scope and the resident agent context.
+ */
+export async function managerIdsOwningResident(
+  db: ServiceRoleDb,
+  residentEmail: string,
+): Promise<string[]> {
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return [];
+  const ids = new Set<string>();
+
+  const { data: apps } = await db
+    .from("manager_application_records")
+    .select("manager_user_id, row_data")
+    .eq("resident_email", email);
+  for (const row of apps ?? []) {
+    const rowData = (row.row_data ?? {}) as Record<string, unknown>;
+    if (rowData.bucket !== "approved") continue;
+    const id = String(row.manager_user_id ?? "").trim();
+    if (id) ids.add(id);
+  }
+
+  for (const table of ["portal_household_charge_records", "portal_lease_pipeline_records"] as const) {
+    const { data } = await db.from(table).select("manager_user_id").eq("resident_email", email);
+    for (const row of data ?? []) {
+      const id = String(row.manager_user_id ?? "").trim();
+      if (id) ids.add(id);
+    }
+  }
+
+  return [...ids];
+}
+
 export async function residentBelongsToManager(
   db: ServiceRoleDb,
   params: { residentEmail: string; managerUserId: string },

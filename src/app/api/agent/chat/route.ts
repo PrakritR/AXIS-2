@@ -1,40 +1,34 @@
 import { NextResponse } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
-import { resolveAgentContext, type AgentContext } from "@/lib/tools/context";
+import { resolveAgentContext } from "@/lib/tools/context";
 import { agentRegistry } from "@/lib/tools";
-import {
-  createPendingAction,
-  denyPendingAction,
-} from "@/lib/tools/pending-actions";
-import { runConfirmedPendingAction } from "@/lib/tools/confirm-gate.server";
 import { runAgentTurn } from "@/lib/agent/loop";
+import { SYSTEM_PROMPT } from "@/lib/agent/system-prompt";
+import { sanitizeChatMessages, lastUserText } from "@/lib/agent/chat-handler";
+import { parseChatImages, buildImageUserMessage } from "@/lib/agent/images";
+import { persistPendingAction } from "@/lib/tools/pending-actions";
+import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
-import { executeDispatch } from "@/lib/work-order-dispatch.server";
 
 export const runtime = "nodejs";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
-
 /**
- * Confirm path for a proposed write action. The client sends ONLY the pending
- * action id; the tool name and input come from the server-stored proposal
- * (Zod-validated at propose time, re-validated here), and the tool handler
- * re-resolves current state itself. Client- or model-supplied arguments are
- * never trusted at confirm time.
+ * Manager-portal assistant turn. Write tools are exposed to the model but a
+ * proposal never executes here: the loop halts, the proposal is persisted, and
+ * only the gated /api/agent/action endpoint can execute it after the user
+ * confirms.
  */
-async function confirmAction(ctx: AgentContext, actionId: string) {
-  const result = await runConfirmedPendingAction(ctx, actionId);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
-  }
-  track("assistant_action_confirmed", ctx.userId, { action: result.toolName });
-  return NextResponse.json({ reply: result.reply, toolTrace: [{ tool: result.toolName, ok: true }] });
-}
-
 export async function POST(req: Request) {
   const ctx = await resolveAgentContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  if (!rateLimit(`agent-chat:${ctx.userId}`, 20, 60_000).ok) {
+    return NextResponse.json(
+      { error: "You're sending messages a little fast — please wait a moment and try again." },
+      { status: 429 },
+    );
+  }
 
   let body: Record<string, unknown> = {};
   try {
@@ -43,98 +37,83 @@ export async function POST(req: Request) {
     body = {};
   }
 
-  if (typeof body.confirmActionId === "string") {
-    return confirmAction(ctx, body.confirmActionId);
-  }
-
-  if (typeof body.denyActionId === "string") {
-    const denied = await denyPendingAction(ctx, body.denyActionId);
-    track("assistant_action_denied", ctx.userId, { known: denied });
-    return NextResponse.json({ reply: "Okay, cancelled. Nothing was sent or changed." });
-  }
-
-  // Work-order dispatch keeps its own confirm shape: its proposal is persisted
-  // server-side on the work order row itself (row_data.dispatch, written by the
-  // deterministic prepareDispatch flow), so executeDispatch re-derives everything
-  // from that record — the client sends only the work order id. It does not go
-  // through agent_pending_actions, which exists to persist model-proposed args.
-  const legacyConfirm = body.confirmAction as { type?: string; workOrderId?: unknown } | undefined;
-  if (legacyConfirm?.type === "dispatch_work_order") {
-    const workOrderId = String(legacyConfirm.workOrderId ?? "").trim();
-    try {
-      const result = await executeDispatch(ctx.db, {
-        workOrderId,
-        landlordId: ctx.landlordId,
-        actor: { userId: ctx.userId, email: ctx.email, fullName: "" },
-        decidedBy: "manager",
-      });
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: result.status >= 500 ? 500 : 400 });
-      }
-      track("assistant_action_confirmed", ctx.userId, { action: "dispatch_work_order" });
-      const reply = result.scheduledIso
-        ? `Dispatched ${result.vendorName} and booked their next open slot. They've been notified.`
-        : `Dispatched ${result.vendorName}. No availability was on file, so pick a visit time from Work orders.`;
-      return NextResponse.json({ reply, toolTrace: [{ tool: "dispatch_work_order", ok: true }] });
-    } catch (e) {
-      console.error("[agent/chat] dispatch confirm failed:", e);
-      return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
-    }
-  }
-
-  const rawMessages = Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : [];
-  const messages: Anthropic.MessageParam[] = rawMessages
-    .filter(
-      (m) =>
-        m &&
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.trim().length > 0,
-    )
-    .slice(-20)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
-
+  const messages = sanitizeChatMessages(body.messages);
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
   }
 
+  // Optional image attachments apply to the LAST user message only; history
+  // stays text-only so tool_use/image blocks never cross a turn boundary.
+  const images = parseChatImages(body.images);
+  if (!images.ok) return NextResponse.json({ error: images.error }, { status: 400 });
+  if (images.blocks.length > 0) {
+    messages[messages.length - 1] = buildImageUserMessage(
+      String(messages[messages.length - 1]!.content ?? ""),
+      images.blocks,
+    );
+  }
+
+  const sessionId = await ensureAgentSession(ctx, "manager", body.sessionId as string | undefined);
+
   try {
-    const result = await traceAgentTurn(ctx, messages as ChatMessage[], (observer) =>
-      runAgentTurn({ ctx, registry: agentRegistry, messages, observer }),
+    const traceActor = {
+      userId: ctx.userId,
+      sessionId: sessionId ?? undefined,
+      metadata: { landlordId: ctx.landlordId, role: "manager" },
+    };
+    const result = await traceAgentTurn(
+      traceActor,
+      messages.map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "[image message]" })),
+      (observer) =>
+        runAgentTurn({ ctx, registry: agentRegistry, system: SYSTEM_PROMPT, messages, observer }),
     );
     track("assistant_message_sent", ctx.userId, {
+      portal: "manager",
       tools: result.toolTrace.length,
       model: result.model,
       tier: result.tier,
+      images: images.blocks.length,
     });
 
-    if (result.pendingAction) {
-      const actionId = await createPendingAction(
-        ctx,
-        result.pendingAction.toolName,
-        result.pendingAction.input,
-        result.pendingAction.preview,
-      );
-      if (actionId) {
-        track("assistant_action_proposed", ctx.userId, { action: result.pendingAction.toolName });
-        return NextResponse.json({
-          reply: result.reply,
-          toolTrace: result.toolTrace,
-          model: result.model,
-          tier: result.tier,
-          usage: result.usage,
-          // The stored input never leaves the server; the client only sees the
-          // preview and the id it can confirm or deny.
-          pendingAction: { id: actionId, preview: result.pendingAction.preview },
+    let pendingAction = null;
+    if (result.proposedAction) {
+      pendingAction = await persistPendingAction(ctx, {
+        portal: "manager",
+        sessionId,
+        toolName: result.proposedAction.toolName,
+        input: result.proposedAction.input,
+        preview: result.proposedAction.preview,
+        destructive: result.proposedAction.destructive,
+      });
+      if (pendingAction) {
+        track("assistant_action_proposed", ctx.userId, {
+          portal: "manager",
+          tool: pendingAction.toolName,
+          batch: pendingAction.preview.batchCount ?? 1,
         });
       }
-      return NextResponse.json({
-        reply: "I prepared an action but couldn't save it for confirmation. Please try again.",
-        toolTrace: result.toolTrace,
-      });
     }
 
-    return NextResponse.json(result);
+    appendAgentMessages(ctx, "manager", sessionId, [
+      { role: "user", content: lastUserText(messages) },
+      {
+        role: "assistant",
+        content: result.reply,
+        toolTrace: {
+          tools: result.toolTrace,
+          model: result.model,
+          tier: result.tier,
+          ...(pendingAction ? { pendingAction: { toolName: pendingAction.toolName } } : {}),
+        },
+      },
+    ]);
+
+    return NextResponse.json({
+      reply: result.reply,
+      toolTrace: result.toolTrace,
+      sessionId,
+      ...(pendingAction ? { pendingAction } : {}),
+    });
   } catch (e) {
     console.error("[agent/chat] turn failed:", e);
     return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });

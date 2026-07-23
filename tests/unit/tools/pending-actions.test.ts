@@ -1,128 +1,195 @@
 import { describe, it, expect } from "vitest";
-import {
-  createPendingAction,
-  claimPendingAction,
-  denyPendingAction,
-  markPendingActionFailed,
-} from "@/lib/tools/pending-actions";
-import { makeWritableCtx } from "./fake-agent-ctx";
+import { persistPendingAction, claimPendingAction } from "@/lib/tools/pending-actions";
 
 /**
- * These tests pin the confirm-security guarantees: a pending action can be
- * claimed exactly once, only by the landlord who owns it, and only before it
- * expires. The claim is what makes a replayed or tampered confirm a no-op.
+ * In-memory stand-in for the agent_pending_actions table that models the
+ * pieces the module depends on: insert-returning-id, and the atomic claim
+ * UPDATE with its status/expiry/actor WHERE clause.
  */
+type Row = Record<string, unknown> & { id: string };
 
-const preview = { kind: "test", title: "t", confirmLabel: "Do", fields: [] };
+function makeFakeDb() {
+  const rows: Row[] = [];
+  let counter = 0;
+
+  function matches(row: Row, filters: [string, string, unknown][]): boolean {
+    return filters.every(([op, col, val]) => {
+      if (op === "eq") return row[col] === val;
+      if (op === "gt") return String(row[col] ?? "") > String(val ?? "");
+      return true;
+    });
+  }
+
+  const db = {
+    from(table: string) {
+      if (table !== "agent_pending_actions") throw new Error(`unexpected table ${table}`);
+      return {
+        insert(values: Record<string, unknown>) {
+          const row: Row = { id: `pa_${++counter}-0000-4000-8000-000000000000`, ...values };
+          rows.push(row);
+          return {
+            select() {
+              return {
+                single: async () => ({ data: { id: row.id }, error: null }),
+              };
+            },
+          };
+        },
+        update(values: Record<string, unknown>) {
+          const filters: [string, string, unknown][] = [];
+          const chain = {
+            eq(col: string, val: unknown) {
+              filters.push(["eq", col, val]);
+              return chain;
+            },
+            gt(col: string, val: unknown) {
+              filters.push(["gt", col, val]);
+              return chain;
+            },
+            select() {
+              return {
+                maybeSingle: async () => {
+                  const hit = rows.find((r) => matches(r, filters));
+                  if (!hit) return { data: null, error: null };
+                  Object.assign(hit, values);
+                  return { data: { ...hit }, error: null };
+                },
+              };
+            },
+            // updates without .select() (the supersede pass) are awaitable
+            then(resolve: (v: { error: null }) => unknown) {
+              for (const r of rows) if (matches(r, filters)) Object.assign(r, values);
+              return Promise.resolve({ error: null }).then(resolve);
+            },
+          };
+          return chain;
+        },
+        select() {
+          const filters: [string, string, unknown][] = [];
+          const chain = {
+            eq(col: string, val: unknown) {
+              filters.push(["eq", col, val]);
+              return chain;
+            },
+            maybeSingle: async () => {
+              const hit = rows.find((r) => matches(r, filters));
+              return { data: hit ? { ...hit } : null, error: null };
+            },
+          };
+          return chain;
+        },
+      };
+    },
+  };
+  return { db, rows };
+}
+
+const preview = { title: "Do thing", summary: "Will do.", lines: [] };
 
 describe("pending actions", () => {
-  it("stores the proposal and claims it exactly once (replay returns null)", async () => {
-    const { ctx, store } = makeWritableCtx();
-    const id = await createPendingAction(ctx, "do_thing", { target: "abc" }, preview);
-    expect(id).toBeTruthy();
-    expect(store.agent_pending_actions).toHaveLength(1);
-    expect(store.agent_pending_actions![0]).toMatchObject({
-      landlord_id: "manager_a",
-      tool_name: "do_thing",
-      status: "proposed",
-    });
-
-    const claimed = await claimPendingAction(ctx, id!);
-    expect(claimed).toEqual({ toolName: "do_thing", input: { target: "abc" } });
-    expect(store.agent_pending_actions![0]).toMatchObject({ status: "executed" });
-
-    // Replay: the same id can never execute twice.
-    expect(await claimPendingAction(ctx, id!)).toBeNull();
+  it("persists a proposal and returns the wire shape without the raw input", async () => {
+    const { db } = makeFakeDb();
+    const pending = await persistPendingAction(
+      { userId: "user_a", landlordId: "user_a", db },
+      { portal: "manager", toolName: "do_thing", input: { targetId: "t1" }, preview, destructive: false },
+    );
+    expect(pending).toBeTruthy();
+    expect(pending!.toolName).toBe("do_thing");
+    expect(pending!.preview).toEqual(preview);
+    expect("input" in pending!).toBe(false);
   });
 
-  it("rejects a claim from another landlord (tampered confirm)", async () => {
-    const { ctx, store } = makeWritableCtx();
-    const id = await createPendingAction(ctx, "do_thing", { target: "abc" }, preview);
-
-    const { ctx: foreignCtx } = makeWritableCtx({ agent_pending_actions: store.agent_pending_actions! }, {
-      landlordId: "manager_b",
-      userId: "manager_b",
+  it("supersedes prior pending proposals for the same actor", async () => {
+    const { db, rows } = makeFakeDb();
+    const actor = { userId: "user_a", landlordId: "user_a", db };
+    await persistPendingAction(actor, {
+      portal: "manager",
+      toolName: "first",
+      input: {},
+      preview,
+      destructive: false,
     });
-    expect(await claimPendingAction(foreignCtx, id!)).toBeNull();
-    // Untouched: the rightful landlord can still act on it.
-    expect(store.agent_pending_actions![0]).toMatchObject({ status: "proposed" });
+    await persistPendingAction(actor, {
+      portal: "manager",
+      toolName: "second",
+      input: {},
+      preview,
+      destructive: false,
+    });
+    const statuses = rows.map((r) => [r.tool_name, r.status]);
+    expect(statuses).toContainEqual(["first", "superseded"]);
+    expect(statuses).toContainEqual(["second", "pending"]);
   });
 
-  it("rejects a claim from a co-tenant who shares the proposer's landlord", async () => {
-    // Two residents of the same manager share a landlord_id, so claiming on
-    // landlord_id alone would let either confirm the other's action. The claim
-    // is keyed on user_id for exactly this case.
-    const residentScope = {
-      residentUserId: "resident_a",
-      residentEmail: "a@example.com",
-      residentName: "Ada",
-      managerUserId: "manager_a",
-      propertyId: null,
-    };
-    const { ctx, store } = makeWritableCtx({}, {
-      landlordId: "manager_a",
-      userId: "resident_a",
-      residentScope,
+  it("claims exactly once — a second confirm reports already_resolved", async () => {
+    const { db } = makeFakeDb();
+    const actor = { userId: "user_a", landlordId: "user_a", db };
+    const pending = await persistPendingAction(actor, {
+      portal: "manager",
+      toolName: "do_thing",
+      input: { targetId: "t1" },
+      preview,
+      destructive: false,
     });
-    const id = await createPendingAction(ctx, "report_maintenance_issue", { description: "leak" }, preview);
-    expect(store.agent_pending_actions![0]).toMatchObject({ landlord_id: "manager_a", user_id: "resident_a" });
 
-    const { ctx: coTenantCtx } = makeWritableCtx({ agent_pending_actions: store.agent_pending_actions! }, {
-      landlordId: "manager_a",
-      userId: "resident_b",
-      residentScope: { ...residentScope, residentUserId: "resident_b", residentEmail: "b@example.com" },
-    });
-    expect(await claimPendingAction(coTenantCtx, id!)).toBeNull();
-    expect(store.agent_pending_actions![0]).toMatchObject({ status: "proposed" });
+    const first = await claimPendingAction(actor, pending!.id, "confirm");
+    expect(first.ok).toBe(true);
+    if (first.ok) expect(first.row.input).toEqual({ targetId: "t1" });
 
-    // The rightful resident still can.
-    expect(await claimPendingAction(ctx, id!)).toEqual({
-      toolName: "report_maintenance_issue",
-      input: { description: "leak" },
-    });
+    const second = await claimPendingAction(actor, pending!.id, "confirm");
+    expect(second).toEqual({ ok: false, reason: "already_resolved" });
   });
 
-  it("anchors a landlord-less actor (a vendor) to their own user id", async () => {
-    // `landlord_id` is `uuid not null`, and a vendor has no landlord.
-    const { ctx, store } = makeWritableCtx({}, {
-      landlordId: "",
-      userId: "vendor_a",
-      vendorPortalScope: { vendorUserId: "vendor_a", email: "v@example.com" },
+  it("a foreign actor's claim reads as not_found (anti-enumeration)", async () => {
+    const { db } = makeFakeDb();
+    const owner = { userId: "user_a", landlordId: "user_a", db };
+    const stranger = { userId: "user_b", landlordId: "user_b", db };
+    const pending = await persistPendingAction(owner, {
+      portal: "manager",
+      toolName: "do_thing",
+      input: {},
+      preview,
+      destructive: false,
     });
-    const id = await createPendingAction(ctx, "submit_vendor_invoice", { lineItems: [] }, preview);
-    expect(store.agent_pending_actions![0]).toMatchObject({ landlord_id: "vendor_a", user_id: "vendor_a" });
-    expect(await claimPendingAction(ctx, id!)).toBeTruthy();
+
+    const claim = await claimPendingAction(stranger, pending!.id, "confirm");
+    expect(claim).toEqual({ ok: false, reason: "not_found" });
+
+    // ...and the owner can still claim it afterwards.
+    const ownerClaim = await claimPendingAction(owner, pending!.id, "confirm");
+    expect(ownerClaim.ok).toBe(true);
   });
 
-  it("rejects unknown ids and expired proposals", async () => {
-    const { ctx, store } = makeWritableCtx();
-    expect(await claimPendingAction(ctx, "no-such-id")).toBeNull();
-    expect(await claimPendingAction(ctx, "")).toBeNull();
+  it("an expired proposal cannot be claimed", async () => {
+    const { db, rows } = makeFakeDb();
+    const actor = { userId: "user_a", landlordId: "user_a", db };
+    const pending = await persistPendingAction(actor, {
+      portal: "manager",
+      toolName: "do_thing",
+      input: {},
+      preview,
+      destructive: false,
+    });
+    // Force-expire the row.
+    rows.find((r) => r.id === pending!.id)!.expires_at = new Date(Date.now() - 1000).toISOString();
 
-    const id = await createPendingAction(ctx, "do_thing", {}, preview);
-    store.agent_pending_actions![0]!.expires_at = new Date(Date.now() - 1000).toISOString();
-    expect(await claimPendingAction(ctx, id!)).toBeNull();
+    const claim = await claimPendingAction(actor, pending!.id, "confirm");
+    expect(claim).toEqual({ ok: false, reason: "expired" });
   });
 
-  it("marks a claimed action as failed when execution throws, never back to proposed", async () => {
-    const { ctx, store } = makeWritableCtx();
-    const id = await createPendingAction(ctx, "do_thing", {}, preview);
-    await claimPendingAction(ctx, id!);
+  it("cancel claims the row with cancelled status", async () => {
+    const { db, rows } = makeFakeDb();
+    const actor = { userId: "user_a", landlordId: "user_a", db };
+    const pending = await persistPendingAction(actor, {
+      portal: "manager",
+      toolName: "do_thing",
+      input: {},
+      preview,
+      destructive: false,
+    });
 
-    await markPendingActionFailed(ctx, id!);
-    expect(store.agent_pending_actions![0]).toMatchObject({ status: "failed" });
-    // A failed action can never be claimed again — a retry needs a new proposal.
-    expect(await claimPendingAction(ctx, id!)).toBeNull();
-  });
-
-  it("denies a proposal, after which it cannot be claimed", async () => {
-    const { ctx, store } = makeWritableCtx();
-    const id = await createPendingAction(ctx, "do_thing", {}, preview);
-
-    expect(await denyPendingAction(ctx, id!)).toBe(true);
-    expect(store.agent_pending_actions![0]).toMatchObject({ status: "denied" });
-    expect(await claimPendingAction(ctx, id!)).toBeNull();
-    // Denying twice is also a no-op.
-    expect(await denyPendingAction(ctx, id!)).toBe(false);
+    const claim = await claimPendingAction(actor, pending!.id, "cancel");
+    expect(claim.ok).toBe(true);
+    expect(rows.find((r) => r.id === pending!.id)!.status).toBe("cancelled");
   });
 });
