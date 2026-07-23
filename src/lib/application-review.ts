@@ -1,5 +1,9 @@
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
-import { readManagerApplicationRows, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  readManagerApplicationRows,
+  syncManagerApplicationsFromServer,
+  writeManagerApplicationRows,
+} from "@/lib/manager-applications-storage";
 import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
@@ -52,7 +56,8 @@ export async function requestResidentWelcomeEmail(row: DemoApplicantRow): Promis
 
 export const WITHDRAWN_APPROVAL_BLOCKED_MESSAGE =
   "This application was withdrawn by the applicant and can no longer be approved.";
-const UNCONFIRMED_APPROVAL_MESSAGE = "Could not approve this application.";
+const UNCONFIRMED_APPROVAL_MESSAGE =
+  "This applicant has a withdrawn application on file — refresh to see the current status before approving.";
 const UNREACHABLE_APPROVAL_MESSAGE =
   "Couldn't reach the server — approval not saved, retry when connected.";
 
@@ -181,6 +186,15 @@ export async function transitionApplicationBucket(
   // 500 unverifiable, 401/403 session or permission) means the resident was never
   // approved, and neither does a request that never got a response — so an
   // optimistic local "approved" must not survive either.
+  //
+  // KNOWN LIMITATION (pre-existing, general to every approve — NOT specific to the
+  // withdrawn guard, tracked as a separate follow-up): the rollback below is
+  // client-side only. `writeManagerApplicationRows` above already fired the
+  // fire-and-forget `action: "replace"` mirror with this row as `approved`, and on
+  // the server `persistNormalizedRow` provisions the resident account for an
+  // approved row. So for a NON-withdrawn refusal the account may already exist even
+  // though the local state reverts. The withdrawn case is covered — that mirror is
+  // refused by the same guard — but the two writes are otherwise unordered.
   if (nextBucket === "approved") {
     let res: Response | null;
     try {
@@ -193,15 +207,27 @@ export async function transitionApplicationBucket(
       const refusal = await readApprovalRefusal(res);
       const serverMessage = typeof refusal.error === "string" && refusal.error.trim() ? refusal.error.trim() : "";
       const confirmedWithdrawn = res.status === 409 && refusalConfirmsThisApplication(id, refusal);
+      const unconfirmedWithdrawn = res.status === 409 && !confirmedWithdrawn;
       let message: string;
       if (confirmedWithdrawn) {
         message = serverMessage || WITHDRAWN_APPROVAL_BLOCKED_MESSAGE;
-      } else if (res.status === 409) {
+      } else if (unconfirmedWithdrawn) {
         message = UNCONFIRMED_APPROVAL_MESSAGE;
       } else {
         message = serverMessage || "Could not confirm this approval on the server. Nothing was changed.";
       }
       rollbackApprovedTransition(id, row, opts.userId ?? null, { stampWithdrawn: confirmedWithdrawn });
+      if (unconfirmedWithdrawn) {
+        // The refusal names a record we cannot tie to this row, so nothing local can
+        // be stamped from it. Pull authoritative state now instead of waiting out the
+        // sync TTL, or the manager's only visible move is to retry the same doomed
+        // Approve.
+        try {
+          await syncManagerApplicationsFromServer({ force: true, managerUserId: opts.userId ?? null });
+        } catch {
+          /* the rollback already stands; the next scheduled sync will converge */
+        }
+      }
       return {
         row,
         welcomeSent: false,
