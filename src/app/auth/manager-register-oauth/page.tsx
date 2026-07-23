@@ -19,6 +19,10 @@ function FinishContent() {
         const res = await fetch("/api/auth/provision-pending-manager", {
           method: "POST",
           credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          // New manager accounts created via Google/Apple start on a 14-day Pro
+          // trial (no card). The pricing flow's free-select caller omits this.
+          body: JSON.stringify({ trial: true }),
         });
         const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
         if (!res.ok) {

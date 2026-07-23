@@ -110,6 +110,110 @@ describe("ensureFreeManagerPortalAccess", () => {
     );
   });
 
+  it("provisions a genuinely new account onto a 14-day Pro trial when opted in", async () => {
+    const { ensureFreeManagerPortalAccess } = await import("@/lib/auth/manager-portal-provision");
+    // No manager_purchases row for this user or email → genuinely new.
+    findManagerPurchaseForAccount.mockResolvedValue(null);
+
+    const result = await ensureFreeManagerPortalAccess(mockSupabase() as never, testUser(), {
+      trialForNewManager: true,
+    });
+
+    expect(result).toEqual({ status: "portal_ready", managerId: "AXIS-NEW", provisioned: true });
+    expect(finalizePendingManagerFreeTier).toHaveBeenCalledTimes(1);
+    expect(finalizePendingManagerFreeTier).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tier: "pro", billing: "trial", userId: "user-1" }),
+    );
+  });
+
+  it("provisions a genuinely new account as free when NOT opted into the trial", async () => {
+    const { ensureFreeManagerPortalAccess } = await import("@/lib/auth/manager-portal-provision");
+    findManagerPurchaseForAccount.mockResolvedValue(null);
+
+    const result = await ensureFreeManagerPortalAccess(mockSupabase() as never, testUser());
+
+    expect(result).toEqual({ status: "portal_ready", managerId: "AXIS-NEW", provisioned: true });
+    expect(finalizePendingManagerFreeTier).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tier: "free", billing: "monthly", userId: "user-1" }),
+    );
+  });
+
+  it("never re-grants a trial to an existing complete account, even when opted in", async () => {
+    const { ensureFreeManagerPortalAccess } = await import("@/lib/auth/manager-portal-provision");
+    isManagerOnboardingComplete.mockReturnValue(true);
+    findManagerPurchaseForAccount.mockResolvedValue({
+      id: "purchase-1",
+      email: "new@test.com",
+      manager_id: "AXIS-FREE",
+      tier: "free",
+      billing: "monthly",
+      stripe_checkout_session_id: "axis_intent_existing",
+      user_id: "user-1",
+      paid_at: new Date().toISOString(),
+    });
+
+    const result = await ensureFreeManagerPortalAccess(mockSupabase() as never, testUser(), {
+      trialForNewManager: true,
+    });
+
+    expect(result).toEqual({ status: "portal_ready", managerId: "AXIS-FREE", provisioned: false });
+    expect(provisionPendingManagerAccount).not.toHaveBeenCalled();
+    expect(finalizePendingManagerFreeTier).not.toHaveBeenCalled();
+  });
+
+  it("never re-grants a trial to a manager whose trial already expired", async () => {
+    const { ensureFreeManagerPortalAccess } = await import("@/lib/auth/manager-portal-provision");
+    // A used/expired trial keeps its purchase row (session id is axis_intent_…),
+    // so isManagerOnboardingComplete is true and provisioning short-circuits.
+    isManagerOnboardingComplete.mockReturnValue(true);
+    findManagerPurchaseForAccount.mockResolvedValue({
+      id: "purchase-1",
+      email: "new@test.com",
+      manager_id: "AXIS-EXPIRED",
+      tier: "pro",
+      billing: "trial",
+      stripe_checkout_session_id: "axis_intent_expired",
+      user_id: "user-1",
+      paid_at: "2020-01-01T00:00:00.000Z",
+    });
+
+    const result = await ensureFreeManagerPortalAccess(mockSupabase() as never, testUser(), {
+      trialForNewManager: true,
+    });
+
+    expect(result).toEqual({ status: "portal_ready", managerId: "AXIS-EXPIRED", provisioned: false });
+    expect(provisionPendingManagerAccount).not.toHaveBeenCalled();
+    expect(finalizePendingManagerFreeTier).not.toHaveBeenCalled();
+  });
+
+  it("keeps a half-provisioned pending account free even when opted into the trial", async () => {
+    const { ensureFreeManagerPortalAccess } = await import("@/lib/auth/manager-portal-provision");
+    findManagerPurchaseForAccount.mockResolvedValue({
+      id: "purchase-1",
+      email: "new@test.com",
+      manager_id: "AXIS-PENDING",
+      tier: null,
+      billing: null,
+      stripe_checkout_session_id: "axis_pending_test-id",
+      user_id: "user-1",
+      paid_at: null,
+    });
+
+    const result = await ensureFreeManagerPortalAccess(mockSupabase() as never, testUser(), {
+      trialForNewManager: true,
+    });
+
+    expect(result).toEqual({ status: "portal_ready", managerId: "AXIS-PENDING", provisioned: true });
+    // Trial is reserved for genuinely NEW accounts (no purchase row); a pending
+    // row means the account was already started, so it stays free.
+    expect(finalizePendingManagerFreeTier).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tier: "free", userId: "user-1" }),
+    );
+  });
+
   it("returns portal_ready without reprovisioning complete accounts", async () => {
     const { ensureFreeManagerPortalAccess } = await import("@/lib/auth/manager-portal-provision");
     isManagerOnboardingComplete.mockReturnValue(true);
