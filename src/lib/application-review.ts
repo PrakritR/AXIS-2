@@ -6,6 +6,7 @@ import {
   removeAllApplicationCharges,
   removeApprovedApplicationCharges,
 } from "@/lib/household-charges";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 
 export function stageLabelForApplicationBucket(bucket: ManagerApplicationBucket): string {
   if (bucket === "approved") return "Approved";
@@ -13,14 +14,16 @@ export function stageLabelForApplicationBucket(bucket: ManagerApplicationBucket)
   return "Submitted";
 }
 
-async function syncResidentApprovalStatus(row: DemoApplicantRow, nextBucket: ManagerApplicationBucket): Promise<void> {
+async function syncResidentApprovalStatus(row: DemoApplicantRow, nextBucket: ManagerApplicationBucket): Promise<Response | null> {
   const email = row.email?.trim().toLowerCase();
-  if (!email) return;
-  await fetch("/api/portal/resident-approval", {
+  if (!email) return null;
+  // `applicationId` lets the server re-check the exact record's withdrawn stamp so a
+  // withdrawn application can never be approved server-side (defense in depth).
+  return fetch("/api/portal/resident-approval", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, approved: nextBucket === "approved" }),
+    body: JSON.stringify({ email, approved: nextBucket === "approved", applicationId: row.id }),
   });
 }
 
@@ -56,6 +59,12 @@ export async function transitionApplicationBucket(
   const rows = readManagerApplicationRows();
   const row = rows.find((r) => r.id === id);
   if (!row) return null;
+  // Money-path guard: a resident-withdrawn application must never be approved.
+  // Approving it would provision a resident account + rent/deposit charges for
+  // someone who explicitly pulled out. The manager UI already hides Approve for
+  // withdrawn rows; this is the shared-code backstop (the Residents tab reuses
+  // this same path), and the server re-checks in /api/portal/resident-approval.
+  if (nextBucket === "approved" && isWithdrawnApplicationRow(row)) return null;
   const next = rows.map((r) =>
     r.id === id
       ? {

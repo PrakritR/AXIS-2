@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import { track } from "@/lib/analytics/posthog";
 import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
+import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -8,6 +11,11 @@ export const runtime = "nodejs";
 
 function normalizeEmail(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function idVariants(id: string): string[] {
+  const trimmed = id.trim();
+  return [...new Set([trimmed, normalizeApplicationAxisId(trimmed)].filter(Boolean))];
 }
 
 function canManageResidentApproval(role: string | null | undefined): boolean {
@@ -25,15 +33,16 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    let body: { email?: unknown; approved?: unknown };
+    let body: { email?: unknown; approved?: unknown; applicationId?: unknown };
     try {
-      body = (await req.json()) as { email?: unknown; approved?: unknown };
+      body = (await req.json()) as { email?: unknown; approved?: unknown; applicationId?: unknown };
     } catch {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
     const email = normalizeEmail(body.email);
     const approved = typeof body.approved === "boolean" ? body.approved : null;
+    const applicationId = typeof body.applicationId === "string" ? body.applicationId.trim() : "";
     if (!email || approved == null) {
       return NextResponse.json({ error: "Email and approved are required." }, { status: 400 });
     }
@@ -56,6 +65,33 @@ export async function PATCH(req: Request) {
       }
     } else if (!canManageResidentApproval(requestor.role)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    // Money-path guard (defense in depth — the manager UI already hides Approve for
+    // withdrawn rows): a manager must never approve a resident-withdrawn application.
+    // Approving it provisions a resident account + rent/deposit charges for someone
+    // who explicitly pulled out. Scoped to the ACTING manager's own record so it can
+    // never read another landlord's data. A withdrawal is a reversible stamp, so
+    // re-submission (not un-withdraw) is the intended path back to approvable.
+    if (requestor.role !== "resident" && approved) {
+      let appQuery = svc
+        .from("manager_application_records")
+        .select("id, row_data, resident_email")
+        .eq("manager_user_id", user.id);
+      appQuery = applicationId
+        ? appQuery.in("id", idVariants(applicationId))
+        : appQuery.eq("resident_email", email);
+      const { data: appRow } = await appQuery
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const stored = (appRow?.row_data ?? null) as DemoApplicantRow | null;
+      if (stored && isWithdrawnApplicationRow(stored)) {
+        return NextResponse.json(
+          { error: "This application was withdrawn by the applicant and can no longer be approved." },
+          { status: 409 },
+        );
+      }
     }
 
     const query =

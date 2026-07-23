@@ -80,6 +80,22 @@ describe("in-progress-application", () => {
     expect(isSubmittedPendingApplicationRow(submitted)).toBe(true);
   });
 
+  it("excludes a resident-withdrawn row so it never inflates the actionable pending count", () => {
+    // A withdrawn application keeps bucket=pending, but the resident pulled out —
+    // it is not awaiting review, so it must stay off the nav badge / dashboard count.
+    const submitted = {
+      id: "AXIS-3",
+      name: "A",
+      property: "P",
+      bucket: "pending" as const,
+      stage: "Submitted",
+      detail: "",
+    };
+    const withdrawn = { ...submitted, id: "AXIS-4", withdrawnAt: "2026-07-22T00:00:00.000Z" };
+    expect(isSubmittedPendingApplicationRow(submitted)).toBe(true);
+    expect(isSubmittedPendingApplicationRow(withdrawn)).toBe(false);
+  });
+
   it("builds resume url with property id", () => {
     const form = { ...createInitialRentalWizardState(), propertyId: "prop-1", fullLegalName: "Jane Doe" };
     const row = buildInProgressApplicationRow({

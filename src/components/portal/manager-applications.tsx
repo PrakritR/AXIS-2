@@ -733,6 +733,16 @@ export function ManagerApplications() {
     <>
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
+          isWithdrawnApplicationRow(row) ? (
+            // The resident withdrew this application. Approving it would provision a
+            // resident account + rent/deposit charges for someone who explicitly
+            // pulled out, so no Approve (and no completion reminder) is offered. The
+            // row stays visible + reversible (withdrawal is a stamp, not a delete);
+            // Reject/Delete remain so the manager can formally close it.
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
+              Reject
+            </Button>
+          ) : (
           <>
             <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} data-attr="application-approve" onClick={() => setApprovePreviewRow(row)}>
               Approve
@@ -755,6 +765,7 @@ export function ManagerApplications() {
               </Button>
             ) : null}
           </>
+          )
         ) : (
           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>
             Move to pending

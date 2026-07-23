@@ -6,6 +6,7 @@ import {
   wouldDowngradeSubmittedApplication,
 } from "@/lib/manager-applications-storage";
 import { getPropertyById } from "@/lib/rental-application/data";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 export const IN_PROGRESS_APPLICATION_STAGE = "In progress";
@@ -14,9 +15,15 @@ export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
   return row.bucket === "pending" && row.stage.trim().toLowerCase() === IN_PROGRESS_APPLICATION_STAGE.toLowerCase();
 }
 
-/** Submitted applications awaiting manager review (pending bucket, not a draft). */
+/**
+ * Submitted applications awaiting manager review (pending bucket, not a draft).
+ * A resident-withdrawn application keeps `bucket === "pending"` but is NOT
+ * awaiting review — the resident pulled out — so it is excluded here to keep it
+ * off the manager's actionable "needs attention" surfaces (nav badge, dashboard).
+ * It stays visible in the Applications tab, labelled Withdrawn.
+ */
 export function isSubmittedPendingApplicationRow(row: DemoApplicantRow): boolean {
-  return row.bucket === "pending" && !isInProgressApplicationRow(row);
+  return row.bucket === "pending" && !isInProgressApplicationRow(row) && !isWithdrawnApplicationRow(row);
 }
 
 export function inProgressApplicationResumeUrl(origin: string, row: DemoApplicantRow): string {
