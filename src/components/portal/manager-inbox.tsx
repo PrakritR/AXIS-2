@@ -23,10 +23,12 @@ import {
   inboxThreadMessages,
   appendReplyToInboxThread,
   type InboxThreadMessage,
+  type InboxAiDraft,
 } from "@/lib/portal-inbox-storage";
 import {
   INBOX_TAB_DEFS,
   INBOX_LIST_SCROLL,
+  AiDraftReplyCard,
   InboxComposer,
   InboxConversationRow,
   InboxThreadEmpty,
@@ -64,6 +66,9 @@ type InboxThread = {
   body: string;
   time: string;
   unread: boolean;
+  messages?: InboxThreadMessage[];
+  /** Manager-only pending AI reply draft (never present on resident rows). */
+  aiDraft?: InboxAiDraft;
 };
 
 /** Search deliberately skips the trash folder; say so rather than letting a
@@ -454,7 +459,9 @@ export const ManagerInbox = forwardRef<
         body: text,
         at: new Date().toLocaleString(),
       };
-      const updated = appendReplyToInboxThread(thread, reply);
+      // Sending a reply supersedes any pending AI draft — clear it so it never
+      // lingers (and never leaks) once a real reply has gone out.
+      const updated = { ...appendReplyToInboxThread(thread, reply), aiDraft: undefined };
       const next = local.map((t) => (t.id === thread.id ? updated : t));
       persistInboxRef.current = false;
       setLocal(next);
@@ -471,6 +478,9 @@ export const ManagerInbox = forwardRef<
         credentials: "include",
         body: JSON.stringify({
           threadId: thread.id,
+          // Name the sender so the reply reads as the manager on the resident's
+          // side (matches the reply bubble above), not the generic default.
+          fromName: "Property manager",
           subject,
           text,
           toEmails: [thread.email],
@@ -549,6 +559,7 @@ export const ManagerInbox = forwardRef<
   // A fresh draft per conversation.
   useEffect(() => {
     setReplyDraft("");
+    setEditingDraft(false);
   }, [expandedId]);
 
   const activeIsSent = activeThread?.folder === "sent";
@@ -592,6 +603,7 @@ export const ManagerInbox = forwardRef<
     try {
       await handleReply(activeThread.id, text);
       setReplyDraft("");
+      setEditingDraft(false);
       showToast("Reply sent.");
     } catch {
       showToast("Could not send reply.");
@@ -599,6 +611,122 @@ export const ManagerInbox = forwardRef<
       setReplySending(false);
     }
   }, [activeThread, replyDraft, handleReply, showToast]);
+
+  // ---- Approval-first AI drafts ----------------------------------------
+  // PropLane AI drafts a reply to each incoming resident message. The draft is
+  // stored only on the manager's own thread row (invisible to the resident) and
+  // NEVER sends without the manager's explicit Approve/Edit action.
+  const [editingDraft, setEditingDraft] = useState(false);
+  const [approvingDraft, setApprovingDraft] = useState(false);
+  const [draftingIds, setDraftingIds] = useState<Set<string>>(() => new Set());
+  const [draftErrorIds, setDraftErrorIds] = useState<Set<string>>(() => new Set());
+  // Threads we've already asked the server to draft (success, skip, or error).
+  // Prevents auto-regenerating a draft the manager discarded or the server
+  // declined (e.g. a non-resident sender).
+  const draftAttemptedRef = useRef<Set<string>>(new Set());
+  // Threads the server declined to draft (non-resident sender, empty, no AI) —
+  // no manual "generate" affordance is offered for these.
+  const draftSkippedRef = useRef<Set<string>>(new Set());
+
+  const generateDraft = useCallback(async (rowId: string) => {
+    draftAttemptedRef.current.add(rowId);
+    draftSkippedRef.current.delete(rowId);
+    setDraftErrorIds((s) => {
+      if (!s.has(rowId)) return s;
+      const n = new Set(s);
+      n.delete(rowId);
+      return n;
+    });
+    setDraftingIds((s) => new Set(s).add(rowId));
+    try {
+      const res = await fetch("/api/portal/inbox-draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ threadId: rowId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        draft?: InboxAiDraft;
+        skip?: boolean;
+      };
+      if (data.ok && data.draft?.text) {
+        // Reflect the server-persisted draft in local state (the row already
+        // carries it server-side; this just re-renders the open conversation).
+        setLocal((prev) => prev.map((t) => (t.id === rowId ? { ...t, aiDraft: data.draft } : t)));
+      } else if (data.skip) {
+        draftSkippedRef.current.add(rowId);
+      } else {
+        setDraftErrorIds((s) => new Set(s).add(rowId));
+      }
+    } catch {
+      setDraftErrorIds((s) => new Set(s).add(rowId));
+    } finally {
+      setDraftingIds((s) => {
+        const n = new Set(s);
+        n.delete(rowId);
+        return n;
+      });
+    }
+  }, []);
+
+  // Auto-draft eligible incoming resident messages once the inbox has synced.
+  useEffect(() => {
+    if (!inboxSynced || isDemoModeActive()) return;
+    const eligible = local.filter(
+      (t) =>
+        t.folder === "inbox" &&
+        !t.aiDraft &&
+        inboxThreadMessages(t).length <= 1 && // no manager reply yet
+        !draftAttemptedRef.current.has(t.id),
+    );
+    // Cap the burst so a large inbox doesn't fan out dozens of requests at once.
+    for (const t of eligible.slice(0, 8)) void generateDraft(t.id);
+  }, [local, inboxSynced, generateDraft]);
+
+  const approveDraft = useCallback(
+    async (rowId: string) => {
+      const thread = local.find((t) => t.id === rowId);
+      const text = thread?.aiDraft?.text?.trim();
+      if (!thread || !text) return;
+      setApprovingDraft(true);
+      try {
+        // handleReply sends through the normal path AND strips the draft.
+        await handleReply(rowId, text);
+        showToast("Reply approved and sent.");
+      } catch {
+        showToast("Could not send reply.");
+      } finally {
+        setApprovingDraft(false);
+      }
+    },
+    [local, handleReply, showToast],
+  );
+
+  const startEditDraft = useCallback(
+    (rowId: string) => {
+      const thread = local.find((t) => t.id === rowId);
+      setReplyDraft(thread?.aiDraft?.text ?? "");
+      setEditingDraft(true);
+    },
+    [local],
+  );
+
+  const discardDraft = useCallback(
+    async (rowId: string) => {
+      // Keep it discarded: block auto-regeneration for the rest of the session.
+      draftAttemptedRef.current.add(rowId);
+      const thread = local.find((t) => t.id === rowId);
+      if (!thread) return;
+      const updated: InboxThread = { ...thread, aiDraft: undefined };
+      const next = local.map((t) => (t.id === rowId ? updated : t));
+      persistInboxRef.current = false;
+      setLocal(next);
+      await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+      persistInboxRef.current = true;
+    },
+    [local],
+  );
 
   const emptyCopy =
     tabId === "sent" && rowsForTab.length === 0
@@ -840,14 +968,35 @@ export const ManagerInbox = forwardRef<
       emptyLabel="No messages in this conversation."
       composer={
         activeThread.folder === "trash" ? undefined : (
-          <InboxComposer
-            value={replyDraft}
-            onChange={setReplyDraft}
-            onSubmit={() => void sendActiveReply()}
-            sending={replySending}
-            placeholder="Write a reply…"
-            dataAttr="inbox-reply"
-          />
+          <>
+            {activeThread.folder === "inbox" && !editingDraft ? (
+              <AiDraftReplyCard
+                drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft}
+                draft={activeThread.aiDraft?.text}
+                error={draftErrorIds.has(activeThread.id) ? "error" : undefined}
+                approving={approvingDraft}
+                onApprove={() => void approveDraft(activeThread.id)}
+                onEdit={() => startEditDraft(activeThread.id)}
+                onDiscard={() => void discardDraft(activeThread.id)}
+                onGenerate={
+                  !activeThread.aiDraft &&
+                  !draftingIds.has(activeThread.id) &&
+                  !draftSkippedRef.current.has(activeThread.id) &&
+                  draftAttemptedRef.current.has(activeThread.id)
+                    ? () => void generateDraft(activeThread.id)
+                    : undefined
+                }
+              />
+            ) : null}
+            <InboxComposer
+              value={replyDraft}
+              onChange={setReplyDraft}
+              onSubmit={() => void sendActiveReply()}
+              sending={replySending}
+              placeholder={editingDraft ? "Edit the AI draft, then send…" : "Write a reply…"}
+              dataAttr="inbox-reply"
+            />
+          </>
         )
       }
     />

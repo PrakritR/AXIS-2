@@ -367,7 +367,7 @@ export function ResidentApplicationsPanel({
           portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`);
         }}
       >
-        New application
+        Start application
       </Button>
     ) : null;
 
