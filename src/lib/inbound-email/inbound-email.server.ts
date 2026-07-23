@@ -10,9 +10,10 @@
  * the founder/admin portal inbox alongside every other unified-inbox thread.
  *
  * Resend inbound webhooks carry metadata only (from/to/subject/id); the body is
- * fetched separately from Resend's received-email API. The fetch is best-effort:
- * if it fails, the thread still appears with subject + sender so the admin can
- * follow up (never a silent drop).
+ * fetched separately from Resend's received-email API. The thread row is written
+ * from the metadata FIRST and the body is filled in by a best-effort second pass,
+ * so a slow or failing lookup can never cost us the email — and a redelivery can
+ * still backfill a body an earlier attempt failed to retrieve.
  */
 import { buildPortalInboxThreadUpsert } from "@/lib/portal-inbox-thread-upsert";
 import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
@@ -152,13 +153,31 @@ export async function fetchResendReceivedEmailBody(emailId: string): Promise<str
   }
 }
 
-/** Resolve the best available body: inlined text → inlined html → API fetch. */
-export async function resolveInboundEmailBody(parsed: ParsedInboundEmail): Promise<string> {
+/**
+ * Stand-in stored when no body could be resolved yet. It is also the ONLY body
+ * value the enrichment pass is allowed to overwrite, which is what keeps a
+ * backfill from clobbering a body (or an admin's edits) that already landed.
+ */
+export const INBOUND_EMAIL_BODY_PLACEHOLDER =
+  "(No message body could be retrieved. Open the sender's email to read it.)";
+
+/** Body carried on the webhook itself; "" when the provider sent metadata only. */
+export function inlineInboundEmailBody(parsed: ParsedInboundEmail): string {
   if (parsed.text && parsed.text.trim()) return clampBody(parsed.text);
   if (parsed.html && parsed.html.trim()) return clampBody(htmlToText(parsed.html));
+  return "";
+}
+
+/**
+ * Resolve the best available body: inlined text → inlined html → API fetch.
+ * Returns "" (never the placeholder) when nothing could be retrieved, so callers
+ * can tell a real body from a failed lookup.
+ */
+export async function resolveInboundEmailBody(parsed: ParsedInboundEmail): Promise<string> {
+  const inline = inlineInboundEmailBody(parsed);
+  if (inline) return inline;
   const fetched = await fetchResendReceivedEmailBody(parsed.emailId);
-  if (fetched.trim()) return clampBody(fetched);
-  return "(No message body could be retrieved. Open the sender's email to read it.)";
+  return fetched.trim() ? clampBody(fetched) : "";
 }
 
 /**
@@ -192,28 +211,79 @@ export function buildInboundEmailInboxRow(opts: { parsed: ParsedInboundEmail; bo
   };
 }
 
-/** Postgres unique_violation — the row was already ingested by a prior delivery. */
-function isUniqueViolation(error: { code?: string | null; message?: string | null }): boolean {
-  if (error.code === "23505") return true;
-  return /duplicate key value|already exists/i.test(error.message ?? "");
+/**
+ * Postgres unique_violation — the row was already ingested by a prior delivery.
+ * Matched on the code alone: PostgREST always populates it, and a substring
+ * match on the message could misread an unrelated failure as already-ingested,
+ * turning a lost email into a 200.
+ */
+function isUniqueViolation(error: { code?: string | null }): boolean {
+  return error.code === "23505";
 }
 
 /**
- * Ingest a parsed inbound email into the admin portal inbox. Idempotent by
- * construction: the deterministic thread id is inserted, and a unique-violation
- * from a re-delivered webhook is a no-op, so an admin's read/reply state is
- * never clobbered. Any OTHER database error throws so the caller can return a
- * 5xx and let the provider retry rather than silently dropping support mail.
+ * Ingest a parsed inbound email into the admin portal inbox. The row is written
+ * FIRST, from webhook metadata alone, so mail survives even if the body lookup
+ * hangs or fails — `backfillInboundEmailBody` fills the body in afterwards.
+ *
+ * Idempotent by construction: the deterministic thread id is inserted, and a
+ * unique-violation from a re-delivered webhook is a no-op, so an admin's
+ * read/reply state is never clobbered. Any OTHER database error throws so the
+ * caller can return a 5xx and let the provider retry rather than silently
+ * dropping support mail.
  */
 export async function ingestInboundEmail(
   parsed: ParsedInboundEmail,
   db = createSupabaseServiceRoleClient(),
 ): Promise<{ created: boolean }> {
-  const bodyText = await resolveInboundEmailBody(parsed);
-  const row = buildInboundEmailInboxRow({ parsed, bodyText });
+  const row = buildInboundEmailInboxRow({
+    parsed,
+    bodyText: inlineInboundEmailBody(parsed) || INBOUND_EMAIL_BODY_PLACEHOLDER,
+  });
   const record = buildPortalInboxThreadUpsert(row, { id: "", email: null });
   const { error } = await db.from("portal_inbox_thread_records").insert(record);
   if (!error) return { created: true };
   if (isUniqueViolation(error)) return { created: false };
   throw new Error(error.message);
+}
+
+/**
+ * Best-effort second pass that replaces the placeholder body with the real one
+ * once Resend's received-email API answers. Safe to run on every delivery,
+ * including a redelivery of an email whose first body fetch failed: it writes
+ * only when the stored body is STILL the placeholder, so a body that already
+ * landed — and the admin's read/thread state around it — is never overwritten.
+ */
+export async function backfillInboundEmailBody(
+  parsed: ParsedInboundEmail,
+  db = createSupabaseServiceRoleClient(),
+): Promise<{ updated: boolean }> {
+  if (inlineInboundEmailBody(parsed)) return { updated: false };
+
+  const body = await resolveInboundEmailBody(parsed);
+  if (!body) return { updated: false };
+
+  const id = inboundEmailThreadId(parsed.emailId);
+  const { data, error } = await db
+    .from("portal_inbox_thread_records")
+    .select("row_data")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return { updated: false };
+
+  const rowData = (data as { row_data?: unknown }).row_data;
+  if (!rowData || typeof rowData !== "object") return { updated: false };
+  const current = rowData as Record<string, unknown>;
+  if (current.body !== INBOUND_EMAIL_BODY_PLACEHOLDER) return { updated: false };
+
+  const { error: updateError } = await db
+    .from("portal_inbox_thread_records")
+    .update({ row_data: { ...current, body }, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("row_data->>body", INBOUND_EMAIL_BODY_PLACEHOLDER);
+  if (updateError) {
+    console.warn("inbound-email body backfill failed", parsed.emailId, updateError.message);
+    return { updated: false };
+  }
+  return { updated: true };
 }

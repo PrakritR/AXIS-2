@@ -2,12 +2,14 @@ import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyResendWebhookSignature } from "@/lib/inbound-email/verify-signature";
 import {
+  backfillInboundEmailBody,
   buildInboundEmailInboxRow,
   ingestInboundEmail,
   inboundEmailThreadId,
   parseEmailAddress,
   parseInboundEmailWebhook,
   htmlToText,
+  INBOUND_EMAIL_BODY_PLACEHOLDER,
   type ParsedInboundEmail,
 } from "@/lib/inbound-email/inbound-email.server";
 import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
@@ -168,21 +170,66 @@ describe("buildInboundEmailInboxRow", () => {
   });
 });
 
-/** Minimal fake of the Supabase query builder used by ingestInboundEmail. */
-function fakeDb(opts: { error?: { code?: string; message: string } } = {}) {
-  const inserts: Array<{ record: Record<string, unknown> }> = [];
-  const db = {
-    inserts,
-    from() {
-      return {
-        insert: async (record: Record<string, unknown>) => {
-          inserts.push({ record });
-          return { error: opts.error ?? null };
-        },
-      };
-    },
-  };
-  return db;
+type StoredRow = Record<string, unknown>;
+
+/**
+ * Fake of the Supabase query builder used by ingest + backfill. Backs a real row
+ * map so the unique-violation and "only overwrite the placeholder" paths are
+ * exercised rather than stubbed.
+ */
+function fakeDb(opts: { insertError?: { code?: string; message: string } } = {}) {
+  const rows = new Map<string, StoredRow>();
+  const inserts: Array<{ record: StoredRow }> = [];
+  const updates: Array<{ patch: StoredRow; filters: Array<[string, unknown]> }> = [];
+
+  function table() {
+    return {
+      insert: async (record: StoredRow) => {
+        inserts.push({ record });
+        if (opts.insertError) return { error: opts.insertError };
+        const id = String(record.id);
+        if (rows.has(id)) return { error: { code: "23505", message: "duplicate key value" } };
+        rows.set(id, record);
+        return { error: null };
+      },
+      select() {
+        let id = "";
+        const chain = {
+          eq(column: string, value: unknown) {
+            if (column === "id") id = String(value);
+            return chain;
+          },
+          maybeSingle: async () => ({ data: rows.get(id) ?? null, error: null }),
+        };
+        return chain;
+      },
+      update(patch: StoredRow) {
+        const filters: Array<[string, unknown]> = [];
+        const run = async () => {
+          updates.push({ patch, filters });
+          const id = String(filters.find(([column]) => column === "id")?.[1] ?? "");
+          const existing = rows.get(id);
+          if (!existing) return { error: null };
+          const guard = filters.find(([column]) => column === "row_data->>body");
+          const storedBody = (existing.row_data as StoredRow | undefined)?.body;
+          if (guard && storedBody !== guard[1]) return { error: null };
+          rows.set(id, { ...existing, ...patch });
+          return { error: null };
+        };
+        const chain = {
+          eq(column: string, value: unknown) {
+            filters.push([column, value]);
+            return chain;
+          },
+          then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
+            run().then(resolve, reject),
+        };
+        return chain;
+      },
+    };
+  }
+
+  return { rows, inserts, updates, from: table };
 }
 
 const PARSED: ParsedInboundEmail = {
@@ -194,6 +241,13 @@ const PARSED: ParsedInboundEmail = {
   receivedAt: "2026-07-23T10:00:00.000Z",
   text: "inline body so no network fetch is attempted",
 };
+
+/** Metadata-only delivery — the shape Resend actually sends. */
+const PARSED_NO_BODY: ParsedInboundEmail = { ...PARSED, text: undefined, html: undefined };
+
+function storedRowData(db: ReturnType<typeof fakeDb>, emailId: string): StoredRow {
+  return (db.rows.get(inboundEmailThreadId(emailId))!.row_data as StoredRow) ?? {};
+}
 
 describe("ingestInboundEmail", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -211,31 +265,128 @@ describe("ingestInboundEmail", () => {
     expect(record.participant_email).toBe("jane@example.com");
   });
 
+  it("writes the row from metadata alone, never waiting on the body", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const db = fakeDb();
+    const result = await ingestInboundEmail(PARSED_NO_BODY, db as never);
+    expect(result.created).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(storedRowData(db, "abc-123").body).toBe(INBOUND_EMAIL_BODY_PLACEHOLDER);
+    expect(storedRowData(db, "abc-123").topic).toBe("Hello");
+  });
+
   it("is idempotent — a unique violation from re-delivery is a no-op, not a throw", async () => {
-    const db = fakeDb({ error: { code: "23505", message: "duplicate key value violates unique constraint" } });
-    const result = await ingestInboundEmail(PARSED, db as never);
-    expect(result.created).toBe(false);
+    const db = fakeDb();
+    expect((await ingestInboundEmail(PARSED, db as never)).created).toBe(true);
+    expect((await ingestInboundEmail(PARSED, db as never)).created).toBe(false);
+    expect(db.rows.size).toBe(1);
   });
 
   it("throws on any other database error so the route can 5xx and force a retry", async () => {
-    const db = fakeDb({ error: { code: "08006", message: "connection failure" } });
+    const db = fakeDb({ insertError: { code: "08006", message: "connection failure" } });
     await expect(ingestInboundEmail(PARSED, db as never)).rejects.toThrow("connection failure");
+  });
+
+  it("does not treat a non-23505 error as already-ingested even if it mentions duplicates", async () => {
+    const db = fakeDb({ insertError: { code: "42501", message: "row already exists in another schema" } });
+    await expect(ingestInboundEmail(PARSED, db as never)).rejects.toThrow("row already exists");
+  });
+});
+
+describe("backfillInboundEmailBody", () => {
+  const ENV_KEY = "RESEND_API_KEY";
+  let previousKey: string | undefined;
+
+  function mockBodyFetch(body: string | null) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      body === null
+        ? new Response("nope", { status: 502 })
+        : Response.json({ data: { text: body } }),
+    );
+  }
+
+  beforeEach(() => {
+    previousKey = process.env[ENV_KEY];
+    process.env[ENV_KEY] = "re_test_key";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    if (previousKey === undefined) delete process.env[ENV_KEY];
+    else process.env[ENV_KEY] = previousKey;
+    vi.restoreAllMocks();
+  });
+
+  it("backfills the real body over the placeholder", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+    mockBodyFetch("The actual support question");
+
+    const result = await backfillInboundEmailBody(PARSED_NO_BODY, db as never);
+    expect(result.updated).toBe(true);
+    expect(storedRowData(db, "abc-123").body).toBe("The actual support question");
+  });
+
+  it("leaves the placeholder in place when the fetch fails, so a redelivery can backfill it", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+
+    mockBodyFetch(null);
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
+    expect(storedRowData(db, "abc-123").body).toBe(INBOUND_EMAIL_BODY_PLACEHOLDER);
+
+    // Redelivery: the insert no-ops, but the enrichment still lands the body.
+    expect((await ingestInboundEmail(PARSED_NO_BODY, db as never)).created).toBe(false);
+    mockBodyFetch("Arrived on the retry");
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(true);
+    expect(storedRowData(db, "abc-123").body).toBe("Arrived on the retry");
+  });
+
+  it("never clobbers a body that already landed, nor the admin's read/thread state", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+    mockBodyFetch("first body");
+    await backfillInboundEmailBody(PARSED_NO_BODY, db as never);
+
+    // The admin reads and replies in-app.
+    const id = inboundEmailThreadId("abc-123");
+    const stored = db.rows.get(id)!;
+    db.rows.set(id, {
+      ...stored,
+      row_data: { ...(stored.row_data as StoredRow), read: true, thread: [{ from: "admin", body: "on it" }] },
+    });
+
+    mockBodyFetch("a later, different body");
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
+    const rowData = storedRowData(db, "abc-123");
+    expect(rowData.body).toBe("first body");
+    expect(rowData.read).toBe(true);
+    expect(rowData.thread).toHaveLength(1);
+  });
+
+  it("skips the fetch entirely when the webhook already carried the body", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED, db as never);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    expect((await backfillInboundEmailBody(PARSED, db as never)).updated).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
 describe("POST /api/webhooks/email/inbound", () => {
   const ENV = ["VERCEL", "RESEND_INBOUND_WEBHOOK_SECRET"] as const;
   const ingestSpy = vi.fn(async () => ({ created: true }));
+  const backfillSpy = vi.fn(async () => ({ updated: true }));
 
   beforeEach(() => {
     for (const k of ENV) delete process.env[k];
     vi.resetModules();
     ingestSpy.mockClear();
+    backfillSpy.mockClear();
     vi.doMock("@/lib/inbound-email/inbound-email.server", async () => {
       const actual = await vi.importActual<typeof import("@/lib/inbound-email/inbound-email.server")>(
         "@/lib/inbound-email/inbound-email.server",
       );
-      return { ...actual, ingestInboundEmail: ingestSpy };
+      return { ...actual, ingestInboundEmail: ingestSpy, backfillInboundEmailBody: backfillSpy };
     });
   });
   afterEach(() => {
@@ -284,6 +435,36 @@ describe("POST /api/webhooks/email/inbound", () => {
     expect(await res.json()).toEqual({ ok: true });
     expect(ingestSpy).toHaveBeenCalledOnce();
     expect(ingestSpy.mock.calls[0]![0]).toMatchObject({ emailId: RECEIVED_PAYLOAD.data.email_id });
+    expect(backfillSpy).toHaveBeenCalledOnce();
+  });
+
+  it("sheds a flood that rotates its From via the coarse instance cap", async () => {
+    process.env.VERCEL = "1";
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ts = Math.floor(Date.now() / 1000);
+
+    const send = async (n: number) => {
+      const body = JSON.stringify({
+        ...RECEIVED_PAYLOAD,
+        data: { ...RECEIVED_PAYLOAD.data, email_id: `flood-${n}`, from: `sender${n}@example.com` },
+      });
+      const id = `flood_${n}`;
+      return post(body, {
+        "Content-Type": "application/json",
+        "svix-id": id,
+        "svix-timestamp": String(ts),
+        "svix-signature": svixSign(body, SECRET, id, ts),
+      });
+    };
+
+    for (let n = 0; n < 300; n += 1) await send(n);
+    expect(ingestSpy).toHaveBeenCalledTimes(300); // per-sender bucket never trips
+
+    const shed = await send(300);
+    expect(shed.status).toBe(200); // still 200 — a 5xx would make Resend retry the flood
+    expect(await shed.json()).toEqual({ ok: true, rateLimited: "instance" });
+    expect(ingestSpy).toHaveBeenCalledTimes(300);
   });
 
   it("returns 500 when the ingest write fails so Resend retries", async () => {
@@ -303,6 +484,7 @@ describe("POST /api/webhooks/email/inbound", () => {
       "svix-signature": svixSign(body, SECRET, id, ts),
     });
     expect(res.status).toBe(500);
+    expect(backfillSpy).not.toHaveBeenCalled();
   });
 
   it("acks non-received events without ingesting", async () => {

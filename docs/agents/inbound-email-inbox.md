@@ -13,10 +13,14 @@ so support mail is handled inside the app next to the rest of the unified inbox.
 3. The route mirrors the Twilio SMS webhook posture: `runtime = "nodejs"`, Svix
    signature verification that **fails closed on Vercel** (unsigned inbound is
    allowed only in local dev), in-memory rate limiting, service-role Supabase
-   client. The rate-limit bucket is keyed on the **parsed sender**, not the client
-   IP — every request comes from Resend's own IPs, so an IP bucket would be a
-   global ceiling one noisy sender could exhaust for everyone. Over-limit acks 200
-   (a non-2xx makes Resend retry and amplify a flood) and logs the shed message id.
+   client. Two shed valves run in order: a coarse instance-wide backstop on a
+   **constant** key (the sender key is attacker-chosen, so this is what sheds a
+   flood rotating its From — and it bounds how many per-sender buckets one window
+   can mint, since the shared `rateLimit` map never evicts), then a per-**sender**
+   bucket keyed on the parsed From. Neither is keyed on the client IP: every
+   request comes from Resend's own IPs, so an IP bucket would be a global ceiling
+   one noisy sender could exhaust for everyone. Both over-limit paths ack 200 (a
+   non-2xx makes Resend retry and amplify a flood) and log the shed message id.
 4. Ingest (`src/lib/inbound-email/inbound-email.server.ts`) writes a
    `portal_inbox_thread_records` row under **`scope: "admin"`** — the same rail the
    public contact form uses (`src/app/api/public/contact-message/route.ts`). Admin
@@ -24,8 +28,9 @@ so support mail is handled inside the app next to the rest of the unified inbox.
    `scope = admin` threads via `portalInboxThreadScopeFilter`. The external sender
    is stored as `participant_email` as provenance.
 
-The write runs **inline**, not in `after()`: a failed insert returns **500** so
-Resend redelivers, instead of acking 200 and losing the support email.
+The thread write runs **inline**, not in `after()`: a failed insert returns **500**
+so Resend redelivers, instead of acking 200 and losing the support email. Only the
+body enrichment (below) runs in `after()`.
 
 No DB migration is required — this reuses the existing `portal_inbox_thread_records`
 table and the `admin` inbox scope.
@@ -58,14 +63,30 @@ route answers 500 so Resend retries. Do not turn this back into a
 read-then-upsert — the gap between the check and the write is exactly where a
 concurrent redelivery overwrites `read`/`thread`.
 
-### Body retrieval
+### Body retrieval — write first, enrich second
 
 Resend inbound webhooks are **metadata-only** (from/to/subject/id — no body). The
 body is fetched from Resend's received-email API with the same `RESEND_API_KEY`
-used for outbound. This is **best-effort**: if the fetch fails, the thread still
-appears with subject + sender and a "(No message body could be retrieved)" note,
-so support mail is never silently dropped. If Resend routes received mail through a
-different API base for your account, set `RESEND_INBOUND_API_BASE`.
+used for outbound, and that fetch is **best-effort** with an 8s timeout.
+
+The order matters and is deliberate:
+
+1. `ingestInboundEmail` inserts the thread from metadata alone, with
+   `INBOUND_EMAIL_BODY_PLACEHOLDER` as the body. A hung or failing body lookup can
+   therefore never cost us the email, and the ≤8s fetch stays off the webhook
+   response path (an over-long response makes Svix record a failed delivery).
+2. `backfillInboundEmailBody` then runs in `after()` and swaps in the real body —
+   **only if the stored body is still exactly the placeholder** (guarded again in
+   the `UPDATE` itself). That is what keeps a backfill from clobbering a body that
+   already landed, or the admin's `read`/`thread` state around it.
+
+Because the guard is the placeholder and not a "done" flag, a **redelivery
+backfills a body an earlier transient failure could not retrieve**: the insert
+no-ops on the unique violation, and the enrichment pass still runs. Do not resolve
+the body before the insert again — that bakes the placeholder in permanently.
+
+If Resend routes received mail through a different API base for your account, set
+`RESEND_INBOUND_API_BASE`.
 
 ## Captain-side setup (infra to provision)
 
