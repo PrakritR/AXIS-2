@@ -872,7 +872,7 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   reappear on the next sync), then removes the submission's `listing-photos`
   objects via `deleteSubmissionMediaObjects`
   (`src/lib/listing-media-storage.ts`). **A record does not own its uploads
-  exclusively** — the wizard dedupes uploads per data URL, so the two draft rows
+  exclusively** — an object's URL lives on the submission, so the two draft rows
   a partially-failed re-key leaves behind reference the *same* bucket objects.
   `deleteSubmissionMediaObjects` therefore takes every surviving submission
   (`survivingSubmissions`: the other side-bucket rows, the live catalog and the
