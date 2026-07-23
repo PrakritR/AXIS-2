@@ -64,6 +64,19 @@ describe("portal chat routes bind their own registry + persona", () => {
     expect(source).toContain(`portal: ${portal}`);
     expect(source).toContain("handlePendingActionDecision");
   });
+
+  it("only the manager route opts into the inline-write allowlist", () => {
+    expect(read("src/app/api/agent/chat/route.ts")).toContain(
+      "allowWriteTools: MANAGER_INLINE_WRITE_TOOLS",
+    );
+    for (const file of [
+      "src/app/api/agent/resident-chat/route.ts",
+      "src/app/api/agent/vendor-chat/route.ts",
+      "src/app/api/agent/demo-chat/route.ts",
+    ]) {
+      expect(read(file)).not.toContain("allowWriteTools");
+    }
+  });
 });
 
 describe("role registries never cross", () => {

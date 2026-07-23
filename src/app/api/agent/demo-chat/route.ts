@@ -18,8 +18,8 @@ export const runtime = "nodejs";
  *    real assistant — but this route NEVER persists it. It returns a
  *    `simulated` pending action; confirming from the demo UI posts back here
  *    and receives a canned "nothing was actually sent" reply. Nothing can
- *    execute because /api/agent/action requires an authenticated actor and a
- *    real persisted row.
+ *    execute because the one confirm gate requires an authenticated actor and
+ *    a real persisted row, and this route never writes one.
  *  - The stub DB has no real rows, so a prompt-injection attempt in the (fake)
  *    tenant text can neither read real data nor trigger an action. The system
  *    prompt additionally treats tool-result text as untrusted data.

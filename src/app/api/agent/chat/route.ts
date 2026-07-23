@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveAgentContext } from "@/lib/tools/context";
-import { agentRegistry } from "@/lib/tools";
+import { agentRegistry, MANAGER_INLINE_WRITE_TOOLS } from "@/lib/tools";
 import { runAgentTurn } from "@/lib/agent/loop";
 import type { ActionPreview } from "@/lib/tools/registry";
 import { SYSTEM_PROMPT } from "@/lib/agent/system-prompt";
@@ -18,8 +18,13 @@ export const runtime = "nodejs";
 /**
  * Manager-portal assistant turn. Write tools are exposed to the model but a
  * proposal never executes here: the loop halts, the proposal is persisted, and
- * only the gated /api/agent/action endpoint can execute it after the user
- * confirms.
+ * it executes only when the user confirms — by posting the action id back to
+ * THIS endpoint (`handlePendingActionDecision` → the one confirm gate). There
+ * is no separate confirm route; never add a second one.
+ *
+ * The single exception is `MANAGER_INLINE_WRITE_TOOLS`: low-risk inbox
+ * housekeeping this surface allow-lists so it runs inline like a read. No tool
+ * can opt itself out of the gate — only a surface can allow-list one.
  */
 export async function POST(req: Request) {
   const ctx = await resolveAgentContext();
@@ -78,7 +83,14 @@ export async function POST(req: Request) {
       traceActor,
       messages.map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "[image message]" })),
       (observer) =>
-        runAgentTurn({ ctx, registry: agentRegistry, system: SYSTEM_PROMPT, messages, observer }),
+        runAgentTurn({
+          ctx,
+          registry: agentRegistry,
+          system: SYSTEM_PROMPT,
+          messages,
+          observer,
+          allowWriteTools: MANAGER_INLINE_WRITE_TOOLS,
+        }),
     );
     track("assistant_message_sent", ctx.userId, {
       portal: "manager",

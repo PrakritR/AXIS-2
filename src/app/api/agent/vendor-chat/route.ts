@@ -17,8 +17,9 @@ export const runtime = "nodejs";
 /**
  * Vendor-portal assistant turn. Same loop and gating as the manager chat,
  * against the vendor-scoped registry: every tool self-scopes to the
- * authenticated vendor's own records, and write proposals only execute
- * through the gated /api/agent/action endpoint.
+ * authenticated vendor's own records, and write proposals only execute when
+ * the user posts the action id back to THIS endpoint (the one confirm gate,
+ * portal-bound to "vendor"). There is no separate confirm route.
  */
 export async function POST(req: Request) {
   const ctx = await resolveVendorAgentContext();

@@ -19,7 +19,6 @@ vi.mock("@/lib/reports/ledger-sync", () => ({
     reconcileDuplicateHouseholdChargeRecords(...(args as [])),
 }));
 
-import { buildResidentMessagePreview } from "@/lib/tools/domains/messaging-logic";
 import {
   buildBulkReminderPreview,
   buildChargeFromInput,
@@ -56,8 +55,6 @@ function seededCtx(residents: DemoApplicantRow[] = [resident()]) {
   });
 }
 
-const msgInput = { residentEmail: "pat@example.com", subject: "Hello", body: "Hi Pat" };
-
 describe("findOwnedResident", () => {
   it("matches approved residents case-insensitively and rejects everyone else", () => {
     const rows = [resident(), resident({ id: "app_2", email: "pending@x.com", bucket: "pending" as never })];
@@ -68,24 +65,11 @@ describe("findOwnedResident", () => {
   });
 });
 
-describe("buildResidentMessagePreview", () => {
-  it("shows the resolved recipient, subject, and FULL untruncated body", () => {
-    const body = "line one\n".repeat(100);
-    const preview = buildResidentMessagePreview(resident(), { ...msgInput, body });
-    expect(preview.fields.find((f) => f.label === "To")?.value).toBe("Pat Resident <pat@example.com>");
-    expect(preview.fields.find((f) => f.label === "Message")?.value).toBe(body);
-    expect(preview.warnings).toBeUndefined();
-  });
-
-  it("warns when the body contains a link", () => {
-    const preview = buildResidentMessagePreview(resident(), { ...msgInput, body: "pay at https://evil.example" });
-    expect(preview.warnings?.length).toBe(1);
-  });
-});
-
-// send_resident_message was superseded by the richer `send_message` tool;
-// its gated-execute behaviour (scope refusal, audit, dedupe, delivery-failure
-// rollback, thread misdirection) is covered in tests/unit/tools/messaging.test.ts.
+// send_resident_message was superseded by the richer `send_message` tool, and
+// its preview builder went with it; the surviving tool's preview (recipient
+// resolution, full untruncated body, link warning) and its gated-execute
+// behaviour (scope refusal, audit, dedupe, delivery-failure rollback, thread
+// misdirection) are covered in tests/unit/tools/messaging.test.ts.
 
 function charge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
   return {

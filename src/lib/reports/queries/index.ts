@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { HouseholdCharge } from "@/lib/household-charges";
-import type { RecurringRentProfile } from "@/lib/household-charges";
+import type { HouseholdCharge, RecurringRentProfile } from "@/lib/household-charges";
+import { householdChargeDueDate } from "@/lib/household-charges";
 import {
   chartAccountLabel,
   chartAccountScheduleE,
@@ -901,9 +901,11 @@ export async function query1099Candidates(
 
 /**
  * The resident's own balance summary. The amount owed comes from the resident's
- * unpaid household CHARGES — the same records the resident Payments screen
- * shows — so the assistant and the portal can never disagree; the ledger
- * supplies the last recorded payment. Scoped exactly like
+ * `pending` household CHARGES — the exact filter the resident Payments screen
+ * and dashboard use, so a cancelled/refunded/failed or in-flight `processing`
+ * charge is never billed into a balance the portal shows as $0 — and the
+ * assistant and the portal can never disagree; the ledger supplies the last
+ * recorded payment. Scoped exactly like
  * {@link queryResidentLedger}: the resident's own user id OR their verified
  * email, so one resident can never read another's balance.
  *
@@ -928,16 +930,21 @@ export async function queryResidentBalance(
   ]);
 
   const charges = ((chargeRows ?? []) as { row_data: unknown }[]).map((r) => r.row_data as HouseholdCharge);
-  const outstanding = charges.filter((c) => String(c.status ?? "") !== "paid");
+  const outstanding = charges.filter((c) => String(c.status ?? "") === "pending");
   const balanceCents = outstanding.reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
   const paidCents = charges
     .filter((c) => String(c.status ?? "") === "paid")
     .reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
 
-  // Soonest unpaid charge by its due-date label (already a display string).
-  const next = [...outstanding]
-    .filter((c) => Boolean(c.dueDateLabel))
-    .sort((a, b) => String(a.dueDateLabel).localeCompare(String(b.dueDateLabel)))[0];
+  // Soonest unpaid charge by its REAL due date — the label is a display string
+  // ("By Sep 3, 2026") that sorts alphabetically, not chronologically.
+  const next = outstanding
+    .map((c) => ({ charge: c, due: householdChargeDueDate(c) }))
+    .filter((c): c is { charge: HouseholdCharge; due: Date } => c.due !== null)
+    .sort((a, b) => a.due.getTime() - b.due.getTime())[0];
+  const nextDueLabel = next
+    ? next.charge.dueDateLabel || next.due.toISOString().slice(0, 10)
+    : "";
 
   const lastPayment = ((ledgerRows ?? []) as { entry_type: string; amount_cents: number | string | null; posted_date: string | null }[])
     .filter((e) => e.entry_type === "payment")
@@ -950,7 +957,7 @@ export async function queryResidentBalance(
     {
       label: "Next charge",
       value: next
-        ? `${next.title || next.kind || "Charge"} — ${next.balanceLabel || next.amountLabel || "—"} due ${next.dueDateLabel}`
+        ? `${next.charge.title || next.charge.kind || "Charge"} — ${next.charge.balanceLabel || next.charge.amountLabel || "—"} due ${nextDueLabel}`
         : "None scheduled",
     },
     {

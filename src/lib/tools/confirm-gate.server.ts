@@ -13,6 +13,7 @@ import { executeWriteTool, type ToolRegistry } from "./registry";
 import {
   claimPendingAction,
   markPendingActionFailed,
+  peekPendingActionPortal,
   type AgentPortal,
   type PendingActionActor,
 } from "./pending-actions";
@@ -27,6 +28,12 @@ export type ConfirmGateResult =
  * CALLER's, not the row's: the row names the portal it was proposed from, and a
  * mismatch is refused rather than executed against another portal's tool of the
  * same name (schedule_message exists in both the manager and resident maps).
+ *
+ * The portal is checked BEFORE the claim. Claiming first would burn the row —
+ * a dual-role user's still-valid resident proposal would be destroyed by a
+ * stray manager-side confirm instead of staying approvable from its own portal.
+ * The peek is actor-scoped, so it leaks nothing a foreign caller could not
+ * already learn from the uniform 410.
  */
 export async function runConfirmedPendingActionForPortal<Ctx extends PendingActionActor>(
   ctx: Ctx,
@@ -35,6 +42,10 @@ export async function runConfirmedPendingActionForPortal<Ctx extends PendingActi
   actionId: string,
   traceMetadata: Record<string, unknown> = {},
 ): Promise<ConfirmGateResult> {
+  const peeked = await peekPendingActionPortal(ctx, actionId);
+  if (peeked && peeked.portal !== portal) {
+    return { ok: false, status: 400, error: "This action could not be executed." };
+  }
   const claimed = await claimPendingAction(ctx, actionId);
   if (!claimed) {
     return { ok: false, status: 410, error: "This action is no longer available. Ask the assistant again." };

@@ -17,8 +17,9 @@ export const runtime = "nodejs";
 /**
  * Resident-portal assistant turn. Same loop and gating as the manager chat,
  * against the resident-scoped registry: every tool self-scopes to the
- * authenticated resident's own records, and write proposals only execute
- * through the gated /api/agent/action endpoint.
+ * authenticated resident's own records, and write proposals only execute when
+ * the user posts the action id back to THIS endpoint (the one confirm gate,
+ * portal-bound to "resident"). There is no separate confirm route.
  */
 export async function POST(req: Request) {
   const ctx = await resolveResidentAgentContext();

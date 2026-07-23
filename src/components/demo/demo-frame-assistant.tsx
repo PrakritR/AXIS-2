@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import { track } from "@/lib/analytics/track-client";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
+import type { ActionPreview } from "@/lib/tools/registry";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
@@ -19,13 +20,7 @@ type Suggestion = { label: string; prompt: string };
 type PendingAction = {
   id: string;
   toolName: string;
-  preview: {
-    title: string;
-    summary: string;
-    lines: { label: string; value: string }[];
-    confirmLabel?: string;
-    batchCount?: number;
-  };
+  preview: ActionPreview;
   simulated?: boolean;
 };
 
@@ -324,11 +319,13 @@ export function DemoFrameAssistant() {
               {pendingAction ? (
                 <div className="mb-3 rounded-2xl border border-primary/25 bg-primary/5 p-3">
                   <p className="text-xs font-semibold text-foreground">{pendingAction.preview.title}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">{pendingAction.preview.summary}</p>
-                  {pendingAction.preview.lines.slice(0, 4).map((line, i) => (
+                  {pendingAction.preview.summary ? (
+                    <p className="mt-1 text-xs leading-relaxed text-muted">{pendingAction.preview.summary}</p>
+                  ) : null}
+                  {(pendingAction.preview.fields ?? []).slice(0, 4).map((field, i) => (
                     <div key={i} className="mt-1 flex items-baseline justify-between gap-3 text-xs">
-                      <span className="shrink-0 font-medium text-foreground">{line.label}</span>
-                      <span className="truncate text-right text-muted">{line.value}</span>
+                      <span className="shrink-0 font-medium text-foreground">{field.label}</span>
+                      <span className="truncate text-right text-muted">{field.value}</span>
                     </div>
                   ))}
                   <p className="mt-2 text-[11px] italic text-muted">Demo — nothing will actually be sent.</p>

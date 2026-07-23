@@ -44,6 +44,7 @@ function makeDb(rows: Row[]) {
           filters.push(["gt", col, val]);
           return chain;
         },
+        maybeSingle: () => Promise.resolve({ data: apply()[0] ?? null, error: null }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         then: (resolve: (v: any) => unknown) => Promise.resolve({ data: apply(), error: null }).then(resolve),
       };
@@ -98,9 +99,21 @@ describe("confirm gate portal binding", () => {
     const result = await runConfirmedPendingActionForPortal(ctx, registry, "manager", ACTION_ID);
     expect(result.ok).toBe(false);
     expect(executed).toBe(0);
-    // The claim already burned the row; it is recorded as failed, never executed,
-    // so a retry must go through a fresh proposal in the right portal.
-    expect(rows[0]!.status).toBe("failed");
+    // The portal is checked BEFORE the claim, so the row is not burned: a
+    // dual-role user's resident proposal stays approvable from the resident
+    // portal instead of being destroyed by a stray manager-side confirm.
+    expect(rows[0]!.status).toBe("proposed");
+  });
+
+  it("still executes the resident proposal from its OWN portal after a manager-side refusal", async () => {
+    executed = 0;
+    const rows = [proposedRow("resident")];
+    const ctx = { userId: ACTOR, db: makeDb(rows) };
+    await runConfirmedPendingActionForPortal(ctx, registry, "manager", ACTION_ID);
+    const result = await runConfirmedPendingActionForPortal(ctx, registry, "resident", ACTION_ID);
+    expect(result.ok).toBe(true);
+    expect(executed).toBe(1);
+    expect(rows[0]!.status).toBe("executed");
   });
 
   it("refuses another actor's proposal outright", async () => {
