@@ -34,6 +34,7 @@ import {
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
@@ -779,10 +780,21 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     [residentCharges, chargeTab],
   );
 
-  const overdueChargeCount = useMemo(
-    () => residentCharges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
-    [residentCharges],
-  );
+  const residentChargeById = useMemo(() => new Map(residentCharges.map((c) => [c.id, c])), [residentCharges]);
+
+  const residentChargeTableRows = useMemo((): PortalPaymentTableRow[] => {
+    if (!selected) return [];
+    const payee = selected.name.trim() || "Resident";
+    const property = selected.propertyLabel || "—";
+    return visibleCharges.map((c) => ({
+      id: c.id,
+      charge: c.title,
+      property,
+      payee,
+      dueDate: chargeDueLabel(c),
+      amount: c.balanceLabel,
+    }));
+  }, [visibleCharges, selected]);
 
   const selectedApplicationRow = useMemo<DemoApplicantRow | null>(() => {
     void hcTick;
@@ -2093,7 +2105,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               summary={
                                 residentCharges.length === 0
                                   ? "No charges yet."
-                                  : `${chargeCounts.pending} unpaid${overdueChargeCount > 0 ? ` · ${overdueChargeCount} overdue` : ""}`
+                                  : chargeTab === "pending"
+                                    ? "Unpaid charges"
+                                    : "Paid charges"
                               }
                               expanded={expandedResidentSection === "payments"}
                               onToggle={() =>
@@ -2117,7 +2131,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     onClick={() => setAddResidentPaymentOpen(true)}
                                     data-attr="resident-add-payment"
                                   >
-                                    Add
+                                    Add payment
                                   </Button>
                                 </div>
                               }
@@ -2131,12 +2145,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   activeId={chargeTab}
                                   onChange={(id) => setChargeTab(id as "pending" | "paid")}
                                 />
-                                {overdueChargeCount > 0 ? (
-                                  <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
-                                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                                    {overdueChargeCount} overdue
-                                  </div>
-                                ) : null}
                               </div>
                               {visibleCharges.length === 0 ? (
                                 <div className="mt-3">
@@ -2152,186 +2160,162 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   />
                                 </div>
                               ) : (
-                                <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
-                                  <div className={`${PORTAL_DATA_TABLE_SCROLL} overflow-x-auto`}>
-                                    <table className="w-full min-w-[32rem] table-fixed border-collapse text-left text-sm lg:min-w-0">
-                                      <thead>
-                                        <tr className={PORTAL_TABLE_HEAD_ROW}>
-                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
-                                          <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Property</th>
-                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
-                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                                          <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
-                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                                          <th className={PORTAL_TABLE_EXPAND_TH}>
-                                            <span className="sr-only">Expand</span>
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {visibleCharges.map((c) => {
-                                          const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
-                                          return (
-                                            <Fragment key={c.id}>
-                                              <tr
-                                                className={PORTAL_TABLE_TR_EXPANDABLE}
-                                                onClick={createPortalRowExpandClick(() =>
-                                                  setChargeExpandedId((cur) => (cur === c.id ? null : c.id)),
-                                                )}
-                                                aria-expanded={chargeExpandedId === c.id}
-                                              >
-                                                <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{c.title}</td>
-                                                <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{selected.propertyLabel || "—"}</td>
-                                                <td className={PORTAL_TABLE_TD}>{chargeDueLabel(c)}</td>
-                                                <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{c.amountLabel}</td>
-                                                <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
-                                                  {c.balanceLabel}
-                                                </td>
-                                                <td className={PORTAL_TABLE_TD}>
-                                                  <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                                    {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
-                                                  </Badge>
-                                                </td>
-                                                <PortalTableExpandCell expanded={chargeExpandedId === c.id} />
-                                              </tr>
-                                              {chargeExpandedId === c.id ? (
-                                                <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                  <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
-                                                    <div className="space-y-1 text-sm text-muted">
-                                                      <p>
-                                                        Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
-                                                      </p>
-                                                      <p>
-                                                        Due: <span className="text-foreground">{chargeDueLabel(c)}</span>
-                                                      </p>
-                                                      <p>
-                                                        Amount: <span className="tabular-nums text-foreground">{c.amountLabel}</span> · Balance:{" "}
-                                                        <span className="tabular-nums font-semibold text-foreground">{c.balanceLabel}</span>
-                                                      </p>
-                                                    </div>
-                                                    <PortalTableDetailActions>
-                                                      {c.status !== "paid" ? (
-                                                        editingChargeId === c.id ? (
-                                                          <div className="flex flex-wrap items-end gap-2">
-                                                            <div className="min-w-[12rem] flex-1">
-                                                              <p className="mb-1 text-[11px] font-medium text-muted">Charge title</p>
-                                                              <Input
-                                                                value={editChargeTitleDraft}
-                                                                onChange={(e) => setEditChargeTitleDraft(e.target.value)}
-                                                                className="h-8 rounded-lg text-sm"
-                                                              />
-                                                            </div>
-                                                            <div className="w-28">
-                                                              <p className="mb-1 text-[11px] font-medium text-muted">Amount</p>
-                                                              <div className="flex items-center gap-1">
-                                                                <span className="text-sm text-muted">$</span>
-                                                                <Input
-                                                                  value={editChargeAmountDraft}
-                                                                  onChange={(e) => setEditChargeAmountDraft(e.target.value)}
-                                                                  inputMode="decimal"
-                                                                  className="h-8 rounded-lg px-2 text-sm"
-                                                                />
-                                                              </div>
-                                                            </div>
-                                                            <Button
-                                                              type="button"
-                                                              variant="outline"
-                                                              className={PORTAL_DETAIL_BTN_PRIMARY}
-                                                              onClick={() => {
-                                                                const amt = parseFloat(editChargeAmountDraft.replace(/[^\d.]/g, ""));
-                                                                if (!editChargeTitleDraft.trim()) {
-                                                                  showToast("Enter a charge title.");
-                                                                  return;
-                                                                }
-                                                                if (!Number.isFinite(amt) || amt < 0) {
-                                                                  showToast("Enter a valid amount.");
-                                                                  return;
-                                                                }
-                                                                if (
-                                                                  updateHouseholdChargeAmount(
-                                                                    c.id,
-                                                                    amt,
-                                                                    userId,
-                                                                    editChargeTitleDraft,
-                                                                  )
-                                                                ) {
-                                                                  showToast("Payment updated.");
-                                                                  setEditingChargeId(null);
-                                                                } else {
-                                                                  showToast("Could not update this charge.");
-                                                                }
-                                                              }}
-                                                            >
-                                                              Save
-                                                            </Button>
-                                                            <Button
-                                                              type="button"
-                                                              variant="outline"
-                                                              className={PORTAL_DETAIL_BTN}
-                                                              onClick={() => setEditingChargeId(null)}
-                                                            >
-                                                              Cancel
-                                                            </Button>
-                                                          </div>
-                                                        ) : (
-                                                          <>
-                                                            <Button
-                                                              type="button"
-                                                              variant="outline"
-                                                              className={PORTAL_DETAIL_BTN_PRIMARY}
-                                                              onClick={() => {
-                                                                if (markHouseholdChargePaid(c.id, userId)) {
-                                                                  showToast("Marked as paid.");
-                                                                  setChargeExpandedId(null);
-                                                                } else {
-                                                                  showToast("Could not update this charge.");
-                                                                }
-                                                              }}
-                                                            >
-                                                              Mark as paid
-                                                            </Button>
-                                                            <Button
-                                                              type="button"
-                                                              variant="outline"
-                                                              className={PORTAL_DETAIL_BTN}
-                                                              data-attr="resident-charge-edit"
-                                                              onClick={() => {
-                                                                setEditingChargeId(c.id);
-                                                                setEditChargeTitleDraft(c.title);
-                                                                setEditChargeAmountDraft(c.balanceLabel.replace(/[^\d.]/g, ""));
-                                                              }}
-                                                            >
-                                                              Edit payment
-                                                            </Button>
-                                                          </>
-                                                        )
-                                                      ) : (
-                                                        <Button
-                                                          type="button"
-                                                          variant="outline"
-                                                          className={PORTAL_DETAIL_BTN}
-                                                          onClick={() => {
-                                                            if (markHouseholdChargePending(c.id, userId)) {
-                                                              showToast("Moved to unpaid.");
-                                                              setChargeExpandedId(null);
-                                                            } else {
-                                                              showToast("Could not update this charge.");
-                                                            }
-                                                          }}
-                                                        >
-                                                          Move to unpaid
-                                                        </Button>
-                                                      )}
-                                                    </PortalTableDetailActions>
-                                                  </td>
-                                                </tr>
-                                              ) : null}
-                                            </Fragment>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                <div className="mt-3">
+                                  <PortalPaymentsTable
+                                    rows={residentChargeTableRows}
+                                    expandedId={chargeExpandedId}
+                                    onExpand={setChargeExpandedId}
+                                    renderChargeCell={(tr) => {
+                                      const c = residentChargeById.get(tr.id);
+                                      if (!c) return tr.charge;
+                                      const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
+                                      return (
+                                        <span className="inline-flex flex-wrap items-center gap-2">
+                                          <span>{tr.charge}</span>
+                                          <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
+                                            {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
+                                          </Badge>
+                                        </span>
+                                      );
+                                    }}
+                                    renderAmountCell={(tr) => (
+                                      <span className="tabular-nums font-semibold text-foreground">{tr.amount}</span>
+                                    )}
+                                    renderExpandedDetail={(tr) => {
+                                      const c = residentChargeById.get(tr.id);
+                                      if (!c || !selected) return null;
+                                      return (
+                                        <div className="space-y-1 text-sm text-muted">
+                                          <p>
+                                            Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
+                                          </p>
+                                          <p>
+                                            Due: <span className="text-foreground">{chargeDueLabel(c)}</span>
+                                          </p>
+                                          <p>
+                                            Amount: <span className="tabular-nums text-foreground">{c.amountLabel}</span> · Balance:{" "}
+                                            <span className="tabular-nums font-semibold text-foreground">{c.balanceLabel}</span>
+                                          </p>
+                                        </div>
+                                      );
+                                    }}
+                                    renderExpandedActions={(tr) => {
+                                      const c = residentChargeById.get(tr.id);
+                                      if (!c) return null;
+                                      return c.status !== "paid" ? (
+                                        editingChargeId === c.id ? (
+                                          <div className="flex flex-wrap items-end gap-2">
+                                            <div className="min-w-[12rem] flex-1">
+                                              <p className="mb-1 text-[11px] font-medium text-muted">Charge title</p>
+                                              <Input
+                                                value={editChargeTitleDraft}
+                                                onChange={(e) => setEditChargeTitleDraft(e.target.value)}
+                                                className="h-8 rounded-lg text-sm"
+                                              />
+                                            </div>
+                                            <div className="w-28">
+                                              <p className="mb-1 text-[11px] font-medium text-muted">Amount</p>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-sm text-muted">$</span>
+                                                <Input
+                                                  value={editChargeAmountDraft}
+                                                  onChange={(e) => setEditChargeAmountDraft(e.target.value)}
+                                                  inputMode="decimal"
+                                                  className="h-8 rounded-lg px-2 text-sm"
+                                                />
+                                              </div>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className={PORTAL_DETAIL_BTN_PRIMARY}
+                                              onClick={() => {
+                                                const amt = parseFloat(editChargeAmountDraft.replace(/[^\d.]/g, ""));
+                                                if (!editChargeTitleDraft.trim()) {
+                                                  showToast("Enter a charge title.");
+                                                  return;
+                                                }
+                                                if (!Number.isFinite(amt) || amt < 0) {
+                                                  showToast("Enter a valid amount.");
+                                                  return;
+                                                }
+                                                if (
+                                                  updateHouseholdChargeAmount(
+                                                    c.id,
+                                                    amt,
+                                                    userId,
+                                                    editChargeTitleDraft,
+                                                  )
+                                                ) {
+                                                  showToast("Payment updated.");
+                                                  setEditingChargeId(null);
+                                                } else {
+                                                  showToast("Could not update this charge.");
+                                                }
+                                              }}
+                                            >
+                                              Save
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className={PORTAL_DETAIL_BTN}
+                                              onClick={() => setEditingChargeId(null)}
+                                            >
+                                              Cancel
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className={PORTAL_DETAIL_BTN_PRIMARY}
+                                              onClick={() => {
+                                                if (markHouseholdChargePaid(c.id, userId)) {
+                                                  showToast("Marked as paid.");
+                                                  setChargeExpandedId(null);
+                                                } else {
+                                                  showToast("Could not update this charge.");
+                                                }
+                                              }}
+                                            >
+                                              Mark as paid
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className={PORTAL_DETAIL_BTN}
+                                              data-attr="resident-charge-edit"
+                                              onClick={() => {
+                                                setEditingChargeId(c.id);
+                                                setEditChargeTitleDraft(c.title);
+                                                setEditChargeAmountDraft(c.balanceLabel.replace(/[^\d.]/g, ""));
+                                              }}
+                                            >
+                                              Edit payment
+                                            </Button>
+                                          </>
+                                        )
+                                      ) : (
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN}
+                                          onClick={() => {
+                                            if (markHouseholdChargePending(c.id, userId)) {
+                                              showToast("Moved to unpaid.");
+                                              setChargeExpandedId(null);
+                                            } else {
+                                              showToast("Could not update this charge.");
+                                            }
+                                          }}
+                                        >
+                                          Move to unpaid
+                                        </Button>
+                                      );
+                                    }}
+                                  />
                                 </div>
                               )}
                             </ResidentDetailSection>
