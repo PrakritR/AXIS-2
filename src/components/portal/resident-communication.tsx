@@ -82,6 +82,15 @@ function ResidentUnifiedInbox({
   const [smsOpened, setSmsOpened] = useState<Set<string>>(() => loadOpenedIds());
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [scheduleCount, setScheduleCount] = useState(0);
+
+  // The embedded ResidentInboxPanel counts EMAIL only, so forwarding its counts
+  // upward would drop the SMS thread out of the folder badges whenever a thread
+  // pane is mounted. Take only the schedule count and let the effect below own
+  // the badges.
+  const handleEmbeddedTabCounts = useCallback((counts: ResidentInboxTabCounts) => {
+    setScheduleCount(counts.schedule);
+  }, []);
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
@@ -177,11 +186,11 @@ function ResidentUnifiedInbox({
     onTabCountsChange({
       unopened: filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length + (smsInTab("unopened") ? 1 : 0),
       opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length + (smsInTab("opened") ? 1 : 0),
-      schedule: 0,
+      schedule: scheduleCount,
       sent: filteredEmail.filter((t) => t.folder === "sent").length + (smsInTab("sent") ? 1 : 0),
       trash: filteredEmail.filter((t) => t.folder === "trash").length,
     });
-  }, [filteredEmail, onTabCountsChange, smsMessages, smsOpened]);
+  }, [filteredEmail, onTabCountsChange, smsMessages, smsOpened, scheduleCount]);
 
   if (tabId === "schedule") {
     return (
@@ -190,7 +199,7 @@ function ResidentUnifiedInbox({
         tabId={tabId}
         embeddedInCommunication
         externalTitleActions
-        onTabCountsChange={onTabCountsChange}
+        onTabCountsChange={handleEmbeddedTabCounts}
       />
     );
   }
@@ -245,7 +254,7 @@ function ResidentUnifiedInbox({
         onControlledExpandedIdChange={(id) => {
           if (!id) setSelectedKey(null);
         }}
-        onTabCountsChange={onTabCountsChange}
+        onTabCountsChange={handleEmbeddedTabCounts}
       />
     ) : selection?.channel === "sms" ? (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">

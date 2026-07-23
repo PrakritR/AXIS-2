@@ -23,6 +23,7 @@ import {
   MANAGER_SMS_SORT_OPTIONS,
   normalizeManagerSmsConversationsPayload,
   smsConversationDisplayName,
+  smsConversationSubtitle,
   sortSmsConversationRows,
   smsThreadHasUnread,
   type ManagerSmsConversationsPayload,
@@ -208,6 +209,9 @@ export const ManagerSmsPanel = forwardRef<
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openedSmsIds, setOpenedSmsIds] = useState<Set<string>>(() => loadOpenedIds());
+  // Mirrors `openedSmsIds` so `markOpened` can build and persist the next set
+  // without waiting for React to run a state updater — see the comment there.
+  const openedSmsIdsRef = useRef(openedSmsIds);
   const [hiddenConversationIds, setHiddenConversationIds] = useState<Set<string>>(() =>
     loadHiddenConversationIds(),
   );
@@ -372,21 +376,20 @@ export const ManagerSmsPanel = forwardRef<
     threadEndRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
   }, [activeId, active?.messages.length]);
 
+  // Persists synchronously, not from inside a state updater: callers notify a
+  // parent (`onConversationOpened`) on the very next line, and that parent reads
+  // the opened-id set back out of localStorage. React only runs an updater on
+  // the following render, so writing there would leave the parent reading the
+  // pre-open set and the unread dot stuck on the thread just opened.
   const markOpened = useCallback((messageIds: string[]) => {
     if (messageIds.length === 0) return;
-    setOpenedSmsIds((prev) => {
-      let changed = false;
-      const next = new Set(prev);
-      for (const id of messageIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      if (!changed) return prev;
-      persistOpenedIds(next);
-      return next;
-    });
+    const prev = openedSmsIdsRef.current;
+    if (messageIds.every((id) => prev.has(id))) return;
+    const next = new Set(prev);
+    for (const id of messageIds) next.add(id);
+    openedSmsIdsRef.current = next;
+    persistOpenedIds(next);
+    setOpenedSmsIds(next);
   }, []);
 
   const openThread = useCallback(
@@ -614,11 +617,7 @@ export const ManagerSmsPanel = forwardRef<
             <ConversationRow
               key={row.rowId}
               name={smsConversationDisplayName(row.resident)}
-              subtitle={
-                row.resident.propertyLabel?.trim() ||
-                row.resident.residentEmail ||
-                ""
-              }
+              subtitle={smsConversationSubtitle(row.resident)}
               preview={
                 row.lastMessage
                   ? `${row.lastMessage.direction === "outbound" ? "You: " : ""}${row.lastMessage.body}`
@@ -661,7 +660,7 @@ export const ManagerSmsPanel = forwardRef<
             {smsConversationDisplayName(active.resident)}
           </p>
           <p className="truncate text-xs text-muted">
-            {active.resident.propertyLabel || active.resident.residentEmail || " "}
+            {smsConversationSubtitle(active.resident) || " "}
           </p>
         </div>
         {allowDelete ? (
