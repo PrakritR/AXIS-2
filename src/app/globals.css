@@ -2234,9 +2234,21 @@ html[data-native] [data-listing-sections-root] {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Architectural grid + bloom. Theme split is absolute: base rules use the
- * purple family (dark); the `[data-theme="light"]` block below uses the
- * cobalt-blue family. Motion is opacity-only (the lit cells breathe). */
+/* Architectural grid + bloom. Theme split is absolute: these custom properties
+ * carry the purple family (dark); the `[data-theme="light"]` block below
+ * re-points the same properties at the cobalt-blue family. Geometry is declared
+ * once, in the layer rules. Motion is opacity-only (the lit cells breathe). */
+.landing-hero-glow {
+  --hero-grid-line: color-mix(in srgb, var(--pl-purple) 24%, transparent);
+  --hero-grid-opacity: 0.55;
+  --hero-bloom: color-mix(in srgb, var(--pl-purple) 28%, transparent);
+  --hero-cell-1: color-mix(in srgb, var(--pl-purple) 20%, transparent);
+  --hero-cell-2: color-mix(in srgb, var(--pl-purple-soft) 16%, transparent);
+  --hero-cell-3: color-mix(in srgb, var(--pl-purple) 14%, transparent);
+  --hero-cell-4: color-mix(in srgb, var(--pl-purple-soft) 14%, transparent);
+  --hero-wash: color-mix(in srgb, var(--pl-black) 62%, transparent);
+}
+
 .landing-hero-glow > * {
   position: absolute;
   inset: 0;
@@ -2246,26 +2258,18 @@ html[data-native] [data-listing-sections-root] {
    gone by the edges. */
 .landing-hero-grid {
   background-image:
-    repeating-linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--pl-purple) 24%, transparent) 0 1px,
-      transparent 1px 56px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--pl-purple) 24%, transparent) 0 1px,
-      transparent 1px 56px
-    );
-  -webkit-mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, #000 0%, transparent 72%);
-  mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, #000 0%, transparent 72%);
-  opacity: 0.55;
+    repeating-linear-gradient(0deg, var(--hero-grid-line) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(90deg, var(--hero-grid-line) 0 1px, transparent 1px 56px);
+  -webkit-mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, black 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, black 0%, transparent 72%);
+  opacity: var(--hero-grid-opacity);
 }
 
 /* Layer 2 — one large brand bloom behind the product panel. */
 .landing-hero-bloom {
   background: radial-gradient(
     ellipse 46% 54% at 78% 40%,
-    color-mix(in srgb, var(--pl-purple) 28%, transparent) 0%,
+    var(--hero-bloom) 0%,
     transparent 62%
   );
 }
@@ -2273,10 +2277,10 @@ html[data-native] [data-listing-sections-root] {
 /* Layer 3 — a few cells softly lit like occupied units, breathing slowly. */
 .landing-hero-cells {
   background:
-    radial-gradient(circle 24px at 63% 30%, color-mix(in srgb, var(--pl-purple) 20%, transparent) 0%, transparent 72%),
-    radial-gradient(circle 20px at 71% 55%, color-mix(in srgb, var(--pl-purple-soft) 16%, transparent) 0%, transparent 72%),
-    radial-gradient(circle 18px at 56% 63%, color-mix(in srgb, var(--pl-purple) 14%, transparent) 0%, transparent 72%),
-    radial-gradient(circle 16px at 84% 26%, color-mix(in srgb, var(--pl-purple-soft) 14%, transparent) 0%, transparent 72%);
+    radial-gradient(circle 24px at 63% 30%, var(--hero-cell-1) 0%, transparent 72%),
+    radial-gradient(circle 20px at 71% 55%, var(--hero-cell-2) 0%, transparent 72%),
+    radial-gradient(circle 18px at 56% 63%, var(--hero-cell-3) 0%, transparent 72%),
+    radial-gradient(circle 16px at 84% 26%, var(--hero-cell-4) 0%, transparent 72%);
   animation: hero-cells-breathe 14s ease-in-out infinite;
 }
 
@@ -2286,7 +2290,7 @@ html[data-native] [data-listing-sections-root] {
 .landing-hero-wash {
   background: radial-gradient(
     ellipse 72% 82% at 24% 46%,
-    color-mix(in srgb, var(--pl-black) 62%, transparent) 0%,
+    var(--hero-wash) 0%,
     transparent 58%
   );
 }
@@ -2400,41 +2404,17 @@ html[data-native] [data-listing-sections-root] {
   color: var(--pl-ink);
 }
 
-/* Light mode: cobalt-blue family only (no purple). */
-[data-theme="light"] .landing-hero-grid {
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--pl-blue) 16%, transparent) 0 1px,
-      transparent 1px 56px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--pl-blue) 16%, transparent) 0 1px,
-      transparent 1px 56px
-    );
-  opacity: 0.7;
-}
-[data-theme="light"] .landing-hero-bloom {
-  background: radial-gradient(
-    ellipse 46% 54% at 78% 40%,
-    color-mix(in srgb, var(--pl-blue) 18%, transparent) 0%,
-    transparent 62%
-  );
-}
-[data-theme="light"] .landing-hero-cells {
-  background:
-    radial-gradient(circle 24px at 63% 30%, color-mix(in srgb, var(--pl-blue) 15%, transparent) 0%, transparent 72%),
-    radial-gradient(circle 20px at 71% 55%, color-mix(in srgb, var(--pl-blue-soft) 13%, transparent) 0%, transparent 72%),
-    radial-gradient(circle 18px at 56% 63%, color-mix(in srgb, var(--pl-blue) 11%, transparent) 0%, transparent 72%),
-    radial-gradient(circle 16px at 84% 26%, color-mix(in srgb, var(--pl-blue-soft) 12%, transparent) 0%, transparent 72%);
-}
-[data-theme="light"] .landing-hero-wash {
-  background: radial-gradient(
-    ellipse 72% 82% at 24% 46%,
-    color-mix(in srgb, var(--pl-white) 70%, transparent) 0%,
-    transparent 58%
-  );
+/* Light mode: cobalt-blue family only (no purple). Colour only — the layer
+   geometry above is shared by both themes. */
+[data-theme="light"] .landing-hero-glow {
+  --hero-grid-line: color-mix(in srgb, var(--pl-blue) 16%, transparent);
+  --hero-grid-opacity: 0.7;
+  --hero-bloom: color-mix(in srgb, var(--pl-blue) 18%, transparent);
+  --hero-cell-1: color-mix(in srgb, var(--pl-blue) 15%, transparent);
+  --hero-cell-2: color-mix(in srgb, var(--pl-blue-soft) 13%, transparent);
+  --hero-cell-3: color-mix(in srgb, var(--pl-blue) 11%, transparent);
+  --hero-cell-4: color-mix(in srgb, var(--pl-blue-soft) 12%, transparent);
+  --hero-wash: color-mix(in srgb, var(--pl-white) 70%, transparent);
 }
 
 [data-theme="light"] .landing-hero-badge {
