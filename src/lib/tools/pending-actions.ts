@@ -186,6 +186,16 @@ export async function markPendingActionFailed(actor: PendingActionActor, id: str
 }
 
 /**
+ * What a peek could establish about a proposal. `unreadable` is NOT the same as
+ * `missing`: a transient query failure must never read as "no such row", or the
+ * confirm gate would skip its portal check and burn the row it was protecting.
+ */
+export type PeekedPendingAction =
+  | { state: "found"; portal: AgentPortal; toolName: string }
+  | { state: "missing" }
+  | { state: "unreadable" };
+
+/**
  * Read a proposal's portal WITHOUT claiming it, so the confirm route can
  * resolve that portal's context (and fail closed) before burning the action.
  * Actor-scoped: a foreign id is indistinguishable from an unknown one.
@@ -193,14 +203,15 @@ export async function markPendingActionFailed(actor: PendingActionActor, id: str
 export async function peekPendingActionPortal(
   actor: PendingActionActor,
   id: string,
-): Promise<{ portal: AgentPortal; toolName: string } | null> {
-  const { data } = await actor.db
+): Promise<PeekedPendingAction> {
+  const { data, error } = await actor.db
     .from("agent_pending_actions")
     .select("portal, tool_name")
     .eq("id", id)
     .eq("user_id", actor.userId)
     .maybeSingle();
-  if (!data) return null;
+  if (error) return { state: "unreadable" };
+  if (!data) return { state: "missing" };
   const portal = data.portal === "resident" || data.portal === "vendor" ? data.portal : "manager";
-  return { portal, toolName: String(data.tool_name) };
+  return { state: "found", portal, toolName: String(data.tool_name) };
 }

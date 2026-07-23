@@ -113,7 +113,7 @@ export const submitBidTool = defineWriteTool({
       { label: "Bid (labor)", value: formatUsd(amountCents) },
       { label: "Proposed time", value: proposedIso },
     ];
-    if (input.note?.trim()) lines.push({ label: "Note", value: input.note.trim().slice(0, 140) });
+    if (input.note?.trim()) lines.push({ label: "Note", value: input.note.trim() });
     return {
       kind: "submit_bid",
       title: "Submit bid",
@@ -331,7 +331,7 @@ export const markJobDoneTool = defineWriteTool({
       { label: "Job", value: jobLabel(res.target.row) },
       { label: "Effect", value: "Notifies the manager to review and approve payment" },
     ];
-    if (input.workDoneSummary?.trim()) lines.push({ label: "Summary", value: input.workDoneSummary.trim().slice(0, 140) });
+    if (input.workDoneSummary?.trim()) lines.push({ label: "Summary", value: input.workDoneSummary.trim() });
     return {
       kind: "mark_job_done",
       title: "Mark job done",

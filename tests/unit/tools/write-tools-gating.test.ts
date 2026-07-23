@@ -66,10 +66,12 @@ describe("findOwnedResident", () => {
 });
 
 // send_resident_message was superseded by the richer `send_message` tool, and
-// its preview builder went with it; the surviving tool's preview (recipient
-// resolution, full untruncated body, link warning) and its gated-execute
-// behaviour (scope refusal, audit, dedupe, delivery-failure rollback, thread
-// misdirection) are covered in tests/unit/tools/messaging.test.ts.
+// its preview builder went with it. Everything that builder pinned now lives on
+// the surviving tools and is covered in tests/unit/tools/messaging.test.ts:
+// preview recipient resolution, the full untruncated body field and the link
+// warning (send_message / schedule_message / reply_to_thread), plus the
+// gated-execute behaviour (scope refusal, audit, dedupe, delivery-failure
+// rollback, thread misdirection).
 
 function charge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
   return {

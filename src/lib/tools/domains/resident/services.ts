@@ -163,7 +163,7 @@ export const createServiceRequestTool = defineWriteTool({
       summary: `File "${input.title.trim()}" with ${routing.managerLabel}.`,
       fields: [
           { label: "Request", value: input.title.trim() },
-          { label: "Details", value: input.description.trim().slice(0, 140) },
+          { label: "Details", value: input.description.trim() },
           { label: "Priority", value: input.priority ?? "normal" },
           { label: "Property", value: routing.propertyLabel },
           { label: "Sent to", value: routing.managerLabel },
@@ -286,7 +286,7 @@ export const addServiceRequestNoteTool = defineWriteTool({
       summary: `Add a note to "${own.offerName}" (${own.status}).`,
       fields: [
           { label: "Request", value: `${own.offerName} (${own.status})` },
-          { label: "Note", value: input.note.trim().slice(0, 140) },
+          { label: "Note", value: input.note.trim() },
         ],
       confirmLabel: "Add note",
     };

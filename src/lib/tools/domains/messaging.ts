@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { defineWriteTool } from "../registry";
+import { withBodyWarnings } from "../preview-body";
 import type { AgentContext } from "../context";
 import { writeAuditLog, updateAuditResult, auditDayBucket } from "../audit";
 import { filterRecipientsBySenderScope, type InboxScopeSender } from "@/lib/inbox-recipient-scope";
@@ -157,6 +158,7 @@ export const sendMessageTool = defineWriteTool({
             : "No valid recipients resolved (the landlord has no approved residents to broadcast to).");
     }
     const subject = input.subject.trim();
+    const body = input.body.trim();
     const deliverViaEmail = input.deliverViaEmail !== false;
 
     const lines = allowed.slice(0, PREVIEW_LINE_CAP).map((r) => ({ label: r.name, value: r.email }));
@@ -164,6 +166,7 @@ export const sendMessageTool = defineWriteTool({
       lines.push({ label: "…", value: `and ${allowed.length - PREVIEW_LINE_CAP} more` });
     }
     lines.push({ label: "Subject", value: subject });
+    lines.push({ label: "Message", value: body });
     lines.push({ label: "Delivery", value: deliverViaEmail ? "Portal inbox + email" : "Portal inbox only" });
     if (blocked.length > 0) {
       // Surface — never silently drop — recipients the scope filter rejected.
@@ -179,7 +182,7 @@ export const sendMessageTool = defineWriteTool({
         ...(allowedExplicit.length > 0 ? { toEmails: allowedExplicit } : {}),
         ...(input.toAllResidents === true ? { toAllResidents: true } : {}),
         subject,
-        body: input.body.trim(),
+        body,
         ...(input.deliverViaEmail === undefined ? {} : { deliverViaEmail: input.deliverViaEmail }),
       },
       kind: "send_message",
@@ -192,6 +195,7 @@ export const sendMessageTool = defineWriteTool({
           ? ` ${blocked.length} requested recipient${blocked.length === 1 ? " is" : "s are"} not connected to you and will be skipped.`
           : ""),
       fields: lines,
+      ...withBodyWarnings(body),
       confirmLabel: allowed.length === 1 ? "Send message" : `Send to ${allowed.length} recipients`,
       ...(allowed.length > 1 ? { batchCount: allowed.length } : {}),
     };
@@ -316,7 +320,6 @@ export const replyToThreadTool = defineWriteTool({
     }
     const body = input.body.trim();
     const subject = thread.subject?.startsWith("Re:") ? thread.subject : `Re: ${thread.subject ?? ""}`.trim();
-    const bodyPreview = body.length > 280 ? `${body.slice(0, 280)}…` : body;
     const emailConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
     return {
       confirmedInput: { threadId: row.id, body },
@@ -326,12 +329,13 @@ export const replyToThreadTool = defineWriteTool({
       fields: [
           { label: "To", value: recipientLabel(recipient) },
           { label: "Subject", value: subject },
-          { label: "Reply", value: bodyPreview },
+          { label: "Reply", value: body },
           {
             label: "Delivery",
             value: emailConfigured ? "Portal inbox + email" : "Portal inbox only (email is not configured)",
           },
         ],
+      ...withBodyWarnings(body),
       confirmLabel: "Send reply",
     };
   },
@@ -456,17 +460,20 @@ export const scheduleMessageTool = defineWriteTool({
       throw new Error(`${normalizeEmail(input.toEmail)} is not connected to this landlord. Managers can only message their own residents, co-managers, and vendors.`);
     }
     const subject = input.subject.trim();
+    const body = input.body.trim();
     return {
-      confirmedInput: { toEmail: recipient.email, subject, body: input.body.trim(), sendAtIso: when.iso },
+      confirmedInput: { toEmail: recipient.email, subject, body, sendAtIso: when.iso },
       kind: "schedule_message",
       title: "Schedule message",
       summary: `Schedule "${subject}" to ${recipientLabel(recipient)} for ${when.iso}.`,
       fields: [
           { label: "To", value: recipientLabel(recipient) },
           { label: "Subject", value: subject },
+          { label: "Message", value: body },
           { label: "Send at", value: when.iso },
           { label: "Delivery", value: "Portal inbox + email" },
         ],
+      ...withBodyWarnings(body),
       confirmLabel: "Schedule message",
     };
   },

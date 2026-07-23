@@ -33,7 +33,9 @@ export type ConfirmGateResult =
  * a dual-role user's still-valid resident proposal would be destroyed by a
  * stray manager-side confirm instead of staying approvable from its own portal.
  * The peek is actor-scoped, so it leaks nothing a foreign caller could not
- * already learn from the uniform 410.
+ * already learn from the uniform 410, and it fails CLOSED: a peek that could
+ * not be read refuses without claiming, because an unreadable row is not a
+ * missing one and must not fall through to the claim that would burn it.
  */
 export async function runConfirmedPendingActionForPortal<Ctx extends PendingActionActor>(
   ctx: Ctx,
@@ -43,7 +45,10 @@ export async function runConfirmedPendingActionForPortal<Ctx extends PendingActi
   traceMetadata: Record<string, unknown> = {},
 ): Promise<ConfirmGateResult> {
   const peeked = await peekPendingActionPortal(ctx, actionId);
-  if (peeked && peeked.portal !== portal) {
+  if (peeked.state === "unreadable") {
+    return { ok: false, status: 503, error: "This action could not be confirmed right now. Please try again." };
+  }
+  if (peeked.state === "found" && peeked.portal !== portal) {
     return { ok: false, status: 400, error: "This action could not be executed." };
   }
   const claimed = await claimPendingAction(ctx, actionId);

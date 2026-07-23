@@ -206,10 +206,28 @@ describe("pending actions", () => {
     const { db, rows } = makeFakeDb();
     const id = await propose(db, { portal: "resident" });
     expect(await peekPendingActionPortal({ userId: "user_a", db }, id!)).toEqual({
+      state: "found",
       portal: "resident",
       toolName: "do_thing",
     });
-    expect(await peekPendingActionPortal({ userId: "user_b", db }, id!)).toBeNull();
+    expect(await peekPendingActionPortal({ userId: "user_b", db }, id!)).toEqual({ state: "missing" });
     expect(rows[0]!.status).toBe("proposed");
+  });
+
+  it("reports a query failure as unreadable, never as missing", async () => {
+    const failingDb = {
+      from: () => {
+        const chain: Record<string, unknown> = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => ({ data: null, error: { message: "connection reset" } }),
+        };
+        return chain;
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    expect(await peekPendingActionPortal({ userId: "user_a", db: failingDb }, "act_1")).toEqual({
+      state: "unreadable",
+    });
   });
 });

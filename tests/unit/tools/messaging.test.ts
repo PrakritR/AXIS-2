@@ -129,6 +129,14 @@ function makeCtx(tables: Tables, overrides: Partial<AgentContext> = {}): AgentCo
   } as unknown as AgentContext;
 }
 
+/**
+ * Longer than the 280- and 140-char truncations these previews used to apply,
+ * so a re-introduced `.slice()` fails these tests instead of silently blinding
+ * the approver.
+ */
+const LONG_BODY = `Water will be shut off Tuesday from 9am to 4pm. ${"Please plan accordingly. ".repeat(20)}Thanks!`;
+const LINK_WARNING = "The message body contains a link. Verify it before sending.";
+
 /** Seed: manager_a owns Pat (has an account) and Sam (invite-pending); manager_b owns Foreign. */
 function seedRecipientTables(): Tables {
   return {
@@ -235,6 +243,48 @@ describe("send_message", () => {
     expect(values).toContain("sam@x.com");
     expect(values.join()).not.toContain("foreign@x.com");
     expect(values.join()).not.toContain("pending@x.com");
+  });
+
+  it("preview shows the COMPLETE body verbatim — the approver can only veto what they can see", async () => {
+    const res = await previewWrite(sendMessageTool, ctx, {
+      toEmails: ["pat@x.com"],
+      subject: "Hello",
+      body: `  ${LONG_BODY}  `,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.preview.fields).toContainEqual({ label: "Message", value: LONG_BODY });
+  });
+
+  it("a toAllResidents broadcast previews the complete body too", async () => {
+    const res = await previewWrite(sendMessageTool, ctx, {
+      toAllResidents: true,
+      subject: "Notice",
+      body: LONG_BODY,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.preview.fields.find((l) => l.label === "Message")?.value).toBe(LONG_BODY);
+  });
+
+  it("preview warns when the body carries a link", async () => {
+    const res = await previewWrite(sendMessageTool, ctx, {
+      toEmails: ["pat@x.com"],
+      subject: "Hello",
+      body: "pay at https://evil.example",
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.preview.warnings).toEqual([LINK_WARNING]);
+
+    const clean = await previewWrite(sendMessageTool, ctx, {
+      toEmails: ["pat@x.com"],
+      subject: "Hello",
+      body: "no links here",
+    });
+    expect(clean.ok).toBe(true);
+    if (!clean.ok) return;
+    expect(clean.preview.warnings).toBeUndefined();
   });
 
   it("execute audits first, delivers portal inbox rows, and is idempotent per day", async () => {
@@ -354,6 +404,29 @@ describe("schedule_message", () => {
     expect(res.preview.fields).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
     expect(res.preview.fields).toContainEqual({ label: "Send at", value: FUTURE });
     expect((res.input as { sendAtIso: string }).sendAtIso).toBe(FUTURE);
+  });
+
+  it("preview shows the COMPLETE body and warns on a link", async () => {
+    const res = await previewWrite(scheduleMessageTool, ctx, {
+      toEmail: "pat@x.com",
+      subject: "Rent due soon",
+      body: LONG_BODY,
+      sendAtIso: FUTURE,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.preview.fields).toContainEqual({ label: "Message", value: LONG_BODY });
+    expect(res.preview.warnings).toBeUndefined();
+
+    const linked = await previewWrite(scheduleMessageTool, ctx, {
+      toEmail: "pat@x.com",
+      subject: "Rent due soon",
+      body: "pay at https://evil.example",
+      sendAtIso: FUTURE,
+    });
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.preview.warnings).toEqual([LINK_WARNING]);
   });
 
   it("execute creates the scheduled row with a one-shot dedupe key", async () => {
@@ -646,6 +719,22 @@ describe("reply_to_thread", () => {
     expect(res.preview.fields).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
     expect(res.preview.fields).toContainEqual({ label: "Subject", value: "Re: Leaky faucet" });
     expect(res.preview.fields.find((l) => l.label === "Reply")?.value).toContain("plumber tomorrow");
+  });
+
+  it("preview shows the COMPLETE reply body and warns on a link", async () => {
+    const res = await previewWrite(replyToThreadTool, ctx, { threadId: "t_pat", body: LONG_BODY });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.preview.fields).toContainEqual({ label: "Reply", value: LONG_BODY });
+    expect(res.preview.warnings).toBeUndefined();
+
+    const linked = await previewWrite(replyToThreadTool, ctx, {
+      threadId: "t_pat",
+      body: "details at https://evil.example",
+    });
+    expect(linked.ok).toBe(true);
+    if (!linked.ok) return;
+    expect(linked.preview.warnings).toEqual([LINK_WARNING]);
   });
 
   it("preview rejects another landlord's thread as unknown (anti-enumeration)", async () => {

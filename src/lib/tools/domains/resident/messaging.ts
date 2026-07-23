@@ -140,7 +140,7 @@ export const sendMessageToManagerTool = defineWriteTool({
       fields: [
           ...resolved.targets.map((t) => ({ label: "To", value: `${t.name} (${t.email})` })),
           { label: "Subject", value: input.subject.trim() },
-          { label: "Message", value: input.body.trim().slice(0, 140) },
+          { label: "Message", value: input.body.trim() },
         ],
       confirmLabel: "Send message",
     };
@@ -222,7 +222,7 @@ export const scheduleMessageTool = defineWriteTool({
           { label: "To", value: `${target.name} (${target.email})` },
           { label: "Subject", value: input.subject.trim() },
           { label: "Send at", value: sendAt.toISOString() },
-          { label: "Message", value: input.body.trim().slice(0, 140) },
+          { label: "Message", value: input.body.trim() },
         ],
       confirmLabel: "Schedule",
     };

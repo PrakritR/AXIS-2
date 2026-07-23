@@ -16,7 +16,7 @@ type Row = Record<string, unknown> & { id: string };
 const ACTOR = "user_a";
 const ACTION_ID = "act_1";
 
-function makeDb(rows: Row[]) {
+function makeDb(rows: Row[], opts: { peekFails?: boolean } = {}) {
   const matches = (row: Row, filters: [string, string, unknown][]) =>
     filters.every(([op, col, val]) =>
       op === "eq" ? row[col] === val : String(row[col] ?? "") > String(val ?? ""),
@@ -44,7 +44,10 @@ function makeDb(rows: Row[]) {
           filters.push(["gt", col, val]);
           return chain;
         },
-        maybeSingle: () => Promise.resolve({ data: apply()[0] ?? null, error: null }),
+        maybeSingle: () =>
+          opts.peekFails
+            ? Promise.resolve({ data: null, error: { message: "connection reset" } })
+            : Promise.resolve({ data: apply()[0] ?? null, error: null }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         then: (resolve: (v: any) => unknown) => Promise.resolve({ data: apply(), error: null }).then(resolve),
       };
@@ -114,6 +117,17 @@ describe("confirm gate portal binding", () => {
     expect(result.ok).toBe(true);
     expect(executed).toBe(1);
     expect(rows[0]!.status).toBe("executed");
+  });
+
+  it("fails closed when the portal peek cannot be read — refuses WITHOUT claiming", async () => {
+    executed = 0;
+    const rows = [proposedRow("manager")];
+    const ctx = { userId: ACTOR, db: makeDb(rows, { peekFails: true }) };
+    const result = await runConfirmedPendingActionForPortal(ctx, registry, "manager", ACTION_ID);
+    expect(result).toMatchObject({ ok: false, status: 503 });
+    expect(executed).toBe(0);
+    // An unreadable peek is not a missing row: the proposal survives for a retry.
+    expect(rows[0]!.status).toBe("proposed");
   });
 
   it("refuses another actor's proposal outright", async () => {
