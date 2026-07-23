@@ -15,6 +15,7 @@
 
 export type DashboardSectionId =
   | "cashflow"
+  | "aiDrafts"
   | "tours"
   | "applications"
   | "leases"
@@ -39,6 +40,12 @@ export const MANAGER_DASHBOARD_SECTIONS: readonly DashboardSectionDef[] = [
     id: "cashflow",
     label: "Cash flow",
     description: "Payments collected vs. expenses, last 6 months.",
+    defaultVisible: true,
+  },
+  {
+    id: "aiDrafts",
+    label: "AI drafts",
+    description: "Assistant-proposed actions awaiting your approval.",
     defaultVisible: true,
   },
   {
