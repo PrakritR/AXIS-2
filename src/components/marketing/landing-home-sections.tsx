@@ -11,9 +11,13 @@ const GET_STARTED = MANAGER_GET_STARTED_HREF;
 export function LandingHomeSections() {
   return (
     <>
-      <LandingDashboardChatDemo />
-      <LandingInboxApproveDemo />
-      <LearnSection />
+      {/* One element paints the blueprint grid for the whole flow band, so the
+          square pitch never resets phase at a section boundary. */}
+      <div className="lp-flow-band lp-blueprint">
+        <LandingDashboardChatDemo />
+        <LandingInboxApproveDemo />
+        <LearnSection />
+      </div>
       <OpsSkySection />
       <section className="lp-end lp-end-cta-only" aria-label="Get started">
         <CtaPair
@@ -53,7 +57,7 @@ function CtaPair({
 // Exported for unit coverage of the light/dark guide-art swap.
 export function LearnSection() {
   return (
-    <section id="learn" className="lp-learn lp-blueprint scroll-mt-20">
+    <section id="learn" className="lp-learn scroll-mt-20">
       <div className="lp-w">
         <h2>Learn how to manage your house</h2>
         <p className="lp-lede">

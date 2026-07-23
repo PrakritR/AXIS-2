@@ -2262,8 +2262,8 @@ html[data-native] [data-listing-sections-root] {
   inset: 0;
 }
 
-/* Layer 1 — masked 1px lattice (~56px pitch): crisp behind the headline,
-   gone by the edges. */
+/* Layer 1 — masked 1px lattice on the shared --lp-grid-size pitch: crisp behind
+   the headline, gone by the edges. */
 .landing-hero-grid {
   background-image:
     repeating-linear-gradient(0deg, var(--hero-grid-line) 0 1px, transparent 1px var(--lp-grid-size)),

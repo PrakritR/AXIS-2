@@ -265,9 +265,17 @@
 /* Blueprint / floorplan grid.
  * The square pitch is the shared `--lp-grid-size` token (set in globals.css) so
  * these squares are exactly the same size as the hero lattice — the grid never
- * appears to resize as you scroll between sections. Applied to every flow-band
- * "working surface" section (dashboard demo, inbox demo, learn) so the grid is a
- * continuous motif instead of appearing/disappearing between sections. */
+ * appears to resize as you scroll between sections. It is painted ONCE, on the
+ * `.lp-flow-band` wrapper around the "working surface" sections (dashboard demo,
+ * inbox demo, learn), because a per-section background restarts its tiling
+ * origin at each section's own top edge — leaving an off-pitch band wherever a
+ * section height is not a multiple of the pitch. One element = one continuous
+ * grid; the sections inside it stay transparent. */
+.lp-flow-band {
+  position: relative;
+  min-width: 0;
+}
+
 .lp-blueprint {
   background-color: var(--lp-surface);
   /* Theme brand grid (blue in light, purple in dark via --lp-blue). */
@@ -277,7 +285,9 @@
   background-size: var(--lp-grid-size) var(--lp-grid-size);
 }
 
-/* Dark: give otherwise-flat black bands an ambient purple undercurrent for depth. */
+/* Dark: give otherwise-flat black bands an ambient purple undercurrent for depth.
+ * The glow layer is sized in pixels (not `100%`) so it stays a top-of-band
+ * accent instead of scaling with the full height of the flow band. */
 [data-theme="dark"] .lp-blueprint {
   background-image:
     linear-gradient(color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px),
@@ -286,7 +296,8 @@
   background-size:
     var(--lp-grid-size) var(--lp-grid-size),
     var(--lp-grid-size) var(--lp-grid-size),
-    100% 100%;
+    100% 720px;
+  background-repeat: repeat, repeat, no-repeat;
 }
 
 /* Product stage */
@@ -1211,7 +1222,7 @@
   position: relative;
   padding: 40px 0 28px;
   min-width: 0;
-  /* Background comes from the shared `.lp-blueprint` class (continuous grid). */
+  /* Transparent on purpose: the `.lp-flow-band` wrapper paints the grid. */
   color: var(--lp-ink);
 }
 
@@ -1566,7 +1577,7 @@
   position: relative;
   padding: 40px 0 28px;
   min-width: 0;
-  /* Background comes from the shared `.lp-blueprint` class (continuous grid). */
+  /* Transparent on purpose: the `.lp-flow-band` wrapper paints the grid. */
   color: var(--lp-ink);
 }
 

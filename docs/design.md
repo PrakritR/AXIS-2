@@ -160,9 +160,10 @@ background is the `.landing-hero-glow` container holding four layers, styled in
 in dark, cobalt-blue family in light, never mixed** (base rules purple,
 `[data-theme="light"]` overrides blue), using `--pl-*` tokens only.
 
-1. **Architectural grid** (`.landing-hero-grid`) — a 1px lattice on a 56px pitch
-   from two `repeating-linear-gradient`s, faded with a radial `mask-image` so it
-   is crisp behind the headline and gone by the edges.
+1. **Architectural grid** (`.landing-hero-grid`) — a 1px lattice from two
+   `repeating-linear-gradient`s on the shared `--lp-grid-size` pitch (56px, in
+   `globals.css`), faded with a radial `mask-image` so it is crisp behind the
+   headline and gone by the edges.
 2. **Brand bloom** (`.landing-hero-bloom`) — one large radial glow behind the
    product panel (`ApplicationsPipelinePanel`).
 3. **Lit cells** (`.landing-hero-cells`) — a few grid cells softly lit like
@@ -175,6 +176,15 @@ The panel keeps its own opaque fill and sits strictly above the background;
 motion is `transform`/`opacity` only (compositor-safe for the Capacitor
 WebView), and the lit-cells animation holds a static frame under
 `prefers-reduced-motion`.
+
+**The lattice continues below the hero.** `.lp-blueprint`
+(`landing-proplane.css`) reads the same `--lp-grid-size`, so its squares are
+never a different size from the hero's — never hardcode a second pitch. It is
+applied once to the `.lp-flow-band` wrapper around the dashboard-demo,
+inbox-demo, and learn sections (`landing-home-sections.tsx`), not per section:
+a per-section background restarts its tiling origin at that section's top edge,
+so the squares appear to shift wherever a section height is not a multiple of
+the pitch. Sections inside the band stay transparent.
 
 ---
 
