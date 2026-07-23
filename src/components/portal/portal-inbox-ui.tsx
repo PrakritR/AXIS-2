@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, ChevronLeft } from "lucide-react";
+import { ArrowUp, ChevronLeft, Check, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -703,6 +703,147 @@ export function InboxComposer({
         </div>
       ) : null}
     </form>
+  );
+}
+
+/**
+ * Approval-first AI reply card, shown above the reply composer on an incoming
+ * resident thread. PropLane AI drafts a reply; the manager stays in control and
+ * must Approve & Send, Edit, or Discard. Nothing is sent to the resident until
+ * the manager approves. Drafts live only on the manager's row, so residents
+ * never see this card or the draft text.
+ */
+export function AiDraftReplyCard({
+  drafting = false,
+  draft,
+  error,
+  approving = false,
+  onApprove,
+  onEdit,
+  onDiscard,
+  onGenerate,
+}: {
+  /** True while a draft is being generated. */
+  drafting?: boolean;
+  /** The pending draft text (present once ready). */
+  draft?: string;
+  /** Optional error from the last generation attempt. */
+  error?: string;
+  /** True while Approve & Send is in flight. */
+  approving?: boolean;
+  onApprove: () => void;
+  onEdit: () => void;
+  onDiscard: () => void;
+  /** Manual (re)generate — shown when there is no draft yet (e.g. after Discard). */
+  onGenerate?: () => void;
+}) {
+  if (drafting) {
+    return (
+      <div
+        className="shrink-0 border-t border-border bg-accent/30 px-3.5 py-3"
+        data-attr="inbox-ai-draft-drafting"
+      >
+        <div className="flex items-center gap-2 text-[13px] font-medium text-muted">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-3 w-3 text-primary" strokeWidth={2.25} />
+          </span>
+          <span className="animate-pulse">PropLane AI is drafting a reply…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!draft) {
+    if (error) {
+      return (
+        <div className="shrink-0 border-t border-border bg-card px-3.5 py-2.5" data-attr="inbox-ai-draft-error">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[13px] text-danger">Couldn’t draft a reply.</span>
+            {onGenerate ? (
+              <Button type="button" variant="outline" className="h-8 min-h-0 px-3 text-[12px]" onClick={onGenerate}>
+                Try again
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+    if (onGenerate) {
+      return (
+        <div className="shrink-0 border-t border-border bg-card px-3.5 py-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 min-h-0 gap-1.5 px-3.5 text-[13px]"
+            onClick={onGenerate}
+            data-attr="inbox-ai-draft-generate"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} />
+            Draft reply with PropLane AI
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div
+      className="shrink-0 border-t border-border bg-accent/40 px-3.5 py-3"
+      data-attr="inbox-ai-draft-card"
+    >
+      <div className="flex items-center gap-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+          <Sparkles className="h-3 w-3 text-primary" strokeWidth={2.25} />
+        </span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+          Draft · Pending approval
+        </span>
+      </div>
+      <p className="mt-2 whitespace-pre-wrap break-words rounded-xl border border-border bg-card px-3 py-2.5 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+        {draft}
+      </p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="primary"
+          className="h-9 min-h-0 gap-1.5 px-3.5 text-[13px]"
+          onClick={onApprove}
+          disabled={approving}
+          data-attr="inbox-ai-draft-approve"
+        >
+          {approving ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+          )}
+          Approve &amp; Send
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 min-h-0 gap-1.5 px-3.5 text-[13px]"
+          onClick={onEdit}
+          disabled={approving}
+          data-attr="inbox-ai-draft-edit"
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={2.25} />
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-9 min-h-0 gap-1.5 px-3 text-[13px] text-muted hover:text-danger"
+          onClick={onDiscard}
+          disabled={approving}
+          data-attr="inbox-ai-draft-discard"
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+          Discard
+        </Button>
+        <span className="ml-auto text-[11px] text-muted">You’re in control · nothing sends without you</span>
+      </div>
+    </div>
   );
 }
 

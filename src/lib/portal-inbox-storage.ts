@@ -8,6 +8,22 @@ export type InboxThreadMessage = {
   at: string;
 };
 
+/**
+ * An AI-drafted manager reply awaiting explicit manager approval. Stored ONLY on
+ * the manager's own inbox thread row (owner-scoped to the manager), so it is
+ * structurally invisible to the resident — residents read their own scope and
+ * never this row. Nothing here is ever delivered to a resident until the manager
+ * hits Approve & Send, which routes through the normal send path. See
+ * `docs/agents/inbox-ai-drafts.md`.
+ */
+export type InboxAiDraft = {
+  text: string;
+  /** Only value while stored; approved/discarded drafts are removed, not restatused. */
+  status: "pending_approval";
+  generatedAt: string;
+  model?: string;
+};
+
 export type PersistedInboxThread = {
   id: string;
   folder: "inbox" | "sent" | "trash";
@@ -20,6 +36,8 @@ export type PersistedInboxThread = {
   time: string;
   unread: boolean;
   messages?: InboxThreadMessage[];
+  /** Manager-only pending AI reply draft (never present on resident-scope rows). */
+  aiDraft?: InboxAiDraft;
 };
 
 export const MANAGER_INBOX_STORAGE_KEY = "axis_portal_inbox_manager_v1";
