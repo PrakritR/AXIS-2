@@ -162,8 +162,8 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-lg font-semibold text-foreground">Contact us</h2>
             <p className="mt-2">
               For privacy questions, contact us at{" "}
-              <a href="mailto:info@axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
-                info@axis-seattle-housing.com
+              <a href="mailto:support@prop-lane.space" className="font-medium text-primary hover:opacity-90">
+                support@prop-lane.space
               </a>{" "}
               or{" "}
               <Link href="/partner/contact" className="font-medium text-primary hover:opacity-90">
