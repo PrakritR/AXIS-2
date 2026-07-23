@@ -216,14 +216,16 @@ export function smsThreadBucketForLatestMessage(
 export function sortSmsConversationRows<
   T extends {
     lastMessage: ManagerSmsMessageRow | null;
-    resident: Pick<ManagerSmsResidentConversation, "name" | "propertyLabel" | "phone">;
+    resident: SmsConversationLabelSource & Pick<ManagerSmsResidentConversation, "phone">;
   },
 >(rows: T[], sort: ManagerSmsSortId): T[] {
+  // Order by the LABEL the row actually renders, not the raw `name` \u2014 a
+  // phone-like name displays as its unit or a masked handle, so sorting on the
+  // raw value makes the visible list look unsorted.
+  const label = (row: T) => smsConversationDisplayName(row.resident);
   return [...rows].sort((a, b) => {
     if (sort === "name") {
-      return (a.resident.name || "").localeCompare(b.resident.name || "", undefined, {
-        sensitivity: "base",
-      });
+      return label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
     }
     if (sort === "house") {
       const byHouse = (a.resident.propertyLabel || "\uffff").localeCompare(
@@ -232,9 +234,7 @@ export function sortSmsConversationRows<
         { sensitivity: "base" },
       );
       if (byHouse !== 0) return byHouse;
-      return (a.resident.name || "").localeCompare(b.resident.name || "", undefined, {
-        sensitivity: "base",
-      });
+      return label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
     }
     const aTs = a.lastMessage?.createdAt ?? "";
     const bTs = b.lastMessage?.createdAt ?? "";
