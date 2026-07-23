@@ -20,14 +20,11 @@ const recordSubmittedApplicationFeeCharge = vi.fn();
 const removeAllApplicationCharges = vi.fn();
 const removeApprovedApplicationCharges = vi.fn();
 
-const syncManagerApplicationsFromServer = vi.fn(async () => ROWS);
-
 vi.mock("@/lib/manager-applications-storage", () => ({
   readManagerApplicationRows: () => ROWS,
   writeManagerApplicationRows: (rows: DemoApplicantRow[]) => {
     ROWS = rows;
   },
-  syncManagerApplicationsFromServer,
 }));
 vi.mock("@/lib/household-charges", () => ({
   recordApprovedApplicationCharges,
@@ -64,7 +61,6 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     vi.stubGlobal("fetch", fetchMock);
     recordApprovedApplicationCharges.mockClear();
     removeApprovedApplicationCharges.mockClear();
-    syncManagerApplicationsFromServer.mockClear();
   });
 
   it("rolls back and stamps when the server matched THIS application by id", async () => {
@@ -89,8 +85,6 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
     // No welcome email may go out for an approval the server refused.
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
-    // The stamp already makes the local cache agree with the server; no resync needed.
-    expect(syncManagerApplicationsFromServer).not.toHaveBeenCalled();
   });
 
   it("rolls back WITHOUT stamping when the 409 came from another application (email fallback)", async () => {
@@ -116,9 +110,8 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     expect(ROWS[0].bucket).toBe("pending");
     expect(ROWS[0].withdrawnAt).toBeFalsy();
     expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
-    // Nothing local can be stamped from this refusal, so pull authoritative state
-    // instead of leaving a doomed Approve up until the sync TTL expires.
-    expect(syncManagerApplicationsFromServer).toHaveBeenCalledWith({ force: true, managerUserId: "mgr-1" });
+    // Only the refusal itself goes out — no extra reads that could race the rollback.
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
   });
 
   it("rolls back WITHOUT stamping when the 409 names a different id even via the id lookup", async () => {
