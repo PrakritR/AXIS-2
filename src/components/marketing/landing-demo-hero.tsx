@@ -12,7 +12,19 @@ const STATS = [
   { value: "2", label: "managers" },
 ] as const;
 
-/** Theme-aware split hero + sparse portfolio stats. Dark keeps near-black; light is soft white. */
+/**
+ * Theme-aware split hero + sparse portfolio stats. Dark keeps near-black; light is soft white.
+ *
+ * Vertical rhythm invariant: the hero AND the stats strip must fit one ~900px
+ * desktop viewport so the portfolio numbers are visible without scrolling. The
+ * `lg:` padding here (`lg:pt-12 lg:pb-14` on the grid, `lg:py-9` on the stats
+ * strip) — plus the 32px `.landing-hero-bridge` at ≥1024px in `globals.css` — is
+ * deliberately tighter than the standard marketing rhythm (docs/design.md,
+ * "Layout & spacing") for exactly that reason. Hero height is driven by the left
+ * text column, not `ApplicationsPipelinePanel`, so trim padding rather than type
+ * or the demo card if this needs to shrink further. Sub-`lg` spacing is left at
+ * the fuller mobile rhythm on purpose — mobile stacks and scrolls normally.
+ */
 export function LandingDemoHero() {
   return (
     <>
