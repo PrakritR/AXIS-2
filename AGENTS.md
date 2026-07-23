@@ -368,9 +368,11 @@ Two branches, two roles:
   (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
   this branch. Never commit straight to it.
 - **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
-  produces a **preview deploy**, and Vercel keeps a stable staging alias that
-  always points at the latest `prakrit` build. Use this to validate a release
-  before promoting. Feature branches also get their own preview URLs.
+  produces a **preview deploy**, and Vercel keeps a stable branch alias that
+  always points at the latest `prakrit` build —
+  `axis-2-git-prakrit-prakritramachandran-6082s-projects.vercel.app`. That URL is
+  the staging preview the ship gate asks you to verify. Feature branches also get
+  their own preview URLs.
 
 **Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
 you want it live:

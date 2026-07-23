@@ -18,7 +18,7 @@ echo "== Axis ship preflight =="
 
 WF=".github/workflows/ios-testflight.yml"
 if [[ -f "$WF" ]]; then
-  if grep -q "branches: \[main\]" "$WF" && grep -q "fastlane beta" "$WF"; then
+  if grep -Eq 'branches:[[:space:]]*\[[^]]*\bmain\b|^[[:space:]]*-[[:space:]]*main[[:space:]]*$' "$WF" && grep -q "fastlane beta" "$WF"; then
     pass "iOS TestFlight workflow triggers on main and runs fastlane beta"
   else
     bad "iOS TestFlight workflow missing main trigger or fastlane beta step"
