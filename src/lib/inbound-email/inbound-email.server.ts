@@ -102,11 +102,11 @@ export function htmlToText(html: string): string {
     .replace(/<\s*\/\s*(p|div|tr|li|h[1-6])\s*>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -134,15 +134,20 @@ export async function fetchResendReceivedEmailBody(emailId: string): Promise<str
   try {
     const res = await fetch(`${base}/emails/receiving/${encodeURIComponent(emailId)}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return "";
+    if (!res.ok) {
+      console.warn("inbound-email body fetch failed", emailId, res.status, res.statusText);
+      return "";
+    }
     const json = (await res.json()) as Record<string, unknown>;
     const data = (json.data && typeof json.data === "object" ? json.data : json) as Record<string, unknown>;
     const text = typeof data.text === "string" ? data.text : "";
     if (text.trim()) return text;
     const html = typeof data.html === "string" ? data.html : "";
     return html.trim() ? htmlToText(html) : "";
-  } catch {
+  } catch (e) {
+    console.warn("inbound-email body fetch errored", emailId, e);
     return "";
   }
 }
@@ -160,7 +165,11 @@ export async function resolveInboundEmailBody(parsed: ParsedInboundEmail): Promi
  * Build the admin-inbox row for an inbound support email. Shape mirrors the
  * `InboxMessage` the admin inbox renders (see demo-admin-partner-inbox.ts) and
  * the contact-message route: scope "admin" (owner-agnostic — visible to every
- * admin/founder), the external sender as the participant so a reply routes back.
+ * admin/founder), with the external sender stored as the participant.
+ *
+ * This is INBOUND DISPLAY ONLY. Replying to a support thread in-app appends to
+ * `row.thread` and does NOT email the sender back — there is no outbound path
+ * for these threads.
  */
 export function buildInboundEmailInboxRow(opts: { parsed: ParsedInboundEmail; bodyText: string }) {
   const { parsed, bodyText } = opts;
@@ -174,37 +183,37 @@ export function buildInboundEmailInboxRow(opts: { parsed: ParsedInboundEmail; bo
     createdAt: parsed.receivedAt,
     read: false,
     folder: "inbox" as const,
-    // "partner" = external contact; roleAllowsThread lets an admin reply.
+    // "partner" = external contact; roleAllowsThread lets an admin open it.
     senderRole: "partner" as const,
     thread: [] as never[],
     scope: ADMIN_INBOX_SCOPE,
-    // Provenance for the admin UI / audit — which support address received it.
+    // Audit metadata only — nothing renders this today.
     channel: "email" as const,
-    receivedTo: parsed.toEmails,
   };
 }
 
+/** Postgres unique_violation — the row was already ingested by a prior delivery. */
+function isUniqueViolation(error: { code?: string | null; message?: string | null }): boolean {
+  if (error.code === "23505") return true;
+  return /duplicate key value|already exists/i.test(error.message ?? "");
+}
+
 /**
- * Ingest a parsed inbound email into the admin portal inbox. Idempotent: a
- * re-delivered webhook (same provider message id) is a no-op once the thread
- * exists, so an admin's read/reply state is never clobbered.
+ * Ingest a parsed inbound email into the admin portal inbox. Idempotent by
+ * construction: the deterministic thread id is inserted, and a unique-violation
+ * from a re-delivered webhook is a no-op, so an admin's read/reply state is
+ * never clobbered. Any OTHER database error throws so the caller can return a
+ * 5xx and let the provider retry rather than silently dropping support mail.
  */
 export async function ingestInboundEmail(
   parsed: ParsedInboundEmail,
   db = createSupabaseServiceRoleClient(),
 ): Promise<{ created: boolean }> {
-  const id = inboundEmailThreadId(parsed.emailId);
-  const { data: existing } = await db
-    .from("portal_inbox_thread_records")
-    .select("id")
-    .eq("id", id)
-    .maybeSingle();
-  if (existing) return { created: false };
-
   const bodyText = await resolveInboundEmailBody(parsed);
   const row = buildInboundEmailInboxRow({ parsed, bodyText });
   const record = buildPortalInboxThreadUpsert(row, { id: "", email: null });
-  const { error } = await db.from("portal_inbox_thread_records").upsert(record, { onConflict: "id" });
-  if (error) throw new Error(error.message);
-  return { created: true };
+  const { error } = await db.from("portal_inbox_thread_records").insert(record);
+  if (!error) return { created: true };
+  if (isUniqueViolation(error)) return { created: false };
+  throw new Error(error.message);
 }

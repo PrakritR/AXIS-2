@@ -12,17 +12,31 @@ so support mail is handled inside the app next to the rest of the unified inbox.
    (`src/app/api/webhooks/email/inbound/route.ts`).
 3. The route mirrors the Twilio SMS webhook posture: `runtime = "nodejs"`, Svix
    signature verification that **fails closed on Vercel** (unsigned inbound is
-   allowed only in local dev), in-memory rate limiting, `after()` for the async
-   ingest, service-role Supabase client.
+   allowed only in local dev), in-memory rate limiting, service-role Supabase
+   client. The rate-limit bucket is keyed on the **parsed sender**, not the client
+   IP — every request comes from Resend's own IPs, so an IP bucket would be a
+   global ceiling one noisy sender could exhaust for everyone. Over-limit acks 200
+   (a non-2xx makes Resend retry and amplify a flood) and logs the shed message id.
 4. Ingest (`src/lib/inbound-email/inbound-email.server.ts`) writes a
    `portal_inbox_thread_records` row under **`scope: "admin"`** — the same rail the
    public contact form uses (`src/app/api/public/contact-message/route.ts`). Admin
    scope is **owner-agnostic** (`owner_user_id = null`); every admin/founder sees
    `scope = admin` threads via `portalInboxThreadScopeFilter`. The external sender
-   is stored as `participant_email` so an admin reply routes back to them.
+   is stored as `participant_email` as provenance.
+
+The write runs **inline**, not in `after()`: a failed insert returns **500** so
+Resend redelivers, instead of acking 200 and losing the support email.
 
 No DB migration is required — this reuses the existing `portal_inbox_thread_records`
 table and the `admin` inbox scope.
+
+## Receive-only — replies do not reach the sender
+
+This is **inbound display only**. Replying to a support thread in the admin inbox
+calls `appendThreadReply`, which appends to `row.thread` and persists it — it does
+**NOT** email the sender back. There is no outbound path wired for these threads;
+answering a customer still means sending mail from the support mailbox. Building
+an outbound round trip is deliberately out of scope here.
 
 ### Signature verification
 
@@ -36,9 +50,13 @@ is checked within a 5-minute tolerance to blunt replay.
 
 ### Idempotency
 
-The thread id is deterministic: `inbound_email_<resend-email_id>`. Ingest checks
-for an existing row first and **no-ops on re-delivery**, so a retried webhook never
-duplicates a thread nor clobbers an admin's read/reply state.
+The thread id is deterministic: `inbound_email_<resend-email_id>`. Ingest
+**inserts** that id and treats a unique-constraint violation as an already-ingested
+no-op, so a retried (or concurrently redelivered) webhook never duplicates a thread
+nor clobbers an admin's read/reply state. Any other database error throws and the
+route answers 500 so Resend retries. Do not turn this back into a
+read-then-upsert — the gap between the check and the write is exactly where a
+concurrent redelivery overwrites `read`/`thread`.
 
 ### Body retrieval
 

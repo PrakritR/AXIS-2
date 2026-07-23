@@ -147,6 +147,12 @@ describe("parseInboundEmailWebhook", () => {
   it("htmlToText strips markup but keeps line breaks", () => {
     expect(htmlToText("<p>Hello</p><p>World</p><script>bad()</script>")).toBe("Hello\nWorld");
   });
+
+  it("htmlToText decodes each entity exactly once", () => {
+    // &amp;lt; is a literally escaped "&lt;" — decoding &amp; first would
+    // double-decode it into "<" and corrupt quoted markup.
+    expect(htmlToText("<p>&amp;lt;div&amp;gt; &amp; &lt;b&gt;</p>")).toBe("&lt;div&gt; & <b>");
+  });
 });
 
 describe("buildInboundEmailInboxRow", () => {
@@ -163,24 +169,15 @@ describe("buildInboundEmailInboxRow", () => {
 });
 
 /** Minimal fake of the Supabase query builder used by ingestInboundEmail. */
-function fakeDb(opts: { existing: boolean }) {
-  const upserts: Array<{ record: Record<string, unknown> }> = [];
+function fakeDb(opts: { error?: { code?: string; message: string } } = {}) {
+  const inserts: Array<{ record: Record<string, unknown> }> = [];
   const db = {
-    upserts,
+    inserts,
     from() {
       return {
-        select() {
-          return {
-            eq() {
-              return {
-                maybeSingle: async () => ({ data: opts.existing ? { id: "x" } : null }),
-              };
-            },
-          };
-        },
-        upsert: async (record: Record<string, unknown>) => {
-          upserts.push({ record });
-          return { error: null };
+        insert: async (record: Record<string, unknown>) => {
+          inserts.push({ record });
+          return { error: opts.error ?? null };
         },
       };
     },
@@ -203,22 +200,26 @@ describe("ingestInboundEmail", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("creates an admin-scope, owner-agnostic inbox thread for a new email", async () => {
-    const db = fakeDb({ existing: false });
+    const db = fakeDb();
     const result = await ingestInboundEmail(PARSED, db as never);
     expect(result.created).toBe(true);
-    expect(db.upserts).toHaveLength(1);
-    const record = db.upserts[0]!.record;
+    expect(db.inserts).toHaveLength(1);
+    const record = db.inserts[0]!.record;
     expect(record.id).toBe(inboundEmailThreadId("abc-123"));
     expect(record.scope).toBe(ADMIN_INBOX_SCOPE);
     expect(record.owner_user_id).toBeNull(); // admin scope is owner-agnostic
     expect(record.participant_email).toBe("jane@example.com");
   });
 
-  it("is idempotent — a re-delivered email does not upsert again", async () => {
-    const db = fakeDb({ existing: true });
+  it("is idempotent — a unique violation from re-delivery is a no-op, not a throw", async () => {
+    const db = fakeDb({ error: { code: "23505", message: "duplicate key value violates unique constraint" } });
     const result = await ingestInboundEmail(PARSED, db as never);
     expect(result.created).toBe(false);
-    expect(db.upserts).toHaveLength(0);
+  });
+
+  it("throws on any other database error so the route can 5xx and force a retry", async () => {
+    const db = fakeDb({ error: { code: "08006", message: "connection failure" } });
+    await expect(ingestInboundEmail(PARSED, db as never)).rejects.toThrow("connection failure");
   });
 });
 
@@ -267,7 +268,7 @@ describe("POST /api/webhooks/email/inbound", () => {
     expect(ingestSpy).not.toHaveBeenCalled();
   });
 
-  it("accepts a correctly signed inbound email and schedules ingest", async () => {
+  it("accepts a correctly signed inbound email and ingests it inline", async () => {
     process.env.VERCEL = "1";
     process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
     const body = JSON.stringify(RECEIVED_PAYLOAD);
@@ -281,10 +282,27 @@ describe("POST /api/webhooks/email/inbound", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    // after() runs the task synchronously (or via void fallback) in this env.
-    await new Promise((r) => setTimeout(r, 0));
     expect(ingestSpy).toHaveBeenCalledOnce();
     expect(ingestSpy.mock.calls[0]![0]).toMatchObject({ emailId: RECEIVED_PAYLOAD.data.email_id });
+  });
+
+  it("returns 500 when the ingest write fails so Resend retries", async () => {
+    process.env.VERCEL = "1";
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
+    ingestSpy.mockImplementationOnce(async () => {
+      throw new Error("db down");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const body = JSON.stringify(RECEIVED_PAYLOAD);
+    const id = "msg_3";
+    const ts = Math.floor(Date.now() / 1000);
+    const res = await post(body, {
+      "Content-Type": "application/json",
+      "svix-id": id,
+      "svix-timestamp": String(ts),
+      "svix-signature": svixSign(body, SECRET, id, ts),
+    });
+    expect(res.status).toBe(500);
   });
 
   it("acks non-received events without ingesting", async () => {
