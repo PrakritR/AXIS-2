@@ -162,7 +162,7 @@ export function ResidentLeasePanel() {
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
-    showToast("Downloading — open the file and use Print → Save as PDF to get a PDF.");
+    showToast("Downloading. Open the file and use Print → Save as PDF to get a PDF.");
   }, [leaseCtx, showToast]);
 
   const onDownloadLeasePackage = useCallback(() => {
@@ -174,7 +174,7 @@ export function ResidentLeasePanel() {
       }
       if (pipelineRow.generatedHtml) {
         printLeaseAsPdf(pipelineRow);
-        showToast("Print dialog opened — choose 'Save as PDF' to download.");
+        showToast("Print dialog opened. Choose 'Save as PDF' to download.");
         return;
       }
       showToast("Ask your manager to generate the lease, or upload your PDF below.");
@@ -205,7 +205,7 @@ export function ResidentLeasePanel() {
       setShowSigningModal(false);
       return true;
     } else {
-      showToast("Could not sign — try again.");
+      showToast("Could not sign. Try again.");
       return false;
     }
   };

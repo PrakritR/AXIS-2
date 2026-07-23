@@ -185,7 +185,7 @@ function CoManagerPermissionsEditor({
       </div>
       {isEmpty ? (
         <p className="rounded-lg border border-dashed border-border bg-accent/20 px-3 py-2 text-xs text-muted">
-          No restrictions — this co-manager has full access to every module on this property.
+          No restrictions. This co-manager has full access to every module on this property.
           Check modules below to restrict them. (To remove the property entirely, use
           &ldquo;Remove access&rdquo;.)
         </p>
@@ -361,7 +361,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         return true; // retry scheduled
       }
       setLoadError(true);
-      showToast("Couldn't load your linked accounts — tap retry.");
+      showToast("Couldn't load your linked accounts. Tap retry.");
       return false;
     };
     try {
@@ -621,7 +621,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       setDraftAxisId(raw);
       setDraftName(body.displayName ?? raw);
       setDraftUserId(body.userId ?? null);
-      showToast("Account verified — assign properties, then send invite.");
+      showToast("Account verified. Assign properties, then send invite.");
       return true;
     } catch {
       showToast("Network error.");
@@ -725,7 +725,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         await loadRemoteInvites();
         resetLinkDraft();
         setLinkModalOpen(false);
-        showToast("Invite sent — waiting for their approval.");
+        showToast("Invite sent. Waiting for their approval.");
         return;
       } catch {
         showToast("Network error.");
@@ -1057,7 +1057,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     await patchInvite(
       id,
       { action },
-      action === "accept" ? "Invite accepted — link is active." : "Invite declined.",
+      action === "accept" ? "Invite accepted. Link is active." : "Invite declined.",
     );
   };
 
@@ -1318,7 +1318,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             >
               <p className="text-sm font-medium text-foreground">{prop.label}</p>
               <p className="mt-0.5 text-xs text-muted">
-                You manage this listing through a co-manager link — it is not in your owned portfolio.
+                You manage this listing through a co-manager link. It is not in your owned portfolio.
               </p>
             </div>
           ))}
@@ -1431,7 +1431,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         {loadError ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
             <span className="text-[var(--status-overdue-fg)]">
-              Couldn&apos;t load your linked accounts. Your access hasn&apos;t changed — this is a
+              Couldn&apos;t load your linked accounts. Your access hasn&apos;t changed; this is a
               temporary load error.
             </span>
             <Button
@@ -1469,8 +1469,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         {atLinkCap ? (
           <p className="text-xs font-medium text-[var(--status-overdue-fg)]">
             {/* Web keeps the "change plan" option; native drops it (App Store 2.1(b)). */}
-            <span className="native-hide">At limit — remove a link or change plan.</span>
-            <span className="native-only">At limit — remove a link to add another.</span>
+            <span className="native-hide">At limit. Remove a link or change plan.</span>
+            <span className="native-only">At limit. Remove a link to add another.</span>
           </p>
         ) : null}
         {inviteeAtCap ? (
@@ -1851,7 +1851,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assigned properties</p>
                 <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-accent/30 p-3">
                   {propertyOptions.length === 0 ? (
-                    <li className="text-sm text-muted">No properties yet — add listings under Properties first.</li>
+                    <li className="text-sm text-muted">No properties yet. Add listings under Properties first.</li>
                   ) : (
                     propertyOptions.map((p) => (
                       <li key={p.id}>
@@ -1909,7 +1909,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
         <Modal
           open={linkedPropertiesPopup !== null}
-          title={linkedPropertiesPopup ? `Linked properties — ${linkedPropertiesPopup.label}` : "Linked properties"}
+          title={linkedPropertiesPopup ? `Linked properties · ${linkedPropertiesPopup.label}` : "Linked properties"}
           onClose={() => setLinkedPropertiesPopup(null)}
         >
           {linkedPropertiesPopup && linkedPropertiesPopup.propertyIds.length > 0 ? (

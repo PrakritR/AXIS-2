@@ -17,7 +17,7 @@ import {
 export const metadata: Metadata = {
   title: "Help & Support",
   description:
-    "Get help with PropLane — contact our team, find answers for residents and property managers, and learn how to reach support.",
+    "Get help with PropLane: contact our team, find answers for residents and property managers, and learn how to reach support.",
 };
 
 export default function SupportPage() {

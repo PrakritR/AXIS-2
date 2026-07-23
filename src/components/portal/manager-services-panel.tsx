@@ -103,7 +103,7 @@ export function ManagerServicesPanel() {
     if (!managerUserId) return;
     toggleAmenityOfferAvailability(offer.id, managerUserId);
     reload();
-    showToast(offer.available ? "Request option paused — residents won't see it." : "Request option is now available to residents.");
+    showToast(offer.available ? "Request option paused. Residents won't see it." : "Request option is now available to residents.");
   };
 
   return (

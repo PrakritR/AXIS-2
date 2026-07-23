@@ -51,8 +51,8 @@ function emptyStatementDraft(): StatementDraft {
 
 const ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = {
   operating: "Operating",
-  trust_rental: "Trust — rental ops",
-  trust_security_deposit: "Trust — security deposits",
+  trust_rental: "Trust · rental ops",
+  trust_security_deposit: "Trust · security deposits",
 };
 
 export function ManagerBankReconciliationPanel() {
@@ -280,7 +280,7 @@ export function ManagerBankReconciliationPanel() {
                   {summary.isReconciled
                     ? "Reconciled"
                     : summary.differenceCents === 0
-                      ? "Balanced — not marked reconciled"
+                      ? "Balanced · not marked reconciled"
                       : "Out of balance"}
                 </Badge>
               </div>

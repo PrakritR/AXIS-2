@@ -216,7 +216,7 @@ export function ManagerSignupPanel({
       <p className="text-center text-xs text-muted">
         {isPaid
           ? `${selectedTier.label} plan · ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then ${price.headline}${price.period ?? ""}`
-          : "Free plan — no card required"}
+          : "Free plan · no card required"}
       </p>
 
       {finishingGoogle ? (

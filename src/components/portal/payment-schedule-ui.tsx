@@ -242,7 +242,7 @@ export function ChargeRemindersModal({
           <p className="mt-1.5">Reminders stop automatically when this charge is marked paid. Skip any send below to turn it off for this charge only.</p>
         </div>
         {manageable.length === 0 ? (
-          <p className="text-sm text-muted">No upcoming reminders — either this charge is paid, past due for all scheduled sends, or reminders were skipped.</p>
+          <p className="text-sm text-muted">No upcoming reminders. Either this charge is paid, past due for all scheduled sends, or reminders were skipped.</p>
         ) : (
           <ul className="space-y-1.5">
             {manageable.map((m) => {

@@ -364,7 +364,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             {selectedDay != null && selectedDateStr ? (
               <div>
                 <p className="mb-3 text-sm font-semibold text-foreground">
-                  Available times — {MONTHS[calMonth]} {selectedDay}
+                  Available times · {MONTHS[calMonth]} {selectedDay}
                 </p>
                 {openSlots.length === 0 ? (
                   <p className="text-sm text-muted">No open half-hour blocks on this day.</p>

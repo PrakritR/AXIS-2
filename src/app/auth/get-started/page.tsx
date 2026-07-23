@@ -82,7 +82,7 @@ function GetStartedContent() {
       <AuthPageHeader
         showLogo
         title="How do you want to use PropLane?"
-        subtitle="Pick the option that fits you — you can add the other later."
+        subtitle="Pick the option that fits you; you can add the other later."
         accent={false}
       />
 

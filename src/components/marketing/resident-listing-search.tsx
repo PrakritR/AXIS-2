@@ -300,7 +300,7 @@ type ChatListing = {
 export function ResidentHousingChat({
   onApplyFilters,
   title = "Ask PropLane",
-  subtitle = 'Describe what you need — e.g. "2 bed under $2000 in Ballard, moving in August"',
+  subtitle = 'Describe what you need, e.g. "2 bed under $2000 in Ballard, moving in August"',
   placeholder = "Tell us what you're looking for…",
   showMatchListings = true,
 }: {
@@ -339,7 +339,7 @@ export function ResidentHousingChat({
       const body = await res.json();
       if (!res.ok) {
         setStatus("error");
-        setSummary(body?.error || "Couldn't understand that — try mentioning bedrooms, budget, or a neighborhood.");
+        setSummary(body?.error || "Couldn't understand that. Try mentioning bedrooms, budget, or a neighborhood.");
         return;
       }
 
@@ -348,8 +348,8 @@ export function ResidentHousingChat({
       setStatus("idle");
       setSummary(
         body.matchCount === 0
-          ? "No listings match that yet — filters were still updated."
-          : `Found ${body.matchCount} matching home${body.matchCount === 1 ? "" : "s"} — filters applied.`,
+          ? "No listings match that yet. Filters were still updated."
+          : `Found ${body.matchCount} matching home${body.matchCount === 1 ? "" : "s"}. Filters applied.`,
       );
     } catch {
       setStatus("error");

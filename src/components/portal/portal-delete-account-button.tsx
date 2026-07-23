@@ -96,7 +96,7 @@ export function PortalDeleteAccountButton({ className }: { className?: string })
           </p>
           <p>
             Deleting removes your login, your profile, and the portal data associated with your
-            account — properties, applications, leases, payments, messages, documents, and any
+            account: properties, applications, leases, payments, messages, documents, and any
             co-manager links you own. Afterwards this email is free to register a new account.
           </p>
           <p className="text-muted">

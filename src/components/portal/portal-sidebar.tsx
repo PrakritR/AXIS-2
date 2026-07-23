@@ -332,8 +332,8 @@ export function PortalSidebar({
   const lockAriaLabel = (label: string, locked: boolean) =>
     locked
       ? definition.kind === "resident"
-        ? `${label} — unavailable on your property's Free plan`
-        : `${label} — locked on Pro or Business`
+        ? `${label}: unavailable on your property's Free plan`
+        : `${label}: locked on Pro or Business`
       : label;
 
   const renderMobileNavLink = (

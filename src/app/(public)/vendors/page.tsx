@@ -9,7 +9,7 @@ import {
 export const metadata: Metadata = {
   title: "Vendors · PropLane",
   description:
-    "Get discovered by property managers, receive work orders, bid after a tour, and get paid — free to join as a PropLane vendor.",
+    "Get discovered by property managers, receive work orders, bid after a tour, and get paid. Free to join as a PropLane vendor.",
 };
 
 const HOW_IT_WORKS = [
@@ -26,7 +26,7 @@ const HOW_IT_WORKS = [
   {
     step: "03",
     title: "Get paid",
-    body: "Approved work pays out through PropLane — labor and materials tracked.",
+    body: "Approved work pays out through PropLane, with labor and materials tracked.",
   },
 ] as const;
 

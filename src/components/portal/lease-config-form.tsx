@@ -31,7 +31,7 @@ export function readLeaseTemplateFile(
     return;
   }
   if (file.size > LEASE_TEMPLATE_MAX_BYTES) {
-    showToast("Lease template is too large — keep it under 8 MB.");
+    showToast("Lease template is too large. Keep it under 8 MB.");
     return;
   }
   const reader = new FileReader();
@@ -105,7 +105,7 @@ export function LeaseConfigForm({
         <span>
           <span className="block text-sm font-semibold text-foreground">Use PropLane standard system</span>
           <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-            PropLane generates a complete room-rental lease from the approved application and this listing — rent,
+            PropLane generates a complete room-rental lease from the approved application and this listing: rent,
             deposits, house rules, and local disclosures included. Uncheck to add your own lease terms or upload a
             lease template.
           </span>

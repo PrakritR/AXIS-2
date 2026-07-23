@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ApplicationsPipelinePanel } from "@/components/marketing/landing-applications-pipeline";
 import { LandingDashboardChatDemo } from "@/components/marketing/landing-dashboard-chat-demo";
+import { LandingInboxApproveDemo } from "@/components/marketing/landing-inbox-approve-demo";
 import { BOOK_DEMO_HREF, MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 import "./landing-proplane.css";
 
@@ -12,8 +12,8 @@ export function LandingHomeSections() {
   return (
     <>
       <LandingDashboardChatDemo />
+      <LandingInboxApproveDemo />
       <LearnSection />
-      <WeekRoadmapSection />
       <OpsSkySection />
       <ClosingCta />
     </>
@@ -50,7 +50,7 @@ export function LearnSection() {
       <div className="lp-w">
         <h2>Learn how to manage your house</h2>
         <p className="lp-lede">
-          Short guides for automating messages and tours — then PropLane turns each step into tasks you
+          Short guides for automating messages and tours, then PropLane turns each step into tasks you
           approve.
         </p>
         <div className="lp-chapters">
@@ -107,31 +107,6 @@ export function LearnSection() {
               </Link>
             </div>
           </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function WeekRoadmapSection() {
-  return (
-    <section id="roadmap" className="lp-feature-band scroll-mt-20">
-      <div className="lp-w">
-        <div className="lp-intro">
-          <h2>Your week, one pipeline</h2>
-          <p>You approve. PropLane advances the rest.</p>
-        </div>
-        <div className="lp-split-feat">
-          <div className="lp-copy">
-            <div className="lp-icon-box" aria-hidden>
-              <span className="lp-icon-mark" />
-            </div>
-            <h3>Tour to keys — same flow</h3>
-            <Link href="/why-proplane" data-attr="home-roadmap-leasing" className="lp-more">
-              See leasing workflows →
-            </Link>
-          </div>
-          <ApplicationsPipelinePanel />
         </div>
       </div>
     </section>

@@ -1175,6 +1175,24 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   animation: page-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Manager dashboard "Needs attention" queue: group cards stream in with a
+   short staggered entrance (delay set inline per card) so the queue reads as a
+   live feed rather than a static block; the summary badge dot pulses. */
+@keyframes pl-attn-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.pl-attn-enter {
+  animation: pl-attn-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pl-attn-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+.pl-attn-pulse {
+  animation: pl-attn-pulse 2.4s ease-in-out infinite;
+}
+
 .reveal-on-view {
   opacity: 0;
   transform: translateY(18px);
@@ -1217,12 +1235,14 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   }
   .animate-fade-up,
   .animate-fade-in,
-  .animate-page-enter {
+  .animate-page-enter,
+  .pl-attn-enter {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
-  .animate-pulse {
+  .animate-pulse,
+  .pl-attn-pulse {
     animation: none !important;
   }
   .reveal-on-view {
@@ -2275,76 +2295,6 @@ html[data-native] [data-listing-sections-root] {
   color: var(--pl-brand-soft);
 }
 
-.landing-attention-card {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: color-mix(in srgb, var(--pl-black) 92%, transparent);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 24px 64px -20px rgba(0, 0, 0, 0.65),
-    0 0 80px -28px color-mix(in srgb, var(--pl-brand) 35%, transparent);
-}
-
-.landing-attention-title {
-  color: var(--pl-white);
-}
-
-.landing-attention-kicker {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.landing-attention-chip {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.landing-attention-chip-dot {
-  background: var(--pl-brand-soft);
-}
-
-.landing-attention-list {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.landing-attention-row {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.landing-attention-row:last-child {
-  border-bottom: 0;
-}
-
-.landing-attention-label {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.landing-attention-meta {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.landing-attention-chevron {
-  color: rgba(255, 255, 255, 0.25);
-}
-
-.landing-attention-footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.landing-attention-ai {
-  background: color-mix(in srgb, var(--pl-brand) 20%, transparent);
-  color: var(--pl-brand-soft);
-}
-
-.landing-attention-footnote {
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.landing-attention-check {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.35);
-}
-
 .landing-stats-strip {
   background: var(--pl-surface);
   border-color: var(--pl-line);
@@ -2461,68 +2411,6 @@ html[data-native] [data-listing-sections-root] {
 
 [data-theme="light"] .landing-hero-check {
   color: var(--pl-blue);
-}
-
-[data-theme="light"] .landing-attention-card {
-  border-color: color-mix(in srgb, var(--pl-ink) 8%, transparent);
-  background: color-mix(in srgb, var(--pl-white) 92%, transparent);
-  box-shadow:
-    0 1px 2px rgba(8, 9, 11, 0.04),
-    0 18px 48px -24px rgba(8, 9, 11, 0.14),
-    0 0 64px -32px color-mix(in srgb, var(--pl-blue) 28%, transparent);
-}
-
-[data-theme="light"] .landing-attention-title {
-  color: var(--pl-ink);
-}
-
-[data-theme="light"] .landing-attention-kicker {
-  color: var(--pl-muted-fg);
-}
-
-[data-theme="light"] .landing-attention-chip {
-  border-color: color-mix(in srgb, var(--pl-blue) 18%, transparent);
-  background: color-mix(in srgb, var(--pl-blue) 7%, var(--pl-white));
-  color: color-mix(in srgb, var(--pl-blue-deep) 70%, var(--pl-ink));
-}
-
-[data-theme="light"] .landing-attention-list {
-  border-top-color: var(--pl-line);
-}
-
-[data-theme="light"] .landing-attention-row {
-  border-bottom-color: var(--pl-line);
-}
-
-[data-theme="light"] .landing-attention-label {
-  color: var(--pl-ink);
-}
-
-[data-theme="light"] .landing-attention-meta {
-  color: var(--pl-muted-fg);
-}
-
-[data-theme="light"] .landing-attention-chevron {
-  color: color-mix(in srgb, var(--pl-muted-fg) 70%, transparent);
-}
-
-[data-theme="light"] .landing-attention-footer {
-  border-top-color: var(--pl-line);
-  background: color-mix(in srgb, var(--pl-blue) 5%, var(--pl-white-muted));
-}
-
-[data-theme="light"] .landing-attention-ai {
-  background: color-mix(in srgb, var(--pl-blue) 14%, var(--pl-white));
-  color: var(--pl-blue-deep);
-}
-
-[data-theme="light"] .landing-attention-footnote {
-  color: var(--pl-muted-fg);
-}
-
-[data-theme="light"] .landing-attention-check {
-  border-color: color-mix(in srgb, var(--pl-ink) 14%, transparent);
-  color: color-mix(in srgb, var(--pl-ink) 40%, transparent);
 }
 
 /* Light bridge: soft blue wash → surface (no charcoal / purple band) */

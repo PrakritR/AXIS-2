@@ -126,7 +126,7 @@ export function PortalStripeConnectPanel({
       showToast("Bank account linked. You're ready to receive resident payments.");
       onConnectDone?.();
     } else {
-      showToast("Setup link expired — try again.");
+      showToast("Setup link expired. Try again.");
     }
     window.history.replaceState({}, "", resolvedReturnPath);
     queueMicrotask(() => {
@@ -341,7 +341,7 @@ export function PortalStripeConnectPanel({
         <>
           {stripeTestMode && !status?.demo ? (
             <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden">
-              Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
+              Stripe test mode is active. Onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
               Set live keys (<span className="font-mono">sk_live_</span> / <span className="font-mono">pk_live_</span>) in production to link a real account.
             </p>
           ) : null}

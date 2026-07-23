@@ -12,13 +12,13 @@ import {
 export const metadata: Metadata = {
   title: "For managers",
   description:
-    "PropLane for property managers — AI drafts leases, rent work, and vendor outreach. You approve every write. Real double-entry books underneath.",
+    "PropLane for property managers: AI drafts leases, rent work, and vendor outreach. You approve every write. Real double-entry books underneath.",
 };
 
 const CAPABILITIES = [
   {
     title: "Leasing that fills itself",
-    body: "Public apply links, tour booking, AI lease drafts from applications, and e-sign — all in one queue.",
+    body: "Public apply links, tour booking, AI lease drafts from applications, and e-sign, all in one queue.",
   },
   {
     title: "Rent without the chase",
@@ -26,7 +26,7 @@ const CAPABILITIES = [
   },
   {
     title: "Vendors who show up",
-    body: "Work orders, bids, visits, and Connect payouts — tracked from request to paid.",
+    body: "Work orders, bids, visits, and Connect payouts, all tracked from request to paid.",
   },
   {
     title: "Books that balance",
@@ -50,7 +50,7 @@ export default function PartnerLandingPage() {
     <MarketingPageShell>
       <MarketingHero
         title="Run the portfolio. Approve the rest."
-        subtitle="PropLane drafts leases, rent work, and vendor outreach — then hands you one queue. Free to start."
+        subtitle="PropLane drafts leases, rent work, and vendor outreach, then hands you one queue. Free to start."
       >
         <MarketingCtaPair
           primaryLabel="Get started free"
@@ -62,7 +62,7 @@ export default function PartnerLandingPage() {
       <MarketingSection>
         <h2 className="lp-center max-w-[18ch]">Built for how managers actually work</h2>
         <p className="lp-section-lede lp-center">
-          One account for leasing, rent, maintenance, inbox, and books — on web and iOS.
+          One account for leasing, rent, maintenance, inbox, and books, on web and iOS.
         </p>
         <div className="lp-page-grid-2">
           {CAPABILITIES.map((item) => (

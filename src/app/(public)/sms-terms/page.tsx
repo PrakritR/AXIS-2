@@ -24,7 +24,7 @@ export default function SmsTermsPage() {
             <h2 className="text-lg font-semibold text-foreground">Program description</h2>
             <p className="mt-2">
               PropLane property management messaging (&ldquo;the Program&rdquo;) provides two-way conversational text
-              messages between property managers and their residents regarding an active tenancy — for example rent
+              messages between property managers and their residents regarding an active tenancy, for example rent
               reminders, maintenance and work-order updates, scheduling, and messages relayed between a resident and
               their property manager through a dedicated PropLane number. The Program does not send marketing or
               promotional content.

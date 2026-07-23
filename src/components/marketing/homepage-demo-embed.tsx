@@ -29,7 +29,7 @@ export function HomepageDemoEmbed() {
             Welcome back
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-            You&rsquo;re signed in. Jump straight into your portal — the live demo below is for
+            You&rsquo;re signed in. Jump straight into your portal. The live demo below is for
             exploring PropLane without an account.
           </p>
           <div className="mt-6">

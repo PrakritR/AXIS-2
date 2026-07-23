@@ -176,7 +176,7 @@ function RentReceiptsTab() {
         .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
         .map((charge) => ({
           date: String(charge.paidAt).slice(0, 10),
-          description: `${charge.title} — ${charge.propertyLabel}`,
+          description: `${charge.title} · ${charge.propertyLabel}`,
           payment: charge.amountLabel,
         }));
       setLedgerReport({ id: "resident-ledger", title: "Resident ledger", columns: [], rows });
@@ -416,12 +416,12 @@ function SignedLeaseDocumentsTable() {
   const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
   const leaseHtml = pdfSrc ? null : getLeaseDocumentHtml(row);
   const signedAt = row.fullySignedAt ?? row.updatedAtIso;
-  const leaseName = `Signed lease${row.unit ? ` — ${row.unit}` : ""}`;
+  const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
 
   const onDownload = () => {
     downloadLeaseFromRow(row);
     showToast(
-      pdfSrc ? "PDF download started." : "Print dialog opened — choose 'Save as PDF' to download.",
+      pdfSrc ? "PDF download started." : "Print dialog opened. Choose 'Save as PDF' to download.",
     );
   };
 

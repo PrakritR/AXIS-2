@@ -350,7 +350,7 @@ export function ManagerPlan({
       const appliedTier = planModal.tier;
       setPlanModal(null);
       setPromoCode("");
-      showToast(body.message ?? `Promo code applied — you're now on ${tierLabel(appliedTier)}.`);
+      showToast(body.message ?? `Promo code applied. You're now on ${tierLabel(appliedTier)}.`);
       await load();
       startTransition(() => router.refresh());
     } catch {
@@ -869,7 +869,7 @@ export function ManagerPlan({
               <span className="font-semibold text-foreground">{tierLabel(planModal.tier)}</span> on your PropLane portal
               {planModal.billing === "annual" ? " with annual billing (~20% savings)." : "."}
               {" "}
-              You&apos;ll stay on this page — billing is handled securely by Stripe.
+              You&apos;ll stay on this page. Billing is handled securely by Stripe.
             </p>
             <SubscriptionCheckoutHint className="text-sm leading-6 text-muted" upgrade />
             <p className="text-sm font-medium text-foreground">
@@ -919,7 +919,7 @@ export function ManagerPlan({
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-muted">
-                  A valid code activates {tierLabel(planModal.tier)} instantly — no card required.
+                  A valid code activates {tierLabel(planModal.tier)} instantly. No card required.
                 </p>
               )}
             </div>
@@ -1054,7 +1054,7 @@ export function ManagerPlan({
               ) : (
                 " the end of your billing period"
               )}
-              , then move to Free. Paid features stay available until then — nothing changes immediately.
+              , then move to Free. Paid features stay available until then. Nothing changes immediately.
             </p>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground" htmlFor="plan-cancel-reason">

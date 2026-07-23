@@ -9,6 +9,7 @@ import {
   PUBLIC_SUPPORT_EMAIL,
   PUBLIC_SUPPORT_PHONE_DISPLAY,
   PUBLIC_SUPPORT_PHONE_TEL,
+  isPlaceholderSocialHref,
 } from "@/lib/marketing/public-contact";
 import type { PublicSocialId } from "@/lib/marketing/public-contact";
 
@@ -23,7 +24,7 @@ const FOOTER_COLUMNS: { heading: string; links: { href: string; label: string }[
     ],
   },
   {
-    heading: "Who it's for",
+    heading: "Built for",
     links: [
       { href: "/partner", label: "Managers" },
       { href: RESIDENT_BROWSE_PATH, label: "Residents" },
@@ -74,19 +75,19 @@ const SOCIAL_GLYPHS: Record<PublicSocialId, ReactNode> = {
       <circle cx="17.1" cy="6.9" r="1.1" fill="currentColor" stroke="none" />
     </svg>
   ),
-  x: (
+  tiktok: (
     <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
-      <path d="M3 3h5.1l4.3 5.8L17.7 3H21l-6.9 7.7L21.4 21h-5.1l-4.6-6.2L6 21H2.7l7.3-8.1L3 3Zm2.6 1.6 9.6 14.8h1.7L7.3 4.6H5.6Z" />
+      <path d="M13.2 3h2.6c.15 1.32.63 2.5 1.55 3.4.9.88 2.06 1.4 3.35 1.53v2.66c-1.53-.05-2.96-.5-4.2-1.28v5.9a6.05 6.05 0 1 1-6.05-6.05c.3 0 .6.02.89.06v2.74a3.32 3.32 0 1 0 2.32 3.16c0-.02 0-11.85.01-11.85Z" />
+    </svg>
+  ),
+  youtube: (
+    <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
+      <path d="M22.2 8.3a2.7 2.7 0 0 0-1.9-1.9C18.6 6 12 6 12 6s-6.6 0-8.3.4A2.7 2.7 0 0 0 1.8 8.3C1.4 10 1.4 12 1.4 12s0 2 .4 3.7a2.7 2.7 0 0 0 1.9 1.9C5.4 18 12 18 12 18s6.6 0 8.3-.4a2.7 2.7 0 0 0 1.9-1.9c.4-1.7.4-3.7.4-3.7s0-2-.4-3.7ZM9.9 15.2V8.8l5.5 3.2-5.5 3.2Z" />
     </svg>
   ),
   linkedin: (
     <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
       <path d="M5 3.4a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM3.2 9h3.6v11.6H3.2V9Zm6 0h3.4v1.6a3.9 3.9 0 0 1 3.4-1.8c2.8 0 4.2 1.8 4.2 5v6.8h-3.6v-6c0-1.5-.6-2.5-1.9-2.5-1.1 0-1.7.7-2 1.5-.1.3-.1.7-.1 1v6h-3.5V9Z" />
-    </svg>
-  ),
-  facebook: (
-    <svg {...SOCIAL_GLYPH_SVG_PROPS} fill="currentColor">
-      <path d="M13.6 21v-8h2.7l.4-3.1h-3.1V7.9c0-.9.3-1.5 1.6-1.5h1.6V3.6c-.3 0-1.2-.1-2.3-.1-2.4 0-4 1.4-4 4.1v2.3H7.8V13h2.7v8h3.1Z" />
     </svg>
   ),
 };
@@ -95,21 +96,25 @@ function SocialRow({ className = "" }: { className?: string }) {
   if (PUBLIC_SOCIAL_LINKS.length === 0) return null;
   return (
     <ul className={`flex items-center gap-2 ${className}`}>
-      {PUBLIC_SOCIAL_LINKS.map(({ id, label, href }) => (
-        <li key={id}>
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer noopener"
-            aria-label={label}
-            title={label}
-            data-attr={`footer-social-${id}`}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-primary/40 hover:text-primary"
-          >
-            {SOCIAL_GLYPHS[id]}
-          </a>
-        </li>
-      ))}
+      {PUBLIC_SOCIAL_LINKS.map(({ id, label, href }) => {
+        // A real profile URL opens in a new tab; an unconfirmed placeholder ("#")
+        // renders the branded icon but does not fling the visitor to a dead page.
+        const placeholder = isPlaceholderSocialHref(href);
+        return (
+          <li key={id}>
+            <a
+              href={href}
+              {...(placeholder ? {} : { target: "_blank", rel: "noreferrer noopener" })}
+              aria-label={label}
+              title={label}
+              data-attr={`footer-social-${id}`}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              {SOCIAL_GLYPHS[id]}
+            </a>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -146,10 +151,7 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
       <div className={`${footerShell} pb-8 pt-10`}>
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 border-b border-border pb-7">
           <AxisLogoLink href="/" size="compact" />
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <p className="text-[13px] leading-snug text-muted">Property ops with approval-first AI.</p>
-            <SocialRow />
-          </div>
+          <SocialRow />
         </div>
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-9 pt-9 sm:grid-cols-3 lg:grid-cols-4 lg:gap-x-12 xl:gap-x-20">
@@ -169,7 +171,7 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
           ))}
 
           <div className="min-w-0">
-            <p className={columnHeading}>Contact</p>
+            <p className={columnHeading}>Get in touch</p>
             <ul className="mt-4 flex flex-col gap-3">
               <li>
                 <a href={`tel:${PUBLIC_SUPPORT_PHONE_TEL}`} className={`${footerLinkClass} tabular-nums`}>

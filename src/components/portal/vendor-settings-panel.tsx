@@ -446,7 +446,7 @@ export function VendorAvailabilityEditor() {
       ];
       setRules(next);
       notifyAvailabilityChanged(next);
-      showToast("Marked flexible — managers can schedule any time this day.");
+      showToast("Marked flexible. Managers can schedule any time this day.");
       return;
     }
     setSaving(true);
@@ -461,7 +461,7 @@ export function VendorAvailabilityEditor() {
       showToast(result.error ?? "Could not save flexible schedule.");
       return;
     }
-    showToast("Marked flexible — managers can schedule any time this day.");
+    showToast("Marked flexible. Managers can schedule any time this day.");
     await reload();
   };
 
@@ -967,7 +967,7 @@ export function VendorSettingsPanel() {
       <div className="space-y-6">
         {unlinked ? (
           <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending" data-attr="vendor-settings-unlinked-banner">
-            Waiting on a property manager to connect with you — you&apos;ll be able to save your profile once linked.
+            Waiting on a property manager to connect with you. You&apos;ll be able to save your profile once linked.
           </p>
         ) : null}
 

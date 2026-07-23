@@ -109,7 +109,7 @@ export function ManagerEditApplicationModal({
       >
         <p className="text-sm text-muted">
           Choose which properties&apos; rental applications you want to edit. When you select multiple, the same
-          questions apply to all — built-in fields, custom questions, and required/optional settings.
+          questions apply to all: built-in fields, custom questions, and required/optional settings.
         </p>
 
         <div className="mt-4 space-y-3">

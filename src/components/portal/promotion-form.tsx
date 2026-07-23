@@ -353,7 +353,7 @@ export function PromotionForm({
           className="mt-1"
           value={draft.propertyLabel}
           onChange={(e) => setDraft((d) => ({ ...d, propertyLabel: e.target.value }))}
-          placeholder="The Pioneer — Pioneer Square"
+          placeholder="The Pioneer, Pioneer Square"
         />
       </div>
       <div className="sm:col-span-2">
@@ -373,7 +373,7 @@ export function PromotionForm({
             rows={4}
             value={draft.customDetails}
             onChange={(e) => setDraft((d) => ({ ...d, customDetails: e.target.value }))}
-            placeholder={"Address, unit mix, square footage, standout features, neighborhood — anything the flyer should highlight."}
+            placeholder={"Address, unit mix, square footage, standout features, neighborhood, or anything the flyer should highlight."}
           />
           <p className="mt-1 text-[11px] text-muted">
             Fed to the AI as facts to advertise. Used to fill in selling points when you leave them blank.

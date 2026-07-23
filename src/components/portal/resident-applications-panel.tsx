@@ -239,7 +239,7 @@ export function ResidentApplicationsPanel({
     >
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Withdrawing removes this application from your active list. It is not deleted — your property
+          Withdrawing removes this application from your active list. It is not deleted; your property
           manager keeps the record{withdrawTarget?.property ? ` for ${withdrawTarget.property}` : ""} and its
           history, and you can reapply later if you change your mind.
         </p>

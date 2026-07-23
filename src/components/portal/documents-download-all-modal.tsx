@@ -156,7 +156,7 @@ function buildResidentSections(
     profileManagerId: residentAxisId,
   });
   if (leaseRow && hasBothLeaseSignatures(leaseRow)) {
-    const leaseName = `Signed lease${leaseRow.unit ? ` — ${leaseRow.unit}` : ""}`;
+    const leaseName = `Signed lease${leaseRow.unit ? ` · ${leaseRow.unit}` : ""}`;
     sections.push({
       id: "lease",
       label: "Lease",
@@ -178,7 +178,7 @@ function buildResidentSections(
     .map((charge, i) => ({
       id: `${String(charge.paidAt).slice(0, 10)}-${i}`,
       date: String(charge.paidAt).slice(0, 10),
-      description: `${charge.title} — ${charge.propertyLabel}`,
+      description: `${charge.title} · ${charge.propertyLabel}`,
       amount: charge.amountLabel,
     }));
 
@@ -188,7 +188,7 @@ function buildResidentSections(
       label: "Rent receipts",
       items: receiptRows.map((row) => ({
         id: row.id,
-        label: `Rent receipt — ${row.date}`,
+        label: `Rent receipt · ${row.date}`,
         sublabel: row.amount,
         run: () => downloadReceiptRow(row, demoMode),
       })),

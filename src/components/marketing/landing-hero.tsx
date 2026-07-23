@@ -20,7 +20,7 @@ export function LandingHero() {
           </h1>
 
           <p className="hero-subtitle mx-auto mt-5 max-w-2xl text-base leading-relaxed sm:text-lg">
-            PropLane uses AI to handle applications, screening, leases, and rent collection in one platform — so you spend less time managing and more time growing your portfolio.
+            PropLane uses AI to handle applications, screening, leases, and rent collection in one platform, so you spend less time managing and more time growing your portfolio.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:mt-12 sm:flex-row">

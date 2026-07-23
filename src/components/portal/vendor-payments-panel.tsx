@@ -277,7 +277,7 @@ export function VendorPaymentsPanel() {
     if (connect === "done") {
       showToast("Bank account linked.");
     } else if (connect === "refresh") {
-      showToast("Setup link expired — open Payment methods and try again.");
+      showToast("Setup link expired. Open Payment methods and try again.");
     }
   }, [showToast]);
 
@@ -366,7 +366,7 @@ export function VendorPaymentsPanel() {
         return false;
       }
       if (action === "report_paid") {
-        showToast("Marked paid — manager notified.");
+        showToast("Marked paid. Manager notified.");
       } else {
         showToast("Reminder sent.");
       }
@@ -392,7 +392,7 @@ export function VendorPaymentsPanel() {
       }
       setSelectedIds(new Set());
       if (action === "report_paid") {
-        showToast(ok === 1 ? "Marked paid — manager notified." : `Marked ${ok} payments paid — manager notified.`);
+        showToast(ok === 1 ? "Marked paid. Manager notified." : `Marked ${ok} payments paid. Manager notified.`);
       } else {
         showToast(ok === 1 ? "Reminder sent." : `Sent ${ok} reminders.`);
       }
@@ -474,7 +474,7 @@ export function VendorPaymentsPanel() {
           className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
           data-attr="vendor-payments-unlinked-banner"
         >
-          Waiting on a property manager to connect with you — completed work will appear here once you&apos;re linked.
+          Waiting on a property manager to connect with you. Completed work will appear here once you&apos;re linked.
         </p>
       ) : null}
 

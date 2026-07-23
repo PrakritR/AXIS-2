@@ -8,13 +8,13 @@ import {
 export const metadata: Metadata = {
   title: "About us",
   description:
-    "PropLane is built by property managers in Seattle who run their own rental units on it every day — AI does the busywork, you approve what matters.",
+    "PropLane is built by property managers in Seattle who run their own rental units on it every day. AI does the busywork, you approve what matters.",
 };
 
 const VALUES = [
   {
     title: "Software should do the work",
-    body: "Chasing rent, drafting leases, filing documents, lining up vendors — that's busywork. Your time belongs on decisions.",
+    body: "Chasing rent, drafting leases, filing documents, lining up vendors: that's busywork. Your time belongs on decisions.",
   },
   {
     title: "You stay in control",
@@ -42,7 +42,7 @@ export default function AboutPage() {
     <MarketingPageShell>
       <MarketingHero
         title="Built by managers tired of the busywork"
-        subtitle="We manage real rental units in Seattle. PropLane is the platform we built to run them — AI drafts, we approve."
+        subtitle="We manage real rental units in Seattle. PropLane is the platform we built to run them. AI drafts, we approve."
       />
 
       <MarketingSection>
@@ -58,13 +58,13 @@ export default function AboutPage() {
               and hoping nothing slipped.
             </p>
             <p>
-              So we built the platform we wished we had — applications become leases, rent collects
+              So we built the platform we wished we had: applications become leases, rent collects
               itself, repairs get bid out and paid, and the books balance. The AI does the busywork;
               the manager approves what matters.
             </p>
             <p className="text-[var(--lp-ink)]">
               We run our own units on PropLane every day. If a workflow annoys us, we feel it before
-              you do — and we fix it.
+              you do, and we fix it.
             </p>
           </div>
         </div>
