@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
@@ -135,7 +135,12 @@ function DocumentLibraryFilterSelect({
   );
 }
 
-export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
+export type ManagerDocumentLibraryHandle = {
+  openUpload: () => void;
+};
+
+export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, { userId: string | null }>(
+  function ManagerDocumentLibrary({ userId }, ref) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
   const searchParams = useSearchParams();
@@ -150,6 +155,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
+  useImperativeHandle(ref, () => ({ openUpload: () => setUploadOpen(true) }), []);
   const [renameTarget, setRenameTarget] = useState<ManagerDocumentDTO | null>(null);
   const [versionTarget, setVersionTarget] = useState<ManagerDocumentDTO | null>(null);
   const [previewTarget, setPreviewTarget] = useState<ManagerDocumentDTO | null>(null);
@@ -523,16 +529,6 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
             options={propertyFilterOptions}
           />
         ) : null}
-        <Button
-          type="button"
-          variant="primary"
-          className="ml-auto h-8 shrink-0 rounded-full px-4 text-sm font-semibold"
-          onClick={() => setUploadOpen(true)}
-          disabled={demo}
-          data-attr="document-upload-open"
-        >
-          Upload
-        </Button>
       </div>
 
       {demo ? (
@@ -693,7 +689,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
       <PreviewModal doc={previewTarget} onClose={() => setPreviewTarget(null)} />
     </div>
   );
-}
+});
 
 function UploadModal({
   open,
