@@ -396,11 +396,11 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
           />
 
           <AttentionGroup
-            title="Inbox"
+            title="Communication"
             href="/admin/communication/email/unopened"
-            linkLabel="Inbox →"
+            linkLabel="Communication →"
             items={inboxPreview}
-            emptyMessage="No unread messages. Inbox is clear."
+            emptyMessage="No unread messages. Communication is clear."
             keyForItem={(message) => message.id}
             renderRow={(message) => (
               <IssueRow

@@ -35,6 +35,7 @@ import {
   InboxThreadView,
   InboxTwoPane,
   PortalInboxEmptyState,
+  inboxTabEmptyCopy,
   type InboxBubbleMessage,
 } from "./portal-inbox-ui";
 import { useInboxRowSelection } from "@/components/portal/portal-inbox-selection";
@@ -312,7 +313,12 @@ export const ManagerInbox = forwardRef<
     setQuery("");
     // Switching folders closes the open thread — its row no longer belongs to
     // the visible list, so keeping it selected would strand the right pane.
-    setExpandedId(null);
+    // In CONTROLLED mode (unified Communication), the parent owns selection and
+    // already clears it on tab change; clearing here would ALSO fire on mount —
+    // when the parent has just selected a thread and mounted this pane — and
+    // immediately wipe that selection back to "Select a conversation".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (controlledExpandedId === undefined) setExpandedId(null);
   }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
@@ -748,16 +754,7 @@ export const ManagerInbox = forwardRef<
     [local],
   );
 
-  const emptyCopy =
-    tabId === "sent" && rowsForTab.length === 0
-      ? "No sent messages yet."
-      : tabId === "trash" && rowsForTab.length === 0
-        ? "No trash messages yet."
-        : tabId === "opened" && rowsForTab.length === 0
-          ? "No opened messages yet."
-          : tabId === "unopened" && rowsForTab.length === 0
-            ? "No unopened messages yet."
-            : "No messages yet.";
+  const emptyCopy = inboxTabEmptyCopy(tabId);
 
   const bulkMarkRead = () => {
     const eligible = [...threadSelection.selectedIds].filter(isUnreadInboxThread);
@@ -983,6 +980,7 @@ export const ManagerInbox = forwardRef<
       }
       subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
       messages={activeBubbles}
+      threadKey={activeThread.id}
       onBack={() => setExpandedId(null)}
       headerActions={threadHeaderActions}
       emptyLabel="No messages in this conversation."

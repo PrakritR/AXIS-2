@@ -63,6 +63,30 @@ export function PortalInboxEmptyState({ title }: { title: string; hint?: ReactNo
   return <PortalEmptyState title={title} icon="inbox" />;
 }
 
+/**
+ * Tab-specific empty-state copy, shared by every Communication surface (manager
+ * unified inbox, resident, admin, vendor) so all four read the same polished
+ * "No <tab> messages yet." wording as the Schedule tab's
+ * "No scheduled messages in this window." Keep this the single source of truth
+ * for the list-pane empty copy — a hand-rolled string in one panel drifts.
+ */
+export function inboxTabEmptyCopy(tabId: string): string {
+  switch (tabId) {
+    case "unopened":
+      return "No unopened messages yet.";
+    case "opened":
+      return "No opened messages yet.";
+    case "sent":
+      return "No sent messages yet.";
+    case "trash":
+      return "No trash messages yet.";
+    case "schedule":
+      return "No scheduled messages in this window.";
+    default:
+      return "No messages yet.";
+  }
+}
+
 export const INBOX_TAB_DEFS = [
   { id: "unopened", label: "Unopened" },
   { id: "opened", label: "Opened" },
@@ -884,6 +908,7 @@ export function InboxThreadView({
   headerActions,
   composer,
   emptyLabel = "No messages yet.",
+  threadKey,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
@@ -896,12 +921,32 @@ export function InboxThreadView({
   /** Pass an <InboxComposer/>; omit for a read-only thread (e.g. Trash). */
   composer?: ReactNode;
   emptyLabel?: string;
+  /**
+   * Identity of the open conversation. When it changes we jump to the latest
+   * message instantly (opening a thread should land at the bottom). A new
+   * message WITHIN the same thread only auto-scrolls if the reader is already
+   * near the bottom — so scrolling up through history is never yanked back.
+   */
+  threadKey?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevThreadKeyRef = useRef<string | undefined>(undefined);
   useEffect(() => {
+    const el = scrollRef.current;
+    const threadChanged = prevThreadKeyRef.current !== threadKey;
+    prevThreadKeyRef.current = threadKey;
     // Optional call: scrollIntoView is absent in jsdom / non-DOM environments.
-    endRef.current?.scrollIntoView?.({ block: "end" });
-  }, [messages.length]);
+    if (threadChanged || !el) {
+      // Opening a conversation lands at the newest message, no animation.
+      endRef.current?.scrollIntoView?.({ block: "end" });
+      return;
+    }
+    // Same thread, a message arrived — only follow the tail if the reader is
+    // already near the bottom, so reading older messages isn't interrupted.
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
+  }, [messages.length, threadKey]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -928,9 +973,14 @@ export function InboxThreadView({
         {headerActions ? <div className="flex shrink-0 items-center gap-1.5">{headerActions}</div> : null}
       </header>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
+      >
         {messages.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted">{emptyLabel}</p>
+          <div className="flex min-h-full items-center justify-center py-6">
+            <PortalInboxEmptyState title={emptyLabel} />
+          </div>
         ) : (
           messages.map((m) => <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />)
         )}

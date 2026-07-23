@@ -1,0 +1,104 @@
+// @vitest-environment jsdom
+//
+// Approval-first AI drafts must render in the UNIFIED Communication inbox, not
+// only the legacy standalone inbox. The unified inbox mounts ManagerInbox with
+// `embeddedInCommunication` + `suppressListPane` + a controlled `expandedId`
+// (the row the parent list selected). This locks two things:
+//
+//  1. A thread the parent selected stays open — the on-mount `[tabId]` reset
+//     must NOT clear a controlled selection (that regression left the right
+//     pane stuck on "Select a conversation").
+//  2. With the thread open, an incoming resident thread that carries a pending
+//     `aiDraft` shows the PropLane AI approval card (Approve & Send / Edit /
+//     Discard) — the same card as the legacy inbox.
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, cleanup } from "@testing-library/react";
+
+const RESIDENT_MSG = {
+  id: "thr-2000000001-root",
+  from: "Dana Ramirez",
+  body: "Hi, is there a parking spot available this month?",
+  at: "Jul 20, 2026, 9:00 AM",
+};
+
+const THREADS = [
+  {
+    id: "thr-2000000001",
+    folder: "inbox",
+    from: "Dana Ramirez",
+    email: "dana@example.com",
+    subject: "Parking spot question",
+    preview: RESIDENT_MSG.body,
+    body: RESIDENT_MSG.body,
+    time: "Jul 20, 2026",
+    unread: true,
+    aiDraft: { text: "Thanks for reaching out — I'll look into availability and follow up shortly.", status: "pending_approval" },
+  },
+];
+
+vi.mock("@/lib/portal-inbox-storage", () => ({
+  MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
+  PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
+  loadPersistedInbox: () => THREADS,
+  syncPersistedInboxFromServer: () => Promise.resolve(THREADS),
+  persistInbox: () => {},
+  persistInboxAwait: () => Promise.resolve(),
+  invalidatePersistedInboxCache: () => {},
+  inboxMutationInFlight: () => false,
+  runInboxMutation: (fn: () => unknown) => fn(),
+  stagePersistedInboxRows: () => {},
+  upsertPersistedInboxRows: () => Promise.resolve(true),
+  deleteInboxThreadIds: () => Promise.resolve(true),
+  inboxThreadMessages: () => [RESIDENT_MSG],
+  appendReplyToInboxThread: () => THREADS[0],
+}));
+
+vi.mock("@/hooks/use-manager-user-id", () => ({
+  useManagerUserId: () => ({ userId: "mgr-1", email: "mgr@example.com", ready: true }),
+}));
+vi.mock("@/lib/portal-nav-client", () => ({ usePortalNavigate: () => () => {} }));
+vi.mock("@/lib/portal-base-path-client", () => ({ usePaidPortalBasePath: () => "/portal" }));
+vi.mock("@/components/providers/app-ui-provider", () => ({ useAppUi: () => ({ showToast: vi.fn() }) }));
+vi.mock("@/components/portal/payment-schedule-ui", () => ({ useScheduledPaymentMessages: () => ({ messages: [] }) }));
+vi.mock("@/components/portal/manager-inbox-schedule-panel", () => ({ ManagerInboxSchedulePanel: () => null }));
+vi.mock("@/lib/manager-inbox-contacts", () => ({ buildManagerInboxLiveContacts: () => [] }));
+// AI drafts are deliberately gated OFF in demo mode; this is the real portal.
+vi.mock("@/lib/demo/demo-session", () => ({ isDemoModeActive: () => false }));
+
+import { ManagerInbox } from "@/components/portal/manager-inbox";
+
+afterEach(() => cleanup());
+
+describe("AI draft in the unified Communication inbox", () => {
+  it("keeps a controlled selection open and shows the approval card on an incoming resident thread", async () => {
+    // No draft-reply fetch is needed — the thread already carries a pending
+    // aiDraft — but stub fetch so any background call is inert.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+
+    let controlledId: string | null = "thr-2000000001";
+    render(
+      <ManagerInbox
+        tabId="unopened"
+        embeddedInCommunication
+        externalTitleActions
+        suppressCompose
+        suppressListPane
+        commBase="/portal/communication"
+        controlledExpandedId={controlledId}
+        onControlledExpandedIdChange={(id) => {
+          controlledId = id;
+        }}
+      />,
+    );
+
+    // The controlled selection was NOT wiped on mount…
+    expect(controlledId).toBe("thr-2000000001");
+    // …and the approval card + its actions render for the resident thread.
+    expect(await screen.findByText("Approve & Send")).toBeTruthy();
+    expect(screen.getByText(/I'll look into availability/)).toBeTruthy();
+    expect(screen.getByText("Edit")).toBeTruthy();
+    expect(screen.getByText("Discard")).toBeTruthy();
+
+    vi.unstubAllGlobals();
+  });
+});

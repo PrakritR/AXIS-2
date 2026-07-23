@@ -79,7 +79,7 @@ export const MANAGER_DASHBOARD_SECTIONS: readonly DashboardSectionDef[] = [
   },
   {
     id: "inbox",
-    label: "Inbox",
+    label: "Communication",
     description: "Unread manager messages.",
     defaultVisible: true,
   },

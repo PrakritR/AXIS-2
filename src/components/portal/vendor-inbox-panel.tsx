@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
-import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, inboxTabEmptyCopy, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import {
   PortalInboxSelectionToolbar,
   useInboxRowSelection,
@@ -492,14 +492,7 @@ export const VendorInboxPanel = forwardRef<
     [tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
   );
 
-  const emptyCopy =
-    tabId === "trash"
-      ? "No trash messages yet."
-      : tabId === "sent"
-        ? "No sent messages yet."
-        : tabId === "opened"
-          ? "No opened messages yet."
-          : "No messages yet.";
+  const emptyCopy = inboxTabEmptyCopy(tabId);
 
   const bulkMarkRead = () => {
     for (const id of threadSelection.selectedIds) markRead(id);

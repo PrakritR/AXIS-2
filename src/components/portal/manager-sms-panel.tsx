@@ -13,10 +13,16 @@ import {
 import { ArrowUp, ChevronLeft, Search, Trash2 } from "lucide-react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerSmsComposeModal } from "@/components/portal/manager-sms-compose-modal";
-import { INBOX_LIST_SCROLL, InboxTwoPane } from "@/components/portal/portal-inbox-ui";
+import {
+  INBOX_LIST_SCROLL,
+  InboxThreadEmpty,
+  InboxTwoPane,
+  PortalInboxEmptyState,
+} from "@/components/portal/portal-inbox-ui";
 import {
   MANAGER_SMS_SORT_OPTIONS,
   normalizeManagerSmsConversationsPayload,
+  smsConversationDisplayName,
   sortSmsConversationRows,
   smsThreadHasUnread,
   type ManagerSmsConversationsPayload,
@@ -50,18 +56,6 @@ function smsMessagesDeleteEndpoint(conversationsEndpoint: string): string {
     return conversationsEndpoint.replace(/\/sms-conversations$/, "/sms-messages");
   }
   return "/api/manager/sms-messages";
-}
-
-function formatPhoneDisplay(phone: string | null): string {
-  if (!phone?.trim()) return "";
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return phone;
 }
 
 function conversationId(resident: ManagerSmsResidentConversation): string {
@@ -611,21 +605,17 @@ export const ManagerSmsPanel = forwardRef<
           </div>
         ) : null}
         {!loading && !error && visibleRows.length === 0 ? (
-          <p className="px-6 py-16 text-center text-sm text-muted">
-            No messages
-            <span className="mt-1 block text-xs text-muted">
-              Use New message above to start a conversation.
-            </span>
-          </p>
+          <div className="p-4">
+            <PortalInboxEmptyState title={search.trim() ? `No messages match “${search.trim()}”.` : "No messages yet."} />
+          </div>
         ) : null}
         <ul>
           {visibleRows.map((row) => (
             <ConversationRow
               key={row.rowId}
-              name={row.resident.name}
+              name={smsConversationDisplayName(row.resident)}
               subtitle={
                 row.resident.propertyLabel?.trim() ||
-                formatPhoneDisplay(row.resident.phone) ||
                 row.resident.residentEmail ||
                 ""
               }
@@ -649,15 +639,7 @@ export const ManagerSmsPanel = forwardRef<
   );
 
   const threadPane = !active ? (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-accent/40 text-muted">
-        <Search className="h-6 w-6" strokeWidth={1.75} aria-hidden />
-      </div>
-      <p className="mt-4 text-sm font-semibold text-foreground">Select a conversation</p>
-      <p className="mt-1 max-w-xs text-xs text-muted">
-        Choose a conversation, or use New message above.
-      </p>
-    </div>
+    <InboxThreadEmpty hint="Choose a conversation on the left, or use New message above." />
   ) : (
     <div className="flex min-h-0 flex-1 flex-col">
       <header
@@ -675,12 +657,11 @@ export const ManagerSmsPanel = forwardRef<
           <span>Messages</span>
         </button>
         <div className="min-w-0 flex-1 px-1">
-          <p className="truncate text-sm font-semibold text-foreground">{active.resident.name}</p>
+          <p className="truncate text-sm font-semibold text-foreground">
+            {smsConversationDisplayName(active.resident)}
+          </p>
           <p className="truncate text-xs text-muted">
-            {formatPhoneDisplay(active.resident.phone) ||
-              active.resident.propertyLabel ||
-              active.resident.residentEmail ||
-              " "}
+            {active.resident.propertyLabel || active.resident.residentEmail || " "}
           </p>
         </div>
         {allowDelete ? (
@@ -701,7 +682,9 @@ export const ManagerSmsPanel = forwardRef<
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
         {active.messages.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted">No messages yet</p>
+          <div className="flex min-h-full items-center justify-center py-6">
+            <PortalInboxEmptyState title="No messages in this conversation." />
+          </div>
         ) : (
           active.messages.map((msg) => (
             <Bubble

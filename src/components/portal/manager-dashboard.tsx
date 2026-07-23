@@ -1065,13 +1065,13 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.inbox ? (
             <AttentionGroup
-              title="Inbox"
+              title="Communication"
               href={`${BASE}/communication/inbox/unopened`}
               sectionId="inbox"
               tone="info"
               order={6}
               items={inboxThreads}
-              emptyMessage="No unread messages. Inbox is clear."
+              emptyMessage="No unread messages. Communication is clear."
               keyForItem={(thread) => thread.id}
               renderRow={(thread) => (
                 <IssueRow

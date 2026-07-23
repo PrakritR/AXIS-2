@@ -61,3 +61,22 @@ row must never carry `aiDraft`.
 The manager and resident inboxes are two ends of the **same** thread model
 (`portal_inbox_thread_records`): an approved manager reply is delivered into the
 resident's Communication view as a normal inbox message.
+
+## Unified Communication inbox
+
+The manager Communication page (`manager-communication.tsx` →
+`manager-unified-inbox.tsx`) merges email + SMS into one list, but the open
+**email** thread pane is still `ManagerInbox` mounted with `suppressListPane` +
+a controlled `expandedId`. So the AI draft card is the SAME `AiDraftReplyCard`
+from `manager-inbox.tsx` — there is no second implementation, and the approval
+gate is unchanged. Two invariants keep it working there:
+
+- **A controlled selection must survive mount.** `ManagerInbox`'s `[tabId]`
+  reset effect fires on mount too; in controlled mode it must NOT call
+  `setExpandedId(null)`, or it immediately clears the row the unified list just
+  selected (the right pane sticks on "Select a conversation" and the AI card
+  never appears). Guarded by `if (controlledExpandedId === undefined)`.
+- The auto-draft effect is unchanged: it runs once the embedded `ManagerInbox`
+  syncs, so opening an incoming resident email in the unified inbox drafts a
+  reply exactly as the legacy inbox did. Coverage:
+  `tests/unit/manager-inbox-ai-draft.test.tsx`.

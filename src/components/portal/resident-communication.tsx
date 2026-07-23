@@ -10,6 +10,7 @@ import {
   InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
+  inboxTabEmptyCopy,
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -169,14 +170,15 @@ function ResidentUnifiedInbox({
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
   useEffect(() => {
-    const smsUnread = smsMessages.some(
-      (m) => m.direction === "inbound" && smsMessageBucket(m, smsOpened) === "unopened",
-    );
+    // The one resident↔manager SMS thread appears in a folder tab when it has a
+    // message in that bucket — mirror that per folder so Opened/Sent counts the
+    // SMS thread too, not just Unopened (parity with the manager unified counts).
+    const smsInTab = (tab: string) => smsMessages.some((m) => smsMatchesTab(tab, m, smsOpened));
     onTabCountsChange({
-      unopened: filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length + (smsUnread ? 1 : 0),
-      opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length,
+      unopened: filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length + (smsInTab("unopened") ? 1 : 0),
+      opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length + (smsInTab("opened") ? 1 : 0),
       schedule: 0,
-      sent: filteredEmail.filter((t) => t.folder === "sent").length,
+      sent: filteredEmail.filter((t) => t.folder === "sent").length + (smsInTab("sent") ? 1 : 0),
       trash: filteredEmail.filter((t) => t.folder === "trash").length,
     });
   }, [filteredEmail, onTabCountsChange, smsMessages, smsOpened]);
@@ -207,7 +209,7 @@ function ResidentUnifiedInbox({
       <div className={INBOX_LIST_SCROLL}>
         {merged.length === 0 ? (
           <div className="p-4">
-            <PortalInboxEmptyState title="No messages yet." />
+            <PortalInboxEmptyState title={query.trim() ? `No messages match “${query.trim()}”.` : inboxTabEmptyCopy(tabId)} />
           </div>
         ) : (
           merged.map((row) => (
