@@ -76,23 +76,35 @@ The order matters and is deliberate:
    hung or failing body lookup can never cost us the email, and the ≤8s fetch stays
    off the webhook response path (an over-long response makes Svix record a failed
    delivery). Do not resolve the body before the insert again.
-2. `backfillInboundEmailBody` then runs in `after()`: it reads the row, bails
-   immediately unless the stored body is still exactly the placeholder (so an
-   already-enriched thread costs no Resend round trip), resolves the body with a
-   **bounded retry** — 3 attempts, ~500ms then ~1s apart, each keeping its own 8s
-   timeout — and swaps it in. The `UPDATE` re-checks the placeholder in its own
-   `WHERE`, which is what keeps a backfill from clobbering a body that already
-   landed.
+2. `backfillInboundEmailBody` then runs in `after()`, in three steps whose ORDER
+   is the load-bearing part:
+   - **pre-check read** — bail unless the stored body is still exactly the
+     placeholder, so an already-enriched thread costs no Resend round trip;
+   - **lookup with a bounded retry** — up to 3 attempts, ~500ms then ~1s apart,
+     each keeping its own 8s timeout;
+   - **fresh re-read, then the guarded `UPDATE`** — the snapshot written back is
+     re-read *after* the slow lookup, and the `UPDATE` re-checks the placeholder
+     in its own `WHERE`.
 
-The retry is load-bearing, not belt-and-braces: the route acks **200**, so Resend
+   Keep the lookup outside that read→write pair. Moving it in between (which a
+   previous revision did) leaves the snapshot up to ~25s stale before it is
+   written back, which turns the accepted residual below into a real clobber.
+
+The retry only fires on a **transient** failure. `fetchResendReceivedEmailBody`
+returns a discriminated result — `body` / `empty` (HTTP 200 with no text or html
+part, e.g. attachment-only) / `no-key` (`RESEND_API_KEY` unset, no request issued)
+/ `error` — and only `error` is retried, so a body-less email never costs three
+round trips and a missing key never costs 1.5s of sleeping inside `after()`.
+
+That retry is load-bearing, not belt-and-braces: the route acks **200**, so Resend
 does **not** redeliver, and nothing else will come along later to fill in a body
 that a transient blip lost. A redelivery only happens if the insert itself 500s.
 
-Known residual: the `UPDATE` writes back the `row_data` snapshot read a round trip
-earlier, so an admin who marks the thread read (or replies) inside that sub-second
-window on a brand-new row would have it undone. Accepted — recoverable, not lost
-mail, and closing it needs a jsonb-merge RPC plus the migration this feature
-deliberately ships without.
+Known residual: the `UPDATE` writes back the `row_data` snapshot from the fresh
+re-read one round trip earlier, so an admin who marks the thread read (or replies)
+inside that sub-second window on a brand-new row would have it undone. Accepted —
+recoverable, not lost mail, and closing it needs a jsonb-merge RPC plus the
+migration this feature deliberately ships without.
 
 If Resend routes received mail through a different API base for your account, set
 `RESEND_INBOUND_API_BASE`.

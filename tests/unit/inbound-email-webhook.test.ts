@@ -351,6 +351,56 @@ describe("backfillInboundEmailBody", () => {
     expect(storedRowData(db, "abc-123").body).toBe(INBOUND_EMAIL_BODY_PLACEHOLDER);
   });
 
+  it("does not retry — or sleep — for an email that genuinely has no body", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => Response.json({ data: { text: "", html: "" } }));
+    const started = performance.now();
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
+    expect(fetchSpy).toHaveBeenCalledOnce(); // an empty body will not change on a retry
+    expect(performance.now() - started).toBeLessThan(400); // no backoff sleeps
+    expect(storedRowData(db, "abc-123").body).toBe(INBOUND_EMAIL_BODY_PLACEHOLDER);
+  });
+
+  it("issues no request — and no sleep — when RESEND_API_KEY is unset", async () => {
+    delete process.env[ENV_KEY];
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const started = performance.now();
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(performance.now() - started).toBeLessThan(400);
+  });
+
+  it("re-reads the row after the lookup, so state that changed mid-fetch survives", async () => {
+    const db = fakeDb();
+    await ingestInboundEmail(PARSED_NO_BODY, db as never);
+    const id = inboundEmailThreadId("abc-123");
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      // The admin opens and answers the thread while the lookup is in flight —
+      // the body is still the placeholder, so the UPDATE's guard alone would
+      // happily write this state back out.
+      const stored = db.rows.get(id)!;
+      db.rows.set(id, {
+        ...stored,
+        row_data: { ...(stored.row_data as StoredRow), read: true, thread: [{ from: "admin", body: "on it" }] },
+      });
+      return Response.json({ data: { text: "the real body" } });
+    });
+
+    expect((await backfillInboundEmailBody(PARSED_NO_BODY, db as never)).updated).toBe(true);
+    const rowData = storedRowData(db, "abc-123");
+    expect(rowData.body).toBe("the real body");
+    expect(rowData.read).toBe(true);
+    expect(rowData.thread).toHaveLength(1);
+  });
+
   it("never clobbers a body that already landed, nor the admin's read/thread state", async () => {
     const db = fakeDb();
     await ingestInboundEmail(PARSED_NO_BODY, db as never);

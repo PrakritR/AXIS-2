@@ -121,16 +121,28 @@ export function clampBody(body: string): string {
 }
 
 /**
+ * Outcome of one body lookup. The kinds exist so the retry can tell a transient
+ * blip (`error`, worth another attempt) from an answer that will never change
+ * (`empty` — an attachment-only email; `no-key` — RESEND_API_KEY unset, where no
+ * request is issued at all).
+ */
+export type ResendReceivedEmailBodyResult =
+  | { kind: "body"; text: string }
+  | { kind: "empty" }
+  | { kind: "no-key" }
+  | { kind: "error" };
+
+/**
  * Fetch the full plain-text body for a received email from Resend. Metadata-only
  * webhooks mean the body lives behind the received-email API, reached with the
- * same RESEND_API_KEY used for outbound. Best-effort: returns "" on any failure.
+ * same RESEND_API_KEY used for outbound.
  *
  * The path follows Resend's documented `receiving` namespace; override the base
  * with RESEND_INBOUND_API_BASE if Resend's routing differs for your account.
  */
-export async function fetchResendReceivedEmailBody(emailId: string): Promise<string> {
+export async function fetchResendReceivedEmailBody(emailId: string): Promise<ResendReceivedEmailBodyResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) return "";
+  if (!apiKey) return { kind: "no-key" };
   const base = (process.env.RESEND_INBOUND_API_BASE?.trim() || "https://api.resend.com").replace(/\/$/, "");
   try {
     const res = await fetch(`${base}/emails/receiving/${encodeURIComponent(emailId)}`, {
@@ -139,17 +151,37 @@ export async function fetchResendReceivedEmailBody(emailId: string): Promise<str
     });
     if (!res.ok) {
       console.warn("inbound-email body fetch failed", emailId, res.status, res.statusText);
-      return "";
+      return { kind: "error" };
     }
     const json = (await res.json()) as Record<string, unknown>;
     const data = (json.data && typeof json.data === "object" ? json.data : json) as Record<string, unknown>;
     const text = typeof data.text === "string" ? data.text : "";
-    if (text.trim()) return text;
+    if (text.trim()) return { kind: "body", text };
     const html = typeof data.html === "string" ? data.html : "";
-    return html.trim() ? htmlToText(html) : "";
+    const converted = html.trim() ? htmlToText(html) : "";
+    return converted.trim() ? { kind: "body", text: converted } : { kind: "empty" };
   } catch (e) {
     console.warn("inbound-email body fetch errored", emailId, e);
-    return "";
+    return { kind: "error" };
+  }
+}
+
+/**
+ * Backoff between body-lookup attempts. Bounded on purpose: the enrichment runs
+ * in after(), so a blip should self-heal here rather than wait for a redelivery
+ * that — because the webhook already acked 200 — normally never comes. Only a
+ * transient `error` is retried; `empty` and `no-key` return immediately so a
+ * body-less email or a missing key never costs a sleep or a wasted round trip.
+ */
+const INBOUND_EMAIL_BODY_RETRY_DELAYS_MS = [500, 1_000];
+
+async function fetchResendReceivedEmailBodyWithRetry(emailId: string): Promise<ResendReceivedEmailBodyResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    const result = await fetchResendReceivedEmailBody(emailId);
+    if (result.kind !== "error") return result;
+    const delay = INBOUND_EMAIL_BODY_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined) return result;
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 }
 
@@ -169,15 +201,15 @@ export function inlineInboundEmailBody(parsed: ParsedInboundEmail): string {
 }
 
 /**
- * Resolve the best available body: inlined text → inlined html → API fetch.
- * Returns "" (never the placeholder) when nothing could be retrieved, so callers
- * can tell a real body from a failed lookup.
+ * Resolve the best available body: inlined text → inlined html → API fetch (with
+ * the bounded retry). Yields INBOUND_EMAIL_BODY_PLACEHOLDER when nothing could be
+ * retrieved, so a caller compares against it to tell a real body from a miss.
  */
 export async function resolveInboundEmailBody(parsed: ParsedInboundEmail): Promise<string> {
   const inline = inlineInboundEmailBody(parsed);
   if (inline) return inline;
-  const fetched = await fetchResendReceivedEmailBody(parsed.emailId);
-  return fetched.trim() ? clampBody(fetched) : "";
+  const fetched = await fetchResendReceivedEmailBodyWithRetry(parsed.emailId);
+  return fetched.kind === "body" ? clampBody(fetched.text) : INBOUND_EMAIL_BODY_PLACEHOLDER;
 }
 
 /**
@@ -247,30 +279,35 @@ export async function ingestInboundEmail(
   throw new Error(error.message);
 }
 
-/**
- * Backoff between body-resolution attempts. Bounded on purpose: the enrichment
- * runs in after(), so a blip should self-heal here rather than wait for a
- * redelivery that — because the webhook already acked 200 — normally never comes.
- */
-const INBOUND_EMAIL_BODY_RETRY_DELAYS_MS = [500, 1_000];
-
-async function resolveInboundEmailBodyWithRetry(parsed: ParsedInboundEmail): Promise<string> {
-  for (let attempt = 0; ; attempt += 1) {
-    const body = await resolveInboundEmailBody(parsed);
-    if (body) return body;
-    const delay = INBOUND_EMAIL_BODY_RETRY_DELAYS_MS[attempt];
-    if (delay === undefined) return "";
-    await new Promise((resolve) => setTimeout(resolve, delay));
+async function readInboundThreadRowData(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  id: string,
+  emailId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await db
+    .from("portal_inbox_thread_records")
+    .select("row_data")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.warn("inbound-email body backfill read failed", emailId, error.message);
+    return null;
   }
+  const rowData = (data as { row_data?: unknown } | null)?.row_data;
+  if (!rowData || typeof rowData !== "object") return null;
+  return rowData as Record<string, unknown>;
 }
 
 /**
  * Best-effort second pass that replaces the placeholder body with the real one
  * once Resend's received-email API answers, retrying a few times so a transient
- * blip heals itself. It reads the stored row first and writes only while the
- * body is STILL the placeholder, so a body that already landed — and the admin's
- * read/thread state around it — is never overwritten, and an already-enriched
- * thread costs no Resend round trip at all.
+ * blip heals itself.
+ *
+ * Three steps in a deliberate order: a cheap pre-check so an already-enriched
+ * thread costs no Resend round trip at all, then the (slow) lookup, then a FRESH
+ * re-read of the row immediately before the write. The lookup sits outside the
+ * read→write pair on purpose — parking it in between would leave the snapshot
+ * tens of seconds stale by the time it is written back.
  */
 export async function backfillInboundEmailBody(
   parsed: ParsedInboundEmail,
@@ -279,25 +316,19 @@ export async function backfillInboundEmailBody(
   if (inlineInboundEmailBody(parsed)) return { updated: false };
 
   const id = inboundEmailThreadId(parsed.emailId);
-  const { data, error } = await db
-    .from("portal_inbox_thread_records")
-    .select("row_data")
-    .eq("id", id)
-    .maybeSingle();
-  if (error || !data) return { updated: false };
+  const precheck = await readInboundThreadRowData(db, id, parsed.emailId);
+  if (!precheck || precheck.body !== INBOUND_EMAIL_BODY_PLACEHOLDER) return { updated: false };
 
-  const rowData = (data as { row_data?: unknown }).row_data;
-  if (!rowData || typeof rowData !== "object") return { updated: false };
-  const current = rowData as Record<string, unknown>;
-  if (current.body !== INBOUND_EMAIL_BODY_PLACEHOLDER) return { updated: false };
+  const body = await resolveInboundEmailBody(parsed);
+  if (body === INBOUND_EMAIL_BODY_PLACEHOLDER) return { updated: false };
 
-  const body = await resolveInboundEmailBodyWithRetry(parsed);
-  if (!body) return { updated: false };
+  const current = await readInboundThreadRowData(db, id, parsed.emailId);
+  if (!current || current.body !== INBOUND_EMAIL_BODY_PLACEHOLDER) return { updated: false };
 
   // The `row_data->>body` filter is the real guard: it makes the write lose to
   // anything that already replaced the placeholder. It does not cover the rest
   // of row_data, so an admin who marks this thread read (or replies) in the
-  // sub-second gap between the select above and this update would have that
+  // sub-second gap between the read above and this update would have that
   // undone — accepted, because it can only happen on a brand-new row before any
   // realistic admin interaction, it is recoverable rather than lost mail, and
   // closing it would need a jsonb-merge RPC and the migration this feature
