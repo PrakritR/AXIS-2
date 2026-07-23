@@ -118,6 +118,21 @@ wired to live Twilio webhooks. If that catalog is wanted, PORT the tools onto
 this framework; do not merge the other framework alongside it. A tree carrying
 two half-wired assistant frameworks is worse than either one alone.
 
+**One conversation loop, multiple surfaces.** The floating popup
+(`axis-assistant.tsx`) and the manager dashboard's right-dock
+(`dashboard-assistant-dock.tsx`, desktop `hidden lg:block` only — mobile keeps
+FAB/popup) both drive the SAME send/confirm transport,
+`useAssistantConversation(endpoint)`, and share the suggestion chips +
+preview/confirm card from `assistant-shared.tsx`. A dashboard-initiated approval
+is NOT a new send path: proposed writes surface as "AI drafts" chips in Needs
+attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
+`useAgentPendingActions` off owner-scoped `GET /api/agent/pending-actions`), and
+Approve/Discard POST ONLY the action id to `/api/agent/chat` →
+`claimPendingAction` re-validates the stored input server-side. Never add a
+one-click execute that skips that gate; the list route returns only the preview,
+never the stored input. `aiDrafts` is a `MANAGER_DASHBOARD_SECTIONS` entry gated
+on `visibility.aiDrafts` like every other dashboard section.
+
 **One registry + one context resolver per role.** The assistant is mounted in
 every portal, so each role needs its own three-piece set — resolver, registry,
 route — and they must never be crossed:
