@@ -6,6 +6,10 @@ import {
   clearPricingOfferCookie,
   readPricingOfferFromRequest,
 } from "@/lib/auth/manager-pricing-oauth-storage";
+import {
+  clearPreOAuthUserCookie,
+  readPreOAuthUserFromRequest,
+} from "@/lib/auth/pre-oauth-user";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import type { NextRequest } from "next/server";
 
@@ -15,6 +19,7 @@ export async function GET(request: NextRequest) {
   if (bridge) return bridge;
 
   const offer = readPricingOfferFromRequest(request);
+  const priorUserId = readPreOAuthUserFromRequest(request);
 
   const response = await handleOAuthCallback(request, `${MANAGER_PRICING_ENTRY_PATH}?google_signed_in=1`, {
     resolveRedirect: async (service, user, safePath) => {
@@ -34,6 +39,16 @@ export async function GET(request: NextRequest) {
         // portal so a brand-new Google account lands on a working dashboard.
         const provisioned = await ensureFreeManagerPortalAccess(service, user);
         if (provisioned.status === "portal_ready") {
+          if (priorUserId && priorUserId === user.id) {
+            const params = new URLSearchParams({
+              mode: "create",
+              role: "manager",
+              same_account: "1",
+              tier,
+              billing: offer?.billing ?? "monthly",
+            });
+            return `/auth/create-account?${params}`;
+          }
           return "/portal/dashboard";
         }
         // Resident-only / primary-admin / pending-paid accounts: route by role instead.
@@ -49,5 +64,6 @@ export async function GET(request: NextRequest) {
   });
 
   clearPricingOfferCookie(response);
+  clearPreOAuthUserCookie(response);
   return response;
 }
