@@ -17,9 +17,9 @@ dispatch commits no money; real enforcement stays at bid-accept).
 type is extended via `WorkOrderRowWithDispatch`, NOT by editing `DemoManagerWorkOrderRow`),
 audit-logs with dedupe key `dispatch_prepare:{id}` (client re-sync replays are no-ops), and
 notifies the manager (`notifyManagerFromAgent` in `src/lib/agent-notify.server.ts` — direct
-inbox-row write + push + optional SMS). Approval surfaces (manager card in the work-orders
-panel via `POST /api/portal/dispatch-proposals`, and the assistant's
-`confirmAction.type === "dispatch_work_order"`) both call the same `executeDispatch`: server
+inbox-row write + push + optional SMS). **`POST /api/portal/dispatch-proposals` is the ONLY
+path that approves or declines a proposal today**, and the manager card in the work-orders
+panel is its one surface. It calls `executeDispatch`: server
 re-derives everything from the persisted proposal (client sends only workOrderId), re-checks
 vendor ownership, assigns (acceptBid write pattern), books the vendor's next open slot when
 availability exists, notifies the vendor, and best-effort notifies the resident
@@ -29,6 +29,17 @@ else downgrades to a proposal. `row_data.dispatch` is strictly server-owned: the
 POST drops any client-supplied `dispatch` and replaces it with the persisted server copy (or
 deletes it when none exists), so a forged proposal on a brand-new resident row can't spoof
 the manager UI or suppress the real dispatch.
+
+**The assistant cannot approve a dispatch — a known capability GAP, not a design choice.** A
+`confirmAction.type === "dispatch_work_order"` branch in `src/app/api/agent/chat/route.ts`
+(line 62 at `a2449a06^1`) used to let a manager confirm a dispatch straight from chat; the
+Cursor write-action-framework lane (`a6e6568d`, merged as `a2449a06`) rewrote that route and
+dropped it, and the later one-framework reconciliation kept it out. Do NOT hand-restore that
+legacy special-case confirm branch — there is exactly ONE write-action framework
+(`docs/ai-assistant.md`), and a second confirm path is what the reconciliation existed to
+remove. The follow-up `axis-restore-dispatch-approval` restores this as a `defineWriteTool`
+whose `preview` renders the persisted proposal and whose `handler` calls `executeDispatch`, so
+it goes through the same `agent_pending_actions` gate as every other write.
 
 **The vendor agent is answer-only by construction.** Registry
 `vendorWorkOrderAgentRegistry` (`src/lib/tools/domains/vendor-work-order.ts`) = 3 reads
