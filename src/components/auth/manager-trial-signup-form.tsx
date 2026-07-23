@@ -1,6 +1,7 @@
 "use client";
 
 import posthog from "posthog-js";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
@@ -53,6 +54,7 @@ export function ManagerTrialSignupForm({
   const [finishingGoogle, setFinishingGoogle] = useState(googleReturn);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [signedInSession, setSignedInSession] = useState(false);
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
 
   const locked = disabled || busy || finishingGoogle;
 
@@ -61,7 +63,10 @@ export function ManagerTrialSignupForm({
     void (async () => {
       const supabase = createSupabaseBrowserClient();
       const { data } = await supabase.auth.getSession();
-      if (!cancelled) setSignedInSession(Boolean(data.session?.user));
+      if (!cancelled) {
+        setSignedInSession(Boolean(data.session?.user));
+        setSignedInEmail(data.session?.user?.email ?? null);
+      }
     })();
     return () => {
       cancelled = true;
@@ -112,30 +117,6 @@ export function ManagerTrialSignupForm({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot continuation on mount
   }, [googleReturn]);
-
-  const submitSignedIn = async () => {
-    setErrorText(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/manager/pricing-oauth-continue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ tier, billing, trialSignup }),
-      });
-      const body = (await res.json()) as { error?: string; action?: string };
-      if (!res.ok) {
-        setErrorText(body.error ?? "Could not create manager account.");
-        showToast(body.error ?? "Could not create manager account.");
-        return;
-      }
-      await navigateAfterRoleSignup("/portal/dashboard");
-    } catch {
-      showToast("Network error.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const submit = async () => {
     if (!email.trim() || password.length < 8) {
@@ -190,18 +171,22 @@ export function ManagerTrialSignupForm({
         <p className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-sm text-muted">
           Finishing sign-in…
         </p>
-      ) : signedInSession ? (
-        <Button
-          type="button"
-          data-attr="manager-trial-signup-submit"
-          className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-          disabled={locked}
-          onClick={() => void submitSignedIn()}
-        >
-          {busy ? "Creating…" : "Create property account"}
-        </Button>
       ) : (
         <>
+          {signedInSession ? (
+            <div className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-[12px] leading-snug text-muted">
+              {signedInEmail ? (
+                <>You&apos;re signed in as <span className="font-semibold text-foreground">{signedInEmail}</span>. </>
+              ) : (
+                <>You&apos;re already signed in. </>
+              )}
+              Create a new property account below, or{" "}
+              <Link href="/portal/dashboard" className="font-semibold text-primary hover:opacity-90">
+                go to your dashboard
+              </Link>
+              .
+            </div>
+          ) : null}
           <div className="space-y-3">
             <PricingAppleContinueButton
               tier={tier}
