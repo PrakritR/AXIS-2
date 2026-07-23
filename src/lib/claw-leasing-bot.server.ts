@@ -66,7 +66,7 @@ export function publicAppOrigin(): string {
   if (app && !/localhost|127\.0\.0\.1/i.test(app)) return app.replace(/\/$/, "");
   const production = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (production) return `https://${production}`.replace(/\/$/, "");
-  return "https://www.axis-seattle-housing.com";
+  return "https://prop-lane.space";
 }
 
 type ManagerTarget = {

@@ -26,8 +26,8 @@ export default function TermsOfServicePage() {
             <h2 className="text-lg font-semibold text-foreground">Agreement</h2>
             <p className="mt-2">
               These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of the PropLane website at{" "}
-              <a href="https://www.axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
-                axis-seattle-housing.com
+              <a href="https://prop-lane.space" className="font-medium text-primary hover:opacity-90">
+                prop-lane.space
               </a>
               , our iOS and Android mobile applications, and related property management software and services
               (collectively, the &ldquo;Service&rdquo;) operated by PropLane Seattle Housing (&ldquo;PropLane,&rdquo;

@@ -5,6 +5,12 @@ loads the live, server-rendered site (`https://www.axis-seattle-housing.com`).
 The app reuses 100% of the web app — auth, Stripe, the manager/resident/admin
 portals — and adds real native capabilities (push notifications, camera) on top.
 
+The shell still points at that legacy host, which stays live and is still
+recognized as production, even though the canonical *web* origin for outbound
+email/SMS/shareable links is now `https://prop-lane.space`
+(`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Repointing the WebView means
+changing `capacitor.config.ts` + `CAP_SERVER_URL` — a native-shell rebuild.
+
 - **Web/UI changes ship instantly** via your normal Vercel deploy. No app-store
   review needed for content or UI — the WebView always loads the latest site.
 - **Native-shell changes** (new plugins, icons, permissions, the Capacitor

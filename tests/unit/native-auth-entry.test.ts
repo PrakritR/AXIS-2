@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isProductionAxisHost,
   nativeAuthEntryPathClient,
   nativeAuthEntryPathForHost,
   nativeAuthEntryPathFromServerBase,
@@ -33,6 +34,20 @@ describe("native-auth-entry", () => {
 
   it("nativeAwarePath leaves marketing URLs unchanged during SSR (no window in vitest)", () => {
     expect(nativeAwarePath("/partner/pricing")).toBe("/partner/pricing");
+  });
+
+  it("isProductionAxisHost recognizes the PropLane domain and keeps the legacy host", () => {
+    // New canonical domain — must be treated as production.
+    expect(isProductionAxisHost("prop-lane.space")).toBe(true);
+    expect(isProductionAxisHost("www.prop-lane.space")).toBe(true);
+    expect(isProductionAxisHost("PROP-LANE.SPACE")).toBe(true);
+    // Legacy domain still resolves (additive rebrand), so it must STILL be production.
+    expect(isProductionAxisHost("axis-seattle-housing.com")).toBe(true);
+    expect(isProductionAxisHost("www.axis-seattle-housing.com")).toBe(true);
+    // Non-production hosts stay false.
+    expect(isProductionAxisHost("localhost")).toBe(false);
+    expect(isProductionAxisHost("axis-2.vercel.app")).toBe(false);
+    expect(isProductionAxisHost("prop-lane.space.evil.com")).toBe(false);
   });
 });
 
