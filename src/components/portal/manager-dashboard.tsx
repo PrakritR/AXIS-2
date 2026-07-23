@@ -120,15 +120,17 @@ function relativeFromNow(iso: string | undefined | null, nowMs: number): string 
   const diff = t - nowMs;
   const past = diff < 0;
   const abs = Math.abs(diff);
-  const min = Math.round(abs / 60000);
+  // Floor at every unit so a label never overstates elapsed/remaining time
+  // (1h31m reads "in 1h", not "in 2h").
+  const min = Math.floor(abs / 60000);
   if (min < 1) return "now";
   const suffix = (n: number, unit: string) => (past ? `${n}${unit} ago` : `in ${n}${unit}`);
   if (min < 60) return suffix(min, "m");
-  const hr = Math.round(min / 60);
+  const hr = Math.floor(min / 60);
   if (hr < 24) return suffix(hr, "h");
-  const day = Math.round(hr / 24);
+  const day = Math.floor(hr / 24);
   if (day < 7) return suffix(day, "d");
-  const wk = Math.round(day / 7);
+  const wk = Math.floor(day / 7);
   return suffix(wk, "w");
 }
 
@@ -525,7 +527,18 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
+  // `nowMs` is frozen for the whole session: it only feeds the 6-month cash-flow
+  // buckets in the heavy `data` memo, where a boundary stale by minutes is fine.
   const [nowMs] = useState(() => Date.now());
+  // `nowTick` is a SEPARATE, lightweight clock that ticks every minute and is
+  // used ONLY for the live relative timestamps (tour rows). Keeping it out of the
+  // `data` memo deps means the minute tick refreshes the labels without re-running
+  // the dashboard's store reads/filters/sorts.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
   const [docExpirySummary, setDocExpirySummary] = useState<DocumentExpirationSummary | null>(null);
   const { visibility, setVisible, reset } = useDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -889,7 +902,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                   dot={DOT_PENDING}
                   title={tour.label}
                   subtitle={tour.propertyTitle || "—"}
-                  meta={relativeFromNow(tour.start, nowMs) ?? fmt(tour.start)}
+                  meta={[fmt(tour.start), relativeFromNow(tour.start, nowTick)].filter(Boolean).join(" · ")}
                   pill={<StatusPill tone="pending">Pending</StatusPill>}
                   dataAttr="dashboard-attention-tour"
                 />

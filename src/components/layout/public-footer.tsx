@@ -24,7 +24,7 @@ const FOOTER_COLUMNS: { heading: string; links: { href: string; label: string }[
     ],
   },
   {
-    heading: "Built for",
+    heading: "Who it's for",
     links: [
       { href: "/partner", label: "Managers" },
       { href: RESIDENT_BROWSE_PATH, label: "Residents" },
@@ -32,7 +32,9 @@ const FOOTER_COLUMNS: { heading: string; links: { href: string; label: string }[
     ],
   },
   {
-    heading: "Company",
+    // Contact us / Support / Partner inquiries are all "reach a human" links,
+    // so the header reads Support (the actual contact DETAILS live under Contact).
+    heading: "Support",
     links: [
       { href: "/contact", label: "Contact us" },
       { href: "/support", label: "Support" },
@@ -97,18 +99,32 @@ function SocialRow({ className = "" }: { className?: string }) {
   return (
     <ul className={`flex items-center gap-2 ${className}`}>
       {PUBLIC_SOCIAL_LINKS.map(({ id, label, href }) => {
-        // A real profile URL opens in a new tab; an unconfirmed placeholder ("#")
-        // renders the branded icon but does not fling the visitor to a dead page.
-        const placeholder = isPlaceholderSocialHref(href);
+        // A confirmed profile URL is a real new-tab link. An unconfirmed
+        // placeholder renders the branded icon as a NON-interactive <span> — an
+        // <a href="#"> actually navigates (scrolls to top, dirties the URL) and
+        // announces as a link to nowhere, so the icon must not be an anchor
+        // until a real destination exists (set via NEXT_PUBLIC_SOCIAL_*).
+        const base =
+          "flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted";
+        if (isPlaceholderSocialHref(href)) {
+          return (
+            <li key={id}>
+              <span aria-label={label} title={label} data-attr={`footer-social-${id}`} className={base}>
+                {SOCIAL_GLYPHS[id]}
+              </span>
+            </li>
+          );
+        }
         return (
           <li key={id}>
             <a
               href={href}
-              {...(placeholder ? {} : { target: "_blank", rel: "noreferrer noopener" })}
+              target="_blank"
+              rel="noreferrer noopener"
               aria-label={label}
               title={label}
               data-attr={`footer-social-${id}`}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-primary/40 hover:text-primary"
+              className={`${base} transition-colors hover:border-primary/40 hover:text-primary`}
             >
               {SOCIAL_GLYPHS[id]}
             </a>
@@ -171,7 +187,7 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
           ))}
 
           <div className="min-w-0">
-            <p className={columnHeading}>Get in touch</p>
+            <p className={columnHeading}>Contact</p>
             <ul className="mt-4 flex flex-col gap-3">
               <li>
                 <a href={`tel:${PUBLIC_SUPPORT_PHONE_TEL}`} className={`${footerLinkClass} tabular-nums`}>
