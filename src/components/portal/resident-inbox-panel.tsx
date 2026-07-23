@@ -102,9 +102,20 @@ export const ResidentInboxPanel = forwardRef<
     embeddedInCommunication?: boolean;
     externalTitleActions?: boolean;
     onTabCountsChange?: (counts: ResidentInboxTabCounts) => void;
+    suppressListPane?: boolean;
+    controlledExpandedId?: string | null;
+    onControlledExpandedIdChange?: (id: string | null) => void;
   }
 >(function ResidentInboxPanel(
-  { tabId, embeddedInCommunication = false, externalTitleActions = false, onTabCountsChange },
+  {
+    tabId,
+    embeddedInCommunication = false,
+    externalTitleActions = false,
+    onTabCountsChange,
+    suppressListPane = false,
+    controlledExpandedId,
+    onControlledExpandedIdChange,
+  },
   ref,
 ) {
   const { showToast } = useAppUi();
@@ -115,7 +126,19 @@ export const ResidentInboxPanel = forwardRef<
   );
   const [persistReady, setPersistReady] = useState(false);
   const persistInboxRef = useRef(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [internalExpandedId, setInternalExpandedId] = useState<string | null>(null);
+  const expandedId = controlledExpandedId !== undefined ? controlledExpandedId : internalExpandedId;
+  const setExpandedId = useCallback(
+    (id: string | null | ((prev: string | null) => string | null)) => {
+      const resolve = (prev: string | null) => (typeof id === "function" ? id(prev) : id);
+      if (controlledExpandedId !== undefined) {
+        onControlledExpandedIdChange?.(resolve(controlledExpandedId));
+      } else {
+        setInternalExpandedId(resolve);
+      }
+    },
+    [controlledExpandedId, onControlledExpandedIdChange],
+  );
   const [replyDraft, setReplyDraft] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -845,6 +868,46 @@ export const ResidentInboxPanel = forwardRef<
             />
           </div>
         )
+      ) : suppressListPane ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {activeThread ? (
+            <InboxThreadView
+              title={
+                activeIsSent
+                  ? activeThread.email || "Unknown recipient"
+                  : activeThread.from || activeThread.email || "Unknown sender"
+              }
+              subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
+              messages={activeBubbles}
+              onBack={() => setExpandedId(null)}
+              headerActions={
+                renderExtraActions({
+                  id: activeThread.id,
+                  name: activeThread.from,
+                  email: activeThread.email,
+                  subject: activeThread.subject,
+                  whenLabel: activeThread.time,
+                  read: !activeThread.unread,
+                })
+              }
+              emptyLabel="No messages in this conversation."
+              composer={
+                activeThread.folder === "trash" || tabId === "trash" ? undefined : (
+                  <InboxComposer
+                    value={replyDraft}
+                    onChange={setReplyDraft}
+                    onSubmit={() => void sendActiveReply()}
+                    sending={replySending}
+                    placeholder="Write a reply…"
+                    dataAttr="resident-inbox-reply"
+                  />
+                )
+              }
+            />
+          ) : (
+            <InboxThreadEmpty />
+          )}
+        </div>
       ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (

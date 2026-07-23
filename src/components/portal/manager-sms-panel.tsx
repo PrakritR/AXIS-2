@@ -185,6 +185,11 @@ export const ManagerSmsPanel = forwardRef<
      * generic toast hides. Admin oversight is read/send only.
      */
     allowDelete?: boolean;
+    /** When true, only the open thread pane is rendered (unified Communication list lives elsewhere). */
+    suppressListPane?: boolean;
+    controlledActiveId?: string | null;
+    onControlledActiveIdChange?: (id: string | null) => void;
+    onConversationOpened?: () => void;
   }
 >(function ManagerSmsPanel(
   {
@@ -197,6 +202,10 @@ export const ManagerSmsPanel = forwardRef<
     allowInlineCompose = true,
     endpoint = "/api/manager/sms-conversations",
     allowDelete = true,
+    suppressListPane = false,
+    controlledActiveId,
+    onControlledActiveIdChange,
+    onConversationOpened,
   },
   ref,
 ) {
@@ -211,13 +220,34 @@ export const ManagerSmsPanel = forwardRef<
   const [composeOpen, setComposeOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<ManagerSmsSortId>("newest");
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [internalActiveId, setInternalActiveId] = useState<string | null>(null);
+  const activeId = controlledActiveId !== undefined ? controlledActiveId : internalActiveId;
+  const setActiveId = useCallback(
+    (id: string | null | ((prev: string | null) => string | null)) => {
+      const resolve = (prev: string | null) => (typeof id === "function" ? id(prev) : id);
+      if (controlledActiveId !== undefined) {
+        onControlledActiveIdChange?.(resolve(controlledActiveId));
+      } else {
+        setInternalActiveId(resolve);
+      }
+    },
+    [controlledActiveId, onControlledActiveIdChange],
+  );
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const messagesDeleteEndpoint = useMemo(() => smsMessagesDeleteEndpoint(endpoint), [endpoint]);
+  // Keep the latest onConversationOpened without making it an effect dependency —
+  // parents pass an inline callback that changes identity every render, and letting
+  // that (or `rows` churn) retrigger the controlled-open sync causes an infinite
+  // render loop ("Maximum update depth exceeded").
+  const onConversationOpenedRef = useRef(onConversationOpened);
+  useEffect(() => {
+    onConversationOpenedRef.current = onConversationOpened;
+  }, [onConversationOpened]);
+  const lastSyncedControlledIdRef = useRef<string | null>(null);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) setLoading(true);
@@ -370,9 +400,25 @@ export const ManagerSmsPanel = forwardRef<
       setActiveId(rowId);
       markOpened(messages.filter((m) => m.direction === "inbound").map((m) => m.id));
       setDraft("");
+      onConversationOpened?.();
     },
-    [markOpened],
+    [markOpened, onConversationOpened, setActiveId],
   );
+
+  useEffect(() => {
+    if (!controlledActiveId) {
+      lastSyncedControlledIdRef.current = null;
+      return;
+    }
+    // Only sync when the controlled selection actually changes — never on every
+    // `rows` refetch or callback identity change, which would loop forever.
+    if (lastSyncedControlledIdRef.current === controlledActiveId) return;
+    const row = rows.find((r) => r.rowId === controlledActiveId);
+    if (!row) return; // rows may load after the id is set; retry until present.
+    lastSyncedControlledIdRef.current = controlledActiveId;
+    markOpened(row.messages.filter((m) => m.direction === "inbound").map((m) => m.id));
+    onConversationOpenedRef.current?.();
+  }, [controlledActiveId, markOpened, rows]);
 
   const composeResidents =
     filterResidentEmail || filterResidentUserId ? residents : (data?.residents ?? []);
@@ -723,7 +769,11 @@ export const ManagerSmsPanel = forwardRef<
         />
       ) : null}
 
-      <InboxTwoPane threadOpen={showThread} list={listPane} thread={threadPane} />
+      {suppressListPane ? (
+        <div className="flex min-h-0 flex-1 flex-col">{threadPane}</div>
+      ) : (
+        <InboxTwoPane threadOpen={showThread} list={listPane} thread={threadPane} />
+      )}
     </div>
   );
 });

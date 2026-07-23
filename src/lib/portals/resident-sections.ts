@@ -138,7 +138,7 @@ export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
   { label: "House details", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
-  { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/email/unopened` },
+  { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/inbox/unopened` },
   { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/application` },
 ] as const;
 
