@@ -2232,6 +2232,11 @@ html[data-native] [data-listing-sections-root] {
   background: var(--pl-black);
   color: var(--pl-white);
   -webkit-font-smoothing: antialiased;
+  /* The hero mounts ApplicationsPipelinePanel outside `.lp-root`, which is where
+   * `--lp-card` is normally declared, so `.lp-pipe` would fall back to
+   * transparent and let the lattice below paint through the product mock.
+   * Same value `.lp-root` assigns, and already theme-aware. */
+  --lp-card: var(--pl-surface-raised);
 }
 
 /* Architectural grid + bloom. Theme split is absolute: these custom properties
