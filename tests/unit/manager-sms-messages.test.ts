@@ -22,6 +22,7 @@ describe("manager-sms-messages types", () => {
       messageSid: "SM123",
       source: "work_number",
       createdAt: "2026-07-16T12:00:00.000Z",
+      storageTable: "inbound_sms_log",
     };
     const resident: ManagerSmsResidentConversation = {
       residentUserId: "user-1",
@@ -73,6 +74,7 @@ describe("manager-sms-messages types", () => {
       messageSid: null,
       source: "work_number",
       createdAt: "2026-07-16T12:00:00.000Z",
+      storageTable: "inbound_sms_log",
     };
     const outbound: ManagerSmsMessageRow = {
       ...inbound,

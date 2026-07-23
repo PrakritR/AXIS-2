@@ -45,6 +45,13 @@ const BUBBLE_OUT_BG = "var(--btn-primary)";
 /** Destructive red for swipe / delete affordances. */
 const DELETE_RED = "var(--status-overdue-fg)";
 
+function smsMessagesDeleteEndpoint(conversationsEndpoint: string): string {
+  if (conversationsEndpoint.endsWith("/sms-conversations")) {
+    return conversationsEndpoint.replace(/\/sms-conversations$/, "/sms-messages");
+  }
+  return "/api/manager/sms-messages";
+}
+
 function formatPhoneDisplay(phone: string | null): string {
   if (!phone?.trim()) return "";
   const digits = phone.replace(/\D/g, "");
@@ -208,7 +215,9 @@ export const ManagerSmsPanel = forwardRef<
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const messagesDeleteEndpoint = useMemo(() => smsMessagesDeleteEndpoint(endpoint), [endpoint]);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) setLoading(true);
@@ -430,6 +439,41 @@ export const ManagerSmsPanel = forwardRef<
     [activeId, endpoint, load, showToast],
   );
 
+  const deleteMessage = useCallback(
+    async (message: ManagerSmsMessageRow) => {
+      if (!message.storageTable) {
+        showToast("Could not delete message.");
+        return;
+      }
+      const ok = window.confirm("Delete this message? This cannot be undone.");
+      if (!ok) return;
+      setDeletingMessageId(message.id);
+      try {
+        const res = await fetch(messagesDeleteEndpoint, {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messageId: message.id,
+            storageTable: message.storageTable,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not delete message.");
+          return;
+        }
+        showToast("Message deleted.");
+        void load({ quiet: true });
+      } catch {
+        showToast("Could not delete message.");
+      } finally {
+        setDeletingMessageId(null);
+      }
+    },
+    [load, messagesDeleteEndpoint, showToast],
+  );
+
   async function sendReply() {
     if (!active?.resident.phone) return;
     const text = draft.trim();
@@ -613,7 +657,14 @@ export const ManagerSmsPanel = forwardRef<
         {active.messages.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted">No messages yet</p>
         ) : (
-          active.messages.map((msg) => <Bubble key={msg.id} message={msg} />)
+          active.messages.map((msg) => (
+            <Bubble
+              key={msg.id}
+              message={msg}
+              deleting={deletingMessageId === msg.id}
+              onDelete={allowDelete ? () => void deleteMessage(msg) : undefined}
+            />
+          ))
         )}
         <div ref={threadEndRef} />
       </div>
@@ -677,18 +728,38 @@ export const ManagerSmsPanel = forwardRef<
   );
 });
 
-function Bubble({ message }: { message: ManagerSmsMessageRow }) {
+function Bubble({
+  message,
+  onDelete,
+  deleting,
+}: {
+  message: ManagerSmsMessageRow;
+  onDelete?: () => void;
+  deleting?: boolean;
+}) {
   const outbound = message.direction === "outbound";
   return (
-    <div className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
+    <div className={`group/msg flex ${outbound ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[min(85%,26rem)] px-3.5 py-2 text-sm leading-relaxed ${
+        className={`relative max-w-[min(85%,26rem)] px-3.5 py-2 text-sm leading-relaxed ${
           outbound
             ? "rounded-2xl rounded-br-md text-primary-foreground"
             : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
         }`}
         style={outbound ? { background: BUBBLE_OUT_BG } : undefined}
       >
+        {onDelete ? (
+          <button
+            type="button"
+            className="absolute -right-1 -top-1 flex h-7 w-7 touch-manipulation items-center justify-center rounded-full border border-border bg-card text-muted opacity-70 shadow-sm transition-opacity hover:text-danger focus-visible:opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 disabled:opacity-40"
+            aria-label="Delete message"
+            data-attr="sms-messages-bubble-delete"
+            disabled={deleting}
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        ) : null}
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { linkedOwnerScopeForModule } from "@/lib/auth/co-manager-module-scope";
 import type {
   ManagerSmsConversationsPayload,
   ManagerSmsMessageRow,
+  ManagerSmsMessageStorageTable,
   ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
 import {
@@ -194,6 +195,80 @@ export async function deleteManagerSmsConversation(
   // retry against history that is already gone.
   if (partialError && deleted === 0) return { ok: false, error: partialError };
   return partialError ? { ok: true, deleted, partial: true, error: partialError } : { ok: true, deleted };
+}
+
+/**
+ * Hard-delete one SMS row from the store the UI read it from. Scoped to the
+ * owning manager and the viewer's Communication edit grant — same bar as
+ * conversation delete.
+ */
+export async function deleteManagerSmsMessage(
+  db: SupabaseClient,
+  args: {
+    viewerUserId: string;
+    messageId: string;
+    storageTable: ManagerSmsMessageStorageTable;
+  },
+): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
+  const viewerUserId = args.viewerUserId.trim();
+  const messageId = args.messageId.trim();
+  if (!viewerUserId || !messageId) return { ok: false, error: "invalid_message", status: 400 };
+
+  let ownerManagerUserId: string | null = null;
+
+  if (args.storageTable === "manager_sms_messages") {
+    const { data, error } = await db
+      .from("manager_sms_messages")
+      .select("id, manager_user_id")
+      .eq("id", messageId)
+      .maybeSingle();
+    if (error || !data) return { ok: false, error: "not_found", status: 404 };
+    ownerManagerUserId = String(data.manager_user_id ?? "").trim() || null;
+  } else if (args.storageTable === "inbound_sms_log") {
+    const { data, error } = await db
+      .from("inbound_sms_log")
+      .select("id, manager_user_id")
+      .eq("id", messageId)
+      .maybeSingle();
+    if (error || !data) return { ok: false, error: "not_found", status: 404 };
+    ownerManagerUserId = String(data.manager_user_id ?? "").trim() || null;
+  } else {
+    const { data: msg, error: msgError } = await db
+      .from("sms_relay_messages")
+      .select("id, thread_id")
+      .eq("id", messageId)
+      .maybeSingle();
+    if (msgError || !msg) return { ok: false, error: "not_found", status: 404 };
+    const { data: thread, error: threadError } = await db
+      .from("sms_relay_threads")
+      .select("manager_user_id")
+      .eq("id", String(msg.thread_id))
+      .maybeSingle();
+    if (threadError || !thread) return { ok: false, error: "not_found", status: 404 };
+    ownerManagerUserId = String(thread.manager_user_id ?? "").trim() || null;
+  }
+
+  if (!ownerManagerUserId) return { ok: false, error: "not_found", status: 404 };
+  if (ownerManagerUserId !== viewerUserId) {
+    const editScope = await resolveSmsScopeManagerIds(db, viewerUserId, "edit");
+    if (!editScope.includes(ownerManagerUserId)) {
+      return { ok: false, error: "forbidden", status: 403 };
+    }
+  }
+
+  const table =
+    args.storageTable === "manager_sms_messages"
+      ? "manager_sms_messages"
+      : args.storageTable === "inbound_sms_log"
+        ? "inbound_sms_log"
+        : "sms_relay_messages";
+  const { data, error } = await db.from(table).delete().eq("id", messageId).select("id");
+  if (error) {
+    console.error("deleteManagerSmsMessage failed", table, error.message);
+    return { ok: false, error: "delete_failed", status: 500 };
+  }
+  if (!data?.length) return { ok: false, error: "not_found", status: 404 };
+  return { ok: true };
 }
 
 
@@ -550,6 +625,7 @@ export async function fetchManagerSmsConversations(
         messageSid: row.message_sid ? String(row.message_sid) : null,
         source: "work_number",
         createdAt: String(row.created_at),
+        storageTable: "inbound_sms_log",
       },
     );
   }
@@ -586,6 +662,7 @@ export async function fetchManagerSmsConversations(
         messageSid: row.message_sid ? String(row.message_sid) : null,
         source: (row.source as ManagerSmsMessageRow["source"]) ?? "work_number",
         createdAt: String(row.created_at),
+        storageTable: "manager_sms_messages",
       },
     );
   }
@@ -656,6 +733,7 @@ export async function fetchManagerSmsConversations(
           messageSid: msg.twilio_sid ? String(msg.twilio_sid) : null,
           source: "relay",
           createdAt: String(msg.created_at),
+          storageTable: "sms_relay_messages",
         },
       );
     }
@@ -792,6 +870,7 @@ export async function fetchResidentSmsConversation(
       messageSid: row.message_sid ? String(row.message_sid) : null,
       source: (row.source as ManagerSmsMessageRow["source"]) ?? "work_number",
       createdAt: String(row.created_at),
+      storageTable: "manager_sms_messages",
     });
   }
 
@@ -822,6 +901,7 @@ export async function fetchResidentSmsConversation(
           messageSid: msg.twilio_sid ? String(msg.twilio_sid) : null,
           source: "relay",
           createdAt: String(msg.created_at),
+          storageTable: "sms_relay_messages",
         });
       }
     }

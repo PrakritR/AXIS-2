@@ -2,6 +2,11 @@
 
 import type { SmsCounterpartyRole } from "@/lib/sms-conversation-identity";
 
+export type ManagerSmsMessageStorageTable =
+  | "manager_sms_messages"
+  | "inbound_sms_log"
+  | "sms_relay_messages";
+
 export type ManagerSmsMessageRow = {
   id: string;
   direction: "inbound" | "outbound";
@@ -11,6 +16,8 @@ export type ManagerSmsMessageRow = {
   messageSid: string | null;
   source: "work_number" | "relay" | "automated";
   createdAt: string;
+  /** Which table this row lives in — set for manager-thread deletes. */
+  storageTable?: ManagerSmsMessageStorageTable;
 };
 
 export type ManagerSmsResidentConversation = {

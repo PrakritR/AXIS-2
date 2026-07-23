@@ -47,6 +47,7 @@ const PAYLOAD = {
           messageSid: "SM1",
           source: "work_number" as const,
           createdAt: "2026-07-20T00:00:00.000Z",
+          storageTable: "inbound_sms_log" as const,
         },
       ],
     },
@@ -54,6 +55,16 @@ const PAYLOAD = {
 };
 
 beforeEach(() => {
+  const store: Record<string, string> = {};
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(JSON.stringify(PAYLOAD), { status: 200 })),
@@ -78,5 +89,14 @@ describe("ManagerSmsPanel delete affordance", () => {
     await waitFor(() => expect(screen.getByText("Jane Resident")).toBeTruthy());
     expect(screen.queryAllByText("Delete")).toEqual([]);
     expect(screen.queryByLabelText("Delete conversation")).toBeNull();
+    expect(screen.queryByLabelText("Delete message")).toBeNull();
+  });
+
+  it("shows per-message delete when a thread is open", async () => {
+    render(<ManagerSmsPanel />);
+    await waitFor(() => expect(screen.getByText("Jane Resident")).toBeTruthy());
+    screen.getByText("Jane Resident").click();
+    await waitFor(() => expect(screen.getByText("hi it's Jane")).toBeTruthy());
+    expect(screen.getByLabelText("Delete message")).toBeTruthy();
   });
 });
