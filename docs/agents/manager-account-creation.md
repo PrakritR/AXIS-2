@@ -1,0 +1,55 @@
+# Manager account creation ("Get started")
+
+The marketing **Get started** CTA (`MANAGER_GET_STARTED_HREF` in
+`src/lib/marketing/public-contact.ts`) opens
+`/auth/create-account?mode=create&role=manager`. That surface exists to create a
+**new** manager account, so it never treats an existing session as a reason to go
+somewhere else.
+
+## Where it lives
+
+| Piece | File |
+| --- | --- |
+| Create-account shell (`skipSessionRedirect = isCreate`) | `src/components/auth/native-auth-hub.tsx` |
+| The form itself | `src/components/auth/manager-trial-signup-form.tsx` |
+| Email/password registration API | `src/app/api/auth/manager-register/route.ts` |
+| Partner-pricing OAuth callback | `src/app/auth/callback/partner-pricing/route.ts` |
+| Regression coverage | `tests/e2e/manager-get-started-signed-in.spec.ts` |
+
+## The create-account surface never auto-redirects to a portal
+
+Entering a portal from here is always an **explicit user click**, on every path:
+
+- **Already signed in?** The full create form still renders, above a notice —
+  "You're signed in as `<email>`. Create a new property account below, or
+  continue to your portal" — whose link goes to `/auth/continue`. Creating a
+  second account with a different email must stay possible. (The old behavior
+  collapsed the form into one button that converted the *current* session and
+  bounced to `/portal/dashboard`; that is the regression the e2e spec covers.)
+- **Partner-pricing OAuth return.** The callback provisions the account as
+  before, but its `resolveRedirect` always returns back to
+  `/auth/create-account?mode=create&role=manager&…` — including the **free-tier**
+  branch, which used to return `/portal/dashboard` and otherwise fall through to
+  `resolveOAuthPortalRedirect`. It appends `account_ready=1` only when
+  `ensureFreeManagerPortalAccess` reported `portal_ready`; a skipped provision
+  logs a warning and returns without the flag.
+- **`account_ready=1`** makes the form show a verified success state — "Your
+  property account is ready" plus a primary **Go to your portal** button and a
+  **Create a different property account** escape hatch. The flag is confirmed
+  against the server (`fetchPartnerPricingSession`) before the state is shown,
+  and the OAuth return params are stripped from the URL afterward.
+
+Do not reintroduce a server-resolved portal path or a "continue" screen on this
+route — the requirement is product-level, not incidental.
+
+## The email/password form requires full name and phone
+
+`/api/auth/manager-register` rejects a missing `fullName` or an unparseable
+`phone` with a 400, so the form collects both and validates them client-side
+before posting (`normalizeE164` for the phone). Omitting either field is not a
+cosmetic gap — it 400s every email/password signup.
+
+`normalizeE164` lives in **`src/lib/phone-e164.ts`**, which is client-safe.
+`src/lib/twilio.ts` re-exports it for the server callers that already import it
+from there; client components must import from `phone-e164` so the Twilio SDK and
+the Supabase service-role client stay out of the browser bundle.
