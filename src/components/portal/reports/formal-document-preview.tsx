@@ -169,7 +169,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
         {doc.incomeByCategory && doc.incomeByCategory.length > 0 ? (
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
-              Income breakdown — Schedule E, Part I (Rents Received)
+              Income breakdown: Schedule E, Part I (Rents Received)
             </p>
             <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
               <div className="max-w-full overflow-x-auto">
@@ -185,7 +185,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
                   {doc.incomeByCategory.map((row) => (
                     <tr key={row.categoryCode} className="border-b border-[#e5e7eb] last:border-0">
                       <td className="px-4 py-2.5 text-[#0f172a]">{row.label}</td>
-                      <td className="px-4 py-2.5 text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>{row.scheduleERef} — Rents Received</td>
+                      <td className="px-4 py-2.5 text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>{row.scheduleERef} · Rents Received</td>
                       <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[#0f172a]">{row.amount}</td>
                     </tr>
                   ))}
@@ -193,7 +193,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
                 <tfoot>
                   <tr className="bg-[#f0fdf4] font-semibold">
                     <td className="px-4 py-2.5 text-[#0f172a]" colSpan={2}>
-                      Total Gross Income (Sch. E, Line 3 — Rents Received)
+                      Total Gross Income (Sch. E, Line 3, Rents Received)
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{doc.rentCollected}</td>
                   </tr>
@@ -249,7 +249,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
         </div>
 
         <p className="text-xs leading-relaxed text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
-          All rental income — including base rent, late fees, pet rent, and other charges — is reported on IRS Schedule E
+          All rental income, including base rent, late fees, pet rent, and other charges, is reported on IRS Schedule E
           (Form 1040), Part I, Line 3 (Rents Received). Days rented and rental-use percentage support the personal-use
           allocation calculation on Schedule E, Part I.
         </p>
@@ -261,7 +261,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
 
 export function FinancialReportDocumentView({ report }: { report: ReportResult }) {
   const period =
-    report.meta?.from && report.meta?.to ? `${String(report.meta.from)} — ${String(report.meta.to)}` : undefined;
+    report.meta?.from && report.meta?.to ? `${String(report.meta.from)} to ${String(report.meta.to)}` : undefined;
   const scope =
     report.meta?.scopeLabel && String(report.meta.scopeLabel) !== "All properties"
       ? String(report.meta.scopeLabel)
@@ -386,7 +386,7 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
 }
 
 export function OccupancyDocumentView({ report }: { report: OccupancyReport }) {
-  const period = `${report.periodFrom} — ${report.periodTo}`;
+  const period = `${report.periodFrom} to ${report.periodTo}`;
   return (
     <DocumentPaper>
       <DocHeader title="Occupancy Report" subtitle={`Portfolio · ${period}`} />

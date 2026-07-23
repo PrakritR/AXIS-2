@@ -223,7 +223,7 @@ export function ManagerPayments() {
         showToast("Bank account linked. You're ready to receive resident payments.");
         setBankLinkBanner(true);
       } else if (e.data?.connect === "refresh") {
-        showToast("Setup link expired — click Finish setup to try again.");
+        showToast("Setup link expired. Click Finish setup to try again.");
       }
       window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
     };

@@ -286,7 +286,7 @@ export function ManagerPaymentsLedgerPanel({
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const chargeId = row.householdChargeId?.trim() || row.id?.trim();
     if (!chargeId) {
-      showToast("This payment is missing a charge id — sync payments and try again.");
+      showToast("This payment is missing a charge id. Sync payments and try again.");
       return;
     }
     const residentName = row.residentName || "Resident";
@@ -406,7 +406,7 @@ export function ManagerPaymentsLedgerPanel({
     try {
       const result = await sendReminderForRow(row, channels, draft);
       if (result.chargePaid) {
-        showToast("This charge is already paid — no reminder was sent.");
+        showToast("This charge is already paid. No reminder was sent.");
       } else if (result.ok) {
         const parts: string[] = ["Axis inbox"];
         if (result.emailSent) parts.push("email");

@@ -157,7 +157,7 @@ export function ManagerLeasesPipelinePanel({
       if (typeof data.mailtoHref === "string") {
         const { openMailtoHref } = await import("@/lib/resident-welcome-email");
         openMailtoHref(data.mailtoHref);
-        showToast("Email provider not configured — opened a draft in your mail app.");
+        showToast("Email provider not configured. Opened a draft in your mail app.");
         return;
       }
       showToast(data.error ?? "Could not send account setup email.");
@@ -251,7 +251,7 @@ export function ManagerLeasesPipelinePanel({
     }
     if (row.generatedHtml) {
       printLeaseAsPdf(row);
-      showToast("Print dialog opened — choose 'Save as PDF' to download.");
+      showToast("Print dialog opened. Choose 'Save as PDF' to download.");
       return;
     }
     showToast("Generate a lease or upload a PDF first.");
@@ -353,7 +353,7 @@ export function ManagerLeasesPipelinePanel({
         : false;
       showToast(
         renewalApplied
-          ? "Lease fully signed — rent and payment schedule updated to the renewed terms."
+          ? "Lease fully signed. Rent and payment schedule updated to the renewed terms."
           : fullySigned
             ? "Lease fully signed."
             : "Manager signature saved.",
@@ -375,7 +375,7 @@ export function ManagerLeasesPipelinePanel({
     setPendingRowId(null);
     if (uploadRef.current) uploadRef.current.value = "";
     if (res.ok) {
-      showToast("PDF saved — resident sees this on their Lease tab.");
+      showToast("PDF saved. Resident sees this on their Lease tab.");
     } else showToast(res.error ?? "Upload failed.");
   };
 
@@ -560,7 +560,7 @@ export function ManagerLeasesPipelinePanel({
       ) : null}
       <PortalNotificationPreviewModal
         open={leaseSentPreview !== null}
-        title="Send lease to resident — preview"
+        title="Send lease to resident · preview"
         onClose={() => setLeaseSentPreview(null)}
         recipient={leaseSentPreview?.recipient ?? ""}
         subject={leaseSentPreview?.subject ?? ""}
@@ -574,7 +574,7 @@ export function ManagerLeasesPipelinePanel({
       />
       <PortalNotificationPreviewModal
         open={leaseReminderPreview !== null}
-        title="Lease signing reminder — preview"
+        title="Lease signing reminder · preview"
         onClose={() => setLeaseReminderPreview(null)}
         recipient={leaseReminderPreview?.recipient ?? ""}
         subject={leaseReminderPreview?.subject ?? ""}

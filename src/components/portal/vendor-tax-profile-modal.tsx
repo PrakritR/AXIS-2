@@ -116,7 +116,7 @@ export function VendorTaxProfileModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`W-9 / tax info${vendorName ? ` — ${vendorName}` : ""}`}>
+    <Modal open={open} onClose={onClose} title={`W-9 / tax info${vendorName ? ` · ${vendorName}` : ""}`}>
       {loading ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : (

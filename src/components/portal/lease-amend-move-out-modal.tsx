@@ -102,7 +102,7 @@ export function LeaseAmendMoveOutModal({
             });
           }
         } catch {
-          setAvailability({ status: "error", message: "Network error — please try again." });
+          setAvailability({ status: "error", message: "Network error. Please try again." });
         }
       })();
     }, 600);
@@ -140,7 +140,7 @@ export function LeaseAmendMoveOutModal({
         showToast(msg);
       }
     } catch {
-      showToast("Network error — please try again.");
+      showToast("Network error. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -297,10 +297,10 @@ export function LeaseRenewModal({
       } else {
         onClose();
         onSuccess();
-        showToast("Renewal created — the lease needs to be signed by both parties. Payments update once it's fully signed.");
+        showToast("Renewal created. The lease needs to be signed by both parties. Payments update once it's fully signed.");
       }
     } catch {
-      showToast("Network error — please try again.");
+      showToast("Network error. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -333,7 +333,7 @@ export function LeaseRenewModal({
         </Select>
         {isMonthToMonth ? (
           <p className="mt-1.5 text-xs text-muted">
-            Month-to-month continues automatically each month — no end date. Either party can end it with proper notice.
+            Month-to-month continues automatically each month, with no end date. Either party can end it with proper notice.
           </p>
         ) : null}
       </div>

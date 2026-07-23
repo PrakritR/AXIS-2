@@ -73,8 +73,8 @@ type InboxThread = {
  *  actually applies from where the reader is standing. */
 function searchSkipsTrashNote(tabId: string) {
   return tabId === "trash"
-    ? "Trash isn’t searched — clear the search to browse it."
-    : "Trash isn’t searched — clear the search, then open the Trash tab.";
+    ? "Trash isn’t searched; clear the search to browse it."
+    : "Trash isn’t searched; clear the search, then open the Trash tab.";
 }
 
 function previewLine(body: string, max = 100) {
@@ -303,7 +303,7 @@ export const ManagerInbox = forwardRef<
 
   const markRead = (id: string) => {
     markReadSilent(id);
-    showToast("Marked as read — moves to Opened after refresh.");
+    showToast("Marked as read. Moves to Opened after refresh.");
   };
 
   const isUnreadInboxThread = (id: string) => {
@@ -614,7 +614,7 @@ export const ManagerInbox = forwardRef<
   const bulkMarkRead = () => {
     const eligible = [...threadSelection.selectedIds].filter(isUnreadInboxThread);
     if (eligible.length === 0) {
-      showToast("Nothing to mark read — the selection has no unread inbox messages.");
+      showToast("Nothing to mark read. The selection has no unread inbox messages.");
       return;
     }
     for (const id of eligible) markRead(id);
@@ -735,7 +735,7 @@ export const ManagerInbox = forwardRef<
         {searchActive ? (
           <p className="px-1 text-[11px] leading-snug text-muted">
             {rowsForTab.length} message{rowsForTab.length === 1 ? "" : "s"} matching{" "}
-            <span className="font-medium text-foreground">“{query.trim()}”</span> — best first.{" "}
+            <span className="font-medium text-foreground">“{query.trim()}”</span>, best first.{" "}
             {searchSkipsTrashNote(tabId)}
           </p>
         ) : null}

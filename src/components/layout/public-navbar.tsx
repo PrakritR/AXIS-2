@@ -146,7 +146,7 @@ export function PublicNavbar() {
             {
               title: "Why PropLane",
               url: "/why-proplane",
-              description: "AI, portals, and books — what makes it different",
+              description: "AI, portals, and books · what makes it different",
               active: pathname.startsWith("/why-proplane"),
               dataAttr: "nav-resources-why",
             },

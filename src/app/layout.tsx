@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s · PropLane",
   },
   description:
-    "PropLane — AI-powered property management for applications, screening, leases, and rent collection.",
+    "PropLane: AI-powered property management for applications, screening, leases, and rent collection.",
 };
 
 export default function RootLayout({

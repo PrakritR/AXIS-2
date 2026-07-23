@@ -74,7 +74,7 @@ function ManagerScreeningSettingsForm({
         const message = body.error ?? "Could not save screening settings.";
         showToast(
           message.includes("screening_settings")
-            ? "Could not save — run the screening database migration (screening_settings on profiles)."
+            ? "Could not save. Run the screening database migration (screening_settings on profiles)."
             : message,
         );
         return;
@@ -145,7 +145,7 @@ export function ManagerScreeningSettingsModal({
           const message = body.error ?? "Could not load screening settings.";
           setLoadError(
             message.includes("screening_settings")
-              ? "Screening is not configured yet — run the screening database migration on profiles."
+              ? "Screening is not configured yet. Run the screening database migration on profiles."
               : message,
           );
           setSettings(DEFAULT_SCREENING_SETTINGS);

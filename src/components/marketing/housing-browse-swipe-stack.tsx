@@ -220,7 +220,7 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
       <div
         className="relative mx-auto w-full max-w-[min(100%,22rem)] touch-none select-none"
         style={{ height: "min(62dvh, 520px)" }}
-        aria-label="Browse homes — swipe left for next, right for previous, tap to view"
+        aria-label="Browse homes. Swipe left for next, right for previous, tap to view"
       >
         {peekCard ? (
           <div className="absolute inset-0 scale-[0.96] opacity-90" aria-hidden>

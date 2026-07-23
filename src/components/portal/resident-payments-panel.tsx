@@ -346,7 +346,7 @@ export function ResidentPaymentsPanel({
         refresh();
         setCheckout(null);
         setSelectedIds(new Set());
-        showToast("Payment received — thank you.");
+        showToast("Payment received. Thank you.");
       } else if (data.processing) {
         showToast("Bank transfer submitted. We will mark this paid when the transfer clears (usually 3–5 business days).");
       } else {
@@ -556,7 +556,7 @@ export function ResidentPaymentsPanel({
       setSelectedIds(new Set());
       setExpandedId(null);
       refresh();
-      showToast("Thanks — your manager will verify and mark this paid when they receive it.");
+      showToast("Thanks. Your manager will verify and mark this paid when they receive it.");
     } finally {
       setReportingManualPayment(false);
     }
@@ -700,7 +700,7 @@ export function ResidentPaymentsPanel({
           <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
             <p className="text-xs font-semibold">Bank transfer in progress</p>
             <p className="mt-1 text-sm leading-relaxed">
-              Your payment was submitted and is clearing — bank transfers take 3–5 business days. No late fees or
+              Your payment was submitted and is clearing. Bank transfers take 3–5 business days. No late fees or
               reminders apply while it clears, and you&apos;ll get a confirmation the moment it lands.
             </p>
           </div>

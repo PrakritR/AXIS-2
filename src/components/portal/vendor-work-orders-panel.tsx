@@ -339,7 +339,7 @@ export function VendorWorkOrdersPanel() {
           cost: `$${(totalCents / 100).toFixed(2)}`,
         }));
         setRows(readVendorWorkOrderRows());
-        showToast("Price saved — your manager will see this on payment.");
+        showToast("Price saved. Your manager will see this on payment.");
         return;
       }
       const res = await fetch("/api/portal/work-orders/set-vendor-price", {
@@ -352,7 +352,7 @@ export function VendorWorkOrdersPanel() {
       if (!res.ok) throw new Error(data.error ?? "Could not save price.");
       await syncManagerWorkOrdersFromServer({ force: true });
       setRows(readVendorWorkOrderRows());
-      showToast("Price saved — your manager will see this on payment.");
+      showToast("Price saved. Your manager will see this on payment.");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not save price.");
     } finally {
@@ -372,7 +372,7 @@ export function VendorWorkOrdersPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not mark done.");
       await syncManagerWorkOrdersFromServer({ force: true });
-      showToast("Marked done — the manager has been notified.");
+      showToast("Marked done. The manager has been notified.");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not mark done.");
     } finally {
@@ -405,14 +405,14 @@ export function VendorWorkOrdersPanel() {
           <p className="mt-1 text-xs text-muted">Awaiting manager approval and payment.</p>
         ) : payout?.status === "paid" ? (
           <p className="mt-1 text-xs text-muted">
-            Payout sent — ${(payout.amountCents / 100).toFixed(2)} on{" "}
+            Payout sent: ${(payout.amountCents / 100).toFixed(2)} on{" "}
             {new Date(payout.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
             {payout.stripeTransferId ? ` · ${payout.stripeTransferId}` : ""}
           </p>
         ) : payout?.status === "failed" ? (
           <p className="mt-1 text-xs text-muted">
             Paid by the manager, but the payout to your bank couldn&apos;t be sent
-            {payout.failureReason ? `: ${payout.failureReason}` : ""} — check your{" "}
+            {payout.failureReason ? `: ${payout.failureReason}` : ""}. Check your{" "}
             <Link href="/vendor/payments" className="font-medium text-foreground underline underline-offset-2">
               Stripe payout setup
             </Link>
@@ -453,7 +453,7 @@ export function VendorWorkOrdersPanel() {
           </p>
         ) : null}
         {row.automationStatus === "vendor_marked_done" ? (
-          <p className="mt-1.5 text-xs font-medium text-muted">Marked done — awaiting manager approval.</p>
+          <p className="mt-1.5 text-xs font-medium text-muted">Marked done. Awaiting manager approval.</p>
         ) : row.automationStatus === "paid" ? (
           <p className="mt-1.5 text-xs font-medium text-muted">Approved and paid.</p>
         ) : null}
@@ -553,7 +553,7 @@ export function VendorWorkOrdersPanel() {
               <p className="mt-2 text-xs text-muted">
                 Consultation scheduled for{" "}
                 <span className="font-medium text-foreground">{formatVisitLabel(bid.consultationVisitAt as string)}</span>
-                {pricingPending ? " — pricing pending." : "."}
+                {pricingPending ? ", pricing pending." : "."}
               </p>
             ) : null}
 
@@ -720,7 +720,7 @@ export function VendorWorkOrdersPanel() {
     sorted.length === 0
       ? "No services offered to you yet."
       : tab === "quote"
-        ? "Nothing needs a quote — new offers from your manager land here."
+        ? "Nothing needs a quote. New offers from your manager land here."
         : tab === "tour"
           ? "No site visits waiting for a price."
           : tab === "scheduled"
@@ -736,7 +736,7 @@ export function VendorWorkOrdersPanel() {
     >
       {bidsSyncFailed || payoutsSyncFailed ? (
         <p className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-danger" data-attr="vendor-wo-sync-error">
-          Couldn&apos;t refresh the latest bidding/payout status — this may be out of date. Retrying automatically.
+          Couldn&apos;t refresh the latest bidding/payout status. This may be out of date. Retrying automatically.
         </p>
       ) : null}
       {visible.length === 0 ? (

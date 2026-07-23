@@ -5,7 +5,7 @@ import { BOOK_DEMO_HREF } from "@/lib/marketing/public-contact";
 export const metadata: Metadata = {
   title: "Docs",
   description:
-    "Product documentation for PropLane — getting started, the three portals, applications, leases and e-signature, rent, maintenance, double-entry accounting, the AI assistant, documents, and the live demo.",
+    "Product documentation for PropLane: getting started, the three portals, applications, leases and e-signature, rent, maintenance, double-entry accounting, the AI assistant, documents, and the live demo.",
 };
 
 /**
@@ -73,7 +73,7 @@ export default function DocsPage() {
           Documentation
         </h1>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed text-muted">
-          Everything PropLane does, in plain terms — from creating your account to running the
+          Everything PropLane does, in plain terms, from creating your account to running the
           books. PropLane is in beta; this covers what ships today, and grows as the product does.
         </p>
       </header>
@@ -114,7 +114,7 @@ export default function DocsPage() {
           <DocSection id="getting-started" kicker="Overview" title="Getting started">
             <p>
               PropLane is a property-management platform for independent landlords and small
-              managers. You run everything — applications, leases, rent, maintenance, and the books —
+              managers. You run everything (applications, leases, rent, maintenance, and the books)
               from one account that works on the web and as an iOS app.
             </p>
             <p>
@@ -124,7 +124,7 @@ export default function DocsPage() {
             </p>
             <DocList>
               <DocLi>
-                <b className="font-medium text-foreground">Create your account</b> — pick a password
+                <b className="font-medium text-foreground">Create your account</b>: pick a password
                 and verify your email.
               </DocLi>
               <DocLi>
@@ -132,12 +132,12 @@ export default function DocsPage() {
                 the monthly rent and due date.
               </DocLi>
               <DocLi>
-                <b className="font-medium text-foreground">Invite people</b> — send residents your
+                <b className="font-medium text-foreground">Invite people</b>: send residents your
                 public application link, and add the vendors you work with.
               </DocLi>
             </DocList>
             <p>
-              Plans: <Chip>Free $0</Chip> <Chip>Pro $20/mo</Chip> <Chip>Business $200/mo</Chip> —
+              Plans: <Chip>Free $0</Chip> <Chip>Pro $20/mo</Chip> <Chip>Business $200/mo</Chip>.
               14-day trial with no card, and 20% off when billed annually.
             </p>
             <p className="text-[14px]">
@@ -148,30 +148,30 @@ export default function DocsPage() {
                 className="text-primary underline-offset-2 hover:underline"
               >
                 live demo
-              </Link>{" "}
-              — the real product in a sandbox you can click through, no account needed.
+              </Link>
+              , the real product in a sandbox you can click through, no account needed.
             </p>
           </DocSection>
 
           <DocSection id="portals" kicker="Overview" title="The three portals">
             <p>
               PropLane has three portals, each with its own login. They share one platform, so a
-              change made on one side shows up on the others automatically — no re-entering the same
+              change made on one side shows up on the others automatically, with no re-entering the same
               thing twice.
             </p>
             <DocList>
               <DocLi>
-                <b className="font-medium text-foreground">Manager</b> — the control center:
+                <b className="font-medium text-foreground">Manager</b>, the control center:
                 portfolio, applications, leases, rent, work orders, double-entry books, documents,
                 and your team.
               </DocLi>
               <DocLi>
-                <b className="font-medium text-foreground">Resident</b> — apply for a unit, sign the
+                <b className="font-medium text-foreground">Resident</b>: apply for a unit, sign the
                 lease, pay rent, see a running balance and receipts, submit maintenance requests, and
                 read documents shared with them.
               </DocLi>
               <DocLi>
-                <b className="font-medium text-foreground">Vendor</b> — see assigned work orders,
+                <b className="font-medium text-foreground">Vendor</b>: see assigned work orders,
                 submit bids, schedule visits, send invoices, and get paid.
               </DocLi>
             </DocList>
@@ -186,7 +186,7 @@ export default function DocsPage() {
             title="Applications & screening"
           >
             <p>
-              Every unit has a public application link you can share anywhere — a listing, an email,
+              Every unit has a public application link you can share anywhere: a listing, an email,
               a text. Applicants fill it out with no account at <Chip>/rent/apply</Chip>, and their
               submission lands in your portal.
             </p>
@@ -196,20 +196,20 @@ export default function DocsPage() {
               automatically, so promising applicants don&rsquo;t slip away.
             </p>
             <p>
-              When you approve an applicant, everything you collected flows straight into a lease —
-              no re-typing (see below).
+              When you approve an applicant, everything you collected flows straight into a lease,
+              with no re-typing (see below).
             </p>
           </DocSection>
 
           <DocSection id="leases" kicker="Core workflows" title="Leases & e-signature">
             <p>
               When you approve an applicant, the AI drafts a lease from their application. Names, the
-              unit, rent, dates, and terms are pulled in for you — you start from a filled-out draft
+              unit, rent, dates, and terms are pulled in for you, so you start from a filled-out draft
               instead of a blank page.
             </p>
             <p>
               Review and edit anything you like, then send it for signature. Both sides e-sign inside
-              the portal — no printing, scanning, or third-party tool. Once it&rsquo;s fully signed,
+              the portal, with no printing, scanning, or third-party tool. Once it&rsquo;s fully signed,
               the lease can be filed to your document library automatically.
             </p>
           </DocSection>
@@ -222,7 +222,7 @@ export default function DocsPage() {
             <DocList>
               <DocLi>
                 <b className="font-medium text-foreground">Reminders</b> go out before and after the
-                due date — by email, and by text if you&rsquo;ve set up a work number.
+                due date, by email, and by text if you&rsquo;ve set up a work number.
               </DocLi>
               <DocLi>
                 <b className="font-medium text-foreground">Late fees</b> apply automatically according
@@ -234,7 +234,7 @@ export default function DocsPage() {
               </DocLi>
             </DocList>
             <p>
-              Every payment posts to the books the moment it clears — you never re-enter a number in
+              Every payment posts to the books the moment it clears, so you never re-enter a number in
               a spreadsheet (see <a href="#accounting" className="text-primary underline-offset-2 hover:underline">Accounting</a>).
             </p>
           </DocSection>
@@ -268,7 +268,7 @@ export default function DocsPage() {
           <DocSection id="accounting" kicker="Books & data" title="Accounting & reports">
             <p>
               Under everything sits a real double-entry general ledger. Every charge, payment,
-              expense, and payout writes a balanced journal entry — you never touch it, but the books
+              expense, and payout writes a balanced journal entry. You never touch it, but the books
               always tie out.
             </p>
             <p>Run standard reports from the Finances section:</p>
@@ -282,14 +282,14 @@ export default function DocsPage() {
               </DocLi>
             </DocList>
             <p>
-              Security deposits are held as a liability in trust — not counted as income — so your
+              Security deposits are held as a liability in trust (not counted as income) so your
               rental income stays honest.
             </p>
           </DocSection>
 
           <DocSection id="documents" kicker="Books & data" title="Documents">
             <p>
-              The document library is your file store — leases, insurance certificates, invoices,
+              The document library is your file store: leases, insurance certificates, invoices,
               inspections, notices, and photos. Files are private; access always goes through a
               short-lived signed link rather than a public URL.
             </p>
@@ -298,7 +298,7 @@ export default function DocsPage() {
                 Organize by category and by the property, unit, lease, or vendor a file belongs to.
               </DocLi>
               <DocLi>
-                Set expiration dates on things like insurance — PropLane reminds you before they
+                Set expiration dates on things like insurance, and PropLane reminds you before they
                 lapse.
               </DocLi>
               <DocLi>
@@ -310,21 +310,21 @@ export default function DocsPage() {
 
           <DocSection id="ai-assistant" kicker="Platform" title="The AI assistant">
             <p>
-              Ask PropLane to do things in plain language — &ldquo;send a rent reminder to unit
+              Ask PropLane to do things in plain language: &ldquo;send a rent reminder to unit
               4,&rdquo; &ldquo;draft a lease for the approved applicant,&rdquo; &ldquo;what&rsquo;s my
               delinquency this month?&rdquo;
             </p>
             <p>
               The assistant works only through the same actions the app already exposes, so it
               can&rsquo;t reach around the product or touch another manager&rsquo;s data. Every number
-              it reports comes from your real records — it never makes figures up.
+              it reports comes from your real records. It never makes figures up.
             </p>
             <p className="rounded-lg border border-border bg-card px-4 py-3.5 text-[14px] text-foreground">
               <span className="mr-2 text-primary" aria-hidden>
                 ✦
               </span>
               Every write action is previewed first. You see exactly what will happen and confirm it
-              before anything sends — and each action is written to an audit log.
+              before anything sends, and each action is written to an audit log.
             </p>
           </DocSection>
 
@@ -333,13 +333,13 @@ export default function DocsPage() {
               Invite co-managers to help run your portfolio. Access is granted per property and per
               module, with <b className="font-medium text-foreground">read</b>,{" "}
               <b className="font-medium text-foreground">edit</b>, and{" "}
-              <b className="font-medium text-foreground">delete</b> levels — so a bookkeeper can see
+              <b className="font-medium text-foreground">delete</b> levels, so a bookkeeper can see
               the books without touching leases, and a leasing helper can work applications without
               seeing payouts.
             </p>
             <p>
-              You can also add a work phone number for your business. Outbound texts — like rent
-              reminders — send from that number, and replies come back into your PropLane inbox, so
+              You can also add a work phone number for your business. Outbound texts (like rent
+              reminders) send from that number, and replies come back into your PropLane inbox, so
               your personal number stays private.
             </p>
           </DocSection>
@@ -347,7 +347,7 @@ export default function DocsPage() {
           <DocSection id="demo" kicker="Platform" title="The live demo">
             <p>
               Not ready to sign up? The live demo runs the real product in a sandbox you can click
-              through with no account. Open all three portals — manager, resident, and vendor — and
+              through with no account. Open all three portals (manager, resident, and vendor) and
               click through applications, leases, rent, and work orders at <Chip>/demo</Chip>.
             </p>
             <p>
@@ -382,8 +382,8 @@ export default function DocsPage() {
               className="text-muted underline-offset-2 hover:text-foreground hover:underline"
             >
               Contact support
-            </Link>{" "}
-            — PropLane is in beta and we answer fast.
+            </Link>
+            . PropLane is in beta and we answer fast.
           </div>
         </div>
       </div>

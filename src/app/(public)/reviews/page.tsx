@@ -7,7 +7,7 @@ import { RevealOnView } from "@/components/motion/reveal-on-view";
 export const metadata: Metadata = {
   title: "Reviews",
   description:
-    "What early-access users are saying about PropLane during the beta — AI lease drafting, rent collection, vendor bidding, and real double-entry accounting.",
+    "What early-access users are saying about PropLane during the beta: AI lease drafting, rent collection, vendor bidding, and real double-entry accounting.",
 };
 
 /*
@@ -31,7 +31,7 @@ const EARLY_ACCESS_QUOTES = [
   },
   {
     quote:
-      "I tried the live demo before making an account — real screens, sample data, and the AI assistant actually answered my questions about it.",
+      "I tried the live demo before making an account: real screens, sample data, and the AI assistant actually answered my questions about it.",
     name: "Jordan",
     context: "Manages 3 units, evaluated via the demo",
   },
@@ -43,7 +43,7 @@ const EARLY_ACCESS_QUOTES = [
   },
   {
     quote:
-      "The books are real double-entry — trial balance, general ledger, owner statements. My accountant stopped asking me for spreadsheets.",
+      "The books are real double-entry: trial balance, general ledger, owner statements. My accountant stopped asking me for spreadsheets.",
     name: "Priya",
     context: "Manages 14 units",
   },
@@ -69,7 +69,7 @@ export default function ReviewsPage() {
 
             <p className="hero-subtitle mx-auto mt-5 max-w-2xl text-base leading-relaxed sm:text-lg">
               PropLane is in beta. These notes come from managers, residents, and vendors in our
-              early-access program — no star ratings, no cherry-picked superlatives, just what
+              early-access program: no star ratings, no cherry-picked superlatives, just what
               they told us.
             </p>
           </RevealOnView>
@@ -116,8 +116,8 @@ export default function ReviewsPage() {
                 className="font-semibold text-primary transition-colors duration-200 hover:text-foreground"
               >
                 live demo
-              </Link>{" "}
-              — no signup required.
+              </Link>
+              . No signup required.
             </p>
           </RevealOnView>
         </div>
@@ -134,7 +134,7 @@ export default function ReviewsPage() {
                   Been using PropLane?
                 </h2>
                 <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-muted sm:text-base">
-                  We&rsquo;re building this page from real beta feedback — the good and the rough
+                  We&rsquo;re building this page from real beta feedback: the good and the rough
                   edges. Tell us what&rsquo;s working and what isn&rsquo;t, and we may feature your
                   note here (with your permission).
                 </p>
@@ -169,7 +169,7 @@ export default function ReviewsPage() {
               Write the next review yourself
             </h2>
             <p className="hero-subtitle mx-auto mt-4 max-w-xl text-sm leading-relaxed sm:text-base">
-              Start a 14-day free trial — no card required — and see how much of the work the AI
+              Start a 14-day free trial (no card required) and see how much of the work the AI
               drafts before you approve it.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">

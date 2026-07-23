@@ -1175,6 +1175,24 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   animation: page-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Manager dashboard "Needs attention" queue: group cards stream in with a
+   short staggered entrance (delay set inline per card) so the queue reads as a
+   live feed rather than a static block; the summary badge dot pulses. */
+@keyframes pl-attn-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.pl-attn-enter {
+  animation: pl-attn-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pl-attn-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+.pl-attn-pulse {
+  animation: pl-attn-pulse 2.4s ease-in-out infinite;
+}
+
 .reveal-on-view {
   opacity: 0;
   transform: translateY(18px);
@@ -1217,12 +1235,14 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   }
   .animate-fade-up,
   .animate-fade-in,
-  .animate-page-enter {
+  .animate-page-enter,
+  .pl-attn-enter {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
-  .animate-pulse {
+  .animate-pulse,
+  .pl-attn-pulse {
     animation: none !important;
   }
   .reveal-on-view {

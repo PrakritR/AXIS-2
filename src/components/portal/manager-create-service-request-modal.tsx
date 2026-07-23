@@ -489,7 +489,7 @@ export function ManagerCreateServiceRequestModal({
           </Select>
           {propertyId && offersForProperty.length === 0 ? (
             <span className="text-[11px] font-normal normal-case text-muted">
-              No catalog offerings yet — choose Custom or add one below.
+              No catalog offerings yet. Choose Custom or add one below.
             </span>
           ) : null}
         </label>
@@ -623,7 +623,7 @@ export function ManagerCreateServiceRequestModal({
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted">
-                  Every resident at this property will see it — this is not specific to the resident selected above.
+                  Every resident at this property will see it. This is not specific to the resident selected above.
                 </p>
               </div>
             )}

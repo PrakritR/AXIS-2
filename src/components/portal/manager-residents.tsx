@@ -1181,8 +1181,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         const err = (data.error ?? "").toLowerCase();
         showToast(
           err.includes("not configured") || err.includes("resend_api_key")
-            ? "Email provider not configured — opened a draft in your mail app."
-            : `Could not send automatically — opened a draft in your mail app.`,
+            ? "Email provider not configured. Opened a draft in your mail app."
+            : `Could not send automatically. Opened a draft in your mail app.`,
         );
         return;
       }
@@ -1416,7 +1416,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
     setAddResidentOpen(false);
     setHcTick((n) => n + 1);
-    showToast(`Resident added — PropLane ID: ${axisId}`);
+    showToast(`Resident added. PropLane ID: ${axisId}`);
   }
 
   function openEditResidentModal() {
@@ -1845,7 +1845,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               title="Application"
                               summary={
                                 selectedApplicationRow
-                                  ? `Application — ${stageLabelForApplicationBucket(selectedApplicationRow.bucket)} · ${selected.name}`
+                                  ? `Application: ${stageLabelForApplicationBucket(selectedApplicationRow.bucket)} · ${selected.name}`
                                   : "No application on file for this resident."
                               }
                               expanded={expandedResidentSection === "application"}
@@ -2846,7 +2846,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             {selected?.name ?? "This resident"}{" "}
             chooses how to pay (bank/ACH, card, or Link) each time they check out a charge. The methods below apply to{" "}
             {selected?.propertyLabel?.trim() || "this resident's property"}{" "}
-            and are the same settings shown under that property&apos;s payment settings in Properties — editing here
+            and are the same settings shown under that property&apos;s payment settings in Properties. Editing here
             updates them there too.
           </p>
           {!pmPropertyId ? (
@@ -2913,7 +2913,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                     data-attr="resident-payment-axis-ach-toggle"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Bank transfer & card — you receive the full amount
+                    Bank transfer & card: you receive the full amount
                   </span>
                 </label>
                 {pmAxisPaymentsEnabled ? (
@@ -3064,7 +3064,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <option value="">Select room…</option>
                   {arRoomOptions.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.name}{r.monthlyRent ? ` — $${r.monthlyRent}/mo` : ""}
+                      {r.name}{r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
                     </option>
                   ))}
                 </select>
@@ -3194,7 +3194,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   {erRoomOptions.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
-                      {r.monthlyRent ? ` — $${r.monthlyRent}/mo` : ""}
+                      {r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
                     </option>
                   ))}
                 </select>
@@ -3262,7 +3262,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         open={applicationEditOpen && Boolean(selectedApplicationRow?.application)}
         title={
           selectedApplicationRow
-            ? `Edit application — ${selectedApplicationRow.name || selected?.name || "Resident"}`
+            ? `Edit application · ${selectedApplicationRow.name || selected?.name || "Resident"}`
             : "Edit application"
         }
         onClose={() => setApplicationEditOpen(false)}
@@ -3296,7 +3296,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}
-        title="Approve application — account setup email"
+        title="Approve application: account setup email"
         onClose={() => setApprovePreviewRow(null)}
         recipient={approvePreviewRow?.email ?? ""}
         subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
@@ -3331,7 +3331,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <PortalNotificationPreviewModal
         open={welcomePreviewFor !== null}
-        title="Email account setup — preview"
+        title="Email account setup · preview"
         onClose={() => setWelcomePreviewFor(null)}
         recipient={welcomePreviewFor?.email ?? ""}
         subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
@@ -3354,7 +3354,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <PortalNotificationPreviewModal
         open={leaseSentPreview !== null}
-        title="Send lease to resident — preview"
+        title="Send lease to resident · preview"
         onClose={() => setLeaseSentPreview(null)}
         recipient={leaseSentPreview?.recipient ?? ""}
         subject={leaseSentPreview?.subject ?? ""}
@@ -3369,7 +3369,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <PortalNotificationPreviewModal
         open={leaseReminderPreview !== null}
-        title="Lease signing reminder — preview"
+        title="Lease signing reminder · preview"
         onClose={() => setLeaseReminderPreview(null)}
         recipient={leaseReminderPreview?.recipient ?? ""}
         subject={leaseReminderPreview?.subject ?? ""}

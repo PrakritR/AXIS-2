@@ -652,7 +652,7 @@ export function ManagerWorkOrdersPanel({
         vendorAssignedAt: undefined,
         selfAssigned: true,
       }));
-      showToast("You're handling this yourself — no vendor email will be sent.");
+      showToast("You're handling this yourself. No vendor email will be sent.");
       return;
     }
     if (!choice) {
@@ -702,7 +702,7 @@ export function ManagerWorkOrdersPanel({
       if (isDemoModeActive()) {
         if (!acceptDemoWorkOrderBid(bid.workOrderId)) throw new Error("Could not accept bid.");
         await loadBids(bid.workOrderId);
-        showToast("Bid accepted — vendor assigned at the agreed cost.");
+        showToast("Bid accepted. Vendor assigned at the agreed cost.");
         return;
       }
       const res = await fetch("/api/portal/work-order-bids", {
@@ -715,7 +715,7 @@ export function ManagerWorkOrdersPanel({
       if (!res.ok) throw new Error(data.error ?? "Could not accept bid.");
       await syncManagerWorkOrdersFromServer({ force: true });
       await loadBids(bid.workOrderId);
-      showToast("Bid accepted — vendor assigned at the agreed cost.");
+      showToast("Bid accepted. Vendor assigned at the agreed cost.");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not accept bid.");
     } finally {
@@ -787,7 +787,7 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
                         {row.automationStatus === "vendor_marked_done" ? (
                           <p className="mt-1.5 text-xs font-medium text-muted">
-                            Vendor marked this done{row.vendorMarkedDoneNote ? ` — "${row.vendorMarkedDoneNote}"` : ""}. Awaiting your approval.
+                            Vendor marked this done{row.vendorMarkedDoneNote ? `: "${row.vendorMarkedDoneNote}"` : ""}. Awaiting your approval.
                           </p>
                         ) : row.automationStatus === "paid" ? (
                           <p className="mt-1.5 text-xs font-medium text-muted">Approved and paid.</p>
@@ -984,7 +984,7 @@ export function ManagerWorkOrdersPanel({
                                                 minute: "2-digit",
                                               })}`
                                             : "pending"}{" "}
-                                          — pricing pending
+                                          , pricing pending
                                         </span>
                                       ) : (
                                         <span className="text-muted">
@@ -1403,7 +1403,7 @@ export function ManagerWorkOrdersPanel({
             ) : null}
             <p className="text-xs text-muted">
               This logs the expense, marks the work order completed, and records the vendor as paid (bookkeeping
-              only — no funds are transferred).
+              only; no funds are transferred).
             </p>
             <div className="flex justify-start gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>

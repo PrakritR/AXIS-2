@@ -258,7 +258,7 @@ export function ManagerAddPaymentModal({
     // everywhere it is echoed (resident dashboard, payments, receipts).
     const roomLabel = selectedResident.roomLabel.trim();
     const roomSuffix = /^(unit|room|apt|apartment|suite)\b/i.test(roomLabel) ? roomLabel : `Unit ${roomLabel}`;
-    const titleWithRoom = roomLabel ? `${chargeTitle.trim()} — ${roomSuffix}` : chargeTitle.trim();
+    const titleWithRoom = roomLabel ? `${chargeTitle.trim()} · ${roomSuffix}` : chargeTitle.trim();
 
     return {
       propertyName: selectedResident.propertyLabel,
@@ -474,7 +474,7 @@ export function ManagerAddPaymentModal({
 
       <PortalNotificationPreviewModal
         open={noticePreview !== null}
-        title="New payment — notification preview"
+        title="New payment · notification preview"
         onClose={() => setNoticePreview(null)}
         recipient={noticePreview?.residentEmail ?? ""}
         subject={noticePreview ? `New charge: ${noticePreview.chargeTitle}` : ""}

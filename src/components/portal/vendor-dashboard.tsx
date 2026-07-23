@@ -527,7 +527,7 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
             linkLabel="Inbox →"
             dataAttr="vendor-dashboard-messages-inbox-link"
             items={inboxThreads}
-            emptyMessage="No unread messages — inbox is clear."
+            emptyMessage="No unread messages. Inbox is clear."
             keyForItem={(thread) => thread.id}
             renderRow={(thread) => (
               <IssueRow

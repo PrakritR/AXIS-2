@@ -23,8 +23,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 
 function trialSignupSubtitle(tier: PlanTierId): string {
-  if (tier === "free") return "Free plan — no card required";
-  return `${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial — no card required`;
+  if (tier === "free") return "Free plan · no card required";
+  return `${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial · no card required`;
 }
 
 /** Manager account creation — OAuth or email, no inline plan UI. */

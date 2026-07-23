@@ -28,12 +28,12 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     monthly: {
       headline: "Free",
       period: null,
-      sub: "List one property, run applications and tours, and collect payments — without resident or inbox tools.",
+      sub: "List one property, run applications and tours, and collect payments, without resident or inbox tools.",
     },
     annual: {
       headline: "Free",
       period: null,
-      sub: "List one property, run applications and tours, and collect payments — without resident or inbox tools.",
+      sub: "List one property, run applications and tours, and collect payments, without resident or inbox tools.",
     },
     features: [
       { text: "1 property listing", included: true },
@@ -72,12 +72,12 @@ export const MANAGER_PLAN_TIERS: ManagerPlanTierDefinition[] = [
     monthly: {
       headline: "$200",
       period: "/ mo",
-      sub: "Everything in Pro at portfolio scale — 20 properties, 20 co-managers, and priority admin support.",
+      sub: "Everything in Pro at portfolio scale: 20 properties, 20 co-managers, and priority admin support.",
     },
     annual: {
       headline: "$1,920",
       period: "/ yr",
-      sub: "Everything in Pro at portfolio scale — 20 properties, 20 co-managers, and priority support (~20% off annual).",
+      sub: "Everything in Pro at portfolio scale: 20 properties, 20 co-managers, and priority support (~20% off annual).",
     },
     features: [
       { text: "Up to 20 property listings", included: true },

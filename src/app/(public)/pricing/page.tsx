@@ -14,7 +14,7 @@ import { MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "PropLane pricing — start free, then Pro at $20/mo or Business at $200/mo. 14-day trial, no card required, and a live demo with no signup.",
+    "PropLane pricing: start free, then Pro at $20/mo or Business at $200/mo. 14-day trial, no card required, and a live demo with no signup.",
 };
 
 const CTA_BASE = MANAGER_GET_STARTED_HREF;
@@ -31,7 +31,7 @@ const TIER_CTA: Record<
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Is the free tier actually free?",
-    a: "Yes — Free is $0 with no card. You get one property listing, applications and tour scheduling, and payment collection. Residents, leases, work orders, inbox, and co-managers live on Pro and up.",
+    a: "Yes. Free is $0 with no card. You get one property listing, applications and tour scheduling, and payment collection. Residents, leases, work orders, inbox, and co-managers live on Pro and up.",
   },
   {
     q: "Do I need a credit card to try Pro or Business?",
@@ -39,7 +39,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How does annual billing save about 20%?",
-    a: "Paying for the year up front is roughly two months free — Pro is $192/yr instead of $240, and Business is $1,920/yr instead of $2,400.",
+    a: "Paying for the year up front is roughly two months free: Pro is $192/yr instead of $240, and Business is $1,920/yr instead of $2,400.",
   },
   {
     q: "Can I change plans later?",

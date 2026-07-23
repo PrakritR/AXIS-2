@@ -551,7 +551,7 @@ export function ResidentDashboard({
   const leaseEmptyMessage = !leaseUnlocked
     ? "Available after your application is approved."
     : appProperty
-      ? `${appProperty}${appRoom ? ` · ${appRoom}` : ""} — lease not started yet.`
+      ? `${appProperty}${appRoom ? ` · ${appRoom}` : ""}. Lease not started yet.`
       : "No lease on file yet.";
 
   const openServiceCount = canUseFullPortal ? serviceItems.length : 0;
@@ -801,7 +801,7 @@ export function ResidentDashboard({
               ) : null
             }
             items={inboxThreads}
-            emptyMessage="No unread messages — inbox is clear."
+            emptyMessage="No unread messages. Inbox is clear."
             keyForItem={(thread) => thread.id}
             renderRow={(thread) => (
               <IssueRow

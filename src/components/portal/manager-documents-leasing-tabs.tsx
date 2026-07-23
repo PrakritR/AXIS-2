@@ -203,7 +203,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
     return (
       <DocumentInlineViewer
         embedded
-        title={`Application — ${row.name || row.id}`}
+        title={`Application · ${row.name || row.id}`}
         srcDoc={previewHtml}
         onDownload={() => downloadRow(row)}
         downloadLabel="Download PDF"
@@ -331,7 +331,7 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
     if (preview?.id !== row.id) return null;
     const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
     const html = pdfSrc ? null : getLeaseDocumentHtml(row);
-    const label = `Lease — ${row.residentName || row.residentEmail}${row.unit ? ` · ${row.unit}` : ""}`;
+    const label = `Lease · ${row.residentName || row.residentEmail}${row.unit ? ` · ${row.unit}` : ""}`;
     return (
       <DocumentInlineViewer
         embedded

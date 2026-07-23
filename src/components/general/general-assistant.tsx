@@ -222,7 +222,7 @@ export function GeneralAssistant() {
                   How can I help?
                 </h3>
                 <p className="max-w-[20rem] text-sm leading-relaxed text-muted">
-                  Ask about PropLane — features, pricing, the live demo, or how to get started.
+                  Ask about PropLane: features, pricing, the live demo, or how to get started.
                 </p>
               </div>
               <div className="grid w-full grid-cols-2 gap-2">

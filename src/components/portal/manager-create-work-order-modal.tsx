@@ -406,7 +406,7 @@ export function ManagerCreateWorkOrderModal({
         bucket: "completed",
         description:
           description.trim() ||
-          `${LOG_CATEGORY_LABELS[logCategory]} — logged by manager.${amt > 0 ? ` Cost: ${costLabel}.` : ""}`,
+          `${LOG_CATEGORY_LABELS[logCategory]}, logged by manager.${amt > 0 ? ` Cost: ${costLabel}.` : ""}`,
         scheduled: "—",
         cost: costLabel,
         residentName: selectedResident.residentName,
@@ -687,8 +687,8 @@ export function ManagerCreateWorkOrderModal({
                     }
                     disabled={busy}
                   >
-                    <option value="completed_paid">Completed work — paid</option>
-                    <option value="completed_pending">Completed work — payment pending</option>
+                    <option value="completed_paid">Completed work · paid</option>
+                    <option value="completed_pending">Completed work · payment pending</option>
                   </Select>
                 ) : (
                   <div className="flex h-10 items-center rounded-xl border border-border bg-accent/20 px-3 text-sm text-foreground">

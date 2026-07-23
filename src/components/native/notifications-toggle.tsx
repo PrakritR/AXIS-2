@@ -46,7 +46,7 @@ export function NotificationsToggle() {
       title="Push notifications"
       subtitle={
         permission === "granted"
-          ? "On — rent reminders and updates arrive on this device."
+          ? "On. Rent reminders and updates arrive on this device."
           : permission === "denied"
             ? "Turn on notifications for PropLane in your device Settings to enable."
             : "Get rent reminders, work-order updates, and announcements."

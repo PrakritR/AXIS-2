@@ -64,7 +64,7 @@ export function ManagerVendorInviteModal({
       if (!res.ok || data.ok === false) {
         if (data.mailtoHref) {
           window.open(data.mailtoHref, "_blank");
-          showToast(data.error ?? "Email delivery isn't configured — opened your email client instead.");
+          showToast(data.error ?? "Email delivery isn't configured. Opened your email client instead.");
           onSent();
           return;
         }

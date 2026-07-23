@@ -282,7 +282,7 @@ export function ApplicationScreeningPanel({
       ) : null}
       {bg?.status === "pending" ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span>{demo ? "Demo screening in progress…" : "Checkr is processing — status updates automatically."}</span>
+          <span>{demo ? "Demo screening in progress…" : "Checkr is processing. Status updates automatically."}</span>
           {!demo ? (
             <button
               type="button"

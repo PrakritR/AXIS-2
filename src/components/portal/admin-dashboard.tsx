@@ -298,7 +298,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
 
   const meetingsEmptyMessage =
     pendingMeetingCount > 0
-      ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"} — no upcoming times on the calendar.`
+      ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"}. No upcoming times on the calendar.`
       : totalMeetings > 0
         ? "No upcoming meetings on the calendar."
         : "No meeting requests yet.";
@@ -400,7 +400,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
             href="/admin/communication/email/unopened"
             linkLabel="Inbox →"
             items={inboxPreview}
-            emptyMessage="No unread messages — inbox is clear."
+            emptyMessage="No unread messages. Inbox is clear."
             keyForItem={(message) => message.id}
             renderRow={(message) => (
               <IssueRow
@@ -419,7 +419,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
             href="/admin/bugs-feedback"
             linkLabel="Feedback →"
             items={openFeedback}
-            emptyMessage={`No open feedback — ${feedbackTotal} submission${feedbackTotal === 1 ? "" : "s"} on file.`}
+            emptyMessage={`No open feedback. ${feedbackTotal} submission${feedbackTotal === 1 ? "" : "s"} on file.`}
             keyForItem={(row) => row.id}
             renderRow={(row) => (
               <IssueRow

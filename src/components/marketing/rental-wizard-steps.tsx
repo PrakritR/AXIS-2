@@ -571,7 +571,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 }
               }}
             >
-              <option value="">None — {isByRoom ? "apply for individual rooms" : "standard lease"}</option>
+              <option value="">None: {isByRoom ? "apply for individual rooms" : "standard lease"}</option>
               {bundleOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -647,7 +647,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div className="space-y-2">
           <Label required>Unit</Label>
           <p className="text-xs text-muted">
-            This home is leased as a whole unit — choose the unit you&apos;re applying for.
+            This home is leased as a whole unit. Choose the unit you&apos;re applying for.
           </p>
           <div data-wizard-field="roomChoice1">
             <Select
@@ -1229,7 +1229,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">Employment and income</h2>
           <StepIntro className="mt-3">
-            Income helps us confirm you can meet rent obligations when you are employed—enter at least one positive amount
+            Income helps us confirm you can meet rent obligations when you are employed. Enter at least one positive amount
             in the income section below. If you are not employed, income is optional; use Other income for benefits or support
             if applicable, and explain gaps on the next screens if needed.
           </StepIntro>
@@ -1425,7 +1425,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <WizardFieldGate fieldKey="ref2Name" enabled={showWizardField}>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted/70">Reference 2</p>
-          <p className="mt-1 text-xs text-muted">Optional — leave blank if you only have one reference.</p>
+          <p className="mt-1 text-xs text-muted">Optional. Leave blank if you only have one reference.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="ref2Name" optional>
@@ -1493,7 +1493,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </Select>
           {Number(form.occupancyCount) > 1 && (
             <p className="rounded-lg border px-3 py-2 text-xs leading-relaxed portal-banner-pending">
-              <span className="font-semibold">Note:</span> More than 1 occupant may increase the total cost. Each additional occupant must submit their own application — make sure you set up a group in step 1 and share your Group ID so all applications are linked together.
+              <span className="font-semibold">Note:</span> More than 1 occupant may increase the total cost. Each additional occupant must submit their own application. Make sure you set up a group in step 1 and share your Group ID so all applications are linked together.
             </p>
           )}
           <FieldError msg={errors.occupancyCount} />
@@ -1797,9 +1797,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <ReviewSection title="Additional details" stepTarget={9} onEdit={editFromReview}>
             <ReviewRow k="Occupants" v={displayOrDash(form.occupancyCount)} />
             <ReviewRow k="Pets" v={displayOrDash(form.pets)} />
-            <ReviewRow k="Eviction" v={form.evictionHistory === "yes" ? `Yes — ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
-            <ReviewRow k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
-            <ReviewRow k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
+            <ReviewRow k="Eviction" v={form.evictionHistory === "yes" ? `Yes: ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
+            <ReviewRow k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes: ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
+            <ReviewRow k="Criminal history" v={form.criminalHistory === "yes" ? `Yes: ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
           </ReviewSection>
           {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
             <ReviewSection title="Manager questions" stepTarget={9} onEdit={editFromReview}>
@@ -1879,7 +1879,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         ) : (
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
             {applicationFeeGate.waived
-              ? "No application fee is required — your first application fee already covers additional applications."
+              ? "No application fee is required. Your first application fee already covers additional applications."
               : "No application fee is required for this listing."}
           </div>
         )}

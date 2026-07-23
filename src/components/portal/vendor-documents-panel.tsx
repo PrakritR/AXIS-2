@@ -310,7 +310,7 @@ export function VendorDocumentsPanel({
           className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
           data-attr="vendor-documents-unlinked-banner"
         >
-          Waiting on a property manager to connect with you — upload documents here so managers can review your
+          Waiting on a property manager to connect with you. Upload documents here so managers can review your
           compliance files.
         </p>
       ) : null}
@@ -452,7 +452,7 @@ export function VendorDocumentsPanel({
             >
               {demo ? (
                 <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-muted">
-                  Sample PDFs are listed above in the demo — sign in to a live vendor account to upload and preview real
+                  Sample PDFs are listed above in the demo. Sign in to a live vendor account to upload and preview real
                   files.
                 </div>
               ) : null}

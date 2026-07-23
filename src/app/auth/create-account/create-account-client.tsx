@@ -443,7 +443,7 @@ export default function CreateAccountClient() {
           <>
             {isAxisIntentSignup ? (
               <>
-                Your <span className="font-semibold text-foreground">account ID</span> is reserved for this signup—use it
+                Your <span className="font-semibold text-foreground">account ID</span> is reserved for this signup; use it
                 when you need support. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             ) : (
@@ -456,7 +456,7 @@ export default function CreateAccountClient() {
         ) : role === "resident" ? (
           <>
             Use the same email address from your rental application. PropLane links your account to that application
-            automatically—no extra steps needed. After signup, your resident portal stays limited until a PropLane manager
+            automatically, with no extra steps needed. After signup, your resident portal stays limited until a PropLane manager
             marks your application fee paid and approves your application.
           </>
         ) : (
@@ -575,7 +575,7 @@ export default function CreateAccountClient() {
                 <GoogleSignedInBanner
                   email={googleSessionEmail}
                   fullName={googleSessionName}
-                  subtitle="Your Google account is linked. Choose Free, Pro, or Business on Partner pricing — no password needed."
+                  subtitle="Your Google account is linked. Choose Free, Pro, or Business on Partner pricing; no password needed."
                 />
                 <div className="mt-6 flex justify-center">
                   <Link

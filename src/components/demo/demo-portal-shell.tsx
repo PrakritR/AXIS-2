@@ -380,7 +380,7 @@ export function DemoPortalShell() {
               <span className="hidden max-w-md truncate text-xs text-muted sm:inline">{stepDef.hint}</span>
             </div>
           ) : (
-            <span className="hidden text-xs text-muted sm:inline">Interactive demo — click anything</span>
+            <span className="hidden text-xs text-muted sm:inline">Interactive demo · click anything</span>
           )}
           {!guidedActive ? (
             <>

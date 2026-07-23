@@ -437,7 +437,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                   <AxisLogoMark className="[html[data-native]_&]:hidden" />
                   <div className="hidden flex-col gap-1 [html[data-native]_&]:flex">
                     <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
-                      {firstName ? `Hi ${firstName} — what should we look at?` : "What should we look at?"}
+                      {firstName ? `Hi ${firstName}, what should we look at?` : "What should we look at?"}
                     </h3>
                   </div>
                   <div className="flex flex-col gap-1.5 [html[data-native]_&]:hidden">
@@ -450,7 +450,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       </h3>
                     </div>
                     <p className="max-w-[18rem] text-sm leading-relaxed text-muted">
-                      Rent, leases, reminders — grounded in your live portfolio data.
+                      Rent, leases, reminders. Grounded in your live portfolio data.
                     </p>
                   </div>
                   <div

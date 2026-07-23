@@ -74,7 +74,7 @@ export function PromotionFlyerPreview({
       <div className="max-h-[min(60vh,480px)] min-w-0 w-full max-w-full overflow-auto rounded-xl border border-border bg-white shadow-sm sm:max-h-[620px] [html[data-native]_&]:max-h-[52vh]">
         <iframe
           ref={iframeRef}
-          title={`Flyer — ${promotion.title || promotion.propertyLabel || "promotion"}`}
+          title={`Flyer · ${promotion.title || promotion.propertyLabel || "promotion"}`}
           sandbox="allow-same-origin"
           className="block h-[min(60vh,480px)] min-h-[360px] w-full min-w-[280px] border-0 sm:h-[620px] [html[data-native]_&]:h-[52vh]"
         />

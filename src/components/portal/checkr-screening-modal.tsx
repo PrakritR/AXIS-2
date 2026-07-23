@@ -181,7 +181,7 @@ export function CheckrScreeningModal({
       };
       setBg(pending);
       setBusy(false);
-      showToast("Demo screening started — no real charge. Results resolve in a few seconds.");
+      showToast("Demo screening started. No real charge. Results resolve in a few seconds.");
       if (demoResolveTimer.current) clearTimeout(demoResolveTimer.current);
       demoResolveTimer.current = setTimeout(() => {
         const resolved = buildDemoBackgroundCheck(row, { packageSlug: selectedPackage, addOnProducts: selectedAddOns });
@@ -229,7 +229,7 @@ export function CheckrScreeningModal({
         setError("Stripe did not return a payment page.");
         return;
       }
-      showToast("Opening Stripe — screening starts once payment completes.");
+      showToast("Opening Stripe. Screening starts once payment completes.");
       window.location.assign(body.url);
       return;
     } catch {
@@ -244,7 +244,7 @@ export function CheckrScreeningModal({
   const canRun = screeningAllowed && configured && Boolean(row.application?.consentCredit) && bg?.status !== "pending";
 
   return (
-    <Modal open={open} onClose={onClose} title={`Run screening — ${row.name}`} panelClassName="max-w-4xl">
+    <Modal open={open} onClose={onClose} title={`Run screening · ${row.name}`} panelClassName="max-w-4xl">
       <div className="space-y-5 text-sm">
         {!screeningAllowed ? (
           <>
@@ -349,7 +349,7 @@ export function CheckrScreeningModal({
             <div className="rounded-xl border border-border bg-foreground/5 p-3">
               {isDemo ? (
                 <>
-                  <p className="font-semibold text-foreground">Demo mode — no real charge</p>
+                  <p className="font-semibold text-foreground">Demo mode: no real charge</p>
                   <p className="mt-1 text-xs text-muted">
                     Uses Checkr Tenant test scenarios when applicant data matches canned profiles (e.g. Herbert Humphrey,
                     Tim Watkins). Otherwise returns a deterministic clear/consider result.
@@ -390,8 +390,8 @@ export function CheckrScreeningModal({
                 : bg
                   ? "Re-run screening"
                   : isDemo
-                    ? "Confirm — $0.00"
-                    : `Pay & run — ${formatCheckrPrice(totalCents)}`}
+                    ? "Confirm · $0.00"
+                    : `Pay & run · ${formatCheckrPrice(totalCents)}`}
             </Button>
           ) : null}
         </div>

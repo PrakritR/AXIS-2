@@ -210,7 +210,7 @@ export function DemoFrameAssistant() {
                       What should we look at first?
                     </h3>
                     <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
-                      Rent, leases, reminders — grounded in this demo portfolio.
+                      Rent, leases, reminders, grounded in this demo portfolio.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2">
