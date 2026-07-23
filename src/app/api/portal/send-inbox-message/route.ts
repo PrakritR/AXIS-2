@@ -8,7 +8,7 @@ import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notif
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
-import { appendInboxThreadReply } from "@/lib/portal-inbox-delivery";
+import { appendInboxThreadReply, deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -391,37 +391,43 @@ export async function POST(req: Request) {
         const rand = Math.random().toString(36).slice(2, 6);
         const recipientLower = recipient.email;
 
-        // Sender's Sent record (owner-only, scoped to the sender's portal)
-        const senderThreadId = `msg_${user.id}_${ts}_${rand}`;
-        await db.from("portal_inbox_thread_records").upsert(
-          {
-            id: senderThreadId,
-            scope: senderScope,
-            owner_user_id: user.id,
-            participant_email: null,
-            thread_type: "portal_message",
-            row_data: { id: senderThreadId, folder: "sent", from: fromName, email: recipientLower, subject, preview, body: text, time: when, unread: false, scope: senderScope },
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        );
+        // Sender's Sent record (owner-only, scoped to the sender's portal).
+        // Repeated sends to the same person append to the ONE sent thread.
+        await deliverPortalMessageThreadSide(db, {
+          scope: senderScope,
+          folder: "sent",
+          ownerUserId: user.id,
+          participantEmail: null,
+          otherPartyEmail: recipientLower,
+          fallbackId: `msg_${user.id}_${ts}_${rand}`,
+          fromName,
+          subject,
+          body: text,
+          preview,
+          when,
+          unread: false,
+          outbound: true,
+        });
 
         if (recipientLower === senderEmail) continue;
 
-        // Recipient's inbox record in their own scope.
-        const recipientThreadId = `msg_inbox_${ts}_${rand}`;
-        await db.from("portal_inbox_thread_records").upsert(
-          {
-            id: recipientThreadId,
-            scope: recipient.scope,
-            owner_user_id: recipient.userId,
-            participant_email: recipientLower,
-            thread_type: "portal_message",
-            row_data: { id: recipientThreadId, folder: "inbox", from: fromName, email: senderEmail, subject, preview, body: text, time: when, unread: true, scope: recipient.scope },
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        );
+        // Recipient's inbox record in their own scope — likewise one thread per
+        // sender, with each new message appended as an inbound turn.
+        await deliverPortalMessageThreadSide(db, {
+          scope: recipient.scope,
+          folder: "inbox",
+          ownerUserId: recipient.userId,
+          participantEmail: recipientLower,
+          otherPartyEmail: senderEmail,
+          fallbackId: `msg_inbox_${ts}_${rand}`,
+          fromName,
+          subject,
+          body: text,
+          preview,
+          when,
+          unread: true,
+          outbound: false,
+        });
       }
 
       // Push notification, best-effort. Keep the payload generic (sender name

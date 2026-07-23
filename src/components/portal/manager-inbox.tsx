@@ -598,9 +598,11 @@ export const ManagerInbox = forwardRef<
   const activeBubbles = useMemo((): InboxBubbleMessage[] => {
     if (!activeThread) return [];
     return inboxThreadMessages(activeThread).map((m, i) => {
-      // Root direction follows the folder (a Sent thread we authored); every
-      // appended message in this model is a manager reply, i.e. outbound.
-      const outbound = i === 0 ? activeFolder === "sent" : true;
+      // Root direction follows the folder (a Sent thread we authored). Appended
+      // messages default to outbound (a reply we sent), but a new message
+      // delivered into this person-thread carries an explicit direction so an
+      // inbound turn on our inbox copy renders inbound rather than as our reply.
+      const outbound = m.outbound ?? (i === 0 ? activeFolder === "sent" : true);
       return {
         id: m.id,
         author: m.from,

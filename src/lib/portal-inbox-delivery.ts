@@ -136,6 +136,163 @@ export async function appendInboxThreadReply(
   };
 }
 
+/**
+ * One side of a person-thread: the sender's "sent" copy or the recipient's
+ * "inbox" copy of the conversation. `otherPartyEmail` is stored in
+ * `row_data.email` and is the person the thread is WITH (the recipient on a
+ * sent copy, the sender on an inbox copy) — it is what makes "sent 4 times to
+ * one person" one thread instead of four.
+ */
+type PortalMessageThreadSide = {
+  scope: string;
+  folder: "sent" | "inbox";
+  /** owner_user_id column (sender on a sent copy; recipient account on an inbox copy — may be null). */
+  ownerUserId: string | null;
+  /** participant_email column (null on a sent copy; recipient email on an inbox copy). */
+  participantEmail: string | null;
+  /** row_data.email — the other party in the conversation. */
+  otherPartyEmail: string;
+};
+
+/**
+ * Find the ONE existing `portal_message` thread for a person-pair so repeated
+ * sends append instead of minting a fresh row each time. Matches on the stable
+ * top-level columns (scope + thread_type + owner/participant) and then on the
+ * `row_data.{folder,email}` pair in JS — JSON-path `.eq` filters are not
+ * portable across our fake test client, and the extra rows per identity are few
+ * (one per counterparty). Returns the newest match or null.
+ */
+async function findExistingPortalMessageThread(
+  db: SupabaseClient,
+  side: PortalMessageThreadSide,
+): Promise<{
+  id: string;
+  rowData: Record<string, unknown>;
+  ownerUserId: string | null;
+  participantEmail: string | null;
+  scope: string;
+} | null> {
+  const matchCol = side.folder === "sent" ? "owner_user_id" : "participant_email";
+  const matchVal = side.folder === "sent" ? side.ownerUserId : side.participantEmail;
+  if (!matchVal) return null;
+
+  const { data } = await db
+    .from("portal_inbox_thread_records")
+    .select("id, row_data, owner_user_id, participant_email, scope, updated_at")
+    .eq("scope", side.scope)
+    .eq("thread_type", "portal_message")
+    .eq(matchCol, matchVal)
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  const rows = (Array.isArray(data) ? data : []) as {
+    id: string;
+    row_data: Record<string, unknown> | null;
+    owner_user_id: string | null;
+    participant_email: string | null;
+    scope: string | null;
+  }[];
+  const otherParty = side.otherPartyEmail.trim().toLowerCase();
+  for (const r of rows) {
+    const rowData = (r.row_data ?? {}) as Record<string, unknown>;
+    if (String(rowData.folder ?? "") !== side.folder) continue;
+    if (String(rowData.email ?? "").trim().toLowerCase() !== otherParty) continue;
+    return {
+      id: String(r.id),
+      rowData,
+      ownerUserId: r.owner_user_id ?? null,
+      participantEmail: r.participant_email ?? null,
+      scope: String(r.scope ?? side.scope),
+    };
+  }
+  return null;
+}
+
+/**
+ * Deliver ONE portal message into a person-thread: append to the existing
+ * conversation for this (owner/participant, other party) pair, or create it
+ * when none exists. This is what collapses several "New message" sends to the
+ * same person into a single thread the way normal messaging does. SMS threads
+ * are untouched — this only ever writes `thread_type: "portal_message"`.
+ */
+export async function deliverPortalMessageThreadSide(
+  db: SupabaseClient,
+  args: PortalMessageThreadSide & {
+    /** Id used only when creating a brand-new thread. */
+    fallbackId: string;
+    fromName: string;
+    subject: string;
+    body: string;
+    preview: string;
+    when: string;
+    /** Inbox copies mark unread on every new message; sent copies never do. */
+    unread: boolean;
+    /** Direction of the appended turn from the owner's view (false = inbound). */
+    outbound: boolean;
+  },
+): Promise<void> {
+  const existing = await findExistingPortalMessageThread(db, args);
+  const nowIso = new Date().toISOString();
+
+  if (existing) {
+    const messages = Array.isArray(existing.rowData.messages)
+      ? [...(existing.rowData.messages as unknown[])]
+      : [];
+    messages.push({
+      id: `msg-${Date.now().toString(36)}-${messages.length}`,
+      from: args.fromName,
+      body: args.body,
+      at: args.when,
+      outbound: args.outbound,
+    });
+    await db.from("portal_inbox_thread_records").upsert(
+      {
+        id: existing.id,
+        scope: existing.scope,
+        owner_user_id: existing.ownerUserId,
+        participant_email: existing.participantEmail,
+        thread_type: "portal_message",
+        row_data: {
+          ...existing.rowData,
+          // Keep the thread's original root body/subject; a person-thread groups
+          // by person, not subject, so "s" and "Re: s" stay one conversation.
+          messages,
+          preview: args.preview,
+          time: args.when,
+          unread: args.unread,
+        },
+        updated_at: nowIso,
+      },
+      { onConflict: "id" },
+    );
+    return;
+  }
+
+  await db.from("portal_inbox_thread_records").upsert(
+    {
+      id: args.fallbackId,
+      scope: args.scope,
+      owner_user_id: args.ownerUserId,
+      participant_email: args.participantEmail,
+      thread_type: "portal_message",
+      row_data: {
+        id: args.fallbackId,
+        folder: args.folder,
+        from: args.fromName,
+        email: args.otherPartyEmail,
+        subject: args.subject,
+        preview: args.preview,
+        body: args.body,
+        time: args.when,
+        unread: args.unread,
+        scope: args.scope,
+      },
+      updated_at: nowIso,
+    },
+    { onConflict: "id" },
+  );
+}
+
 export async function deliverPortalInboxMessage(
   db: SupabaseClient,
   opts: {
@@ -293,57 +450,41 @@ export async function deliverPortalInboxMessage(
       const rand = Math.random().toString(36).slice(2, 6);
       const recipientLower = recipient.email;
 
-      const senderThreadId = `msg_${opts.senderUserId}_${ts}_${rand}`;
-      await db.from("portal_inbox_thread_records").upsert(
-        {
-          id: senderThreadId,
-          scope: senderScope,
-          owner_user_id: opts.senderUserId,
-          participant_email: null,
-          thread_type: "portal_message",
-          row_data: {
-            id: senderThreadId,
-            folder: "sent",
-            from: fromName,
-            email: recipientLower,
-            subject,
-            preview,
-            body: text,
-            time: when,
-            unread: false,
-            scope: senderScope,
-          },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      );
+      // Sender's "Sent" copy — one thread per recipient; repeated sends append.
+      await deliverPortalMessageThreadSide(db, {
+        scope: senderScope,
+        folder: "sent",
+        ownerUserId: opts.senderUserId,
+        participantEmail: null,
+        otherPartyEmail: recipientLower,
+        fallbackId: `msg_${opts.senderUserId}_${ts}_${rand}`,
+        fromName,
+        subject,
+        body: text,
+        preview,
+        when,
+        unread: false,
+        outbound: true,
+      });
 
       if (recipientLower === senderEmail) continue;
 
-      const recipientThreadId = `msg_inbox_${ts}_${rand}`;
-      await db.from("portal_inbox_thread_records").upsert(
-        {
-          id: recipientThreadId,
-          scope: recipient.scope,
-          owner_user_id: recipient.userId,
-          participant_email: recipientLower,
-          thread_type: "portal_message",
-          row_data: {
-            id: recipientThreadId,
-            folder: "inbox",
-            from: fromName,
-            email: senderEmail,
-            subject,
-            preview,
-            body: text,
-            time: when,
-            unread: true,
-            scope: recipient.scope,
-          },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      );
+      // Recipient's "Inbox" copy — one thread per sender; repeated sends append.
+      await deliverPortalMessageThreadSide(db, {
+        scope: recipient.scope,
+        folder: "inbox",
+        ownerUserId: recipient.userId,
+        participantEmail: recipientLower,
+        otherPartyEmail: senderEmail,
+        fallbackId: `msg_inbox_${ts}_${rand}`,
+        fromName,
+        subject,
+        body: text,
+        preview,
+        when,
+        unread: true,
+        outbound: false,
+      });
     }
   }
 

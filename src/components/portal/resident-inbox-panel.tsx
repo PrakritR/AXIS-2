@@ -756,7 +756,7 @@ export const ResidentInboxPanel = forwardRef<
   const activeBubbles = useMemo((): InboxBubbleMessage[] => {
     if (!activeThread) return [];
     return inboxThreadMessages(activeThread).map((m, i) => {
-      const outbound = i === 0 ? activeFolder === "sent" : true;
+      const outbound = m.outbound ?? (i === 0 ? activeFolder === "sent" : true);
       return {
         id: m.id,
         author: m.from,
