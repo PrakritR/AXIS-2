@@ -32,6 +32,9 @@ vi.mock("@/lib/household-charges", () => ({
   removeAllApplicationCharges,
   removeApprovedApplicationCharges,
 }));
+vi.mock("@/lib/demo/demo-session", () => ({ isDemoModeActive: () => DEMO_MODE }));
+
+let DEMO_MODE = false;
 
 function row(over: Partial<DemoApplicantRow> = {}): DemoApplicantRow {
   return {
@@ -53,6 +56,7 @@ function jsonResponse(status: number, body: unknown) {
 describe("transitionApplicationBucket — a refused approval is rolled back, not reported as success", () => {
   beforeEach(() => {
     ROWS = [row()];
+    DEMO_MODE = false;
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
     recordApprovedApplicationCharges.mockClear();
@@ -70,9 +74,38 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     expect(result?.message).toMatch(/withdrawn/i);
     expect(ROWS[0].bucket).toBe("pending");
     expect(ROWS[0].stage).toBe("Submitted");
+    // Stamped locally too, so the row reads "Withdrawn" and stops offering Approve
+    // instead of inviting the same refused round trip until the sync TTL expires.
+    expect(ROWS[0].withdrawnAt).toBeTruthy();
     expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
     // No welcome email may go out for an approval the server refused.
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
+  });
+
+  it("rolls back on any other non-2xx refusal (e.g. 403) rather than reporting success", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(403, { error: "Forbidden." }));
+    const { transitionApplicationBucket } = await import("@/lib/application-review");
+    const result = await transitionApplicationBucket("AXIS-9001", "approved", { userId: "mgr-1" });
+
+    expect(result?.blocked).toBe("error");
+    expect(ROWS[0].bucket).toBe("pending");
+    // A non-withdrawn refusal must not fabricate a withdrawal stamp.
+    expect(ROWS[0].withdrawnAt).toBeFalsy();
+    expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
+  });
+
+  it("leaves the /demo walkthrough alone — no server sync, no rollback", async () => {
+    DEMO_MODE = true;
+    const { transitionApplicationBucket } = await import("@/lib/application-review");
+    const result = await transitionApplicationBucket("AXIS-9001", "approved", {
+      userId: "demo-everything",
+      skipWelcomeEmail: true,
+    });
+
+    expect(result?.blocked).toBeUndefined();
+    expect(ROWS[0].bucket).toBe("approved");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rolls back when the guard could not verify the record (fail-closed 500)", async () => {

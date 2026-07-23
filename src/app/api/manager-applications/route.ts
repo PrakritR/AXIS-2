@@ -37,7 +37,11 @@ function normalizeRow(row: DemoApplicantRow): DemoApplicantRow {
 function idVariants(id: string): string[] {
   const trimmed = id.trim();
   const normalized = normalizeApplicationAxisId(trimmed);
-  return [...new Set([trimmed, normalized].filter(Boolean))];
+  return [
+    ...new Set(
+      [trimmed, trimmed.toUpperCase(), normalized, normalized.toUpperCase()].filter(Boolean),
+    ),
+  ];
 }
 
 /** Stage stored on a draft snapshot; matched case-insensitively via `ilike`. */
@@ -165,7 +169,15 @@ async function loadStoredApplicationRecord(
   return { error: false, record: (data?.[0] as StoredApplicationRecord | undefined) ?? null };
 }
 
-/** One batched read of every stored row a mirrored batch touches (never one query per row). */
+/**
+ * Batched read of every stored row a mirrored batch touches (never one query per
+ * row). The mirror posts the manager's WHOLE cached set, so the id filter is
+ * chunked: one `.in()` carrying several hundred ids overruns the URI buffer in
+ * front of PostgREST, and because this read fails CLOSED that would reject the
+ * entire mirror — silently, since the mirror is fire-and-forget.
+ */
+const STORED_APPLICATION_ID_CHUNK = 100;
+
 async function loadStoredApplicationRecords(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   rows: DemoApplicantRow[],
@@ -173,16 +185,25 @@ async function loadStoredApplicationRecords(
   const byId = new Map<string, StoredApplicationRecord>();
   const ids = [...new Set(rows.flatMap((row) => idVariants(String(row.id ?? ""))))];
   if (ids.length === 0) return { error: false, byId };
-  const { data, error } = await db
-    .from("manager_application_records")
-    .select(STORED_APPLICATION_SELECT)
-    .in("id", ids);
-  if (error) return { error: true, byId };
-  for (const record of (data ?? []) as StoredApplicationRecord[]) {
-    const id = String(record.id ?? "").trim();
-    if (!id) continue;
-    byId.set(id, record);
-    byId.set(id.toUpperCase(), record);
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += STORED_APPLICATION_ID_CHUNK) {
+    chunks.push(ids.slice(index, index + STORED_APPLICATION_ID_CHUNK));
+  }
+
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      db.from("manager_application_records").select(STORED_APPLICATION_SELECT).in("id", chunk),
+    ),
+  );
+  for (const { data, error } of results) {
+    if (error) return { error: true, byId };
+    for (const record of (data ?? []) as StoredApplicationRecord[]) {
+      const id = String(record.id ?? "").trim();
+      if (!id) continue;
+      byId.set(id, record);
+      byId.set(id.toUpperCase(), record);
+    }
   }
   return { error: false, byId };
 }

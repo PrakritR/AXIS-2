@@ -18,6 +18,8 @@ let PROFILE: { role: string; email: string } | null;
 let STORED_ROWS: { id: string; row_data: DemoApplicantRow }[];
 let STORED_ERROR: { message: string } | null;
 let UPSERTS: { id: string; row_data: DemoApplicantRow }[];
+/** Sizes of every `.in("id", …)` filter sent to manager_application_records. */
+let ID_FILTER_SIZES: number[];
 const provisionApprovedResidentAccount = vi.fn(async () => ({ ok: true }));
 
 vi.mock("@/lib/auth/guest-application-upsert", () => ({
@@ -74,7 +76,10 @@ function makeDb() {
           return builder;
         },
         in(column: string, values: string[]) {
-          if (column === "id") state.ids = values;
+          if (column === "id") {
+            state.ids = values;
+            if (table === "manager_application_records") ID_FILTER_SIZES.push(values.length);
+          }
           return builder;
         },
         order() {
@@ -131,6 +136,7 @@ describe("POST /api/manager-applications — withdrawnAt is server-owned on a ma
     STORED_ROWS = [{ id: "AXIS-9001", row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }) }];
     STORED_ERROR = null;
     UPSERTS = [];
+    ID_FILTER_SIZES = [];
     provisionApprovedResidentAccount.mockClear();
   });
 
@@ -194,6 +200,7 @@ describe("POST /api/manager-applications action:\"replace\" — the path the man
     STORED_ROWS = [{ id: "AXIS-9001", row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }) }];
     STORED_ERROR = null;
     UPSERTS = [];
+    ID_FILTER_SIZES = [];
     provisionApprovedResidentAccount.mockClear();
   });
 
@@ -236,6 +243,23 @@ describe("POST /api/manager-applications action:\"replace\" — the path the man
     expect(res.status).toBe(500);
     expect(UPSERTS).toHaveLength(0);
     expect(provisionApprovedResidentAccount).not.toHaveBeenCalled();
+  });
+
+  it("chunks the stored-row lookup so a large mirror is never rejected for size alone", async () => {
+    // The mirror posts the manager's WHOLE cached set; one .in() carrying every id
+    // would overrun the URI buffer and — because this read fails closed — silently
+    // reject the entire batch.
+    const rows = Array.from({ length: 250 }, (_, index) =>
+      appRow({ id: `AXIS-B${index}`, email: `applicant${index}@example.com` }),
+    );
+    STORED_ROWS = rows.map((r) => ({ id: r.id, row_data: r }));
+    const { POST } = await import("@/app/api/manager-applications/route");
+    const res = await POST(post({ action: "replace", rows }));
+
+    expect(res.status).toBe(200);
+    expect(UPSERTS).toHaveLength(250);
+    expect(ID_FILTER_SIZES.length).toBeGreaterThan(1);
+    expect(Math.max(...ID_FILTER_SIZES)).toBeLessThanOrEqual(100);
   });
 
   it("still mirrors an approve of a non-withdrawn application", async () => {
