@@ -62,36 +62,23 @@ import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
 
+const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
+  "rent-roll": "income",
+  delinquency: "summary",
+  "income-statement": "expenses",
+  "lease-expiration": "income-documents",
+  vendors: "expenses",
+  "profit-loss": "expenses",
+};
+
 const DOCUMENTS_TABS = ["library", "templates", "applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
 
+const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
+  summary: "tax-summary",
+  "rent-receipts": "income-documents",
+  "rental-days": "income-documents",
+};
 const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "security-deposits", "financial-diagnostics", "ap-aging", "bills", "budget-vs-actual", "bank-reconciliation", "owner-statement", "owner-distributions"] as const;
-
-type FinancialsTab = (typeof FINANCIALS_TABS)[number];
-type DocumentsTab = (typeof DOCUMENTS_TABS)[number];
-
-// Every legacy map value must name a tab that still exists in its destination
-// list, otherwise the redirect lands on a 404. The unions below make that a
-// compile error instead of a runtime dead end.
-//
-// Null-prototype on purpose, matching RESIDENT_PAYMENTS_LEGACY_TABS: a plain
-// object literal resolves inherited `Object.prototype` members, so
-// `/portal/financials/toString` (also `constructor`, `valueOf`,
-// `hasOwnProperty`, `__proto__`) would read as a known legacy tab and redirect
-// to a garbage URL instead of 404ing.
-const LEGACY_FINANCIALS_TAB_MAP: Record<string, FinancialsTab | undefined> =
-  Object.assign(Object.create(null) as Record<string, FinancialsTab | undefined>, {
-    "rent-roll": "income",
-    "income-statement": "expenses",
-    vendors: "expenses",
-    "profit-loss": "expenses",
-  } satisfies Record<string, FinancialsTab>);
-
-const LEGACY_DOCUMENTS_TAB_MAP: Record<string, DocumentsTab | undefined> =
-  Object.assign(Object.create(null) as Record<string, DocumentsTab | undefined>, {
-    summary: "tax-summary",
-    "rent-receipts": "income-documents",
-    "rental-days": "income-documents",
-  } satisfies Record<string, DocumentsTab>);
 
 const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
 
@@ -99,11 +86,10 @@ function isManagerInboxTab(tab: string): tab is (typeof MANAGER_INBOX_TABS)[numb
   return (MANAGER_INBOX_TABS as readonly string[]).includes(tab);
 }
 
-const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, FinancialsTab | undefined> =
-  Object.assign(Object.create(null) as Record<string, FinancialsTab | undefined>, {
-    expenses: "expenses",
-    "profit-loss": "expenses",
-  } satisfies Record<string, FinancialsTab>);
+const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, string> = {
+  expenses: "expenses",
+  "profit-loss": "expenses",
+};
 
 async function renderManagerFinancesSection(
   section: string,
@@ -118,7 +104,7 @@ async function renderManagerFinancesSection(
   }
   if (tabParts.length > 1) notFound();
   const finTab = tabParts[0]!;
-  if (!FINANCIALS_TABS.includes(finTab as FinancialsTab)) {
+  if (!FINANCIALS_TABS.includes(finTab as (typeof FINANCIALS_TABS)[number])) {
     const mapped = LEGACY_FINANCIALS_TAB_MAP[finTab];
     if (mapped) redirect(`${basePath}/financials/${mapped}`);
     notFound();
@@ -403,30 +389,31 @@ export async function renderPortalSection(
 
   if (kind === "admin" && section === "communication") {
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/communication/email/unopened`);
+      redirect(`${def.basePath}/communication/inbox/unopened`);
     }
     const channel = tabParts[0]!;
-    if (channel === "sms") {
-      const smsTab = tabParts[1] ?? "all";
-      if (!["all", "unopened", "opened", "schedule", "sent"].includes(smsTab)) notFound();
-      if (tabParts.length > 2) notFound();
-      return (
-        <AdminCommunication
-          channel="sms"
-          smsTabId={smsTab as "all" | "unopened" | "opened" | "schedule" | "sent"}
-        />
-      );
+    if (channel === "sms" || channel === "email") {
+      const legacyTab = tabParts[1] ?? "unopened";
+      const mapped =
+        legacyTab === "all" || legacyTab === "unopened"
+          ? "unopened"
+          : legacyTab === "opened"
+            ? "opened"
+            : legacyTab === "sent"
+              ? "sent"
+              : legacyTab === "schedule"
+                ? "schedule"
+                : legacyTab === "trash"
+                  ? "trash"
+                  : null;
+      if (!mapped) notFound();
+      redirect(`${def.basePath}/communication/inbox/${mapped}`);
     }
-    if (channel === "email") {
+    if (channel === "inbox") {
       const emailTab = tabParts[1] ?? "unopened";
       if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
       if (tabParts.length > 2) notFound();
-      return (
-        <AdminCommunication
-          channel="email"
-          emailTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"}
-        />
-      );
+      return <AdminCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} />;
     }
     notFound();
   }
@@ -489,19 +476,21 @@ export async function renderPortalSection(
       }
       const channel = tabParts[0]!;
       if (channel === "sms") {
-        const smsTab = tabParts[1] ?? "all";
-        if (["unopened", "opened", "schedule", "sent"].includes(smsTab)) {
-          redirect(`${def.basePath}/communication/sms/all`);
-        }
-        if (smsTab !== "all") notFound();
-        if (tabParts.length > 2) notFound();
-        const ManagerCommunication = await loadManagerCommunication();
-        return subscriptionGated(
-          <ManagerCommunication channel="sms" smsTabId="all" />,
-          kind,
-          "communication",
-          managerOwnerSubscriptionTier,
-        );
+        const inboxTab = tabParts[1] ?? "unopened";
+        const mapped =
+          inboxTab === "all" || inboxTab === "unopened"
+            ? "unopened"
+            : inboxTab === "opened"
+              ? "opened"
+              : inboxTab === "sent"
+                ? "sent"
+                : inboxTab === "schedule"
+                  ? "schedule"
+                  : inboxTab === "trash"
+                    ? "trash"
+                    : null;
+        if (!mapped) notFound();
+        redirect(`${def.basePath}/communication/inbox/${mapped}`);
       }
       if (channel === "inbox") {
         const inboxTab = tabParts[1] ?? "unopened";
@@ -509,7 +498,7 @@ export async function renderPortalSection(
         if (tabParts.length > 2) notFound();
         const ManagerCommunication = await loadManagerCommunication();
         return subscriptionGated(
-          <ManagerCommunication channel="inbox" inboxTabId={inboxTab} />,
+          <ManagerCommunication inboxTabId={inboxTab} />,
           kind,
           "communication",
           managerOwnerSubscriptionTier,
@@ -716,29 +705,32 @@ export async function renderPortalSection(
       );
     }
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/communication/email/unopened`);
+      redirect(`${def.basePath}/communication/inbox/unopened`);
     }
     const channel = tabParts[0]!;
-    if (channel === "sms") {
-      const smsTab = tabParts[1] ?? "all";
-      if (!["all", "unopened", "opened", "schedule", "sent"].includes(smsTab)) notFound();
-      if (tabParts.length > 2) notFound();
-      return (
-        <ResidentCommunication
-          channel="sms"
-          smsTabId={smsTab as "all" | "unopened" | "opened" | "schedule" | "sent"}
-        />
-      );
+    if (channel === "sms" || channel === "email") {
+      const legacyTab = tabParts[1] ?? "unopened";
+      const mapped =
+        legacyTab === "all" || legacyTab === "unopened"
+          ? "unopened"
+          : legacyTab === "opened"
+            ? "opened"
+            : legacyTab === "sent"
+              ? "sent"
+              : legacyTab === "schedule"
+                ? "schedule"
+                : legacyTab === "trash"
+                  ? "trash"
+                  : null;
+      if (!mapped) notFound();
+      redirect(`${def.basePath}/communication/inbox/${mapped}`);
     }
-    if (channel === "email") {
+    if (channel === "inbox") {
       const emailTab = tabParts[1] ?? "unopened";
       if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
       if (tabParts.length > 2) notFound();
       return (
-        <ResidentCommunication
-          channel="email"
-          emailTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"}
-        />
+        <ResidentCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} />
       );
     }
     notFound();
@@ -784,30 +776,29 @@ export async function renderPortalSection(
 
   if (kind === "vendor" && section === "communication") {
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/communication/email/unopened`);
+      redirect(`${def.basePath}/communication/inbox/unopened`);
     }
     const channel = tabParts[0]!;
-    if (channel === "sms") {
-      const smsTab = tabParts[1] ?? "all";
-      if (!["all", "unopened", "opened", "sent"].includes(smsTab)) notFound();
-      if (tabParts.length > 2) notFound();
-      return (
-        <VendorCommunication
-          channel="sms"
-          smsTabId={smsTab as "all" | "unopened" | "opened" | "sent"}
-        />
-      );
+    if (channel === "sms" || channel === "email") {
+      const legacyTab = tabParts[1] ?? "unopened";
+      const mapped =
+        legacyTab === "all" || legacyTab === "unopened"
+          ? "unopened"
+          : legacyTab === "opened"
+            ? "opened"
+            : legacyTab === "sent"
+              ? "sent"
+              : legacyTab === "trash"
+                ? "trash"
+                : null;
+      if (!mapped) notFound();
+      redirect(`${def.basePath}/communication/inbox/${mapped}`);
     }
-    if (channel === "email") {
+    if (channel === "inbox") {
       const emailTab = tabParts[1] ?? "unopened";
       if (!["unopened", "opened", "sent", "trash"].includes(emailTab)) notFound();
       if (tabParts.length > 2) notFound();
-      return (
-        <VendorCommunication
-          channel="email"
-          emailTabId={emailTab as "unopened" | "opened" | "sent" | "trash"}
-        />
-      );
+      return <VendorCommunication inboxTabId={emailTab as "unopened" | "opened" | "sent" | "trash"} />;
     }
     notFound();
   }

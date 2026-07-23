@@ -544,6 +544,7 @@ export function InboxConversationRow({
   onOpen,
   leading,
   previewPrefix,
+  channelBadge,
 }: {
   name: string;
   subtitle?: string;
@@ -556,6 +557,8 @@ export function InboxConversationRow({
   leading?: ReactNode;
   /** e.g. "You: " when the last message was outbound. */
   previewPrefix?: string;
+  /** Small label for unified email + SMS lists. */
+  channelBadge?: "Email" | "SMS";
 }) {
   return (
     <div
@@ -579,6 +582,11 @@ export function InboxConversationRow({
           </div>
           {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
           <div className="mt-0.5 flex items-center gap-2">
+            {channelBadge ? (
+              <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                {channelBadge}
+              </span>
+            ) : null}
             <p
               className={`min-w-0 flex-1 truncate text-xs ${
                 unread ? "font-medium text-foreground/75" : "text-muted"

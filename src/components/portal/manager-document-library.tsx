@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
@@ -10,6 +11,8 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
+  PORTAL_TOOLBAR_SELECT,
+  PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
@@ -90,7 +93,48 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
-export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
+function DocumentLibraryFilterSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}) {
+  return (
+    <div className="w-fit shrink-0">
+      <PortalToolbarSelectWrap>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={ariaLabel}
+          className={PORTAL_TOOLBAR_SELECT}
+        >
+          <option value="">{placeholder}</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </PortalToolbarSelectWrap>
+    </div>
+  );
+}
+
+export type ManagerDocumentLibraryHandle = {
+  openUpload: () => void;
+};
+
+export const ManagerDocumentLibrary = forwardRef<
+  ManagerDocumentLibraryHandle,
+  { userId: string | null }
+>(function ManagerDocumentLibrary({ userId }, ref) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
   const searchParams = useSearchParams();
@@ -109,6 +153,14 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const [versionTarget, setVersionTarget] = useState<ManagerDocumentDTO | null>(null);
   const [previewTarget, setPreviewTarget] = useState<ManagerDocumentDTO | null>(null);
   const [vendorRows, setVendorRows] = useState<ManagerVendorRow[]>([]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openUpload: () => setUploadOpen(true),
+    }),
+    [],
+  );
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
 
@@ -420,73 +472,51 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   return (
     <div className="space-y-4">
       {complianceBanner}
-      <ManagerPortalStatusPills
-        tabs={expiryPills}
-        activeId={expiryFilter}
-        onChange={setExpiryFilter}
-        activeTone="primary"
-        compact
-      />
-      <ManagerPortalFilterRow>
-        <Input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name…"
-          className="h-10 max-w-[16rem]"
-          aria-label="Search documents"
-          data-attr="document-search"
+      <div className="mb-4">
+        <ManagerPortalStatusPills
+          tabs={expiryPills}
+          activeId={expiryFilter}
+          onChange={setExpiryFilter}
+          activeTone="primary"
+          compact
         />
-        <Select
+      </div>
+      <ManagerPortalFilterRow>
+        <label className="relative block min-w-0 flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name…"
+            className="h-10 w-full rounded-full border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            aria-label="Search documents"
+            data-attr="document-search"
+          />
+        </label>
+        <DocumentLibraryFilterSelect
           value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="h-10 max-w-[12rem]"
-          aria-label="Filter by category"
-        >
-          <option value="">All categories</option>
-          {DOCUMENT_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {DOCUMENT_CATEGORY_LABELS[c]}
-            </option>
-          ))}
-        </Select>
-        <Select
+          onChange={setCategoryFilter}
+          placeholder="All categories"
+          ariaLabel="Filter by category"
+          options={DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: DOCUMENT_CATEGORY_LABELS[c] }))}
+        />
+        <DocumentLibraryFilterSelect
           value={scopeFilter}
-          onChange={(e) => setScopeFilter(e.target.value)}
-          className="h-10 max-w-[12rem]"
-          aria-label="Filter by scope"
-        >
-          {SCOPE_FILTERS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </Select>
+          onChange={setScopeFilter}
+          placeholder="All scopes"
+          ariaLabel="Filter by scope"
+          options={SCOPE_FILTERS.filter((s) => s.id).map((s) => ({ value: s.id, label: s.label }))}
+        />
         {propertyOptions.length > 0 ? (
-          <Select
+          <DocumentLibraryFilterSelect
             value={propertyFilter}
-            onChange={(e) => setPropertyFilter(e.target.value)}
-            className="h-10 max-w-[14rem]"
-            aria-label="Filter by property"
-          >
-            <option value="">All properties</option>
-            {propertyOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
+            onChange={setPropertyFilter}
+            placeholder="All properties"
+            ariaLabel="Filter by property"
+            options={propertyOptions.map((p) => ({ value: p.id, label: p.label }))}
+          />
         ) : null}
-        <Button
-          type="button"
-          variant="primary"
-          className="ml-auto h-10 shrink-0"
-          onClick={() => setUploadOpen(true)}
-          disabled={demo}
-          data-attr="document-upload-open"
-        >
-          Upload
-        </Button>
       </ManagerPortalFilterRow>
 
       {demo ? (
@@ -647,7 +677,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
       <PreviewModal doc={previewTarget} onClose={() => setPreviewTarget(null)} />
     </div>
   );
-}
+});
 
 function UploadModal({
   open,

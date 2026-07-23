@@ -17,7 +17,8 @@ export function PortalCommunicationShell({
 }: {
   title: string;
   titleAside?: ReactNode;
-  channelNav: ReactNode;
+  /** Email/SMS channel tabs removed — unified inbox uses folder pills only. */
+  channelNav?: ReactNode;
   threadFilters?: ReactNode;
   statusPills: ReactNode;
   children: ReactNode;
@@ -27,10 +28,12 @@ export function PortalCommunicationShell({
       title={title}
       titleAside={titleAside}
       filterRow={
-        <ManagerPortalFilterRow>
-          <div className="w-fit shrink-0">{channelNav}</div>
-          {threadFilters}
-        </ManagerPortalFilterRow>
+        threadFilters || channelNav ? (
+          <ManagerPortalFilterRow>
+            {channelNav ? <div className="w-fit shrink-0">{channelNav}</div> : null}
+            {threadFilters}
+          </ManagerPortalFilterRow>
+        ) : undefined
       }
     >
       <div className="mt-1">

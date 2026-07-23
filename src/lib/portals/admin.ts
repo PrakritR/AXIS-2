@@ -32,7 +32,7 @@ export const ADMIN_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/admin/dashboard" },
   { label: "Properties", path: "/admin/properties" },
   { label: "Meetings", path: "/admin/events" },
-  { label: "Communication", path: "/admin/communication/email/unopened" },
+  { label: "Communication", path: "/admin/communication/inbox/unopened" },
   { label: "Accounts", path: "/admin/axis-users" },
   { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Settings", path: "/admin/profile" },

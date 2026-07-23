@@ -8,7 +8,6 @@ import {
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
   buildManagerPropertyFilterOptions,
@@ -148,7 +147,6 @@ export function ManagerPromotion() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sectionExpanded, setSectionExpanded] = useState(true);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
   const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("text");
   const [propertyFilter, setPropertyFilter] = useState("");
@@ -629,7 +627,7 @@ export function ManagerPromotion() {
           onClick={() => openNewPromotion()}
           data-attr="promotion-new"
         >
-          New promotion
+          + Add
         </Button>
       }
       filterRow={
@@ -647,28 +645,19 @@ export function ManagerPromotion() {
         </ManagerPortalFilterRow>
       }
     >
-      <PortalCollapsibleSection
-        title="Your promotions"
-        expanded={sectionExpanded}
-        onExpandedChange={setSectionExpanded}
-        collapsible={assets.length > 0}
-        toggleDataAttr="promotion-section-toggle"
-        contentClassName="px-4 py-3"
-      >
-        <PromotionAssetStack
-          assets={filteredAssets}
-          emptyMessage={
-            assets.length === 0
-              ? "No promotions yet."
-              : "No promotions match these filters."
-          }
-          expandedId={expandedId}
-          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-          onSaveTitle={saveAssetTitle}
-          renderHeaderActions={renderHeaderActions}
-          renderExpanded={renderExpanded}
-        />
-      </PortalCollapsibleSection>
+      <PromotionAssetStack
+        assets={filteredAssets}
+        emptyMessage={
+          assets.length === 0
+            ? "No promotions yet."
+            : "No promotions match these filters."
+        }
+        expandedId={expandedId}
+        onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+        onSaveTitle={saveAssetTitle}
+        renderHeaderActions={renderHeaderActions}
+        renderExpanded={renderExpanded}
+      />
 
       <PromotionNewModal
         open={showNewModal}

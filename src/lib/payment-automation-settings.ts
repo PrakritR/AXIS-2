@@ -134,6 +134,7 @@ export function formatStandardReminderSchedule(settings: Pick<
 
 function normalizePreDueDays(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [...DEFAULT_PRE_DUE_REMINDER_DAYS];
+  if (raw.length === 0) return [];
   const nums = raw
     .map((v) => Math.round(Number(v)))
     .filter((n) => Number.isFinite(n) && n >= 0 && n <= 60);

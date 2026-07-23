@@ -1,7 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TabNav, useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -50,7 +49,7 @@ import {
   ManagerApplicationDocumentsTab,
   ManagerLeaseDocumentsTab,
 } from "@/components/portal/manager-documents-leasing-tabs";
-import { ManagerDocumentLibrary } from "@/components/portal/manager-document-library";
+import { ManagerDocumentLibrary, type ManagerDocumentLibraryHandle } from "@/components/portal/manager-document-library";
 import { ManagerDocumentTemplatesPanel } from "@/components/portal/manager-document-templates-panel";
 
 export const DOCUMENT_TABS = [
@@ -121,6 +120,7 @@ export function ManagerDocumentsPanel({
   const [taxVendorName, setTaxVendorName] = useState("");
   const [expanded1099Id, setExpanded1099Id] = useState<string | null>(null);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const libraryRef = useRef<ManagerDocumentLibraryHandle>(null);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -312,6 +312,18 @@ export function ManagerDocumentsPanel({
           {hasExportActions ? (
             <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
           ) : null}
+          {isLibraryTab ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_HEADER_ACTION_BTN}
+              onClick={() => libraryRef.current?.openUpload()}
+              disabled={isDemoModeActive()}
+              data-attr="document-upload-open"
+            >
+              Upload
+            </Button>
+          ) : null}
           {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
           <Button
             type="button"
@@ -335,7 +347,7 @@ export function ManagerDocumentsPanel({
     >
       <div className="space-y-4">
         {tabId === "library" ? (
-          <ManagerDocumentLibrary userId={userId ?? null} />
+          <ManagerDocumentLibrary ref={libraryRef} userId={userId ?? null} />
         ) : tabId === "templates" ? (
           <ManagerDocumentTemplatesPanel />
         ) : tabId === "applications" ? (

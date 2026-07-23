@@ -21,6 +21,7 @@ import {
   ManagerPortalStatusPills,
   PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
+import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -58,10 +59,10 @@ const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
 
 type StatusFilter = BugFeedbackStatus;
 type SortFilter = "newest" | "oldest";
-type PortalFilter = "all" | "managers" | "residents" | "vendors" | "admin";
+type PortalFilter = "managers" | "residents" | "vendors" | "admin";
 
 /** Map a reporter role to the portal it came from (for the source filter). */
-function portalForRole(role: BugFeedbackReporterRole): Exclude<PortalFilter, "all"> {
+function portalForRole(role: BugFeedbackReporterRole): PortalFilter {
   if (role === "resident") return "residents";
   if (role === "vendor") return "vendors";
   if (role === "admin") return "admin";
@@ -92,7 +93,7 @@ function sortFeedbackRows(rows: PortalBugFeedbackRow[], sort: SortFilter): Porta
 export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
-  const [portalFilter, setPortalFilter] = useState<PortalFilter>("all");
+  const [portalFilter, setPortalFilter] = useState<PortalFilter[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [sortFilter, setSortFilter] = useState<SortFilter>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -116,10 +117,10 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
     return () => window.removeEventListener(ADMIN_UI_EVENT, onRefresh);
   }, [refresh]);
 
-  const portalRows = useMemo(
-    () => (portalFilter === "all" ? rows : rows.filter((r) => portalForRole(r.reporterRole) === portalFilter)),
-    [rows, portalFilter],
-  );
+  const portalRows = useMemo(() => {
+    if (portalFilter.length === 0) return rows;
+    return rows.filter((r) => portalFilter.includes(portalForRole(r.reporterRole)));
+  }, [rows, portalFilter]);
 
   const visibleRows = useMemo(() => {
     const filtered = portalRows.filter((r) => r.status === statusFilter);
@@ -127,14 +128,13 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   }, [portalRows, statusFilter, sortFilter]);
 
   const portalOptions = useMemo(() => {
-    const countFor = (portal: Exclude<PortalFilter, "all">) =>
+    const countFor = (portal: PortalFilter) =>
       rows.filter((r) => portalForRole(r.reporterRole) === portal).length;
     return [
-      { value: "all" as const, label: `All portals (${rows.length})` },
-      { value: "managers" as const, label: `Managers (${countFor("managers")})` },
-      { value: "residents" as const, label: `Residents (${countFor("residents")})` },
-      { value: "vendors" as const, label: `Vendors (${countFor("vendors")})` },
-      { value: "admin" as const, label: `Admin (${countFor("admin")})` },
+      { value: "managers", label: `Managers (${countFor("managers")})` },
+      { value: "residents", label: `Residents (${countFor("residents")})` },
+      { value: "vendors", label: `Vendors (${countFor("vendors")})` },
+      { value: "admin", label: `Admin (${countFor("admin")})` },
     ];
   }, [rows]);
 
@@ -261,15 +261,17 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
           }}
         />
       </div>
-      <PortalToolbarSortSelect
-        label="Portal"
-        value={portalFilter}
-        onChange={(id) => {
-          setPortalFilter(id);
+      <CheckboxMultiSelect
+        variant="pill"
+        label="Filter feedback by portal"
+        emptyLabel={`All portals (${rows.length})`}
+        options={portalOptions}
+        selected={portalFilter}
+        onChange={(next) => {
+          setPortalFilter(next as PortalFilter[]);
           setExpandedId(null);
         }}
-        options={portalOptions}
-        ariaLabel="Filter feedback by portal"
+        dataAttr="admin-feedback-filter-portal"
       />
       <PortalToolbarSortSelect
         label="Sort"

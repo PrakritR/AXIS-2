@@ -76,31 +76,6 @@ export function isPlaceholderManagerWorkNumber(phone: string | null | undefined)
 }
 
 /**
- * A well-formed number a public "Text to tour/apply" CTA may open, or null.
- *
- * The CTA target is resolved SERVER-SIDE per environment (see
- * `publicCtaTargetsManagerOwnPhone` in `server-env.ts`): in PRODUCTION it is the
- * property manager's OWN phone; on localhost / preview / test it is the Claw
- * messenger agent line. Whichever value the server chose arrives here, so this
- * client-side guard is deliberately value-driven — it accepts ANY well-formed
- * number (including the Claw agent line, which is the valid dev target) and
- * rejects only empty, fictional 555, and malformed numbers. That guarantees a
- * CTA never emits an `sms:` link to a dead or malformed number, on either
- * desktop or mobile. Returns E.164 (`+1XXXXXXXXXX`) so the deep link is stable.
- */
-export function usableCtaSmsPhone(phone: string | null | undefined): string | null {
-  const trimmed = phone?.trim();
-  if (!trimmed) return null;
-  if (isFictionalUs555Number(trimmed)) return null;
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  // Already-E.164 international numbers (11–15 digits with a leading +).
-  if (trimmed.startsWith("+") && digits.length >= 11 && digits.length <= 15) return `+${digits}`;
-  return null;
-}
-
-/**
  * Shared PropLane messaging number for the SEND transport
  * (`proplane-sms-transport.server.ts`) and work-number display. When Claw is
  * primary, ALWAYS the single agent line — one phone runs the entire messaging

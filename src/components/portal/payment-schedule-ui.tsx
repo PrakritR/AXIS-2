@@ -21,6 +21,14 @@ import {
 import { readPortalApiError } from "@/lib/portal-api-error";
 import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import {
+  applyReminderPreset,
+  buildReminderPreviewLines,
+  detectReminderPreset,
+  formatFriendlyReminderSchedule,
+  PAYMENT_REMINDER_PRESETS,
+  type ReminderPresetId,
+} from "@/lib/payment-reminder-presets";
+import {
   filterScheduledPaymentMessagesForUnpaidCharges,
   filterScheduledPaymentMessagesForVisibility,
   formatScheduledSendAt,
@@ -29,6 +37,20 @@ import {
   scheduledReminderShortLabel,
   type ScheduledPaymentMessage,
 } from "@/lib/scheduled-payment-messages";
+
+export { formatFriendlyReminderSchedule };
+
+/** Short ledger label for per-charge automated reminders. */
+export function summarizeChargeReminders(messages: ScheduledPaymentMessage[]): string {
+  if (!messages.length) return "";
+  const active = messages.filter((message) => message.status !== "cancelled");
+  if (!active.length) return "Reminders paused";
+  if (active.length === 1) {
+    const next = active[0]!;
+    return `Next: ${scheduledReminderShortLabel(next.kind, next.daysBeforeDue)}`;
+  }
+  return `${active.length} reminders scheduled`;
+}
 
 function mergeLocalChargeReminders(
   serverMessages: ScheduledPaymentMessage[],
@@ -149,22 +171,20 @@ export function ChargeReminderList({
 }) {
   if (!messages.length) return null;
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1.5">
+    <ul className="mt-1.5 space-y-1">
       {messages.map((m) => {
         const cancelled = m.status === "cancelled";
         const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
         return (
-          <span
+          <li
             key={m.id}
-            className={`inline-flex max-w-full items-stretch overflow-hidden rounded-full border text-[11px] leading-none ${
-              cancelled
-                ? "border-border bg-accent/20 text-muted"
-                : "border-primary/20 bg-primary/5 text-foreground"
+            className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] ${
+              cancelled ? "border-border bg-accent/15 text-muted" : "border-border bg-card text-foreground"
             }`}
           >
             <button
               type="button"
-              className={`px-2 py-1 text-left hover:bg-accent/40 ${cancelled ? "line-through" : ""}`}
+              className={`min-w-0 flex-1 text-left ${cancelled ? "line-through" : ""}`}
               title={`Edit · sends ${formatSendDate(m.sendAt)}`}
               onClick={() => onEdit?.(m)}
             >
@@ -174,18 +194,16 @@ export function ChargeReminderList({
             {onToggleCancel ? (
               <button
                 type="button"
-                className="border-l border-border px-1.5 py-1 text-muted hover:bg-accent/50 hover:text-foreground"
-                title={cancelled ? "Restore send" : "Cancel send"}
-                aria-label={cancelled ? `Restore ${label}` : `Cancel ${label}`}
+                className="shrink-0 rounded-full px-2 py-0.5 font-semibold text-muted hover:bg-accent/50 hover:text-foreground"
                 onClick={() => void onToggleCancel(m, !cancelled)}
               >
-                {cancelled ? "↺" : "×"}
+                {cancelled ? "Turn on" : "Turn off"}
               </button>
             ) : null}
-          </span>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }
 
@@ -218,7 +236,7 @@ export function ChargeRemindersModal({
   const manageable = messages.filter((m) => m.status === "scheduled" || m.status === "cancelled");
 
   return (
-    <Modal open={open} onClose={onClose} title="Auto reminders" dense panelClassName="max-w-lg p-3 sm:p-4">
+    <Modal open={open} onClose={onClose} title="Payment reminders" dense panelClassName="max-w-lg p-3 sm:p-4">
       {editingMessage ? (
         <ScheduledMessageEditForm
           key={editingMessage.id}
@@ -230,50 +248,62 @@ export function ChargeRemindersModal({
           }}
         />
       ) : (
-      <div className="space-y-3">
-        <p className="text-sm text-muted">
-          <span className="font-medium text-foreground">{residentName}</span> · {chargeTitle} · due {dueDate}
-        </p>
-        <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-xs leading-relaxed text-muted">
-          <p className="font-medium text-foreground">Automatic schedule</p>
-          <p className="mt-1">
-            {scheduleSummary ?? "3, 2, 1 days before · due date · every day late"}
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
+          <p className="text-sm font-semibold text-foreground">{chargeTitle}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {residentName} · due {dueDate}
           </p>
-          <p className="mt-1.5">Reminders stop automatically when this charge is marked paid. Skip any send below to turn it off for this charge only.</p>
+        </div>
+        <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
+          <p className="text-xs font-semibold text-foreground">Default schedule</p>
+          <p className="mt-1 text-sm text-foreground">{scheduleSummary ?? "Standard"}</p>
+          <p className="mt-1.5 text-xs text-muted">
+            Turn individual sends off below without changing your default. Reminders stop when this charge is marked paid.
+          </p>
         </div>
         {manageable.length === 0 ? (
-          <p className="text-sm text-muted">No upcoming reminders. Either this charge is paid, past due for all scheduled sends, or reminders were skipped.</p>
+          <p className="text-sm text-muted">No upcoming reminders for this charge.</p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {manageable.map((m) => {
               const cancelled = m.status === "cancelled";
               const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
               return (
                 <li
                   key={m.id}
-                  className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
-                    cancelled ? "border-border bg-accent/15 text-muted" : "border-border bg-card"
+                  className={`rounded-xl border px-3 py-2.5 ${
+                    cancelled ? "border-border bg-accent/15" : "border-border bg-card"
                   }`}
                 >
-                  <button
-                    type="button"
-                    className={`min-w-0 flex-1 text-left text-sm ${cancelled ? "line-through" : ""}`}
-                    onClick={() => setEditingMessage(m)}
-                  >
-                    <span className="font-medium text-foreground">{label}</span>
-                    <span className="mt-0.5 block text-xs text-muted">Sends {formatSendDate(m.sendAt)}</span>
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {m.status === "scheduled" || m.status === "cancelled" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 rounded-full px-2.5 text-xs"
-                        onClick={() => void onToggleCancel(m, !cancelled)}
-                      >
-                        {cancelled ? "Restore" : "Skip"}
-                      </Button>
-                    ) : null}
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      className={`min-w-0 flex-1 text-left ${cancelled ? "line-through opacity-70" : ""}`}
+                      onClick={() => setEditingMessage(m)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">{label}</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            cancelled
+                              ? "bg-accent/40 text-muted"
+                              : "bg-primary/10 text-primary"
+                          }`}
+                        >
+                          {cancelled ? "Off" : "Scheduled"}
+                        </span>
+                      </div>
+                      <span className="mt-1 block text-xs text-muted">Sends {formatSendDate(m.sendAt)}</span>
+                    </button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 shrink-0 rounded-full px-3 text-xs"
+                      onClick={() => void onToggleCancel(m, !cancelled)}
+                    >
+                      {cancelled ? "Turn on" : "Turn off"}
+                    </Button>
                   </div>
                 </li>
               );
@@ -282,7 +312,7 @@ export function ChargeRemindersModal({
         )}
         {onOpenSettings ? (
           <Button type="button" variant="outline" className="h-9 w-full rounded-full text-sm" onClick={onOpenSettings}>
-            Edit default schedule for all payments
+            Change default schedule for all payments
           </Button>
         ) : null}
       </div>
@@ -362,7 +392,7 @@ export function ScheduledMessageEditForm({
   };
 
   return (
-    <div className="space-y-4">
+      <div className="space-y-4">
         <p className="text-sm text-muted">
           {message.residentName} · {message.chargeTitle} · sends {formatScheduledSendAt(message.sendAt)}
         </p>
@@ -510,7 +540,7 @@ function PaymentAutomationSettingsForm({
     setDraft((prev) => {
       const has = prev.preDueReminderDays.includes(day);
       const nextDays = has ? prev.preDueReminderDays.filter((d) => d !== day) : [...prev.preDueReminderDays, day].sort((a, b) => b - a);
-      return { ...prev, preDueReminderDays: nextDays.length ? nextDays : [3] };
+      return { ...prev, preDueReminderDays: nextDays };
     });
   };
 
@@ -527,6 +557,20 @@ function PaymentAutomationSettingsForm({
   };
 
   const compact = layout === "modal" && variant === "payments";
+  const activePreset = detectReminderPreset(draft);
+  const previewLines = buildReminderPreviewLines(draft);
+
+  const selectPreset = (presetId: ReminderPresetId) => {
+    if (presetId === "custom") return;
+    setDraft((prev) => applyReminderPreset(prev, presetId));
+  };
+
+  const presetCardClass = (selected: boolean) =>
+    `rounded-xl border px-3 py-2.5 text-left transition-colors ${
+      selected
+        ? "border-primary bg-primary/5 shadow-[var(--shadow-sm)]"
+        : "border-border bg-card hover:border-primary/30"
+    }`;
 
   return (
     <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-4"}>
@@ -537,10 +581,143 @@ function PaymentAutomationSettingsForm({
         </div>
       ) : compact ? (
         <p className="text-sm text-muted">
-          Residents receive email reminders on this schedule for every unpaid charge. Reminders stop when you mark a charge paid.
+          Choose how residents are reminded about unpaid charges. You can still turn off individual sends per payment.
         </p>
       ) : null}
 
+      {compact ? (
+        <>
+          <div>
+            <p className="text-xs font-semibold text-muted">Reminder schedule</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {PAYMENT_REMINDER_PRESETS.map((preset) => {
+                const selected = activePreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={presetCardClass(selected)}
+                    onClick={() => selectPreset(preset.id)}
+                    disabled={busy}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">{preset.label}</span>
+                      {preset.recommended ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                          Recommended
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted">{preset.description}</p>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className={presetCardClass(activePreset === "custom")}
+                onClick={() => setDraft((prev) => prev)}
+                disabled={busy}
+              >
+                <span className="text-sm font-semibold text-foreground">Custom</span>
+                <p className="mt-1 text-xs leading-relaxed text-muted">Pick your own days and follow-up rules below.</p>
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
+            <p className="text-xs font-semibold text-foreground">What residents will receive</p>
+            <ul className="mt-2 space-y-1">
+              {previewLines.map((line) => (
+                <li key={line} className="flex items-center gap-2 text-xs text-muted">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {activePreset === "custom" ? (
+            <div className="space-y-3 rounded-xl border border-border bg-accent/15 p-3">
+              <p className="text-xs font-semibold text-foreground">Customize timing</p>
+              <div>
+                <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {[7, 5, 3, 2, 1, ...draft.preDueReminderDays]
+                    .filter((d, i, arr) => arr.indexOf(d) === i)
+                    .sort((a, b) => b - a)
+                    .map((day) => {
+                      const active = draft.preDueReminderDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          className={`${REMINDER_DAY_PILL} ${active ? REMINDER_DAY_PILL_ACTIVE : REMINDER_DAY_PILL_INACTIVE}`}
+                          onClick={() => toggleDay(day)}
+                          disabled={busy}
+                        >
+                          {day} day{day === 1 ? "" : "s"} before
+                        </button>
+                      );
+                    })}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Input
+                      className="h-8 w-16 text-xs"
+                      inputMode="numeric"
+                      placeholder="Day"
+                      value={customDay}
+                      onChange={(e) => setCustomDay(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCustomDay();
+                        }
+                      }}
+                      disabled={busy}
+                    />
+                    <button
+                      type="button"
+                      className={`${REMINDER_DAY_PILL} ${REMINDER_DAY_PILL_INACTIVE} px-2`}
+                      onClick={addCustomDay}
+                      disabled={busy}
+                    >
+                      Add day
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draft.sameDayReminderEnabled}
+                    onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })}
+                    disabled={busy}
+                  />
+                  {copy.sameDayLabel}
+                </label>
+                <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draft.overdueDailyEnabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setDraft((prev) => ({
+                        ...prev,
+                        overdueDailyEnabled: enabled,
+                        ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
+                        postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
+                      }));
+                    }}
+                    disabled={busy}
+                  />
+                  Every day late
+                </label>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
       <div>
         <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -648,6 +825,9 @@ function PaymentAutomationSettingsForm({
           </div>
         </label>
       ) : null}
+
+      </>
+      )}
 
       {variant === "inbox" ? (
       <div>
@@ -815,7 +995,7 @@ export function ReminderSettingsModal({
   if (!settings) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Auto reminders"} dense={variant === "payments"} panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}>
+    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Payment reminders"} dense={variant === "payments"} panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}>
       {settings ? (
         <PaymentAutomationSettingsPanel
           settings={settings}

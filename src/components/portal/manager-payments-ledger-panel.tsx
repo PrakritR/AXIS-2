@@ -19,6 +19,7 @@ import {
   cancelFutureRemindersForPaidCharge,
   patchScheduledMessage,
   restoreFutureRemindersForPendingCharge,
+  summarizeChargeReminders,
 } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
@@ -56,6 +57,7 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId,
   activeBucket,
   scheduledMessages = [],
+  reminderScheduleSummary,
   onOpenReminderSettings,
   onRowsChanged,
   onScheduleChanged,
@@ -64,6 +66,7 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId: string | null;
   activeBucket: ManagerPaymentBucket;
   scheduledMessages?: ScheduledPaymentMessage[];
+  reminderScheduleSummary?: string;
   onOpenReminderSettings?: () => void;
   onRowsChanged?: () => void;
   onScheduleChanged?: () => void;
@@ -257,7 +260,6 @@ export function ManagerPaymentsLedgerPanel({
         <span className="block">{row.dueDate}</span>
         {row.householdChargeId && !isPaidRow(row) ? (() => {
           const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
-          const activeReminders = reminders.filter((m) => m.status !== "cancelled");
           if (!reminders.length) return null;
           return (
             <span
@@ -275,7 +277,7 @@ export function ManagerPaymentsLedgerPanel({
                 setChargeRemindersRow(row);
               }}
             >
-              Auto · {activeReminders.length > 0 ? activeReminders.length : "skipped"}
+              {summarizeChargeReminders(reminders)}
             </span>
           );
         })() : null}
@@ -524,7 +526,7 @@ export function ManagerPaymentsLedgerPanel({
           </Button>
           {row.householdChargeId ? (
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
-              Auto reminders
+              View reminders
             </Button>
           ) : null}
         </>
@@ -590,6 +592,7 @@ export function ManagerPaymentsLedgerPanel({
         chargeTitle={chargeRemindersRow.chargeTitle}
         dueDate={chargeRemindersRow.dueDate}
         messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
+        scheduleSummary={reminderScheduleSummary}
         onMessageSaved={() => onScheduleChanged?.()}
         onToggleCancel={async (message, cancelled) => {
           try {
