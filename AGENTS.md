@@ -789,8 +789,8 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   `deleteManagerPropertyDraft`).
 - **The draft's record id IS the eventual live `mgr-…` listing id.** Publishing
   (final "Submit listing") re-upserts the SAME id `draft → live` and drops it
-  from the drafts bucket — no orphaned duplicate. A brand-new wizard that used
-  "Save draft" mid-way also publishes-in-place via the remembered id (`draftIdRef`
+  from the drafts bucket — no orphaned duplicate. A brand-new wizard that was
+  closed mid-way also publishes-in-place via the remembered id (`draftIdRef`
   in `manager-add-listing-form.tsx`), never a second row.
 - **That id is therefore a permanent public URL, so it is never minted from a
   blank name.** A save made before the manager typed a property name gets a
@@ -806,7 +806,20 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   table row key and unmount the open editor. Publishing is always in place, so
   the one-record invariant holds either way. Unnamed drafts render as "Untitled
   draft" in the list.
-- **Save draft is unvalidated** (partial-friendly, on every step) and does NOT
+- **Closing the wizard IS the save — there is no "Save draft" button.** Every
+  close affordance (footer Close, header ✕, backdrop click) routes through
+  `closeWizard` in `manager-add-listing-form.tsx`, which persists the current
+  submission as a draft and only then calls `onClose`. Two guards make that safe
+  to leave implicit: an UNTOUCHED wizard closes without writing anything (the
+  baseline fingerprint captured on first render, `manager-listing-draft-autosave.ts`,
+  compares the whole submission rather than an allowlist of fields, so a field
+  added to the wizard tomorrow is covered), and every EDIT mode (pending / live
+  listing / request-change / `preview` scope) is excluded, because those rows are
+  already persisted elsewhere and drafting one would fork it. A failed draft
+  write leaves the wizard OPEN with the work intact rather than closing on a lie.
+  Coverage: `tests/unit/listing-wizard-draft-autosave.test.tsx` drives the real
+  component through the real save path.
+- **Draft saving is unvalidated** (partial-friendly, on every step) and does NOT
   count toward the plan property limit; **publishing** runs full validation +
   the limit gate like any new listing — so the wizard's `skuTier`/`skuLoaded`
   come from the one `/api/manager/subscription` load in `manager-properties.tsx`
