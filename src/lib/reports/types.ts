@@ -69,7 +69,7 @@ export const MANAGER_REPORT_IDS = [
   "owner-statement",
 ] as const;
 
-export const RESIDENT_REPORT_IDS = ["resident-balance", "resident-ledger"] as const;
+export const RESIDENT_REPORT_IDS = ["resident-ledger"] as const;
 
 export type ManagerReportId = (typeof MANAGER_REPORT_IDS)[number];
 export type ResidentReportId = (typeof RESIDENT_REPORT_IDS)[number];

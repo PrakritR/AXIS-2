@@ -217,10 +217,10 @@ export function ManagerProperties() {
         data-attr="manager-properties-share"
         onClick={() => openShareListing()}
       >
-        Share
+        Send to prospect
       </Button>
       <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="manager-properties-create" onClick={tryOpenAdd}>
-        Create
+        Create listing
       </Button>
     </>
   );

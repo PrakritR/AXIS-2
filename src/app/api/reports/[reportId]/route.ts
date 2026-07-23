@@ -10,7 +10,7 @@ import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
 } from "@/lib/reports/types";
-import { runManagerReport, queryResidentBalance, queryResidentLedger } from "@/lib/reports/queries";
+import { runManagerReport, queryResidentLedger } from "@/lib/reports/queries";
 
 export const runtime = "nodejs";
 
@@ -35,14 +35,6 @@ export async function GET(
         to: searchParams.get("to")?.trim() || undefined,
       };
 
-      // ORPHANED branch — no UI caller. The resident portal Payments > Summary
-      // tab was its only consumer and was removed when Payments became
-      // Charges-only. Kept on purpose (removing it risks the shared reporting
-      // infra); a separate task tracks proper removal.
-      if (reportId === "resident-balance") {
-        const report = await queryResidentBalance(auth.db, auth.userId, auth.email);
-        return NextResponse.json(report);
-      }
       if (reportId === "resident-ledger") {
         const report = await queryResidentLedger(auth.db, auth.userId, auth.email, filters);
         return NextResponse.json(report);

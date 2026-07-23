@@ -13,7 +13,7 @@ import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
 } from "@/lib/reports/types";
-import { runManagerReport, queryResidentBalance, queryResidentLedger } from "@/lib/reports/queries";
+import { runManagerReport, queryResidentLedger } from "@/lib/reports/queries";
 
 export const runtime = "nodejs";
 
@@ -41,12 +41,7 @@ export async function GET(
         from: searchParams.get("from")?.trim() || undefined,
         to: searchParams.get("to")?.trim() || undefined,
       };
-      // Only the resident-ledger arm has a UI caller (Documents > Rent receipts);
-      // resident-balance is orphaned-but-kept — see the note in ../route.ts.
-      report =
-        reportId === "resident-balance"
-          ? await queryResidentBalance(auth.db, auth.userId, auth.email)
-          : await queryResidentLedger(auth.db, auth.userId, auth.email, filters);
+      report = await queryResidentLedger(auth.db, auth.userId, auth.email, filters);
     } else {
       if (!MANAGER_REPORT_IDS.includes(reportId as (typeof MANAGER_REPORT_IDS)[number])) {
         return NextResponse.json({ error: "Unknown report." }, { status: 404 });
