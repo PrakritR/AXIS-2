@@ -248,8 +248,16 @@ export function extractPropertyIdHint(text: string): string | null {
   const m =
     text.match(/propertyId=([a-zA-Z0-9._-]+)/i) ||
     text.match(/\/rent\/listings\/([a-zA-Z0-9._-]+)/i) ||
-    text.match(/\/rent\/apply\?[^\s]*propertyId=([a-zA-Z0-9._-]+)/i) ||
-    text.match(/\b(?:listing|property|home)\s*[#: ]\s*([a-zA-Z0-9._-]{6,})\b/i) ||
+    // NB: the `/rent/apply?…propertyId=` pattern was removed. It is unreachable:
+    // any string it could match contains `propertyId=<id>`, which the first
+    // pattern already matches, so `||` short-circuits before this ever runs. It
+    // also backtracked polynomially (`[^\s]*propertyId=`, CodeQL
+    // js/polynomial-redos), so dropping the dead branch removes the alert with
+    // zero behavior change.
+    // Single `[\s#:]+` separator class instead of `\s*[#: ]\s*`, whose two
+    // whitespace quantifiers around a space-containing class overlap and
+    // backtrack polynomially (CodeQL js/polynomial-redos).
+    text.match(/\b(?:listing|property|home)[\s#:]+([a-zA-Z0-9._-]{6,})\b/i) ||
     text.match(/\b(mgr-[a-z0-9-]+)\b/i);
   return m?.[1]?.trim() || null;
 }
@@ -263,18 +271,24 @@ export function extractBundleIdHint(text: string): string | null {
 
 /** Pull a human listing/bundle name from a CTA draft for server-side resolve. */
 export function extractPropertyLabelHint(text: string): string | null {
+  // Each label capture is anchored to non-whitespace on both ends
+  // (`\S(?:.*?\S)?`) instead of a bare `(.+?)` wedged between `\s+` and the
+  // optional trailing period. In the original, the leading `\s+` and the lazy
+  // `.` (which also matches whitespace) can carve the same run of spaces two
+  // ways, backtracking polynomially (CodeQL js/polynomial-redos). The capture is
+  // trimmed downstream, so the extracted label is identical for real CTA copy.
   const patterns = [
-    /apply for the bundle\s+"[^"]+"\s+at\s+(.+?)\.?$/i,
-    /apply for a room bundle at\s+(.+?)\.?$/i,
-    /schedule a tour for\s+(.+?)\.?$/i,
-    /tour for\s+(.+?)\.?$/i,
-    /apply for .+? at\s+(.+?)\.?$/i,
-    /apply for\s+(.+?)\.?$/i,
-    /question about .+? at\s+(.+?)\.?$/i,
-    /question about\s+(.+?)\.?$/i,
-    /(?:more )?info(?:rmation)? about\s+(.+?)\.?$/i,
-    /tell me about\s+(.+?)\.?$/i,
-    /interested in\s+(.+?)\.?$/i,
+    /apply for the bundle\s+"[^"]+"\s+at\s+(\S(?:.*?\S)?)\.?$/i,
+    /apply for a room bundle at\s+(\S(?:.*?\S)?)\.?$/i,
+    /schedule a tour for\s+(\S(?:.*?\S)?)\.?$/i,
+    /tour for\s+(\S(?:.*?\S)?)\.?$/i,
+    /apply for .+? at\s+(\S(?:.*?\S)?)\.?$/i,
+    /apply for\s+(\S(?:.*?\S)?)\.?$/i,
+    /question about .+? at\s+(\S(?:.*?\S)?)\.?$/i,
+    /question about\s+(\S(?:.*?\S)?)\.?$/i,
+    /(?:more )?info(?:rmation)? about\s+(\S(?:.*?\S)?)\.?$/i,
+    /tell me about\s+(\S(?:.*?\S)?)\.?$/i,
+    /interested in\s+(\S(?:.*?\S)?)\.?$/i,
   ];
   for (const re of patterns) {
     const m = text.trim().match(re);
