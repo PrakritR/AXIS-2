@@ -7,7 +7,6 @@ import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
 import {
   INBOX_LIST_SCROLL,
   InboxConversationRow,
-  InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
 } from "@/components/portal/portal-inbox-ui";
@@ -184,19 +183,31 @@ function ResidentUnifiedInbox({
             <span />
           )}
           {!query.trim() ? (
-            <button
-              type="button"
-              onClick={() => setShowArchived((v) => !v)}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
-                showArchived
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted hover:bg-foreground/5 hover:text-foreground"
-              }`}
-              data-attr="resident-inbox-archived-toggle"
-              aria-pressed={showArchived}
-            >
-              {showArchived ? "← Conversations" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {showArchived && archivedCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => inboxRef.current?.emptyTrash()}
+                  className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium text-[var(--status-overdue-fg)] transition-colors hover:bg-[var(--status-overdue-bg)]"
+                  data-attr="resident-inbox-empty-trash"
+                >
+                  Empty trash
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  showArchived
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border text-muted hover:bg-foreground/5 hover:text-foreground"
+                }`}
+                data-attr="resident-inbox-archived-toggle"
+                aria-pressed={showArchived}
+              >
+                {showArchived ? "← Conversations" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+              </button>
+            </div>
           ) : null}
         </div>
       </div>
@@ -233,25 +244,26 @@ function ResidentUnifiedInbox({
     </div>
   );
 
+  // Kept mounted for every non-SMS state (including "nothing selected") so the
+  // header's New message / Empty trash handles are never wired to a null ref;
+  // with no thread selected it renders its own empty state.
   const threadPane =
-    selection?.channel === "email" ? (
+    selection?.channel === "sms" ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+        <RoleSmsPanel apiPath="/api/resident/sms-conversations" storageScope="resident" tabId={"all" as ManagerSmsBucketId} />
+      </div>
+    ) : (
       <ResidentInboxPanel
         ref={inboxRef}
         tabId={showArchived ? "trash" : "all"}
         embeddedInCommunication
         externalTitleActions
         suppressListPane
-        controlledExpandedId={selection.threadId}
+        controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
         onControlledExpandedIdChange={(id) => {
           if (!id) setSelectedKey(null);
         }}
       />
-    ) : selection?.channel === "sms" ? (
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-        <RoleSmsPanel apiPath="/api/resident/sms-conversations" storageScope="resident" tabId={"all" as ManagerSmsBucketId} />
-      </div>
-    ) : (
-      <InboxThreadEmpty />
     );
 
   return <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />;

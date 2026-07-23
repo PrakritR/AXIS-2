@@ -56,8 +56,12 @@ describe("resident conversation inbox (no folder tabs)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
     render(<ResidentCommunication />);
 
-    const text = document.body.innerText;
+    // jsdom does not implement innerText — textContent is the real rendered text,
+    // so these assertions actually fail if the folder tabs come back.
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Property manager");
     expect(/\bUnopened\b/.test(text)).toBe(false);
+    expect(/\bOpened\b/.test(text)).toBe(false);
     expect(/\bSchedule\b/.test(text)).toBe(false);
     // The live conversation shows; the trashed one does not (until archived).
     expect(screen.getByText("Property manager")).toBeTruthy();
@@ -67,6 +71,15 @@ describe("resident conversation inbox (no folder tabs)", () => {
     expect(toggle).toBeTruthy();
     fireEvent.click(toggle);
     expect(screen.getByText("Old notice")).toBeTruthy();
+  });
+
+  it("offers Empty trash only in the archived view, and only when it has rows", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    render(<ResidentCommunication />);
+
+    expect(document.querySelector('[data-attr="resident-inbox-empty-trash"]')).toBeNull();
+    fireEvent.click(document.querySelector('[data-attr="resident-inbox-archived-toggle"]') as HTMLButtonElement);
+    expect(document.querySelector('[data-attr="resident-inbox-empty-trash"]')).toBeTruthy();
   });
 
   it("does not fetch SMS when the SMS UI flag is off (default)", async () => {

@@ -21,6 +21,7 @@ import {
   syncPersistedInboxFromServer,
   upsertPersistedInboxRows,
   inboxThreadMessages,
+  inboxThreadSortMs,
   appendReplyToInboxThread,
   type InboxThreadMessage,
   type InboxAiDraft,
@@ -272,8 +273,7 @@ export const ManagerInbox = forwardRef<
   }, [counts, embeddedInCommunication, onTabCountsChange]);
 
   function threadTimestamp(t: InboxThread): number {
-    const match = t.id.match(/(\d{10,})/);
-    return match ? parseInt(match[1]!, 10) : 0;
+    return inboxThreadSortMs(t.id, t.time);
   }
 
   /**
@@ -703,24 +703,23 @@ export const ManagerInbox = forwardRef<
       item: { id: string; source: "manual" | "automation" },
       next: { subject: string; body: string },
     ) => {
-      if (item.source === "manual") {
-        const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ subject: next.subject, body: next.body }),
-        });
-        if (!res.ok) {
-          showToast(await readPortalApiError(res, "Could not save changes."));
-          return;
-        }
-      } else {
-        try {
+      // Rejects on failure so the inline editor stays open with the draft text.
+      try {
+        if (item.source === "manual") {
+          const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ subject: next.subject, body: next.body }),
+          });
+          if (!res.ok) throw new Error(await readPortalApiError(res, "Could not save changes."));
+        } else {
           await patchScheduledMessage(item.id, { customSubject: next.subject, customBody: next.body });
-        } catch (e) {
-          showToast(e instanceof Error ? e.message : "Could not save changes.");
-          return;
         }
+      } catch (e) {
+        const message = e instanceof Error && e.message ? e.message : "Could not save changes.";
+        showToast(message);
+        throw new Error(message);
       }
       showToast("Scheduled message updated.");
       reloadScheduled();

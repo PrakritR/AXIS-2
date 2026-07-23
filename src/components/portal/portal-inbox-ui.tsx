@@ -956,22 +956,40 @@ export function InboxScheduledCard({
   const [draftSubject, setDraftSubject] = useState(subject);
   const [draftBody, setDraftBody] = useState(body);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Uncontrolled fallback: the actions live inside the expanded branch, so a
+  // caller that owns no expand state still gets a card it can open.
+  const [selfExpanded, setSelfExpanded] = useState(false);
+  const isExpanded = onToggleExpand ? expanded : selfExpanded;
+  const toggleExpand = onToggleExpand ?? (() => setSelfExpanded((v) => !v));
 
   const startEdit = () => {
     setDraftSubject(subject);
     setDraftBody(body);
+    setSaveError(null);
     setEditing(true);
   };
-  const cancelEdit = () => setEditing(false);
+  const cancelEdit = () => {
+    setSaveError(null);
+    setEditing(false);
+  };
   const saveEdit = () => {
     if (!onSaveEdit || !draftBody.trim()) return;
     setSaving(true);
+    setSaveError(null);
     void Promise.resolve(onSaveEdit({ subject: draftSubject.trim(), body: draftBody.trim() }))
-      .then(() => setEditing(false))
+      .then(() => {
+        setSaveError(null);
+        setEditing(false);
+      })
+      .catch((e: unknown) => {
+        // Keep the editor open with the manager's text intact on failure.
+        setSaveError(e instanceof Error && e.message ? e.message : "Could not save changes.");
+      })
       .finally(() => setSaving(false));
   };
 
-  const summary = [subject || "Scheduled message"].join("");
+  const summary = subject || "Scheduled message";
 
   return (
     <div
@@ -981,9 +999,9 @@ export function InboxScheduledCard({
       {/* Compact summary row — always visible, click to expand. */}
       <button
         type="button"
-        onClick={onToggleExpand}
+        onClick={toggleExpand}
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
-        aria-expanded={expanded}
+        aria-expanded={isExpanded}
         data-attr="inbox-scheduled-toggle"
       >
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -994,14 +1012,14 @@ export function InboxScheduledCard({
           <span className="text-muted"> · sends {sendLabel}</span>
           <span className="text-foreground/80"> · {summary}</span>
         </span>
-        {expanded ? (
+        {isExpanded ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} />
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} />
         )}
       </button>
 
-      {expanded ? (
+      {isExpanded ? (
         <div className="border-t border-primary/15 px-3.5 pb-3 pt-2.5">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <InboxChannelTag channel={channel} />
@@ -1026,6 +1044,11 @@ export function InboxScheduledCard({
                 className="text-sm"
                 data-attr="inbox-scheduled-edit-body"
               />
+              {saveError ? (
+                <p className="text-[12px] font-medium text-danger" role="alert" data-attr="inbox-scheduled-save-error">
+                  {saveError}
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"

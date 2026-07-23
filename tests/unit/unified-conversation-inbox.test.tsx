@@ -78,6 +78,12 @@ vi.mock("@/lib/portal-inbox-storage", () => ({
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => ALL_THREADS,
+  inboxThreadSortMs: (id: string, t?: string) => {
+    const m = String(id ?? "").match(/(\d{10,})/);
+    if (m) return parseInt(m[1]!, 10);
+    const p = Date.parse(t ?? "");
+    return Number.isNaN(p) ? 0 : p;
+  },
   inboxThreadMessages: (t: { id: string; from: string; body: string; time: string }) => [
     { id: `${t.id}-root`, from: t.from, body: t.body, at: t.time },
   ],

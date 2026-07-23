@@ -345,6 +345,18 @@ export function appendPersistedInboxThread(key: string, thread: PersistedInboxTh
   persistInbox(key, [thread, ...rows]);
 }
 
+/**
+ * Newest-first sort key for a conversation row. Thread ids embed the creation
+ * epoch (10+ digits); when they don't, fall back to parsing a display/ISO time.
+ * One implementation for every portal inbox — manager, unified, vendor.
+ */
+export function inboxThreadSortMs(id: string, fallbackTime?: string | null): number {
+  const match = String(id ?? "").match(/(\d{10,})/);
+  if (match) return parseInt(match[1]!, 10);
+  const parsed = Date.parse(fallbackTime ?? "");
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMessage[] {
   const root: InboxThreadMessage = {
     id: `${thread.id}-root`,

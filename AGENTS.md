@@ -681,6 +681,15 @@ Schedule tab bar. Manager + resident use the chat two-pane
   `src/lib/inbox-scheduled-thread.ts`. Edit permissions are unchanged —
   resident-originated / resident-side rows are cancel-only (the resident
   scheduled-message route only patches status), so residents pass no `onSaveEdit`.
+  `onSaveEdit` MUST reject on failure (see `saveScheduledEdit` in
+  `manager-inbox.tsx`) — the card keeps the editor open and shows the error
+  instead of closing and discarding the manager's text.
+  **Admin is the one exception to "inline".** Its Communication is a flat table
+  with no chat pane, and a scheduled send to someone admin has never messaged has
+  no conversation row to sit in, so admin keeps a reachable Scheduled view behind
+  an `admin-inbox-scheduled-toggle` button beside the archive toggle. It is a
+  view toggle, not a folder tab; do not delete it while the admin compose modal
+  can still schedule — that leaves scheduled sends uncancellable.
 - **`scheduled-message-path-id.ts` must NEVER use the `base64url` encoding
   token.** It runs client-side (building the scheduled-message action URL), and
   Next's browser Buffer polyfill throws "Unknown encoding: base64url" — that

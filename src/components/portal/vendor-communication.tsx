@@ -75,6 +75,7 @@ export function VendorCommunication({
           tabId={view}
           embeddedInCommunication
           externalTitleActions
+          smsUiEnabled={smsUiEnabled}
           onTabCountsChange={setEmailTabCounts}
         />
         {smsUiEnabled && view !== "trash" ? (

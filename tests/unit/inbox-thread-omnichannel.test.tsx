@@ -7,7 +7,7 @@
 //  3. Scheduled messages render INLINE as a "Scheduled · sends <when>" card
 //     with Cancel / Send now actions, replacing the standalone Schedule table.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import {
   InboxBubble,
   InboxScheduledCard,
@@ -112,5 +112,55 @@ describe("inbox thread omnichannel primitives", () => {
     fireEvent.click(screen.getByText("Save"));
     expect(onSaveEdit).toHaveBeenCalledTimes(1);
     expect(onSaveEdit.mock.calls[0][0]).toMatchObject({ body: "Edited body" });
+  });
+
+  it("keeps the editor open with the draft intact when the save rejects", async () => {
+    const onSaveEdit = vi.fn(() => Promise.reject(new Error("Could not save changes.")));
+    render(
+      <InboxScheduledCard
+        sendLabel="Jul 25"
+        subject="Rent reminder"
+        body="Original body"
+        source="manual"
+        editable
+        expanded
+        onToggleExpand={vi.fn()}
+        onCancel={vi.fn()}
+        onSendNow={vi.fn()}
+        onSaveEdit={onSaveEdit}
+      />,
+    );
+    fireEvent.click(screen.getByText("Edit"));
+    const bodyField = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
+    fireEvent.change(bodyField, { target: { value: "Edited body" } });
+    fireEvent.click(screen.getByText("Save"));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-attr="inbox-scheduled-save-error"]')?.textContent).toBe(
+        "Could not save changes.",
+      ),
+    );
+    // Editor still open, edited text NOT discarded.
+    const stillEditing = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
+    expect(stillEditing).toBeTruthy();
+    expect(stillEditing.value).toBe("Edited body");
+  });
+
+  it("falls back to internal expand state when no onToggleExpand is given", () => {
+    render(
+      <InboxScheduledCard
+        sendLabel="Jul 25"
+        subject="Rent reminder"
+        body="Original body"
+        source="manual"
+        editable={false}
+        onCancel={vi.fn()}
+        onSendNow={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Send now")).toBeNull();
+    fireEvent.click(document.querySelector('[data-attr="inbox-scheduled-toggle"]') as HTMLButtonElement);
+    expect(screen.getByText("Send now")).toBeTruthy();
+    expect(screen.getByText("Cancel send")).toBeTruthy();
   });
 });

@@ -31,6 +31,7 @@ import {
   syncPersistedInboxFromServer,
   upsertPersistedInboxRows,
   VENDOR_INBOX_STORAGE_KEY,
+  inboxThreadSortMs,
   type InboxThreadMessage,
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
@@ -39,22 +40,20 @@ type InboxThread = PersistedInboxThread;
 
 const VENDOR_INBOX_FALLBACK: PersistedInboxThread[] = [];
 
-function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
-  return list.map((t) => ({
-    id: t.id,
-    name: tabId === "sent" ? (t.email || "Unknown recipient") : t.from,
-    email: tabId === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
-    subject: t.subject,
-    whenLabel: t.time,
-    read: !t.unread,
-  }));
-}
-
-function threadSortMs(t: InboxThread): number {
-  const idMatch = t.id.match(/(\d{10,})/);
-  if (idMatch) return parseInt(idMatch[1]!, 10);
-  const parsed = Date.parse(t.time ?? "");
-  return Number.isNaN(parsed) ? 0 : parsed;
+function toRows(list: InboxThread[]): PortalInboxTableRow[] {
+  // Display semantics come from the ROW's own folder, not the active tab — the
+  // unified "all" list mixes inbox (show sender) and sent (show recipient) rows.
+  return list.map((t) => {
+    const isSent = t.folder === "sent";
+    return {
+      id: t.id,
+      name: isSent ? t.email || "Unknown recipient" : t.from,
+      email: isSent ? (t.from ? `From ${t.from}` : "") : t.email,
+      subject: t.subject,
+      whenLabel: t.time,
+      read: !t.unread,
+    };
+  });
 }
 
 function countThreads(threads: InboxThread[]) {
@@ -85,10 +84,16 @@ export const VendorInboxPanel = forwardRef<
     tabId: string;
     embeddedInCommunication?: boolean;
     externalTitleActions?: boolean;
+    /**
+     * Server-resolved SMS Communication UI flag. While it is false the SMS panel
+     * is hidden, so inbound-SMS notices must FALL THROUGH into the conversation
+     * list (`keepSmsLike`) instead of being filtered into a panel nobody can see.
+     */
+    smsUiEnabled?: boolean;
     onTabCountsChange?: (counts: VendorInboxTabCounts) => void;
   }
 >(function VendorInboxPanel(
-  { tabId, embeddedInCommunication = false, externalTitleActions = false, onTabCountsChange },
+  { tabId, embeddedInCommunication = false, externalTitleActions = false, smsUiEnabled = false, onTabCountsChange },
   ref,
 ) {
   const { showToast } = useAppUi();
@@ -175,8 +180,8 @@ export const VendorInboxPanel = forwardRef<
 
   const emailThreads = useMemo(() => {
     if (!embeddedInCommunication) return local;
-    return filterEmailInboxThreads(local);
-  }, [embeddedInCommunication, local]);
+    return filterEmailInboxThreads(local, { keepSmsLike: !smsUiEnabled });
+  }, [embeddedInCommunication, local, smsUiEnabled]);
 
   const emailCounts = useMemo(() => countThreads(emailThreads), [emailThreads]);
 
@@ -212,7 +217,7 @@ export const VendorInboxPanel = forwardRef<
       return emailThreads
         .filter((t) => t.folder !== "trash")
         .slice()
-        .sort((a, b) => threadSortMs(b) - threadSortMs(a));
+        .sort((a, b) => inboxThreadSortMs(b.id, b.time) - inboxThreadSortMs(a.id, a.time));
     if (tabId === "unopened")
       return emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
     if (tabId === "opened") return emailThreads.filter((t) => t.folder === "inbox" && !t.unread);
@@ -473,7 +478,12 @@ export const VendorInboxPanel = forwardRef<
 
   const renderExtraActions = useCallback(
     (row: PortalInboxTableRow) => {
-      if (tabId === "trash") {
+      // Destructive actions follow the ROW's own folder, never the active tab —
+      // the unified "all" view spans folders, so a tab-derived "Delete forever"
+      // would destroy a live conversation.
+      const thread = local.find((t) => t.id === row.id);
+      const folder = thread?.folder ?? (tabId === "trash" ? "trash" : "inbox");
+      if (folder === "trash") {
         return (
           <>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => restoreFromTrash(row.id)}>
@@ -485,7 +495,7 @@ export const VendorInboxPanel = forwardRef<
           </>
         );
       }
-      if (tabId === "opened") {
+      if (folder === "inbox" && !thread?.unread) {
         return (
           <>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markUnread(row.id)}>
@@ -503,7 +513,7 @@ export const VendorInboxPanel = forwardRef<
         </Button>
       );
     },
-    [tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
+    [local, tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
   );
 
   const emptyCopy = inboxTabEmptyCopy(tabId);
@@ -558,7 +568,7 @@ export const VendorInboxPanel = forwardRef<
       ) : (
         <div className="space-y-3">
           <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
-            {tabId === "unopened" ? (
+            {tabId === "unopened" || tabId === "all" ? (
               <>
                 <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
                   Mark read
@@ -595,9 +605,9 @@ export const VendorInboxPanel = forwardRef<
             ) : null}
           </PortalInboxSelectionToolbar>
           <PortalInboxMessageTable
-            rows={toRows(rowsForTab, tabId)}
-            primaryPartyHeader={tabId === "sent" ? "To" : "From"}
-            onMarkRead={tabId === "unopened" ? markRead : undefined}
+            rows={toRows(rowsForTab)}
+            primaryPartyHeader={tabId === "all" ? "From / To" : tabId === "sent" ? "To" : "From"}
+            onMarkRead={tabId === "unopened" || tabId === "all" ? markRead : undefined}
             getDetailBody={(row) => bodyById[row.id]}
             getThreadMessages={(row) => {
               const thread = local.find((t) => t.id === row.id);

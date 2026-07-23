@@ -25,15 +25,22 @@ export function AdminCommunication({
 }) {
   const inboxRef = useRef<AdminInboxClientHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);
-  // Trashed/archived conversations are reachable via a toggle, not a folder tab.
-  const [showArchived, setShowArchived] = useState(false);
+  // Trashed/archived conversations and pending scheduled sends are each reachable
+  // via a toggle, not a folder tab. Admin rows are a flat table with no chat pane
+  // to host manager/resident-style inline scheduled cards, and a scheduled send
+  // to someone the admin has never messaged has no conversation row to sit in —
+  // so the schedule surface stays a view of its own. Without it, staff can create
+  // scheduled sends they can never view or cancel.
+  const [view, setView] = useState<"all" | "trash" | "schedule">("all");
   const [trashCount, setTrashCount] = useState(0);
+  const [scheduleCount, setScheduleCount] = useState(0);
   const handleEmailTabCountsChange = useCallback((counts: AdminInboxTabCounts) => {
     setTrashCount(counts.trash);
+    setScheduleCount(counts.schedule);
   }, []);
 
-  // "all" = one list of every live conversation; "trash" = the archived view.
-  const viewTabId: "all" | "trash" = showArchived ? "trash" : "all";
+  const showArchived = view === "trash";
+  const showSchedule = view === "schedule";
 
   const titleAside = (
     <>
@@ -51,9 +58,19 @@ export function AdminCommunication({
         type="button"
         variant="outline"
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="admin-inbox-scheduled-toggle"
+        aria-pressed={showSchedule}
+        onClick={() => setView((v) => (v === "schedule" ? "all" : "schedule"))}
+      >
+        {showSchedule ? "← Conversations" : `Scheduled${scheduleCount > 0 ? ` (${scheduleCount})` : ""}`}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         data-attr="admin-inbox-archived-toggle"
         aria-pressed={showArchived}
-        onClick={() => setShowArchived((v) => !v)}
+        onClick={() => setView((v) => (v === "trash" ? "all" : "trash"))}
       >
         {showArchived ? "← Conversations" : `Archived${trashCount > 0 ? ` (${trashCount})` : ""}`}
       </Button>
@@ -73,13 +90,13 @@ export function AdminCommunication({
       <div className="space-y-6">
         <AdminInboxClient
           ref={inboxRef}
-          tabId={viewTabId}
+          tabId={view}
           commBase={`${ADMIN_COMM_BASE}/inbox`}
           embeddedInCommunication
           externalTitleActions
           onTabCountsChange={handleEmailTabCountsChange}
         />
-        {smsUiEnabled && !showArchived ? (
+        {smsUiEnabled && view === "all" ? (
           <section className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-foreground">Text messages</h2>
