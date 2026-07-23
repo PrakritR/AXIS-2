@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
+import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 
 // A fresh manager per test — the side-bucket draft store is module-level memory
 // that outlives a single test.
@@ -190,6 +191,44 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/could not save/i)));
     expect(onClose).not.toHaveBeenCalled();
     expect(readAdminPropertyRows(5, MANAGER_ID)).toHaveLength(0);
+  });
+
+  it("keeps the wizard open when no manager is signed in, rather than dropping the work", async () => {
+    // A session that expired mid-wizard must not turn Close into a silent
+    // discard — the same keep-open rule as a failed write.
+    MANAGER_ID = "";
+    const { onClose, showToast } = renderWizard();
+
+    typePropertyName("Ravenna Craftsman");
+    clickClose();
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/could not save/i)));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+  });
+
+  it("saves the typed listing without any base64 when the media upload fails", async () => {
+    // The stubbed Supabase client has no session, so every data-URL upload
+    // throws — the draft must still land, minus the raw bytes.
+    const { onClose, showToast } = renderWizard({
+      initialSubmission: {
+        ...createDefaultListingSubmission(),
+        housePhotoDataUrls: ["data:image/jpeg;base64,AAAA"],
+        leaseTemplateDocUrl: "data:application/pdf;base64,BBBB",
+        floorPlanByLabel: { "Floor 1": "data:image/png;base64,CCCC" },
+      },
+    });
+
+    typePropertyName("Ravenna Craftsman");
+    clickClose();
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+
+    const drafts = readAdminPropertyRows(5, MANAGER_ID);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]!.buildingName).toBe("Ravenna Craftsman");
+    expect(JSON.stringify(drafts[0]!.submission)).not.toContain("data:");
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/photos could not be uploaded/i));
   });
 
   it("never drafts an edit of an existing listing", async () => {
