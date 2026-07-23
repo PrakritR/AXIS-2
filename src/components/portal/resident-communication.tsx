@@ -244,27 +244,32 @@ function ResidentUnifiedInbox({
     </div>
   );
 
-  // Kept mounted for every non-SMS state (including "nothing selected") so the
-  // header's New message / Empty trash handles are never wired to a null ref;
-  // with no thread selected it renders its own empty state.
-  const threadPane =
-    selection?.channel === "sms" ? (
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-        <RoleSmsPanel apiPath="/api/resident/sms-conversations" storageScope="resident" tabId={"all" as ManagerSmsBucketId} />
+  // ALWAYS mounted — including while an SMS thread is open and while nothing is
+  // selected — so the header's New message / Empty trash handles are never wired
+  // to a null ref. With no email thread selected it renders its own empty state.
+  const smsSelected = selection?.channel === "sms";
+  const threadPane = (
+    <>
+      {smsSelected ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+          <RoleSmsPanel apiPath="/api/resident/sms-conversations" storageScope="resident" tabId={"all" as ManagerSmsBucketId} />
+        </div>
+      ) : null}
+      <div className={smsSelected ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+        <ResidentInboxPanel
+          ref={inboxRef}
+          tabId={showArchived ? "trash" : "all"}
+          embeddedInCommunication
+          externalTitleActions
+          suppressListPane
+          controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
+          onControlledExpandedIdChange={(id) => {
+            if (!id) setSelectedKey(null);
+          }}
+        />
       </div>
-    ) : (
-      <ResidentInboxPanel
-        ref={inboxRef}
-        tabId={showArchived ? "trash" : "all"}
-        embeddedInCommunication
-        externalTitleActions
-        suppressListPane
-        controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
-        onControlledExpandedIdChange={(id) => {
-          if (!id) setSelectedKey(null);
-        }}
-      />
-    );
+    </>
+  );
 
   return <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />;
 }

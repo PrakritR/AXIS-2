@@ -72,6 +72,8 @@ export function PortalInboxEmptyState({ title }: { title: string; hint?: ReactNo
  */
 export function inboxTabEmptyCopy(tabId: string): string {
   switch (tabId) {
+    case "all":
+      return "No conversations yet.";
     case "unopened":
       return "No unopened messages yet.";
     case "opened":

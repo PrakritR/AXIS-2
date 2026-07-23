@@ -704,6 +704,7 @@ export const ManagerInbox = forwardRef<
       next: { subject: string; body: string },
     ) => {
       // Rejects on failure so the inline editor stays open with the draft text.
+      // The card renders the message inline, so there is deliberately no toast.
       try {
         if (item.source === "manual") {
           const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {
@@ -717,9 +718,7 @@ export const ManagerInbox = forwardRef<
           await patchScheduledMessage(item.id, { customSubject: next.subject, customBody: next.body });
         }
       } catch (e) {
-        const message = e instanceof Error && e.message ? e.message : "Could not save changes.";
-        showToast(message);
-        throw new Error(message);
+        throw new Error(e instanceof Error && e.message ? e.message : "Could not save changes.");
       }
       showToast("Scheduled message updated.");
       reloadScheduled();

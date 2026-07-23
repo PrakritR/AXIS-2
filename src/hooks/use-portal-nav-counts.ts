@@ -27,7 +27,6 @@ import {
   readAllServiceRequests,
   SERVICE_REQUESTS_EVENT,
 } from "@/lib/service-requests-storage";
-import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
@@ -36,6 +35,20 @@ import {
 import { readBugFeedbackRows } from "@/lib/portal-bug-feedback";
 import { prefetchPortalData } from "@/lib/portal-data-store";
 import type { PortalKind } from "@/lib/portal-types";
+
+/**
+ * Unread Communication conversations for the nav badge.
+ *
+ * Deliberately does NOT drop SMS-like rows. Communication is one section that
+ * owns both the conversation list and the SMS panel, and while the SMS UI is
+ * hidden an inbound-SMS notice falls through into the conversation list
+ * (`keepSmsLike` in `filterEmailInboxThreads`). This hook is a client hook with
+ * no access to the server-resolved `smsUiEnabled` flag, so counting every
+ * unread inbox row is the only way the badge can never disagree with the list.
+ */
+function countUnreadCommunication(rows: { folder?: string; unread?: boolean }[]): number {
+  return rows.filter((t) => t.folder === "inbox" && t.unread).length;
+}
 
 /** Pending / unread counts for sidebar nav badges (0 = hide badge). */
 export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, number>> {
@@ -100,9 +113,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const pendingWorkOrders = readManagerWorkOrderRows().filter(
         (w) => moduleRowVisibleToPortalUser(w, userId, "services") && w.bucket === "open",
       ).length;
-      const inboxRows = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
-      const emailOnly = filterEmailInboxThreads(inboxRows);
-      const inbox = emailOnly.filter((t) => t.folder === "inbox" && t.unread).length;
+      const inbox = countUnreadCommunication(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
       return {
         applications: pendingApps,
         services: pendingServiceRequests + pendingWorkOrders,
@@ -111,9 +122,9 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     }
 
     if (kind === "resident") {
-      const residentRows = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
-      const emailOnly = filterEmailInboxThreads(residentRows);
-      const inbox = emailOnly.filter((t) => t.folder === "inbox" && t.unread).length;
+      const inbox = countUnreadCommunication(
+        loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK),
+      );
       return { communication: inbox };
     }
 
