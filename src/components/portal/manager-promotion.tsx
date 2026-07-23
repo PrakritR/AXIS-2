@@ -8,7 +8,6 @@ import {
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
   buildManagerPropertyFilterOptions,
@@ -148,7 +147,6 @@ export function ManagerPromotion() {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sectionExpanded, setSectionExpanded] = useState(true);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
   const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("text");
   const [propertyFilter, setPropertyFilter] = useState("");
@@ -618,6 +616,30 @@ export function ManagerPromotion() {
     );
   };
 
+  // #region agent log
+  useEffect(() => {
+    const direct = typeof document !== "undefined"
+      ? Boolean(document.querySelector('[data-attr="promotion-content-direct"]'))
+      : false;
+    const legacy = typeof document !== "undefined"
+      ? Boolean(document.querySelector('[data-attr="promotion-section-toggle"]'))
+      : false;
+    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+      body: JSON.stringify({
+        sessionId: "81cbea",
+        runId: "promotion-flat",
+        hypothesisId: "H1-your-promotions-wrapper",
+        location: "manager-promotion.tsx:render",
+        message: "Promotion panel mounted",
+        data: { direct, legacy, href: typeof window !== "undefined" ? window.location.href : null },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, []);
+  // #endregion
+
   return (
     <ManagerPortalPageShell
       title="Promotion"
@@ -647,14 +669,7 @@ export function ManagerPromotion() {
         </ManagerPortalFilterRow>
       }
     >
-      <PortalCollapsibleSection
-        title="Your promotions"
-        expanded={sectionExpanded}
-        onExpandedChange={setSectionExpanded}
-        collapsible={assets.length > 0}
-        toggleDataAttr="promotion-section-toggle"
-        contentClassName="px-4 py-3"
-      >
+      <div data-attr="promotion-content-direct">
         <PromotionAssetStack
           assets={filteredAssets}
           emptyMessage={
@@ -668,7 +683,7 @@ export function ManagerPromotion() {
           renderHeaderActions={renderHeaderActions}
           renderExpanded={renderExpanded}
         />
-      </PortalCollapsibleSection>
+      </div>
 
       <PromotionNewModal
         open={showNewModal}
