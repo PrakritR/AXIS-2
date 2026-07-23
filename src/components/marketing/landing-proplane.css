@@ -262,14 +262,19 @@
   font-weight: 600;
 }
 
-/* Blueprint / floorplan grid */
+/* Blueprint / floorplan grid.
+ * The square pitch is the shared `--lp-grid-size` token (set in globals.css) so
+ * these squares are exactly the same size as the hero lattice — the grid never
+ * appears to resize as you scroll between sections. Applied to every flow-band
+ * "working surface" section (dashboard demo, inbox demo, learn) so the grid is a
+ * continuous motif instead of appearing/disappearing between sections. */
 .lp-blueprint {
   background-color: var(--lp-surface);
   /* Theme brand grid (blue in light, purple in dark via --lp-blue). */
   background-image:
     linear-gradient(color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-size: var(--lp-grid-size) var(--lp-grid-size);
 }
 
 /* Dark: give otherwise-flat black bands an ambient purple undercurrent for depth. */
@@ -278,7 +283,10 @@
     linear-gradient(color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in srgb, var(--lp-blue) 8%, transparent) 1px, transparent 1px),
     radial-gradient(ellipse 70% 55% at 50% -8%, color-mix(in srgb, var(--pl-purple) 14%, transparent) 0%, transparent 65%);
-  background-size: 24px 24px, 24px 24px, 100% 100%;
+  background-size:
+    var(--lp-grid-size) var(--lp-grid-size),
+    var(--lp-grid-size) var(--lp-grid-size),
+    100% 100%;
 }
 
 /* Product stage */
@@ -1203,7 +1211,7 @@
   position: relative;
   padding: 40px 0 28px;
   min-width: 0;
-  background: var(--lp-surface);
+  /* Background comes from the shared `.lp-blueprint` class (continuous grid). */
   color: var(--lp-ink);
 }
 
@@ -1558,7 +1566,7 @@
   position: relative;
   padding: 40px 0 28px;
   min-width: 0;
-  background: var(--lp-surface);
+  /* Background comes from the shared `.lp-blueprint` class (continuous grid). */
   color: var(--lp-ink);
 }
 

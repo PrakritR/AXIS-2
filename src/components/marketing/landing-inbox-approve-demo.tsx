@@ -212,7 +212,7 @@ export function LandingInboxApproveDemo() {
     <section
       ref={rootRef}
       id="approval-inbox"
-      className="lp-ibx-demo scroll-mt-20"
+      className="lp-ibx-demo lp-blueprint scroll-mt-20"
       aria-label="Approval-first manager inbox demo"
     >
       <div className="lp-w-wide">

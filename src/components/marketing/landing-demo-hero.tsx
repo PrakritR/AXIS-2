@@ -71,7 +71,7 @@ export function LandingDemoHero() {
             </ul>
           </div>
 
-          <div className="mx-auto w-full max-w-[468px] min-w-0 lg:ml-auto lg:mr-0">
+          <div className="mx-auto w-full max-w-[524px] min-w-0 lg:ml-auto lg:mr-0">
             <ApplicationsPipelinePanel />
           </div>
         </div>

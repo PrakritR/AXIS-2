@@ -18,6 +18,9 @@
   --pl-white: #ffffff;
   /* Cool off-white (not cream) for large light planes */
   --pl-white-muted: #f7f8fa;
+  /* Single blueprint/lattice square pitch shared by the landing hero grid and
+   * the flow-band blueprint so the squares never change size between sections. */
+  --lp-grid-size: 56px;
 }
 
 :root,
@@ -2263,8 +2266,8 @@ html[data-native] [data-listing-sections-root] {
    gone by the edges. */
 .landing-hero-grid {
   background-image:
-    repeating-linear-gradient(0deg, var(--hero-grid-line) 0 1px, transparent 1px 56px),
-    repeating-linear-gradient(90deg, var(--hero-grid-line) 0 1px, transparent 1px 56px);
+    repeating-linear-gradient(0deg, var(--hero-grid-line) 0 1px, transparent 1px var(--lp-grid-size)),
+    repeating-linear-gradient(90deg, var(--hero-grid-line) 0 1px, transparent 1px var(--lp-grid-size));
   -webkit-mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, black 0%, transparent 72%);
   mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, black 0%, transparent 72%);
   opacity: var(--hero-grid-opacity);

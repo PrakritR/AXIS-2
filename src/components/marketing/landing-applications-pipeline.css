@@ -102,7 +102,7 @@
 }
 
 .lp-pipe-body {
-  padding: 14px 14px 15px;
+  padding: 18px 18px 20px;
   background: var(--lp-surface);
 }
 
@@ -117,7 +117,7 @@
 
 .lp-pipe-heading {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--lp-ink);
@@ -213,25 +213,37 @@
 .lp-pipe-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 13px;
+  padding: 14px 16px;
   min-width: 0;
 }
 
+/* Circular profile avatar: a filled brand-accent chip with white initials that
+ * reads like a real profile picture (Chrome-style), not flat text. Single hue
+ * per the "never mix blue and purple" brand rule — the accent is blue in light,
+ * purple in dark. A card-colored ring + soft shadow lift it off the row. */
 .lp-pipe-avatar {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
-  color: var(--lp-muted);
-  background: color-mix(in srgb, var(--lp-surface-2) 92%, var(--lp-ink));
-  border: 1px solid color-mix(in srgb, var(--lp-line) 90%, transparent);
+  color: var(--pl-white);
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--lp-pipe-accent) 78%, white),
+    var(--lp-pipe-accent) 52%,
+    color-mix(in srgb, var(--lp-pipe-accent) 82%, black)
+  );
+  border: 2px solid var(--lp-card);
+  box-shadow:
+    0 3px 9px color-mix(in srgb, var(--pl-accent) 40%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--pl-accent) 32%, transparent);
 }
 
 .lp-pipe-applicant {
@@ -244,10 +256,10 @@
 .lp-pipe-name {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 15.5px;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--lp-ink);
   overflow: hidden;
@@ -258,7 +270,7 @@
 /* Inline chevron after the primary label, per the portal UI system. */
 .lp-pipe-chev {
   flex-shrink: 0;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1;
   color: var(--lp-muted);
 }
@@ -269,8 +281,8 @@
 
 .lp-pipe-meta {
   display: block;
-  margin-top: 2px;
-  font-size: 10.5px;
+  margin-top: 3px;
+  font-size: 12px;
   color: var(--lp-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -283,8 +295,8 @@
   align-items: center;
   white-space: nowrap;
   border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 10px;
+  padding: 4px 9px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -305,7 +317,9 @@
 
 /* Expanded row — the manager's review moment. */
 .lp-pipe-detail {
-  padding: 0 12px 12px 50px;
+  /* Left inset aligns the expanded content under the name column:
+   * row padding-left (16) + avatar (42) + row gap (13) = 71px. */
+  padding: 0 16px 14px 71px;
   border-top: 1px solid color-mix(in srgb, var(--lp-line) 55%, transparent);
 }
 
