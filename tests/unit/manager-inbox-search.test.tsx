@@ -77,6 +77,12 @@ vi.mock("@/lib/portal-inbox-storage", () => ({
   stagePersistedInboxRows: () => {},
   upsertPersistedInboxRows: () => {},
   deleteInboxThreadIds: () => Promise.resolve(),
+  inboxThreadSortMs: (id: string, t?: string) => {
+    const m = String(id ?? "").match(/(\d{10,})/);
+    if (m) return parseInt(m[1]!, 10);
+    const p = Date.parse(t ?? "");
+    return Number.isNaN(p) ? 0 : p;
+  },
   inboxThreadMessages: () => [],
   appendReplyToInboxThread: () => THREADS,
 }));

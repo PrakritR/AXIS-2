@@ -13,6 +13,12 @@ vi.mock("@/lib/portal-inbox-storage", () => ({
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => [],
+  inboxThreadSortMs: (id: string, t?: string) => {
+    const m = String(id ?? "").match(/(\d{10,})/);
+    if (m) return parseInt(m[1]!, 10);
+    const p = Date.parse(t ?? "");
+    return Number.isNaN(p) ? 0 : p;
+  },
   inboxThreadMessages: () => [],
 }));
 vi.mock("@/components/portal/manager-inbox", () => ({ ManagerInbox: () => <div /> }));

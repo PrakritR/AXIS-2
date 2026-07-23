@@ -1,22 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ResidentInboxPanel, type ResidentInboxPanelHandle, type ResidentInboxTabCounts } from "@/components/portal/resident-inbox-panel";
+import { ResidentInboxPanel, type ResidentInboxPanelHandle } from "@/components/portal/resident-inbox-panel";
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
 import {
   INBOX_LIST_SCROLL,
   InboxConversationRow,
-  InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
-  inboxTabEmptyCopy,
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   mergeUnifiedInboxItems,
@@ -59,38 +54,20 @@ function loadOpenedIds(): Set<string> {
   }
 }
 
-function smsMatchesTab(tabId: string, msg: ManagerSmsMessageRow, opened: Set<string>): boolean {
-  if (tabId === "schedule" || tabId === "trash") return false;
-  const bucket = smsMessageBucket(msg, opened);
-  if (tabId === "unopened") return bucket === "unopened";
-  if (tabId === "opened") return bucket === "opened";
-  if (tabId === "sent") return bucket === "sent";
-  return true;
-}
-
 function ResidentUnifiedInbox({
-  tabId,
   inboxRef,
-  onTabCountsChange,
+  smsUiEnabled,
 }: {
-  tabId: string;
   inboxRef: React.RefObject<ResidentInboxPanelHandle | null>;
-  onTabCountsChange: (counts: ResidentInboxTabCounts) => void;
+  smsUiEnabled: boolean;
 }) {
   const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
   const [smsMessages, setSmsMessages] = useState<ManagerSmsMessageRow[]>([]);
-  const [smsOpened, setSmsOpened] = useState<Set<string>>(() => loadOpenedIds());
+  const [smsOpened] = useState<Set<string>>(() => loadOpenedIds());
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [scheduleCount, setScheduleCount] = useState(0);
-
-  // The embedded ResidentInboxPanel counts EMAIL only, so forwarding its counts
-  // upward would drop the SMS thread out of the folder badges whenever a thread
-  // pane is mounted. Take only the schedule count and let the effect below own
-  // the badges.
-  const handleEmbeddedTabCounts = useCallback((counts: ResidentInboxTabCounts) => {
-    setScheduleCount(counts.schedule);
-  }, []);
+  // Archived (trashed) conversations reachable via a toggle, not a tab.
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
@@ -99,6 +76,9 @@ function ResidentUnifiedInbox({
   }, []);
 
   useEffect(() => {
+    // SMS UI hidden until A2P clears — never fetch SMS. Inbound texts still land
+    // as inbox notices and fall through to the unified list (keepSmsLike below).
+    if (!smsUiEnabled) return;
     void (async () => {
       try {
         const res = await fetch("/api/resident/sms-conversations", { credentials: "include", cache: "no-store" });
@@ -109,14 +89,17 @@ function ResidentUnifiedInbox({
         /* keep */
       }
     })();
-  }, []);
+  }, [smsUiEnabled]);
 
   useEffect(() => {
     setSelectedKey(null);
     setQuery("");
-  }, [tabId]);
+  }, [showArchived]);
 
-  const filteredEmail = useMemo(() => filterEmailInboxThreads(emailThreads), [emailThreads]);
+  const filteredEmail = useMemo(
+    () => filterEmailInboxThreads(emailThreads, { keepSmsLike: !smsUiEnabled }),
+    [emailThreads, smsUiEnabled],
+  );
 
   const emailItems = useMemo((): UnifiedInboxListItem[] => {
     const q = query.trim().toLowerCase();
@@ -127,11 +110,11 @@ function ResidentUnifiedInbox({
         const hay = [t.from, t.email, t.subject, t.body, t.preview].filter(Boolean).join(" ").toLowerCase();
         return hay.includes(q);
       });
-    } else if (tabId === "unopened") rows = rows.filter((t) => t.folder === "inbox" && t.unread);
-    else if (tabId === "opened") rows = rows.filter((t) => t.folder === "inbox" && !t.unread);
-    else if (tabId === "sent") rows = rows.filter((t) => t.folder === "sent");
-    else if (tabId === "trash") rows = rows.filter((t) => t.folder === "trash");
-    else rows = [];
+    } else if (showArchived) {
+      rows = rows.filter((t) => t.folder === "trash");
+    } else {
+      rows = rows.filter((t) => t.folder !== "trash");
+    }
 
     return rows.map((t) => {
       const msgs = inboxThreadMessages(t);
@@ -150,11 +133,11 @@ function ResidentUnifiedInbox({
         sortMs: Date.parse(lastMsg?.at ?? "") || 0,
       };
     });
-  }, [filteredEmail, query, tabId]);
+  }, [filteredEmail, query, showArchived]);
 
   const smsItems = useMemo((): UnifiedInboxListItem[] => {
-    if (tabId === "schedule" || tabId === "trash") return [];
-    const scoped = smsMessages.filter((m) => smsMatchesTab(tabId, m, smsOpened));
+    if (!smsUiEnabled || showArchived) return [];
+    const scoped = smsMessages;
     if (scoped.length === 0) return [];
     const last = [...scoped].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]!;
     const unread = scoped.some((m) => m.direction === "inbound" && smsMessageBucket(m, smsOpened) === "unopened");
@@ -173,36 +156,11 @@ function ResidentUnifiedInbox({
     const q = query.trim().toLowerCase();
     if (q && !["text messages", "property manager", last.body].join(" ").toLowerCase().includes(q)) return [];
     return [item];
-  }, [query, smsMessages, smsOpened, tabId]);
+  }, [query, smsMessages, smsOpened, smsUiEnabled, showArchived]);
 
   const merged = useMemo(() => mergeUnifiedInboxItems([...emailItems, ...smsItems]), [emailItems, smsItems]);
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
-
-  useEffect(() => {
-    // The one resident↔manager SMS thread appears in a folder tab when it has a
-    // message in that bucket — mirror that per folder so Opened/Sent counts the
-    // SMS thread too, not just Unopened (parity with the manager unified counts).
-    const smsInTab = (tab: string) => smsMessages.some((m) => smsMatchesTab(tab, m, smsOpened));
-    onTabCountsChange({
-      unopened: filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length + (smsInTab("unopened") ? 1 : 0),
-      opened: filteredEmail.filter((t) => t.folder === "inbox" && !t.unread).length + (smsInTab("opened") ? 1 : 0),
-      schedule: scheduleCount,
-      sent: filteredEmail.filter((t) => t.folder === "sent").length + (smsInTab("sent") ? 1 : 0),
-      trash: filteredEmail.filter((t) => t.folder === "trash").length,
-    });
-  }, [filteredEmail, onTabCountsChange, smsMessages, smsOpened, scheduleCount]);
-
-  if (tabId === "schedule") {
-    return (
-      <ResidentInboxPanel
-        ref={inboxRef}
-        tabId={tabId}
-        embeddedInCommunication
-        externalTitleActions
-        onTabCountsChange={handleEmbeddedTabCounts}
-      />
-    );
-  }
+  const archivedCount = useMemo(() => filteredEmail.filter((t) => t.folder === "trash").length, [filteredEmail]);
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -214,11 +172,56 @@ function ResidentUnifiedInbox({
           placeholder="Search messages"
           className="h-9 w-full rounded-full border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
         />
+        <div className="mt-2 flex items-center justify-between gap-2 px-1">
+          {merged.length > 0 ? (
+            <p className="text-[11px] text-muted">
+              {merged.length} conversation{merged.length === 1 ? "" : "s"}
+              {query.trim() ? ` matching “${query.trim()}”` : showArchived ? " · archived" : ""}
+            </p>
+          ) : (
+            <span />
+          )}
+          {!query.trim() ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {showArchived && archivedCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => inboxRef.current?.emptyTrash()}
+                  className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium text-[var(--status-overdue-fg)] transition-colors hover:bg-[var(--status-overdue-bg)]"
+                  data-attr="resident-inbox-empty-trash"
+                >
+                  Empty trash
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  showArchived
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border text-muted hover:bg-foreground/5 hover:text-foreground"
+                }`}
+                data-attr="resident-inbox-archived-toggle"
+                aria-pressed={showArchived}
+              >
+                {showArchived ? "← Conversations" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className={INBOX_LIST_SCROLL}>
         {merged.length === 0 ? (
           <div className="p-4">
-            <PortalInboxEmptyState title={query.trim() ? `No messages match “${query.trim()}”.` : inboxTabEmptyCopy(tabId)} />
+            <PortalInboxEmptyState
+              title={
+                query.trim()
+                  ? `No messages match “${query.trim()}”.`
+                  : showArchived
+                    ? "No archived conversations."
+                    : "No conversations yet."
+              }
+            />
           </div>
         ) : (
           merged.map((row) => (
@@ -240,90 +243,61 @@ function ResidentUnifiedInbox({
     </div>
   );
 
-  const smsTab = (tabId === "unopened" ? "unopened" : tabId === "opened" ? "opened" : tabId === "sent" ? "sent" : "all") as ManagerSmsBucketId;
-
-  const threadPane =
-    selection?.channel === "email" ? (
-      <ResidentInboxPanel
-        ref={inboxRef}
-        tabId={tabId}
-        embeddedInCommunication
-        externalTitleActions
-        suppressListPane
-        controlledExpandedId={selection.threadId}
-        onControlledExpandedIdChange={(id) => {
-          if (!id) setSelectedKey(null);
-        }}
-        onTabCountsChange={handleEmbeddedTabCounts}
-      />
-    ) : selection?.channel === "sms" ? (
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-        <RoleSmsPanel apiPath="/api/resident/sms-conversations" storageScope="resident" tabId={smsTab} />
+  // ALWAYS mounted — including while an SMS thread is open and while nothing is
+  // selected — so the header's New message / Empty trash handles are never wired
+  // to a null ref. With no email thread selected it renders its own empty state.
+  const smsSelected = selection?.channel === "sms";
+  const threadPane = (
+    <>
+      {smsSelected ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+          <RoleSmsPanel apiPath="/api/resident/sms-conversations" storageScope="resident" tabId={"all" as ManagerSmsBucketId} />
+        </div>
+      ) : null}
+      <div className={smsSelected ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+        <ResidentInboxPanel
+          ref={inboxRef}
+          tabId={showArchived ? "trash" : "all"}
+          embeddedInCommunication
+          externalTitleActions
+          suppressListPane
+          controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
+          onControlledExpandedIdChange={(id) => {
+            if (!id) setSelectedKey(null);
+          }}
+        />
       </div>
-    ) : (
-      <InboxThreadEmpty />
-    );
+    </>
+  );
 
   return <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />;
 }
 
 export type ResidentEmailTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 
-export function ResidentCommunication({ inboxTabId = "unopened" }: { inboxTabId?: ResidentEmailTabId }) {
-  const navigate = usePortalNavigate();
-  const commBase = `${RESIDENT_PORTAL_BASE_PATH}/communication`;
+export function ResidentCommunication({
+  smsUiEnabled = false,
+}: {
+  /** @deprecated Folder tabs removed; kept so legacy routes still resolve. */
+  inboxTabId?: ResidentEmailTabId;
+  smsUiEnabled?: boolean;
+}) {
   const inboxRef = useRef<ResidentInboxPanelHandle>(null);
-  const [tabCounts, setTabCounts] = useState<ResidentInboxTabCounts>({
-    unopened: 0,
-    opened: 0,
-    schedule: 0,
-    sent: 0,
-    trash: 0,
-  });
-
-  const handleTabCountsChange = useCallback((counts: ResidentInboxTabCounts) => {
-    setTabCounts(counts);
-  }, []);
-
-  const statusPills = (
-    <ManagerPortalStatusPills
-      activeTone="primary"
-      tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-        id,
-        label,
-        count: tabCounts[id as keyof ResidentInboxTabCounts],
-      }))}
-      activeId={inboxTabId}
-      onChange={(id) => navigate(`${commBase}/inbox/${id}`)}
-    />
-  );
 
   const titleAside = (
-    <>
-      {inboxTabId === "trash" && tabCounts.trash > 0 ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
-          onClick={() => inboxRef.current?.emptyTrash()}
-        >
-          Empty trash
-        </Button>
-      ) : null}
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => inboxRef.current?.openCompose()}
-      >
-        New message
-      </Button>
-    </>
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+      onClick={() => inboxRef.current?.openCompose()}
+    >
+      New message
+    </Button>
   );
 
   return (
-    <PortalCommunicationShell title="Communication" titleAside={titleAside} statusPills={statusPills}>
-      <ResidentUnifiedInbox tabId={inboxTabId} inboxRef={inboxRef} onTabCountsChange={handleTabCountsChange} />
+    <PortalCommunicationShell title="Communication" titleAside={titleAside}>
+      <ResidentUnifiedInbox inboxRef={inboxRef} smsUiEnabled={smsUiEnabled} />
     </PortalCommunicationShell>
   );
 }

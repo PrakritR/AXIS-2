@@ -183,9 +183,17 @@ these same threads read-only at `/admin/communication` → SMS
 (`fetchAdminSharedLineSmsConversation` in `manager-sms-messages.server.ts`,
 merging `inbound_sms_log` + `manager_sms_messages` across the mapped
 managers) — Admin Communication → Email is the pre-existing admin inbox
-(`AdminInboxClient`), just reachable at `/admin/communication/email/*` now
-(old `/admin/inbox/*` links redirect via the generic "Inbox → Communication"
-legacy-path handler in `render-portal-section.tsx`).
+(`AdminInboxClient`), reachable at `/admin/communication/inbox/*`
+(old `/admin/inbox/*` and `/admin/communication/email|sms/*` links redirect
+there via `render-portal-section.tsx`).
+
+⚠️ **Every portal's Communication SMS panel is hidden by default** (manager,
+resident, vendor, admin) — the sections render only when `SMS_COMM_UI_ENABLED`
+is on. Nothing in this document's transport, webhook, provisioning or agent
+paths is affected; the flag gates UI only. The full rule, including the
+inbound-notice fall-through that keeps texts visible while the panel is hidden,
+lives with the inbox invariants in AGENTS.md → "Communication is one unified,
+conversation-based inbox".
 
 **Proxy-pair relay: manager ↔ resident text from their personal phones through
 a pooled number, neither seeing the other's real number**

@@ -20,6 +20,7 @@ import {
   PORTAL_INBOX_CHANGED_EVENT,
   loadPersistedInbox,
   inboxThreadMessages,
+  inboxThreadSortMs,
 } from "@/lib/portal-inbox-storage";
 import {
   mergeUnifiedInboxItems,
@@ -43,11 +44,6 @@ function previewLine(body: string, max = 80) {
   const t = body.trim().replace(/\s+/g, " ");
   if (t.length <= max) return t;
   return `${t.slice(0, max)}…`;
-}
-
-function threadTimestampFromId(id: string): number {
-  const match = id.match(/(\d{10,})/);
-  return match ? parseInt(match[1]!, 10) : 0;
 }
 
 function smsConversationId(resident: ManagerSmsResidentConversation): string {
@@ -242,7 +238,7 @@ export function ManagerUnifiedInbox({
         previewPrefix: lastOutbound ? "You: " : undefined,
         time: t.time,
         unread: t.folder === "inbox" && t.unread,
-        sortMs: threadTimestampFromId(t.id) || Date.parse(lastMsg?.at ?? "") || 0,
+        sortMs: inboxThreadSortMs(t.id, lastMsg?.at),
       };
     });
   }, [filteredEmail, query, showArchived]);

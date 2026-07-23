@@ -1,62 +1,52 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { VendorInboxPanel, type VendorInboxPanelHandle, type VendorInboxTabCounts } from "@/components/portal/vendor-inbox-panel";
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
-import type { ManagerSmsBucketId } from "@/lib/manager-sms-messages";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 
+/** @deprecated Folder tabs removed — kept so legacy routes still resolve. */
 export type VendorEmailTabId = "unopened" | "opened" | "sent" | "trash";
 
-const VENDOR_EMAIL_TAB_DEFS = INBOX_TAB_DEFS.filter((tab) => tab.id !== "schedule");
-
-function mapInboxTabToSms(tabId: VendorEmailTabId): ManagerSmsBucketId {
-  if (tabId === "unopened") return "unopened";
-  if (tabId === "opened") return "opened";
-  if (tabId === "sent") return "sent";
-  return "all";
-}
-
-export function VendorCommunication({ inboxTabId = "unopened" }: { inboxTabId?: VendorEmailTabId }) {
-  const navigate = usePortalNavigate();
-  const commBase = "/vendor/communication";
+export function VendorCommunication({
+  smsUiEnabled = false,
+}: {
+  /** @deprecated Folder tabs removed; the unified list is always shown. Kept for route compatibility. */
+  inboxTabId?: VendorEmailTabId;
+  /**
+   * Server-resolved SMS Communication UI flag. When false, the SMS "Text
+   * messages" section is hidden entirely — transport/webhooks/agents are
+   * unaffected. Default false ("hide now").
+   */
+  smsUiEnabled?: boolean;
+}) {
   const inboxRef = useRef<VendorInboxPanelHandle>(null);
+  // Archived (trashed) conversations are reachable via a toggle, not a tab.
+  const [showArchived, setShowArchived] = useState(false);
   const [emailTabCounts, setEmailTabCounts] = useState<VendorInboxTabCounts>({
     unopened: 0,
     opened: 0,
     sent: 0,
     trash: 0,
   });
-  const [smsBucketCounts, setSmsBucketCounts] = useState<Record<ManagerSmsBucketId, number>>({
-    all: 0,
-    unopened: 0,
-    opened: 0,
-    schedule: 0,
-    sent: 0,
-  });
 
-  const statusPills = (
-    <ManagerPortalStatusPills
-      activeTone="primary"
-      tabs={VENDOR_EMAIL_TAB_DEFS.map(({ id, label }) => ({
-        id,
-        label,
-        count:
-          emailTabCounts[id as keyof VendorInboxTabCounts] +
-          (id === "unopened" ? smsBucketCounts.unopened : id === "opened" ? smsBucketCounts.opened : id === "sent" ? smsBucketCounts.sent : 0),
-      }))}
-      activeId={inboxTabId}
-      onChange={(id) => navigate(`${commBase}/inbox/${id}`)}
-    />
-  );
+  const view: "all" | "trash" = showArchived ? "trash" : "all";
 
   const titleAside = (
     <>
-      {inboxTabId === "trash" && emailTabCounts.trash > 0 ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="vendor-inbox-archived-toggle"
+        aria-pressed={showArchived}
+        onClick={() => setShowArchived((v) => !v)}
+      >
+        {showArchived ? "← Conversations" : `Archived${emailTabCounts.trash > 0 ? ` (${emailTabCounts.trash})` : ""}`}
+      </Button>
+      {showArchived && emailTabCounts.trash > 0 ? (
         <Button
           type="button"
           variant="outline"
@@ -78,16 +68,17 @@ export function VendorCommunication({ inboxTabId = "unopened" }: { inboxTabId?: 
   );
 
   return (
-    <PortalCommunicationShell title="Communication" titleAside={titleAside} statusPills={statusPills}>
+    <PortalCommunicationShell title="Communication" titleAside={titleAside}>
       <div className="space-y-6">
         <VendorInboxPanel
           ref={inboxRef}
-          tabId={inboxTabId}
+          tabId={view}
           embeddedInCommunication
           externalTitleActions
+          smsUiEnabled={smsUiEnabled}
           onTabCountsChange={setEmailTabCounts}
         />
-        {inboxTabId !== "trash" ? (
+        {smsUiEnabled && view !== "trash" ? (
           <section className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-foreground">Text messages</h2>
@@ -95,12 +86,7 @@ export function VendorCommunication({ inboxTabId = "unopened" }: { inboxTabId?: 
                 SMS
               </span>
             </div>
-            <RoleSmsPanel
-              apiPath="/api/vendor/sms-conversations"
-              storageScope="vendor"
-              tabId={mapInboxTabToSms(inboxTabId)}
-              onBucketCountsChange={setSmsBucketCounts}
-            />
+            <RoleSmsPanel apiPath="/api/vendor/sms-conversations" storageScope="vendor" tabId="all" />
           </section>
         ) : null}
       </div>

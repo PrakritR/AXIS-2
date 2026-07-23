@@ -657,39 +657,63 @@ destructive actions and column labels from the ROW's folder, not the active tab
 inheriting it for a live inbox row destroys real mail. Coverage:
 `tests/unit/manager-inbox-search.test.tsx`.
 
-### Manager Communication is one unified, conversation-based inbox (no folder tabs)
+### Communication is one unified, conversation-based inbox (no folder tabs) — ALL portals
 
-The real manager Communication surface (`manager-communication.tsx` →
-`manager-unified-inbox.tsx`) is a single conversation list + chat threads, NOT
-the old Unopened / Opened / Sent / Trash / Schedule tab bar. Invariants:
+Every portal's Communication (manager, resident, vendor, admin) is a single
+conversation list + threads, NOT the old Unopened / Opened / Sent / Trash /
+Schedule tab bar. Manager + resident use the chat two-pane
+(`manager-unified-inbox.tsx`, `ResidentUnifiedInbox` in `resident-communication.tsx`
+→ `ResidentInboxPanel`); vendor + admin reuse their existing panels driven by an
+`"all"` tabId (all non-trash conversations) plus the archive toggle. Invariants:
 
-- **No folder tabs.** `ManagerUnifiedInbox` shows ALL live conversations
-  (inbox + sent) in one list; the `tabId` route param is legacy and does not
-  segregate the list. Archived (trashed) conversations are reachable via the
-  `unified-inbox-archived-toggle`, and trash/restore live in the open thread
-  header — never re-add a top-level Schedule/Trash tab. `INBOX_TAB_DEFS` and the
-  standalone tabbed `ManagerInbox` shell survive only for the /demo path and
-  legacy route redirects.
-- **Scheduled messages render INLINE in the recipient's thread** as
-  "Scheduled · sends <when>" cards (`InboxScheduledCard`), cancel/send-now/edit
-  in place — the standalone Schedule table is gone from production. Matching is
-  pure: `scheduledItemsForRecipient(email, manual, automation)` in
-  `src/lib/inbox-scheduled-thread.ts`. Manager-vs-resident edit permissions are
-  unchanged (resident-originated rows are cancel-only).
+- **No folder tabs.** The list shows ALL live conversations (inbox + sent); the
+  `tabId` route param is legacy and does not segregate the list. Archived
+  (trashed) conversations are reachable via a `*-inbox-archived-toggle` button,
+  and trash/restore live in the open thread — never re-add a top-level
+  Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone tabbed panels survive
+  only for the /demo path and legacy route redirects.
+- **Scheduled messages render INLINE in the recipient's thread** as a COMPACT,
+  collapsible "Scheduled · sends <when> · <subject>" card (`InboxScheduledCard`)
+  that expands for the full body + Send now / Cancel send / Edit; Edit is an
+  INLINE textarea saved via `onSaveEdit` (no separate form). The standalone
+  Schedule table is gone from production. Matching is pure:
+  `scheduledItemsForRecipient(email, manual, automation)` in
+  `src/lib/inbox-scheduled-thread.ts`. Edit permissions are unchanged —
+  resident-originated / resident-side rows are cancel-only (the resident
+  scheduled-message route only patches status), so residents pass no `onSaveEdit`.
+  `onSaveEdit` MUST reject on failure (see `saveScheduledEdit` in
+  `manager-inbox.tsx`) — the card keeps the editor open and shows the error
+  instead of closing and discarding the manager's text.
+  **Admin is the one exception to "inline".** Its Communication is a flat table
+  with no chat pane, and a scheduled send to someone admin has never messaged has
+  no conversation row to sit in, so admin keeps a reachable Scheduled view behind
+  an `admin-inbox-scheduled-toggle` button beside the archive toggle. It is a
+  view toggle, not a folder tab; do not delete it while the admin compose modal
+  can still schedule — that leaves scheduled sends uncancellable.
+- **`scheduled-message-path-id.ts` must NEVER use the `base64url` encoding
+  token.** It runs client-side (building the scheduled-message action URL), and
+  Next's browser Buffer polyfill throws "Unknown encoding: base64url" — that
+  crashed Send now / Cancel / Edit on automation messages. Use btoa/atob + the
+  `base64` transform only (`tests/unit/scheduled-message-path-id.test.ts` guards
+  this with a throwing-Buffer shim).
 - **Thread messages are channel-tagged** (`InboxBubbleMessage.channel`,
   `InboxChannel = email|sms|whatsapp|gmail`). Email is the only live channel; the
   tag exists so SMS/WhatsApp/Gmail tag into the SAME per-person thread (built on
   the one-thread-per-person `portal-inbox-delivery.ts` foundation) rather than a
   parallel list. Bubbles render the FULL body (pre-wrap, no clamp).
 - **SMS UI is gated by `isSmsCommUiEnabled()`** (`src/lib/sms-comm-ui-flag.server.ts`,
-  env `SMS_COMM_UI_ENABLED`, default OFF, server-resolved and threaded as the
-  `smsUiEnabled` prop through `manager-communication.tsx` → `manager-unified-inbox.tsx`
-  → `manager-communication-compose-modal.tsx`). It gates ONLY the UI — SMS
-  transport, both SMS agents, and phone provisioning stay live. ⚠️ While hidden,
-  inbound-SMS notices must stay visible: `filterEmailInboxThreads(rows,
-  { keepSmsLike: !smsUiEnabled })` lets them fall through into the conversation
-  list instead of vanishing into the hidden SMS panel. Coverage:
+  env `SMS_COMM_UI_ENABLED`, default OFF, server-resolved). `render-portal-section.tsx`
+  threads it as the `smsUiEnabled` prop into all four Communication components
+  (manager / resident / vendor / admin), which gate their compose "via SMS"
+  channel, SMS rows, and SMS panel on it. It gates ONLY the UI — SMS transport,
+  both SMS agents, and phone provisioning stay live. ⚠️ While hidden, inbound-SMS
+  notices must stay visible: `filterEmailInboxThreads(rows, { keepSmsLike:
+  !smsUiEnabled })` lets them fall through into the conversation list instead of
+  vanishing into the hidden SMS panel. Coverage:
   `tests/unit/unified-conversation-inbox.test.tsx`,
+  `tests/unit/resident-conversation-inbox.test.tsx`,
+  `tests/unit/vendor-conversation-inbox.test.tsx`,
+  `tests/unit/portal-nav-communication-count.test.tsx`,
   `tests/unit/inbox-scheduled-thread.test.ts`,
   `tests/unit/inbox-thread-omnichannel.test.tsx`,
   `tests/unit/sms-comm-ui-flag.test.ts`.
