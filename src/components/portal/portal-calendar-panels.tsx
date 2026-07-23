@@ -135,18 +135,6 @@ function formatWeekRangeMonSun(monday: Date): string {
   return `${formatPacificDate(monday, opts)}–${formatPacificDate(sunday, { ...opts, year: "numeric" })}`;
 }
 
-function formatBlockRange(start: Date, dayCount: number): string {
-  const end = addDays(start, dayCount - 1);
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  return `${formatPacificDate(start, opts)}–${formatPacificDate(end, { ...opts, year: "numeric" })}`;
-}
-
-function startOfLocalDay(d: Date): Date {
-  const copy = new Date(d);
-  copy.setHours(12, 0, 0, 0);
-  return copy;
-}
-
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
   if (!pick.start) return false;
   if (!pick.end) return ds === pick.start;
@@ -349,14 +337,8 @@ export function PortalCalendarPanels({
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
-  const compactBlockStart = useMemo(() => startOfLocalDay(anchorDate), [anchorDate]);
-  const compactBlockDates = useMemo(
-    () => [0, 1, 2, 3, 4].map((i) => addDays(compactBlockStart, i)),
-    [compactBlockStart],
-  );
-  const compactBlockDateStrs = useMemo(() => compactBlockDates.map(toLocalDateStr), [compactBlockDates]);
-  const activeBlockDates = compactAvailability ? compactBlockDates : fullWeekDates;
-  const activeBlockDateStrs = compactAvailability ? compactBlockDateStrs : fullWeekDateStrs;
+  const activeBlockDates = fullWeekDates;
+  const activeBlockDateStrs = fullWeekDateStrs;
 
   const meetings = useMemo<DemoMeeting[]>(() => {
     void calendarRefreshSignal;
@@ -755,15 +737,13 @@ export function PortalCalendarPanels({
   }, [today]);
 
   const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
-    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
-    setAnchorDate((d) => addDays(d, dir * shiftDays));
+    setAnchorDate((d) => addDays(startOfWeekMonday(d), dir * COMPACT_BLOCK_DAYS));
     if (compactAvailability) setMobileDayIndex(0);
   }, [compactAvailability]);
 
   const copyPreviousWeek = useCallback(() => {
     const currentDates = activeBlockDates;
-    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
-    const previousBlockDates = currentDates.map((date) => addDays(date, -shiftDays));
+    const previousBlockDates = currentDates.map((date) => addDays(date, -COMPACT_BLOCK_DAYS));
     const next = new Set(activeSlots);
 
     for (const targetDate of currentDates) {
@@ -784,7 +764,7 @@ export function PortalCalendarPanels({
     });
 
     writeAvailability(next);
-  }, [activeBlockDates, activeSlots, compactAvailability, writeAvailability]);
+  }, [activeBlockDates, activeSlots, writeAvailability]);
 
   const toggleBlockWeekday = useCallback((weekday: number) => {
     setBlockWeekdays((current) =>
@@ -1181,12 +1161,12 @@ export function PortalCalendarPanels({
               {vendorMode ? (
                 <div className="min-w-0 px-1">
                   <p className="text-xs font-semibold text-foreground sm:text-sm">{availabilityHeading}</p>
-                  <p className="truncate text-[11px] text-muted">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                  <p className="truncate text-[11px] text-muted">{formatWeekRangeMonSun(weekMonday)}</p>
                 </div>
               ) : (
                 <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
                   <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
-                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatWeekRangeMonSun(weekMonday)}</p>
                   {tourScopeLabel ? <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p> : null}
                 </div>
               )}
@@ -1431,10 +1411,10 @@ export function PortalCalendarPanels({
                   </div>
                 </div>
 
-                {/* Desktop: 5-day block grid. */}
+                {/* Desktop: Mon-Sun week grid. */}
                 <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
-                  <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-                    <div className={`grid min-w-[680px] grid-cols-[76px_repeat(5,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
+                  <div className="w-full" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
+                    <div className={`grid w-full grid-cols-[minmax(56px,76px)_repeat(7,minmax(0,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                       {activeBlockDates.map((d) => {
                         const ds = toLocalDateStr(d);

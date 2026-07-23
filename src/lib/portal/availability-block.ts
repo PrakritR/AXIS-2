@@ -1,11 +1,8 @@
 /**
  * Pure date helpers for the availability-block editor (portal-calendar-panels).
  *
- * The availability grid can render either a full Monday–Sunday week or a compact
- * 5-day window that starts on ANY weekday (and can even straddle a Monday
- * boundary). Because of that, a column's weekday must always be derived from its
- * real date — never from its position in the window. These helpers keep that
- * logic in one testable place.
+ * The availability grid renders a full Monday–Sunday week. A column's weekday
+ * must always be derived from its real date — never from its position in the window.
  */
 
 /** JS `getDay()` is 0=Sun..6=Sat; convert to a Monday-based index 0=Mon..6=Sun. */
