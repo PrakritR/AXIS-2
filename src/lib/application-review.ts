@@ -6,6 +6,7 @@ import {
   removeAllApplicationCharges,
   removeApprovedApplicationCharges,
 } from "@/lib/household-charges";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 
 export function stageLabelForApplicationBucket(bucket: ManagerApplicationBucket): string {
@@ -17,6 +18,9 @@ export function stageLabelForApplicationBucket(bucket: ManagerApplicationBucket)
 async function syncResidentApprovalStatus(row: DemoApplicantRow, nextBucket: ManagerApplicationBucket): Promise<Response | null> {
   const email = row.email?.trim().toLowerCase();
   if (!email) return null;
+  // /demo never writes real rows — and its sandbox rows are not on the server, so
+  // a refusal here would only roll back a walkthrough that is working as intended.
+  if (isDemoModeActive()) return null;
   // `applicationId` lets the server re-check the exact record's withdrawn stamp so a
   // withdrawn application can never be approved server-side (defense in depth).
   return fetch("/api/portal/resident-approval", {
@@ -57,17 +61,40 @@ export type ApplicationBucketTransition = {
   message?: string;
 };
 
-/** Restore the row's pre-transition bucket after the server refused the approval. */
-function rollbackApprovedTransition(id: string, previous: DemoApplicantRow, userId: string | null): void {
+/**
+ * Restore the row's pre-transition bucket after the server refused the approval.
+ * A `withdrawn` refusal also stamps the local row: the server just told us the
+ * record carries the stamp, and without it the row keeps rendering Approve, so the
+ * manager can re-fire the whole round trip until the sync TTL catches up.
+ */
+function rollbackApprovedTransition(
+  id: string,
+  previous: DemoApplicantRow,
+  userId: string | null,
+  opts: { stampWithdrawn: boolean },
+): void {
+  const withdrawnAt = opts.stampWithdrawn
+    ? previous.withdrawnAt || new Date().toISOString()
+    : previous.withdrawnAt;
   const reverted = readManagerApplicationRows().map((r) =>
     r.id === id
-      ? { ...r, bucket: previous.bucket, stage: previous.stage, managerUserId: previous.managerUserId }
+      ? {
+          ...r,
+          bucket: previous.bucket,
+          stage: previous.stage,
+          managerUserId: previous.managerUserId,
+          withdrawnAt,
+        }
       : r,
   );
   writeManagerApplicationRows(reverted);
   try {
-    removeApprovedApplicationCharges(id, userId);
-    recordSubmittedApplicationFeeCharge(previous, userId);
+    if (previous.bucket === "rejected") {
+      removeAllApplicationCharges(id, userId);
+    } else {
+      removeApprovedApplicationCharges(id, userId);
+      recordSubmittedApplicationFeeCharge(previous, userId);
+    }
   } catch {
     /* leave charges as-is if reconciliation fails; the bucket is already reverted */
   }
@@ -120,26 +147,28 @@ export async function transitionApplicationBucket(
     /* Keep approval flow moving even if charge reconciliation fails. */
   }
 
-  // The server owns the withdrawal stamp, so its refusal is authoritative: an
-  // optimistic local "approved" must never survive a 409 (withdrawn) or a 500
-  // (the guard could not verify the record). Other statuses keep the pre-existing
-  // behaviour of letting the local workflow continue.
+  // The server is authoritative for an approval: it owns the withdrawal stamp and
+  // it is what actually writes `application_approved`. ANY non-2xx (409 withdrawn,
+  // 500 unverifiable, 401/403 session or permission) means the resident was never
+  // approved, so an optimistic local "approved" must not survive it.
   try {
     const res = await syncResidentApprovalStatus(row, nextBucket);
-    if (nextBucket === "approved" && res && (res.status === 409 || res.status === 500)) {
-      let message = WITHDRAWN_APPROVAL_BLOCKED_MESSAGE;
-      if (res.status === 500) message = "Could not verify this application on the server. Nothing was changed.";
+    if (nextBucket === "approved" && res && !res.ok) {
+      const withdrawn = res.status === 409;
+      let message = withdrawn
+        ? WITHDRAWN_APPROVAL_BLOCKED_MESSAGE
+        : "Could not confirm this approval on the server. Nothing was changed.";
       try {
         const data = (await res.json()) as { error?: string };
         if (typeof data.error === "string" && data.error.trim()) message = data.error;
       } catch {
         /* keep the default message */
       }
-      rollbackApprovedTransition(id, row, opts.userId ?? null);
+      rollbackApprovedTransition(id, row, opts.userId ?? null, { stampWithdrawn: withdrawn });
       return {
         row,
         welcomeSent: false,
-        blocked: res.status === 409 ? "withdrawn" : "error",
+        blocked: withdrawn ? "withdrawn" : "error",
         message,
       };
     }
