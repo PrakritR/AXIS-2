@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
-import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
+import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
+import { type ManagerInboxHandle } from "@/components/portal/manager-inbox";
+import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ManagerCommunicationComposeModal,
   type CommunicationComposeChannel,
@@ -13,7 +14,6 @@ import { PortalCommunicationShell } from "@/components/portal/portal-communicati
 import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
 import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
-import { TabNav } from "@/components/ui/tabs";
 import {
   axisAdminFilterContact,
   contactsForSelectedRoles,
@@ -32,9 +32,10 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
-export type ManagerCommunicationChannel = "inbox" | "sms";
 export type ManagerInboxTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
-/** Legacy SMS folder URLs redirect to `all`; kept for typed route props. */
+/** @deprecated Legacy SMS routes redirect to unified inbox. */
+export type ManagerCommunicationChannel = "inbox" | "sms";
+/** @deprecated Legacy SMS folder URLs redirect to unified inbox. */
 export type ManagerSmsTabId = "all" | "unopened" | "opened" | "schedule" | "sent";
 
 const ROLE_OPTIONS: { value: CommunicationFilterRole; label: string }[] = [
@@ -45,12 +46,12 @@ const ROLE_OPTIONS: { value: CommunicationFilterRole; label: string }[] = [
 ];
 
 export function ManagerCommunication({
-  channel,
   inboxTabId = "unopened",
-  smsTabId: _smsTabId = "all",
 }: {
-  channel: ManagerCommunicationChannel;
+  /** @deprecated Channel is always unified; kept for route compatibility. */
+  channel?: ManagerCommunicationChannel;
   inboxTabId?: ManagerInboxTabId;
+  /** @deprecated SMS folders merged into unified inbox. */
   smsTabId?: ManagerSmsTabId;
 }) {
   const navigate = usePortalNavigate();
@@ -60,7 +61,6 @@ export function ManagerCommunication({
   const inboxRef = useRef<ManagerInboxHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);
   const [filters, setFilters] = useState<CommunicationThreadFilters>(EMPTY_COMMUNICATION_THREAD_FILTERS);
-  const [smsUnreadCount, setSmsUnreadCount] = useState(0);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
@@ -71,9 +71,6 @@ export function ManagerCommunication({
     sent: 0,
     trash: 0,
   });
-  const handleSmsUnreadCountChange = useCallback((unread: number) => {
-    setSmsUnreadCount(unread);
-  }, []);
   const handleInboxTabCountsChange = useCallback(
     (counts: { unopened: number; opened: number; schedule: number; sent: number; trash: number }) => {
       setInboxTabCounts(counts);
@@ -122,11 +119,14 @@ export function ManagerCommunication({
     void loadSmsRecipients();
   }, [loadSmsRecipients]);
 
-  const openCompose = useCallback((preferred: CommunicationComposeChannel) => {
-    setComposeChannel(preferred);
-    setComposeOpen(true);
-    void loadSmsRecipients();
-  }, [loadSmsRecipients]);
+  const openCompose = useCallback(
+    (preferred: CommunicationComposeChannel) => {
+      setComposeChannel(preferred);
+      setComposeOpen(true);
+      void loadSmsRecipients();
+    },
+    [loadSmsRecipients],
+  );
 
   const handleComposeSent = useCallback(
     (channels: { email: boolean; sms: boolean }) => {
@@ -137,7 +137,7 @@ export function ManagerCommunication({
       if (channels.sms) {
         smsRef.current?.reload?.();
         void loadSmsRecipients();
-        if (!channels.email) navigate(`${commBase}/sms/all`);
+        if (!channels.email) navigate(`${commBase}/inbox/unopened`);
       }
     },
     [commBase, loadSmsRecipients, navigate],
@@ -184,25 +184,22 @@ export function ManagerCommunication({
     </div>
   );
 
-  const statusPills =
-    channel === "inbox" ? (
-      <ManagerPortalStatusPills
-        tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-          id,
-          label,
-          count: inboxTabCounts[id as keyof typeof inboxTabCounts],
-        }))}
-        activeId={inboxTabId}
-        onChange={(id) => navigate(`${commBase}/inbox/${id}`)}
-      />
-    ) : smsUnreadCount > 0 ? (
-      <p className="text-xs text-muted">{smsUnreadCount} unread</p>
-    ) : null;
+  const statusPills = (
+    <ManagerPortalStatusPills
+      tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
+        id,
+        label,
+        count: inboxTabCounts[id as keyof typeof inboxTabCounts],
+      }))}
+      activeId={inboxTabId}
+      onChange={(id) => navigate(`${commBase}/inbox/${id}`)}
+    />
+  );
 
   const titleAside = (
     <>
       <ManagerWorkNumberButton />
-      {channel === "inbox" && inboxTabId === "trash" ? (
+      {inboxTabId === "trash" ? (
         <Button
           type="button"
           variant="outline"
@@ -217,7 +214,7 @@ export function ManagerCommunication({
         variant="primary"
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         data-attr="communication-new-message"
-        onClick={() => openCompose(channel === "sms" ? "sms" : "email")}
+        onClick={() => openCompose("email")}
       >
         New message
       </Button>
@@ -228,15 +225,6 @@ export function ManagerCommunication({
     <PortalCommunicationShell
       title="Communication"
       titleAside={titleAside}
-      channelNav={
-        <TabNav
-          activeId={channel}
-          items={[
-            { id: "inbox", label: "Email", href: `${commBase}/inbox/unopened`, dataAttr: "manager-communication-tab-email" },
-            { id: "sms", label: "SMS", href: `${commBase}/sms/all`, dataAttr: "manager-communication-tab-sms" },
-          ]}
-        />
-      }
       threadFilters={threadFilters}
       statusPills={statusPills}
     >
@@ -249,28 +237,15 @@ export function ManagerCommunication({
         onSent={handleComposeSent}
       />
 
-      {channel === "inbox" ? (
-        <ManagerInbox
-          ref={inboxRef}
-          tabId={inboxTabId}
-          embeddedInCommunication
-          externalTitleActions
-          suppressCompose
-          commBase={commBase}
-          threadFilters={filters}
-          filterContacts={filterContacts}
-          onTabCountsChange={handleInboxTabCountsChange}
-        />
-      ) : (
-        <ManagerSmsPanel
-          ref={smsRef}
-          threadFilters={filters}
-          filterContacts={filterContacts}
-          onUnreadCountChange={handleSmsUnreadCountChange}
-          onSentNavigate={() => navigate(`${commBase}/sms/all`)}
-          allowInlineCompose={false}
-        />
-      )}
+      <ManagerUnifiedInbox
+        tabId={inboxTabId}
+        commBase={commBase}
+        threadFilters={filters}
+        filterContacts={filterContacts}
+        onTabCountsChange={handleInboxTabCountsChange}
+        inboxRef={inboxRef}
+        smsRef={smsRef}
+      />
     </PortalCommunicationShell>
   );
 }

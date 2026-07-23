@@ -116,6 +116,11 @@ export const ManagerInbox = forwardRef<
     threadFilters?: CommunicationThreadFilters;
     filterContacts?: InboxScopedContact[];
     onTabCountsChange?: (counts: ReturnType<typeof countThreads>) => void;
+    /** When true, only the open thread pane is rendered (unified Communication list lives elsewhere). */
+    suppressListPane?: boolean;
+    /** Controlled selection for unified Communication. */
+    controlledExpandedId?: string | null;
+    onControlledExpandedIdChange?: (id: string | null) => void;
   }
 >(function ManagerInbox(
   {
@@ -127,6 +132,9 @@ export const ManagerInbox = forwardRef<
     threadFilters,
     filterContacts,
     onTabCountsChange,
+    suppressListPane = false,
+    controlledExpandedId,
+    onControlledExpandedIdChange,
   },
   ref,
 ) {
@@ -163,7 +171,19 @@ export const ManagerInbox = forwardRef<
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
   const [inboxSynced, setInboxSynced] = useState(false);
   const persistInboxRef = useRef(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [internalExpandedId, setInternalExpandedId] = useState<string | null>(null);
+  const expandedId = controlledExpandedId !== undefined ? controlledExpandedId : internalExpandedId;
+  const setExpandedId = useCallback(
+    (id: string | null | ((prev: string | null) => string | null)) => {
+      const resolve = (prev: string | null) => (typeof id === "function" ? id(prev) : id);
+      if (controlledExpandedId !== undefined) {
+        onControlledExpandedIdChange?.(resolve(controlledExpandedId));
+      } else {
+        setInternalExpandedId(resolve);
+      }
+    },
+    [controlledExpandedId, onControlledExpandedIdChange],
+  );
   const [composeOpen, setComposeOpen] = useState(false);
   const [contactTick, setContactTick] = useState(0);
   const [query, setQuery] = useState("");
@@ -1044,6 +1064,8 @@ export const ManagerInbox = forwardRef<
 
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
+      ) : suppressListPane ? (
+        <div className="flex min-h-0 flex-1 flex-col">{threadPane}</div>
       ) : (
         <InboxTwoPane threadOpen={Boolean(activeThread)} list={listPane} thread={threadPane} />
       )}

@@ -8,24 +8,12 @@ import { PortalCommunicationShell } from "@/components/portal/portal-communicati
 import { ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { INBOX_TAB_DEFS } from "@/components/portal/portal-inbox-ui";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import type { ManagerSmsBucketId } from "@/lib/manager-sms-messages";
-import { TabNav } from "@/components/ui/tabs";
 
-export type AdminCommunicationChannel = "email" | "sms";
 export type AdminEmailTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 
 const ADMIN_COMM_BASE = "/admin/communication";
 
-export function AdminCommunication({
-  channel,
-  emailTabId = "unopened",
-}: {
-  channel: AdminCommunicationChannel;
-  emailTabId?: AdminEmailTabId;
-  /** Retained for route compatibility (`/admin/communication/sms/:tab`); the
-   * threaded SMS panel manages its own view state and ignores it. */
-  smsTabId?: ManagerSmsBucketId;
-}) {
+export function AdminCommunication({ inboxTabId = "unopened" }: { inboxTabId?: AdminEmailTabId }) {
   const navigate = usePortalNavigate();
   const inboxRef = useRef<AdminInboxClientHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);
@@ -40,94 +28,70 @@ export function AdminCommunication({
     setEmailTabCounts(counts);
   }, []);
 
-  // SMS uses the threaded panel's own search / sort / unread controls, so it
-  // has no status-pill folders (unlike Email).
-  const statusPills =
-    channel === "email" ? (
-      <ManagerPortalStatusPills
-        activeTone="primary"
-        tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-          id,
-          label,
-          count: emailTabCounts[id as keyof AdminInboxTabCounts],
-        }))}
-        activeId={emailTabId}
-        onChange={(id) => navigate(`${ADMIN_COMM_BASE}/email/${id}`)}
-      />
-    ) : undefined;
+  const statusPills = (
+    <ManagerPortalStatusPills
+      activeTone="primary"
+      tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
+        id,
+        label,
+        count: emailTabCounts[id as keyof AdminInboxTabCounts],
+      }))}
+      activeId={inboxTabId}
+      onChange={(id) => navigate(`${ADMIN_COMM_BASE}/inbox/${id}`)}
+    />
+  );
 
-  const titleAside =
-    channel === "email" ? (
-      <>
-        {emailTabId === "trash" && emailTabCounts.trash > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-            onClick={() => inboxRef.current?.emptyTrash()}
-          >
-            Delete all trash
-          </Button>
-        ) : null}
+  const titleAside = (
+    <>
+      {inboxTabId === "trash" && emailTabCounts.trash > 0 ? (
         <Button
           type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={() => inboxRef.current?.openCompose()}
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+          onClick={() => inboxRef.current?.emptyTrash()}
         >
-          New message
+          Delete all trash
         </Button>
-      </>
-    ) : (
+      ) : null}
       <Button
         type="button"
         variant="primary"
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => smsRef.current?.openCompose()}
-        data-attr="admin-sms-new-message"
+        onClick={() => inboxRef.current?.openCompose()}
       >
         New message
       </Button>
-    );
+    </>
+  );
 
   return (
-    <PortalCommunicationShell
-      title="Communication"
-      titleAside={titleAside}
-      channelNav={
-        <TabNav
-          activeId={channel}
-          items={[
-            { id: "email", label: "Email", href: `${ADMIN_COMM_BASE}/email/unopened`, dataAttr: "admin-communication-tab-email" },
-            { id: "sms", label: "SMS", href: `${ADMIN_COMM_BASE}/sms/all`, dataAttr: "admin-communication-tab-sms" },
-          ]}
-        />
-      }
-      statusPills={statusPills}
-    >
-      {channel === "email" ? (
+    <PortalCommunicationShell title="Communication" titleAside={titleAside} statusPills={statusPills}>
+      <div className="space-y-6">
         <AdminInboxClient
           ref={inboxRef}
-          tabId={emailTabId}
-          commBase={`${ADMIN_COMM_BASE}/email`}
+          tabId={inboxTabId}
+          commBase={`${ADMIN_COMM_BASE}/inbox`}
           embeddedInCommunication
           externalTitleActions
           onTabCountsChange={handleEmailTabCountsChange}
         />
-      ) : (
-        <ManagerSmsPanel
-          ref={smsRef}
-          endpoint="/api/admin/sms-conversations"
-          // Admin has no separate shell compose modal — let the panel own its
-          // own SMS compose, opened from the header New message button.
-          allowInlineCompose
-          // Admin oversight is read + send only. The admin route has no DELETE
-          // handler, and deleting another manager's SMS history from an
-          // oversight surface is not a capability we want — so the affordance
-          // is off rather than a button that always 405s after a confirm.
-          allowDelete={false}
-        />
-      )}
+        {inboxTabId !== "trash" ? (
+          <section className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-foreground">Text messages</h2>
+              <span className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                SMS
+              </span>
+            </div>
+            <ManagerSmsPanel
+              ref={smsRef}
+              endpoint="/api/admin/sms-conversations"
+              allowInlineCompose
+              allowDelete={false}
+            />
+          </section>
+        ) : null}
+      </div>
     </PortalCommunicationShell>
   );
 }
