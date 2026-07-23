@@ -7,7 +7,7 @@ import "./landing-proplane.css";
 
 const GET_STARTED = MANAGER_GET_STARTED_HREF;
 
-/** Dashboard+assistant demo, learn guides, week pipeline, ops band, closing CTA. */
+/** Dashboard+assistant demo, learn guides, ops banner, closing CTAs. */
 export function LandingHomeSections() {
   return (
     <>
@@ -15,7 +15,14 @@ export function LandingHomeSections() {
       <LandingInboxApproveDemo />
       <LearnSection />
       <OpsSkySection />
-      <ClosingCta />
+      <section className="lp-end lp-end-cta-only" aria-label="Get started">
+        <CtaPair
+          primaryAttr="home-closing-get-started"
+          secondaryAttr="home-closing-book-demo"
+          primaryClass="lp-btn lp-btn-blue lp-lg"
+          secondaryClass="lp-btn lp-btn-ghost lp-lg"
+        />
+      </section>
     </>
   );
 }
@@ -113,28 +120,6 @@ export function LearnSection() {
   );
 }
 
-const PORTFOLIO_BUILDINGS = ["Cascade Lofts", "Ballard Commons", "Cascade Court"] as const;
-
-function BuildingIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
-      <path
-        d="M3.5 13.5V3.75a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 .75.75V13.5M9.5 13.5V6.75a.75.75 0 0 1 .75-.75h1.75a.75.75 0 0 1 .75.75v6.75M2.5 13.5h11.5"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5 5.25h1M5 7.5h1M5 9.75h1"
-        stroke="currentColor"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function OpsSkySection() {
   return (
     <section className="lp-ops-sky">
@@ -156,14 +141,6 @@ function OpsSkySection() {
         <TaskFloatRow status="review" label="Manager review" title="Lease · Cascade 4B" agent="Leases" />
         <TaskFloatRow status="run" label="Running" title="Rent reminder · April overdue" agent="Payments" />
         <TaskFloatRow status="done" label="Completed" title="Work order #142 · bids collected" agent="Work orders" />
-      </div>
-      <div className="lp-portfolio-strip" aria-hidden>
-        {PORTFOLIO_BUILDINGS.map((name) => (
-          <span key={name} className="lp-portfolio-chip">
-            <BuildingIcon />
-            {name}
-          </span>
-        ))}
       </div>
     </section>
   );
@@ -188,23 +165,5 @@ function TaskFloatRow({
       </div>
       <span className="lp-agent">{agent}</span>
     </div>
-  );
-}
-
-function ClosingCta() {
-  return (
-    <section className="lp-end">
-      <h2>Start managing with PropLane</h2>
-      <p>
-        Free to begin with your first listing. Scales up to a <b>20-property</b> portfolio with residents,
-        leases, and a full team as you grow.
-      </p>
-      <CtaPair
-        primaryAttr="home-closing-get-started"
-        secondaryAttr="home-closing-book-demo"
-        primaryClass="lp-btn lp-btn-blue lp-lg"
-        secondaryClass="lp-btn lp-btn-ghost lp-lg"
-      />
-    </section>
   );
 }
