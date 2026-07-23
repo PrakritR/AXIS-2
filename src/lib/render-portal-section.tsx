@@ -72,18 +72,26 @@ type DocumentsTab = (typeof DOCUMENTS_TABS)[number];
 // Every legacy map value must name a tab that still exists in its destination
 // list, otherwise the redirect lands on a 404. The unions below make that a
 // compile error instead of a runtime dead end.
-const LEGACY_FINANCIALS_TAB_MAP: Record<string, FinancialsTab> = {
-  "rent-roll": "income",
-  "income-statement": "expenses",
-  vendors: "expenses",
-  "profit-loss": "expenses",
-};
+//
+// Null-prototype on purpose, matching RESIDENT_PAYMENTS_LEGACY_TABS: a plain
+// object literal resolves inherited `Object.prototype` members, so
+// `/portal/financials/toString` (also `constructor`, `valueOf`,
+// `hasOwnProperty`, `__proto__`) would read as a known legacy tab and redirect
+// to a garbage URL instead of 404ing.
+const LEGACY_FINANCIALS_TAB_MAP: Record<string, FinancialsTab | undefined> =
+  Object.assign(Object.create(null) as Record<string, FinancialsTab | undefined>, {
+    "rent-roll": "income",
+    "income-statement": "expenses",
+    vendors: "expenses",
+    "profit-loss": "expenses",
+  } satisfies Record<string, FinancialsTab>);
 
-const LEGACY_DOCUMENTS_TAB_MAP: Record<string, DocumentsTab> = {
-  summary: "tax-summary",
-  "rent-receipts": "income-documents",
-  "rental-days": "income-documents",
-};
+const LEGACY_DOCUMENTS_TAB_MAP: Record<string, DocumentsTab | undefined> =
+  Object.assign(Object.create(null) as Record<string, DocumentsTab | undefined>, {
+    summary: "tax-summary",
+    "rent-receipts": "income-documents",
+    "rental-days": "income-documents",
+  } satisfies Record<string, DocumentsTab>);
 
 const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
 
@@ -91,10 +99,11 @@ function isManagerInboxTab(tab: string): tab is (typeof MANAGER_INBOX_TABS)[numb
   return (MANAGER_INBOX_TABS as readonly string[]).includes(tab);
 }
 
-const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, FinancialsTab> = {
-  expenses: "expenses",
-  "profit-loss": "expenses",
-};
+const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, FinancialsTab | undefined> =
+  Object.assign(Object.create(null) as Record<string, FinancialsTab | undefined>, {
+    expenses: "expenses",
+    "profit-loss": "expenses",
+  } satisfies Record<string, FinancialsTab>);
 
 async function renderManagerFinancesSection(
   section: string,
