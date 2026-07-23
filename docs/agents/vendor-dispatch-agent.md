@@ -76,7 +76,8 @@ job-texts terms in the invite modal, so their number is fair game). Langfuse tra
 turn as `vendor-agent-turn` grouped by session id.
 
 **Vendor contact fields**: `profiles.phone` (E.164, validated by the intl-aware
-`normalizeE164` now exported from `src/lib/twilio.ts`), `preferred_language`,
+`normalizeE164` in `src/lib/phone-e164.ts`, re-exported from `src/lib/twilio.ts`),
+`preferred_language`,
 `sms_consent_at` (vendor-granted in settings; a manager can never consent for them),
 `sms_opt_out_at` (STOP) — profiles is canonical for the agent; the directory row keeps a
 display copy + pre-signup `preferredLanguage`/phone from the invite modal.
