@@ -296,6 +296,57 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/attachments couldn't be saved/i));
   });
 
+  it("still reports the dropped attachment after the failed save is retried", async () => {
+    // A flaky connection tends to fail the upload AND the write together. The
+    // dropped attachment is already gone from the form, so the notice has to
+    // survive until a save actually delivers it.
+    SESSION_USER_ID = "supabase-user-1";
+    uploadFails = (contentType) => contentType === "image/png";
+    let serverFails = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown, init?: { body?: string }) => {
+        if (typeof url === "string" && url.startsWith("data:")) {
+          const mime = url.slice("data:".length, url.indexOf(";")) || "application/octet-stream";
+          return { ok: true, blob: async () => new Blob(["bytes"], { type: mime }) } as unknown as Response;
+        }
+        if (serverFails) return { ok: false, status: 500 } as unknown as Response;
+        const body = init?.body ? (JSON.parse(init.body) as RecordedCall) : ({} as RecordedCall);
+        if (body.action) calls.push({ action: body.action, id: body.id, status: body.status });
+        return { ok: true, status: 200, json: async () => ({ records: [] }) } as unknown as Response;
+      }),
+    );
+    const { onClose, showToast } = renderWizard({
+      initialSubmission: {
+        ...createDefaultListingSubmission(),
+        housePhotoDataUrls: ["data:image/jpeg;base64,AAAA", "data:image/png;base64,BBBB"],
+      },
+    });
+
+    typePropertyName("Ravenna Craftsman");
+    clickClose();
+
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringMatching(/could not save your progress.+attachments couldn't be saved/i),
+      ),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    // The upload no longer fails on the retry — the notice must not vanish with it.
+    uploadFails = () => false;
+    serverFails = false;
+    clickClose();
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(showToast).toHaveBeenLastCalledWith(
+      "Progress saved to Drafts. Some attachments couldn't be saved — add them again next time.",
+    );
+    const saved = readAdminPropertyRows(5, MANAGER_ID)[0]!.submission!;
+    expect(saved.housePhotoDataUrls).toHaveLength(1);
+    expect(JSON.stringify(saved)).not.toContain("data:");
+  });
+
   it("reports plain success when every attachment uploads", async () => {
     SESSION_USER_ID = "supabase-user-1";
     const { onClose, showToast } = renderWizard({
