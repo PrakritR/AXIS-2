@@ -18,12 +18,7 @@ import {
   handleGoogleSignedInReturn,
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
-import {
-  clearManagerPricingOffer,
-  readManagerPricingOffer,
-} from "@/lib/auth/manager-pricing-oauth-storage";
-import { persistPreOAuthUser, readPreOAuthUser } from "@/lib/auth/pre-oauth-user";
-import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
+import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { normalizeE164 } from "@/lib/phone-e164";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -44,7 +39,6 @@ export function ManagerTrialSignupForm({
   disabled = false,
   hideLegalFooter = false,
   googleReturn = false,
-  sameAccountReturn = false,
   trialSignup = true,
 }: {
   tier: PlanTierId;
@@ -53,7 +47,6 @@ export function ManagerTrialSignupForm({
   disabled?: boolean;
   hideLegalFooter?: boolean;
   googleReturn?: boolean;
-  sameAccountReturn?: boolean;
   trialSignup?: boolean;
 }) {
   const router = useRouter();
@@ -66,13 +59,9 @@ export function ManagerTrialSignupForm({
   const [finishingGoogle, setFinishingGoogle] = useState(googleReturn);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
-  const [oauthReturnedSameAccount, setOauthReturnedSameAccount] = useState(sameAccountReturn);
+  const [accountReady, setAccountReady] = useState(false);
 
   const locked = disabled || busy || finishingGoogle;
-
-  useEffect(() => {
-    if (sameAccountReturn) clearManagerPricingOffer();
-  }, [sameAccountReturn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +71,6 @@ export function ManagerTrialSignupForm({
       const user = data.session?.user ?? null;
       if (cancelled) return;
       setSignedInUser(user ? { id: user.id, email: user.email ?? null } : null);
-      persistPreOAuthUser(user?.id ?? null);
     })();
     return () => {
       cancelled = true;
@@ -90,13 +78,9 @@ export function ManagerTrialSignupForm({
   }, []);
 
   const applyPricingResult = useCallback(
-    (result: ContinuePartnerPricingResult, sameAccount: boolean) => {
+    (result: ContinuePartnerPricingResult) => {
       if (result.status === "portal") {
-        if (sameAccount) {
-          setOauthReturnedSameAccount(true);
-          return;
-        }
-        void navigateAfterRoleSignup("/portal/dashboard");
+        setAccountReady(true);
         return;
       }
       if (result.status === "error") {
@@ -109,7 +93,6 @@ export function ManagerTrialSignupForm({
 
   useEffect(() => {
     if (!googleReturn) return;
-    const priorUserId = readPreOAuthUser();
     let cancelled = false;
     void (async () => {
       setFinishingGoogle(true);
@@ -118,12 +101,6 @@ export function ManagerTrialSignupForm({
         const offer =
           stored ??
           buildPricingOffer({ tier, billing, returnSurface: "mobile-plan", trialSignup: true });
-
-        const returnedUser = priorUserId
-          ? await waitForAuthUser(createSupabaseBrowserClient())
-          : null;
-        if (cancelled) return;
-        const sameAccount = Boolean(returnedUser && returnedUser.id === priorUserId);
 
         const result = await handleGoogleSignedInReturn(offer);
         if (cancelled) return;
@@ -135,7 +112,17 @@ export function ManagerTrialSignupForm({
           return;
         }
         const continued = await continuePartnerPricingWithOffer(offer);
-        if (!cancelled) applyPricingResult(continued, sameAccount);
+        if (cancelled) return;
+        applyPricingResult(continued);
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams({
+            mode: "create",
+            role: "manager",
+            tier: offer.tier,
+            billing: offer.billing,
+          });
+          window.history.replaceState({}, "", `/auth/create-account?${params}`);
+        }
       } finally {
         if (!cancelled) setFinishingGoogle(false);
       }
@@ -194,12 +181,10 @@ export function ManagerTrialSignupForm({
       });
       if (signInError) {
         if (signedInUser) await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
-        persistPreOAuthUser(null);
         showToast("Account created. Sign in to continue.");
         router.push("/auth/sign-in?role=manager");
         return;
       }
-      persistPreOAuthUser(signInData?.user?.id ?? null);
       if (signInData?.user) posthog.identify(signInData.user.id);
       const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard";
       await navigateAfterRoleSignup(fallback);
@@ -222,10 +207,10 @@ export function ManagerTrialSignupForm({
         </p>
       ) : (
         <>
-          {signedInUser ? (
+          {signedInUser || accountReady ? (
             <div className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-[12px] leading-snug text-muted">
-              {oauthReturnedSameAccount ? <>Your property account is ready. </> : null}
-              {signedInUser.email ? (
+              {accountReady ? <>Your property account is ready. </> : null}
+              {signedInUser?.email ? (
                 <>You&apos;re signed in as <span className="font-semibold text-foreground">{signedInUser.email}</span>. </>
               ) : (
                 <>You&apos;re already signed in. </>

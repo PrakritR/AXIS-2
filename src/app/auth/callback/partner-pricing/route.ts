@@ -6,53 +6,35 @@ import {
   clearPricingOfferCookie,
   readPricingOfferFromRequest,
 } from "@/lib/auth/manager-pricing-oauth-storage";
-import {
-  clearPreOAuthUserCookie,
-  readPreOAuthUserFromRequest,
-} from "@/lib/auth/pre-oauth-user";
-import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import type { NextRequest } from "next/server";
 
-/** Fixed OAuth return path for partner pricing — tier-aware redirect after free account setup. */
+function createAccountPath(params: Record<string, string>): string {
+  return `/auth/create-account?${new URLSearchParams({ mode: "create", role: "manager", ...params })}`;
+}
+
+/**
+ * Fixed OAuth return path for partner pricing. Account setup still runs here, but
+ * the return always lands back on the create-account screen: entering a portal is
+ * an explicit click there, never an automatic bounce.
+ */
 export async function GET(request: NextRequest) {
   const bridge = maybeNativeOAuthBridgeResponse(request);
   if (bridge) return bridge;
 
   const offer = readPricingOfferFromRequest(request);
-  const priorUserId = readPreOAuthUserFromRequest(request);
 
   const response = await handleOAuthCallback(request, `${MANAGER_PRICING_ENTRY_PATH}?google_signed_in=1`, {
-    resolveRedirect: async (service, user, safePath) => {
+    resolveRedirect: async (service, user) => {
       const tier = offer?.tier ?? "free";
+      const billing = offer?.billing ?? "monthly";
       if (offer?.trialSignup) {
-        const params = new URLSearchParams({
-          mode: "create",
-          role: "manager",
-          google_signed_in: "1",
-          tier: offer.tier,
-          billing: offer.billing,
-        });
-        return `/auth/create-account?${params}`;
+        return createAccountPath({ google_signed_in: "1", tier, billing });
       }
       if (tier === "free") {
-        // The user explicitly chose the Free manager plan — provision before entering the
-        // portal so a brand-new Google account lands on a working dashboard.
-        const provisioned = await ensureFreeManagerPortalAccess(service, user);
-        if (provisioned.status === "portal_ready") {
-          if (priorUserId && priorUserId === user.id) {
-            const params = new URLSearchParams({
-              mode: "create",
-              role: "manager",
-              same_account: "1",
-              tier,
-              billing: offer?.billing ?? "monthly",
-            });
-            return `/auth/create-account?${params}`;
-          }
-          return "/portal/dashboard";
-        }
-        // Resident-only / primary-admin / pending-paid accounts: route by role instead.
-        return resolveOAuthPortalRedirect(service, user, safePath, { intent: "manager" });
+        // The user explicitly chose the Free manager plan — provision so the account
+        // is ready the moment they choose to open the portal.
+        await ensureFreeManagerPortalAccess(service, user);
+        return createAccountPath({ tier, billing });
       }
       if (offer?.returnSurface === "mobile-plan") {
         return "/auth/manager/plan?google_signed_in=1";
@@ -64,6 +46,5 @@ export async function GET(request: NextRequest) {
   });
 
   clearPricingOfferCookie(response);
-  clearPreOAuthUserCookie(response);
   return response;
 }
