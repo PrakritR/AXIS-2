@@ -410,6 +410,18 @@
 
 .lp-pipe-item {
   transition: background 0.35s ease;
+  animation: lp-pipe-row-in 0.32s ease both;
+}
+
+@keyframes lp-pipe-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .lp-pipe-item-approved {
@@ -574,7 +586,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-pipe-spin {
+  .lp-pipe-spin,
+  .lp-pipe-item {
     animation: none;
   }
 

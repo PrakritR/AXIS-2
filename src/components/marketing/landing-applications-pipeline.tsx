@@ -12,14 +12,16 @@
  * real Approve / Reject / Send reminder actions and the Checkr screening chip.
  * Every label here exists in the portal — do not invent copy.
  *
- * By default it auto-cycles the pending applicants through the review flow:
- * Run screening flips the Checkr chip Pending → Clear and the badge to
- * Screened, then Approve moves the row to Approved and the pill counts update.
- * The Pending / Approved / Rejected tabs are real, keyboard-accessible tabs: a
- * visitor can click one to browse that bucket, which briefly pauses the loop;
- * after a few seconds of no interaction the loop resumes on the Pending tab.
- * Purely scripted and presentational — no API, money, or auth calls. Honors
- * prefers-reduced-motion by rendering a representative mid-flow state statically.
+ * By default it auto-runs ONE pending applicant through the review flow: open
+ * her, Run screening flips the Checkr chip Pending → Clear and the badge to
+ * Screened, then Approve moves her OUT of Pending into Approved. Because the
+ * list is strictly filtered by the active tab, the approved applicant actually
+ * leaves the Pending list and the pill counts stay exact (Pending 3 → 2,
+ * Approved 4 → 5). It rests, then resets and repeats. The Pending / Approved /
+ * Rejected tabs are real, keyboard-accessible tabs: a visitor can click one to
+ * browse that bucket, which pauses the loop; after ~4s of no interaction it
+ * resumes on the Pending tab. Purely scripted and presentational — no API,
+ * money, or auth calls. Honors prefers-reduced-motion with a static snapshot.
  */
 import { useEffect, useRef, useState } from "react";
 import {
@@ -87,9 +89,8 @@ const INITIAL_SCREENING: Record<string, Screening> = {
   ethan: "complete",
 };
 
-/** The animated cast, in the order the loop works the review queue. */
-const PLAY_ORDER = ["priya", "dev", "maya"] as const;
-const CAST_IDS = new Set<string>(PLAY_ORDER);
+/** The single applicant the loop demonstrates end to end. */
+const FEATURED_ID = "priya";
 
 /** How long a manual interaction pauses the loop before it resumes on its own. */
 const RESUME_DELAY_MS = 4000;
@@ -114,16 +115,12 @@ export function ApplicationsPipelinePanel() {
   const resumeRef = useRef<number | null>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  // Counts derive straight from the stages, so the tab numbers always equal the
+  // actual filtered lists — approving an applicant moves her and updates both.
   const counts: Record<Bucket, number> = { pending: 0, approved: 0, rejected: 0 };
   for (const applicant of APPLICANTS) counts[bucketOf(stages[applicant.id])] += 1;
 
-  // While the loop owns the panel it always sits on Pending and shows the cast
-  // (so an in-flight approval stays visible). Once the visitor takes control we
-  // strictly filter the full roster by the chosen tab.
-  const storyMode = !paused && !reducedMotion && filter === "pending";
-  const displayed = storyMode
-    ? APPLICANTS.filter((a) => CAST_IDS.has(a.id))
-    : APPLICANTS.filter((a) => bucketOf(stages[a.id]) === filter);
+  const displayed = APPLICANTS.filter((a) => bucketOf(stages[a.id]) === filter);
 
   // Reduced motion: a representative "ready to approve" snapshot, no animation.
   useEffect(() => {
@@ -143,53 +140,48 @@ export function ApplicationsPipelinePanel() {
     };
   }, []);
 
-  // Self-playing loop: screen → approve each cast member, then reset and repeat.
+  // Self-playing loop: one applicant, open → screen → approve → she moves out of
+  // Pending into Approved (counts update), rest, then reset and repeat.
   useEffect(() => {
     if (!playing || reducedMotion || paused) return;
 
     const pool = createTimerPool();
-    const flash = async (id: string, action: string, ms: number) => {
+    const id = FEATURED_ID;
+    const flash = async (action: string, ms: number) => {
       setPressed({ id, action });
       await pool.wait(ms);
       if (!pool.cancelled) setPressed(null);
     };
 
-    const runItem = async (id: string) => {
-      setActiveId(id);
-      await pool.wait(950);
-      if (pool.cancelled) return;
-
-      if (INITIAL_SCREENING[id] !== "complete") {
-        await flash(id, "run", 260);
-        if (pool.cancelled) return;
-        setScreening((s) => ({ ...s, [id]: "running" }));
-        await pool.wait(1500);
-        if (pool.cancelled) return;
-        setScreening((s) => ({ ...s, [id]: "complete" }));
-        setStages((s) => ({ ...s, [id]: "screened" }));
-        await pool.wait(850);
-        if (pool.cancelled) return;
-      }
-
-      await flash(id, "approve", 320);
-      if (pool.cancelled) return;
-      setStages((s) => ({ ...s, [id]: "approved" }));
-      await pool.wait(1650);
-    };
-
     void (async () => {
       while (!pool.cancelled) {
+        // Reset to the start state: Priya back in Pending, screening not yet run.
         setStages(INITIAL_STAGE);
         setScreening(INITIAL_SCREENING);
         setReminderId(null);
-        setActiveId(PLAY_ORDER[0]);
-        await pool.wait(750);
-        for (const id of PLAY_ORDER) {
-          if (pool.cancelled) break;
-          await runItem(id);
-        }
+        setActiveId(id);
+        await pool.wait(1100);
         if (pool.cancelled) break;
-        await pool.wait(2000);
+
+        // Run screening: Checkr Pending → Running → Clear, badge → Screened.
+        await flash("run", 300);
+        if (pool.cancelled) break;
+        setScreening((s) => ({ ...s, [id]: "running" }));
+        await pool.wait(1500);
+        if (pool.cancelled) break;
+        setScreening((s) => ({ ...s, [id]: "complete" }));
+        setStages((s) => ({ ...s, [id]: "screened" }));
+        await pool.wait(1150);
+        if (pool.cancelled) break;
+
+        // Approve: she leaves Pending and joins Approved; the counts follow.
+        await flash("approve", 340);
+        if (pool.cancelled) break;
+        setStages((s) => ({ ...s, [id]: "approved" }));
+        await pool.wait(2600);
+        if (pool.cancelled) break;
+
+        await pool.wait(700);
       }
     })();
 
