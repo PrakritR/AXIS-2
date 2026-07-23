@@ -1051,6 +1051,12 @@ export function ManagerAddListingForm({
   });
   const [busy, setBusy] = useState(false);
   const [closingDraft, setClosingDraft] = useState(false);
+  /**
+   * Why the wizard refused to close. Shown inline in the footer because the
+   * toast container renders below this modal's overlay — without it, a failed
+   * draft save just reads as a broken Close button.
+   */
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
   const resumedStepIndex = clampWizardStep(initialStepIndex);
   const resumedMaxStepReached = Math.max(clampWizardStep(initialMaxStepReached), resumedStepIndex);
@@ -2093,13 +2099,16 @@ export function ManagerAddListingForm({
       existingDraftId && (stepIndex !== resumedStepIndex || maxStepReached !== resumedMaxStepReached),
     );
     if (!contentChanged && !positionChanged) {
+      setDraftSaveError(null);
       onClose();
       return;
     }
     if (!authReady || !userId) {
       // Same rule as a failed write below: never close on a lie. The work stays
       // in the open wizard so signing in again and closing still saves it.
-      showToast("Could not save your progress — sign in again, then close. Your work is still here.");
+      const msg = "Could not save your progress — sign in again, then close. Your work is still here.";
+      setDraftSaveError(msg);
+      showToast(msg);
       return;
     }
 
@@ -2130,13 +2139,14 @@ export function ManagerAddListingForm({
         allowIdUpgrade: draftIdMintedHereRef.current,
       });
       if (!savedId) {
-        showToast(
-          droppedAttachmentsRef.current
-            ? "Could not save your progress. Your listing is still here, but some attachments couldn't be saved — check your connection and close again."
-            : "Could not save your progress. It is still here — check your connection and close again.",
-        );
+        const msg = droppedAttachmentsRef.current
+          ? "Could not save your progress. Your listing is still here, but some attachments couldn't be saved — check your connection and close again."
+          : "Could not save your progress. It is still here — check your connection and close again.";
+        setDraftSaveError(msg);
+        showToast(msg);
         return;
       }
+      setDraftSaveError(null);
       draftIdRef.current = savedId;
       onSaved?.();
       const droppedAttachments = droppedAttachmentsRef.current;
@@ -4576,6 +4586,11 @@ export function ManagerAddListingForm({
         </div>
 
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
+          {draftSaveError ? (
+            <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
+              {draftSaveError}
+            </p>
+          ) : null}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               <Button

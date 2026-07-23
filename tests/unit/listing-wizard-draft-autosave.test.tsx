@@ -124,6 +124,15 @@ function clickClose() {
   fireEvent.click(btn);
 }
 
+/**
+ * The inline failed-save notice in the wizard footer. It is the guaranteed
+ * readable channel: the toast container renders below the wizard's own overlay.
+ */
+function draftSaveErrorText(): string | null {
+  const el = document.querySelector('[data-testid="listing-wizard-draft-save-error"]');
+  return el ? (el.textContent ?? "") : null;
+}
+
 function typePropertyName(value: string) {
   fireEvent.change(wizardField("buildingName"), { target: { value } });
 }
@@ -230,6 +239,18 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/could not save/i)));
     expect(onClose).not.toHaveBeenCalled();
     expect(readAdminPropertyRows(5, MANAGER_ID)).toHaveLength(0);
+    // Rendered where the manager can actually read it, not only toasted.
+    expect(draftSaveErrorText()).toMatch(/could not save your progress/i);
+  });
+
+  it("shows no inline failure notice when the close saves cleanly", async () => {
+    const { onClose } = renderWizard();
+
+    typePropertyName("Ravenna Craftsman");
+    clickClose();
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(draftSaveErrorText()).toBeNull();
   });
 
   it("keeps the wizard open when no manager is signed in, rather than dropping the work", async () => {
@@ -244,6 +265,7 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/could not save/i)));
     expect(onClose).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
+    expect(draftSaveErrorText()).toMatch(/sign in again/i);
   });
 
   it("saves the typed listing without any base64 when the media upload fails", async () => {
@@ -332,6 +354,8 @@ describe("closing the add-listing wizard saves the work in progress", () => {
       ),
     );
     expect(onClose).not.toHaveBeenCalled();
+    // The inline notice carries the dropped attachments too, not just the failure.
+    expect(draftSaveErrorText()).toMatch(/could not save your progress.+attachments couldn't be saved/i);
 
     // The upload no longer fails on the retry — the notice must not vanish with it.
     uploadFails = () => false;
@@ -342,6 +366,7 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     expect(showToast).toHaveBeenLastCalledWith(
       "Progress saved to Drafts. Some attachments couldn't be saved — add them again next time.",
     );
+    expect(draftSaveErrorText()).toBeNull();
     const saved = readAdminPropertyRows(5, MANAGER_ID)[0]!.submission!;
     expect(saved.housePhotoDataUrls).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain("data:");
