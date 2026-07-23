@@ -6,6 +6,15 @@ export type InboxThreadMessage = {
   from: string;
   body: string;
   at: string;
+  /**
+   * Direction hint from the owner's point of view. Absent on legacy rows and on
+   * reply-appended messages (which are always the owner's own outbound replies),
+   * where the index heuristic in the bubble builders is correct. Set explicitly
+   * when a NEW message is appended to a person-thread so the recipient's inbox
+   * copy renders inbound turns as inbound instead of assuming every non-root
+   * message is the owner's reply.
+   */
+  outbound?: boolean;
 };
 
 /**

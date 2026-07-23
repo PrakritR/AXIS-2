@@ -145,8 +145,18 @@ describe("POST /api/portal/send-inbox-message", () => {
     const from = vi.fn().mockImplementation(() => {
       const obj: Record<string, unknown> = {};
       obj.upsert = upsert;
+      // Chainable stand-in for the person-thread lookup
+      // (findExistingPortalMessageThread): .eq()×5 → .order() → .limit(), plus
+      // .maybeSingle() for the profiles sender-role lookup. No existing thread,
+      // so each send creates a fresh sent/inbox row.
+      const threadQuery: Record<string, unknown> = {
+        eq: vi.fn(() => threadQuery),
+        order: vi.fn(() => threadQuery),
+        limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+        maybeSingle: senderProfileMaybeSingle,
+      };
       obj.select = vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({ maybeSingle: senderProfileMaybeSingle }),
+        eq: vi.fn().mockReturnValue(threadQuery),
         in: vi.fn().mockReturnValue(recipientProfilesData()),
         ilike: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),

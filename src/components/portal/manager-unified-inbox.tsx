@@ -237,7 +237,7 @@ export function ManagerUnifiedInbox({
       const lastMsg = msgs[msgs.length - 1];
       const sentSemantics = t.folder === "sent";
       const displayName = sentSemantics ? t.email || "Unknown recipient" : t.from || t.email || "Unknown sender";
-      const lastOutbound = msgs.length > 1 ? true : t.folder === "sent";
+      const lastOutbound = lastMsg?.outbound ?? (msgs.length > 1 ? true : t.folder === "sent");
       return {
         key: unifiedInboxKey("email", t.id),
         channel: "email" as const,

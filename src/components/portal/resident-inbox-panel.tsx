@@ -756,7 +756,7 @@ export const ResidentInboxPanel = forwardRef<
   const activeBubbles = useMemo((): InboxBubbleMessage[] => {
     if (!activeThread) return [];
     return inboxThreadMessages(activeThread).map((m, i) => {
-      const outbound = i === 0 ? activeFolder === "sent" : true;
+      const outbound = m.outbound ?? (i === 0 ? activeFolder === "sent" : true);
       return {
         id: m.id,
         author: m.from,
@@ -963,7 +963,7 @@ export const ResidentInboxPanel = forwardRef<
                   const msgs = inboxThreadMessages(thread);
                   const lastMsg = msgs[msgs.length - 1];
                   const folder = thread.folder === "trash" ? inferPreviousFolder(thread) : thread.folder;
-                  const lastOutbound = msgs.length > 1 ? true : folder === "sent";
+                  const lastOutbound = lastMsg?.outbound ?? (msgs.length > 1 ? true : folder === "sent");
                   return (
                     <InboxConversationRow
                       key={thread.id}
