@@ -7,6 +7,7 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -602,6 +603,28 @@ export async function POST(req: Request) {
           );
         }
         row.managerUserId = gate.owner ?? user.id;
+      }
+      // `withdrawnAt` is SERVER-owned on a manager write. This route mirrors a
+      // client-cached blob wholesale, so a manager whose Applications panel went
+      // stale before the resident withdrew would otherwise erase the stamp — and,
+      // because this same write provisions the resident account when the row lands
+      // in `approved`, approve the withdrawal it just erased. Re-anchor from the
+      // STORED row (the resident branch above does the same for its server-owned
+      // fields) and refuse the approve outright. Fails CLOSED on a query error.
+      const storedIds = idVariants(row.id);
+      const { data: storedRows, error: storedError } = await db
+        .from("manager_application_records")
+        .select("row_data")
+        .in("id", storedIds)
+        .limit(1);
+      if (storedError) return NextResponse.json({ error: storedError.message }, { status: 500 });
+      const storedRow = storedRows?.[0]?.row_data as DemoApplicantRow | undefined;
+      row = { ...row, withdrawnAt: storedRow?.withdrawnAt ?? row.withdrawnAt };
+      if (row.bucket === "approved" && isWithdrawnApplicationRow(row)) {
+        return NextResponse.json(
+          { error: "This application was withdrawn by the applicant and can no longer be approved." },
+          { status: 409 },
+        );
       }
     }
     await persistNormalizedRow(db, row.id, row);
