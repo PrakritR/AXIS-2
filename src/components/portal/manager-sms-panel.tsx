@@ -15,6 +15,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerSmsComposeModal } from "@/components/portal/manager-sms-compose-modal";
 import {
   INBOX_LIST_SCROLL,
+  InboxAvatar,
   InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
@@ -72,13 +73,6 @@ function conversationId(resident: ManagerSmsResidentConversation): string {
   );
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
-}
-
 /** iOS Messages list timestamp: time today, weekday this week, else short date. */
 function iosListTimestamp(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -132,20 +126,6 @@ function loadHiddenConversationIds(): Set<string> {
 function persistHiddenConversationIds(ids: Set<string>): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(SMS_HIDDEN_STORAGE_KEY, JSON.stringify([...ids]));
-}
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <div
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold text-white"
-      style={{
-        background: "linear-gradient(160deg, var(--primary) 0%, var(--primary-alt) 100%)",
-      }}
-      aria-hidden
-    >
-      {initials(name)}
-    </div>
-  );
 }
 
 export type ManagerSmsPanelHandle = {
@@ -934,7 +914,7 @@ function ConversationRow({
             <span className="text-[18px] font-bold leading-none">−</span>
           </button>
         ) : null}
-        <Avatar name={name} />
+        <InboxAvatar name={name} className="h-11 w-11 text-[14px]" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <p

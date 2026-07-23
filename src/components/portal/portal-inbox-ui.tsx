@@ -548,7 +548,7 @@ export function inboxInitials(name: string): string {
 export function InboxAvatar({ name, className = "" }: { name: string; className?: string }) {
   return (
     <div
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white ${className}`}
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold tracking-[0.02em] text-white shadow-[0_2px_10px_color-mix(in_srgb,var(--primary)_40%,transparent)] ring-2 ring-[color-mix(in_srgb,var(--primary)_28%,transparent)] ${className}`}
       style={{ background: "linear-gradient(160deg, var(--primary) 0%, var(--primary-alt) 100%)" }}
       aria-hidden
     >
