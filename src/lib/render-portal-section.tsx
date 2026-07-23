@@ -62,24 +62,28 @@ import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
 
-const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
+const DOCUMENTS_TABS = ["library", "templates", "applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
+
+const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "security-deposits", "financial-diagnostics", "ap-aging", "bills", "budget-vs-actual", "bank-reconciliation", "owner-statement", "owner-distributions"] as const;
+
+type FinancialsTab = (typeof FINANCIALS_TABS)[number];
+type DocumentsTab = (typeof DOCUMENTS_TABS)[number];
+
+// Every legacy map value must name a tab that still exists in its destination
+// list, otherwise the redirect lands on a 404. The unions below make that a
+// compile error instead of a runtime dead end.
+const LEGACY_FINANCIALS_TAB_MAP: Record<string, FinancialsTab> = {
   "rent-roll": "income",
-  // Delinquency (overdue rent) lives inside the rent-roll/income view; the old
-  // `summary` target is not a financials tab, so it used to 404.
-  delinquency: "income",
   "income-statement": "expenses",
   vendors: "expenses",
   "profit-loss": "expenses",
 };
 
-const DOCUMENTS_TABS = ["library", "templates", "applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
-
-const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
+const LEGACY_DOCUMENTS_TAB_MAP: Record<string, DocumentsTab> = {
   summary: "tax-summary",
   "rent-receipts": "income-documents",
   "rental-days": "income-documents",
 };
-const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "security-deposits", "financial-diagnostics", "ap-aging", "bills", "budget-vs-actual", "bank-reconciliation", "owner-statement", "owner-distributions"] as const;
 
 const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
 
@@ -87,17 +91,9 @@ function isManagerInboxTab(tab: string): tab is (typeof MANAGER_INBOX_TABS)[numb
   return (MANAGER_INBOX_TABS as readonly string[]).includes(tab);
 }
 
-const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, string> = {
+const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, FinancialsTab> = {
   expenses: "expenses",
   "profit-loss": "expenses",
-};
-
-// Legacy financials tabs whose current home is a DOCUMENTS tab, not a financials
-// tab. `lease-expiration` used to map to `income-documents` inside the financials
-// handler, which only redirects within /financials/, so it 404'd — it must cross
-// into the documents section where `income-documents` actually lives.
-const LEGACY_FINANCIALS_TO_DOCUMENTS: Record<string, string> = {
-  "lease-expiration": "income-documents",
 };
 
 async function renderManagerFinancesSection(
@@ -113,9 +109,7 @@ async function renderManagerFinancesSection(
   }
   if (tabParts.length > 1) notFound();
   const finTab = tabParts[0]!;
-  if (!FINANCIALS_TABS.includes(finTab as (typeof FINANCIALS_TABS)[number])) {
-    const docsRedirect = LEGACY_FINANCIALS_TO_DOCUMENTS[finTab];
-    if (docsRedirect) redirect(`${basePath}/documents/${docsRedirect}`);
+  if (!FINANCIALS_TABS.includes(finTab as FinancialsTab)) {
     const mapped = LEGACY_FINANCIALS_TAB_MAP[finTab];
     if (mapped) redirect(`${basePath}/financials/${mapped}`);
     notFound();
