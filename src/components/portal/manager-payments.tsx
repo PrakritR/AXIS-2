@@ -43,6 +43,7 @@ import {
   ReminderSettingsModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
+import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import {
   buildManagerOutgoingPaymentRows,
   MANAGER_OUTGOING_PAYMENTS_EVENT,
@@ -107,6 +108,10 @@ export function ManagerPayments() {
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
+  const reminderScheduleSummary = useMemo(
+    () => (reminderSettings ? formatFriendlyReminderSchedule(reminderSettings) : undefined),
+    [reminderSettings],
+  );
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}:${outgoingTick}`;
 
   useEffect(() => {
@@ -483,6 +488,7 @@ export function ManagerPayments() {
             managerUserId={userId ?? null}
             activeBucket={bucket}
             scheduledMessages={scheduledMessages}
+            reminderScheduleSummary={reminderScheduleSummary}
             onOpenReminderSettings={() => setReminderSettingsOpen(true)}
             onScheduleChanged={() => void reloadSchedule()}
             onRowsChanged={() => setHcTick((n) => n + 1)}
