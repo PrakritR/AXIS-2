@@ -161,7 +161,12 @@ describe("PATCH /api/portal/resident-approval — withdrawn applications are not
       patch({ email: "applicant@example.com", approved: true, applicationId: "AXIS-9001" }),
     );
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/withdrawn/i);
+    const body = await res.json();
+    expect(body.error).toMatch(/withdrawn/i);
+    // The refusal names the matched record so the client can tell an id match (this
+    // application) from an email-fallback match (possibly a sibling application).
+    expect(body.blockedApplicationId).toBe("AXIS-9001");
+    expect(body.matchedBy).toBe("id");
     // The provisioning write must not have happened.
     expect(PROFILE_UPDATE_CALLS).toBe(0);
   });
@@ -220,6 +225,10 @@ describe("PATCH /api/portal/resident-approval — withdrawn applications are not
       patch({ email: "applicant@example.com", approved: true, applicationId: "unknown-id" }),
     );
     expect(res.status).toBe(409);
+    const body = await res.json();
+    // Matched by email, so the id it names is NOT necessarily the approved one.
+    expect(body.matchedBy).toBe("email");
+    expect(body.blockedApplicationId).toBe("AXIS-LINKED");
     expect(PROFILE_UPDATE_CALLS).toBe(0);
   });
 

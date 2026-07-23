@@ -13,6 +13,13 @@ export const runtime = "nodejs";
 /** Rows scanned when resolving the withdrawn stamp by applicant email (newest first). */
 const EMAIL_FALLBACK_SCAN_LIMIT = 20;
 
+type WithdrawnLookup = {
+  error: boolean;
+  stored: DemoApplicantRow | null;
+  storedId: string;
+  matchedBy: "id" | "email";
+};
+
 function normalizeEmail(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -93,7 +100,7 @@ export async function PATCH(req: Request) {
     // manager's legitimate approval). A query error fails CLOSED (matching
     // `resolveApplicationWriteOwner`).
     if (requestor.role !== "resident" && approved) {
-      const loadById = async (): Promise<{ error: boolean; stored: DemoApplicantRow | null }> => {
+      const loadById = async (): Promise<WithdrawnLookup> => {
         const { data, error } = await svc
           .from("manager_application_records")
           .select("id, row_data")
@@ -101,37 +108,48 @@ export async function PATCH(req: Request) {
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-        if (error) return { error: true, stored: null };
-        return { error: false, stored: (data?.row_data ?? null) as DemoApplicantRow | null };
+        if (error) return { error: true, stored: null, storedId: "", matchedBy: "id" };
+        return {
+          error: false,
+          stored: (data?.row_data ?? null) as DemoApplicantRow | null,
+          storedId: String(data?.id ?? "").trim(),
+          matchedBy: "id",
+        };
       };
 
-      const loadByEmail = async (): Promise<{ error: boolean; stored: DemoApplicantRow | null }> => {
+      const loadByEmail = async (): Promise<WithdrawnLookup> => {
         const { data, error } = await svc
           .from("manager_application_records")
           .select("id, row_data, manager_user_id, property_id, assigned_property_id")
           .eq("resident_email", email)
           .order("updated_at", { ascending: false })
           .limit(EMAIL_FALLBACK_SCAN_LIMIT);
-        if (error) return { error: true, stored: null };
+        if (error) return { error: true, stored: null, storedId: "", matchedBy: "email" };
         const records = data ?? [];
-        if (requestor.role === "admin") {
-          return { error: false, stored: (records[0]?.row_data ?? null) as DemoApplicantRow | null };
-        }
-        const owned = records.filter((record) => String(record.manager_user_id ?? "") === user.id);
-        if (owned.length > 0) {
-          return { error: false, stored: (owned[0].row_data ?? null) as DemoApplicantRow | null };
-        }
-        const [appIds, resIds] = await Promise.all([
-          linkedPropertyIdsForModule(svc, user.id, "applications"),
-          linkedPropertyIdsForModule(svc, user.id, "residents"),
-        ]);
-        const scopedPropertyIds = new Set<string>([...appIds, ...resIds]);
-        const coManaged = records.find((record) => {
-          const pid = String(record.property_id ?? "").trim();
-          const assigned = String(record.assigned_property_id ?? "").trim();
-          return (pid && scopedPropertyIds.has(pid)) || (assigned && scopedPropertyIds.has(assigned));
-        });
-        return { error: false, stored: (coManaged?.row_data ?? null) as DemoApplicantRow | null };
+        const resolved = async () => {
+          if (requestor.role === "admin") return records[0] ?? null;
+          const owned = records.find((record) => String(record.manager_user_id ?? "") === user.id);
+          if (owned) return owned;
+          const [appIds, resIds] = await Promise.all([
+            linkedPropertyIdsForModule(svc, user.id, "applications"),
+            linkedPropertyIdsForModule(svc, user.id, "residents"),
+          ]);
+          const scopedPropertyIds = new Set<string>([...appIds, ...resIds]);
+          return (
+            records.find((record) => {
+              const pid = String(record.property_id ?? "").trim();
+              const assigned = String(record.assigned_property_id ?? "").trim();
+              return (pid && scopedPropertyIds.has(pid)) || (assigned && scopedPropertyIds.has(assigned));
+            }) ?? null
+          );
+        };
+        const match = await resolved();
+        return {
+          error: false,
+          stored: (match?.row_data ?? null) as DemoApplicantRow | null,
+          storedId: String(match?.id ?? "").trim(),
+          matchedBy: "email",
+        };
       };
 
       let lookup = applicationId ? await loadById() : null;
@@ -145,8 +163,17 @@ export async function PATCH(req: Request) {
         }
       }
       if (lookup.stored && isWithdrawnApplicationRow(lookup.stored)) {
+        // The refusal names the record it matched and how. An email-fallback match
+        // may be a DIFFERENT application by the same applicant (the approved one's
+        // mirror may not have landed yet), so the client can only treat the stamp as
+        // this application's when the id lookup is what matched.
         return NextResponse.json(
-          { error: "This application was withdrawn by the applicant and can no longer be approved." },
+          {
+            error: "This application was withdrawn by the applicant and can no longer be approved.",
+            blocked: "withdrawn",
+            blockedApplicationId: lookup.storedId || null,
+            matchedBy: lookup.matchedBy,
+          },
           { status: 409 },
         );
       }

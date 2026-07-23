@@ -52,6 +52,9 @@ export async function requestResidentWelcomeEmail(row: DemoApplicantRow): Promis
 
 export const WITHDRAWN_APPROVAL_BLOCKED_MESSAGE =
   "This application was withdrawn by the applicant and can no longer be approved.";
+const UNCONFIRMED_APPROVAL_MESSAGE = "Could not approve this application.";
+const UNREACHABLE_APPROVAL_MESSAGE =
+  "Couldn't reach the server — approval not saved, retry when connected.";
 
 export type ApplicationBucketTransition = {
   row: DemoApplicantRow;
@@ -61,11 +64,37 @@ export type ApplicationBucketTransition = {
   message?: string;
 };
 
+type ResidentApprovalRefusal = {
+  error?: unknown;
+  blockedApplicationId?: unknown;
+  matchedBy?: unknown;
+};
+
+async function readApprovalRefusal(res: Response): Promise<ResidentApprovalRefusal> {
+  try {
+    return (await res.json()) as ResidentApprovalRefusal;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * A 409 only proves THIS application is withdrawn when the server matched it by id.
+ * Its email fallback can resolve a different application by the same applicant (the
+ * approved row's mirror may not have landed yet), and a stamp written from that
+ * would be mirrored back and permanently mislabel a record nobody withdrew.
+ */
+function refusalConfirmsThisApplication(id: string, refusal: ResidentApprovalRefusal): boolean {
+  if (refusal.matchedBy !== "id") return false;
+  const blockedId = typeof refusal.blockedApplicationId === "string" ? refusal.blockedApplicationId.trim() : "";
+  return Boolean(blockedId) && blockedId.toUpperCase() === id.trim().toUpperCase();
+}
+
 /**
  * Restore the row's pre-transition bucket after the server refused the approval.
- * A `withdrawn` refusal also stamps the local row: the server just told us the
- * record carries the stamp, and without it the row keeps rendering Approve, so the
- * manager can re-fire the whole round trip until the sync TTL catches up.
+ * A CONFIRMED withdrawn refusal also stamps the local row: the server just told us
+ * this record carries the stamp, and without it the row keeps rendering Approve, so
+ * the manager can re-fire the whole round trip until the sync TTL catches up.
  */
 function rollbackApprovedTransition(
   id: string,
@@ -150,30 +179,42 @@ export async function transitionApplicationBucket(
   // The server is authoritative for an approval: it owns the withdrawal stamp and
   // it is what actually writes `application_approved`. ANY non-2xx (409 withdrawn,
   // 500 unverifiable, 401/403 session or permission) means the resident was never
-  // approved, so an optimistic local "approved" must not survive it.
-  try {
-    const res = await syncResidentApprovalStatus(row, nextBucket);
-    if (nextBucket === "approved" && res && !res.ok) {
-      const withdrawn = res.status === 409;
-      let message = withdrawn
-        ? WITHDRAWN_APPROVAL_BLOCKED_MESSAGE
-        : "Could not confirm this approval on the server. Nothing was changed.";
-      try {
-        const data = (await res.json()) as { error?: string };
-        if (typeof data.error === "string" && data.error.trim()) message = data.error;
-      } catch {
-        /* keep the default message */
+  // approved, and neither does a request that never got a response — so an
+  // optimistic local "approved" must not survive either.
+  if (nextBucket === "approved") {
+    let res: Response | null;
+    try {
+      res = await syncResidentApprovalStatus(row, nextBucket);
+    } catch {
+      rollbackApprovedTransition(id, row, opts.userId ?? null, { stampWithdrawn: false });
+      return { row, welcomeSent: false, blocked: "error", message: UNREACHABLE_APPROVAL_MESSAGE };
+    }
+    if (res && !res.ok) {
+      const refusal = await readApprovalRefusal(res);
+      const serverMessage = typeof refusal.error === "string" && refusal.error.trim() ? refusal.error.trim() : "";
+      const confirmedWithdrawn = res.status === 409 && refusalConfirmsThisApplication(id, refusal);
+      let message: string;
+      if (confirmedWithdrawn) {
+        message = serverMessage || WITHDRAWN_APPROVAL_BLOCKED_MESSAGE;
+      } else if (res.status === 409) {
+        message = UNCONFIRMED_APPROVAL_MESSAGE;
+      } else {
+        message = serverMessage || "Could not confirm this approval on the server. Nothing was changed.";
       }
-      rollbackApprovedTransition(id, row, opts.userId ?? null, { stampWithdrawn: withdrawn });
+      rollbackApprovedTransition(id, row, opts.userId ?? null, { stampWithdrawn: confirmedWithdrawn });
       return {
         row,
         welcomeSent: false,
-        blocked: withdrawn ? "withdrawn" : "error",
+        blocked: confirmedWithdrawn ? "withdrawn" : "error",
         message,
       };
     }
-  } catch {
-    /* keep local workflow moving even if profile sync fails */
+  } else {
+    try {
+      await syncResidentApprovalStatus(row, nextBucket);
+    } catch {
+      /* keep local workflow moving even if profile sync fails */
+    }
   }
 
   let welcomeSent = false;

@@ -63,9 +63,14 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     removeApprovedApplicationCharges.mockClear();
   });
 
-  it("rolls back the local bucket and surfaces the server message on a 409", async () => {
+  it("rolls back and stamps when the server matched THIS application by id", async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse(409, { error: "This application was withdrawn by the applicant and can no longer be approved." }),
+      jsonResponse(409, {
+        error: "This application was withdrawn by the applicant and can no longer be approved.",
+        blocked: "withdrawn",
+        blockedApplicationId: "axis-9001",
+        matchedBy: "id",
+      }),
     );
     const { transitionApplicationBucket } = await import("@/lib/application-review");
     const result = await transitionApplicationBucket("AXIS-9001", "approved", { userId: "mgr-1" });
@@ -79,6 +84,56 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     expect(ROWS[0].withdrawnAt).toBeTruthy();
     expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
     // No welcome email may go out for an approval the server refused.
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
+  });
+
+  it("rolls back WITHOUT stamping when the 409 came from another application (email fallback)", async () => {
+    // Applicant withdrew unit A and then applied for unit B with the same manager.
+    // B's mirror has not landed, so the guard's id lookup misses and its email
+    // fallback matches A — stamping B here would permanently mislabel a record
+    // nobody withdrew, and the mirror would make that durable.
+    fetchMock.mockResolvedValue(
+      jsonResponse(409, {
+        error: "This application was withdrawn by the applicant and can no longer be approved.",
+        blocked: "withdrawn",
+        blockedApplicationId: "AXIS-8000",
+        matchedBy: "email",
+      }),
+    );
+    const { transitionApplicationBucket } = await import("@/lib/application-review");
+    const result = await transitionApplicationBucket("AXIS-9001", "approved", { userId: "mgr-1" });
+
+    expect(result?.blocked).toBe("error");
+    expect(result?.message).toBe("Could not approve this application.");
+    expect(ROWS[0].bucket).toBe("pending");
+    expect(ROWS[0].withdrawnAt).toBeFalsy();
+    expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
+  });
+
+  it("rolls back WITHOUT stamping when the 409 names a different id even via the id lookup", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(409, { error: "withdrawn", blockedApplicationId: "AXIS-8000", matchedBy: "id" }),
+    );
+    const { transitionApplicationBucket } = await import("@/lib/application-review");
+    const result = await transitionApplicationBucket("AXIS-9001", "approved", { userId: "mgr-1" });
+
+    expect(result?.blocked).toBe("error");
+    expect(ROWS[0].bucket).toBe("pending");
+    expect(ROWS[0].withdrawnAt).toBeFalsy();
+  });
+
+  it("rolls back when the request never reaches the server (offline / aborted)", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { transitionApplicationBucket } = await import("@/lib/application-review");
+    const result = await transitionApplicationBucket("AXIS-9001", "approved", { userId: "mgr-1" });
+
+    expect(result?.blocked).toBe("error");
+    expect(result?.message).toMatch(/retry when connected/i);
+    expect(ROWS[0].bucket).toBe("pending");
+    // A network error is not a withdrawal signal.
+    expect(ROWS[0].withdrawnAt).toBeFalsy();
+    expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
+    // The welcome email must not claim an approval that never landed.
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
   });
 
