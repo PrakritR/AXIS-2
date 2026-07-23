@@ -142,6 +142,84 @@ async function assertManagerOrAdminWriteAccess(
   return null;
 }
 
+type StoredApplicationRecord = {
+  id?: string | null;
+  row_data?: DemoApplicantRow | null;
+  manager_user_id?: string | null;
+  property_id?: string | null;
+  assigned_property_id?: string | null;
+};
+
+const STORED_APPLICATION_SELECT = "id, row_data, manager_user_id, property_id, assigned_property_id";
+
+async function loadStoredApplicationRecord(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  id: string,
+): Promise<{ error: boolean; record: StoredApplicationRecord | null }> {
+  const { data, error } = await db
+    .from("manager_application_records")
+    .select(STORED_APPLICATION_SELECT)
+    .in("id", idVariants(id))
+    .limit(1);
+  if (error) return { error: true, record: null };
+  return { error: false, record: (data?.[0] as StoredApplicationRecord | undefined) ?? null };
+}
+
+/** One batched read of every stored row a mirrored batch touches (never one query per row). */
+async function loadStoredApplicationRecords(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  rows: DemoApplicantRow[],
+): Promise<{ error: boolean; byId: Map<string, StoredApplicationRecord> }> {
+  const byId = new Map<string, StoredApplicationRecord>();
+  const ids = [...new Set(rows.flatMap((row) => idVariants(String(row.id ?? ""))))];
+  if (ids.length === 0) return { error: false, byId };
+  const { data, error } = await db
+    .from("manager_application_records")
+    .select(STORED_APPLICATION_SELECT)
+    .in("id", ids);
+  if (error) return { error: true, byId };
+  for (const record of (data ?? []) as StoredApplicationRecord[]) {
+    const id = String(record.id ?? "").trim();
+    if (!id) continue;
+    byId.set(id, record);
+    byId.set(id.toUpperCase(), record);
+  }
+  return { error: false, byId };
+}
+
+function storedRecordForRow(
+  byId: Map<string, StoredApplicationRecord>,
+  row: DemoApplicantRow,
+): StoredApplicationRecord | null {
+  for (const variant of idVariants(String(row.id ?? ""))) {
+    const hit = byId.get(variant) ?? byId.get(variant.toUpperCase());
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * `withdrawnAt` is SERVER-owned on a manager write. Both write paths mirror a
+ * client-cached blob wholesale, so a manager whose panel went stale before the
+ * resident withdrew would otherwise erase the stamp — and, because
+ * `persistNormalizedRow` provisions the resident account for any row landing in
+ * `approved`, approve the withdrawal it just erased.
+ *
+ * The refusal is keyed on the TRANSITION into `approved`, not on the row's state:
+ * records that are already approved AND carry a stamp exist in production (the
+ * residue of the gap this closes) and must stay editable.
+ */
+function anchorServerOwnedWithdrawal(
+  row: DemoApplicantRow,
+  stored: StoredApplicationRecord | null,
+): { row: DemoApplicantRow; blockedApproval: boolean } {
+  const storedRow = (stored?.row_data ?? null) as DemoApplicantRow | null;
+  const next: DemoApplicantRow = { ...row, withdrawnAt: storedRow?.withdrawnAt ?? row.withdrawnAt };
+  const blockedApproval =
+    next.bucket === "approved" && storedRow?.bucket !== "approved" && isWithdrawnApplicationRow(next);
+  return { row: next, blockedApproval };
+}
+
 /**
  * Resolve the owner a manager write should be attributed to, and whether it is
  * allowed. A role-only gate previously trusted the client-supplied
@@ -156,19 +234,25 @@ async function resolveApplicationWriteOwner(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   callerId: string,
   row: DemoApplicantRow,
+  prefetched?: { record: StoredApplicationRecord | null },
 ): Promise<{ ok: boolean; owner: string | null }> {
   const ids = idVariants(String(row.id ?? ""));
   // Use .in() (parameterized) rather than interpolating the client-controlled id
   // variants into an .or() filter string. Fail CLOSED on a query error: treating
   // a transient failure as "no existing row" would attribute a foreign row to
   // the caller and skip the ownership check.
-  const { data: existingRows, error: existingErr } = await db
-    .from("manager_application_records")
-    .select("manager_user_id, property_id, assigned_property_id")
-    .in("id", ids)
-    .limit(1);
-  if (existingErr) return { ok: false, owner: null };
-  const existing = existingRows?.[0];
+  let existing: StoredApplicationRecord | null;
+  if (prefetched) {
+    existing = prefetched.record;
+  } else {
+    const { data: existingRows, error: existingErr } = await db
+      .from("manager_application_records")
+      .select(STORED_APPLICATION_SELECT)
+      .in("id", ids)
+      .limit(1);
+    if (existingErr) return { ok: false, owner: null };
+    existing = (existingRows?.[0] as StoredApplicationRecord | undefined) ?? null;
+  }
   const existingOwner = existing?.manager_user_id ? String(existing.manager_user_id) : null;
 
   const canEditProperty = async (pid: string): Promise<boolean> =>
@@ -406,18 +490,42 @@ export async function POST(req: Request) {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;
       const replaceAdmin = await isAdminUser(user.id);
+      // This mirror — not the single-row upsert — is the path the manager panel's
+      // Approve actually takes, so the withdrawn-approval guard has to bite here.
+      // One batched read of the stored blobs; fail CLOSED if it cannot be read.
+      const storedBatch = await loadStoredApplicationRecords(db, rows);
+      if (storedBatch.error) {
+        return NextResponse.json({ error: "Could not load existing applications." }, { status: 500 });
+      }
+      let blockedWithdrawnApprovals = 0;
       for (const row of rows) {
         // Attribute each row to its correct owner and enforce edit access on
         // foreign (linked-owner) rows. Admins keep the client-supplied owner.
+        const stored = storedRecordForRow(storedBatch.byId, row);
         if (!replaceAdmin) {
-          const gate = await resolveApplicationWriteOwner(db, user.id, row);
+          const gate = await resolveApplicationWriteOwner(db, user.id, row, { record: stored });
           if (!gate.ok) continue;
           row.managerUserId = gate.owner ?? user.id;
         }
-        await persistNormalizedRow(db, row.id, row);
-        if (row.bucket === "pending" && row.application?.consentCredit) {
-          void tryAutoOrderScreening(db, row);
+        const guarded = anchorServerOwnedWithdrawal(row, stored);
+        if (guarded.blockedApproval) {
+          blockedWithdrawnApprovals += 1;
+          continue;
         }
+        await persistNormalizedRow(db, guarded.row.id, guarded.row);
+        if (guarded.row.bucket === "pending" && guarded.row.application?.consentCredit) {
+          void tryAutoOrderScreening(db, guarded.row);
+        }
+      }
+      if (blockedWithdrawnApprovals > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "This application was withdrawn by the applicant and can no longer be approved.",
+            blockedWithdrawnApprovals,
+          },
+          { status: 409 },
+        );
       }
       return NextResponse.json({ ok: true });
     }
@@ -594,8 +702,12 @@ export async function POST(req: Request) {
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;
+      const storedLoad = await loadStoredApplicationRecord(db, row.id);
+      if (storedLoad.error) {
+        return NextResponse.json({ error: "Could not load the existing application." }, { status: 500 });
+      }
       if (!(await isAdminUser(user.id))) {
-        const gate = await resolveApplicationWriteOwner(db, user.id, row);
+        const gate = await resolveApplicationWriteOwner(db, user.id, row, { record: storedLoad.record });
         if (!gate.ok) {
           return NextResponse.json(
             { error: "You do not have edit access to this property's applications." },
@@ -604,28 +716,14 @@ export async function POST(req: Request) {
         }
         row.managerUserId = gate.owner ?? user.id;
       }
-      // `withdrawnAt` is SERVER-owned on a manager write. This route mirrors a
-      // client-cached blob wholesale, so a manager whose Applications panel went
-      // stale before the resident withdrew would otherwise erase the stamp — and,
-      // because this same write provisions the resident account when the row lands
-      // in `approved`, approve the withdrawal it just erased. Re-anchor from the
-      // STORED row (the resident branch above does the same for its server-owned
-      // fields) and refuse the approve outright. Fails CLOSED on a query error.
-      const storedIds = idVariants(row.id);
-      const { data: storedRows, error: storedError } = await db
-        .from("manager_application_records")
-        .select("row_data")
-        .in("id", storedIds)
-        .limit(1);
-      if (storedError) return NextResponse.json({ error: storedError.message }, { status: 500 });
-      const storedRow = storedRows?.[0]?.row_data as DemoApplicantRow | undefined;
-      row = { ...row, withdrawnAt: storedRow?.withdrawnAt ?? row.withdrawnAt };
-      if (row.bucket === "approved" && isWithdrawnApplicationRow(row)) {
+      const guarded = anchorServerOwnedWithdrawal(row, storedLoad.record);
+      if (guarded.blockedApproval) {
         return NextResponse.json(
           { error: "This application was withdrawn by the applicant and can no longer be approved." },
           { status: 409 },
         );
       }
+      row = guarded.row;
     }
     await persistNormalizedRow(db, row.id, row);
     if (row.bucket === "pending" && row.application?.consentCredit) {

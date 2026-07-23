@@ -46,6 +46,33 @@ export async function requestResidentWelcomeEmail(row: DemoApplicantRow): Promis
   return { status: "failed", mailtoHref: typeof data.mailtoHref === "string" ? data.mailtoHref : undefined, error: data.error };
 }
 
+export const WITHDRAWN_APPROVAL_BLOCKED_MESSAGE =
+  "This application was withdrawn by the applicant and can no longer be approved.";
+
+export type ApplicationBucketTransition = {
+  row: DemoApplicantRow;
+  welcomeSent: boolean;
+  /** Set when the transition did NOT take effect; local state has been rolled back. */
+  blocked?: "withdrawn" | "error";
+  message?: string;
+};
+
+/** Restore the row's pre-transition bucket after the server refused the approval. */
+function rollbackApprovedTransition(id: string, previous: DemoApplicantRow, userId: string | null): void {
+  const reverted = readManagerApplicationRows().map((r) =>
+    r.id === id
+      ? { ...r, bucket: previous.bucket, stage: previous.stage, managerUserId: previous.managerUserId }
+      : r,
+  );
+  writeManagerApplicationRows(reverted);
+  try {
+    removeApprovedApplicationCharges(id, userId);
+    recordSubmittedApplicationFeeCharge(previous, userId);
+  } catch {
+    /* leave charges as-is if reconciliation fails; the bucket is already reverted */
+  }
+}
+
 /**
  * Shared application bucket transition (pending/approved/rejected): the same status change,
  * charge reconciliation, and resident-approval sync used by the Applications tab, reused by
@@ -55,7 +82,7 @@ export async function transitionApplicationBucket(
   id: string,
   nextBucket: ManagerApplicationBucket,
   opts: { userId: string | null; skipWelcomeEmail?: boolean },
-): Promise<{ row: DemoApplicantRow; welcomeSent: boolean } | null> {
+): Promise<ApplicationBucketTransition | null> {
   const rows = readManagerApplicationRows();
   const row = rows.find((r) => r.id === id);
   if (!row) return null;
@@ -64,7 +91,9 @@ export async function transitionApplicationBucket(
   // someone who explicitly pulled out. The manager UI already hides Approve for
   // withdrawn rows; this is the shared-code backstop (the Residents tab reuses
   // this same path), and the server re-checks in /api/portal/resident-approval.
-  if (nextBucket === "approved" && isWithdrawnApplicationRow(row)) return null;
+  if (nextBucket === "approved" && isWithdrawnApplicationRow(row)) {
+    return { row, welcomeSent: false, blocked: "withdrawn", message: WITHDRAWN_APPROVAL_BLOCKED_MESSAGE };
+  }
   const next = rows.map((r) =>
     r.id === id
       ? {
@@ -91,8 +120,29 @@ export async function transitionApplicationBucket(
     /* Keep approval flow moving even if charge reconciliation fails. */
   }
 
+  // The server owns the withdrawal stamp, so its refusal is authoritative: an
+  // optimistic local "approved" must never survive a 409 (withdrawn) or a 500
+  // (the guard could not verify the record). Other statuses keep the pre-existing
+  // behaviour of letting the local workflow continue.
   try {
-    await syncResidentApprovalStatus(row, nextBucket);
+    const res = await syncResidentApprovalStatus(row, nextBucket);
+    if (nextBucket === "approved" && res && (res.status === 409 || res.status === 500)) {
+      let message = WITHDRAWN_APPROVAL_BLOCKED_MESSAGE;
+      if (res.status === 500) message = "Could not verify this application on the server. Nothing was changed.";
+      try {
+        const data = (await res.json()) as { error?: string };
+        if (typeof data.error === "string" && data.error.trim()) message = data.error;
+      } catch {
+        /* keep the default message */
+      }
+      rollbackApprovedTransition(id, row, opts.userId ?? null);
+      return {
+        row,
+        welcomeSent: false,
+        blocked: res.status === 409 ? "withdrawn" : "error",
+        message,
+      };
+    }
   } catch {
     /* keep local workflow moving even if profile sync fails */
   }

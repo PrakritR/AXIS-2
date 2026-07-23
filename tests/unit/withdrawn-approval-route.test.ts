@@ -13,15 +13,28 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
  * scoped to the acting manager's own record.
  */
 
+type StoredRecord = {
+  id: string;
+  row_data: DemoApplicantRow | null;
+  resident_email: string;
+  manager_user_id?: string | null;
+  property_id?: string | null;
+  assigned_property_id?: string | null;
+};
+
 const getUser = vi.fn();
 let REQUESTOR: { role: string; email: string; sms_from_number: string | null } | null;
 /** Application records the stub "stores", keyed the way the route filters them. */
-let APP_ROWS: { id: string; row_data: DemoApplicantRow | null; resident_email: string }[];
+let APP_ROWS: StoredRecord[];
 let APP_QUERY_ERROR: { message: string } | null;
+let LINKED_PROPERTY_IDS: string[];
 let PROFILE_UPDATE_CALLS: number;
 
 vi.mock("@/lib/analytics/posthog", () => ({ track: vi.fn() }));
 vi.mock("@/lib/application-lifecycle-sms.server", () => ({ notifyApplicantApplicationSms: vi.fn() }));
+vi.mock("@/lib/auth/co-manager-module-scope", () => ({
+  linkedPropertyIdsForModule: async () => new Set(LINKED_PROPERTY_IDS),
+}));
 vi.mock("@/lib/manager-applications-storage", () => ({
   normalizeApplicationAxisId: (id: string) => id.trim(),
 }));
@@ -40,6 +53,14 @@ vi.mock("@/lib/supabase/service", () => ({
  * awaited directly, so the builder is also thenable and records that a profile write
  * was attempted — a withdrawn approval must never reach it.
  */
+function matchingRecords(filters: { ids: string[] | null; residentEmail: string | null }): StoredRecord[] {
+  return APP_ROWS.filter((row) => {
+    if (filters.ids) return filters.ids.includes(row.id);
+    if (filters.residentEmail) return row.resident_email === filters.residentEmail;
+    return false;
+  });
+}
+
 function makeServiceClient() {
   return {
     from(table: string) {
@@ -70,16 +91,14 @@ function makeServiceClient() {
           if (table === "profiles") return Promise.resolve({ data: REQUESTOR, error: null });
           if (table !== "manager_application_records") return Promise.resolve({ data: null, error: null });
           if (APP_QUERY_ERROR) return Promise.resolve({ data: null, error: APP_QUERY_ERROR });
-          const match =
-            APP_ROWS.find((row) => {
-              if (filters.ids) return filters.ids.includes(row.id);
-              if (filters.residentEmail) return row.resident_email === filters.residentEmail;
-              return false;
-            }) ?? null;
-          return Promise.resolve({ data: match, error: null });
+          return Promise.resolve({ data: matchingRecords(filters)[0] ?? null, error: null });
         },
-        then(resolve: (v: { error: null }) => unknown) {
-          return Promise.resolve({ error: null }).then(resolve);
+        then(resolve: (v: { data?: unknown; error: unknown }) => unknown) {
+          if (table === "manager_application_records") {
+            if (APP_QUERY_ERROR) return Promise.resolve({ data: null, error: APP_QUERY_ERROR }).then(resolve);
+            return Promise.resolve({ data: matchingRecords(filters), error: null }).then(resolve);
+          }
+          return Promise.resolve({ data: null, error: null }).then(resolve);
         },
       };
       return builder;
@@ -108,10 +127,12 @@ function appRow(over: Partial<DemoApplicantRow>): DemoApplicantRow {
   };
 }
 
-const WITHDRAWN_ROW = {
+const WITHDRAWN_ROW: StoredRecord = {
   id: "AXIS-9001",
   row_data: appRow({ withdrawnAt: "2026-07-22T00:00:00.000Z" }),
   resident_email: "applicant@example.com",
+  manager_user_id: "mgr-1",
+  property_id: "mgr-demo-pioneer",
 };
 
 describe("PATCH /api/portal/resident-approval — withdrawn applications are not approvable", () => {
@@ -119,8 +140,17 @@ describe("PATCH /api/portal/resident-approval — withdrawn applications are not
     getUser.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: "mgr-1" } } });
     REQUESTOR = { role: "manager", email: "mgr@example.com", sms_from_number: null };
-    APP_ROWS = [{ id: "AXIS-9001", row_data: appRow({}), resident_email: "applicant@example.com" }];
+    APP_ROWS = [
+      {
+        id: "AXIS-9001",
+        row_data: appRow({}),
+        resident_email: "applicant@example.com",
+        manager_user_id: "mgr-1",
+        property_id: "mgr-demo-pioneer",
+      },
+    ];
     APP_QUERY_ERROR = null;
+    LINKED_PROPERTY_IDS = [];
     PROFILE_UPDATE_CALLS = 0;
   });
 
@@ -149,6 +179,45 @@ describe("PATCH /api/portal/resident-approval — withdrawn applications are not
     const { PATCH } = await import("@/app/api/portal/resident-approval/route");
     const res = await PATCH(
       patch({ email: "applicant@example.com", approved: true, applicationId: "not-a-real-id" }),
+    );
+    expect(res.status).toBe(409);
+    expect(PROFILE_UPDATE_CALLS).toBe(0);
+  });
+
+  it("does NOT let the email fallback cross landlords — another manager's withdrawal cannot block this approval", async () => {
+    // Same applicant, different landlord's record. Blocking here would permanently
+    // and invisibly reject this manager's legitimate approval.
+    APP_ROWS = [
+      {
+        id: "AXIS-OTHER",
+        row_data: appRow({ id: "AXIS-OTHER", withdrawnAt: "2026-07-22T00:00:00.000Z" }),
+        resident_email: "applicant@example.com",
+        manager_user_id: "other-landlord",
+        property_id: "other-landlord-prop",
+      },
+    ];
+    const { PATCH } = await import("@/app/api/portal/resident-approval/route");
+    const res = await PATCH(
+      patch({ email: "applicant@example.com", approved: true, applicationId: "unknown-id" }),
+    );
+    expect(res.status).toBe(200);
+    expect(PROFILE_UPDATE_CALLS).toBe(1);
+  });
+
+  it("still blocks via the email fallback on a CO-MANAGED record the caller does not own", async () => {
+    APP_ROWS = [
+      {
+        id: "AXIS-LINKED",
+        row_data: appRow({ id: "AXIS-LINKED", withdrawnAt: "2026-07-22T00:00:00.000Z" }),
+        resident_email: "applicant@example.com",
+        manager_user_id: "linked-owner",
+        property_id: "linked-prop",
+      },
+    ];
+    LINKED_PROPERTY_IDS = ["linked-prop"];
+    const { PATCH } = await import("@/app/api/portal/resident-approval/route");
+    const res = await PATCH(
+      patch({ email: "applicant@example.com", approved: true, applicationId: "unknown-id" }),
     );
     expect(res.status).toBe(409);
     expect(PROFILE_UPDATE_CALLS).toBe(0);

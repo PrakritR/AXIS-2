@@ -1350,6 +1350,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (!result) return;
     setHcTick((n) => n + 1);
     setLeaseTick((n) => n + 1);
+    if (result.blocked) {
+      showToast(result.message ?? "That change could not be saved.");
+      return;
+    }
     const msg =
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail

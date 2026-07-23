@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { track } from "@/lib/analytics/posthog";
 import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
+import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -9,13 +10,21 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
+/** Rows scanned when resolving the withdrawn stamp by applicant email (newest first). */
+const EMAIL_FALLBACK_SCAN_LIMIT = 20;
+
 function normalizeEmail(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
 function idVariants(id: string): string[] {
   const trimmed = id.trim();
-  return [...new Set([trimmed, normalizeApplicationAxisId(trimmed)].filter(Boolean))];
+  const normalized = normalizeApplicationAxisId(trimmed);
+  return [
+    ...new Set(
+      [trimmed, trimmed.toUpperCase(), normalized, normalized.toUpperCase()].filter(Boolean),
+    ),
+  ];
 }
 
 function canManageResidentApproval(role: string | null | undefined): boolean {
@@ -73,30 +82,64 @@ export async function PATCH(req: Request) {
     // who explicitly pulled out. A withdrawal is a reversible stamp, so re-submission
     // (not un-withdraw) is the intended path back to approvable.
     //
-    // The lookup is deliberately NOT scoped to `manager_user_id`: a co-managed row
+    // The ID lookup is deliberately NOT scoped to `manager_user_id`: a co-managed row
     // keeps the linked OWNER's id, and an admin never owns the record, so scoping
     // made the guard silently never fire for exactly the callers the UI check cannot
     // be trusted for. The row is reduced to a single boolean here and no part of it
     // is ever returned to the client. A bogus/unknown `applicationId` must not
-    // disable the guard either, so it falls back to the resident-email lookup, and a
-    // query error fails CLOSED (matching `resolveApplicationWriteOwner`).
+    // disable the guard either, so it falls back to a resident-email lookup — and
+    // THAT one has no id to anchor on, so it is restricted to records the caller owns
+    // or co-manages (an unrelated landlord's withdrawal must never reject this
+    // manager's legitimate approval). A query error fails CLOSED (matching
+    // `resolveApplicationWriteOwner`).
     if (requestor.role !== "resident" && approved) {
-      const loadStoredRow = async (
-        by: "id" | "email",
-      ): Promise<{ error: boolean; stored: DemoApplicantRow | null }> => {
-        const base = svc.from("manager_application_records").select("id, row_data");
-        const scoped = by === "id" ? base.in("id", idVariants(applicationId)) : base.eq("resident_email", email);
-        const { data, error } = await scoped.order("updated_at", { ascending: false }).limit(1).maybeSingle();
+      const loadById = async (): Promise<{ error: boolean; stored: DemoApplicantRow | null }> => {
+        const { data, error } = await svc
+          .from("manager_application_records")
+          .select("id, row_data")
+          .in("id", idVariants(applicationId))
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
         if (error) return { error: true, stored: null };
         return { error: false, stored: (data?.row_data ?? null) as DemoApplicantRow | null };
       };
 
-      let lookup = applicationId ? await loadStoredRow("id") : null;
+      const loadByEmail = async (): Promise<{ error: boolean; stored: DemoApplicantRow | null }> => {
+        const { data, error } = await svc
+          .from("manager_application_records")
+          .select("id, row_data, manager_user_id, property_id, assigned_property_id")
+          .eq("resident_email", email)
+          .order("updated_at", { ascending: false })
+          .limit(EMAIL_FALLBACK_SCAN_LIMIT);
+        if (error) return { error: true, stored: null };
+        const records = data ?? [];
+        if (requestor.role === "admin") {
+          return { error: false, stored: (records[0]?.row_data ?? null) as DemoApplicantRow | null };
+        }
+        const owned = records.filter((record) => String(record.manager_user_id ?? "") === user.id);
+        if (owned.length > 0) {
+          return { error: false, stored: (owned[0].row_data ?? null) as DemoApplicantRow | null };
+        }
+        const [appIds, resIds] = await Promise.all([
+          linkedPropertyIdsForModule(svc, user.id, "applications"),
+          linkedPropertyIdsForModule(svc, user.id, "residents"),
+        ]);
+        const scopedPropertyIds = new Set<string>([...appIds, ...resIds]);
+        const coManaged = records.find((record) => {
+          const pid = String(record.property_id ?? "").trim();
+          const assigned = String(record.assigned_property_id ?? "").trim();
+          return (pid && scopedPropertyIds.has(pid)) || (assigned && scopedPropertyIds.has(assigned));
+        });
+        return { error: false, stored: (coManaged?.row_data ?? null) as DemoApplicantRow | null };
+      };
+
+      let lookup = applicationId ? await loadById() : null;
       if (lookup?.error) {
         return NextResponse.json({ error: "Could not verify the application status." }, { status: 500 });
       }
       if (!lookup?.stored) {
-        lookup = await loadStoredRow("email");
+        lookup = await loadByEmail();
         if (lookup.error) {
           return NextResponse.json({ error: "Could not verify the application status." }, { status: 500 });
         }
