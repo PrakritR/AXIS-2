@@ -1254,7 +1254,15 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   .motion-orb-drift-reverse,
   .chrome-flow,
   .chrome-shift,
-  .sheen-sweep {
+  .sheen-sweep,
+  .landing-hero-bg__cells,
+  .landing-hero-bg__aurora,
+  .landing-hero-bg__paths-trails,
+  .landing-hero-bg__glint,
+  .landing-hero-bg__node-halo,
+  .landing-hero-bg__node-core,
+  .landing-hero-bg--film .landing-hero-bg__bloom,
+  .landing-hero-bg--spotlight .landing-hero-bg__cone {
     animation: none !important;
   }
   .segmented-pill {
@@ -2421,6 +2429,383 @@ html[data-native] [data-listing-sections-root] {
     color-mix(in srgb, var(--pl-surface) 50%, #eef2fb) 40%,
     var(--pl-surface) 100%
   );
+}
+
+/* —————————————————————————————————————————————————————————————
+ * TEMPORARY hero-background lab (candidates 1–5). Driven by the optional
+ * `bgVariant` prop on LandingDemoHero + /dev/hero-lab. Theme split is absolute:
+ * base rules use the purple family (dark), `[data-theme="light"]` overrides use
+ * the cobalt-blue family (light) — never mixed. Motion is transform/opacity
+ * only. Deleted once the captain picks a winner (see task stage 2).
+ * ————————————————————————————————————————————————————————————— */
+.landing-hero-lab {
+  z-index: 0;
+}
+.landing-hero-lab > * {
+  position: absolute;
+  inset: 0;
+}
+
+/* Shared legibility wash — darkens (dark) / lightens (light) the left text
+ * column so .landing-hero-sub / .landing-hero-trust hold ≥4.5:1 regardless of
+ * the candidate's glows. Mirrors .chrome-substrate-full__wash. */
+.landing-hero-lab .landing-hero-bg__wash {
+  background: radial-gradient(
+    ellipse 72% 82% at 24% 46%,
+    color-mix(in srgb, var(--pl-black) 62%, transparent) 0%,
+    transparent 58%
+  );
+}
+[data-theme="light"] .landing-hero-lab .landing-hero-bg__wash {
+  background: radial-gradient(
+    ellipse 72% 82% at 24% 46%,
+    color-mix(in srgb, var(--pl-white) 70%, transparent) 0%,
+    transparent 58%
+  );
+}
+
+/* ── Candidate 1 — Architectural grid + bloom ── */
+.landing-hero-bg--grid .landing-hero-bg__grid {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--pl-purple) 24%, transparent) 0 1px,
+      transparent 1px 56px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--pl-purple) 24%, transparent) 0 1px,
+      transparent 1px 56px
+    );
+  -webkit-mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse 58% 62% at 52% 42%, #000 0%, transparent 72%);
+  opacity: 0.55;
+}
+.landing-hero-bg--grid .landing-hero-bg__bloom {
+  background: radial-gradient(
+    ellipse 46% 54% at 78% 40%,
+    color-mix(in srgb, var(--pl-purple) 28%, transparent) 0%,
+    transparent 62%
+  );
+}
+.landing-hero-bg--grid .landing-hero-bg__cells {
+  background:
+    radial-gradient(circle 24px at 63% 30%, color-mix(in srgb, var(--pl-purple) 20%, transparent) 0%, transparent 72%),
+    radial-gradient(circle 20px at 71% 55%, color-mix(in srgb, var(--pl-purple-soft) 16%, transparent) 0%, transparent 72%),
+    radial-gradient(circle 18px at 56% 63%, color-mix(in srgb, var(--pl-purple) 14%, transparent) 0%, transparent 72%),
+    radial-gradient(circle 16px at 84% 26%, color-mix(in srgb, var(--pl-purple-soft) 14%, transparent) 0%, transparent 72%);
+  animation: hero-cells-breathe 14s ease-in-out infinite;
+}
+[data-theme="light"] .landing-hero-bg--grid .landing-hero-bg__grid {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--pl-blue) 16%, transparent) 0 1px,
+      transparent 1px 56px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--pl-blue) 16%, transparent) 0 1px,
+      transparent 1px 56px
+    );
+  opacity: 0.7;
+}
+[data-theme="light"] .landing-hero-bg--grid .landing-hero-bg__bloom {
+  background: radial-gradient(
+    ellipse 46% 54% at 78% 40%,
+    color-mix(in srgb, var(--pl-blue) 18%, transparent) 0%,
+    transparent 62%
+  );
+}
+[data-theme="light"] .landing-hero-bg--grid .landing-hero-bg__cells {
+  background:
+    radial-gradient(circle 24px at 63% 30%, color-mix(in srgb, var(--pl-blue) 15%, transparent) 0%, transparent 72%),
+    radial-gradient(circle 20px at 71% 55%, color-mix(in srgb, var(--pl-blue-soft) 13%, transparent) 0%, transparent 72%),
+    radial-gradient(circle 18px at 56% 63%, color-mix(in srgb, var(--pl-blue) 11%, transparent) 0%, transparent 72%),
+    radial-gradient(circle 16px at 84% 26%, color-mix(in srgb, var(--pl-blue-soft) 12%, transparent) 0%, transparent 72%);
+}
+@keyframes hero-cells-breathe {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+/* ── Candidate 2 — Aurora mesh ── */
+.landing-hero-bg--aurora .landing-hero-bg__aurora {
+  inset: auto;
+  border-radius: 50%;
+  filter: blur(64px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.landing-hero-bg--aurora .landing-hero-bg__aurora--1 {
+  width: 44vw;
+  height: 44vw;
+  left: 46%;
+  top: -12%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-purple) 62%, transparent) 0%, transparent 68%);
+  animation: hero-aurora-1 52s ease-in-out infinite;
+}
+.landing-hero-bg--aurora .landing-hero-bg__aurora--2 {
+  width: 38vw;
+  height: 38vw;
+  left: 62%;
+  top: 28%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-purple-deep) 58%, transparent) 0%, transparent 68%);
+  animation: hero-aurora-2 61s ease-in-out infinite;
+}
+.landing-hero-bg--aurora .landing-hero-bg__aurora--3 {
+  width: 40vw;
+  height: 40vw;
+  left: 30%;
+  top: 40%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-purple-soft) 46%, transparent) 0%, transparent 68%);
+  animation: hero-aurora-3 68s ease-in-out infinite;
+}
+.landing-hero-bg--aurora .landing-hero-bg__aurora--4 {
+  width: 30vw;
+  height: 30vw;
+  left: 74%;
+  top: -6%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-purple) 50%, transparent) 0%, transparent 68%);
+  animation: hero-aurora-4 45s ease-in-out infinite;
+}
+[data-theme="light"] .landing-hero-bg--aurora .landing-hero-bg__aurora {
+  opacity: 0.42;
+  filter: blur(72px);
+}
+[data-theme="light"] .landing-hero-bg--aurora .landing-hero-bg__aurora--1 {
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-blue) 40%, transparent) 0%, transparent 68%);
+}
+[data-theme="light"] .landing-hero-bg--aurora .landing-hero-bg__aurora--2 {
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-blue-deep) 34%, transparent) 0%, transparent 68%);
+}
+[data-theme="light"] .landing-hero-bg--aurora .landing-hero-bg__aurora--3 {
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-blue-soft) 32%, transparent) 0%, transparent 68%);
+}
+[data-theme="light"] .landing-hero-bg--aurora .landing-hero-bg__aurora--4 {
+  background: radial-gradient(circle, color-mix(in srgb, var(--pl-blue) 32%, transparent) 0%, transparent 68%);
+}
+@keyframes hero-aurora-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-4%, 5%) scale(1.08); }
+}
+@keyframes hero-aurora-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(5%, -4%) scale(1.06); }
+}
+@keyframes hero-aurora-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6%, 3%) scale(1.1); }
+}
+@keyframes hero-aurora-4 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5%, 4%) scale(1.05); }
+}
+
+/* ── Candidate 3 — Flight paths (the paper-plane wake) ── */
+.landing-hero-bg--paths {
+  --hero-path-line: var(--pl-purple);
+  --hero-path-glint: var(--pl-purple-soft);
+  --hero-path-node-core: color-mix(in srgb, var(--pl-purple-soft) 90%, white);
+  --hero-path-node-mid: color-mix(in srgb, var(--pl-purple) 55%, transparent);
+}
+[data-theme="light"] .landing-hero-bg--paths {
+  --hero-path-line: var(--pl-blue);
+  --hero-path-glint: var(--pl-blue-deep);
+  --hero-path-node-core: color-mix(in srgb, var(--pl-blue) 80%, white);
+  --hero-path-node-mid: color-mix(in srgb, var(--pl-blue) 42%, transparent);
+}
+.landing-hero-bg--paths .landing-hero-bg__paths {
+  width: 100%;
+  height: 100%;
+}
+.landing-hero-bg__paths-trails {
+  animation: hero-paths-drift 40s ease-in-out infinite;
+  will-change: transform;
+}
+.landing-hero-bg__trail {
+  fill: none;
+  stroke: var(--hero-path-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 11;
+  opacity: 0.4;
+}
+[data-theme="light"] .landing-hero-bg__trail {
+  opacity: 0.32;
+}
+.landing-hero-bg__glint {
+  fill: var(--hero-path-glint);
+  opacity: 0;
+}
+.landing-hero-bg__glint--a {
+  transform: translate(-40px, 690px);
+  animation: hero-glint-a 9s linear infinite;
+}
+.landing-hero-bg__glint--b {
+  transform: translate(20px, 700px);
+  animation: hero-glint-b 11s linear infinite;
+  animation-delay: 3.5s;
+}
+.landing-hero-bg__node-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hero-node-breathe 8s ease-in-out infinite;
+}
+.landing-hero-bg__node-core {
+  fill: var(--hero-path-node-core);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hero-node-core 8s ease-in-out infinite;
+}
+@keyframes hero-paths-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-9px, 7px); }
+}
+@keyframes hero-glint-a {
+  0% { transform: translate(-40px, 690px); opacity: 0; }
+  12% { opacity: 0.9; }
+  82% { opacity: 0.9; }
+  100% { transform: translate(862px, 262px); opacity: 0; }
+}
+@keyframes hero-glint-b {
+  0% { transform: translate(20px, 700px); opacity: 0; }
+  14% { opacity: 0.8; }
+  80% { opacity: 0.8; }
+  100% { transform: translate(862px, 262px); opacity: 0; }
+}
+@keyframes hero-node-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.14); opacity: 1; }
+}
+@keyframes hero-node-core {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+/* ── Candidate 4 — Film plane ── */
+.landing-hero-bg--film .landing-hero-bg__bloom {
+  background: radial-gradient(
+    ellipse 60% 55% at 108% -12%,
+    color-mix(in srgb, var(--pl-purple) 34%, transparent) 0%,
+    color-mix(in srgb, var(--pl-purple-deep) 16%, transparent) 40%,
+    transparent 68%
+  );
+  animation: hero-film-bloom 46s ease-in-out infinite;
+  will-change: transform;
+}
+.landing-hero-bg--film .landing-hero-bg__hairline {
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pl-purple-deep) 60%, transparent) 22%,
+    var(--pl-purple) 50%,
+    color-mix(in srgb, var(--pl-purple-soft) 70%, transparent) 78%,
+    transparent 100%
+  );
+}
+.landing-hero-bg--film .landing-hero-bg__grain {
+  width: 100%;
+  height: 100%;
+  opacity: 0.03;
+  mix-blend-mode: soft-light;
+}
+.landing-hero-bg--film .landing-hero-bg__vignette {
+  inset: auto 0 0 0;
+  height: 46%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pl-black) 55%, transparent) 68%,
+    var(--pl-black) 100%
+  );
+}
+[data-theme="light"] .landing-hero-bg--film .landing-hero-bg__bloom {
+  background: radial-gradient(
+    ellipse 60% 55% at 108% -12%,
+    color-mix(in srgb, var(--pl-blue) 22%, transparent) 0%,
+    color-mix(in srgb, var(--pl-blue-soft) 12%, transparent) 40%,
+    transparent 68%
+  );
+}
+[data-theme="light"] .landing-hero-bg--film .landing-hero-bg__hairline {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pl-blue-deep) 55%, transparent) 22%,
+    var(--pl-blue) 50%,
+    color-mix(in srgb, var(--pl-blue-soft) 70%, transparent) 78%,
+    transparent 100%
+  );
+}
+[data-theme="light"] .landing-hero-bg--film .landing-hero-bg__grain {
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+}
+[data-theme="light"] .landing-hero-bg--film .landing-hero-bg__vignette {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, #e8eef8 55%, transparent) 68%,
+    var(--pl-surface) 100%
+  );
+}
+@keyframes hero-film-bloom {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-3%, 2%) scale(1.06); }
+}
+
+/* ── Candidate 5 — Panel spotlight ── */
+.landing-hero-bg--spotlight .landing-hero-bg__cone {
+  background:
+    radial-gradient(
+      ellipse 82% 40% at 82% 40%,
+      color-mix(in srgb, var(--pl-purple) 26%, transparent) 0%,
+      transparent 66%
+    ),
+    radial-gradient(
+      ellipse 34% 62% at 80% 40%,
+      color-mix(in srgb, var(--pl-purple-soft) 20%, transparent) 0%,
+      transparent 60%
+    );
+  transform-origin: 82% 40%;
+  animation: hero-spot-drift 24s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+.landing-hero-bg--spotlight .landing-hero-bg__pool {
+  inset: auto 0 0 0;
+  height: 42%;
+  background: radial-gradient(
+    ellipse 40% 80% at 78% 100%,
+    color-mix(in srgb, var(--pl-purple) 18%, transparent) 0%,
+    transparent 62%
+  );
+}
+[data-theme="light"] .landing-hero-bg--spotlight .landing-hero-bg__cone {
+  background:
+    radial-gradient(
+      ellipse 82% 40% at 82% 40%,
+      color-mix(in srgb, var(--pl-blue) 16%, transparent) 0%,
+      transparent 66%
+    ),
+    radial-gradient(
+      ellipse 34% 62% at 80% 40%,
+      color-mix(in srgb, var(--pl-blue-soft) 14%, transparent) 0%,
+      transparent 60%
+    );
+}
+[data-theme="light"] .landing-hero-bg--spotlight .landing-hero-bg__pool {
+  background: radial-gradient(
+    ellipse 40% 80% at 78% 100%,
+    color-mix(in srgb, var(--pl-blue) 12%, transparent) 0%,
+    transparent 62%
+  );
+}
+@keyframes hero-spot-drift {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
 }
 
 /* Lower Full-flow sections: src/components/marketing/landing-proplane.css (lp-*). */
