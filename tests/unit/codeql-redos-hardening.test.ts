@@ -58,9 +58,14 @@ describe("manager-intent resident-hint ReDoS", () => {
     expect(hint("agent mark payment for   Kai   Lee   paid")).toBe("Kai   Lee");
   });
 
+  it("keeps the leftmost-shortest capture when a delimiter word repeats", () => {
+    expect(hint("agent mark A paid B paid")).toBe("A");
+    expect(hint("agent mark payment for A paid B paid")).toBe("A");
+  });
+
   it("runs in linear time on whitespace and punctuation floods", () => {
     // Old `\s+(.+?)\s+paid` AND old `[.?!,]+$` both backtracked here.
-    const spaces = `agent mark payment for${" ".repeat(60_000)}`;
+    const spaces = `agent mark${" ".repeat(60_000)}x paid`;
     const bangs = `agent mark ${"!".repeat(60_000)}a paid`;
     expectFast(() => classifyManagerAgentCommand(spaces));
     expectFast(() => classifyManagerAgentCommand(bangs));
@@ -100,10 +105,11 @@ describe("leasing extractPropertyLabelHint — label-capture ReDoS", () => {
       extractPropertyLabelHint('Hi — I\'d like to apply for the bundle "A" at Birch Place.'),
     ).toBe("Birch Place");
     expect(extractPropertyLabelHint("I'm interested in Willow Flats.")).toBe("Willow Flats");
+    expect(extractPropertyLabelHint("I'm interested in X.")).toBe("X");
   });
 
-  it("runs in linear time on a long trailing whitespace run", () => {
-    const pathological = `apply for Cedar${" ".repeat(60_000)}`;
+  it("runs in linear time on a long interior whitespace run", () => {
+    const pathological = `apply for${" ".repeat(60_000)}Cedar`;
     expectFast(() => extractPropertyLabelHint(pathological));
   });
 });

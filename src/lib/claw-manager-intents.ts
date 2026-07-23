@@ -67,15 +67,16 @@ export function classifyManagerAgentCommand(text: string): ClassifiedManagerAgen
 
   // mark payment for X paid | mark X paid | mark payment paid
   if (/\bmark\b/.test(lower) && /\bpaid\b/.test(lower)) {
-    // Capture group anchored to non-whitespace on both ends (`\S(?:.*?\S)?`)
+    // Capture group anchored to non-whitespace on both ends (`\S(?:.*?\S)??`)
     // rather than `(.+?)` sitting between two `\s+` delimiters that can all
     // match the same whitespace — that overlap backtracks polynomially
-    // (CodeQL js/polynomial-redos). The hint is trimmed anyway, so the captured
-    // text is identical for every legitimate command.
+    // (CodeQL js/polynomial-redos). The trailing `??` keeps the optional tail
+    // lazy, so the capture is leftmost-shortest exactly like `(.+?)` was
+    // (`mark A paid B paid` still captures `A`).
     const residentHint = extractResidentHint(rest, [
-      /\bmark\s+payment\s+for\s+(\S(?:.*?\S)?)\s+paid\b/i,
-      /\bmark\s+(\S(?:.*?\S)?)\s+paid\b/i,
-      /\bfor\s+(\S(?:.*?\S)?)\s+paid\b/i,
+      /\bmark\s+payment\s+for\s+(\S(?:.*?\S)??)\s+paid\b/i,
+      /\bmark\s+(\S(?:.*?\S)??)\s+paid\b/i,
+      /\bfor\s+(\S(?:.*?\S)??)\s+paid\b/i,
     ]);
     // Drop the literal word "payment" if it was captured as the hint.
     const cleaned =

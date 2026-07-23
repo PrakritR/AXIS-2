@@ -256,7 +256,10 @@ export function extractPropertyIdHint(text: string): string | null {
     // zero behavior change.
     // Single `[\s#:]+` separator class instead of `\s*[#: ]\s*`, whose two
     // whitespace quantifiers around a space-containing class overlap and
-    // backtrack polynomially (CodeQL js/polynomial-redos).
+    // backtrack polynomially (CodeQL js/polynomial-redos). This accepts a few
+    // separator shapes the old pattern rejected (tabs/newlines, repeats); the
+    // widening is intentional and reviewed — the hint is always re-resolved
+    // against the real catalog downstream.
     text.match(/\b(?:listing|property|home)[\s#:]+([a-zA-Z0-9._-]{6,})\b/i) ||
     text.match(/\b(mgr-[a-z0-9-]+)\b/i);
   return m?.[1]?.trim() || null;
@@ -272,23 +275,24 @@ export function extractBundleIdHint(text: string): string | null {
 /** Pull a human listing/bundle name from a CTA draft for server-side resolve. */
 export function extractPropertyLabelHint(text: string): string | null {
   // Each label capture is anchored to non-whitespace on both ends
-  // (`\S(?:.*?\S)?`) instead of a bare `(.+?)` wedged between `\s+` and the
+  // (`\S(?:.*?\S)??`) instead of a bare `(.+?)` wedged between `\s+` and the
   // optional trailing period. In the original, the leading `\s+` and the lazy
   // `.` (which also matches whitespace) can carve the same run of spaces two
-  // ways, backtracking polynomially (CodeQL js/polynomial-redos). The capture is
-  // trimmed downstream, so the extracted label is identical for real CTA copy.
+  // ways, backtracking polynomially (CodeQL js/polynomial-redos). The trailing
+  // `??` keeps the optional tail lazy, so the capture stays leftmost-shortest
+  // exactly like `(.+?)` was (`interested in X.` still captures `X`).
   const patterns = [
-    /apply for the bundle\s+"[^"]+"\s+at\s+(\S(?:.*?\S)?)\.?$/i,
-    /apply for a room bundle at\s+(\S(?:.*?\S)?)\.?$/i,
-    /schedule a tour for\s+(\S(?:.*?\S)?)\.?$/i,
-    /tour for\s+(\S(?:.*?\S)?)\.?$/i,
-    /apply for .+? at\s+(\S(?:.*?\S)?)\.?$/i,
-    /apply for\s+(\S(?:.*?\S)?)\.?$/i,
-    /question about .+? at\s+(\S(?:.*?\S)?)\.?$/i,
-    /question about\s+(\S(?:.*?\S)?)\.?$/i,
-    /(?:more )?info(?:rmation)? about\s+(\S(?:.*?\S)?)\.?$/i,
-    /tell me about\s+(\S(?:.*?\S)?)\.?$/i,
-    /interested in\s+(\S(?:.*?\S)?)\.?$/i,
+    /apply for the bundle\s+"[^"]+"\s+at\s+(\S(?:.*?\S)??)\.?$/i,
+    /apply for a room bundle at\s+(\S(?:.*?\S)??)\.?$/i,
+    /schedule a tour for\s+(\S(?:.*?\S)??)\.?$/i,
+    /tour for\s+(\S(?:.*?\S)??)\.?$/i,
+    /apply for .+? at\s+(\S(?:.*?\S)??)\.?$/i,
+    /apply for\s+(\S(?:.*?\S)??)\.?$/i,
+    /question about .+? at\s+(\S(?:.*?\S)??)\.?$/i,
+    /question about\s+(\S(?:.*?\S)??)\.?$/i,
+    /(?:more )?info(?:rmation)? about\s+(\S(?:.*?\S)??)\.?$/i,
+    /tell me about\s+(\S(?:.*?\S)??)\.?$/i,
+    /interested in\s+(\S(?:.*?\S)??)\.?$/i,
   ];
   for (const re of patterns) {
     const m = text.trim().match(re);

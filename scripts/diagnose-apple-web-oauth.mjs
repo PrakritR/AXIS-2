@@ -11,6 +11,7 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const TEAM_ID = "8FH3GVHCZ9";
 const KEY_ID = "9872GVCALV";
@@ -142,7 +143,7 @@ async function main() {
 
 // Only run the probe when executed directly, so tests can import the exported
 // helpers above without triggering network calls or reading .env.local.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error(err.message ?? err);
     process.exit(1);
