@@ -7,7 +7,7 @@ import "./landing-proplane.css";
 
 const GET_STARTED = MANAGER_GET_STARTED_HREF;
 
-/** Dashboard+assistant demo, learn guides, week pipeline, ops band, closing CTA. */
+/** Dashboard+assistant demo, learn guides, ops banner, closing CTAs. */
 export function LandingHomeSections() {
   return (
     <>
@@ -15,7 +15,14 @@ export function LandingHomeSections() {
       <LandingInboxApproveDemo />
       <LearnSection />
       <OpsSkySection />
-      <ClosingCta />
+      <section className="lp-end lp-end-cta-only" aria-label="Get started">
+        <CtaPair
+          primaryAttr="home-closing-get-started"
+          secondaryAttr="home-closing-book-demo"
+          primaryClass="lp-btn lp-btn-blue lp-lg"
+          secondaryClass="lp-btn lp-btn-ghost lp-lg"
+        />
+      </section>
     </>
   );
 }
@@ -158,23 +165,5 @@ function TaskFloatRow({
       </div>
       <span className="lp-agent">{agent}</span>
     </div>
-  );
-}
-
-function ClosingCta() {
-  return (
-    <section className="lp-end">
-      <h2>Start managing with PropLane</h2>
-      <p>
-        Free to begin with your first listing. Scales up to a <b>20-property</b> portfolio with residents,
-        leases, and a full team as you grow.
-      </p>
-      <CtaPair
-        primaryAttr="home-closing-get-started"
-        secondaryAttr="home-closing-book-demo"
-        primaryClass="lp-btn lp-btn-blue lp-lg"
-        secondaryClass="lp-btn lp-btn-ghost lp-lg"
-      />
-    </section>
   );
 }

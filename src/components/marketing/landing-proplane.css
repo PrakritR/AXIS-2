@@ -1148,6 +1148,14 @@
   flex-shrink: 0;
 }
 
+.lp-end.lp-end-cta-only {
+  padding-top: 28px;
+}
+
+.lp-end.lp-end-cta-only .lp-cta-row {
+  margin-top: 0;
+}
+
 .lp-end {
   padding: 56px 20px 72px;
   text-align: center;
