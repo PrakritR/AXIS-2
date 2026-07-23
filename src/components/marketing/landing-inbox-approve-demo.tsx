@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  createTimerPool,
+  useAutoplayGate,
+  usePrefersReducedMotion,
+} from "@/components/marketing/use-marketing-demo";
 import "./landing-proplane.css";
 
 /**
@@ -84,20 +89,6 @@ const ITEMS: InboxItem[] = [
 
 type Phase = "reading" | "drafting" | "review";
 
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setReduced(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  return reduced;
-}
-
 function relativeLabel(baseMinutes: number, tickMinutes: number) {
   const total = baseMinutes + tickMinutes;
   if (total <= 0) return "now";
@@ -107,8 +98,7 @@ function relativeLabel(baseMinutes: number, tickMinutes: number) {
 }
 
 export function LandingInboxApproveDemo() {
-  const rootRef = useRef<HTMLElement>(null);
-  const [active, setActive] = useState(false);
+  const { ref: rootRef, playing } = useAutoplayGate<HTMLElement>(0.25);
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("reading");
   const [draftText, setDraftText] = useState("");
@@ -117,64 +107,49 @@ export function LandingInboxApproveDemo() {
   const [paused, setPaused] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  /** Announce a completed draft to screen readers once, not on every cycle. */
+  const announcedRef = useRef(false);
   const reducedMotion = usePrefersReducedMotion();
 
   const current = ITEMS[idx] ?? ITEMS[0];
 
-  // Reveal + start only when scrolled into view.
+  // Live relative timestamps: gently age the inbox only while it is playing.
   useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setActive(true);
-          io.disconnect();
-        }
-      },
-      { threshold: 0.25, rootMargin: "0px 0px -8% 0px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  // Live relative timestamps: gently age the inbox while it is on screen.
-  useEffect(() => {
-    if (!active || reducedMotion) return;
+    if (!playing || reducedMotion) return;
     const timer = window.setInterval(() => {
       setTickMinutes((m) => (m >= 59 ? m : m + 1));
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [active, reducedMotion]);
+  }, [playing, reducedMotion]);
 
   // Reduced motion: render the first item's final, approvable state statically.
   useEffect(() => {
-    if (!active || !reducedMotion) return;
+    if (!reducedMotion) return;
     setIdx(0);
     setPhase("review");
     setDraftText(ITEMS[0].draft);
-    setLiveAnnouncement(
-      `Resident ${ITEMS[0].name}: ${ITEMS[0].body}. PropLane AI drafted a reply pending your approval.`,
-    );
-  }, [active, reducedMotion]);
+    if (!announcedRef.current) {
+      setLiveAnnouncement(
+        `Resident ${ITEMS[0].name}: ${ITEMS[0].body}. PropLane AI drafted a reply pending your approval.`,
+      );
+      announcedRef.current = true;
+    }
+  }, [reducedMotion]);
 
   // Self-playing loop: select → read → stream draft → rest on approve → advance.
+  // Pauses (cleanup) whenever the section scrolls off screen or the tab is
+  // backgrounded, so it never streams setState into an unseen section.
   useEffect(() => {
-    if (!active || reducedMotion || paused) return;
+    if (!playing || reducedMotion || paused) return;
 
-    let cancelled = false;
-    const timers: number[] = [];
-    const wait = (ms: number) =>
-      new Promise<void>((resolve) => {
-        timers.push(window.setTimeout(resolve, ms));
-      });
+    const pool = createTimerPool();
 
     const streamDraft = async (full: string, charMs = 14) => {
       setDraftText("");
       for (let i = 1; i <= full.length; i++) {
-        if (cancelled) return;
+        if (pool.cancelled) return;
         setDraftText(full.slice(0, i));
-        await wait(charMs);
+        await pool.wait(charMs);
       }
     };
 
@@ -184,39 +159,39 @@ export function LandingInboxApproveDemo() {
       setApprovedId(null);
       setDraftText("");
       setPhase("reading");
-      await wait(1000);
-      if (cancelled) return;
+      await pool.wait(1000);
+      if (pool.cancelled) return;
 
       setPhase("drafting");
       await streamDraft(item.draft);
-      if (cancelled) return;
-      setLiveAnnouncement(
-        `Resident ${item.name}: ${item.body}. PropLane AI drafted a reply pending your approval.`,
-      );
-      await wait(500);
+      if (pool.cancelled) return;
+      if (!announcedRef.current) {
+        setLiveAnnouncement(
+          `Resident ${item.name}: ${item.body}. PropLane AI drafted a reply pending your approval.`,
+        );
+        announcedRef.current = true;
+      }
+      await pool.wait(500);
 
       setPhase("review");
-      await wait(3400);
+      await pool.wait(3400);
     };
 
     void (async () => {
       let i = idx;
-      while (!cancelled) {
+      while (!pool.cancelled) {
         await runItem(i);
-        if (cancelled) break;
-        await wait(700);
+        if (pool.cancelled) break;
+        await pool.wait(700);
         i = (i + 1) % ITEMS.length;
       }
     })();
 
-    return () => {
-      cancelled = true;
-      for (const t of timers) window.clearTimeout(t);
-    };
+    return () => pool.cancel();
     // idx intentionally omitted: the loop owns idx after the first run, and
     // including it would restart the loop on every advance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, reducedMotion, paused]);
+  }, [playing, reducedMotion, paused]);
 
   // Manual selection: pause auto-play and show that item's approvable state.
   const selectItem = (i: number) => {
