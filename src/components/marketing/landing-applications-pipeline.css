@@ -373,6 +373,41 @@
 }
 
 /* ── Interactive / self-playing states ─────────────────────────────────── */
+/* Status tabs — real buttons grouped in a tablist, styled like the pills. */
+.lp-pipe-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lp-pipe-tab {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.lp-pipe-tab:not(.lp-pipe-pill-on):hover {
+  background: color-mix(in srgb, var(--lp-surface-2) 60%, var(--pl-accent) 6%);
+  color: var(--lp-ink);
+}
+
+.lp-pipe-tab:focus-visible {
+  outline: 2px solid var(--lp-pipe-accent);
+  outline-offset: 2px;
+}
+
+.lp-pipe-empty {
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--lp-muted);
+}
+
 .lp-pipe-item {
   transition: background 0.35s ease;
 }

@@ -1,24 +1,27 @@
 "use client";
 
 /**
- * Homepage hero mock of the manager Applications portal — now self-playing.
+ * Homepage hero mock of the manager Applications portal — self-playing AND
+ * interactively browsable.
  *
  * Copy and structure mirror `src/components/portal/manager-applications.tsx`:
  * the "Applications" page title + Invite action, the Pending / Approved /
- * Rejected status pills with counts plus the property filter pill, applicant
+ * Rejected status tabs with counts plus the property filter pill, applicant
  * rows (avatar initials, name with inline chevron, "property · room"
  * subtitle, status badge from `applicationStatusPill`), and the expanded row's
  * real Approve / Reject / Send reminder actions and the Checkr screening chip.
  * Every label here exists in the portal — do not invent copy.
  *
- * The demo auto-cycles applicants through the review flow: Run screening flips
- * the Checkr chip Pending → Clear and the badge to Screened, then Approve moves
- * the row to Approved and updates the pill counts. It is purely scripted and
- * presentational — no API, money, or auth calls. Interacting (clicking a row or
- * an action) pauses auto-play so it never fights the user, and it honors
+ * By default it auto-cycles the pending applicants through the review flow:
+ * Run screening flips the Checkr chip Pending → Clear and the badge to
+ * Screened, then Approve moves the row to Approved and the pill counts update.
+ * The Pending / Approved / Rejected tabs are real, keyboard-accessible tabs: a
+ * visitor can click one to browse that bucket, which briefly pauses the loop;
+ * after a few seconds of no interaction the loop resumes on the Pending tab.
+ * Purely scripted and presentational — no API, money, or auth calls. Honors
  * prefers-reduced-motion by rendering a representative mid-flow state statically.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createTimerPool,
   useAutoplayGate,
@@ -29,6 +32,7 @@ import "./landing-applications-pipeline.css";
 type Stage = "new" | "screening" | "screened" | "approved" | "rejected";
 type Screening = "pending" | "running" | "complete";
 type Tone = "pending" | "success" | "info" | "danger";
+type Bucket = "pending" | "approved" | "rejected";
 
 const BADGE: Record<Stage, { label: string; tone: Tone }> = {
   new: { label: "New", tone: "info" },
@@ -38,30 +42,57 @@ const BADGE: Record<Stage, { label: string; tone: Tone }> = {
   rejected: { label: "Rejected", tone: "danger" },
 };
 
+const TABS: { id: Bucket; label: string }[] = [
+  { id: "pending", label: "Pending" },
+  { id: "approved", label: "Approved" },
+  { id: "rejected", label: "Rejected" },
+];
+
+const bucketOf = (stage: Stage): Bucket =>
+  stage === "approved" ? "approved" : stage === "rejected" ? "rejected" : "pending";
+
 type Applicant = { id: string; name: string; subtitle: string };
 
+/** Full roster so every tab has real content. The first three are the animated
+ * "cast" the loop works through; the rest are static Approved / Rejected rows. */
 const APPLICANTS: Applicant[] = [
   { id: "maya", name: "Maya Chen", subtitle: "Cascade Lofts · Room 4B" },
   { id: "priya", name: "Priya Nair", subtitle: "Cascade Lofts · Room 2A" },
   { id: "dev", name: "Dev Ramos", subtitle: "Ballard Commons · Room 1C" },
+  { id: "aisha", name: "Aisha Rahman", subtitle: "Cascade Lofts · Room 3C" },
+  { id: "leo", name: "Leo Martins", subtitle: "Ballard Commons · Room 2B" },
+  { id: "sofia", name: "Sofia Reyes", subtitle: "Cascade Court · Room 1A" },
+  { id: "noah", name: "Noah Kim", subtitle: "Cascade Lofts · Room 5D" },
+  { id: "ethan", name: "Ethan Cole", subtitle: "Ballard Commons · Room 4A" },
 ];
 
-/** Base offsets for the pills so counts read like a real portfolio (extra
- * Approved / Rejected applicants live off-screen; the visible three are Pending). */
-const APPROVED_BASE = 4;
-const REJECTED_BASE = 1;
-
-const INITIAL_STAGE: Record<string, Stage> = { maya: "screened", priya: "screening", dev: "new" };
+const INITIAL_STAGE: Record<string, Stage> = {
+  maya: "screened",
+  priya: "screening",
+  dev: "new",
+  aisha: "approved",
+  leo: "approved",
+  sofia: "approved",
+  noah: "approved",
+  ethan: "rejected",
+};
 const INITIAL_SCREENING: Record<string, Screening> = {
   maya: "complete",
   priya: "pending",
   dev: "pending",
+  aisha: "complete",
+  leo: "complete",
+  sofia: "complete",
+  noah: "complete",
+  ethan: "complete",
 };
-/** Order the loop works the review queue in. */
-const PLAY_ORDER = ["priya", "dev", "maya"] as const;
 
-const isPendingBucket = (stage: Stage) =>
-  stage === "new" || stage === "screening" || stage === "screened";
+/** The animated cast, in the order the loop works the review queue. */
+const PLAY_ORDER = ["priya", "dev", "maya"] as const;
+const CAST_IDS = new Set<string>(PLAY_ORDER);
+
+/** How long a manual interaction pauses the loop before it resumes on its own. */
+const RESUME_DELAY_MS = 4000;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -77,23 +108,42 @@ export function ApplicationsPipelinePanel() {
   const [activeId, setActiveId] = useState<string>("priya");
   const [pressed, setPressed] = useState<{ id: string; action: string } | null>(null);
   const [reminderId, setReminderId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Bucket>("pending");
+  /** True while the visitor is browsing; the loop is idle until it resumes. */
   const [paused, setPaused] = useState(false);
+  const resumeRef = useRef<number | null>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const pendingCount = APPLICANTS.filter((a) => isPendingBucket(stages[a.id])).length;
-  const approvedCount = APPROVED_BASE + APPLICANTS.filter((a) => stages[a.id] === "approved").length;
-  const rejectedCount = REJECTED_BASE + APPLICANTS.filter((a) => stages[a.id] === "rejected").length;
+  const counts: Record<Bucket, number> = { pending: 0, approved: 0, rejected: 0 };
+  for (const applicant of APPLICANTS) counts[bucketOf(stages[applicant.id])] += 1;
 
-  // Reduced motion: a representative mid-flow snapshot, no animation.
+  // While the loop owns the panel it always sits on Pending and shows the cast
+  // (so an in-flight approval stays visible). Once the visitor takes control we
+  // strictly filter the full roster by the chosen tab.
+  const storyMode = !paused && !reducedMotion && filter === "pending";
+  const displayed = storyMode
+    ? APPLICANTS.filter((a) => CAST_IDS.has(a.id))
+    : APPLICANTS.filter((a) => bucketOf(stages[a.id]) === filter);
+
+  // Reduced motion: a representative "ready to approve" snapshot, no animation.
   useEffect(() => {
     if (!reducedMotion) return;
-    setStages({ maya: "approved", priya: "screened", dev: "new" });
-    setScreening({ maya: "complete", priya: "complete", dev: "pending" });
+    setStages({ ...INITIAL_STAGE, priya: "screened" });
+    setScreening({ ...INITIAL_SCREENING, priya: "complete" });
     setActiveId("priya");
+    setFilter("pending");
     setReminderId(null);
     setPressed(null);
   }, [reducedMotion]);
 
-  // Self-playing loop: screen → approve each applicant, then reset and repeat.
+  // Clean up any pending resume timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (resumeRef.current) window.clearTimeout(resumeRef.current);
+    };
+  }, []);
+
+  // Self-playing loop: screen → approve each cast member, then reset and repeat.
   useEffect(() => {
     if (!playing || reducedMotion || paused) return;
 
@@ -146,8 +196,37 @@ export function ApplicationsPipelinePanel() {
     return () => pool.cancel();
   }, [playing, reducedMotion, paused]);
 
+  // Any manual interaction pauses the loop, then schedules it to resume on the
+  // Pending tab after a few idle seconds (skipped under reduced motion).
   const takeControl = () => {
-    if (!paused) setPaused(true);
+    if (reducedMotion) {
+      setPaused(true);
+      return;
+    }
+    setPaused(true);
+    if (resumeRef.current) window.clearTimeout(resumeRef.current);
+    resumeRef.current = window.setTimeout(() => {
+      setFilter("pending");
+      setPaused(false);
+    }, RESUME_DELAY_MS);
+  };
+
+  const selectTab = (id: Bucket) => {
+    takeControl();
+    setFilter(id);
+  };
+
+  const onTabKeyDown = (event: React.KeyboardEvent, index: number) => {
+    const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    let next = index;
+    if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + TABS.length) % TABS.length;
+    else if (event.key === "Home") next = 0;
+    else next = TABS.length - 1;
+    selectTab(TABS[next].id);
+    tabRefs.current[next]?.focus();
   };
 
   const toggleRow = (id: string) => {
@@ -199,35 +278,60 @@ export function ApplicationsPipelinePanel() {
           </div>
 
           <div className="lp-pipe-toolbar">
-            <span className="lp-pipe-pill lp-pipe-pill-on">
-              Pending <span className="lp-pipe-count">{pendingCount}</span>
-            </span>
-            <span className="lp-pipe-pill">
-              Approved <span className="lp-pipe-count">{approvedCount}</span>
-            </span>
-            <span className="lp-pipe-pill">
-              Rejected <span className="lp-pipe-count">{rejectedCount}</span>
-            </span>
+            <div className="lp-pipe-tabs" role="tablist" aria-label="Filter applications by status">
+              {TABS.map((tab, index) => {
+                const active = filter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    ref={(node) => {
+                      tabRefs.current[index] = node;
+                    }}
+                    type="button"
+                    role="tab"
+                    id={`applications-tab-${tab.id}`}
+                    aria-selected={active}
+                    aria-controls="applications-tabpanel"
+                    tabIndex={active ? 0 : -1}
+                    className={`lp-pipe-pill lp-pipe-tab${active ? " lp-pipe-pill-on" : ""}`}
+                    data-attr={`applications-demo-tab-${tab.id}`}
+                    onClick={() => selectTab(tab.id)}
+                    onKeyDown={(event) => onTabKeyDown(event, index)}
+                  >
+                    {tab.label} <span className="lp-pipe-count">{counts[tab.id]}</span>
+                  </button>
+                );
+              })}
+            </div>
             <span className="lp-pipe-pill lp-pipe-pill-filter">All properties</span>
           </div>
 
-          <div className="lp-pipe-table" role="list">
-            {APPLICANTS.map((applicant) => (
-              <PipeRow
-                key={applicant.id}
-                applicant={applicant}
-                stage={stages[applicant.id]}
-                screening={screening[applicant.id]}
-                expanded={activeId === applicant.id}
-                pressed={pressed?.id === applicant.id ? pressed.action : null}
-                reminderSent={reminderId === applicant.id}
-                onToggle={() => toggleRow(applicant.id)}
-                onRunScreening={() => runScreening(applicant.id)}
-                onApprove={() => approve(applicant.id)}
-                onReject={() => reject(applicant.id)}
-                onSendReminder={() => sendReminder(applicant.id)}
-              />
-            ))}
+          <div
+            className="lp-pipe-table"
+            role="tabpanel"
+            id="applications-tabpanel"
+            aria-labelledby={`applications-tab-${filter}`}
+          >
+            {displayed.length === 0 ? (
+              <div className="lp-pipe-empty">No applications in this view.</div>
+            ) : (
+              displayed.map((applicant) => (
+                <PipeRow
+                  key={applicant.id}
+                  applicant={applicant}
+                  stage={stages[applicant.id]}
+                  screening={screening[applicant.id]}
+                  expanded={activeId === applicant.id}
+                  pressed={pressed?.id === applicant.id ? pressed.action : null}
+                  reminderSent={reminderId === applicant.id}
+                  onToggle={() => toggleRow(applicant.id)}
+                  onRunScreening={() => runScreening(applicant.id)}
+                  onApprove={() => approve(applicant.id)}
+                  onReject={() => reject(applicant.id)}
+                  onSendReminder={() => sendReminder(applicant.id)}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -272,7 +376,6 @@ function PipeRow({
 
   return (
     <div
-      role="listitem"
       className={`lp-pipe-item${expanded ? " lp-pipe-item-open" : ""}${
         stage === "approved" ? " lp-pipe-item-approved" : ""
       }`}
