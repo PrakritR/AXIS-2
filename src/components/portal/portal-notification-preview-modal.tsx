@@ -254,7 +254,7 @@ export function PortalNotificationPreviewModal({
             ) : (
               <p className="mt-1.5 text-xs text-muted">
                 {footerNote?.trim() ||
-                  "Pick one or both. Always saved to Axis inbox. SMS uses your work number."}
+                  "Pick one or both. Always saved to PropLane inbox. SMS uses your work number."}
               </p>
             )}
           </div>

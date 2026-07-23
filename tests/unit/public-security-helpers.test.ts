@@ -10,7 +10,7 @@ describe("public host labels", () => {
 
   it("labels admin hosts without email", () => {
     expect(publicAdminSchedulingHostLabel({ email: "admin@axis.com", fullName: "Sam Lee" })).toBe("Sam");
-    expect(publicAdminSchedulingHostLabel({ email: "admin@axis.com" })).toBe("Axis team member");
+    expect(publicAdminSchedulingHostLabel({ email: "admin@axis.com" })).toBe("PropLane team member");
   });
 });
 

@@ -24,5 +24,5 @@ export function publicAdminSchedulingHostLabel(input: {
     const first = name.split(/\s+/)[0]?.trim();
     if (first) return first;
   }
-  return "Axis team member";
+  return "PropLane team member";
 }

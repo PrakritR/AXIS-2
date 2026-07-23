@@ -1049,28 +1049,6 @@ export function InboxTwoPane({
     };
   }, []);
 
-  // #region agent log
-  useEffect(() => {
-    const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        runId: "inbox-dark-ui",
-        hypothesisId: "H1-nested-surfaces",
-        location: "portal-inbox-ui.tsx:InboxTwoPane",
-        message: "Inbox two-pane mounted",
-        data: {
-          dark,
-          hasPane: Boolean(rootRef.current?.querySelector(".portal-inbox-list-pane")),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, []);
-  // #endregion
-
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
   const height = measuredHeight ? `${measuredHeight}px` : fallback;
 

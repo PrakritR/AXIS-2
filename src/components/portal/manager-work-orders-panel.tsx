@@ -825,7 +825,7 @@ export function ManagerWorkOrdersPanel({
                         {row.bucket === "open" && dispatch ? (
                           dispatch.status === "proposed" ? (
                             <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-3">
-                              <p className="text-sm font-semibold text-foreground">Axis suggests {dispatch.vendorName}</p>
+                              <p className="text-sm font-semibold text-foreground">PropLane suggests {dispatch.vendorName}</p>
                               <p className="mt-1 text-xs text-muted">{dispatch.reasoning}</p>
                               {dispatch.candidates.slice(0, 2).map((c) => (
                                 <p key={c.vendorId} className="mt-0.5 text-[11px] text-muted">
@@ -857,7 +857,7 @@ export function ManagerWorkOrdersPanel({
                             </div>
                           ) : dispatch.status === "approved" || dispatch.status === "auto_dispatched" ? (
                             <p className="mt-4 text-xs text-muted">
-                              Dispatched by Axis to <span className="font-medium text-foreground">{dispatch.vendorName}</span>
+                              Dispatched by PropLane to <span className="font-medium text-foreground">{dispatch.vendorName}</span>
                               {dispatch.decidedAtIso ? ` · ${formatScheduledLabel(dispatch.decidedAtIso)}` : ""}
                             </p>
                           ) : null
@@ -1140,7 +1140,7 @@ export function ManagerWorkOrdersPanel({
                     </span>
                     {dispatch?.status === "proposed" ? (
                       <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-info">
-                        Axis pick
+                        PropLane pick
                       </span>
                     ) : null}
                     <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
@@ -1196,7 +1196,7 @@ export function ManagerWorkOrdersPanel({
                           <PortalTableInlineExpand expanded={isExpanded}>{row.title}</PortalTableInlineExpand>
                           {dispatch?.status === "proposed" ? (
                             <span className="inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-info">
-                              Axis pick
+                              PropLane pick
                             </span>
                           ) : null}
                         </div>
@@ -1355,7 +1355,7 @@ export function ManagerWorkOrdersPanel({
                         Messages (SMS)
                       </label>
                     </div>
-                    <p className="text-xs text-muted">Always saved to Axis inbox. SMS uses your work number.</p>
+                    <p className="text-xs text-muted">Always saved to PropLane inbox. SMS uses your work number.</p>
                   </>
                 ) : null}
               </div>

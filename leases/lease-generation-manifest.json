@@ -2,7 +2,7 @@
   "schema_version": "0.1.0",
   "generated_date": "2026-06-25",
   "legal_review_required": true,
-  "description": "Master data manifest for Axis AI lease generation in Seattle and San Francisco. Combines document structure, merge fields, fee validators, and references to disclosure-clause-rules.json. Not parsed at runtime in phase 1 — port into src/lib/lease-templates/ after attorney review.",
+  "description": "Master data manifest for PropLane AI lease generation in Seattle and San Francisco. Combines document structure, merge fields, fee validators, and references to disclosure-clause-rules.json. Not parsed at runtime in phase 1 — port into src/lib/lease-templates/ after attorney review.",
   "rules_catalog": "disclosure-clause-rules.json",
   "code_templates": {
     "router": "src/lib/generated-lease.ts",
@@ -88,13 +88,13 @@
       "sources": ["listing.moveInFee", "application.managerMoveInFeeOverride", "application.managerOtherCostAmount"]
     },
     "has_periodic_pest_service": {
-      "source": "listing or property admin field (not yet in Axis — default false until captured)"
+      "source": "listing or property admin field (not yet in PropLane — default false until captured)"
     },
     "shared_utility_metering": {
-      "source": "listing or property admin field (not yet in Axis — default false until captured)"
+      "source": "listing or property admin field (not yet in PropLane — default false until captured)"
     },
     "year_built": {
-      "source": "property.yearBuilt or listing submission (not yet in Axis — required for lead paint rule)"
+      "source": "property.yearBuilt or listing submission (not yet in PropLane — required for lead paint rule)"
     },
     "is_rent_ordinance_covered": {
       "source": "sf-coverage-determination decision tree",

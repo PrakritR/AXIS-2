@@ -945,7 +945,7 @@ export function ManagerApplications() {
         recipient={reminderPreview?.to ?? ""}
         subject={reminderPreview?.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT}
         body={reminderPreview?.text ?? ""}
-        intro="Choose Email and/or SMS. Always saved to Axis inbox."
+        intro="Choose Email and/or SMS. Always saved to PropLane inbox."
         showSkipMessage={false}
         showChannelPicker
         emailAvailable

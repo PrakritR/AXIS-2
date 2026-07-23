@@ -4,15 +4,15 @@
  * Run: node scripts/preview-tour-emails.mjs
  */
 
-const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://www.axis-seattle-housing.com";
+const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://www.prop-lane.space";
 const propertyId = "demo_property_1";
 const applyUrl = `${origin}/rent/apply?propertyId=${encodeURIComponent(propertyId)}&roomName=${encodeURIComponent("Room 2A")}`;
 
-const managerSubject = "New tour request — Axis";
+const managerSubject = "New tour request — PropLane";
 const managerBody = [
   "Hi,",
   "",
-  "Someone requested a property tour through Axis.",
+  "Someone requested a property tour through PropLane.",
   "",
   "Guest: Alex Chen (alex@example.com)",
   "Phone: (206) 555-0100",
@@ -24,12 +24,12 @@ const managerBody = [
   "Notes from guest:",
   "Looking for a quiet room near transit.",
   "",
-  "Open your Axis manager portal calendar to approve or decline this tour request.",
+  "Open your PropLane manager portal calendar to approve or decline this tour request.",
   "",
-  "— Axis",
+  "— PropLane",
 ].join("\n");
 
-const tenantSubject = "Your Axis tour is confirmed";
+const tenantSubject = "Your PropLane tour is confirmed";
 const tenantBody = [
   "Hi Alex Chen,",
   "",
@@ -50,9 +50,9 @@ const tenantBody = [
   "• Employment and income details",
   "• Application fee payment (when required for this listing)",
   "",
-  "Questions before or after your tour? Reply in your Axis inbox and your property team will help.",
+  "Questions before or after your tour? Reply in your PropLane inbox and your property team will help.",
   "",
-  "— Axis",
+  "— PropLane",
 ].join("\n");
 
 console.log("=== Manager: new tour request ===");

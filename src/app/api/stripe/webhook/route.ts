@@ -96,7 +96,7 @@ async function recordSubscriptionInvoiceExpense(inv: Stripe.Invoice, subscriptio
     categoryCode: "management",
     amountCents: inv.amount_paid,
     expenseDate: new Date(inv.created * 1000).toISOString().slice(0, 10),
-    memo: `Axis platform subscription — ${planLabel}`,
+    memo: `PropLane platform subscription — ${planLabel}`,
     sourceStripePaymentId: inv.id,
   });
 }
@@ -116,7 +116,7 @@ async function recordCheckoutSubscriptionExpense(session: Stripe.Checkout.Sessio
     categoryCode: "management",
     amountCents,
     expenseDate: new Date().toISOString().slice(0, 10),
-    memo: `Axis platform subscription — ${planLabel}`,
+    memo: `PropLane platform subscription — ${planLabel}`,
     sourceStripePaymentId: session.id,
   });
 }

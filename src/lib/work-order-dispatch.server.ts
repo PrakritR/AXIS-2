@@ -86,7 +86,7 @@ export async function prepareDispatch(db: Db, workOrderId: string): Promise<void
       landlordId: managerUserId,
       subject: `No vendor matched: ${row.title}`,
       text: [
-        `Axis couldn't find a matching vendor for "${row.title}" at ${where} (category: ${row.category}).`,
+        `PropLane couldn't find a matching vendor for "${row.title}" at ${where} (category: ${row.category}).`,
         "",
         "Add or tag a vendor for this trade, then assign manually from Work orders.",
       ].join("\n"),
@@ -141,7 +141,7 @@ export async function prepareDispatch(db: Db, workOrderId: string): Promise<void
         landlordId: managerUserId,
         subject: `${isEmergencyWorkOrder(row) ? "Emergency dispatched" : "Dispatched"}: ${row.title}`,
         text: [
-          `Axis dispatched ${result.vendorName} for "${row.title}" at ${where} (${top.reason}).`,
+          `PropLane dispatched ${result.vendorName} for "${row.title}" at ${where} (${top.reason}).`,
           result.scheduledIso
             ? `Visit booked for ${formatPacificDateTime(result.scheduledIso)}.`
             : "No availability was on file, so pick a visit time from Work orders.",
@@ -161,7 +161,7 @@ export async function prepareDispatch(db: Db, workOrderId: string): Promise<void
     landlordId: managerUserId,
     subject: `Dispatch ready: ${row.title}`,
     text: [
-      `Axis suggests ${top.vendorName} for "${row.title}" at ${where} (${top.reason}).`,
+      `PropLane suggests ${top.vendorName} for "${row.title}" at ${where} (${top.reason}).`,
       "",
       "Open Work orders to approve with one tap, pick another vendor, or decline.",
     ].join("\n"),
@@ -292,7 +292,7 @@ export async function executeDispatch(
       await deliverPortalInboxMessage(db, {
         senderUserId: args.landlordId,
         senderEmail: args.actor.email,
-        fromName: "Axis Portal",
+        fromName: "PropLane Portal",
         subject: update.subject,
         text: update.text,
         toEmails: [residentEmail],

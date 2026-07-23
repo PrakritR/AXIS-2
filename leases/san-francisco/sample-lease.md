@@ -6,7 +6,7 @@ Reference room rental agreement for **California / San Francisco**. Align `src/l
 
 ---
 
-# AXIS SAN FRANCISCO HOUSING
+# PROPLANE SAN FRANCISCO HOUSING
 # RESIDENTIAL ROOM RENTAL AGREEMENT
 # STATE OF CALIFORNIA · CITY AND COUNTY OF SAN FRANCISCO
 
@@ -54,7 +54,7 @@ Month-to-month conversion and notice periods per California law and SF Rent Ordi
 
 Monthly base rent: **[RENT]**. Utilities/services estimate: **[UTILITIES]**. Rent due on the **1st** of each month.
 
-Late fees per California Civil Code and local law. Payment via Axis portal or method agreed in writing.
+Late fees per California Civil Code and local law. Payment via PropLane portal or method agreed in writing.
 
 ---
 
@@ -101,4 +101,4 @@ Mirror Seattle template sections: utilities, use & occupancy, shared spaces, hou
 
 ## ELECTRONIC SIGNATURE
 
-Parties execute once through the Axis portal. The Electronic Signature Certificate is the binding record for both parties.
+Parties execute once through the PropLane portal. The Electronic Signature Certificate is the binding record for both parties.

@@ -274,7 +274,7 @@ export async function POST(req: Request) {
       emailSent,
       smsSent,
       skipped: skippedExternal,
-      reason: skippedExternal ? "Saved to Axis inbox (external email/SMS not sent)." : undefined,
+      reason: skippedExternal ? "Saved to PropLane inbox (external email/SMS not sent)." : undefined,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

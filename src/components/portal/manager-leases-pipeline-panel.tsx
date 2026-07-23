@@ -194,7 +194,7 @@ export function ManagerLeasesPipelinePanel({
 
       appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.", managerUserId);
       if (res.skipped) {
-        showToast("Reminder saved to Axis inbox.");
+        showToast("Reminder saved to PropLane inbox.");
       } else {
         showToast("Lease-signing reminder sent.");
       }

@@ -1,6 +1,6 @@
 # Lease reference materials
 
-This folder holds **sample leases, disclosure rules, and city-specific notes** used to align Axis generated leases with your legal templates.
+This folder holds **sample leases, disclosure rules, and city-specific notes** used to align PropLane generated leases with your legal templates.
 
 ## Structure
 
@@ -11,7 +11,7 @@ This folder holds **sample leases, disclosure rules, and city-specific notes** u
 | `seattle/` | Washington / Seattle samples and notes |
 | `san-francisco/` | California / San Francisco samples and notes |
 
-## How Axis uses these files
+## How PropLane uses these files
 
 Generation code in `src/lib/lease-templates/` mirrors the structure and clauses from samples here. JSON manifests are **reference material** — they are not parsed at runtime in phase 1. When you update rules or samples, port the relevant sections into the matching template file in code after attorney review.
 

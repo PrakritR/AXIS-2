@@ -382,7 +382,7 @@ export function ManagerPaymentsLedgerPanel({
       return;
     }
     if (skipped === ok) {
-      showToast(ok === 1 ? "Reminder saved to Axis inbox." : `Sent ${ok} reminders to Axis inbox.`);
+      showToast(ok === 1 ? "Reminder saved to PropLane inbox." : `Sent ${ok} reminders to PropLane inbox.`);
     } else if (skipped > 0) {
       showToast(`Sent ${ok} reminder${ok === 1 ? "" : "s"} (${skipped} inbox-only).`);
     } else {
@@ -408,12 +408,12 @@ export function ManagerPaymentsLedgerPanel({
       if (result.chargePaid) {
         showToast("This charge is already paid. No reminder was sent.");
       } else if (result.ok) {
-        const parts: string[] = ["Axis inbox"];
+        const parts: string[] = ["PropLane inbox"];
         if (result.emailSent) parts.push("email");
         if (result.smsSent) parts.push("Messages");
         showToast(
           result.skipped
-            ? "Reminder saved to Axis inbox."
+            ? "Reminder saved to PropLane inbox."
             : `Reminder sent via ${parts.join(" + ")}.`,
         );
       } else {

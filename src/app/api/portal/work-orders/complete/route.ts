@@ -85,7 +85,7 @@ export async function POST(req: Request) {
         await deliverPortalInboxMessage(auth.db, {
           senderUserId: auth.userId,
           senderEmail: auth.email,
-          fromName: "Axis Portal",
+          fromName: "PropLane Portal",
           subject: `${title} completed`,
           text: `Your work order "${title}"${propertyLabel ? ` at ${propertyLabel}` : ""} has been completed.`,
           toEmails: [residentEmail],

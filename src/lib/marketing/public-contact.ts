@@ -10,6 +10,8 @@
  * half-done rename fails instead of shipping two addresses.
  */
 export const PUBLIC_SUPPORT_EMAIL = "support@prop-lane.space";
+/** Default leasing contact shown in promotion flyer / email blast placeholders. */
+export const PUBLIC_LEASING_EMAIL = "leasing@prop-lane.space";
 export const PUBLIC_SUPPORT_PHONE_DISPLAY = "(510) 309-8345";
 export const PUBLIC_SUPPORT_PHONE_TEL = "+15103098345";
 export const PUBLIC_SUPPORT_ADDRESS_LINE = "5259 Brooklyn Ave NE, Seattle, WA 98105";

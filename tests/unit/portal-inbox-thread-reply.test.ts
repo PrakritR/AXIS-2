@@ -18,7 +18,7 @@ function makeDb(threads: Record<string, unknown>[]) {
 const baseOpts = {
   senderUserId: "manager_a",
   senderEmail: "manager@axis.test",
-  fromName: "Axis Portal",
+  fromName: "PropLane Portal",
   text: "reply body",
 };
 
