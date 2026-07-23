@@ -143,12 +143,38 @@ The signature Blue Steel background. Implemented in `ChromeSubstrate` (`src/comp
 
 | Substrate | Surfaces |
 |-----------|----------|
-| **Full chrome** | Home hero, partner hero, auth pages, billing success |
+| **Full chrome** | Partner hero, auth pages, billing success |
+| **PropLane hero** | Home hero (`/`) — see below; Blue Steel full chrome does **not** run here |
 | **Quiet** | Apply/tours wizards (deep-link only), partner pricing/contact, default public layout |
 | **Portal calm** | All authenticated portal content areas |
 | **Sidebar chrome only** | Portal brand header (266px sidebar) — metal confined to this strip |
 
 **Rule:** Never place dense fields, tables, or long forms over animated chrome.
+
+### Homepage hero background (PropLane grid + bloom)
+
+The homepage hero (`LandingDemoHero`, `landing-demo-hero.tsx`) does **not** use
+Blue Steel full chrome — it moved to the `--pl-*` purple/blue theme split. Its
+background is the `.landing-hero-glow` container holding four layers, styled in
+`globals.css` next to the hero block. Theme split is absolute: **purple family
+in dark, cobalt-blue family in light, never mixed** (base rules purple,
+`[data-theme="light"]` overrides blue), using `--pl-*` tokens only.
+
+1. **Architectural grid** (`.landing-hero-grid`) — a 1px lattice on a 56px pitch
+   from two `repeating-linear-gradient`s, faded with a radial `mask-image` so it
+   is crisp behind the headline and gone by the edges.
+2. **Brand bloom** (`.landing-hero-bloom`) — one large radial glow behind the
+   product panel (`ApplicationsPipelinePanel`).
+3. **Lit cells** (`.landing-hero-cells`) — a few grid cells softly lit like
+   occupied units, breathing slowly (`hero-cells-breathe`, opacity only).
+4. **Legibility wash** (`.landing-hero-wash`) — a radial that darkens (dark) /
+   lightens (light) the left text column so `.landing-hero-sub` /
+   `.landing-hero-trust` hold ≥4.5:1. Mirrors `.chrome-substrate-full__wash`.
+
+The panel keeps its own opaque fill and sits strictly above the background;
+motion is `transform`/`opacity` only (compositor-safe for the Capacitor
+WebView), and the lit-cells animation holds a static frame under
+`prefers-reduced-motion`.
 
 ---
 
@@ -248,11 +274,12 @@ Mono uppercase section label + “View all” accent link. Rows: name, sub-line,
 | `chromeFlow` | 26s linear | Full chrome conic rotation |
 | `chromeShift` | 18s ease-in-out | Overlay drift |
 | `sheen` | 7s | Hero search bar diagonal sweep |
+| `hero-cells-breathe` | 14s ease-in-out | Homepage hero lit-cells opacity breath (grid + bloom) |
 | `page-enter` | 0.42s cubic-bezier(0.22,1,0.36,1) | Route transitions (`PublicMainTransition`) |
 | `fade-up` | 0.45s | Hero stagger |
 | `reveal-on-view` | 0.55s | Scroll reveals |
 
-**Reduced motion:** All ambient animation (`chrome-flow`, `chrome-shift`, `sheen-sweep`, orb drift, page-enter) halts under `prefers-reduced-motion: reduce` — static frame retained.
+**Reduced motion:** All ambient animation (`chrome-flow`, `chrome-shift`, `sheen-sweep`, `landing-hero-cells`, orb drift, page-enter) halts under `prefers-reduced-motion: reduce` — static frame retained.
 
 Interactive feedback: `active:scale-[0.99]`, 200ms transitions on buttons and nav.
 
@@ -278,7 +305,10 @@ Five product surfaces. Per-route detail lives in [`docs/specs/`](specs/).
 
 **Spec:** [Blue Steel Marketing Spec](specs/Blue%20Steel%20Marketing%20Spec.html)
 
-**Chrome:** Full on `/`, `/partner`, `/billing/success`. Quiet elsewhere.
+**Chrome:** Full on `/partner`, `/billing/success`. The home hero (`/`) runs the
+PropLane grid + bloom background (see [Chrome substrate → Homepage hero
+background](#homepage-hero-background-proplane-grid--bloom)), not full chrome.
+Quiet elsewhere.
 
 **Key components:** `PublicNavbar`, `PublicFooter`, `ChromeSubstrate`, pricing tier cards.
 
