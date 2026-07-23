@@ -73,8 +73,8 @@ type InboxThread = {
  *  actually applies from where the reader is standing. */
 function searchSkipsTrashNote(tabId: string) {
   return tabId === "trash"
-    ? "Trash isn’t searched. Clear the search to browse it."
-    : "Trash isn’t searched. Clear the search, then open the Trash tab.";
+    ? "Trash isn’t searched; clear the search to browse it."
+    : "Trash isn’t searched; clear the search, then open the Trash tab.";
 }
 
 function previewLine(body: string, max = 100) {
