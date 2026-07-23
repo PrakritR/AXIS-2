@@ -7,6 +7,8 @@ import {
 } from "@/lib/public-tour-booking-guard";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { notifyManagerTourRequest, notifyTenantTourRequestReceived } from "@/lib/tour-notification-delivery.server";
+import { loadManagerAutomationSettings } from "@/lib/payment-automation-settings";
+import { proposeTourConfirmation } from "@/lib/tour-proposal.server";
 
 export const runtime = "nodejs";
 
@@ -260,6 +262,15 @@ export async function POST(req: Request) {
       if (managerUserId) {
         void notifyManagerTourRequest(db, req, row, requestedWindows[0]).catch(() => undefined);
         void notifyTenantTourRequestReceived(db, req, row, requestedWindows[0]).catch(() => undefined);
+        // Approval-first automated tours: when the manager opted in, propose
+        // confirming this inquiry into its first open slot as an approval item.
+        // Best-effort — a failure here must never fail the inquiry submission,
+        // and nothing books or emails the tenant until the manager approves.
+        void (async () => {
+          const settings = await loadManagerAutomationSettings(db, managerUserId);
+          if (!settings.proposeTourConfirmations) return;
+          await proposeTourConfirmation(db, { inquiry: row, managerUserId, requestedWindows });
+        })().catch(() => undefined);
       }
     }
 

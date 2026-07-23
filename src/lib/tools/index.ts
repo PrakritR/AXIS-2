@@ -41,6 +41,7 @@ import {
 import { managerFinancialsWriteTools } from "./domains/financials-write";
 import { listDocumentsTool, listPromotionsTool } from "./domains/documents";
 import { managerServicesWriteTools } from "./domains/services-write";
+import { confirmTourInquiryTool } from "./domains/tours-write";
 import { residentPortalTools } from "./domains/resident-portal";
 import { vendorPortalTools } from "./domains/vendor-portal";
 
@@ -68,6 +69,9 @@ export const agentRegistry = buildRegistry([
   createChargeTool,
   createLeaseDraftTool,
   updateLeaseDraftTool,
+  // Confirm a proposed tour into a booked event + notify the guest. Backs the
+  // approval-first auto-tour flow, executed only through the confirm gate.
+  confirmTourInquiryTool,
   ...managerServicesWriteTools,
   // The accounting writes (bills, budgets, deposit dispositions, owner
   // distributions, bank reconciliation). They were previously registry-only and

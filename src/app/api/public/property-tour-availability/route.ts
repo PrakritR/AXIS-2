@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { publicSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import {
+  payloadSlots,
+  rowPayload,
+  safePropertyId,
+  slotBlocked,
+  slotIsBookable,
+  windowsFromPayload,
+  type TourBlock,
+} from "@/lib/tour-slot-math";
 
 export const runtime = "nodejs";
 
@@ -24,22 +33,6 @@ type PropertyRecordRow = {
   property_data: unknown;
 };
 
-type TourBlock = {
-  start: string;
-  end: string;
-  slotKey?: string;
-};
-
-function safePropertyId(propertyId: string): string {
-  return propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
-}
-
-function payloadSlots(rowData: unknown): string[] {
-  if (!rowData || typeof rowData !== "object" || Array.isArray(rowData)) return [];
-  const payload = (rowData as Record<string, unknown>).payload;
-  return Array.isArray(payload) ? payload.filter((item): item is string => typeof item === "string") : [];
-}
-
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
@@ -47,61 +40,6 @@ function asObject(value: unknown): Record<string, unknown> | null {
 function textField(row: Record<string, unknown>, key: string): string {
   const value = row[key];
   return typeof value === "string" ? value.trim() : "";
-}
-
-function rowPayload(rowData: unknown): Record<string, unknown> | null {
-  const row = asObject(rowData);
-  if (!row) return null;
-  return asObject(row.payload) ?? row;
-}
-
-function windowsFromPayload(payload: Record<string, unknown>): TourBlock[] {
-  const requested = Array.isArray(payload.requestedWindows) ? payload.requestedWindows : [];
-  const windows = requested
-    .map(asObject)
-    .filter((window): window is Record<string, unknown> => Boolean(window))
-    .map((window) => ({
-      start: textField(window, "start"),
-      end: textField(window, "end"),
-      slotKey: textField(window, "slotKey") || undefined,
-    }))
-    .filter((window) => window.start && window.end);
-  if (windows.length > 0) return windows;
-  const start = textField(payload, "proposedStart") || textField(payload, "start");
-  const end = textField(payload, "proposedEnd") || textField(payload, "end");
-  if (!start || !end) return [];
-  return [{ start, end, slotKey: textField(payload, "slotKey") || undefined }];
-}
-
-function slotStartMs(slot: string): number | null {
-  const [dateStr, rawSlotIndex] = slot.split(":");
-  const slotIndex = Number.parseInt(rawSlotIndex ?? "", 10);
-  if (!dateStr || !Number.isFinite(slotIndex) || slotIndex < 0 || slotIndex >= 48) return null;
-  const [year, month, day] = dateStr.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
-  start.setMinutes(slotIndex * 30);
-  return start.getTime();
-}
-
-function overlaps(slot: string, block: TourBlock): boolean {
-  const startMs = slotStartMs(slot);
-  if (startMs === null) return false;
-  const endMs = startMs + 30 * 60 * 1000;
-  const blockStartMs = new Date(block.start).getTime();
-  const blockEndMs = new Date(block.end).getTime();
-  if (![blockStartMs, blockEndMs].every(Number.isFinite)) return false;
-  return startMs < blockEndMs && blockStartMs < endMs;
-}
-
-function slotBlocked(slot: string, blocks: TourBlock[]): boolean {
-  return blocks.some((block) => block.slotKey === slot || overlaps(slot, block));
-}
-
-function slotIsBookable(slot: string): boolean {
-  const startMs = slotStartMs(slot);
-  if (startMs === null) return false;
-  return startMs >= Date.now();
 }
 
 function propertyMatchKey(row: Record<string, unknown>): string {

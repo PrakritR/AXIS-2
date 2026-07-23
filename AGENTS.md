@@ -875,6 +875,29 @@ Two routing gotchas this exposed, both of which silently break a section without
   sub-tabs to a section wired into the demo, forward `tabId`/`basePath` there too or the demo
   always shows the first tab no matter which `TabNav` link is clicked.
 
+## Approval-first automated tours
+
+When a manager opts in (`proposeTourConfirmations`, default OFF, on
+`manager_automation_settings`), a new pending tour inquiry generates a PROPOSAL
+to confirm it into the first matching open slot. It NEVER auto-books or emails —
+the proposal is a gated pending action the manager approves. Invariants:
+
+- **One booking core.** `confirmTourInquiry` (`src/lib/tour-inquiry-confirm.server.ts`)
+  is the single implementation behind both the manual accept route and the
+  auto-tour tool — `resolveConfirmedEnd`, plannedEvent creation, competing-inquiry
+  removal, `notifyTenantTourConfirmed`. Never duplicate booking logic; the tool
+  path passes `guardDoubleBook: true` (refuse a slot a confirmed tour occupies),
+  the manual route leaves it off to keep its override behavior.
+- **Reuses the confirm gate.** The proposal is an `agent_pending_actions` row
+  (`confirm_tour_inquiry` write tool in `agentRegistry`) with a 7-day expiry;
+  approve/discard go through `runConfirmedPendingAction`/`denyPendingAction`
+  (`src/lib/tools/confirm-gate.server.ts`) — the SAME gate the assistant uses.
+  Standalone surface: `GET/POST /api/portal-tour-inquiries/proposals` +
+  `TourProposalsPanel` on the manager calendar.
+- **First-open-slot math** (`src/lib/tour-proposal.server.ts`, `tour-slot-math.ts`)
+  mirrors the public availability route's exclusion set; it excludes the
+  inquiry's own window so it never blocks itself. No slot match → no proposal.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.
