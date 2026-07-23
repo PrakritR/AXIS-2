@@ -20,11 +20,14 @@ const recordSubmittedApplicationFeeCharge = vi.fn();
 const removeAllApplicationCharges = vi.fn();
 const removeApprovedApplicationCharges = vi.fn();
 
+const syncManagerApplicationsFromServer = vi.fn(async () => ROWS);
+
 vi.mock("@/lib/manager-applications-storage", () => ({
   readManagerApplicationRows: () => ROWS,
   writeManagerApplicationRows: (rows: DemoApplicantRow[]) => {
     ROWS = rows;
   },
+  syncManagerApplicationsFromServer,
 }));
 vi.mock("@/lib/household-charges", () => ({
   recordApprovedApplicationCharges,
@@ -61,6 +64,7 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     vi.stubGlobal("fetch", fetchMock);
     recordApprovedApplicationCharges.mockClear();
     removeApprovedApplicationCharges.mockClear();
+    syncManagerApplicationsFromServer.mockClear();
   });
 
   it("rolls back and stamps when the server matched THIS application by id", async () => {
@@ -85,6 +89,8 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
     // No welcome email may go out for an approval the server refused.
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/portal/resident-approval"]);
+    // The stamp already makes the local cache agree with the server; no resync needed.
+    expect(syncManagerApplicationsFromServer).not.toHaveBeenCalled();
   });
 
   it("rolls back WITHOUT stamping when the 409 came from another application (email fallback)", async () => {
@@ -104,10 +110,15 @@ describe("transitionApplicationBucket — a refused approval is rolled back, not
     const result = await transitionApplicationBucket("AXIS-9001", "approved", { userId: "mgr-1" });
 
     expect(result?.blocked).toBe("error");
-    expect(result?.message).toBe("Could not approve this application.");
+    // The message must point at the cause and the resolution, not invite a retry.
+    expect(result?.message).toMatch(/withdrawn application on file/i);
+    expect(result?.message).toMatch(/refresh/i);
     expect(ROWS[0].bucket).toBe("pending");
     expect(ROWS[0].withdrawnAt).toBeFalsy();
     expect(removeApprovedApplicationCharges).toHaveBeenCalledWith("AXIS-9001", "mgr-1");
+    // Nothing local can be stamped from this refusal, so pull authoritative state
+    // instead of leaving a doomed Approve up until the sync TTL expires.
+    expect(syncManagerApplicationsFromServer).toHaveBeenCalledWith({ force: true, managerUserId: "mgr-1" });
   });
 
   it("rolls back WITHOUT stamping when the 409 names a different id even via the id lookup", async () => {
