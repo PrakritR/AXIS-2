@@ -65,9 +65,10 @@ import { notFound, redirect } from "next/navigation";
 
 const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
   "rent-roll": "income",
-  delinquency: "summary",
+  // Delinquency (overdue rent) lives inside the rent-roll/income view; the old
+  // `summary` target is not a financials tab, so it used to 404.
+  delinquency: "income",
   "income-statement": "expenses",
-  "lease-expiration": "income-documents",
   vendors: "expenses",
   "profit-loss": "expenses",
 };
@@ -92,6 +93,14 @@ const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, string> = {
   "profit-loss": "expenses",
 };
 
+// Legacy financials tabs whose current home is a DOCUMENTS tab, not a financials
+// tab. `lease-expiration` used to map to `income-documents` inside the financials
+// handler, which only redirects within /financials/, so it 404'd — it must cross
+// into the documents section where `income-documents` actually lives.
+const LEGACY_FINANCIALS_TO_DOCUMENTS: Record<string, string> = {
+  "lease-expiration": "income-documents",
+};
+
 async function renderManagerFinancesSection(
   section: string,
   tabParts: string[] | undefined,
@@ -106,6 +115,8 @@ async function renderManagerFinancesSection(
   if (tabParts.length > 1) notFound();
   const finTab = tabParts[0]!;
   if (!FINANCIALS_TABS.includes(finTab as (typeof FINANCIALS_TABS)[number])) {
+    const docsRedirect = LEGACY_FINANCIALS_TO_DOCUMENTS[finTab];
+    if (docsRedirect) redirect(`${basePath}/documents/${docsRedirect}`);
     const mapped = LEGACY_FINANCIALS_TAB_MAP[finTab];
     if (mapped) redirect(`${basePath}/financials/${mapped}`);
     notFound();
