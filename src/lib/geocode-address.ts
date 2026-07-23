@@ -54,14 +54,20 @@ export function listingGeocodeQuery(
   // or returns a lower-confidence centroid. Strip a unit already embedded in the
   // street line for the same reason; the unit is still shown in the UI.
   // Match a SINGLE leading separator (`[,\s]`, not `[,\s]+`) before the unit
-  // token: the immediately-following `.replace(/[,\s]+$/, "")` strips any extra
-  // trailing separators the same way, so the final output is identical while the
-  // regex stays linear-time (the `[,\s]+` variant backtracks polynomially on a
-  // long run of whitespace — CodeQL js/polynomial-redos).
-  const streetLine = (street || unit)
-    .replace(/[,\s](?:apt|apartment|unit|ste|suite|#)\s*[\w-]+\s*$/i, "")
-    .replace(/[,\s]+$/, "")
-    .trim() || street;
+  // token: the trailing-separator trim below strips any extra separators the
+  // same way, so the final output is identical while the regex stays
+  // linear-time (the `[,\s]+` variant backtracks polynomially on a long run of
+  // whitespace — CodeQL js/polynomial-redos).
+  const withoutUnit = (street || unit).replace(
+    /[,\s](?:apt|apartment|unit|ste|suite|#)\s*[\w-]+\s*$/i,
+    "",
+  );
+  // Linear trailing-separator trim. `/[,\s]+$/` is the same polynomial shape we
+  // just removed — it re-scans the separator run from every offset — so walk the
+  // run backwards one character at a time instead.
+  let end = withoutUnit.length;
+  while (end > 0 && /[,\s]/.test(withoutUnit[end - 1]!)) end -= 1;
+  const streetLine = withoutUnit.slice(0, end).trim() || street;
 
   const parts = [streetLine, neighborhood, zip].filter(Boolean);
   if (!parts.length) return "";

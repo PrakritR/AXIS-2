@@ -42,7 +42,12 @@ describe("geocode listingGeocodeQuery — unit-strip ReDoS", () => {
   });
 
   it("runs in linear time on a long whitespace run", () => {
-    const pathological = `123 Main St${"\t".repeat(60_000)}`;
+    // The run must be INTERIOR: `listingGeocodeQuery` trims the address before
+    // either regex runs, so a trailing run is gone before it can backtrack and
+    // the assertion would pass vacuously. The trailing "apt!" also keeps the
+    // unit-token regex from matching, which is what made the old
+    // `.replace(/[,\s]+$/)` re-scan the space run from every offset (~1.2s).
+    const pathological = `123 Main St${" ".repeat(60_000)}apt!`;
     expectFast(() => strip(pathological));
   });
 });
@@ -65,7 +70,10 @@ describe("manager-intent resident-hint ReDoS", () => {
 
   it("runs in linear time on whitespace and punctuation floods", () => {
     // Old `\s+(.+?)\s+paid` AND old `[.?!,]+$` both backtracked here.
-    const spaces = `agent mark${" ".repeat(60_000)}x paid`;
+    // "paid" sits BEFORE "mark" so the mark_paid branch is entered but the
+    // `\s+(.+?)\s+paid` capture can never complete — that failure is what made
+    // the old lazy `(.+?)` re-scan the space run for every `\s+` split.
+    const spaces = `agent paid mark${" ".repeat(60_000)}x`;
     const bangs = `agent mark ${"!".repeat(60_000)}a paid`;
     expectFast(() => classifyManagerAgentCommand(spaces));
     expectFast(() => classifyManagerAgentCommand(bangs));
@@ -109,7 +117,10 @@ describe("leasing extractPropertyLabelHint — label-capture ReDoS", () => {
   });
 
   it("runs in linear time on a long interior whitespace run", () => {
-    const pathological = `apply for${" ".repeat(60_000)}Cedar`;
+    // A second line after the space run is what makes the old `(.+?)\.?$`
+    // fail: `.` never crosses `\n`, so every `\s+` split re-scanned the run.
+    // Without it the pattern matches immediately and proves nothing.
+    const pathological = `apply for${" ".repeat(60_000)}A\nB`;
     expectFast(() => extractPropertyLabelHint(pathological));
   });
 });
