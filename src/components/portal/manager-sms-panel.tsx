@@ -545,7 +545,7 @@ export const ManagerSmsPanel = forwardRef<
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Messages</h2>
       </header>
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 pb-2.5">
+      <div className="portal-inbox-list-toolbar flex shrink-0 items-center gap-2 border-b border-border px-3 pb-2.5">
         <label className="relative block min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
@@ -554,7 +554,7 @@ export const ManagerSmsPanel = forwardRef<
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search"
             enterKeyHint="search"
-            className="h-9 w-full rounded-full border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            className="portal-inbox-search h-9 w-full rounded-full border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
             data-attr="sms-messages-search"
           />
         </label>
@@ -622,7 +622,7 @@ export const ManagerSmsPanel = forwardRef<
   ) : (
     <div className="flex min-h-0 flex-1 flex-col">
       <header
-        className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
+        className="portal-inbox-thread-header flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
       >
         <button
@@ -659,7 +659,7 @@ export const ManagerSmsPanel = forwardRef<
         )}
       </header>
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
+      <div className="portal-inbox-thread-body min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
         {active.messages.length === 0 ? (
           <div className="flex min-h-full items-center justify-center py-6">
             <PortalInboxEmptyState title="No messages in this conversation." />
@@ -678,7 +678,7 @@ export const ManagerSmsPanel = forwardRef<
       </div>
 
       <form
-        className="flex shrink-0 items-end gap-2 border-t border-border bg-card px-3 pt-2.5"
+        className="portal-inbox-composer flex shrink-0 items-end gap-2 border-t border-border bg-card px-3 pt-2.5"
         style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -692,7 +692,7 @@ export const ManagerSmsPanel = forwardRef<
           placeholder="Text message"
           maxLength={1600}
           enterKeyHint="send"
-          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+          className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
           data-attr="sms-messages-reply"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -865,16 +865,11 @@ function ConversationRow({
 
       <div
         className={[
-          "relative z-[1] flex cursor-pointer items-center gap-3 border-b border-border px-3 py-2.5 transition-transform duration-200 ease-out",
+          "portal-inbox-row relative z-[1] flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-transform duration-200 ease-out",
+          selected ? "portal-inbox-row--selected bg-accent" : "bg-card hover:bg-foreground/[0.03]",
           "touch-pan-y",
         ].join(" ")}
         style={{
-          // Opaque background so the row covers the delete action beneath it as
-          // it slides; the selected state is an opaque primary tint (not the
-          // translucent bg-accent, which would let the red bleed through).
-          backgroundColor: selected
-            ? "color-mix(in srgb, var(--card) 88%, var(--primary) 12%)"
-            : "var(--card)",
           transform: `translate3d(${reveal}px,0,0)`,
         }}
         onClick={() => {

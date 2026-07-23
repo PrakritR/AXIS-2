@@ -810,7 +810,7 @@ export const ManagerInbox = forwardRef<
         placeholder="Search messages…"
         aria-label="Search messages by sender, subject, or content"
         data-attr="inbox-message-search"
-        className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-8 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+        className="portal-inbox-search h-9 w-full rounded-full border border-border bg-card pl-9 pr-8 text-sm text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
       />
       {searchActive ? (
         <button
@@ -875,7 +875,7 @@ export const ManagerInbox = forwardRef<
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 space-y-2 border-b border-border p-2.5">
+      <div className="portal-inbox-list-toolbar shrink-0 space-y-2 border-b border-border p-2.5">
         {searchBox}
         {searchActive ? (
           <p className="px-1 text-[11px] leading-snug text-muted">

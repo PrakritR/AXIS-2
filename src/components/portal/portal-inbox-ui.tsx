@@ -586,8 +586,8 @@ export function InboxConversationRow({
 }) {
   return (
     <div
-      className={`flex items-center gap-2.5 border-b border-border px-3 py-2.5 transition-colors ${
-        selected ? "bg-accent" : "hover:bg-foreground/[0.03]"
+      className={`portal-inbox-row flex items-center gap-2.5 px-3 py-2.5 transition-colors ${
+        selected ? "portal-inbox-row--selected bg-accent" : "hover:bg-foreground/[0.03]"
       }`}
     >
       {leading}
@@ -642,7 +642,7 @@ export function InboxBubble({
         <span className="mb-1 px-1 text-[11px] font-medium text-muted">{message.author}</span>
       ) : null}
       <div
-        className={`max-w-[min(85%,32rem)] px-3.5 py-2 text-sm leading-relaxed ${
+        className={`portal-inbox-inbound-bubble max-w-[min(85%,32rem)] px-3.5 py-2 text-sm leading-relaxed ${
           outbound
             ? "rounded-2xl rounded-br-md text-primary-foreground"
             : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
@@ -684,7 +684,7 @@ export function InboxComposer({
   const canSend = !sending && !disabled && value.trim().length > 0;
   return (
     <form
-      className="shrink-0 border-t border-border bg-card px-3 py-2.5"
+      className="portal-inbox-composer shrink-0 border-t border-border bg-card px-3 py-2.5"
       style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
       onSubmit={(e) => {
         e.preventDefault();
@@ -701,7 +701,7 @@ export function InboxComposer({
           disabled={disabled}
           enterKeyHint="send"
           data-attr={dataAttr}
-          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+          className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -772,7 +772,7 @@ export function AiDraftReplyCard({
   if (drafting) {
     return (
       <div
-        className="shrink-0 border-t border-border bg-accent/30 px-3.5 py-3"
+        className="portal-inbox-ai-draft shrink-0 border-t border-border bg-accent/30 px-3.5 py-3"
         data-attr="inbox-ai-draft-drafting"
       >
         <div className="flex items-center gap-2 text-[13px] font-medium text-muted">
@@ -788,7 +788,7 @@ export function AiDraftReplyCard({
   if (!draft) {
     if (error) {
       return (
-        <div className="shrink-0 border-t border-border bg-card px-3.5 py-2.5" data-attr="inbox-ai-draft-error">
+        <div className="portal-inbox-ai-draft shrink-0 border-t border-border bg-card px-3.5 py-2.5" data-attr="inbox-ai-draft-error">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[13px] text-danger">Couldn’t draft a reply.</span>
             {onGenerate ? (
@@ -802,7 +802,7 @@ export function AiDraftReplyCard({
     }
     if (onGenerate) {
       return (
-        <div className="shrink-0 border-t border-border bg-card px-3.5 py-2.5">
+        <div className="portal-inbox-ai-draft shrink-0 border-t border-border bg-card px-3.5 py-2.5">
           <Button
             type="button"
             variant="outline"
@@ -821,7 +821,7 @@ export function AiDraftReplyCard({
 
   return (
     <div
-      className="shrink-0 border-t border-border bg-accent/40 px-3.5 py-3"
+      className="portal-inbox-ai-draft shrink-0 border-t border-border bg-accent/40 px-3.5 py-3"
       data-attr="inbox-ai-draft-card"
     >
       <div className="flex items-center gap-2">
@@ -832,7 +832,7 @@ export function AiDraftReplyCard({
           Draft · Pending approval
         </span>
       </div>
-      <p className="mt-2 whitespace-pre-wrap break-words rounded-xl border border-border bg-card px-3 py-2.5 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+      <p className="portal-inbox-ai-draft-text mt-2 whitespace-pre-wrap break-words rounded-xl border border-border bg-card px-3 py-2.5 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
         {draft}
       </p>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -960,7 +960,7 @@ export function InboxThreadView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header
-        className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
+        className="portal-inbox-thread-header flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
       >
         {onBack ? (
@@ -985,7 +985,7 @@ export function InboxThreadView({
       <div
         ref={scrollRef}
         onScroll={handleThreadScroll}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
+        className="portal-inbox-thread-body min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
       >
         {messages.length === 0 ? (
           <div className="flex min-h-full items-center justify-center py-6">
@@ -1049,24 +1049,49 @@ export function InboxTwoPane({
     };
   }, []);
 
+  // #region agent log
+  useEffect(() => {
+    const dark = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "dark";
+    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+      body: JSON.stringify({
+        sessionId: "81cbea",
+        runId: "inbox-dark-ui",
+        hypothesisId: "H1-nested-surfaces",
+        location: "portal-inbox-ui.tsx:InboxTwoPane",
+        message: "Inbox two-pane mounted",
+        data: {
+          dark,
+          hasPane: Boolean(rootRef.current?.querySelector(".portal-inbox-list-pane")),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, []);
+  // #endregion
+
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
   const height = measuredHeight ? `${measuredHeight}px` : fallback;
 
   return (
     <div
       ref={rootRef}
-      className={`overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] ${className}`}
+      className={`portal-inbox-two-pane overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] ${className}`}
       style={{ height }}
+      data-attr="portal-inbox-two-pane"
     >
       <div className="grid h-full lg:grid-cols-[minmax(300px,34%)_1fr]">
         <section
-          className={`min-h-0 min-w-0 flex-col border-border lg:border-r ${
+          className={`portal-inbox-list-pane min-h-0 min-w-0 flex-col border-border lg:border-r ${
             threadOpen ? "hidden lg:flex" : "flex"
           }`}
         >
           {list}
         </section>
-        <section className={`min-h-0 min-w-0 flex-col ${threadOpen ? "flex" : "hidden lg:flex"}`}>
+        <section
+          className={`portal-inbox-thread-pane min-h-0 min-w-0 flex-col ${threadOpen ? "flex" : "hidden lg:flex"}`}
+        >
           {thread}
         </section>
       </div>

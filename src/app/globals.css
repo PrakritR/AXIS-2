@@ -2502,3 +2502,83 @@ html[data-native] [data-listing-subnav] {
   width: 100%;
   max-width: 100vw;
 }
+
+/* ── Portal Communication inbox (dark) — align with homepage lp-ibx surfaces ── */
+html[data-theme="dark"] .portal-communication-inbox .portal-inbox-two-pane {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .portal-inbox-list-pane {
+  background: var(--pl-surface-muted);
+}
+
+html[data-theme="dark"] .portal-inbox-thread-pane {
+  background: var(--pl-surface-raised);
+}
+
+html[data-theme="dark"] .portal-inbox-list-toolbar {
+  border-color: color-mix(in srgb, var(--border) 40%, transparent);
+  background: transparent;
+}
+
+html[data-theme="dark"] .portal-inbox-search {
+  background: color-mix(in srgb, var(--pl-black) 24%, var(--pl-surface-muted));
+  border-color: color-mix(in srgb, var(--border) 36%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-row {
+  border-bottom: none;
+  border-radius: 10px;
+  margin: 1px 6px;
+}
+
+html[data-theme="dark"] .portal-inbox-row:hover {
+  background: color-mix(in srgb, var(--foreground) 3.5%, var(--pl-surface-muted)) !important;
+}
+
+html[data-theme="dark"] .portal-inbox-row--selected {
+  background: color-mix(in srgb, var(--primary) 9%, var(--pl-surface-muted)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-thread-header {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--primary) 7%, transparent),
+    transparent 55%
+  );
+  border-color: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-thread-body {
+  background: transparent;
+}
+
+html[data-theme="dark"] .portal-inbox-composer {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-composer-input {
+  background: color-mix(in srgb, var(--pl-black) 18%, var(--pl-surface-raised));
+  border-color: color-mix(in srgb, var(--border) 36%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-inbound-bubble {
+  background: var(--pl-surface-muted);
+  border-color: color-mix(in srgb, var(--border) 32%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-ai-draft {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+html[data-theme="dark"] .portal-inbox-ai-draft-text {
+  background: color-mix(in srgb, var(--primary) 5%, var(--pl-surface-raised));
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+}

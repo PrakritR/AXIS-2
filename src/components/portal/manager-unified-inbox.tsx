@@ -363,14 +363,14 @@ export function ManagerUnifiedInbox({
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-border p-2.5">
+      <div className="portal-inbox-list-toolbar shrink-0 border-b border-border p-2.5">
         <div className="relative min-w-0">
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search messages"
-            className="h-9 w-full rounded-full border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            className="portal-inbox-search h-9 w-full rounded-full border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
             data-attr="unified-inbox-search"
           />
         </div>
