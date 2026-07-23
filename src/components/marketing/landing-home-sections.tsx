@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ApplicationsPipelinePanel } from "@/components/marketing/landing-applications-pipeline";
 import { LandingDashboardChatDemo } from "@/components/marketing/landing-dashboard-chat-demo";
+import { LandingInboxApproveDemo } from "@/components/marketing/landing-inbox-approve-demo";
 import { BOOK_DEMO_HREF, MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
 import "./landing-proplane.css";
 
@@ -12,6 +13,7 @@ export function LandingHomeSections() {
   return (
     <>
       <LandingDashboardChatDemo />
+      <LandingInboxApproveDemo />
       <LearnSection />
       <WeekRoadmapSection />
       <OpsSkySection />
