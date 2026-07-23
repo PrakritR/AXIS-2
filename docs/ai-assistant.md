@@ -121,11 +121,13 @@ created.
   `axis-agent-action` trace per confirm/cancel. Traces carry the
   `TraceActor` metadata: role + landlordId (manager) or managerIds
   (resident/vendor). No-ops when `LANGFUSE_*` env is unset.
-- **PostHog** (ids/enums only, never PII): `assistant_opened {portal}`,
-  `assistant_message_sent {portal, tools, model, tier}`,
-  `assistant_action_proposed {portal, tool, batch}`,
-  `assistant_action_confirmed {portal, tool, batch}`,
-  `assistant_action_cancelled {portal, tool}`.
+- **PostHog** (ids/enums only, never PII): `assistant_opened` (the `/demo`
+  surface adds `{surface}`), `assistant_message_sent {portal, tools, model,
+  tier}`, `assistant_action_proposed {portal, tool, batch}`,
+  `assistant_action_confirmed {portal, action}`,
+  `assistant_action_denied {portal, known}`. There is no
+  `assistant_action_cancelled` — it died with the standalone confirm route;
+  denials are `assistant_action_denied`.
 
 ## Security model
 
@@ -138,13 +140,14 @@ created.
   system prompt forbids following instructions found in tool results or
   proposing actions because tool-result text asked.
 - **Cross-tenant isolation** is enforced three times: context resolution,
-  every tool's own scope filter, and execute-time re-resolution. Unit suites
+  every tool's own scope filter, and handler-time re-resolution. Unit suites
   (`tests/unit/tools/*scope-isolation*`, `pending-actions.test.ts`) seed
   foreign rows and assert they never surface.
-- **Anti-enumeration:** an unknown action id and a foreign actor's action id
-  are indistinguishable (404).
-- **Rate limits:** per-user on every chat route and the confirm endpoint;
-  per-IP on the public demo.
+- **Anti-enumeration:** every claim that does not land — unknown id, expired
+  row, already-confirmed row, another actor's row — returns the same 410, so a
+  response can never reveal that someone else's action id exists.
+- **Rate limits:** per-user on every chat route (confirm/deny posts back to the
+  same route, so it is rate-limited with the turn); per-IP on the public demo.
 - **Money invariants:** `approve_and_pay_work_order` transfers exactly the
   accepted bid's `amount_cents` (immutable anchor — never a model- or
   client-supplied amount); vendor `set_my_price` refuses once a bid is
@@ -169,7 +172,8 @@ inbox (`list_inbox_threads` R, `get_thread_messages` R, `reply_to_thread` W,
 `update_thread` W*),
 calendar (`list_calendar_events` R, `list_tour_inquiries` R,
 `update_manager_availability` W, `create_calendar_event` W,
-`cancel_calendar_event` W, `accept_tour_inquiry` W), work orders
+`cancel_calendar_event` W, `accept_tour_inquiry` W, `confirm_tour_inquiry` W —
+backs the approval-first auto-tour proposals), work orders
 (`list_work_orders` R, `list_work_order_bids` R, `suggest_vendors_for_work_order` R,
 `create_work_order` W, `assign_vendor` W, `offer_to_vendors` W,
 `schedule_vendor_visit` W, `accept_bid` W, `complete_work_order` W,
@@ -180,23 +184,30 @@ properties (`list_properties` R, `get_property_details` R, `create_property` W,
 W destructive, `record_move_out` W), applications (`list_applications` R,
 `get_application_details` R, `update_application_bucket` W,
 `order_background_check` W — env-gated, costs money), leases (`list_leases` R,
-`amend_lease` W, `void_lease` W destructive, `send_lease_for_signature` W),
+`create_lease_draft` W, `update_lease_draft` W, `amend_lease` W, `void_lease` W
+destructive, `send_lease_for_signature` W),
 vendors (`list_vendors` R, `add_vendor` W, `update_vendor` W,
 `invite_vendor` W), financials (`run_financial_report` R, `record_expense` W,
-`record_income` W — tier-gated), search (`find_records` R), profile
+`record_income` W — tier-gated), accounting (`financials-write.ts`:
+`create_manager_bill` W, `approve_manager_bill` W, `record_bill_payment` W,
+`create_manager_budget` W, `update_manager_budget` W, `dispose_security_deposit`
+W, `create_owner_distribution` W, `approve_owner_distribution` W,
+`reconcile_bank_statement_line` W), search (`find_records` R), profile
 (`get_manager_profile` R, `get_dashboard_summary` R), promotions
 (`list_promotions` R, `create_promotion` W, `update_promotion` W,
-`delete_promotion` W destructive), team (`list_co_managers` R), services
-(`list_service_requests` R).
+`delete_promotion` W destructive), team (`list_co_managers` R), documents
+(`list_documents` R), services (`list_service_requests` R,
+`decide_service_request` W).
 
 ### Resident (`src/lib/tools/resident-index.ts`)
 
 Reads: `get_my_balance`, `list_my_charges`, `get_my_lease`,
 `get_my_application_status`, `list_my_service_requests`,
 `list_my_work_orders`, `get_move_in_info`, `list_my_inbox_threads`,
-`get_my_payment_methods`, `get_my_scheduled_messages`. Writes:
+`get_my_payment_methods`, `get_my_scheduled_messages`,
+`list_my_shared_documents`. Writes:
 `create_service_request`, `add_service_request_note`,
-`send_message_to_manager`, `report_manual_payment`,
+`report_maintenance_issue`, `send_message_to_manager`, `report_manual_payment`,
 `request_lease_extension`, `schedule_message`, `cancel_scheduled_message`,
 `start_rent_payment` (returns a hosted Stripe Checkout link — the agent never
 completes a payment). Application-phase residents get only
@@ -209,16 +220,18 @@ Deliberately NOT tools: lease signing (legal ceremony — deep-link to
 ### Vendor (`src/lib/tools/vendor-index.ts`)
 
 Reads: `list_my_jobs`, `get_job_details`, `list_my_bids`, `list_my_offers`,
-`list_my_payouts`, `get_my_availability`, `list_my_inbox_threads`,
-`get_my_profile`. Writes: `submit_bid`, `set_my_price` (refuses once a bid is
-accepted), `mark_job_done`, `update_my_availability`,
-`send_message_to_manager`. Stripe Connect onboarding, W-9/tax, and document
-uploads stay on the Profile page (deep-link only).
+`list_my_payouts`, `get_my_availability`, `list_my_schedule`,
+`list_my_inbox_threads`, `get_my_profile`, plus invoicing
+(`list_vendor_invoices`, `list_vendor_payouts` — see
+`docs/agents/vendor-invoicing.md`). Writes: `submit_bid`, `set_my_price`
+(refuses once a bid is accepted), `mark_job_done`, `update_my_availability`,
+`send_message_to_manager`, `submit_vendor_invoice`. Stripe Connect onboarding,
+W-9/tax, and document uploads stay on the Profile page (deep-link only).
 
 ## How to add a new tool (checklist)
 
 1. **Define it** in the right `src/lib/tools/domains/` file (or a new one):
-   `defineTool` for reads, `defineWriteTool` for writes (preview + execute,
+   `defineTool` for reads, `defineWriteTool` for writes (preview + handler,
    audit row, dedupe key per the conventions above). Never accept identity
    fields; always scope queries to the context.
 2. **Back it with the shared lib.** If the capability lives in an API route,
@@ -249,7 +262,10 @@ uploads stay on the Profile page (deep-link only).
 | Stripe keys + Connect | no | rent checkout links, vendor payouts (tools report honestly when unconfigured) |
 
 Database: migrations `20260625000000_agent_observability.sql`
-(`audit_log`, `agent_sessions`, `agent_messages`) and
-`20260716090000_agent_pending_actions.sql` (`agent_pending_actions`,
-portal columns). Apply with `npm run db:push` (dev/test project only — see
+(`audit_log`, `agent_sessions`, `agent_messages`),
+`20260713000000_agent_pending_actions.sql` (creates `agent_pending_actions`,
+claimed on `user_id` + status `proposed`, 15-minute default expiry) and
+`20260716090000_agent_pending_actions.sql` (additive only — the `portal` and
+`session_id` columns; it must never rename the claim key). Apply with
+`npm run db:push` (dev/test project only — see
 `docs/database-environments.md`).

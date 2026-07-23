@@ -64,9 +64,10 @@ Vendor portal already defaults light (`SurfaceThemeDefault theme="light"` in
 
 **AI tools.** `src/lib/tools/domains/vendor-financials.ts` (`list_vendor_invoices`,
 `submit_vendor_invoice` [gated write], `list_vendor_payouts`) scope by
-`vendor_user_id = ctx.userId`, exactly like `landlordId`. They live in a SEPARATE
-`vendorAgentRegistry` (`src/lib/tools/index.ts`) so the manager `agentRegistry`
-never inherits vendor tools. **No W-9 / TIN tool exists in either registry** —
+`vendor_user_id = ctx.userId` and bind to `VendorAgentContext`, so a manager tool
+cannot even typecheck into their registry. They live in a SEPARATE
+`vendorAgentRegistry` (`src/lib/tools/vendor-index.ts`) so the manager
+`agentRegistry` never inherits vendor tools. **No W-9 / TIN tool exists in either registry** —
 self-service W-9 is UI-only (`/api/vendor/tax-profile`, which now also sets
 `vendor_tax_profiles.submitted_by_vendor = true`), per the `1099_candidates`
 exclusion precedent. `tests/unit/tools/vendor-financials.test.ts` enforces both

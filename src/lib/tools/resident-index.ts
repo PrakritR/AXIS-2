@@ -85,7 +85,11 @@ const TOOL_SECTION: Record<string, string> = {
 /** Tools available while the resident is still in the application phase. */
 const APPLICATION_PHASE_TOOLS = new Set(["get_my_application_status", "send_message_to_manager"]);
 
-/** Full registry (every resident tool) — used by the gated confirm endpoint. */
+/**
+ * Full registry (every resident tool), unfiltered by phase/tier. The chat route
+ * builds its own per-request registry with `buildResidentRegistry`, so this is
+ * the catalog-level view used by tests and any caller that needs every tool.
+ */
 export const residentAgentRegistry: ToolRegistry<ResidentAgentContext> = buildRegistry(ALL_RESIDENT_TOOLS);
 
 /**
