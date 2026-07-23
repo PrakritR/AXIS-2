@@ -19,7 +19,15 @@ import {
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
-import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import {
+  publishManagerPropertyDraftToServer,
+  saveManagerPropertyDraftToServer,
+  updateRequestChangeProperty,
+} from "@/lib/demo-admin-property-inventory";
+import {
+  listingSubmissionFingerprint,
+  listingWizardHasUnsavedInput,
+} from "@/lib/manager-listing-draft-autosave";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
@@ -641,6 +649,12 @@ export function listingWizardStepIndices(scope: ListingWizardScope): number[] {
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
+/** A step position restored from a saved draft, clamped to a step that exists today. */
+function clampWizardStep(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(LISTING_STEP_COUNT - 1, Math.max(0, Math.floor(value)));
+}
+
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
   home:        "Property type, address, layout, move-in access, amenities, and photos.",
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
@@ -964,9 +978,13 @@ export function ManagerAddListingForm({
   editListingId = null,
   editListingOwnerUserId = null,
   editRequestChangeId = null,
+  editDraftId = null,
   initialSubmission = null,
+  initialStepIndex = null,
+  initialMaxStepReached = null,
   noteKey = null,
   wizardScope = "full",
+  onSaved,
 }: {
   onClose: () => void;
   onSubmitted: () => void;
@@ -979,11 +997,22 @@ export function ManagerAddListingForm({
   editListingOwnerUserId?: string | null;
   /** adminRefId of a "request change" (edits requested by admin) row to save back to. */
   editRequestChangeId?: string | null;
+  /**
+   * Record id of a saved draft being resumed. Publishing re-uses this id
+   * (draft → live), and closing updates it in place rather than minting a
+   * second draft row.
+   */
+  editDraftId?: string | null;
   initialSubmission?: ManagerListingSubmissionV1 | null;
+  /** Wizard position saved with a draft, so resuming reopens where it was left. */
+  initialStepIndex?: number | null;
+  initialMaxStepReached?: number | null;
   /** Stable key for legacy localStorage house-detail notes, used to backfill houseRulesText if empty on the submission. */
   noteKey?: string | null;
   /** `preview` limits steps to public listing marketing content (floor plans, lease basics, amenities, etc.). */
   wizardScope?: ListingWizardScope;
+  /** Called after progress is auto-saved as a draft, so the list surface can refresh. */
+  onSaved?: () => void;
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => {
     const base = initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission();
@@ -996,11 +1025,14 @@ export function ManagerAddListingForm({
     };
   });
   const [busy, setBusy] = useState(false);
+  const [closingDraft, setClosingDraft] = useState(false);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
+  const resumedStepIndex = clampWizardStep(initialStepIndex);
+  const resumedMaxStepReached = Math.max(clampWizardStep(initialMaxStepReached), resumedStepIndex);
+  const [stepIndex, setStepIndex] = useState(resumedStepIndex);
   const [stepFieldErrors, setStepFieldErrors] = useState<Record<string, string>>({});
   const [maxStepReached, setMaxStepReached] = useState(() =>
-    (editPendingId ?? editListingId ?? editRequestChangeId) ? LISTING_STEP_COUNT - 1 : 0,
+    (editPendingId ?? editListingId ?? editRequestChangeId) ? LISTING_STEP_COUNT - 1 : resumedMaxStepReached,
   );
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
@@ -1054,6 +1086,25 @@ export function ManagerAddListingForm({
   const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
+  // The draft record this wizard owns. It starts as the resumed draft's id (if
+  // any) and is filled in by the first auto-save; publishing re-uses it, so the
+  // draft becomes the live listing rather than a second row.
+  const draftIdRef = useRef<string | null>(editDraftId?.trim() || null);
+  // Only the wizard that minted a provisional (`mgr-listing-…`) id may re-key it
+  // once a property name exists. A RESUMED draft's id is the drafts-table row
+  // key the list surface is rendering, so re-keying it would unmount the editor.
+  const draftIdMintedHereRef = useRef(!editDraftId?.trim());
+  // Snapshot of what the wizard opened with, captured on the first render and
+  // never recomputed. Closing only persists a draft when the manager actually
+  // changed something since then — an untouched wizard must not litter the
+  // Drafts stage with an "Untitled draft".
+  const baselineFingerprintRef = useRef<string | null>(null);
+  if (baselineFingerprintRef.current === null) {
+    baselineFingerprintRef.current = listingSubmissionFingerprint({
+      ...sub,
+      serviceRequestOptions: serviceOffers,
+    });
+  }
   const wizardSteps = useMemo(() => listingWizardStepIndices(wizardScope), [wizardScope]);
   const lastStepIndex = wizardSteps[wizardSteps.length - 1] ?? LISTING_STEP_COUNT - 1;
   const visibleStepPosition = Math.max(0, wizardSteps.indexOf(stepIndex));
@@ -1979,6 +2030,81 @@ export function ManagerAddListingForm({
     return out;
   };
 
+  /**
+   * A draft only makes sense for a listing that does not exist yet. Every edit
+   * mode (pending row, live listing, request-change row, preview scope) is
+   * changing a record that is already persisted somewhere else — saving one of
+   * those as a draft would fork it into a second record.
+   */
+  const draftAutoSaveEligible = !isEditMode && !isPreviewWizard;
+
+  /**
+   * Closing IS the save: persist whatever the manager has entered as a draft,
+   * then close. There is no "Save draft" button — this is the only save path
+   * for in-progress work, so it must not silently drop it. When the save fails
+   * the wizard deliberately stays open with the work intact rather than closing
+   * on a lie.
+   */
+  const closeWizard = () => {
+    if (!draftAutoSaveEligible) {
+      onClose();
+      return;
+    }
+    void saveDraftAndClose();
+  };
+
+  const saveDraftAndClose = async () => {
+    if (busy || closingDraft) return;
+    const existingDraftId = draftIdRef.current;
+    const current: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: serviceOffers };
+    const contentChanged = listingWizardHasUnsavedInput(current, baselineFingerprintRef.current ?? "");
+    // A resumed draft whose content is untouched can still have moved to another
+    // step; re-saving keeps the restored position honest.
+    const positionChanged = Boolean(
+      existingDraftId && (stepIndex !== resumedStepIndex || maxStepReached !== resumedMaxStepReached),
+    );
+    if (!contentChanged && !positionChanged) {
+      onClose();
+      return;
+    }
+    if (!authReady || !userId) {
+      showToast("Sign in to save your progress.");
+      onClose();
+      return;
+    }
+
+    setClosingDraft(true);
+    try {
+      let submission = current;
+      try {
+        submission = await uploadSubmissionMedia(current);
+        // Keep the uploaded URLs so a retried close does not re-upload the same
+        // bytes and orphan the first copies in the bucket.
+        setSub(submission);
+      } catch (err) {
+        // Photos are worth less than the typed listing: save the draft anyway
+        // rather than losing everything to a failed upload.
+        console.error("manager-add-listing-form: draft media upload failed", err);
+      }
+      const savedId = await saveManagerPropertyDraftToServer(submission, userId, {
+        existingDraftId,
+        stepIndex,
+        maxStepReached,
+        allowIdUpgrade: draftIdMintedHereRef.current,
+      });
+      if (!savedId) {
+        showToast("Could not save your progress. It is still here — check your connection and close again.");
+        return;
+      }
+      draftIdRef.current = savedId;
+      onSaved?.();
+      showToast("Progress saved to Drafts.");
+      onClose();
+    } finally {
+      setClosingDraft(false);
+    }
+  };
+
   const submitListing = async () => {
     const invalid = (() => {
       if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 5);
@@ -2105,11 +2231,18 @@ export function ManagerAddListingForm({
         onSubmitted();
         return;
       }
-      const id = await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
+      // Publishing a draft promotes the SAME record id draft → live, so the id
+      // the manager's saved progress already carries becomes the listing's
+      // permanent public URL — never a second row alongside the draft.
+      const draftId = draftIdRef.current;
+      const id = draftId
+        ? await publishManagerPropertyDraftToServer(draftId, uploadedSubmission, userId)
+        : await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
       if (!id) {
         showToast("Could not submit listing.");
         return;
       }
+      draftIdRef.current = null;
       if (isDemoModeActive()) {
         window.dispatchEvent(new CustomEvent(DEMO_LISTING_SUBMITTED_EVENT, { detail: { id } }));
       }
@@ -2141,7 +2274,7 @@ export function ManagerAddListingForm({
   return createPortal(
     <div
       className="modal-overlay fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) closeWizard(); }}
     >
       <form
         id="manager-add-listing-form"
@@ -2162,8 +2295,9 @@ export function ManagerAddListingForm({
             </div>
             <button
               type="button"
-              onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/30 text-muted hover:bg-accent/40"
+              onClick={closeWizard}
+              disabled={closingDraft}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/30 text-muted hover:bg-accent/40 disabled:opacity-60"
               aria-label="Close"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
@@ -4378,7 +4512,9 @@ export function ManagerAddListingForm({
                 <p className="mt-1 text-sm leading-6 text-muted">
                   {isEditMode
                     ? "Review each step, then submit your changes when the listing is ready for review."
-                    : "This form does not auto-save or auto-submit. Click Submit listing below when the listing is complete — it will go live on Rent with PropLane right away."}
+                    : isPreviewWizard
+                      ? "Review each step, then save the preview when it reads the way you want."
+                      : "Nothing is published until you click Submit listing below — then it goes live on Rent with PropLane right away. Close any time and your progress is saved to Drafts."}
                 </p>
               </div>
             </div>
@@ -4389,8 +4525,15 @@ export function ManagerAddListingForm({
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy}>
-                Close
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
+                data-attr="listing-wizard-close"
+                onClick={closeWizard}
+                disabled={busy || closingDraft}
+              >
+                {closingDraft ? "Saving progress…" : "Close"}
               </Button>
               {visibleStepPosition > 0 ? (
                 <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>

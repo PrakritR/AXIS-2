@@ -140,7 +140,7 @@ export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
   listed: "No listed properties.",
   unlisted: "No unlisted properties.",
-  drafts: "No saved drafts. Start a new property and tap Save draft to finish it later.",
+  drafts: "No saved drafts. Start a new property — close the wizard any time and your progress is saved here to finish later.",
 };
 
 /** A draft can be saved before it has a name — never render an empty title cell. */
