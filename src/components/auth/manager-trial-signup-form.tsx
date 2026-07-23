@@ -31,6 +31,12 @@ function trialSignupSubtitle(tier: PlanTierId): string {
   return `${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial · no card required`;
 }
 
+function dropOAuthReturnParams(tier: PlanTierId, billing: "monthly" | "annual"): void {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams({ mode: "create", role: "manager", tier, billing });
+  window.history.replaceState({}, "", `/auth/create-account?${params}`);
+}
+
 type SignedInUser = { id: string; email: string | null };
 
 /** Manager account creation — OAuth or email, no inline plan UI. */
@@ -55,19 +61,19 @@ export function ManagerTrialSignupForm({
 }) {
   const router = useRouter();
   const { showToast } = useAppUi();
+  const oauthReturn = googleReturn || accountReadyReturn;
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [finishingGoogle, setFinishingGoogle] = useState(googleReturn);
+  const [finishingOAuth, setFinishingOAuth] = useState(oauthReturn);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
   const [accountReady, setAccountReady] = useState(false);
   const [creatingAnother, setCreatingAnother] = useState(false);
 
-  const oauthReturn = googleReturn || accountReadyReturn;
-  const locked = disabled || busy || finishingGoogle;
+  const locked = disabled || busy || finishingOAuth;
 
   const readSignedInUser = useCallback(async (awaitOAuthSession: boolean): Promise<SignedInUser | null> => {
     const supabase = createSupabaseBrowserClient();
@@ -103,23 +109,28 @@ export function ManagerTrialSignupForm({
   );
 
   useEffect(() => {
-    if (!accountReadyReturn) return;
+    if (!accountReadyReturn || googleReturn) return;
     let cancelled = false;
     void (async () => {
-      const session = await fetchPartnerPricingSession();
-      if (cancelled) return;
-      if (session.authenticated && !session.needsPricing) setAccountReady(true);
+      try {
+        const session = await fetchPartnerPricingSession();
+        if (cancelled) return;
+        if (session.authenticated && !session.needsPricing) setAccountReady(true);
+        dropOAuthReturnParams(tier, billing);
+      } finally {
+        if (!cancelled) setFinishingOAuth(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [accountReadyReturn]);
+  }, [accountReadyReturn, googleReturn, tier, billing]);
 
   useEffect(() => {
     if (!googleReturn) return;
     let cancelled = false;
     void (async () => {
-      setFinishingGoogle(true);
+      setFinishingOAuth(true);
       try {
         const stored = readManagerPricingOffer();
         const offer =
@@ -138,18 +149,12 @@ export function ManagerTrialSignupForm({
         const continued = await continuePartnerPricingWithOffer(offer);
         if (cancelled) return;
         applyPricingResult(continued);
-        setSignedInUser(await readSignedInUser(true));
-        if (typeof window !== "undefined") {
-          const params = new URLSearchParams({
-            mode: "create",
-            role: "manager",
-            tier: offer.tier,
-            billing: offer.billing,
-          });
-          window.history.replaceState({}, "", `/auth/create-account?${params}`);
-        }
+        dropOAuthReturnParams(offer.tier, offer.billing);
+        const refreshed = await readSignedInUser(true);
+        if (cancelled) return;
+        setSignedInUser(refreshed);
       } finally {
-        if (!cancelled) setFinishingGoogle(false);
+        if (!cancelled) setFinishingOAuth(false);
       }
     })();
     return () => {
@@ -226,7 +231,7 @@ export function ManagerTrialSignupForm({
         {trialSignupSubtitle(tier)}
       </p>
 
-      {finishingGoogle ? (
+      {finishingOAuth ? (
         <p className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-sm text-muted">
           Finishing sign-in…
         </p>
