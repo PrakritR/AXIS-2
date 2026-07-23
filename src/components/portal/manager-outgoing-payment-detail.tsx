@@ -120,7 +120,7 @@ export function ManagerOutgoingPaymentDetail({
       showToast(
         paymentMethod === "ach"
           ? "Approved and paid through PropLane."
-          : `Marked paid — ${managerVendorPayMethodLabel(paymentMethod)}.`,
+          : `Marked paid · ${managerVendorPayMethodLabel(paymentMethod)}.`,
       );
       setPayConfirmOpen(false);
       onPaid?.();
@@ -209,7 +209,7 @@ export function ManagerOutgoingPaymentDetail({
       ) : null}
 
       {row.fromExpense && !row.workOrderId && row.bucket === "paid" ? (
-        <p className="text-xs text-muted">Logged expense — no vendor payout action required.</p>
+        <p className="text-xs text-muted">Logged expense. No vendor payout action required.</p>
       ) : null}
 
       {!hideActionBar ? (

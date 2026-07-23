@@ -29,7 +29,7 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
   const html = getLeaseDocumentHtml(row);
   const defaultEmpty =
     emptyHint ??
-    "No lease document yet — click Generate lease (from application data) or upload a PDF to preview it here.";
+    "No lease document yet. Click Generate lease (from application data) or upload a PDF to preview it here.";
 
   const syntheticHtml = useMemo(() => {
     if (pdfSrc || html || row.leaseDocumentRemovedAt) return null;
@@ -45,7 +45,7 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
       </p>
       {showSynthetic ? (
         <p className="border-b px-3 py-2 text-xs portal-banner-info">
-          Draft preview from saved application answers — use Generate to save a version to the pipeline, or upload a PDF.
+          Draft preview from saved application answers. Use Generate to save a version to the pipeline, or upload a PDF.
         </p>
       ) : null}
       {pdfSrc ? (

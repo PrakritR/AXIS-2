@@ -114,7 +114,7 @@ function validateField(
       return "Add at least one dropdown option (comma-separated).";
     }
     const key = field.key.trim() || customApplicationFieldKeyFromLabel(label, usedKeys);
-    if (usedKeys.has(key)) return "Duplicate question — rename or remove one of the copies.";
+    if (usedKeys.has(key)) return "Duplicate question. Rename or remove one of the copies.";
     usedKeys.add(key);
   }
   return null;

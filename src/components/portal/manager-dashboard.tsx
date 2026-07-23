@@ -93,6 +93,45 @@ const DOT_INFO = "var(--status-approved-fg)";
 
 type PillTone = "pending" | "success" | "danger" | "info";
 
+/**
+ * Status accent tokens for a whole "Needs attention" group — the header rail,
+ * title colour and count badge all read in the group's status colour so the
+ * queue is scannable by colour alone (overdue → red, pending review → orange,
+ * signatures/unread → blue, active → green). Reuses the shared `--status-*`
+ * tokens so it flips with the light/dark theme like every other status surface.
+ */
+type AttentionTone = PillTone;
+const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
+  danger: { fg: "var(--status-overdue-fg)", bg: "var(--status-overdue-bg)" },
+  pending: { fg: "var(--status-pending-fg)", bg: "var(--status-pending-bg)" },
+  info: { fg: "var(--status-approved-fg)", bg: "var(--status-approved-bg)" },
+  success: { fg: "var(--status-confirmed-fg)", bg: "var(--status-confirmed-bg)" },
+};
+
+/**
+ * Compact relative-time label ("in 3d", "2h ago", "now") for time-bearing
+ * attention rows — the live, at-a-glance timing the queue leans on. Falls back
+ * to `null` for unparseable input so callers can drop the meta entirely.
+ */
+function relativeFromNow(iso: string | undefined | null, nowMs: number): string | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const diff = t - nowMs;
+  const past = diff < 0;
+  const abs = Math.abs(diff);
+  const min = Math.round(abs / 60000);
+  if (min < 1) return "now";
+  const suffix = (n: number, unit: string) => (past ? `${n}${unit} ago` : `in ${n}${unit}`);
+  if (min < 60) return suffix(min, "m");
+  const hr = Math.round(min / 60);
+  if (hr < 24) return suffix(hr, "h");
+  const day = Math.round(hr / 24);
+  if (day < 7) return suffix(day, "d");
+  const wk = Math.round(day / 7);
+  return suffix(wk, "w");
+}
+
 /** Small theme-aware status pill (light/dark flip via `.portal-badge-*`). */
 function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
   return (
@@ -210,6 +249,8 @@ function AttentionGroup<T>({
   title,
   href,
   sectionId,
+  tone,
+  order = 0,
   badge,
   items,
   emptyMessage,
@@ -219,6 +260,10 @@ function AttentionGroup<T>({
   title: string;
   href: string;
   sectionId: DashboardSectionId;
+  /** Status colour for the whole group (rail + title + count when non-empty). */
+  tone: AttentionTone;
+  /** Stable position for the staggered entrance delay (0-based). */
+  order?: number;
   badge?: ReactNode;
   items: T[];
   emptyMessage: string;
@@ -229,13 +274,23 @@ function AttentionGroup<T>({
   const { isNative } = useIsNativeApp();
   const count = items.length;
   const isEmpty = count === 0;
+  const accent = ATTENTION_TONE[tone];
   // null → follow the "open when non-empty" default (reactive to async loads);
   // boolean → the manager's explicit tap wins.
   const [override, setOverride] = useState<boolean | null>(null);
   const open = override ?? !isEmpty;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <div
+      className="pl-attn-enter overflow-hidden rounded-lg border border-border bg-card"
+      style={{
+        animationDelay: `${Math.min(order, 8) * 55}ms`,
+        // A status rail on the leading edge — only lit when the group has items,
+        // so empty groups stay quiet instead of shouting a colour with a 0 next to it.
+        borderLeftWidth: isEmpty ? undefined : 3,
+        borderLeftColor: isEmpty ? undefined : accent.fg,
+      }}
+    >
       <div
         role="button"
         tabIndex={0}
@@ -252,13 +307,19 @@ function AttentionGroup<T>({
         className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
       >
         <PortalTableExpandChevron expanded={open} />
-        <h3 className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] text-muted [html[data-native]_&]:leading-snug">
+        <h3
+          className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] [html[data-native]_&]:leading-snug"
+          style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
+        >
           {title}
         </h3>
         <span
-          className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
-            isEmpty ? "text-muted/60" : "bg-[var(--secondary)] text-foreground"
-          }`}
+          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums"
+          style={
+            isEmpty
+              ? { color: "color-mix(in srgb, var(--muted) 60%, transparent)" }
+              : { background: accent.bg, color: accent.fg }
+          }
         >
           {count}
         </span>
@@ -453,7 +514,7 @@ function DashboardTrends({ payments, expenses }: { payments: MonthPoint[]; expen
         </div>
       ) : (
         <p className="mt-4 text-sm text-muted [html[data-native]_&]:text-xs">
-          No payments or expenses recorded yet — collected rent and logged expenses will chart here.
+          No payments or expenses recorded yet. Collected rent and logged expenses will chart here.
         </p>
       )}
     </div>
@@ -781,16 +842,23 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
           <DashboardTrends payments={paymentsByMonth} expenses={expensesByMonth} />
         ) : null}
 
-        {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
+        {/* Needs attention — a live, colour-coded queue: big all-caps heading over
+            status-railed group cards that stream in with a staggered entrance. */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">
-          <div className="flex items-center gap-2">
-            <span aria-hidden className="text-primary">
+          <div className="flex items-center gap-2.5">
+            <span aria-hidden className="text-primary text-xl leading-none [html[data-native]_&]:text-lg">
               ✦
             </span>
-            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
+            <h2 className="text-2xl font-extrabold uppercase leading-none tracking-[0.02em] text-foreground [html[data-native]_&]:text-xl">
+              Needs Attention
+            </h2>
             {openCount > 0 ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
-                <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
+                <span
+                  aria-hidden
+                  className="pl-attn-pulse size-1.5 rounded-full"
+                  style={{ background: DOT_CONFIRMED }}
+                />
                 {openCount} open
               </span>
             ) : null}
@@ -810,6 +878,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Tour requests"
               href={`${BASE}/calendar`}
               sectionId="tours"
+              tone="pending"
+              order={0}
               items={pendingTours}
               emptyMessage="No pending tour requests right now."
               keyForItem={(tour) => tour.id}
@@ -819,7 +889,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                   dot={DOT_PENDING}
                   title={tour.label}
                   subtitle={tour.propertyTitle || "—"}
-                  meta={fmt(tour.start)}
+                  meta={relativeFromNow(tour.start, nowMs) ?? fmt(tour.start)}
                   pill={<StatusPill tone="pending">Pending</StatusPill>}
                   dataAttr="dashboard-attention-tour"
                 />
@@ -832,8 +902,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Applications"
               href={`${BASE}/applications`}
               sectionId="applications"
+              tone="pending"
+              order={1}
               items={pendingApps}
-              emptyMessage="No pending applications — you're all caught up."
+              emptyMessage="No pending applications. You're all caught up."
               keyForItem={(app) => app.id}
               renderRow={(app: DemoApplicantRow) => (
                 <IssueRow
@@ -853,6 +925,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Leases pending signature"
               href={`${BASE}/leases`}
               sectionId="leases"
+              tone="info"
+              order={2}
               items={pendingLeaseRows}
               emptyMessage="No leases waiting for a signature."
               keyForItem={(lease) => lease.id}
@@ -882,6 +956,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Residents"
               href={`${BASE}/residents/current`}
               sectionId="residents"
+              tone="success"
+              order={3}
               items={activeResidents}
               emptyMessage="No current residents yet."
               keyForItem={(lease) => lease.id}
@@ -904,6 +980,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Pending & overdue payments"
               href={`${BASE}/payments`}
               sectionId="payments"
+              tone={overdueChargeCount > 0 ? "danger" : "pending"}
+              order={4}
               badge={
                 overdueChargeCount > 0 ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
@@ -946,6 +1024,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Services"
               href={`${BASE}/services/requests`}
               sectionId="services"
+              tone="pending"
+              order={5}
               badge={
                 pendingServiceCount > 0 ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
@@ -975,8 +1055,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Inbox"
               href={`${BASE}/communication/inbox/unopened`}
               sectionId="inbox"
+              tone="info"
+              order={6}
               items={inboxThreads}
-              emptyMessage="No unread messages — inbox is clear."
+              emptyMessage="No unread messages. Inbox is clear."
               keyForItem={(thread) => thread.id}
               renderRow={(thread) => (
                 <IssueRow

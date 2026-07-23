@@ -52,7 +52,7 @@ export function LandingDemoHero() {
 
             <p className="landing-hero-sub mt-5 max-w-[40ch] text-[15.5px] leading-relaxed sm:text-[16px]">
               One platform for managers, residents, and vendors. It drafts leases from applications,
-              collects rent, chases late fees, and pays vendors — then hands you a single queue to
+              collects rent, chases late fees, and pays vendors, then hands you a single queue to
               approve. Real double-entry books underneath.
             </p>
 
@@ -143,7 +143,7 @@ function NeedsAttentionCard() {
           ✦
         </span>
         <p className="landing-attention-footnote min-w-0 flex-1 text-[12.5px] leading-snug">
-          Every AI action is previewed — nothing sends without your OK.
+          Every AI action is previewed. Nothing sends without your OK.
         </p>
         <span
           aria-hidden

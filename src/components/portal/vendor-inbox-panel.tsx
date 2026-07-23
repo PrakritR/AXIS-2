@@ -224,7 +224,7 @@ export const VendorInboxPanel = forwardRef<
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
     setRetainedIds((prev) => new Set(prev).add(id));
-    showToast("Marked as read — moves to Opened after refresh.");
+    showToast("Marked as read. Moves to Opened after refresh.");
   };
 
   const markUnread = useCallback(

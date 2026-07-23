@@ -20,7 +20,7 @@ type DemoPhase =
 
 const USER_MSG = "Chase overdue rent on Maple 2A and queue a reminder for my approval.";
 const ASSISTANT_MSG =
-  "Drafted a rent reminder for Jordan Lee · Maple 2A ($1,240). It's under Needs attention — nothing sends until you approve.";
+  "Drafted a rent reminder for Jordan Lee · Maple 2A ($1,240). It's under Needs attention. Nothing sends until you approve.";
 
 /**
  * Presentational 1:1 manager dashboard + PropLane Assistant side panel.
@@ -167,7 +167,7 @@ export function LandingDashboardChatDemo() {
         <header className="lp-dash-demo-intro">
           <h2>Ask PropLane. Watch the dashboard move.</h2>
           <p>
-            The same manager home you use in the portal — KPIs, Needs attention, and approvals — with the
+            The same manager home you use in the portal (KPIs, Needs attention, and approvals) with the
             assistant drafting beside it.
           </p>
         </header>
@@ -404,7 +404,7 @@ function DemoDashboardShell({
         <AttentionGroup title="Tour requests" linkLabel="Calendar →">
           <IssueRow
             dot={DOT_PENDING}
-            title="Cascade 4B — Sat 11:00a"
+            title="Cascade 4B · Sat 11:00a"
             subtitle="Priya N. · Cascade Court"
             meta="Sat"
             pill={<StatusPill tone="pending">Pending</StatusPill>}
@@ -445,7 +445,7 @@ function DemoDashboardShell({
             <IssueRow
               dot={DOT_INFO}
               title="PropLane · Rent reminder draft"
-              subtitle="Jordan Lee · Maple 2A — ready to approve"
+              subtitle="Jordan Lee · Maple 2A · ready to approve"
               pill={<StatusPill tone="info">AI draft</StatusPill>}
               highlight
             />

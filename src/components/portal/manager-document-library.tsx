@@ -245,7 +245,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
               : row,
           ),
         );
-        showToast("Signature requested — resident notified in inbox.");
+        showToast("Signature requested. Resident notified in inbox.");
       } catch (e) {
         showToast(e instanceof Error ? e.message : "Failed to request signature.");
       }
@@ -626,7 +626,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         propertyOptions={propertyOptions}
         vendorRows={vendorRows.filter((v) => v.active !== false)}
         supersedeDocumentId={versionTarget?.id}
-        title={versionTarget ? `Upload new version — ${versionTarget.displayName}` : "Upload new version"}
+        title={versionTarget ? `Upload new version · ${versionTarget.displayName}` : "Upload new version"}
         versionMode
         onUploaded={(doc) => {
           setDocuments((cur) => [doc, ...cur.filter((row) => row.id !== versionTarget?.id)]);

@@ -335,7 +335,7 @@ export function CosignerApplyFlow({
         style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
       >
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Co-signer form received</p>
-        <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Thank you — you&apos;re all set</h2>
+        <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Thank you, you&apos;re all set</h2>
         <p className="mt-3 text-sm leading-relaxed text-foreground">
           Your co-signer details are on file and linked to the primary application. The property manager can review everything under{" "}
           <strong className="text-foreground">Property Portal → Applications</strong> on the primary applicant&apos;s record. The
@@ -399,7 +399,7 @@ export function CosignerApplyFlow({
     >
       <div className="border-b border-border pb-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
-          Step {step} of {COSIGNER_STEPS} — Co-signer form
+          Step {step} of {COSIGNER_STEPS} · Co-signer form
         </p>
         <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{stepTitle}</p>
         <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
@@ -523,7 +523,7 @@ export function CosignerApplyFlow({
                   className={err("dlNumber")}
                 />
               </Field>
-              <Field fieldKey="ssn" label="Social Security #" hint="9 digits — ###-##-####" error={fieldErrors.ssn}>
+              <Field fieldKey="ssn" label="Social Security #" hint="9 digits: ###-##-####" error={fieldErrors.ssn}>
                 <Input
                   value={f.ssn}
                   onChange={(e) => {
@@ -704,7 +704,7 @@ export function CosignerApplyFlow({
                     className={err("employmentStart")}
                   />
                 </Field>
-                <Field label="Other / Non-Employment Income ($)" optional hint="Optional — e.g. rental income, investments">
+                <Field label="Other / Non-Employment Income ($)" optional hint="Optional, e.g. rental income, investments">
                   <Input
                     value={f.otherIncome}
                     onChange={(e) => patchField(setF, "otherIncome", e.target.value)}

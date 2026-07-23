@@ -78,7 +78,7 @@ function ManagerPlanPickerInner() {
         <AuthPageHeader
           eyebrow="Manager"
           title="Choose your plan"
-          subtitle={`Pro and Business include a ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial — no card required`}
+          subtitle={`Pro and Business include a ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial · no card required`}
           accent={false}
         />
 
@@ -97,7 +97,7 @@ function ManagerPlanPickerInner() {
 
         <p className="auth-plan-price-block mt-4 text-center text-xs text-muted sm:mt-5">
           {selectedTierId === "free"
-            ? `${selected.label} — no card required`
+            ? `${selected.label} · no card required`
             : `${selected.label} · ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then downgrades to Free`}
         </p>
 

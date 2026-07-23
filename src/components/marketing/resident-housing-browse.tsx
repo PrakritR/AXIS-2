@@ -354,7 +354,7 @@ function BrowseFiltersInline({
       <ResidentHousingChat
         onApplyFilters={onApplyChatFilters}
         title="What would you like in your next home?"
-        subtitle="Tell PropLane your move-in dates, budget, neighborhood, room type, or bathroom setup — we'll filter the homes below."
+        subtitle="Tell PropLane your move-in dates, budget, neighborhood, room type, or bathroom setup, and we'll filter the homes below."
         placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
         showMatchListings={false}
       />
@@ -491,7 +491,7 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
           <ResidentHousingChat
             onApplyFilters={applyChatFilters}
             title="What would you like in your next home?"
-            subtitle="Describe the type of home you want — room setup, budget, neighborhood, or move-in dates."
+            subtitle="Describe the type of home you want: room setup, budget, neighborhood, or move-in dates."
             placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
             showMatchListings={false}
           />
@@ -537,8 +537,8 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
           <p className="text-base font-semibold text-foreground">No homes match right now</p>
           <p className="mt-2 text-sm text-muted">
             {activeFilterCount > 0
-              ? "Try adjusting your filters — new listings are added as managers publish."
-              : "Check back soon — managers add listings as they go live."}
+              ? "Try adjusting your filters. New listings are added as managers publish."
+              : "Check back soon. Managers add listings as they go live."}
           </p>
           {activeFilterCount > 0 ? (
             <button

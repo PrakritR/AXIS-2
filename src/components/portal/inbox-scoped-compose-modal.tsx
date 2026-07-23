@@ -171,7 +171,7 @@ export function ScopedInboxComposeModal({
       setSubject(detail?.subject?.trim() || "Lease renewal reminder");
       setBody(
         detail?.body?.trim() ||
-          "Hi — just a friendly reminder that your lease renewal paperwork is ready whenever you want to review it.",
+          "Hi, just a friendly reminder that your lease renewal paperwork is ready whenever you want to review it.",
       );
       const email = detail?.residentEmail?.trim().toLowerCase();
       if (email) {

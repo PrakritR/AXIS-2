@@ -426,9 +426,9 @@ export function ManagerApplications() {
     const screening = params.get("screening");
     if (!screening) return;
     if (screening === "paid") {
-      showToast("Payment received — the background check is starting now.");
+      showToast("Payment received. The background check is starting now.");
     } else if (screening === "cancelled") {
-      showToast("Payment cancelled — no screening was ordered.");
+      showToast("Payment cancelled. No screening was ordered.");
     }
     params.delete("screening");
     params.delete("session_id");
@@ -661,8 +661,8 @@ export function ManagerApplications() {
         openMailtoHref(data.mailtoHref);
         showToast(
           res.status === 503
-            ? "Email isn't configured — opened a draft in your mail app instead."
-            : `Couldn't send automatically${data.error ? ` (${data.error})` : ""} — opened a draft in your mail app.`,
+            ? "Email isn't configured. Opened a draft in your mail app instead."
+            : `Couldn't send automatically${data.error ? ` (${data.error})` : ""}. Opened a draft in your mail app.`,
         );
         return;
       }
@@ -909,7 +909,7 @@ export function ManagerApplications() {
     </ManagerPortalPageShell>
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}
-        title="Approve application — account setup email"
+        title="Approve application: account setup email"
         onClose={() => setApprovePreviewRow(null)}
         recipient={approvePreviewRow?.email ?? ""}
         subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
@@ -946,7 +946,7 @@ export function ManagerApplications() {
         recipient={reminderPreview?.to ?? ""}
         subject={reminderPreview?.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT}
         body={reminderPreview?.text ?? ""}
-        intro="Choose Email and/or SMS — always saved to Axis inbox."
+        intro="Choose Email and/or SMS. Always saved to Axis inbox."
         showSkipMessage={false}
         showChannelPicker
         emailAvailable

@@ -52,7 +52,7 @@ export function AdminCreateResidentClient() {
         <h1 className={PORTAL_PAGE_TITLE}>Create resident account</h1>
       </div>
       <p className="mt-2 max-w-xl text-sm text-muted">
-        Provisions a resident portal login. Application approval stays off until your workflow marks them approved—this
+        Provisions a resident portal login. Application approval stays off until your workflow marks them approved. This
         path is separate from manager provisioning.
       </p>
 

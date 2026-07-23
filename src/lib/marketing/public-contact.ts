@@ -15,17 +15,18 @@ export const MANAGER_GET_STARTED_HREF =
 export const BOOK_DEMO_HREF = "/contact?tab=schedule";
 
 /**
- * Public social profiles, rendered as the footer icon row.
+ * Public social profiles, rendered as the footer icon row: Instagram, TikTok,
+ * YouTube, LinkedIn.
  *
- * Every default below is deliberately EMPTY: we do not hold a confirmed handle
- * on any of these networks yet, and a public footer link to an unclaimed handle
- * either 404s or hands a squatter our brand. An empty href drops that icon from
- * the footer entirely, so the row only ever renders profiles someone has
- * confirmed by setting `NEXT_PUBLIC_SOCIAL_*` in the environment. Do not
- * hardcode a URL here to "fill in" a network — supply it via env once the
- * account actually exists.
+ * We do not hold a confirmed handle on most of these networks yet, and a public
+ * link to an unclaimed handle either 404s or hands a squatter our brand — so the
+ * defaults are the deliberately-neutral placeholder `PLACEHOLDER_SOCIAL_HREF`
+ * ("#"), which renders the icon (the brand row is a design requirement) but does
+ * NOT point anywhere real. `isPlaceholderSocialHref` lets the renderer drop the
+ * new-tab target for those. Supply the real profile URL via `NEXT_PUBLIC_SOCIAL_*`
+ * once an account exists; do not hardcode a guessed handle here.
  */
-export type PublicSocialId = "instagram" | "x" | "linkedin" | "facebook";
+export type PublicSocialId = "instagram" | "tiktok" | "youtube" | "linkedin";
 
 export type PublicSocialLink = {
   id: PublicSocialId;
@@ -34,30 +35,36 @@ export type PublicSocialLink = {
   href: string;
 };
 
+/** Neutral, non-navigating placeholder for a network we have no handle on yet. */
+export const PLACEHOLDER_SOCIAL_HREF = "#";
+
+/** True when `href` is unset or the neutral placeholder (no real destination). */
+export function isPlaceholderSocialHref(href: string): boolean {
+  return href.length === 0 || href === PLACEHOLDER_SOCIAL_HREF;
+}
+
 const SOCIAL_DEFAULTS: Record<PublicSocialId, { label: string; href: string }> = {
-  instagram: { label: "PropLane on Instagram", href: "" },
-  x: { label: "PropLane on X", href: "" },
-  linkedin: { label: "PropLane on LinkedIn", href: "" },
-  facebook: { label: "PropLane on Facebook", href: "" },
+  instagram: { label: "PropLane on Instagram", href: PLACEHOLDER_SOCIAL_HREF },
+  tiktok: { label: "PropLane on TikTok", href: PLACEHOLDER_SOCIAL_HREF },
+  youtube: { label: "PropLane on YouTube", href: PLACEHOLDER_SOCIAL_HREF },
+  linkedin: { label: "PropLane on LinkedIn", href: PLACEHOLDER_SOCIAL_HREF },
 };
 
 const SOCIAL_ENV: Record<PublicSocialId, string | undefined> = {
   // Read as literals so Next can inline them into the client bundle.
   instagram: process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM,
-  x: process.env.NEXT_PUBLIC_SOCIAL_X,
+  tiktok: process.env.NEXT_PUBLIC_SOCIAL_TIKTOK,
+  youtube: process.env.NEXT_PUBLIC_SOCIAL_YOUTUBE,
   linkedin: process.env.NEXT_PUBLIC_SOCIAL_LINKEDIN,
-  facebook: process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK,
 };
 
 export const PUBLIC_SOCIAL_LINKS: PublicSocialLink[] = (
   Object.keys(SOCIAL_DEFAULTS) as PublicSocialId[]
-)
-  .map((id) => {
-    const override = SOCIAL_ENV[id]?.trim();
-    return {
-      id,
-      label: SOCIAL_DEFAULTS[id].label,
-      href: override === undefined ? SOCIAL_DEFAULTS[id].href : override,
-    };
-  })
-  .filter((link) => link.href.length > 0);
+).map((id) => {
+  const override = SOCIAL_ENV[id]?.trim();
+  return {
+    id,
+    label: SOCIAL_DEFAULTS[id].label,
+    href: override && override.length > 0 ? override : SOCIAL_DEFAULTS[id].href,
+  };
+});

@@ -1141,7 +1141,7 @@ export function PortalCalendarPanels({
   const tourConfirmPreviewModal = (
     <PortalNotificationPreviewModal
       open={tourConfirmPreview !== null}
-      title="Confirm tour — guest notification preview"
+      title="Confirm tour · guest notification preview"
       onClose={() => setTourConfirmPreview(null)}
       recipient={tourConfirmPreview?.meeting.email ?? ""}
       subject={tourConfirmPreview?.subject ?? ""}
@@ -1589,7 +1589,7 @@ export function PortalCalendarPanels({
           >
             <div className="space-y-5">
               <p className="text-sm text-muted">
-                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones — nothing is removed.
+                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones; nothing is removed.
               </p>
               <div className="space-y-2">
                 {otherProperties.map((p) => (

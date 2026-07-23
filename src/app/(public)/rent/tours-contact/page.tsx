@@ -791,7 +791,7 @@ function Step2({
       {selectedDay && (
         <div>
           <p className="mb-3 text-sm font-semibold text-foreground">
-            Available times — {MONTHS[calMonth]} {selectedDay}
+            Available times · {MONTHS[calMonth]} {selectedDay}
           </p>
           {openSlots.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-3 text-sm text-muted">

@@ -211,7 +211,7 @@ export function ManagerPropertyHouseDetailsPanel({
           <HouseDetailRow label="House rules" value={houseRulesText} />
           <HouseDetailRow label="General info" value={generalHouseInfo} badge="Residents only" />
           {!hasAny ? (
-            <p className="px-4 py-3 text-sm text-muted">No house details yet — click Edit to add.</p>
+            <p className="px-4 py-3 text-sm text-muted">No house details yet. Click Edit to add.</p>
           ) : null}
         </div>
       </PortalCollapsibleSection>

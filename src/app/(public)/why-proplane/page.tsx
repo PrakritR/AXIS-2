@@ -11,7 +11,7 @@ import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 export const metadata: Metadata = {
   title: "Why PropLane",
   description:
-    "AI drafts leases, tours, messages, and rent work — you approve every write. One platform for managers, residents, and vendors with real double-entry books.",
+    "AI drafts leases, tours, messages, and rent work. You approve every write. One platform for managers, residents, and vendors with real double-entry books.",
 };
 
 const PILLARS = [
@@ -20,15 +20,15 @@ const PILLARS = [
     title: "AI drafts. You approve.",
     body: "Chatbot and leasing SMS prepare the work. Leases, reminders, and vendor outreach never send without your OK.",
     points: [
-      ["Leases from applications", "Terms filled from the applicant — e-sign when you release."],
+      ["Leases from applications", "Terms filled from the applicant; e-sign when you release."],
       ["Automatic messages", "Rent, lease-ready, and visit updates draft first; you send."],
-      ["Scheduled tours", "Prospects book from listings or text — slots land on your calendar."],
+      ["Scheduled tours", "Prospects book from listings or text; slots land on your calendar."],
     ],
   },
   {
     eyebrow: "Three portals",
     title: "Managers, residents, vendors.",
-    body: "Same product, scoped correctly. Everyone works in PropLane — not parallel inboxes.",
+    body: "Same product, scoped correctly. Everyone works in PropLane, not parallel inboxes.",
     points: [
       ["Managers", "Leasing, rent, services, inbox, finances, and AI approvals."],
       ["Residents", "Browse, apply, pay rent (ACH free), and message your manager."],
@@ -42,7 +42,7 @@ const PILLARS = [
     points: [
       ["Trial balance & GL", "Always balanced from the same source of truth."],
       ["Owner statements", "Per property, ready to send."],
-      ["Deposit trust", "Security deposits book as liability — not income."],
+      ["Deposit trust", "Security deposits book as liability, not income."],
     ],
   },
 ] as const;
@@ -55,10 +55,10 @@ const OLD_WAY = [
 ] as const;
 
 const PROPLANE_WAY = [
-  "AI drafts the lease from the application — you review, both sides e-sign.",
+  "AI drafts the lease from the application; you review, both sides e-sign.",
   "Rent collects on-platform via Stripe; reminders draft, you approve send.",
   "Work orders invite bids; approved work pays out through Connect.",
-  "Double-entry posts itself — trial balance, trust, owner statements.",
+  "Double-entry posts itself: trial balance, trust, owner statements.",
 ] as const;
 
 const PRICING_TIERS = [
@@ -72,7 +72,7 @@ export default function WhyPropLanePage() {
     <MarketingPageShell>
       <MarketingHero
         title="Property ops that wait for your OK"
-        subtitle="Tours. Texts. Rent. Approvals. One platform — AI drafts, you confirm."
+        subtitle="Tours. Texts. Rent. Approvals. One platform. AI drafts, you confirm."
       >
         <MarketingCtaPair
           primaryLabel="Get started free"

@@ -134,7 +134,7 @@ function ManagerIdContent() {
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-muted/70">Save this — you&apos;ll need it to access support or activate your account later.</p>
+        <p className="mt-2 text-xs text-muted/70">Save this; you&apos;ll need it to access support or activate your account later.</p>
       </div>
 
       {/* Steps */}

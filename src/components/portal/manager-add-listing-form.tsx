@@ -658,7 +658,7 @@ function LeaseUtilitiesEditor({
             </GridField>
             {line.paidBy === "included_in_rent" ? (
               <GridField>
-                <FieldLabel hint="Optional — resident pays any overage above this cap.">
+                <FieldLabel hint="Optional. Resident pays any overage above this cap.">
                   Included allowance / cap
                 </FieldLabel>
                 <Input
@@ -914,7 +914,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   home:        "Property type, address, layout, move-in access, amenities, and photos.",
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
   bathrooms:   "Bathroom name, location, and amenities for the public listing.",
-  spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
+  spaces:      "Shared areas: name, location, and amenities (kitchen, laundry, lounge, outdoor).",
   lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
   finish:      "Sidebar quick facts and final submit.",
 };
@@ -1713,7 +1713,7 @@ export function ManagerAddListingForm({
       ...s,
       rooms: [...s.rooms.slice(0, i + 1), copy, ...s.rooms.slice(i + 1)],
     }));
-    showToast("Room duplicated — edit the copy below.");
+    showToast("Room duplicated. Edit the copy below.");
   };
 
   const addBathroom = () => {
@@ -1830,7 +1830,7 @@ export function ManagerAddListingForm({
         strikethrough: "",
         promo:
           kind === "whole_house"
-            ? "Rent the full home as one lease — all rooms included."
+            ? "Rent the full home as one lease. All rooms included."
             : "Select any rooms that can be rented together.",
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
         includedRoomIds,
@@ -2411,7 +2411,7 @@ export function ManagerAddListingForm({
       // them back. Saying "save again here" is the only retry that works.
       showToast(
         mediaFailed
-          ? "Draft saved without your photos — the upload failed. Tap Save draft again before closing this window to retry them."
+          ? "Draft saved without your photos. The upload failed. Tap Save draft again before closing this window to retry them."
           : "Draft saved. Continue anytime from Properties → Drafts.",
       );
       onSaved?.();
@@ -2424,7 +2424,7 @@ export function ManagerAddListingForm({
     // A draft save in flight has not yet handed back the draft id, so publishing
     // now would create a second record alongside the draft being written.
     if (savingDraft) {
-      showToast("Saving your draft — try again in a moment.");
+      showToast("Saving your draft. Try again in a moment.");
       return;
     }
     const invalid = (() => {
@@ -2852,7 +2852,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Optional — only if the layout is unusual.">Extra layout note</FieldLabel>
+                <FieldLabel hint="Optional. Only if the layout is unusual.">Extra layout note</FieldLabel>
                 <Input
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
@@ -2901,7 +2901,7 @@ export function ManagerAddListingForm({
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional for draft — recommended before you go live.</p>
+                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional for draft. Recommended before you go live.</p>
                   )}
                 </div>
                 <div
@@ -2921,7 +2921,7 @@ export function ManagerAddListingForm({
                       <button type="button" onClick={clearHouseVideo} className="text-xs font-medium text-rose-600 hover:text-rose-800">Remove video</button>
                     </div>
                   ) : (
-                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
+                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional. MP4, MOV, or WebM.</p>
                   )}
                 </div>
               </div>
@@ -2973,7 +2973,7 @@ export function ManagerAddListingForm({
             id="edit-lease"
             title="Pricing"
             description={
-              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount — enter 0 when you do not charge it, and it stays off the public listing.</>
+              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount. Enter 0 when you do not charge it, and it stays off the public listing.</>
             }
           >
             <div className="space-y-5">
@@ -2999,7 +2999,7 @@ export function ManagerAddListingForm({
                 title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
                 description={
                   isEntireHome
-                    ? "One monthly lease for the full unit — utilities and proration apply to the whole home."
+                    ? "One monthly lease for the full unit. Utilities and proration apply to the whole home."
                     : "Set rent, utilities estimate, and proration for each bedroom you are listing."
                 }
               >
@@ -3051,7 +3051,7 @@ export function ManagerAddListingForm({
                           (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
                             ? "Not billed separately when included in rent."
                             : (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                              ? "Optional — typical monthly cost shown on the listing."
+                              ? "Optional. Typical monthly cost shown on the listing."
                               : "Monthly estimate used in signing totals."
                         }
                       >
@@ -3102,7 +3102,7 @@ export function ManagerAddListingForm({
                         <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <GridField>
-                            <FieldLabel hint={room.rentBasis === "daily" ? "Optional when this room is priced by the day — shown only as an estimate." : undefined}>
+                            <FieldLabel hint={room.rentBasis === "daily" ? "Optional when this room is priced by the day. Shown only as an estimate." : undefined}>
                               {room.rentBasis === "daily" ? "Monthly rent (optional)" : "Monthly rent *"}
                             </FieldLabel>
                             <div className="relative" data-wizard-field={roomRentKey}>
@@ -3127,7 +3127,7 @@ export function ManagerAddListingForm({
                                 (room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
                                   ? "Not billed separately when included in rent."
                                   : (room.utilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                                    ? "Optional — typical monthly cost shown on the listing."
+                                    ? "Optional. Typical monthly cost shown on the listing."
                                     : "Monthly estimate billed with rent through the portal."
                               }
                             >
@@ -3300,7 +3300,7 @@ export function ManagerAddListingForm({
                       </div>
                     </GridField>
                     <GridField>
-                      <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
+                      <FieldLabel hint="Move-in fee for short-term stays. Used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
@@ -3902,7 +3902,7 @@ export function ManagerAddListingForm({
                     }
                   >
                       <GridField>
-                        <FieldLabel hint="Autofilled — edit anytime.">Room name</FieldLabel>
+                        <FieldLabel hint="Autofilled. Edit anytime.">Room name</FieldLabel>
                         <div data-wizard-field={roomNameKey}>
                           <Input
                             value={room.name}
@@ -4062,7 +4062,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                            <p className="mt-3 text-[11px] text-muted">No photos yet. Up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -4084,7 +4084,7 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            <p className="mt-3 text-sm text-primary">Uploading video. This may take a moment…</p>
                           ) : (
                           <p className="mt-3 text-sm text-muted">Drag and drop one room video here, or use the button above.</p>
                           )}
@@ -4255,7 +4255,7 @@ export function ManagerAddListingForm({
                     }
                   >
                       <div className="sm:col-span-2" data-wizard-field={bathNameKey}>
-                        <FieldLabel hint="Autofilled — edit anytime.">Name</FieldLabel>
+                        <FieldLabel hint="Autofilled. Edit anytime.">Name</FieldLabel>
                         <Input
                           value={b.name}
                           className={wizardFieldErrorClass(Boolean(bathNameErr))}
@@ -4451,7 +4451,7 @@ export function ManagerAddListingForm({
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                            <p className="mt-3 text-[11px] text-muted">No photos yet. Up to 8 images. Images are auto-compressed.</p>
                           )}
                         </div>
                       </div>
@@ -4472,7 +4472,7 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            <p className="mt-3 text-sm text-primary">Uploading video. This may take a moment…</p>
                           ) : (
                           <p className="mt-3 text-sm text-muted">Drag and drop one bathroom video here, or use the button above.</p>
                           )}
@@ -4493,7 +4493,7 @@ export function ManagerAddListingForm({
                               </button>
                             </div>
                           ) : (
-                            <p className="mt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
+                            <p className="mt-2 text-[11px] text-muted">Optional. MP4, MOV, or WebM.</p>
                           )}
                         </div>
                       </div>
@@ -4740,7 +4740,7 @@ export function ManagerAddListingForm({
                                 ))}
                               </div>
                             ) : (
-                              <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
+                              <p className="mt-3 text-[11px] text-muted">No photos yet. Up to 8 images. Images are auto-compressed.</p>
                             )}
                           </div>
                         </div>
@@ -4761,7 +4761,7 @@ export function ManagerAddListingForm({
                               {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
                             </MediaPickTrigger>
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
-                              <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                              <p className="mt-3 text-sm text-primary">Uploading video. This may take a moment…</p>
                             ) : (
                               <p className="mt-3 text-sm text-muted">Drag and drop one video here, or use the button above.</p>
                             )}

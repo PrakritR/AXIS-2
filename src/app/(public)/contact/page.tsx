@@ -54,7 +54,7 @@ function ContactInner() {
         <div className="lp-w max-w-[560px]">
           <h1 className="lp-page-title lp-page-title-wide">Connect with the PropLane team</h1>
           <p className="lp-page-lede">
-            Schedule a demo or send a message — whatever works best for you.
+            Schedule a demo or send a message, whatever works best for you.
           </p>
 
           <div className="mt-6">

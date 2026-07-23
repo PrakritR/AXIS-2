@@ -94,7 +94,7 @@ export function PortalTextNotificationsBlock({
       }
       setCodeSent(true);
       setCodeInput("");
-      showToast("Code sent — check your texts.");
+      showToast("Code sent. Check your texts.");
     } catch {
       showToast("Network error.");
     } finally {
@@ -248,7 +248,7 @@ export function PortalTextNotificationsBlock({
           ) : null}
           {smsConfigured ? null : (
             <p className="text-xs text-muted">
-              Text notifications aren&apos;t available yet — they&apos;ll turn on once your property
+              Text notifications aren&apos;t available yet. They&apos;ll turn on once your property
               manager connects texting.
             </p>
           )}

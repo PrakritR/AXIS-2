@@ -109,7 +109,7 @@ export function ManagerEditLeasesModal({
       >
         <p className="text-sm text-muted">
           Choose which properties&apos; lease documents you want to edit. When you select multiple, the same settings
-          apply to all — standard PropLane lease, custom terms, or an uploaded template.
+          apply to all: standard PropLane lease, custom terms, or an uploaded template.
         </p>
 
         <div className="mt-4 space-y-3">

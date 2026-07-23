@@ -162,9 +162,9 @@ export function ManagerApplicationReadonlyReview({
       <ReviewSection title="Additional details">
         <Row k="Occupants" v={displayOrDash(form.occupancyCount)} />
         <Row k="Pets" v={displayOrDash(form.pets)} />
-        <Row k="Eviction" v={form.evictionHistory === "yes" ? `Yes — ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
-        <Row k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
-        <Row k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
+        <Row k="Eviction" v={form.evictionHistory === "yes" ? `Yes: ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
+        <Row k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes: ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
+        <Row k="Criminal history" v={form.criminalHistory === "yes" ? `Yes: ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
       </ReviewSection>
       {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
         <ReviewSection title="Manager questions">

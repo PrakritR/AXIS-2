@@ -290,7 +290,7 @@ export function ServiceRequestCard({
           </a>
           <p className="mt-1.5 text-xs text-muted">
             {req.depositPaid
-              ? "Deposit refunded — return complete."
+              ? "Deposit refunded. Return complete."
               : "Awaiting manager review to refund deposit."}
           </p>
         </>
@@ -1090,7 +1090,7 @@ export function ResidentServicesPanel({
     // Manager notification (inbox + email + SMS) fires server-side on the
     // mirror write — a second client-side send here would double-notify.
     void notifyDetails;
-    showToast(`${notifyTitle} requested — awaiting manager approval.`);
+    showToast(`${notifyTitle} requested. Awaiting manager approval.`);
     resetService();
     setModalMode("none");
     await syncServiceRequestsFromServer({ force: true });
@@ -1368,7 +1368,7 @@ export function ResidentServicesPanel({
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
         panelClassName="max-w-lg"
       >
-        <p className="text-xs text-muted">Describe the issue — your property manager will be notified.</p>
+        <p className="text-xs text-muted">Describe the issue. Your property manager will be notified.</p>
         <div className="mt-4 grid gap-3">
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Title</p>
@@ -1583,7 +1583,7 @@ export function ResidentServicesPanel({
                         className="bg-card"
                       />
                       <p className="mt-1 text-[10px] text-muted">
-                        Maximum you&apos;re willing to pay — your manager confirms the final amount.
+                        Maximum you&apos;re willing to pay. Your manager confirms the final amount.
                       </p>
                     </div>
                   </>
@@ -1664,7 +1664,7 @@ export function ResidentServicesPanel({
         onClose={() => setEditingWorkOrder(null)}
         panelClassName="max-w-lg"
       >
-        <p className="text-xs text-muted">Update your maintenance request — your property manager sees these changes.</p>
+        <p className="text-xs text-muted">Update your maintenance request. Your property manager sees these changes.</p>
         <div className="mt-4 grid gap-3">
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Title</p>

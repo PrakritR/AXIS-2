@@ -282,7 +282,7 @@ export function VendorCalendarPanel() {
         ];
         setAvailabilityRules(next);
         notifyAvailabilityChanged(next);
-        showToast("Marked flexible — visits can auto-schedule by your timing preferences.");
+        showToast("Marked flexible. Visits can auto-schedule by your timing preferences.");
         return;
       }
 
@@ -296,7 +296,7 @@ export function VendorCalendarPanel() {
         showToast(result.error ?? "Could not mark day as flexible.");
         return;
       }
-      showToast("Marked flexible — visits can auto-schedule by your timing preferences.");
+      showToast("Marked flexible. Visits can auto-schedule by your timing preferences.");
       await reloadAvailability();
     },
     [availabilityRules, demo, reloadAvailability, showToast],

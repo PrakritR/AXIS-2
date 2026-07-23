@@ -20,7 +20,7 @@ const RESIDENT_FAQS: FaqItem[] = [
     a: (
       <>
         Sign in to the resident portal and open <strong className="font-medium text-foreground">Payments</strong>.
-        Rent is processed securely through Stripe — you can pay by bank transfer or card, and set up reminders so you
+        Rent is processed securely through Stripe. You can pay by bank transfer or card, and set up reminders so you
         never miss a due date.
       </>
     ),
@@ -56,7 +56,7 @@ const RESIDENT_FAQS: FaqItem[] = [
     q: "Is there a mobile app?",
     a: (
       <>
-        Yes — PropLane is available for iOS and Android. Download the app and sign in with the same account you use on the
+        Yes, PropLane is available for iOS and Android. Download the app and sign in with the same account you use on the
         web. Enable push notifications to get rent reminders and messages instantly.
       </>
     ),
@@ -78,7 +78,7 @@ const MANAGER_FAQS: FaqItem[] = [
     q: "How do I get started as a property manager?",
     a: (
       <>
-        Create an account, add your properties, and invite residents — applications, screening, leases, and rent
+        Create an account, add your properties, and invite residents. Applications, screening, leases, and rent
         collection all run from the manager portal. For a guided walkthrough,{" "}
         <Link href="/partner/contact?tab=schedule" className="font-medium text-primary hover:opacity-90">
           schedule a meeting
@@ -107,7 +107,7 @@ const MANAGER_FAQS: FaqItem[] = [
     q: "How is my data kept secure?",
     a: (
       <>
-        Data is encrypted in transit, access is scoped per account, and payments are handled by Stripe — we never store
+        Data is encrypted in transit, access is scoped per account, and payments are handled by Stripe, so we never store
         full card or bank numbers. Read the details in our{" "}
         <Link href="/privacy" className="font-medium text-primary hover:opacity-90">
           Privacy Policy

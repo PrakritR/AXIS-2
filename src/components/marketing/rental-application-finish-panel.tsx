@@ -123,7 +123,7 @@ export function RentalApplicationFinishPanel({
           ? canCreateAccount
             ? "Create your resident portal account now to track your application."
             : emailFailed
-              ? "Application saved — we could not send the setup email automatically."
+              ? "Application saved. We could not send the setup email automatically."
               : email
                 ? `Check ${email} for your resident account setup link.`
                 : "Check your email for your resident account setup link."
@@ -134,7 +134,7 @@ export function RentalApplicationFinishPanel({
 
       {syncError ? (
         <p className="mt-3 text-[12px] text-amber-800 sm:text-sm">
-          Sync issue — {guestFlow ? "try submitting again, or sign in if you already have an account." : "sign in to confirm your application status."}
+          Sync issue: {guestFlow ? "try submitting again, or sign in if you already have an account." : "sign in to confirm your application status."}
         </p>
       ) : null}
 

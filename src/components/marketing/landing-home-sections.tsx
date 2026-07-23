@@ -50,7 +50,7 @@ export function LearnSection() {
       <div className="lp-w">
         <h2>Learn how to manage your house</h2>
         <p className="lp-lede">
-          Short guides for automating messages and tours — then PropLane turns each step into tasks you
+          Short guides for automating messages and tours, then PropLane turns each step into tasks you
           approve.
         </p>
         <div className="lp-chapters">
@@ -126,7 +126,7 @@ function WeekRoadmapSection() {
             <div className="lp-icon-box" aria-hidden>
               <span className="lp-icon-mark" />
             </div>
-            <h3>Tour to keys — same flow</h3>
+            <h3>Tour to keys · same flow</h3>
             <Link href="/why-proplane" data-attr="home-roadmap-leasing" className="lp-more">
               See leasing workflows →
             </Link>

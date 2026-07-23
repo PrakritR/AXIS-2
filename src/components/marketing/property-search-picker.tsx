@@ -153,7 +153,7 @@ export function PropertySearchPicker({
                 {displayQuery.trim()
                   ? `${filtered.total} ${filtered.total === 1 ? "match" : "matches"}`
                   : filtered.truncated
-                    ? `Showing ${filtered.items.length} of ${filtered.total} properties — search to find yours faster`
+                    ? `Showing ${filtered.items.length} of ${filtered.total} properties. Search to find yours faster`
                     : `${filtered.total} ${filtered.total === 1 ? "property" : "properties"}`}
               </p>
               <ul

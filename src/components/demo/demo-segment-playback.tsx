@@ -408,7 +408,7 @@ async function runInboxSegment(frame: HTMLElement, nav: DemoPlaybackNav): Promis
     new CustomEvent(DEMO_INBOX_REPLY_PREFILL_EVENT, {
       detail: {
         rowId: DEMO_RESIDENT_INBOX_THREAD_ID,
-        text: "Thanks — I'll review the renewal paperwork tonight.",
+        text: "Thanks, I'll review the renewal paperwork tonight.",
       },
     }),
   );

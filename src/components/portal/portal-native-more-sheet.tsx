@@ -79,7 +79,7 @@ function MoreNavRow({
             ? "text-muted/80"
             : "text-foreground hover:bg-accent/70"
       }`}
-      aria-label={item.locked ? `${item.label} — locked` : item.label}
+      aria-label={item.locked ? `${item.label} (locked)` : item.label}
     >
       {showNavIcons ? (
         <span className={`shrink-0 ${item.locked ? "opacity-60" : ""}`} aria-hidden>

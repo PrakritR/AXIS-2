@@ -387,7 +387,7 @@ export function ResidentOtherDocumentsTable({
   loading,
   onRemove,
   demo = false,
-  emptyMessage = "No documents yet. Use Add above to upload one — anything your manager shares with you will appear here too.",
+  emptyMessage = "No documents yet. Use Add above to upload one. Anything your manager shares with you will appear here too.",
 }: {
   uploads: UploadedOwnLease[];
   loading: boolean;
@@ -545,11 +545,11 @@ export function ResidentOtherDocumentsTable({
           />
         ) : ownIsText ? (
           <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap break-words bg-white p-4 text-sm text-foreground">
-            {ownText ?? "Preview isn't available for this file — use Download to open it."}
+            {ownText ?? "Preview isn't available for this file. Use Download to open it."}
           </pre>
         ) : ownIsPdf ? null : (
           <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
-            Preview isn&apos;t available for this file type — use Download to open it.
+            Preview isn&apos;t available for this file type. Use Download to open it.
           </div>
         )}
       </DocumentInlineViewer>
@@ -572,7 +572,7 @@ export function ResidentOtherDocumentsTable({
           <img src={sharedUrl} alt={selected.name} className="max-h-[720px] w-full bg-white object-contain" />
         ) : sharedIsPdf ? null : (
           <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
-            Preview isn&apos;t available for this file type — use Download to open it.
+            Preview isn&apos;t available for this file type. Use Download to open it.
           </div>
         )}
       </DocumentInlineViewer>
