@@ -2,7 +2,7 @@
  * Thin custom agent loop on the Anthropic SDK with native tool-calling. The
  * model orchestrates and explains, the system computes. Read tools run
  * directly; a write tool call runs its READ-ONLY preview phase and halts the
- * turn with a proposedAction — nothing executes until the user confirms
+ * turn with a pendingAction — nothing executes until the user confirms
  * through the gated endpoint. Reliability guards: a max-iteration cap and
  * pause_turn handling. Tool results are returned to the model as data, never
  * as instructions.
@@ -14,8 +14,7 @@ import {
   type ActionPreview,
   toAnthropicTools,
   runReadTool,
-  prepareWriteAction,
-  executeWriteAction,
+  previewWriteTool,
 } from "@/lib/tools/registry";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { selectModel, type ModelTier } from "./model";
@@ -26,9 +25,9 @@ export type ToolTraceEntry = { tool: string; ok: boolean };
 export type TurnUsage = { inputTokens: number; outputTokens: number };
 
 /** A write tool the model proposed; the turn halted awaiting user confirmation. */
-export type ProposedAction = {
+export type PendingActionProposal = {
   toolName: string;
-  /** Zod-validated + preview-normalized. Persisted server-side, never sent to the client. */
+  /** Zod-validated. Persisted server-side, never sent to the client. */
   input: unknown;
   preview: ActionPreview;
   destructive: boolean;
@@ -40,8 +39,8 @@ export type AgentTurnResult = {
   model: string;
   tier: ModelTier;
   usage: TurnUsage;
-  /** Present => the turn halted on a write-tool proposal. */
-  proposedAction?: ProposedAction;
+  /** Present => the turn halted on a write-tool proposal awaiting confirmation. */
+  pendingAction?: PendingActionProposal;
 };
 
 /**
@@ -97,17 +96,34 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
   /** Portal-specific system prompt; defaults to the manager prompt. */
   system?: string;
   observer?: AgentObserver;
+  /** Pin the model instead of routing by complexity (the SMS agents do this). */
+  model?: { model: string; tier: ModelTier };
+  /**
+   * Write tools this surface lets the model call WITHOUT a confirmation card.
+   * An explicit per-surface allowlist (e.g. the vendor SMS agent's
+   * escalate_to_manager, where no human is present on a webhook turn) so a
+   * write tool added to a registry later can never become autonomously
+   * callable by accident.
+   */
+  allowWriteTools?: readonly string[];
+  /**
+   * Hide every write tool the surface has not allow-listed. Set by surfaces with
+   * NO confirmation UI (the SMS agents): a proposal there could never be shown
+   * or confirmed, so the model must not be able to make one.
+   */
+  readOnly?: boolean;
 }): Promise<AgentTurnResult> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env
   const system = opts.system ?? SYSTEM_PROMPT;
-  const tools = toAnthropicTools(opts.registry);
+  const allowWrite = opts.allowWriteTools ?? [];
+  const tools = toAnthropicTools(opts.registry, { allowWrite, readOnly: opts.readOnly });
   const messages: Anthropic.MessageParam[] = [...opts.messages];
   const toolTrace: ToolTraceEntry[] = [];
 
   // Route the turn once, up front, based on its complexity, and use that model
   // for every iteration of the loop (switching models mid-turn would thrash the
   // prompt cache). Token usage accumulates across iterations for cost tracing.
-  const { model, tier } = selectModel(opts.messages);
+  const { model, tier } = opts.model ?? selectModel(opts.messages);
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
   const observer = opts.observer;
@@ -175,10 +191,10 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
     // abandoned tool_use blocks never reach a future API call.
     const gatedWrite = toolUses.find((u) => {
       const t = opts.registry.get(u.name);
-      return t?.kind === "write" && t.confirm !== "none";
+      return t?.kind === "write" && !allowWrite.includes(u.name);
     });
     if (gatedWrite) {
-      const prepared = await prepareWriteAction(opts.registry, opts.ctx, gatedWrite.name, gatedWrite.input);
+      const prepared = await previewWriteTool(opts.registry, opts.ctx, gatedWrite.name, gatedWrite.input);
       notify(
         observer?.onPendingAction &&
           (() =>
@@ -203,11 +219,11 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
           model,
           tier,
           usage,
-          proposedAction: {
+          pendingAction: {
             toolName: gatedWrite.name,
             input: prepared.input,
             preview: prepared.preview,
-            destructive: Boolean(prepared.tool.destructive),
+            destructive: prepared.destructive,
           },
         };
       }
@@ -228,7 +244,7 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
           continue;
         }
         const tool = opts.registry.get(use.name);
-        if (tool?.kind === "write" && tool.confirm !== "none") {
+        if (tool?.kind === "write" && !allowWrite.includes(use.name)) {
           toolTrace.push({ tool: use.name, ok: false });
           results.push({
             type: "tool_result",
@@ -238,7 +254,7 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
           });
           continue;
         }
-        const result = await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, observer);
+        const result = await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, allowWrite, observer);
         results.push(result);
       }
       messages.push({ role: "user", content: results });
@@ -249,7 +265,7 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
 
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const use of toolUses) {
-      results.push(await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, observer));
+      results.push(await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, allowWrite, observer));
     }
     messages.push({ role: "user", content: results });
   }
@@ -264,9 +280,9 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
 }
 
 /**
- * Run a tool the loop may execute inline: read tools, and low-risk
- * confirm:"none" write tools (preview → execute in one step; still
- * audit-logged inside execute()).
+ * Run a tool the loop may execute inline: read tools, plus any write tool this
+ * surface allow-listed (still audit-logged inside its own handler). Everything
+ * else is refused here — a gated write only ever executes from the confirm gate.
  */
 async function runInlineTool<Ctx>(
   registry: ToolRegistry<Ctx>,
@@ -274,27 +290,12 @@ async function runInlineTool<Ctx>(
   use: Anthropic.ToolUseBlock,
   iteration: number,
   toolTrace: ToolTraceEntry[],
+  allowWrite: readonly string[],
   observer?: AgentObserver,
 ): Promise<Anthropic.ToolResultBlockParam> {
-  const tool = registry.get(use.name);
-  let ok: boolean;
-  let output: unknown;
-
-  if (tool?.kind === "write" && tool.confirm === "none") {
-    const prepared = await prepareWriteAction(registry, ctx, use.name, use.input);
-    if (!prepared.ok) {
-      ok = false;
-      output = prepared.error;
-    } else {
-      const executed = await executeWriteAction(registry, ctx, use.name, prepared.input);
-      ok = executed.ok;
-      output = executed.ok ? { done: true, result: executed.reply } : executed.error;
-    }
-  } else {
-    const result = await runReadTool(registry, ctx, use.name, use.input);
-    ok = result.ok;
-    output = result.ok ? result.data : result.error;
-  }
+  const result = await runReadTool(registry, ctx, use.name, use.input, { allowWrite });
+  const ok = result.ok;
+  const output = result.ok ? result.data : result.error;
 
   toolTrace.push({ tool: use.name, ok });
   notify(

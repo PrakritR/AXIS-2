@@ -146,7 +146,6 @@ export const updateApplicationBucketTool = defineWriteTool({
   name: "update_application_bucket",
   description:
     "Move one of the landlord's applications between the pending, approved, and rejected buckets. Pass an application id from list_applications. Approving also turns the applicant's resident portal access on (rejected/pending turns it off); it does not send the welcome email — use send_resident_welcome for that.",
-  kind: "write",
   inputSchema: z
     .object({
       applicationId: z.string().min(1).describe("The application id, from list_applications."),
@@ -156,11 +155,11 @@ export const updateApplicationBucketTool = defineWriteTool({
   preview: async (ctx, input) => {
     const rec = await loadOwnedApplicationRecord(ctx, input.applicationId);
     if (!rec) {
-      return { ok: false, error: "No application with that id belongs to this landlord. Use list_applications to get valid ids." };
+      throw new Error("No application with that id belongs to this landlord. Use list_applications to get valid ids.");
     }
     const r = (rec.row_data ?? {}) as DemoApplicantRow;
     if (r.bucket === input.bucket) {
-      return { ok: false, error: `This application is already ${input.bucket} — nothing to change.` };
+      throw new Error(`This application is already ${input.bucket} — nothing to change.`);
     }
     const email = (r.email || rec.resident_email || "").trim().toLowerCase();
     const lines = [
@@ -177,29 +176,25 @@ export const updateApplicationBucketTool = defineWriteTool({
         : []),
     ];
     return {
-      ok: true,
-      input,
-      preview: {
-        title:
-          input.bucket === "approved"
+      kind: "update_application_bucket",
+      title: input.bucket === "approved"
             ? "Approve application"
             : input.bucket === "rejected"
               ? "Reject application"
               : "Move application to pending",
-        summary: `Move ${r.name || rec.id}'s application from ${r.bucket ?? "—"} to ${input.bucket}.`,
-        lines,
-        confirmLabel: input.bucket === "approved" ? "Approve" : input.bucket === "rejected" ? "Reject" : "Move to pending",
-      },
+      summary: `Move ${r.name || rec.id}'s application from ${r.bucket ?? "—"} to ${input.bucket}.`,
+      fields: lines,
+      confirmLabel: input.bucket === "approved" ? "Approve" : input.bucket === "rejected" ? "Reject" : "Move to pending",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve the owned record at execute time; never trust stored input.
     const rec = await loadOwnedApplicationRecord(ctx, input.applicationId);
-    if (!rec) return { ok: false, error: "No application with that id belongs to this landlord." };
+    if (!rec) throw new Error("No application with that id belongs to this landlord.");
     const rowData = (rec.row_data && typeof rec.row_data === "object" ? rec.row_data : {}) as Record<string, unknown>;
     const r = rowData as unknown as DemoApplicantRow;
     if (r.bucket === input.bucket) {
-      return { ok: true, reply: `This application is already ${input.bucket}.` };
+      return { reply: `This application is already ${input.bucket}.` };
     }
 
     // One-shot per application+bucket: re-approving after a bounce records anew
@@ -212,8 +207,8 @@ export const updateApplicationBucketTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `This application was already moved to ${input.bucket}.` };
-      return { ok: false, error: "Could not record the action; nothing was changed." };
+      if (audit.duplicate) return { reply: `This application was already moved to ${input.bucket}.` };
+      throw new Error("Could not record the action; nothing was changed.");
     }
 
     // Read-merge-write the CURRENT row_data with the same fields the UI's
@@ -234,7 +229,7 @@ export const updateApplicationBucketTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { error: "update_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
 
     // Matching the UI flow: every bucket transition syncs the resident's
@@ -259,11 +254,7 @@ export const updateApplicationBucketTool = defineWriteTool({
       bucket === "approved" && email
         ? " Their portal access is on — use send_resident_welcome to send account setup."
         : "";
-    return {
-      ok: true,
-      reply: `Moved ${r.name || rec.id}'s application to ${bucket}.${tail}`,
-      resultSummary: { applicationId: rec.id, bucket, approvalSynced },
-    };
+    return { reply: `Moved ${r.name || rec.id}'s application to ${bucket}.${tail}`, resultSummary: { applicationId: rec.id, bucket, approvalSynced } };
   },
 });
 
@@ -312,7 +303,6 @@ export const orderBackgroundCheckTool = defineWriteTool({
   name: "order_background_check",
   description:
     "Order a paid background/screening check (Checkr or Certn) for one of the landlord's applicants. This charges the landlord's saved payment method. Pass an application id from list_applications; the applicant must have consented to screening on their application.",
-  kind: "write",
   inputSchema: z
     .object({
       applicationId: z.string().min(1).describe("The application id, from list_applications."),
@@ -326,53 +316,50 @@ export const orderBackgroundCheckTool = defineWriteTool({
     // Env-gate first: an unconfigured deployment gets an honest error, never a
     // preview that cannot execute.
     const resolved = resolveScreeningProvider(input.provider);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const provider = resolved.provider;
 
     const rec = await loadOwnedApplicationRecord(ctx, input.applicationId);
     if (!rec) {
-      return { ok: false, error: "No application with that id belongs to this landlord. Use list_applications to get valid ids." };
+      throw new Error("No application with that id belongs to this landlord. Use list_applications to get valid ids.");
     }
     const r = (rec.row_data ?? {}) as DemoApplicantRow;
     if (!r.application) {
-      return { ok: false, error: "This record has no rental application on file to screen (it may be a manually added resident)." };
+      throw new Error("This record has no rental application on file to screen (it may be a manually added resident).");
     }
     if (r.application.consentCredit !== true) {
-      return { ok: false, error: "The applicant did not authorize credit/background screening on their application, so a check cannot be ordered." };
+      throw new Error("The applicant did not authorize credit/background screening on their application, so a check cannot be ordered.");
     }
     const inProgress = screeningInProgressError(r, provider);
-    if (inProgress) return { ok: false, error: inProgress };
+    if (inProgress) throw new Error(inProgress);
 
     const packageLabel = provider === "checkr" ? `Checkr "${checkrPackage()}"` : "Certn standard screening";
     const costCents = provider === "checkr" ? checkrOrderCostCents(checkrPackage(), []) : screeningCostCents();
     const costLabel = `$${(costCents / 100).toFixed(2)}`;
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Order background check",
-        summary: `Order a ${provider} background check for ${r.name || rec.id} (${costLabel}).`,
-        lines: [
+      kind: "order_background_check",
+      title: "Order background check",
+      summary: `Order a ${provider} background check for ${r.name || rec.id} (${costLabel}).`,
+      fields: [
           { label: "Applicant", value: r.name ? `${r.name}${r.email ? ` <${(r.email || "").trim().toLowerCase()}>` : ""}` : rec.id },
           { label: "Provider", value: provider },
           { label: "Package", value: packageLabel },
           { label: "Cost", value: costLabel },
           { label: "Consent on file", value: "Yes" },
         ],
-        confirmLabel: "Order check",
-        warning: `This orders a paid screening (${costLabel}) charged to your saved payment method. It is not refundable once the vendor starts the report.`,
-      },
+      confirmLabel: "Order check",
+      warnings: [`This orders a paid screening (${costLabel}) charged to your saved payment method. It is not refundable once the vendor starts the report.`],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const resolved = resolveScreeningProvider(input.provider);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (!resolved.ok) throw new Error(resolved.error);
     const provider = resolved.provider;
 
     // Re-resolve ownership at execute time — the screening libs are called with
     // ctx.landlordId, and the record must be this landlord's own.
     const rec = await loadOwnedApplicationRecord(ctx, input.applicationId);
-    if (!rec) return { ok: false, error: "No application with that id belongs to this landlord." };
+    if (!rec) throw new Error("No application with that id belongs to this landlord.");
     const r = (rec.row_data ?? {}) as DemoApplicantRow;
 
     // One-shot per application+provider: a money-moving order must never
@@ -386,9 +373,9 @@ export const orderBackgroundCheckTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `A ${provider} check was already ordered for this applicant.` };
+        return { reply: `A ${provider} check was already ordered for this applicant.` };
       }
-      return { ok: false, error: "Could not record the action; no check was ordered." };
+      throw new Error("Could not record the action; no check was ordered.");
     }
 
     const result =
@@ -409,17 +396,13 @@ export const orderBackgroundCheckTool = defineWriteTool({
       // Order never went through (config, plan, consent, payment, or vendor
       // error): clear the dedupe key so a corrected retry can order fresh.
       await updateAuditResult(ctx, dedupeKey, { error: result.code ?? "order_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     const status = provider === "checkr"
       ? (result as { backgroundCheck: { status: string } }).backgroundCheck.status
       : (result as { screening: { status: string } }).screening.status;
     await updateAuditResult(ctx, dedupeKey, { applicationId: rec.id, provider, status });
-    return {
-      ok: true,
-      reply: `Ordered the ${provider} background check for ${r.name || rec.id} — current status: ${status}. Results will appear on the application when the report completes.`,
-      resultSummary: { applicationId: rec.id, provider, status },
-    };
+    return { reply: `Ordered the ${provider} background check for ${r.name || rec.id} — current status: ${status}. Results will appear on the application when the report completes.`, resultSummary: { applicationId: rec.id, provider, status } };
   },
 });

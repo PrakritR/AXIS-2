@@ -1,7 +1,21 @@
 import { z } from "zod";
 import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
-import { normalizeLeasePipelineRow, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { randomUUID } from "node:crypto";
+import {
+  leaseAllowsManagerDocumentEdits,
+  normalizeLeasePipelineRow,
+  type LeasePipelineRow,
+} from "@/lib/lease-pipeline-storage";
+import {
+  applyLeaseDraftUpdate,
+  buildLeaseDraft,
+  buildLeaseDraftPreview,
+  type CreateLeaseDraftInput,
+  type UpdateLeaseDraftInput,
+} from "./leases-logic";
+import { loadManagerApplications } from "./residents";
+import { findOwnedResident } from "./residents-logic";
 import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease } from "@/lib/lease-amendment.server";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { loadAllManagerRows } from "./load-manager-rows";
@@ -86,7 +100,6 @@ export const amendLeaseTool = defineWriteTool({
   name: "amend_lease",
   description:
     "Change a fully signed lease's move-out (end) date — extend, renew, or shorten it. Pass the lease id from list_leases and the new end date; extensions are checked against the room's availability first and rejected with the conflict reason if the room is booked.",
-  kind: "write",
   inputSchema: z
     .object({
       leaseId: z.string().min(1).describe("Id of the lease to amend, from list_leases."),
@@ -99,49 +112,44 @@ export const amendLeaseTool = defineWriteTool({
   preview: async (ctx, input) => {
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
     if (!record) {
-      return {
-        ok: false,
-        error: `No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`,
-      };
+      throw new Error(`No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`);
     }
     const row = normalizeLeasePipelineRow(record.row_data);
     if (row.status !== "Fully Signed") {
-      return { ok: false, error: "Only fully signed leases can be renewed or extended." };
+      throw new Error("Only fully signed leases can be renewed or extended.");
     }
     const currentEnd = row.application?.leaseEnd ?? "";
     if (input.newLeaseEnd === currentEnd) {
-      return { ok: false, error: "The new move-out date is the same as the current lease end date." };
+      throw new Error("The new move-out date is the same as the current lease end date.");
     }
     const availability = await checkMoveOutAvailabilityForLease(ctx.db, row, record, input.newLeaseEnd);
     if (!availability.ok) {
       const nextAvailable = availability.nextAvailableDate
         ? ` Next available date: ${availability.nextAvailableDate}.`
         : "";
-      return { ok: false, error: `${availability.reason}${nextAvailable}` };
+      throw new Error(`${availability.reason}${nextAvailable}`);
     }
     const verb = availability.direction === "decrease" ? "Shorten" : "Extend";
     return {
-      ok: true,
-      input: { leaseId: record.id, newLeaseEnd: input.newLeaseEnd },
-      preview: {
-        title: "Amend lease move-out date",
-        summary: `${verb} ${row.residentName}'s lease${row.unit && row.unit !== "—" ? ` at ${row.unit}` : ""} to end ${input.newLeaseEnd}.`,
-        lines: [
+      confirmedInput: { leaseId: record.id, newLeaseEnd: input.newLeaseEnd },
+      kind: "amend_lease",
+      title: "Amend lease move-out date",
+      summary: `${verb} ${row.residentName}'s lease${row.unit && row.unit !== "—" ? ` at ${row.unit}` : ""} to end ${input.newLeaseEnd}.`,
+      fields: [
           { label: "Resident", value: row.residentName },
           { label: "Unit", value: row.unit },
           { label: "Current end", value: currentEnd || "—" },
           { label: "New end", value: input.newLeaseEnd },
         ],
-        confirmLabel: "Amend lease",
-        warning: SIGNATURE_RESET_WARNING,
-      },
+      confirmLabel: "Amend lease",
+      warnings: [SIGNATURE_RESET_WARNING],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve at execute time — the preview's record is never trusted as
     // ownership proof, and lease state may have changed since.
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
-    if (!record) return { ok: false, error: "No matching lease for this landlord." };
+    if (!record) throw new Error("No matching lease for this landlord.");
     const row = normalizeLeasePipelineRow(record.row_data);
 
     // Record intent first, idempotently — one amend per lease per target date.
@@ -154,9 +162,9 @@ export const amendLeaseTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `This lease was already amended to end ${input.newLeaseEnd}.` };
+        return { reply: `This lease was already amended to end ${input.newLeaseEnd}.` };
       }
-      return { ok: false, error: "Could not record the action; the lease was not amended." };
+      throw new Error("Could not record the action; the lease was not amended.");
     }
 
     // amendLeaseMoveOutDate re-checks signatures, dates, and room availability
@@ -165,15 +173,11 @@ export const amendLeaseTool = defineWriteTool({
     const result = await amendLeaseMoveOutDate(ctx.db, record, input.newLeaseEnd);
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { amended: false }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
     await updateAuditResult(ctx, dedupeKey, { amended: true, direction: result.direction, newLeaseEnd: result.newLeaseEnd });
     const verb = result.direction === "extend" ? "extended" : "shortened";
-    return {
-      ok: true,
-      reply: `${row.residentName}'s lease was ${verb} to end ${result.newLeaseEnd}. Both signatures were reset — the lease is back in manager review and must be re-signed.`,
-      resultSummary: { leaseId: record.id, direction: result.direction, newLeaseEnd: result.newLeaseEnd },
-    };
+    return { reply: `${row.residentName}'s lease was ${verb} to end ${result.newLeaseEnd}. Both signatures were reset — the lease is back in manager review and must be re-signed.`, resultSummary: { leaseId: record.id, direction: result.direction, newLeaseEnd: result.newLeaseEnd } };
   },
 });
 
@@ -181,7 +185,6 @@ export const voidLeaseTool = defineWriteTool({
   name: "void_lease",
   description:
     "Permanently void a lease so it can no longer be signed or enforced. Pass the lease id from list_leases; an optional reason is recorded on the lease's activity thread.",
-  kind: "write",
   destructive: true,
   inputSchema: z
     .object({
@@ -196,39 +199,34 @@ export const voidLeaseTool = defineWriteTool({
   preview: async (ctx, input) => {
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
     if (!record) {
-      return {
-        ok: false,
-        error: `No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`,
-      };
+      throw new Error(`No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`);
     }
     const row = normalizeLeasePipelineRow(record.row_data);
     if (row.status === "Voided") {
-      return { ok: false, error: "This lease is already voided." };
+      throw new Error("This lease is already voided.");
     }
     const reason = input.reason?.trim();
     return {
-      ok: true,
-      input: { leaseId: record.id, ...(reason ? { reason } : {}) },
-      preview: {
-        title: "Void lease",
-        summary: `Void ${row.residentName}'s lease${row.unit && row.unit !== "—" ? ` at ${row.unit}` : ""}.`,
-        lines: [
+      confirmedInput: { leaseId: record.id, ...(reason ? { reason } : {}) },
+      kind: "void_lease",
+      title: "Void lease",
+      summary: `Void ${row.residentName}'s lease${row.unit && row.unit !== "—" ? ` at ${row.unit}` : ""}.`,
+      fields: [
           { label: "Resident", value: row.residentName },
           { label: "Unit", value: row.unit },
           { label: "Current status", value: row.status ?? row.stageLabel },
           ...(reason ? [{ label: "Reason", value: reason }] : []),
         ],
-        confirmLabel: "Void lease",
-        warning: "Voiding is permanent; the resident keeps portal access.",
-      },
+      confirmLabel: "Void lease",
+      warnings: ["Voiding is permanent; the resident keeps portal access."],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
-    if (!record) return { ok: false, error: "No matching lease for this landlord." };
+    if (!record) throw new Error("No matching lease for this landlord.");
     const row = normalizeLeasePipelineRow(record.row_data);
     if (row.status === "Voided") {
-      return { ok: true, reply: `The lease for ${row.residentName} is already voided.` };
+      return { reply: `The lease for ${row.residentName} is already voided.` };
     }
 
     // One-shot transition: record intent first; retries return already-done.
@@ -240,8 +238,8 @@ export const voidLeaseTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "This lease was already voided." };
-      return { ok: false, error: "Could not record the action; the lease was not voided." };
+      if (audit.duplicate) return { reply: "This lease was already voided." };
+      throw new Error("Could not record the action; the lease was not voided.");
     }
 
     // Read-merge-write the CURRENT row_data (never constructed from scratch) so
@@ -285,14 +283,10 @@ export const voidLeaseTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { voided: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { voided: true });
-    return {
-      ok: true,
-      reply: `Voided the lease for ${row.residentName}${row.unit && row.unit !== "—" ? ` at ${row.unit}` : ""}. This is permanent; the resident keeps portal access.`,
-      resultSummary: { leaseId: record.id, voided: true },
-    };
+    return { reply: `Voided the lease for ${row.residentName}${row.unit && row.unit !== "—" ? ` at ${row.unit}` : ""}. This is permanent; the resident keeps portal access.`, resultSummary: { leaseId: record.id, voided: true } };
   },
 });
 
@@ -320,7 +314,6 @@ export const sendLeaseForSignatureTool = defineWriteTool({
   name: "send_lease_for_signature",
   description:
     "Send a prepared lease to its resident for electronic signature: moves the lease to the resident's signing queue and notifies them in their portal inbox and by email. The lease must already have a generated or uploaded document; pass the lease id from list_leases.",
-  kind: "write",
   inputSchema: z
     .object({
       leaseId: z.string().min(1).describe("Id of the lease to send, from list_leases."),
@@ -329,37 +322,32 @@ export const sendLeaseForSignatureTool = defineWriteTool({
   preview: async (ctx, input) => {
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
     if (!record) {
-      return {
-        ok: false,
-        error: `No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`,
-      };
+      throw new Error(`No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`);
     }
     const row = normalizeLeasePipelineRow(record.row_data);
     const blocker = sendForSignatureBlocker(row);
-    if (blocker) return { ok: false, error: blocker };
+    if (blocker) throw new Error(blocker);
     const residentEmail = row.residentEmail.trim().toLowerCase();
     return {
-      ok: true,
-      input: { leaseId: record.id },
-      preview: {
-        title: "Send lease for signature",
-        summary: `Send ${row.residentName}'s lease to ${residentEmail} for electronic signature.`,
-        lines: [
+      confirmedInput: { leaseId: record.id },
+      kind: "send_lease_for_signature",
+      title: "Send lease for signature",
+      summary: `Send ${row.residentName}'s lease to ${residentEmail} for electronic signature.`,
+      fields: [
           { label: "Resident", value: row.residentName },
           { label: "Email", value: residentEmail },
           { label: "Unit", value: row.unit },
           { label: "Document", value: row.managerUploadedPdf?.dataUrl ? "Uploaded PDF" : "Generated lease" },
         ],
-        confirmLabel: "Send for signature",
-      },
+      confirmLabel: "Send for signature",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
-    if (!record) return { ok: false, error: "No matching lease for this landlord." };
+    if (!record) throw new Error("No matching lease for this landlord.");
     const row = normalizeLeasePipelineRow(record.row_data);
     const blocker = sendForSignatureBlocker(row);
-    if (blocker) return { ok: false, error: blocker };
+    if (blocker) throw new Error(blocker);
     const residentEmail = row.residentEmail.trim().toLowerCase();
 
     // Repeatable send: idempotent per lease per day.
@@ -372,9 +360,9 @@ export const sendLeaseForSignatureTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: "This lease was already sent to the resident today." };
+        return { reply: "This lease was already sent to the resident today." };
       }
-      return { ok: false, error: "Could not record the action; the lease was not sent." };
+      throw new Error("Could not record the action; the lease was not sent.");
     }
 
     // Same field transition the Leases UI writes (sendLeaseToResident in
@@ -405,7 +393,7 @@ export const sendLeaseForSignatureTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { sent: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
 
     // Best-effort resident notification (portal inbox + email). A delivery
@@ -435,12 +423,142 @@ export const sendLeaseForSignatureTool = defineWriteTool({
     }
 
     await updateAuditResult(ctx, dedupeKey, { residentEmail, sent: true, notified });
-    return {
-      ok: true,
-      reply: notified
+    return { reply: notified
         ? `Sent the lease to ${row.residentName} (${residentEmail}) for signature — they've been notified in their portal inbox.`
-        : `Sent the lease to ${row.residentName} for signature. The notification could not be delivered, but the lease is waiting in their portal.`,
-      resultSummary: { leaseId: record.id, notified },
-    };
+        : `Sent the lease to ${row.residentName} for signature. The notification could not be delivered, but the lease is waiting in their portal.`, resultSummary: { leaseId: record.id, notified } };
+  },
+});
+
+/** Upsert a lease row through the same column mapping as the pipeline route. */
+async function upsertLeaseRow(ctx: AgentContext, row: LeasePipelineRow): Promise<void> {
+  const { error } = await ctx.db.from("portal_lease_pipeline_records").upsert(
+    {
+      id: row.id,
+      manager_user_id: ctx.landlordId,
+      resident_user_id: row.residentUserId ?? null,
+      resident_email: row.residentEmail || null,
+      property_id: row.propertyId ?? null,
+      status: row.bucket,
+      row_data: row,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error("Could not save the lease draft.");
+}
+
+async function writeLeaseAudit(
+  ctx: AgentContext,
+  action: string,
+  leaseId: string,
+  dedupeKey: string | null,
+): Promise<"ok" | "duplicate"> {
+  const { error } = await ctx.db.from("audit_log").insert({
+    actor_user_id: ctx.userId,
+    landlord_id: ctx.landlordId,
+    action,
+    tool_name: action,
+    input_summary: { leaseId },
+    result_summary: {},
+    dedupe_key: dedupeKey,
+    created_at: new Date().toISOString(),
+  });
+  if (error?.code === "23505") return "duplicate";
+  if (error) throw new Error("Could not record the action; nothing was saved.");
+  return "ok";
+}
+
+/**
+ * Gated write: start a lease draft (including a renewal — a fresh draft for an
+ * existing resident). The resident is re-resolved from the landlord's own
+ * residents at preview and execute time.
+ */
+export const createLeaseDraftTool = defineWriteTool<CreateLeaseDraftInput, { reply: string }>({
+  name: "create_lease_draft",
+  description:
+    "Start a new lease draft for one of the landlord's own residents (also used for renewals). Use list_residents first to get the resident's email. The landlord sees the draft details and must confirm before it is created.",
+  inputSchema: z
+    .object({
+      residentEmail: z
+        .string()
+        .describe("The resident's email, as returned by list_residents. Must be one of the landlord's own residents."),
+      unit: z.string().max(120).optional().describe("Optional unit/room label; defaults to the resident's assigned room."),
+      notes: z.string().max(2000).optional().describe("Optional notes to record on the draft."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const resident = findOwnedResident(await loadManagerApplications(ctx), input.residentEmail);
+    if (!resident) throw new Error("No resident with that email in this landlord's portfolio.");
+    return buildLeaseDraftPreview(
+      buildLeaseDraft(resident, input, ctx.landlordId, "preview", new Date().toISOString()),
+      "create",
+    );
+  },
+  handler: async (ctx, input) => {
+    const resident = findOwnedResident(await loadManagerApplications(ctx), input.residentEmail);
+    if (!resident) throw new Error("No resident with that email in this landlord's portfolio.");
+    const nowIso = new Date().toISOString();
+    const row = buildLeaseDraft(resident, input, ctx.landlordId, `lease_${randomUUID()}`, nowIso);
+    // One agent-created draft per resident per day guards double-confirms.
+    const dedupeKey = `create_lease_draft:${ctx.landlordId}:${row.residentEmail}:${nowIso.slice(0, 10)}`;
+    if ((await writeLeaseAudit(ctx, "create_lease_draft", row.id, dedupeKey)) === "duplicate") {
+      return { reply: `A lease draft for ${row.residentName} was already created today; nothing new was created.` };
+    }
+    await upsertLeaseRow(ctx, row);
+    return { reply: `Created a lease draft for ${row.residentName}${row.unit !== "—" ? ` (unit ${row.unit})` : ""}. It's in the Leases tab under Draft.` };
+  },
+});
+
+/** Load one lease row owned by this landlord, or null. */
+async function loadOwnedLease(ctx: AgentContext, leaseId: string): Promise<LeasePipelineRow | null> {
+  const id = leaseId.trim();
+  if (!id) return null;
+  const { data } = await ctx.db
+    .from("portal_lease_pipeline_records")
+    .select("row_data")
+    .eq("id", id)
+    .eq("manager_user_id", ctx.landlordId)
+    .maybeSingle();
+  if (!data?.row_data) return null;
+  return normalizeLeasePipelineRow(data.row_data);
+}
+
+/**
+ * Gated write: update the whitelisted editable fields (unit, notes) of an
+ * existing draft. Deliberately stricter than the UI: drafts only, refused once
+ * any signature exists.
+ */
+export const updateLeaseDraftTool = defineWriteTool<UpdateLeaseDraftInput, { reply: string }>({
+  name: "update_lease_draft",
+  description:
+    "Update the unit or notes on one of the landlord's existing lease drafts (use list_leases to find the lease id). Only drafts that have no signatures can be edited. The landlord must confirm before anything changes.",
+  inputSchema: z
+    .object({
+      leaseId: z.string().describe("The lease id from list_leases."),
+      unit: z.string().max(120).optional().describe("New unit/room label."),
+      notes: z.string().max(2000).optional().describe("New notes (replaces the existing notes)."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    if (input.unit === undefined && input.notes === undefined) {
+      throw new Error("Nothing to update: provide unit and/or notes.");
+    }
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id in this landlord's portfolio.");
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
+    }
+    return buildLeaseDraftPreview(applyLeaseDraftUpdate(row, input, new Date().toISOString()), "update");
+  },
+  handler: async (ctx, input) => {
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id in this landlord's portfolio.");
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
+    }
+    const updated = applyLeaseDraftUpdate(row, input, new Date().toISOString());
+    await writeLeaseAudit(ctx, "update_lease_draft", updated.id, null);
+    await upsertLeaseRow(ctx, updated);
+    return { reply: `Updated the lease draft for ${updated.residentName}.` };
   },
 });

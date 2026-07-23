@@ -32,6 +32,11 @@ function hashText(text: string): string {
  * base64 photo data URLs and are deliberately never returned.
  */
 function summarizePromotion(row: ManagerPromotionRow) {
+  // A promotion carries flyer copy, marketing text entries, or both; the
+  // Promotion page's All/Text/Image pills classify on exactly this distinction.
+  const raw = row as unknown as Record<string, unknown>;
+  const hasFlyer = Boolean(raw.copy) || (Array.isArray(raw.flyers) && raw.flyers.length > 0);
+  const textCount = Array.isArray(raw.textCopies) ? raw.textCopies.length : raw.textCopy ? 1 : 0;
   return {
     id: row.id,
     title: row.title || null,
@@ -39,6 +44,8 @@ function summarizePromotion(row: ManagerPromotionRow) {
     propertyLabel: row.propertyLabel || null,
     status: row.status === "generated" ? "generated" : "draft",
     template: normalizePromotionTemplate(row.template),
+    hasFlyer,
+    textCount,
     updatedAt: row.updatedAt || null,
   };
 }
@@ -88,11 +95,16 @@ async function resolveOwnedPropertyLabel(
 export const listPromotionsTool = defineTool({
   name: "list_promotions",
   description:
-    "List the current landlord's marketing promotions (AI flyer/social campaigns) with id, title, property, status (draft/generated), and flyer template. Use for 'what promotions do I have' and to get promotion ids for update_promotion/delete_promotion. Flyer images and generated copy are not returned.",
+    "List the current landlord's marketing promotions from the Promotion page (AI flyer/social campaigns) with id, title, property, status (draft/generated), flyer template, and whether each carries a generated flyer image and/or marketing text. Use for 'what promotions do I have for this listing', 'have I made a flyer for the Ballard house', and to get promotion ids for update_promotion/delete_promotion. Flyer images and generated copy are not returned.",
   kind: "read",
   inputSchema: z
     .object({
       status: z.enum(["draft", "generated"]).optional().describe("Optional filter on promotion status."),
+      propertyId: z.string().optional().describe("Optional: only promotions for this property."),
+      contentType: z
+        .enum(["text", "flyer"])
+        .optional()
+        .describe("Optional content-type filter, matching the All/Text/Image pills on the Promotion page."),
     })
     .strict(),
   handler: async (ctx, input) => {
@@ -107,7 +119,13 @@ export const listPromotionsTool = defineTool({
       .map((r) => r.row_data as ManagerPromotionRow)
       .filter(Boolean)
       .map(summarizePromotion)
-      .filter((p) => !input.status || p.status === input.status);
+      .filter((p) => !input.status || p.status === input.status)
+      .filter((p) => !input.propertyId || p.propertyId === input.propertyId)
+      .filter((p) => {
+        if (input.contentType === "flyer") return p.hasFlyer;
+        if (input.contentType === "text") return p.textCount > 0;
+        return true;
+      });
     return { count: promotions.length, promotions };
   },
 });
@@ -116,7 +134,6 @@ export const createPromotionTool = defineWriteTool({
   name: "create_promotion",
   description:
     "Create a draft marketing promotion for the landlord. Optionally attach one of their properties (propertyId from list_properties/find_records) and seed notes for the flyer copy. The flyer and social text themselves are generated later on the Promotions page — this only creates the draft.",
-  kind: "write",
   inputSchema: z
     .object({
       title: z.string().min(1).describe("Short promotion title, e.g. 'Spring move-in special'."),
@@ -138,7 +155,7 @@ export const createPromotionTool = defineWriteTool({
     let propertyLabel: string | null = null;
     if (input.propertyId?.trim()) {
       const property = await resolveOwnedPropertyLabel(ctx, input.propertyId.trim());
-      if (!property.ok) return property;
+      if (!property.ok) throw new Error(property.error);
       propertyLabel = property.label;
     }
     const template = normalizePromotionTemplate(input.template);
@@ -149,23 +166,20 @@ export const createPromotionTool = defineWriteTool({
     ];
     if (input.notes?.trim()) lines.push({ label: "Notes", value: input.notes.trim() });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Create promotion",
-        summary: `Create the draft promotion "${input.title.trim()}"${propertyLabel ? ` for ${propertyLabel}` : ""}. Flyer and social copy are generated on the Promotions page afterwards.`,
-        lines,
-        confirmLabel: "Create draft",
-      },
+      kind: "create_promotion",
+      title: "Create promotion",
+      summary: `Create the draft promotion "${input.title.trim()}"${propertyLabel ? ` for ${propertyLabel}` : ""}. Flyer and social copy are generated on the Promotions page afterwards.`,
+      fields: lines,
+      confirmLabel: "Create draft",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const title = input.title.trim();
     const propertyId = input.propertyId?.trim() || null;
     let propertyLabel = "";
     if (propertyId) {
       const property = await resolveOwnedPropertyLabel(ctx, propertyId);
-      if (!property.ok) return { ok: false, error: property.error };
+      if (!property.ok) throw new Error(property.error);
       propertyLabel = property.label;
     }
 
@@ -178,9 +192,9 @@ export const createPromotionTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: "A promotion with this title and property was already created today — nothing new was added." };
+        return { reply: "A promotion with this title and property was already created today — nothing new was added." };
       }
-      return { ok: false, error: "Could not record the action; no promotion was created." };
+      throw new Error("Could not record the action; no promotion was created.");
     }
 
     const nowIso = new Date().toISOString();
@@ -215,14 +229,10 @@ export const createPromotionTool = defineWriteTool({
     );
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { created: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { created: true, promotionId: row.id });
-    return {
-      ok: true,
-      reply: `Created the draft promotion "${title}"${propertyLabel ? ` for ${propertyLabel}` : ""} — open the Promotions page to generate the flyer and social copy.`,
-      resultSummary: { promotionId: row.id },
-    };
+    return { reply: `Created the draft promotion "${title}"${propertyLabel ? ` for ${propertyLabel}` : ""} — open the Promotions page to generate the flyer and social copy.`, resultSummary: { promotionId: row.id } };
   },
 });
 
@@ -230,7 +240,6 @@ export const updatePromotionTool = defineWriteTool({
   name: "update_promotion",
   description:
     "Rename one of the landlord's promotions and/or change its status (draft/generated). Pass the promotionId from list_promotions. Flyer content itself is edited on the Promotions page, not here.",
-  kind: "write",
   inputSchema: z
     .object({
       promotionId: z.string().min(1).describe("Id of the promotion to update, from list_promotions."),
@@ -240,30 +249,27 @@ export const updatePromotionTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     if (!input.title?.trim() && !input.status) {
-      return { ok: false, error: "Provide at least one change: a new title or a new status." };
+      throw new Error("Provide at least one change: a new title or a new status.");
     }
     const current = await loadOwnedPromotion(ctx, input.promotionId.trim());
-    if (!current) return { ok: false, error: UNOWNED_PROMOTION_ERROR };
+    if (!current) throw new Error(UNOWNED_PROMOTION_ERROR);
     const lines = [{ label: "Promotion", value: current.title || current.id }];
     if (input.title?.trim()) lines.push({ label: "New title", value: input.title.trim() });
     if (input.status) {
       lines.push({ label: "Status", value: `${current.status === "generated" ? "generated" : "draft"} → ${input.status}` });
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Update promotion",
-        summary: `Update the promotion "${current.title || current.id}".`,
-        lines,
-        confirmLabel: "Update promotion",
-      },
+      kind: "update_promotion",
+      title: "Update promotion",
+      summary: `Update the promotion "${current.title || current.id}".`,
+      fields: lines,
+      confirmLabel: "Update promotion",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const promotionId = input.promotionId.trim();
     const current = await loadOwnedPromotion(ctx, promotionId);
-    if (!current) return { ok: false, error: UNOWNED_PROMOTION_ERROR };
+    if (!current) throw new Error(UNOWNED_PROMOTION_ERROR);
 
     const dedupeKey = `update_promotion:${ctx.landlordId}:${promotionId}:${hashText(`${input.title ?? ""}|${input.status ?? ""}`)}:${auditDayBucket()}`;
     const audit = await writeAuditLog(ctx, {
@@ -274,9 +280,9 @@ export const updatePromotionTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: "This exact promotion update was already applied today — nothing changed." };
+        return { reply: "This exact promotion update was already applied today — nothing changed." };
       }
-      return { ok: false, error: "Could not record the action; the promotion was not updated." };
+      throw new Error("Could not record the action; the promotion was not updated.");
     }
 
     // Mirror-table write: merge onto the CURRENT row_data, never rebuild it.
@@ -294,14 +300,10 @@ export const updatePromotionTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { updated: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { updated: true, promotionId });
-    return {
-      ok: true,
-      reply: `Updated the promotion "${merged.title}"${input.status ? ` (status: ${merged.status})` : ""}.`,
-      resultSummary: { promotionId },
-    };
+    return { reply: `Updated the promotion "${merged.title}"${input.status ? ` (status: ${merged.status})` : ""}.`, resultSummary: { promotionId } };
   },
 });
 
@@ -309,7 +311,6 @@ export const deletePromotionTool = defineWriteTool({
   name: "delete_promotion",
   description:
     "Permanently delete one of the landlord's promotions, including its generated flyer and text copies. Pass the promotionId from list_promotions.",
-  kind: "write",
   destructive: true,
   inputSchema: z
     .object({
@@ -318,26 +319,23 @@ export const deletePromotionTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const current = await loadOwnedPromotion(ctx, input.promotionId.trim());
-    if (!current) return { ok: false, error: UNOWNED_PROMOTION_ERROR };
+    if (!current) throw new Error(UNOWNED_PROMOTION_ERROR);
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Delete promotion",
-        summary: `Delete the promotion "${current.title || current.id}"${current.propertyLabel ? ` (${current.propertyLabel})` : ""}.`,
-        lines: [
+      kind: "delete_promotion",
+      title: "Delete promotion",
+      summary: `Delete the promotion "${current.title || current.id}"${current.propertyLabel ? ` (${current.propertyLabel})` : ""}.`,
+      fields: [
           { label: "Promotion", value: current.title || current.id },
           { label: "Status", value: current.status === "generated" ? "generated" : "draft" },
         ],
-        confirmLabel: "Delete promotion",
-        warning: "This permanently deletes the promotion and any generated flyer and text copies. It cannot be undone.",
-      },
+      confirmLabel: "Delete promotion",
+      warnings: ["This permanently deletes the promotion and any generated flyer and text copies. It cannot be undone."],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const promotionId = input.promotionId.trim();
     const current = await loadOwnedPromotion(ctx, promotionId);
-    if (!current) return { ok: false, error: UNOWNED_PROMOTION_ERROR };
+    if (!current) throw new Error(UNOWNED_PROMOTION_ERROR);
 
     // One-shot transition: retries return already-done forever.
     const dedupeKey = `delete_promotion:${ctx.landlordId}:${promotionId}`;
@@ -348,8 +346,8 @@ export const deletePromotionTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That promotion was already deleted." };
-      return { ok: false, error: "Could not record the action; the promotion was not deleted." };
+      if (audit.duplicate) return { reply: "That promotion was already deleted." };
+      throw new Error("Could not record the action; the promotion was not deleted.");
     }
 
     const { error } = await ctx.db
@@ -359,13 +357,9 @@ export const deletePromotionTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { deleted: false }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { deleted: true });
-    return {
-      ok: true,
-      reply: `Deleted the promotion "${current.title || promotionId}".`,
-      resultSummary: { promotionId },
-    };
+    return { reply: `Deleted the promotion "${current.title || promotionId}".`, resultSummary: { promotionId } };
   },
 });

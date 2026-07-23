@@ -36,36 +36,33 @@ function makeRegistry(opts: { previewOk?: boolean } = {}) {
   const writeTool = defineWriteTool({
     name: "do_thing",
     description: "Do a thing.",
-    kind: "write",
     destructive: false,
     inputSchema: z.object({ targetId: z.string() }).strict(),
-    preview: async (_ctx, input) =>
-      previewOk
-        ? {
-            ok: true as const,
-            input,
-            preview: { title: "Do thing", summary: `Will do ${input.targetId}.`, lines: [] },
-          }
-        : { ok: false as const, error: "target not found" },
-    execute: async (_ctx, input) => {
+    preview: async (_ctx, input) => {
+      if (!previewOk) throw new Error("target not found");
+      return {
+        kind: "do_thing",
+        title: "Do thing",
+        confirmLabel: "Do it",
+        summary: `Will do ${input.targetId}.`,
+        fields: [],
+      };
+    },
+    handler: async (_ctx, input) => {
       executeSpy(input);
-      return { ok: true as const, reply: "did it" };
+      return { reply: "did it" };
     },
   });
+  // A write the SURFACE allow-lists runs inline like a read; nothing about the
+  // tool itself opts out of the gate.
   const inlineWrite = defineWriteTool({
     name: "quick_flag",
     description: "Low-risk inline write.",
-    kind: "write",
-    confirm: "none",
     inputSchema: z.object({ targetId: z.string() }).strict(),
-    preview: async (_ctx, input) => ({
-      ok: true as const,
-      input,
-      preview: { title: "Flag", summary: "flag", lines: [] },
-    }),
-    execute: async (_ctx, input) => {
+    preview: async () => ({ kind: "quick_flag", title: "Flag", confirmLabel: "Flag", fields: [] }),
+    handler: async (_ctx, input) => {
       executeSpy(input);
-      return { ok: true as const, reply: "flagged" };
+      return { reply: "flagged" };
     },
   });
   return buildRegistry([readTool, writeTool, inlineWrite]);
@@ -79,7 +76,7 @@ describe("runAgentTurn write-proposal halting", () => {
     executeSpy.mockReset();
   });
 
-  it("halts the turn with a proposedAction when a gated write's preview succeeds — and never executes", async () => {
+  it("halts the turn with a pendingAction when a gated write's preview succeeds — and never executes", async () => {
     create.mockResolvedValueOnce({
       stop_reason: "tool_use",
       content: [
@@ -96,12 +93,12 @@ describe("runAgentTurn write-proposal halting", () => {
     });
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(result.proposedAction).toMatchObject({
+    expect(result.pendingAction).toMatchObject({
       toolName: "do_thing",
       input: { targetId: "t1" },
       destructive: false,
     });
-    expect(result.proposedAction!.preview.title).toBe("Do thing");
+    expect(result.pendingAction!.preview.title).toBe("Do thing");
     expect(result.reply).toBe("I'll do the thing.");
     expect(executeSpy).not.toHaveBeenCalled();
   });
@@ -136,7 +133,7 @@ describe("runAgentTurn write-proposal halting", () => {
       is_error: true,
       content: "target not found",
     });
-    expect(result.proposedAction).toBeUndefined();
+    expect(result.pendingAction).toBeUndefined();
     expect(result.reply).toBe("That target doesn't exist.");
     expect(executeSpy).not.toHaveBeenCalled();
   });
@@ -189,11 +186,11 @@ describe("runAgentTurn write-proposal halting", () => {
       messages: [{ role: "user", content: "do both" }],
     });
 
-    expect(result.proposedAction).toMatchObject({ input: { targetId: "t1" } });
+    expect(result.pendingAction).toMatchObject({ input: { targetId: "t1" } });
     expect(executeSpy).not.toHaveBeenCalled();
   });
 
-  it("executes confirm:'none' writes inline like a read and continues the loop", async () => {
+  it("executes an allow-listed write inline like a read and continues the loop", async () => {
     create
       .mockResolvedValueOnce({
         stop_reason: "tool_use",
@@ -210,10 +207,11 @@ describe("runAgentTurn write-proposal halting", () => {
       ctx,
       registry: makeRegistry(),
       messages: [{ role: "user", content: "flag t9" }],
+      allowWriteTools: ["quick_flag"],
     });
 
     expect(executeSpy).toHaveBeenCalledWith({ targetId: "t9" });
-    expect(result.proposedAction).toBeUndefined();
+    expect(result.pendingAction).toBeUndefined();
     expect(result.reply).toBe("flagged it");
     expect(result.toolTrace).toContainEqual({ tool: "quick_flag", ok: true });
   });

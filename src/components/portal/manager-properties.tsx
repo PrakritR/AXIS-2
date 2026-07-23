@@ -144,10 +144,12 @@ export function ManagerProperties() {
   const stageCounts = useMemo(() => {
     void portfolioTick;
     const kpiValues = adminKpiCounts(scopeUserId);
+    // Index 5 is the drafts side bucket (see AdminPropertyBucketIndex).
     return {
       listed: kpiValues[2],
       unlisted: kpiValues[3],
-    };
+      drafts: kpiValues[5],
+    } satisfies Record<ManagerStageKey, number>;
   }, [portfolioTick, scopeUserId]);
 
   const shareableProperties = useMemo(() => {
@@ -265,6 +267,8 @@ export function ManagerProperties() {
           activeStage={activeStage}
           onStageChange={setActiveStage}
           onSendToProspect={openShareListing}
+          skuTier={skuTier}
+          skuLoaded={skuLoaded}
         />
       </ManagerPortalPageShell>
       {wizardOpen ? (

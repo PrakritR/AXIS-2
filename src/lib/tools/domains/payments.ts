@@ -223,7 +223,6 @@ export const sendRentReminderTool = defineWriteTool({
   name: "send_rent_reminder",
   description:
     "Send a payment reminder (email + portal inbox record) to residents with overdue charges. Pass the charge ids from get_overdue_charges — one id for a single resident, or many ids to remind everyone at once.",
-  kind: "write",
   inputSchema: z
     .object({
       chargeIds: z
@@ -244,10 +243,7 @@ export const sendRentReminderTool = defineWriteTool({
       else invalid.push(id);
     }
     if (invalid.length > 0) {
-      return {
-        ok: false,
-        error: `These ids are not overdue charges owned by this landlord: ${invalid.join(", ")}. Use get_overdue_charges to get valid charge ids.`,
-      };
+      throw new Error(`These ids are not overdue charges owned by this landlord: ${invalid.join(", ")}. Use get_overdue_charges to get valid charge ids.`);
     }
     const lines = resolved.slice(0, PREVIEW_LINE_CAP).map((p) => ({
       label: p.residentName,
@@ -257,21 +253,19 @@ export const sendRentReminderTool = defineWriteTool({
       lines.push({ label: "…", value: `and ${resolved.length - PREVIEW_LINE_CAP} more` });
     }
     return {
-      ok: true,
-      input: { chargeIds: resolved.map((p) => p.chargeId) },
-      preview: {
-        title: resolved.length === 1 ? "Send rent reminder" : "Send rent reminders",
-        summary:
-          resolved.length === 1
-            ? `Send a payment reminder to ${resolved[0]!.residentName} for ${resolved[0]!.chargeTitle}${resolved[0]!.balanceDue ? ` (${resolved[0]!.balanceDue})` : ""}.`
-            : `Send payment reminders to ${resolved.length} residents with overdue charges.`,
-        lines,
-        confirmLabel: resolved.length === 1 ? "Send reminder" : `Send ${resolved.length} reminders`,
-        ...(resolved.length > 1 ? { batchCount: resolved.length } : {}),
-      },
+      confirmedInput: { chargeIds: resolved.map((p) => p.chargeId) },
+      kind: "send_rent_reminder",
+      title: resolved.length === 1 ? "Send rent reminder" : "Send rent reminders",
+      summary:
+        resolved.length === 1
+          ? `Send a payment reminder to ${resolved[0]!.residentName} for ${resolved[0]!.chargeTitle}${resolved[0]!.balanceDue ? ` (${resolved[0]!.balanceDue})` : ""}.`
+          : `Send payment reminders to ${resolved.length} residents with overdue charges.`,
+      fields: lines,
+      confirmLabel: resolved.length === 1 ? "Send reminder" : `Send ${resolved.length} reminders`,
+      ...(resolved.length > 1 ? { batchCount: resolved.length } : {}),
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const charges = await loadManagerCharges(ctx);
     let emailed = 0;
     let portalOnly = 0;
@@ -304,10 +298,6 @@ export const sendRentReminderTool = defineWriteTool({
     const reply = parts.length
       ? `Done — ${parts.join("; ")}.`
       : "Nothing to send — no matching overdue charges remained.";
-    return {
-      ok: true,
-      reply,
-      resultSummary: { emailed, portalOnly, alreadySent, emailFailed, skipped },
-    };
+    return { reply, resultSummary: { emailed, portalOnly, alreadySent, emailFailed, skipped } };
   },
 });

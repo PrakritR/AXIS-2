@@ -8,6 +8,8 @@ import { buildRegistry, type ToolDefinition, type ToolRegistry } from "./registr
 import type { ResidentAgentContext } from "./resident-context";
 import { residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { getMyBalanceTool, listMyChargesTool, getMyPaymentMethodsTool } from "./domains/resident/balance";
+import { listMySharedDocumentsTool } from "./domains/resident/documents";
+import { reportMaintenanceIssueTool } from "./domains/resident/maintenance";
 import {
   getMyLeaseTool,
   getMyApplicationStatusTool,
@@ -47,6 +49,9 @@ const ALL_RESIDENT_TOOLS: ResidentTool[] = [
   listMyWorkOrdersTool,
   createServiceRequestTool,
   addServiceRequestNoteTool,
+  reportMaintenanceIssueTool,
+  // Documents shared with the resident
+  listMySharedDocumentsTool,
   // Inbox / messaging
   listMyInboxThreadsTool,
   getMyScheduledMessagesTool,
@@ -68,6 +73,8 @@ const TOOL_SECTION: Record<string, string> = {
   [listMyWorkOrdersTool.name]: "services",
   [createServiceRequestTool.name]: "services",
   [addServiceRequestNoteTool.name]: "services",
+  [reportMaintenanceIssueTool.name]: "services",
+  [listMySharedDocumentsTool.name]: "documents",
   [listMyInboxThreadsTool.name]: "inbox",
   [getMyScheduledMessagesTool.name]: "inbox",
   [sendMessageToManagerTool.name]: "inbox",

@@ -1,145 +1,206 @@
 /**
- * Persistence for proposed-but-unconfirmed write actions. A write tool call
- * from the model produces one row here (via the chat routes); the client only
- * ever holds the row's opaque id. Confirming claims the row atomically
- * (exactly-once, expiry-checked) and executes against the stored, re-validated
- * input. Cancelled/expired proposals are kept — they feed the eval set.
+ * Server-side persistence for proposed write actions — the preview→confirm
+ * gate's storage layer. The confirm request carries ONLY a row id; the stored
+ * input (validated at propose time and re-validated at confirm time) is what
+ * executes — model/client-supplied arguments are never trusted at confirm
+ * time. The atomic status flip (proposed -> executed/denied) is the replay
+ * guard, and the stored preview is an audit of exactly what the user was shown.
+ *
+ * Proposals are deliberately NOT superseded by newer ones: the manager
+ * dashboard lists every open proposal as an approvable "AI draft" chip, and the
+ * approval-first tour flow parks long-lived (7-day) proposals in the same
+ * table. `expiresInMs` is what distinguishes a live chat turn from that queue.
  */
+import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { ActionPreview } from "./registry";
 
+type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
+
+/** Which portal's registry + context resolver owns the action. */
 export type AgentPortal = "manager" | "resident" | "vendor";
 
-/** Minimal actor surface; all three portal contexts satisfy it. */
+/**
+ * Minimal actor surface for the claim. Every portal context satisfies it, as
+ * does a bare `{ userId, db }` built from an authenticated session.
+ */
 export type PendingActionActor = {
   userId: string;
-  /** Manager id for manager-portal actions; undefined otherwise. */
-  landlordId?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any;
+  db: Db;
 };
-
-/** The wire shape sent to the client. Never includes the raw tool input. */
-export type PendingAction = {
-  id: string;
-  toolName: string;
-  destructive: boolean;
-  expiresAt: string; // ISO
-  preview: ActionPreview;
-  /** Demo surfaces set this; the confirm button shows a canned reply instead. */
-  simulated?: boolean;
-};
-
-export type PendingActionRow = {
-  id: string;
-  actor_user_id: string;
-  portal: AgentPortal;
-  landlord_id: string | null;
-  session_id: string | null;
-  tool_name: string;
-  input: unknown;
-  preview: ActionPreview & { destructive?: boolean };
-  status: string;
-  created_at: string;
-  expires_at: string;
-};
-
-export const PENDING_ACTION_TTL_MS = 10 * 60_000;
 
 /**
- * Persist a proposal and supersede any other pending proposals for this actor,
- * so at most one confirm card is ever live per user.
+ * Insert a proposed action for a specific actor, service-role only. Used both by
+ * the model-loop path (via {@link createPendingAction}) and by system-initiated
+ * proposals that have no live AgentContext — e.g. the approval-first tour
+ * confirmation generated when a new inquiry arrives on a public route. Those
+ * async, inbox-style proposals pass a longer `expiresInMs` than a live chat
+ * turn's 15-minute default.
  */
-export async function persistPendingAction(
-  actor: PendingActionActor,
+export async function createPendingActionForUser(
+  db: Db,
   args: {
-    portal: AgentPortal;
-    sessionId?: string | null;
+    landlordId: string;
+    userId: string;
     toolName: string;
     input: unknown;
     preview: ActionPreview;
-    destructive: boolean;
+    portal?: AgentPortal;
+    sessionId?: string | null;
+    expiresInMs?: number;
   },
-): Promise<PendingAction | null> {
-  const nowIso = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + PENDING_ACTION_TTL_MS).toISOString();
-
-  try {
-    await actor.db
-      .from("agent_pending_actions")
-      .update({ status: "superseded", resolved_at: nowIso })
-      .eq("actor_user_id", actor.userId)
-      .eq("status", "pending");
-
-    const { data, error } = await actor.db
-      .from("agent_pending_actions")
-      .insert({
-        actor_user_id: actor.userId,
-        portal: args.portal,
-        landlord_id: actor.landlordId ?? null,
-        session_id: args.sessionId ?? null,
-        tool_name: args.toolName,
-        input: args.input,
-        preview: { ...args.preview, destructive: args.destructive },
-        status: "pending",
-        created_at: nowIso,
-        expires_at: expiresAt,
-      })
-      .select("id")
-      .single();
-    if (error || !data?.id) return null;
-
-    return {
-      id: String(data.id),
-      toolName: args.toolName,
-      destructive: args.destructive,
-      expiresAt,
-      preview: args.preview,
-    };
-  } catch {
-    return null;
+): Promise<string | null> {
+  const row: Record<string, unknown> = {
+    // `landlord_id` is `uuid not null`. A manager's landlordId is their own id;
+    // a resident's is their linked manager. A vendor (and an unlinked resident)
+    // has no landlord, so the row is anchored to the actor instead — `user_id`
+    // is what actually gates the claim below.
+    landlord_id: args.landlordId || args.userId,
+    user_id: args.userId,
+    portal: args.portal ?? "manager",
+    tool_name: args.toolName,
+    input: args.input,
+    preview: args.preview,
+  };
+  if (args.sessionId) row.session_id = args.sessionId;
+  if (args.expiresInMs && args.expiresInMs > 0) {
+    row.expires_at = new Date(Date.now() + args.expiresInMs).toISOString();
   }
+  const { data, error } = await db.from("agent_pending_actions").insert(row).select("id").single();
+  if (error || !data?.id) return null;
+  return String(data.id);
 }
 
-export type ClaimResult =
-  | { ok: true; row: PendingActionRow }
-  | { ok: false; reason: "not_found" | "already_resolved" | "expired" };
+export async function createPendingAction(
+  ctx: { landlordId?: string; userId: string; db: Db },
+  toolName: string,
+  input: unknown,
+  preview: ActionPreview,
+  opts: { portal?: AgentPortal; sessionId?: string | null } = {},
+): Promise<string | null> {
+  return createPendingActionForUser(ctx.db, {
+    landlordId: ctx.landlordId || ctx.userId,
+    userId: ctx.userId,
+    toolName,
+    input,
+    preview,
+    portal: opts.portal,
+    sessionId: opts.sessionId,
+  });
+}
+
+export type ProposedAction = {
+  id: string;
+  input: unknown;
+  preview: ActionPreview;
+  createdAt: string;
+};
 
 /**
- * Atomically claim a pending action for confirmation or cancellation. The
- * UPDATE's WHERE clause is the entire security story: it matches only rows
- * owned by this actor, still pending, and not expired — so a double confirm,
- * a foreign user's id, or a stale card can never execute.
+ * Every still-open proposal of one tool for one actor, newest first. Scoped on
+ * `user_id` (the claim key) so a manager only ever sees their own approvals.
  */
-export async function claimPendingAction(
+export async function listProposedActionsForUser(
+  db: Db,
+  args: { userId: string; toolName: string },
+): Promise<ProposedAction[]> {
+  const { data, error } = await db
+    .from("agent_pending_actions")
+    .select("id, input, preview, created_at")
+    .eq("user_id", args.userId)
+    .eq("tool_name", args.toolName)
+    .eq("status", "proposed")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as { id: string; input: unknown; preview: ActionPreview; created_at: string }[]).map((row) => ({
+    id: String(row.id),
+    input: row.input,
+    preview: row.preview,
+    createdAt: String(row.created_at ?? ""),
+  }));
+}
+
+/** What a successful claim hands the confirm gate. */
+export type ClaimedAction = {
+  toolName: string;
+  input: unknown;
+  portal: AgentPortal;
+  sessionId: string | null;
+};
+
+async function resolvePendingAction(
   actor: PendingActionActor,
-  actionId: string,
-  decision: "confirm" | "cancel",
-): Promise<ClaimResult> {
-  const nowIso = new Date().toISOString();
+  id: string,
+  status: "executed" | "denied",
+): Promise<ClaimedAction | null> {
+  const actionId = String(id ?? "").trim();
+  if (!actionId) return null;
+  // Single atomic update: only a still-proposed, unexpired row owned by this
+  // ACTOR flips. A concurrent double-confirm loses the race and gets null.
+  // `user_id` (not `landlord_id`) is the ownership key: two residents of the
+  // same manager share a landlord_id, so filtering on it alone would let one
+  // confirm the other's pending action.
   const { data, error } = await actor.db
     .from("agent_pending_actions")
-    .update({ status: decision === "confirm" ? "confirmed" : "cancelled", resolved_at: nowIso })
+    .update({ status, resolved_at: new Date().toISOString() })
     .eq("id", actionId)
-    .eq("actor_user_id", actor.userId)
-    .eq("status", "pending")
-    .gt("expires_at", nowIso)
-    .select("*")
-    .maybeSingle();
+    .eq("user_id", actor.userId)
+    .eq("status", "proposed")
+    .gt("expires_at", new Date().toISOString())
+    .select("tool_name, input, portal, session_id");
+  const row = (data ?? [])[0] as
+    | { tool_name: string; input: unknown; portal?: string | null; session_id?: string | null }
+    | undefined;
+  if (error || !row) return null;
+  const portal = row.portal === "resident" || row.portal === "vendor" ? row.portal : "manager";
+  return {
+    toolName: String(row.tool_name),
+    input: row.input,
+    portal,
+    sessionId: row.session_id ? String(row.session_id) : null,
+  };
+}
 
-  if (!error && data) return { ok: true, row: data as PendingActionRow };
+/** Claim a proposed action for execution. Null = unknown/foreign/expired/replayed. */
+export function claimPendingAction(actor: PendingActionActor, id: string) {
+  return resolvePendingAction(actor, id, "executed");
+}
 
-  // Zero rows claimed: one scoped follow-up read to say why (still actor-scoped,
-  // so foreign ids stay indistinguishable from unknown ids).
-  const { data: existing } = await actor.db
+/** Mark a proposed action as denied. Same guards as claiming. */
+export async function denyPendingAction(actor: PendingActionActor, id: string): Promise<boolean> {
+  return (await resolvePendingAction(actor, id, "denied")) !== null;
+}
+
+/**
+ * Record that a claimed action's execution threw, so the row doesn't falsely
+ * read "executed". Deliberately NOT reverted to "proposed": a handler may have
+ * partially executed, and re-running it must go through a fresh proposal.
+ */
+export async function markPendingActionFailed(actor: PendingActionActor, id: string): Promise<void> {
+  await actor.db
     .from("agent_pending_actions")
-    .select("id, status, expires_at")
-    .eq("id", actionId)
-    .eq("actor_user_id", actor.userId)
-    .maybeSingle();
+    .update({ status: "failed" })
+    .eq("id", id)
+    .eq("user_id", actor.userId)
+    .eq("status", "executed");
+}
 
-  if (!existing) return { ok: false, reason: "not_found" };
-  if (existing.status === "pending" && String(existing.expires_at) <= nowIso) {
-    return { ok: false, reason: "expired" };
-  }
-  return { ok: false, reason: "already_resolved" };
+/**
+ * Read a proposal's portal WITHOUT claiming it, so the confirm route can
+ * resolve that portal's context (and fail closed) before burning the action.
+ * Actor-scoped: a foreign id is indistinguishable from an unknown one.
+ */
+export async function peekPendingActionPortal(
+  actor: PendingActionActor,
+  id: string,
+): Promise<{ portal: AgentPortal; toolName: string } | null> {
+  const { data } = await actor.db
+    .from("agent_pending_actions")
+    .select("portal, tool_name")
+    .eq("id", id)
+    .eq("user_id", actor.userId)
+    .maybeSingle();
+  if (!data) return null;
+  const portal = data.portal === "resident" || data.portal === "vendor" ? data.portal : "manager";
+  return { portal, toolName: String(data.tool_name) };
 }

@@ -85,7 +85,6 @@ export const sendMessageToManagerTool = defineWriteTool({
   name: "send_message_to_manager",
   description:
     "Send a portal inbox message (plus email when configured) from you to the manager(s) whose vendor directory lists you. Use for questions, scheduling notes, or updates that need the manager's attention.",
-  kind: "write",
   inputSchema: z
     .object({
       subject: z.string().min(1).max(200).describe("Short subject line for the message."),
@@ -99,26 +98,23 @@ export const sendMessageToManagerTool = defineWriteTool({
     .strict(),
   preview: async (ctx: VendorAgentContext, input) => {
     const resolved = await resolveMessageTargets(ctx, input.recipientManagerId);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Send message to manager",
-        summary: `Send "${input.subject.trim()}" to ${resolved.targets.map((t) => t.name).join(", ")}.`,
-        lines: [
+      kind: "send_message_to_manager",
+      title: "Send message to manager",
+      summary: `Send "${input.subject.trim()}" to ${resolved.targets.map((t) => t.name).join(", ")}.`,
+      fields: [
           ...resolved.targets.map((t) => ({ label: "To", value: `${t.name} (${t.email})` })),
           { label: "Subject", value: input.subject.trim() },
           { label: "Message", value: input.body.trim().slice(0, 140) },
         ],
-        confirmLabel: "Send message",
-      },
+      confirmLabel: "Send message",
     };
   },
-  execute: async (ctx: VendorAgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     // Re-resolve targets from the authenticated context at execute time.
     const resolved = await resolveMessageTargets(ctx, input.recipientManagerId);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     const subject = input.subject.trim();
     const body = input.body.trim();
 
@@ -130,8 +126,8 @@ export const sendMessageToManagerTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "This exact message was already sent today." };
-      return { ok: false, error: "Could not record the action; no message was sent." };
+      if (audit.duplicate) return { reply: "This exact message was already sent today." };
+      throw new Error("Could not record the action; no message was sent.");
     }
 
     // deliverPortalInboxMessage re-filters recipients through
@@ -151,14 +147,10 @@ export const sendMessageToManagerTool = defineWriteTool({
     });
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { recipientCount: result.recipientCount });
-    return {
-      ok: true,
-      reply: `Sent "${subject}" to ${resolved.targets.map((t) => t.name).join(", ")}.`,
-      resultSummary: { recipientCount: result.recipientCount },
-    };
+    return { reply: `Sent "${subject}" to ${resolved.targets.map((t) => t.name).join(", ")}.`, resultSummary: { recipientCount: result.recipientCount } };
   },
 });

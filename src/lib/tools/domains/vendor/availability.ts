@@ -125,7 +125,6 @@ export const updateMyAvailabilityTool = defineWriteTool({
   name: "update_my_availability",
   description:
     "Open or close your availability slots for one date and time window — managers auto-schedule work-order visits into your open slots. Times are half-hour aligned; the window covers [startTime, endTime).",
-  kind: "write",
   inputSchema: z
     .object({
       date: z.string().describe("Calendar date to change, as YYYY-MM-DD."),
@@ -136,26 +135,23 @@ export const updateMyAvailabilityTool = defineWriteTool({
     .strict(),
   preview: async (ctx: VendorAgentContext, input) => {
     const resolved = resolveAvailabilityScope(ctx, input);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     const slotCount = resolved.scope.slotKeys.length;
     return {
-      ok: true,
-      input,
-      preview: {
-        title: input.mode === "add" ? "Open availability" : "Close availability",
-        summary: `${input.mode === "add" ? "Open" : "Close"} ${slotCount} half-hour slot${slotCount === 1 ? "" : "s"} on ${input.date}, ${resolved.scope.windowLabel}.`,
-        lines: [
+      kind: "update_my_availability",
+      title: input.mode === "add" ? "Open availability" : "Close availability",
+      summary: `${input.mode === "add" ? "Open" : "Close"} ${slotCount} half-hour slot${slotCount === 1 ? "" : "s"} on ${input.date}, ${resolved.scope.windowLabel}.`,
+      fields: [
           { label: "Date", value: input.date },
           { label: "Time", value: resolved.scope.windowLabel },
           { label: "Slots", value: `${slotCount} half-hour slot${slotCount === 1 ? "" : "s"}` },
         ],
-        confirmLabel: input.mode === "add" ? "Open slots" : "Close slots",
-      },
+      confirmLabel: input.mode === "add" ? "Open slots" : "Close slots",
     };
   },
-  execute: async (ctx: VendorAgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     const resolved = resolveAvailabilityScope(ctx, input);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     const { scope } = resolved;
 
     const dedupeKey = `update_my_availability:${ctx.landlordId}:${input.date}:${input.mode}:${input.startTime}-${input.endTime}`;
@@ -167,9 +163,9 @@ export const updateMyAvailabilityTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `Already done — that ${input.mode === "add" ? "availability" : "removal"} was applied for ${input.date}, ${scope.windowLabel}.` };
+        return { reply: `Already done — that ${input.mode === "add" ? "availability" : "removal"} was applied for ${input.date}, ${scope.windowLabel}.` };
       }
-      return { ok: false, error: "Could not record the action; availability was not changed." };
+      throw new Error("Could not record the action; availability was not changed.");
     }
 
     // Read-merge-write the current slot set (never construct from scratch).
@@ -207,17 +203,13 @@ export const updateMyAvailabilityTool = defineWriteTool({
     );
     if (writeError) {
       await updateAuditResult(ctx, dedupeKey, { error: "write_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: String(writeError.message ?? "Could not save availability.") };
+      throw new Error(String(writeError.message ?? "Could not save availability."));
     }
 
     await updateAuditResult(ctx, dedupeKey, { changed, totalSlots: slots.size });
     const already = scope.slotKeys.length - changed;
     const verb = input.mode === "add" ? "Opened" : "Closed";
     const alreadyNote = already > 0 ? ` (${already} slot${already === 1 ? " was" : "s were"} already ${input.mode === "add" ? "open" : "closed"})` : "";
-    return {
-      ok: true,
-      reply: `${verb} ${changed} half-hour slot${changed === 1 ? "" : "s"} on ${input.date}, ${scope.windowLabel}${alreadyNote}.`,
-      resultSummary: { changed, totalSlots: slots.size },
-    };
+    return { reply: `${verb} ${changed} half-hour slot${changed === 1 ? "" : "s"} on ${input.date}, ${scope.windowLabel}${alreadyNote}.`, resultSummary: { changed, totalSlots: slots.size } };
   },
 });

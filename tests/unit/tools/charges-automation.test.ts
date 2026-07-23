@@ -14,6 +14,7 @@ vi.mock("@/lib/payment-automation-server", async (importOriginal) => {
 
 import { loadManagerScheduledMessages } from "@/lib/payment-automation-server";
 import { buildRegistry } from "@/lib/tools/registry";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
 import {
   createChargeTool,
   updateChargeTool,
@@ -100,20 +101,46 @@ function makeFakeDb(seed: Record<string, Row[]> = {}) {
         updateVals = vals;
         return api;
       },
-      insert: async (rows: Row | Row[]) => {
+      // Insert is chainable, not a bare promise: the ledger sync inserts with
+      // `.insert(row).select("id").single()`, so awaiting it directly and
+      // reading the inserted row back must both work off ONE execution.
+      insert: (rows: Row | Row[]) => {
         const list = Array.isArray(rows) ? rows : [rows];
-        for (const row of list) {
-          // Mirror the partial UNIQUE index on audit_log.dedupe_key (NULLs never collide).
-          if (
-            table === "audit_log" &&
-            row.dedupe_key != null &&
-            tableRows(table).some((r) => r.dedupe_key === row.dedupe_key)
-          ) {
-            return { error: { code: "23505", message: "duplicate key value" } };
+        let result: { data: Row[] | null; error: { code: string; message: string } | null } | null = null;
+        const exec = () => {
+          if (result) return result;
+          const inserted: Row[] = [];
+          for (const row of list) {
+            // Mirror the partial UNIQUE index on audit_log.dedupe_key (NULLs never collide).
+            if (
+              table === "audit_log" &&
+              row.dedupe_key != null &&
+              tableRows(table).some((r) => r.dedupe_key === row.dedupe_key)
+            ) {
+              result = { data: null, error: { code: "23505", message: "duplicate key value" } };
+              return result;
+            }
+            const stored = { id: `${table}_${tableRows(table).length + 1}`, ...row };
+            tableRows(table).push(stored);
+            inserted.push(stored);
           }
-          tableRows(table).push({ ...row });
-        }
-        return { error: null };
+          result = { data: inserted, error: null };
+          return result;
+        };
+        const chain = {
+          select: () => chain,
+          single: async () => {
+            const r = exec();
+            return { data: r.data?.[0] ?? null, error: r.error };
+          },
+          maybeSingle: async () => {
+            const r = exec();
+            return { data: r.data?.[0] ?? null, error: r.error };
+          },
+          then: <T>(resolve: (v: { data: Row[] | null; error: unknown }) => T) =>
+            Promise.resolve(exec()).then(resolve),
+        };
+        return chain;
       },
       upsert: async (rows: Row | Row[], opts?: { onConflict?: string }) => {
         const keys = (opts?.onConflict ?? "id").split(",").map((s) => s.trim());
@@ -258,7 +285,7 @@ describe("create_charge", () => {
       ],
     });
     for (const email of ["foreign@example.com", "lead@example.com"]) {
-      const res = await createChargeTool.preview(ctx, {
+      const res = await previewWrite(createChargeTool, ctx, {
         residentEmail: email,
         kind: "other_cost",
         title: "Cleaning fee",
@@ -273,7 +300,7 @@ describe("create_charge", () => {
     const { ctx } = makeCtx({
       manager_application_records: [applicantRow(LANDLORD, { id: "a1", email: "Res@Example.com" })],
     });
-    const res = await createChargeTool.preview(ctx, {
+    const res = await previewWrite(createChargeTool, ctx, {
       residentEmail: "res@example.com",
       kind: "other_cost",
       title: "Cleaning fee",
@@ -282,7 +309,7 @@ describe("create_charge", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines).toEqual(
+    expect(res.preview.fields).toEqual(
       expect.arrayContaining([
         { label: "Amount", value: "$1,250.00" },
         { label: "Resident", value: "Pat Resident (res@example.com)" },
@@ -296,7 +323,7 @@ describe("create_charge", () => {
       manager_application_records: [applicantRow(LANDLORD, { id: "a1", email: "res@example.com" })],
       profiles: [{ id: RESIDENT_UUID, email: "res@example.com" }],
     });
-    const res = await createChargeTool.execute(ctx, {
+    const res = await executeWrite(createChargeTool, ctx, {
       residentEmail: "res@example.com",
       kind: "other_cost",
       title: "Cleaning fee",
@@ -328,8 +355,8 @@ describe("create_charge", () => {
       manager_application_records: [applicantRow(LANDLORD, { id: "a1", email: "res@example.com" })],
     });
     const input = { residentEmail: "res@example.com", kind: "other_cost" as const, title: "Fee", amountUsd: 50 };
-    const first = await createChargeTool.execute(ctx, input);
-    const second = await createChargeTool.execute(ctx, input);
+    const first = await executeWrite(createChargeTool, ctx, input);
+    const second = await executeWrite(createChargeTool, ctx, input);
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply.toLowerCase()).toContain("already");
@@ -342,7 +369,7 @@ describe("update_charge", () => {
     const { ctx } = makeCtx({
       portal_household_charge_records: [chargeRow(OTHER_LANDLORD, { id: "c_foreign" })],
     });
-    const res = await updateChargeTool.preview(ctx, { chargeId: "c_foreign", amountUsd: 10 });
+    const res = await previewWrite(updateChargeTool, ctx, { chargeId: "c_foreign", amountUsd: 10 });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("list_charges");
   });
@@ -354,14 +381,14 @@ describe("update_charge", () => {
         chargeRow(LANDLORD, { id: "c_open" }),
       ],
     });
-    const paid = await updateChargeTool.preview(ctx, { chargeId: "c_paid", amountUsd: 10 });
+    const paid = await previewWrite(updateChargeTool, ctx, { chargeId: "c_paid", amountUsd: 10 });
     expect(paid.ok).toBe(false);
     if (!paid.ok) expect(paid.error).toContain("paid");
 
-    const open = await updateChargeTool.preview(ctx, { chargeId: "c_open", amountUsd: 1600 });
+    const open = await previewWrite(updateChargeTool, ctx, { chargeId: "c_open", amountUsd: 1600 });
     expect(open.ok).toBe(true);
     if (open.ok) {
-      expect(open.preview.lines).toEqual(
+      expect(open.preview.fields).toEqual(
         expect.arrayContaining([{ label: "Amount", value: "$1,500.00 → $1,600.00" }]),
       );
     }
@@ -371,7 +398,7 @@ describe("update_charge", () => {
     const { ctx, tables } = makeCtx({
       portal_household_charge_records: [chargeRow(LANDLORD, { id: "c_open" })],
     });
-    const res = await updateChargeTool.execute(ctx, { chargeId: "c_open", amountUsd: 1600 });
+    const res = await executeWrite(updateChargeTool, ctx, { chargeId: "c_open", amountUsd: 1600 });
     expect(res.ok).toBe(true);
 
     const rowData = (tables.get("portal_household_charge_records") ?? [])[0]!.row_data as HouseholdCharge;
@@ -393,8 +420,8 @@ describe("update_charge", () => {
         chargeRow(OTHER_LANDLORD, { id: "c_foreign" }),
       ],
     });
-    expect((await updateChargeTool.execute(ctx, { chargeId: "c_paid", amountUsd: 10 })).ok).toBe(false);
-    expect((await updateChargeTool.execute(ctx, { chargeId: "c_foreign", amountUsd: 10 })).ok).toBe(false);
+    expect((await executeWrite(updateChargeTool, ctx, { chargeId: "c_paid", amountUsd: 10 })).ok).toBe(false);
+    expect((await executeWrite(updateChargeTool, ctx, { chargeId: "c_foreign", amountUsd: 10 })).ok).toBe(false);
   });
 });
 
@@ -406,10 +433,10 @@ describe("delete_charge", () => {
         chargeRow(OTHER_LANDLORD, { id: "c_foreign" }),
       ],
     });
-    expect((await deleteChargeTool.preview(ctx, { chargeId: "c_foreign" })).ok).toBe(false);
-    const mine = await deleteChargeTool.preview(ctx, { chargeId: "c_mine" });
+    expect((await previewWrite(deleteChargeTool, ctx, { chargeId: "c_foreign" })).ok).toBe(false);
+    const mine = await previewWrite(deleteChargeTool, ctx, { chargeId: "c_mine" });
     expect(mine.ok).toBe(true);
-    if (mine.ok) expect(mine.preview.warning).toContain("cannot be undone");
+    if (mine.ok) expect(mine.preview.warnings?.[0]).toContain("cannot be undone");
   });
 
   it("execute deletes the owned row AND its ledger entries, never another landlord's", async () => {
@@ -425,7 +452,7 @@ describe("delete_charge", () => {
         { id: 3, manager_user_id: OTHER_LANDLORD, source_charge_id: "c_mine", entry_type: "charge" },
       ],
     });
-    const res = await deleteChargeTool.execute(ctx, { chargeId: "c_mine" });
+    const res = await executeWrite(deleteChargeTool, ctx, { chargeId: "c_mine" });
     expect(res.ok).toBe(true);
 
     const charges = tables.get("portal_household_charge_records") ?? [];
@@ -437,7 +464,7 @@ describe("delete_charge", () => {
     expect(audit.dedupe_key).toBe(`delete_charge:${LANDLORD}:c_mine`);
 
     // One-shot dedupe: a repeat returns already-done.
-    const again = await deleteChargeTool.execute(ctx, { chargeId: "c_mine" });
+    const again = await executeWrite(deleteChargeTool, ctx, { chargeId: "c_mine" });
     expect(again.ok).toBe(false); // row is gone → re-resolve fails first
   });
 });
@@ -453,10 +480,10 @@ describe("mark_charge_paid", () => {
         }),
       ],
     });
-    const res = await markChargePaidTool.preview(ctx, { chargeId: "c_open", channel: "zelle" });
+    const res = await previewWrite(markChargePaidTool, ctx, { chargeId: "c_open", channel: "zelle" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const values = res.preview.lines.map((l) => l.value).join(" | ");
+    const values = res.preview.fields.map((l) => l.value).join(" | ");
     expect(values).toContain("Resident reported sending Zelle");
     expect(values).toContain("Future reminders cancelled; payment recorded in the ledger");
   });
@@ -468,17 +495,17 @@ describe("mark_charge_paid", () => {
         chargeRow(OTHER_LANDLORD, { id: "c_foreign" }),
       ],
     });
-    expect((await markChargePaidTool.preview(ctx, { chargeId: "c_paid" })).ok).toBe(false);
-    expect((await markChargePaidTool.preview(ctx, { chargeId: "c_foreign" })).ok).toBe(false);
-    expect((await markChargePaidTool.execute(ctx, { chargeId: "c_paid" })).ok).toBe(false);
-    expect((await markChargePaidTool.execute(ctx, { chargeId: "c_foreign" })).ok).toBe(false);
+    expect((await previewWrite(markChargePaidTool, ctx, { chargeId: "c_paid" })).ok).toBe(false);
+    expect((await previewWrite(markChargePaidTool, ctx, { chargeId: "c_foreign" })).ok).toBe(false);
+    expect((await executeWrite(markChargePaidTool, ctx, { chargeId: "c_paid" })).ok).toBe(false);
+    expect((await executeWrite(markChargePaidTool, ctx, { chargeId: "c_foreign" })).ok).toBe(false);
   });
 
   it("execute marks paid, writes the payment ledger entry, cancels future reminders, audits one-shot", async () => {
     const { ctx, tables } = makeCtx({
       portal_household_charge_records: [chargeRow(LANDLORD, { id: "c_open" })],
     });
-    const res = await markChargePaidTool.execute(ctx, { chargeId: "c_open", channel: "cash" });
+    const res = await executeWrite(markChargePaidTool, ctx, { chargeId: "c_open", channel: "cash" });
     expect(res.ok).toBe(true);
 
     const rowData = (tables.get("portal_household_charge_records") ?? [])[0]!.row_data as HouseholdCharge;
@@ -519,12 +546,12 @@ describe("get_automation_settings", () => {
 describe("update_automation_settings", () => {
   it("preview requires at least one field and diffs before → after", async () => {
     const { ctx } = makeCtx();
-    expect((await updateAutomationSettingsTool.preview(ctx, {})).ok).toBe(false);
+    expect((await previewWrite(updateAutomationSettingsTool, ctx, {})).ok).toBe(false);
 
-    const res = await updateAutomationSettingsTool.preview(ctx, { sameDayReminderEnabled: false });
+    const res = await previewWrite(updateAutomationSettingsTool, ctx, { sameDayReminderEnabled: false });
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.preview.lines).toEqual(
+      expect(res.preview.fields).toEqual(
         expect.arrayContaining([{ label: "Same-day reminder", value: "on → off" }]),
       );
     }
@@ -532,7 +559,7 @@ describe("update_automation_settings", () => {
 
   it("execute merges + normalizes + saves under the landlord, with a patch-hash dedupe key", async () => {
     const { ctx, tables } = makeCtx();
-    const res = await updateAutomationSettingsTool.execute(ctx, {
+    const res = await executeWrite(updateAutomationSettingsTool, ctx, {
       sameDayReminderEnabled: false,
       preDueReminderDays: [5, 1],
     });
@@ -548,7 +575,7 @@ describe("update_automation_settings", () => {
     const audit = (tables.get("audit_log") ?? [])[0]!;
     expect(audit.dedupe_key).toBe(`update_automation_settings:${LANDLORD}:${expectedHash}`);
 
-    const again = await updateAutomationSettingsTool.execute(ctx, {
+    const again = await executeWrite(updateAutomationSettingsTool, ctx, {
       sameDayReminderEnabled: false,
       preDueReminderDays: [5, 1],
     });
@@ -560,7 +587,7 @@ describe("update_automation_settings", () => {
 describe("cancel_scheduled_reminder", () => {
   it("preview fails with a corrective error when the slot does not exist for this landlord", async () => {
     const { ctx } = makeCtx();
-    const res = await cancelScheduledReminderTool.preview(ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
+    const res = await previewWrite(cancelScheduledReminderTool, ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
     expect(res.ok).toBe(false);
     // The projection is landlord-scoped: a foreign charge id never matches.
     expect(mockedLoadScheduled).toHaveBeenCalledWith(ctx.db, LANDLORD, { includeHidden: true });
@@ -572,7 +599,7 @@ describe("cancel_scheduled_reminder", () => {
       messages: [slotMessage({ status: "cancelled" })],
     });
     const { ctx } = makeCtx();
-    const res = await cancelScheduledReminderTool.preview(ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
+    const res = await previewWrite(cancelScheduledReminderTool, ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("cancelled");
   });
@@ -580,7 +607,7 @@ describe("cancel_scheduled_reminder", () => {
   it("execute writes the cancelled override for the exact slot and audits per slot", async () => {
     mockedLoadScheduled.mockResolvedValue({ settings: {} as never, messages: [slotMessage()] });
     const { ctx, tables } = makeCtx();
-    const res = await cancelScheduledReminderTool.execute(ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
+    const res = await executeWrite(cancelScheduledReminderTool, ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
     expect(res.ok).toBe(true);
 
     const overrides = tables.get("scheduled_message_overrides") ?? [];
@@ -593,7 +620,7 @@ describe("cancel_scheduled_reminder", () => {
     const audit = (tables.get("audit_log") ?? [])[0]!;
     expect(audit.dedupe_key).toBe(`cancel_scheduled_reminder:${LANDLORD}:c1:pre_due:3`);
 
-    const again = await cancelScheduledReminderTool.execute(ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
+    const again = await executeWrite(cancelScheduledReminderTool, ctx, { chargeId: "c1", kind: "pre_due", daysBeforeDue: 3 });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply.toLowerCase()).toContain("already");
   });
@@ -603,14 +630,14 @@ describe("reschedule_reminder", () => {
   it("preview rejects an invalid or past newSendAtIso", async () => {
     mockedLoadScheduled.mockResolvedValue({ settings: {} as never, messages: [slotMessage()] });
     const { ctx } = makeCtx();
-    const past = await rescheduleReminderTool.preview(ctx, {
+    const past = await previewWrite(rescheduleReminderTool, ctx, {
       chargeId: "c1",
       kind: "pre_due",
       daysBeforeDue: 3,
       newSendAtIso: "2020-01-01T00:00:00Z",
     });
     expect(past.ok).toBe(false);
-    const junk = await rescheduleReminderTool.preview(ctx, {
+    const junk = await previewWrite(rescheduleReminderTool, ctx, {
       chargeId: "c1",
       kind: "pre_due",
       daysBeforeDue: 3,
@@ -622,7 +649,7 @@ describe("reschedule_reminder", () => {
   it("execute writes customSendAt for the slot and audits with the slot+time key", async () => {
     mockedLoadScheduled.mockResolvedValue({ settings: {} as never, messages: [slotMessage()] });
     const { ctx, tables } = makeCtx();
-    const res = await rescheduleReminderTool.execute(ctx, {
+    const res = await executeWrite(rescheduleReminderTool, ctx, {
       chargeId: "c1",
       kind: "pre_due",
       daysBeforeDue: 3,

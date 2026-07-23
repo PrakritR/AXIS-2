@@ -101,7 +101,7 @@ export const listMyWorkOrdersTool = defineTool({
   },
 });
 
-type ServiceRequestRouting = {
+export type ServiceRequestRouting = {
   managerId: string;
   managerLabel: string;
   propertyId: string;
@@ -114,7 +114,7 @@ type ServiceRequestRouting = {
  * recent approved application whose manager is in ctx.managerIds — the same
  * authoritative link the API route verifies with residentBelongsToManager.
  */
-async function resolveServiceRequestRouting(ctx: ResidentAgentContext): Promise<ServiceRequestRouting | null> {
+export async function resolveServiceRequestRouting(ctx: ResidentAgentContext): Promise<ServiceRequestRouting | null> {
   if (ctx.managerIds.length === 0) return null;
   const { data } = await ctx.db
     .from("manager_application_records")
@@ -142,7 +142,6 @@ export const createServiceRequestTool = defineWriteTool({
   name: "create_service_request",
   description:
     "File a new service/amenity request with the resident's property manager (a custom request the manager prices and approves). Provide a short title and a description of what's needed.",
-  kind: "write",
   inputSchema: z
     .object({
       title: z.string().min(3).max(120).describe("Short name for the request, e.g. 'Extra parking spot'."),
@@ -156,29 +155,26 @@ export const createServiceRequestTool = defineWriteTool({
   preview: async (ctx: ResidentAgentContext, input) => {
     const routing = await resolveServiceRequestRouting(ctx);
     if (!routing) {
-      return { ok: false, error: "You are not linked to a property manager yet, so a service request cannot be filed." };
+      throw new Error("You are not linked to a property manager yet, so a service request cannot be filed.");
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "File service request",
-        summary: `File "${input.title.trim()}" with ${routing.managerLabel}.`,
-        lines: [
+      kind: "create_service_request",
+      title: "File service request",
+      summary: `File "${input.title.trim()}" with ${routing.managerLabel}.`,
+      fields: [
           { label: "Request", value: input.title.trim() },
           { label: "Details", value: input.description.trim().slice(0, 140) },
           { label: "Priority", value: input.priority ?? "normal" },
           { label: "Property", value: routing.propertyLabel },
           { label: "Sent to", value: routing.managerLabel },
         ],
-        confirmLabel: "File request",
-      },
+      confirmLabel: "File request",
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     const routing = await resolveServiceRequestRouting(ctx);
     if (!routing) {
-      return { ok: false, error: "You are not linked to a property manager yet, so a service request cannot be filed." };
+      throw new Error("You are not linked to a property manager yet, so a service request cannot be filed.");
     }
     const title = input.title.trim();
 
@@ -191,8 +187,8 @@ export const createServiceRequestTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `A service request titled "${title}" was already filed today.` };
-      return { ok: false, error: "Could not record the action; no request was filed." };
+      if (audit.duplicate) return { reply: `A service request titled "${title}" was already filed today.` };
+      throw new Error("Could not record the action; no request was filed.");
     }
 
     const now = new Date().toISOString();
@@ -235,7 +231,7 @@ export const createServiceRequestTool = defineWriteTool({
     );
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
 
     // Best-effort manager notification (portal inbox; email when configured) —
@@ -265,11 +261,7 @@ export const createServiceRequestTool = defineWriteTool({
       .catch(() => false);
 
     await updateAuditResult(ctx, dedupeKey, { requestId: row.id, notified });
-    return {
-      ok: true,
-      reply: `Filed the service request "${title}" with ${routing.managerLabel}. They'll review it and set a price before approval.`,
-      resultSummary: { requestId: row.id, notified },
-    };
+    return { reply: `Filed the service request "${title}" with ${routing.managerLabel}. They'll review it and set a price before approval.`, resultSummary: { requestId: row.id, notified } };
   },
 });
 
@@ -277,7 +269,6 @@ export const addServiceRequestNoteTool = defineWriteTool({
   name: "add_service_request_note",
   description:
     "Append a note to one of the resident's own existing service requests (e.g. extra details or a follow-up for the manager). Pass the request id from list_my_service_requests.",
-  kind: "write",
   inputSchema: z
     .object({
       requestId: z.string().min(1).describe("Id of your service request (from list_my_service_requests)."),
@@ -287,26 +278,20 @@ export const addServiceRequestNoteTool = defineWriteTool({
   preview: async (ctx: ResidentAgentContext, input) => {
     const own = (await loadOwnServiceRequests(ctx)).find((r) => r.id === input.requestId.trim());
     if (!own) {
-      return {
-        ok: false,
-        error: `${input.requestId} is not one of your service requests. Use list_my_service_requests to get valid ids.`,
-      };
+      throw new Error(`${input.requestId} is not one of your service requests. Use list_my_service_requests to get valid ids.`);
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Add note to service request",
-        summary: `Add a note to "${own.offerName}" (${own.status}).`,
-        lines: [
+      kind: "add_service_request_note",
+      title: "Add note to service request",
+      summary: `Add a note to "${own.offerName}" (${own.status}).`,
+      fields: [
           { label: "Request", value: `${own.offerName} (${own.status})` },
           { label: "Note", value: input.note.trim().slice(0, 140) },
         ],
-        confirmLabel: "Add note",
-      },
+      confirmLabel: "Add note",
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     const requestId = input.requestId.trim();
     const note = input.note.trim();
     // Re-resolve the full record, scoped to the resident's own email.
@@ -316,9 +301,9 @@ export const addServiceRequestNoteTool = defineWriteTool({
       .eq("id", requestId)
       .eq("resident_email", ctx.email)
       .maybeSingle();
-    if (readError) return { ok: false, error: readError.message };
+    if (readError) throw new Error(readError.message);
     if (!record) {
-      return { ok: false, error: `${requestId} is not one of your service requests.` };
+      throw new Error(`${requestId} is not one of your service requests.`);
     }
 
     const dedupeKey = `add_service_request_note:${ctx.landlordId}:${requestId}:${contentHash(note)}`;
@@ -329,8 +314,8 @@ export const addServiceRequestNoteTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That note was already added to this request." };
-      return { ok: false, error: "Could not record the action; no note was added." };
+      if (audit.duplicate) return { reply: "That note was already added to this request." };
+      throw new Error("Could not record the action; no note was added.");
     }
 
     // Read-merge-write the CURRENT row_data — never construct it from scratch.
@@ -352,14 +337,10 @@ export const addServiceRequestNoteTool = defineWriteTool({
     );
     if (writeError) {
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: writeError.message };
+      throw new Error(writeError.message);
     }
 
     await updateAuditResult(ctx, dedupeKey, { requestId });
-    return {
-      ok: true,
-      reply: `Added your note to "${current.offerName || requestId}". Your manager will see it on the request.`,
-      resultSummary: { requestId },
-    };
+    return { reply: `Added your note to "${current.offerName || requestId}". Your manager will see it on the request.`, resultSummary: { requestId } };
   },
 });

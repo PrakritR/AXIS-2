@@ -21,18 +21,21 @@ POST /api/agent/demo-chat       (public /demo sandbox, simulated actions)
 runAgentTurn (src/lib/agent/loop.ts)
   · Anthropic SDK, native tool-calling, ≤8 iterations
   · model routed per turn by complexity (src/lib/agent/model.ts)
-  · READ tools run inline; confirm:"none" writes run inline (still audited)
-  · a gated WRITE tool call runs its preview() and HALTS the turn
+  · READ tools run inline; so do writes the SURFACE allow-listed
+    (allowWriteTools — e.g. the SMS agents' escalate_to_manager)
+  · every other WRITE tool call runs its preview() and HALTS the turn
         │
         ▼ (write proposal)
-agent_pending_actions row (validated input + preview; 10-min TTL)
+agent_pending_actions row (validated input + preview; 15-min TTL by default,
+  longer for async queues like the 7-day tour approvals)
   → client renders PendingActionCard from the preview
         │ user confirms
         ▼
-POST /api/agent/action  { actionId, decision: confirm|cancel }
-  · atomic exactly-once claim (actor-scoped, expiry-checked)
+POST back to the SAME chat endpoint  { confirmActionId } | { denyActionId }
+  · atomic exactly-once claim (actor-scoped on user_id, expiry-checked)
+  · the claimed row's portal must match the calling route's portal
   · re-validates stored input against the tool's CURRENT schema
-  · tool execute() re-resolves every target from actor-scoped data
+  · tool handler() re-resolves every target from actor-scoped data
   · audit_log row written BEFORE the side effect (dedupe_key idempotency)
 ```
 
@@ -48,7 +51,10 @@ Identity always comes from the authenticated session — **never** from model
 input. `buildRegistry` throws at module init if a write tool's input schema
 declares an identity-shaped field (`landlordId`, `manager_user_id`, …).
 Target ids (a charge id, a recipient email) are allowed in inputs and are
-re-verified against actor-scoped data in both `preview()` and `execute()`.
+re-verified against actor-scoped data in both `preview()` and `handler()`. A
+target that unavoidably reads as an identity (`submit_vendor_invoice`'s
+`managerUserId`, the manager being BILLED) opts out explicitly via
+`allowedIdentityInputs` and is re-verified in both phases.
 
 ### Registries
 
@@ -60,19 +66,27 @@ re-verified against actor-scoped data in both `preview()` and `execute()`.
 
 ### Write-action lifecycle
 
-1. Model calls a write tool → `prepareWriteAction` Zod-validates and runs
+1. Model calls a write tool → `previewWriteTool` Zod-validates and runs
    `preview(ctx, input)` (READ-ONLY: validate against live data, build an
-   `ActionPreview`). A failed preview is fed back as a `tool_result` error so
-   the model self-corrects.
-2. The loop halts and returns `proposedAction`; the chat route persists it to
-   `agent_pending_actions` and sends the client only `{id, preview, …}` —
-   never the raw input.
-3. The user confirms → `POST /api/agent/action` claims the row atomically
-   (`status='pending' AND expires_at > now() AND actor_user_id = <me>`),
-   re-validates, and runs `execute(ctx, input)`.
-4. `execute` re-resolves ownership of every target, writes the audit row
+   `ActionPreview`). The preview signals failure by THROWING; the message is
+   fed back as a `tool_result` error so the model self-corrects.
+2. The loop halts and returns `pendingAction`; the chat route persists it with
+   `createPendingAction` and sends the client only `{id, preview}` — never the
+   raw input. A preview that resolved something the user is approving (an
+   auto-picked visit slot) pins it with `confirmedInput`, which
+   `previewWriteTool` STRIPS out of the stored/returned preview and uses as the
+   stored input, so the handler executes exactly what the card showed.
+3. The user confirms → the client posts `{ confirmActionId }` back to the same
+   chat endpoint → `runConfirmedPendingActionForPortal` claims the row
+   atomically (`status='proposed' AND expires_at > now() AND user_id = <me>`),
+   checks the row's portal against the caller's, re-validates against the
+   tool's CURRENT schema, and runs `handler(ctx, input)`. A claim that does not
+   land returns a single 410 whatever the reason, so the response can never
+   enumerate other users' action ids.
+4. `handler` re-resolves ownership of every target, writes the audit row
    FIRST (`writeAuditLog`, `src/lib/tools/audit.ts`), performs the side
-   effect, then stamps the outcome (`updateAuditResult`).
+   effect, then stamps the outcome (`updateAuditResult`). A throw is recorded
+   with `markPendingActionFailed` — never silently left reading "executed".
 
 Batch actions are **tool-level array inputs** (e.g. `send_rent_reminder`
 takes `chargeIds[]`) — one proposal, one card, one confirm; per-target dedupe
@@ -140,7 +154,8 @@ created.
 
 > The live source of truth is the registry files; this table is the
 > orientation map. Kind: R = read, W = confirm-gated write, W* = inline
-> low-risk write (confirm:"none", still audited).
+> low-risk write the surface allow-lists (`MANAGER_INLINE_WRITE_TOOLS`, still
+> audited by its own handler).
 
 ### Manager (`src/lib/tools/index.ts`)
 

@@ -165,16 +165,16 @@ const THREAD_ACTION_LABEL: Record<(typeof THREAD_ACTIONS)[number], string> = {
 };
 
 /**
- * Low-risk inbox housekeeping (confirm:"none" — executed inline like a read,
- * still audit-logged). The folder model mirrors portal-inbox-storage: archiving
- * moves the thread to "trash" and remembers previousFolder so restore can undo.
+ * Low-risk inbox housekeeping. Named in MANAGER_INLINE_WRITE_TOOLS so the
+ * manager surfaces let the model run it inline like a read (still audit-logged
+ * by its handler); every other surface keeps it confirm-gated. The folder model
+ * mirrors portal-inbox-storage: archiving moves the thread to "trash" and
+ * remembers previousFolder so restore can undo.
  */
 export const updateThreadTool = defineWriteTool({
   name: "update_thread",
   description:
     "Mark one of the landlord's own inbox threads read or unread, move it to trash (archive), or restore it from trash to its previous folder. Pass the thread id from list_inbox_threads.",
-  kind: "write",
-  confirm: "none",
   inputSchema: z
     .object({
       threadId: z.string().min(1).describe("Thread id from list_inbox_threads."),
@@ -186,31 +186,26 @@ export const updateThreadTool = defineWriteTool({
   preview: async (ctx, input) => {
     const thread = await loadOwnThread(ctx, input.threadId);
     if (!thread) {
-      return {
-        ok: false,
-        error: `No inbox thread ${input.threadId} in this landlord's inbox. Use list_inbox_threads to get valid thread ids.`,
-      };
+      throw new Error(`No inbox thread ${input.threadId} in this landlord's inbox. Use list_inbox_threads to get valid thread ids.`);
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: THREAD_ACTION_LABEL[input.action],
-        summary: `${THREAD_ACTION_LABEL[input.action]}: "${thread.subject || "(no subject)"}" from ${thread.from || "unknown sender"}.`,
-        lines: [
+      kind: "update_thread",
+      title: THREAD_ACTION_LABEL[input.action],
+      summary: `${THREAD_ACTION_LABEL[input.action]}: "${thread.subject || "(no subject)"}" from ${thread.from || "unknown sender"}.`,
+      fields: [
           { label: "Thread", value: thread.subject || "(no subject)" },
           { label: "From", value: thread.from || "—" },
           { label: "Action", value: THREAD_ACTION_LABEL[input.action] },
         ],
-      },
+      confirmLabel: "Confirm",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve under the same scope filters — the stored thread id is never
     // trusted as ownership proof.
     const thread = await loadOwnThread(ctx, input.threadId);
     if (!thread) {
-      return { ok: false, error: "That thread no longer exists in this landlord's inbox." };
+      throw new Error("That thread no longer exists in this landlord's inbox.");
     }
 
     // Read-merge-write the CURRENT row_data, never construct it from scratch.
@@ -238,7 +233,7 @@ export const updateThreadTool = defineWriteTool({
       inputSummary: { threadId: input.threadId, action: input.action },
     });
     if (!audit.recorded) {
-      return { ok: false, error: "Could not record the action; the thread was not changed." };
+      throw new Error("Could not record the action; the thread was not changed.");
     }
 
     const { error } = await ctx.db
@@ -247,7 +242,7 @@ export const updateThreadTool = defineWriteTool({
       .eq("scope", MANAGER_INBOX_SCOPE)
       .eq("owner_user_id", ctx.userId)
       .eq("id", input.threadId);
-    if (error) return { ok: false, error: String(error.message ?? "The thread could not be updated.") };
+    if (error) throw new Error(String(error.message ?? "The thread could not be updated."));
 
     const subject = thread.subject || "(no subject)";
     const reply =
@@ -258,6 +253,6 @@ export const updateThreadTool = defineWriteTool({
           : input.action === "archive"
             ? `Moved "${subject}" to trash.`
             : `Restored "${subject}" to ${next.folder}.`;
-    return { ok: true, reply, resultSummary: { threadId: input.threadId, action: input.action } };
+    return { reply, resultSummary: { threadId: input.threadId, action: input.action } };
   },
 });

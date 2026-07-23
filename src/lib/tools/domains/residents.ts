@@ -120,7 +120,6 @@ export const setResidentApprovalTool = defineWriteTool({
   name: "set_resident_approval",
   description:
     "Turn a resident's portal access on or off by setting their application-approved flag. Pass the resident's email from list_residents. approved=true grants resident portal access; approved=false suspends it without deleting anything.",
-  kind: "write",
   inputSchema: z
     .object({
       residentEmail: z.string().min(3).describe("The resident's email, from list_residents."),
@@ -129,35 +128,33 @@ export const setResidentApprovalTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const email = input.residentEmail.trim().toLowerCase();
-    if (!email.includes("@")) return { ok: false, error: "A valid resident email is required." };
+    if (!email.includes("@")) throw new Error("A valid resident email is required.");
     const ownershipError = await assertResidentInPortfolio(ctx, email);
-    if (ownershipError) return { ok: false, error: ownershipError };
+    if (ownershipError) throw new Error(ownershipError);
     const profile = await loadResidentProfile(ctx, email);
     if (!profile) {
-      return { ok: false, error: `No resident account exists for ${email} — they may not have signed up yet.` };
+      throw new Error(`No resident account exists for ${email} — they may not have signed up yet.`);
     }
     const currently = profile.application_approved === true;
     if (currently === input.approved) {
-      return { ok: false, error: `${email} is already ${input.approved ? "approved" : "not approved"} — nothing to change.` };
+      throw new Error(`${email} is already ${input.approved ? "approved" : "not approved"} — nothing to change.`);
     }
     return {
-      ok: true,
-      input: { ...input, residentEmail: email },
-      preview: {
-        title: input.approved ? "Approve resident access" : "Suspend resident access",
-        summary: `${input.approved ? "Turn on" : "Turn off"} resident portal access for ${profile.full_name || email}.`,
-        lines: [
+      confirmedInput: { ...input, residentEmail: email },
+      kind: "set_resident_approval",
+      title: input.approved ? "Approve resident access" : "Suspend resident access",
+      summary: `${input.approved ? "Turn on" : "Turn off"} resident portal access for ${profile.full_name || email}.`,
+      fields: [
           { label: "Resident", value: profile.full_name ? `${profile.full_name} <${email}>` : email },
           { label: "Approval", value: `${currently ? "Approved" : "Not approved"} → ${input.approved ? "Approved" : "Not approved"}` },
           { label: "Effect", value: `Resident portal access turned ${input.approved ? "on" : "off"}` },
         ],
-        confirmLabel: input.approved ? "Approve" : "Suspend",
-      },
+      confirmLabel: input.approved ? "Approve" : "Suspend",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const email = input.residentEmail.trim().toLowerCase();
-    if (!email.includes("@")) return { ok: false, error: "A valid resident email is required." };
+    if (!email.includes("@")) throw new Error("A valid resident email is required.");
 
     // One-shot per email+value: repeating the same toggle returns already-done.
     const dedupeKey = `set_resident_approval:${ctx.landlordId}:${email}:${input.approved}`;
@@ -170,9 +167,9 @@ export const setResidentApprovalTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `${email} was already set to ${input.approved ? "approved" : "not approved"}.` };
+        return { reply: `${email} was already set to ${input.approved ? "approved" : "not approved"}.` };
       }
-      return { ok: false, error: "Could not record the action; nothing was changed." };
+      throw new Error("Could not record the action; nothing was changed.");
     }
 
     // The lib re-checks portfolio ownership server-side before touching profiles.
@@ -183,15 +180,11 @@ export const setResidentApprovalTool = defineWriteTool({
     );
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { error: "update_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { residentEmail: email, approved: input.approved });
-    return {
-      ok: true,
-      reply: `${input.approved ? "Approved" : "Suspended"} resident portal access for ${email}.`,
-      resultSummary: { approved: input.approved },
-    };
+    return { reply: `${input.approved ? "Approved" : "Suspended"} resident portal access for ${email}.`, resultSummary: { approved: input.approved } };
   },
 });
 
@@ -199,7 +192,6 @@ export const sendResidentWelcomeTool = defineWriteTool({
   name: "send_resident_welcome",
   description:
     "Send the resident welcome / account-setup email (with their Axis ID and portal signup link) for an approved application. Pass the application id from list_applications or list_residents — the recipient email and Axis ID are resolved from the stored record, never from input.",
-  kind: "write",
   inputSchema: z
     .object({
       applicationId: z.string().min(1).describe("The application id, from list_applications or list_residents."),
@@ -208,22 +200,20 @@ export const sendResidentWelcomeTool = defineWriteTool({
   preview: async (ctx, input) => {
     const target = await resolveResidentWelcomeTarget(ctx.db, ctx.landlordId, input.applicationId);
     if (!target) {
-      return { ok: false, error: "No application with that id belongs to this landlord. Use list_applications to get valid ids." };
+      throw new Error("No application with that id belongs to this landlord. Use list_applications to get valid ids.");
     }
     if (!target.to || !RESIDENT_WELCOME_EMAIL_RE.test(target.to)) {
-      return { ok: false, error: "This application has no valid resident email on file, so a welcome email can't be sent." };
+      throw new Error("This application has no valid resident email on file, so a welcome email can't be sent.");
     }
     const skipExternalEmail = target.to.endsWith("@axis.local") || target.to === ctx.email;
     if (!skipExternalEmail && !residentWelcomeEmailConfigured()) {
-      return { ok: false, error: "Email delivery is not configured on this deployment (set RESEND_API_KEY), so the welcome email cannot be sent." };
+      throw new Error("Email delivery is not configured on this deployment (set RESEND_API_KEY), so the welcome email cannot be sent.");
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Send resident welcome email",
-        summary: `Send the account-setup welcome email to ${target.residentName || target.to}.`,
-        lines: [
+      kind: "send_resident_welcome",
+      title: "Send resident welcome email",
+      summary: `Send the account-setup welcome email to ${target.residentName || target.to}.`,
+      fields: [
           { label: "To", value: target.residentName ? `${target.residentName} <${target.to}>` : target.to },
           { label: "Axis ID", value: target.axisId },
           {
@@ -233,16 +223,15 @@ export const sendResidentWelcomeTool = defineWriteTool({
               : "Email + portal inbox record",
           },
         ],
-        confirmLabel: "Send welcome",
-      },
+      confirmLabel: "Send welcome",
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve the recipient from the landlord's own record at execute time.
     const target = await resolveResidentWelcomeTarget(ctx.db, ctx.landlordId, input.applicationId);
-    if (!target) return { ok: false, error: "No application with that id belongs to this landlord." };
+    if (!target) throw new Error("No application with that id belongs to this landlord.");
     if (!target.to || !RESIDENT_WELCOME_EMAIL_RE.test(target.to)) {
-      return { ok: false, error: "This application has no valid resident email on file." };
+      throw new Error("This application has no valid resident email on file.");
     }
 
     // Idempotent per application per day — repeat asks don't re-email.
@@ -255,8 +244,8 @@ export const sendResidentWelcomeTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `A welcome email was already sent to ${target.to} today.` };
-      return { ok: false, error: "Could not record the action; no email was sent." };
+      if (audit.duplicate) return { reply: `A welcome email was already sent to ${target.to} today.` };
+      throw new Error("Could not record the action; no email was sent.");
     }
 
     const result = await deliverResidentWelcome(
@@ -268,18 +257,14 @@ export const sendResidentWelcomeTool = defineWriteTool({
       // Hard failure (not configured / Resend error): clear the dedupe key so a
       // retry after fixing the config can record a fresh attempt.
       await updateAuditResult(ctx, dedupeKey, { error: "send_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     const delivery = result.skipped ? "portal_only" : "emailed";
     await updateAuditResult(ctx, dedupeKey, { residentEmail: target.to, delivery });
-    return {
-      ok: true,
-      reply: result.skipped
+    return { reply: result.skipped
         ? `Recorded the welcome message for ${target.to} in the portal (demo/self address — no external email sent).`
-        : `Sent the welcome email with Axis ID ${target.axisId} to ${target.to}.`,
-      resultSummary: { applicationId: target.applicationId, delivery },
-    };
+        : `Sent the welcome email with Axis ID ${target.axisId} to ${target.to}.`, resultSummary: { applicationId: target.applicationId, delivery } };
   },
 });
 
@@ -287,7 +272,6 @@ export const revokeResidentAccessTool = defineWriteTool({
   name: "revoke_resident_access",
   description:
     "Permanently remove a resident's portal sign-in access. Their application, lease, payment, and message records are kept — only the login is removed. Pass the resident's email from list_residents.",
-  kind: "write",
   destructive: true,
   inputSchema: z
     .object({
@@ -296,33 +280,30 @@ export const revokeResidentAccessTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const email = input.residentEmail.trim().toLowerCase();
-    if (!email.includes("@")) return { ok: false, error: "A valid resident email is required." };
+    if (!email.includes("@")) throw new Error("A valid resident email is required.");
     const ownershipError = await assertResidentInPortfolio(ctx, email);
-    if (ownershipError) return { ok: false, error: ownershipError };
+    if (ownershipError) throw new Error(ownershipError);
     const profile = await loadResidentProfile(ctx, email);
     if (!profile) {
-      return { ok: false, error: `No resident account exists for ${email} — there is no portal access to revoke.` };
+      throw new Error(`No resident account exists for ${email} — there is no portal access to revoke.`);
     }
     return {
-      ok: true,
-      input: { ...input, residentEmail: email },
-      preview: {
-        title: "Revoke resident portal access",
-        summary: `Remove resident portal sign-in access for ${profile.full_name || email}.`,
-        lines: [
+      confirmedInput: { ...input, residentEmail: email },
+      kind: "revoke_resident_access",
+      title: "Revoke resident portal access",
+      summary: `Remove resident portal sign-in access for ${profile.full_name || email}.`,
+      fields: [
           { label: "Resident", value: profile.full_name ? `${profile.full_name} <${email}>` : email },
           { label: "Removed", value: "Resident portal sign-in (login deleted entirely if resident is their only role)" },
           { label: "Kept", value: "Application, lease, payment, and message records" },
         ],
-        confirmLabel: "Revoke access",
-        warning:
-          "This permanently removes the resident's sign-in. If resident is their only portal role, their entire Axis login is deleted and they would have to be re-invited. Their data is NOT deleted — to purge data too, delete the application from the Applications page.",
-      },
+      confirmLabel: "Revoke access",
+      warnings: ["This permanently removes the resident's sign-in. If resident is their only portal role, their entire Axis login is deleted and they would have to be re-invited. Their data is NOT deleted — to purge data too, delete the application from the Applications page."],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     const email = input.residentEmail.trim().toLowerCase();
-    if (!email.includes("@")) return { ok: false, error: "A valid resident email is required." };
+    if (!email.includes("@")) throw new Error("A valid resident email is required.");
 
     // One-shot state transition: revoking twice returns already-done.
     const dedupeKey = `revoke_resident_access:${ctx.landlordId}:${email}`;
@@ -334,8 +315,8 @@ export const revokeResidentAccessTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `Portal access for ${email} was already revoked.` };
-      return { ok: false, error: "Could not record the action; nothing was revoked." };
+      if (audit.duplicate) return { reply: `Portal access for ${email} was already revoked.` };
+      throw new Error("Could not record the action; nothing was revoked.");
     }
 
     // The lib re-checks portfolio ownership server-side before removing access.
@@ -346,7 +327,7 @@ export const revokeResidentAccessTool = defineWriteTool({
     );
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { error: "revoke_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { residentEmail: email, mode: result.mode });
@@ -356,7 +337,7 @@ export const revokeResidentAccessTool = defineWriteTool({
         : result.mode === "revoked_role"
           ? `Removed ${email}'s resident portal access; their other portal roles remain. Their records are kept.`
           : `${email} had no active resident access — nothing further to remove.`;
-    return { ok: true, reply, resultSummary: { mode: result.mode } };
+    return { reply, resultSummary: { mode: result.mode } };
   },
 });
 
@@ -370,7 +351,6 @@ export const recordMoveOutTool = defineWriteTool({
   name: "record_move_out",
   description:
     "Record a resident's move-out date on their application record (bookkeeping only). Pass the application id from list_residents. This updates the stored move-out/lease-end fields the portal displays; it does NOT amend a signed lease.",
-  kind: "write",
   inputSchema: z
     .object({
       applicationId: z.string().min(1).describe("The resident's application id, from list_residents."),
@@ -383,30 +363,27 @@ export const recordMoveOutTool = defineWriteTool({
   preview: async (ctx, input) => {
     const rec = await loadOwnedApplicationRecord(ctx, input.applicationId);
     if (!rec) {
-      return { ok: false, error: "No application with that id belongs to this landlord. Use list_residents to get valid ids." };
+      throw new Error("No application with that id belongs to this landlord. Use list_residents to get valid ids.");
     }
     const row = (rec.row_data ?? {}) as DemoApplicantRow;
     const currentEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || "not set";
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Record move-out date",
-        summary: `Record ${input.moveOutDate} as the move-out date for ${row.name || rec.id}.`,
-        lines: [
+      kind: "record_move_out",
+      title: "Record move-out date",
+      summary: `Record ${input.moveOutDate} as the move-out date for ${row.name || rec.id}.`,
+      fields: [
           { label: "Resident", value: row.name ? `${row.name}${row.email ? ` <${row.email.trim().toLowerCase()}>` : ""}` : rec.id },
           ...(row.property ? [{ label: "Property", value: row.property }] : []),
           { label: "Move-out date", value: `${currentEnd} → ${input.moveOutDate}` },
         ],
-        confirmLabel: "Record move-out",
-        warning: "Does not amend a signed lease — use amend_lease for that.",
-      },
+      confirmLabel: "Record move-out",
+      warnings: ["Does not amend a signed lease — use amend_lease for that."],
     };
   },
-  execute: async (ctx, input) => {
+  handler: async (ctx, input) => {
     // Re-resolve the owned record at execute time; never trust stored input.
     const rec = await loadOwnedApplicationRecord(ctx, input.applicationId);
-    if (!rec) return { ok: false, error: "No application with that id belongs to this landlord." };
+    if (!rec) throw new Error("No application with that id belongs to this landlord.");
 
     const dedupeKey = `record_move_out:${ctx.landlordId}:${rec.id}:${input.moveOutDate}`;
     const audit = await writeAuditLog(ctx, {
@@ -416,8 +393,8 @@ export const recordMoveOutTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `${input.moveOutDate} was already recorded as the move-out date.` };
-      return { ok: false, error: "Could not record the action; nothing was changed." };
+      if (audit.duplicate) return { reply: `${input.moveOutDate} was already recorded as the move-out date.` };
+      throw new Error("Could not record the action; nothing was changed.");
     }
 
     // Read-merge-write the exact fields syncApplicationLeaseDates
@@ -439,15 +416,11 @@ export const recordMoveOutTool = defineWriteTool({
       .eq("manager_user_id", ctx.landlordId);
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { error: "update_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: error.message };
+      throw new Error(error.message);
     }
 
     await updateAuditResult(ctx, dedupeKey, { applicationId: rec.id, moveOutDate: input.moveOutDate });
     const row = rowData as unknown as DemoApplicantRow;
-    return {
-      ok: true,
-      reply: `Recorded ${input.moveOutDate} as the move-out date for ${row.name || rec.id}. This does not amend a signed lease — use amend_lease for that.`,
-      resultSummary: { applicationId: rec.id, moveOutDate: input.moveOutDate },
-    };
+    return { reply: `Recorded ${input.moveOutDate} as the move-out date for ${row.name || rec.id}. This does not amend a signed lease — use amend_lease for that.`, resultSummary: { applicationId: rec.id, moveOutDate: input.moveOutDate } };
   },
 });

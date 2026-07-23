@@ -174,7 +174,6 @@ export const requestLeaseExtensionTool = defineWriteTool({
   name: "request_lease_extension",
   description:
     "Change the end date of the resident's own fully-signed lease (extend or shorten). Availability is checked against room bookings and blocked periods. Use get_my_lease first to see the current end date.",
-  kind: "write",
   inputSchema: z
     .object({
       newLeaseEnd: z
@@ -186,45 +185,41 @@ export const requestLeaseExtensionTool = defineWriteTool({
   preview: async (ctx: ResidentAgentContext, input) => {
     const found = await findOwnSignedLease(ctx);
     if (!found) {
-      return { ok: false, error: "No fully-signed lease found for this resident — only signed leases can be extended." };
+      throw new Error("No fully-signed lease found for this resident — only signed leases can be extended.");
     }
     const currentStart = found.row.application?.leaseStart ?? "";
     const currentEnd = found.row.application?.leaseEnd ?? "";
     if (currentStart && input.newLeaseEnd < currentStart) {
-      return { ok: false, error: "New move-out date cannot be before the lease start date." };
+      throw new Error("New move-out date cannot be before the lease start date.");
     }
     if (currentEnd && input.newLeaseEnd === currentEnd) {
-      return { ok: false, error: "New move-out date is the same as the current lease end date." };
+      throw new Error("New move-out date is the same as the current lease end date.");
     }
     const availability = await checkMoveOutAvailabilityForLease(ctx.db, found.row, found.record, input.newLeaseEnd);
     if (!availability.ok) {
       const hint = availability.nextAvailableDate ? ` Next available date: ${availability.nextAvailableDate}.` : "";
-      return { ok: false, error: `${availability.reason}${hint}` };
+      throw new Error(`${availability.reason}${hint}`);
     }
     const direction = availability.direction === "decrease" ? "Shorten lease" : "Extend lease";
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Request lease date change",
-        summary: `${direction}: move the lease end date from ${currentEnd || "(unset)"} to ${input.newLeaseEnd}.`,
-        lines: [
+      kind: "request_lease_extension",
+      title: "Request lease date change",
+      summary: `${direction}: move the lease end date from ${currentEnd || "(unset)"} to ${input.newLeaseEnd}.`,
+      fields: [
           { label: "Property", value: found.row.unit || found.record.property_id || "—" },
           { label: "Current lease end", value: currentEnd || "—" },
           { label: "New lease end", value: input.newLeaseEnd },
         ],
-        confirmLabel: "Request change",
-        warning:
-          "This regenerates the lease and clears both signatures — you and your manager must re-sign the updated lease.",
-      },
+      confirmLabel: "Request change",
+      warnings: ["This regenerates the lease and clears both signatures — you and your manager must re-sign the updated lease."],
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     // Re-resolve at execute time — the lease may have been voided or re-signed
     // since preview, and ownership is never trusted from stored input.
     const found = await findOwnSignedLease(ctx);
     if (!found) {
-      return { ok: false, error: "No fully-signed lease found for this resident." };
+      throw new Error("No fully-signed lease found for this resident.");
     }
     const dedupeKey = `request_lease_extension:${ctx.landlordId}:${found.record.id}:${input.newLeaseEnd}`;
     const audit = await writeAuditLog(ctx, {
@@ -235,9 +230,9 @@ export const requestLeaseExtensionTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `This lease change to ${input.newLeaseEnd} was already requested.` };
+        return { reply: `This lease change to ${input.newLeaseEnd} was already requested.` };
       }
-      return { ok: false, error: "Could not record the action; no lease change was made." };
+      throw new Error("Could not record the action; no lease change was made.");
     }
 
     const result = await amendLeaseMoveOutDate(ctx.db, found.record, input.newLeaseEnd);
@@ -245,14 +240,10 @@ export const requestLeaseExtensionTool = defineWriteTool({
       // Clear the dedupe key so a retry (e.g. after a conflict resolves) can
       // record a fresh attempt instead of "already requested".
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { direction: result.direction, newLeaseEnd: result.newLeaseEnd });
-    return {
-      ok: true,
-      reply: `Done — your lease end date is now ${result.newLeaseEnd}. The updated lease was regenerated and needs new signatures from you and your manager.`,
-      resultSummary: { leaseId: found.record.id, direction: result.direction, newLeaseEnd: result.newLeaseEnd },
-    };
+    return { reply: `Done — your lease end date is now ${result.newLeaseEnd}. The updated lease was regenerated and needs new signatures from you and your manager.`, resultSummary: { leaseId: found.record.id, direction: result.direction, newLeaseEnd: result.newLeaseEnd } };
   },
 });

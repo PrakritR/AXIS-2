@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { listDocumentsTool, listPromotionsTool } from "@/lib/tools/domains/documents";
+import { listDocumentsTool } from "@/lib/tools/domains/documents";
+import { listPromotionsTool } from "@/lib/tools/domains/promotions";
 import { decideServiceRequestTool } from "@/lib/tools/domains/services-write";
 import { makeManagerRowsCtx, makeWritableCtx, managerRow, type FakeRecord } from "./fake-agent-ctx";
 

@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { resolveResidentAgentContext } from "@/lib/tools/resident-context";
 import { buildResidentRegistry } from "@/lib/tools/resident-index";
 import { runAgentTurn } from "@/lib/agent/loop";
+import type { ActionPreview } from "@/lib/tools/registry";
 import { RESIDENT_SYSTEM_PROMPT } from "@/lib/agent/resident-system-prompt";
 import { sanitizeChatMessages, lastUserText } from "@/lib/agent/chat-handler";
-import { persistPendingAction } from "@/lib/tools/pending-actions";
+import { createPendingAction } from "@/lib/tools/pending-actions";
+import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
@@ -36,6 +38,17 @@ export async function POST(req: Request) {
     body = {};
   }
 
+  // Confirm / deny of an earlier proposal: the body carries ONLY the action id.
+  // The stored input is re-validated and the handler re-resolves state itself.
+  const decision = await handlePendingActionDecision({
+    body,
+    ctx,
+    registry: buildResidentRegistry(ctx),
+    portal: "resident",
+    traceMetadata: { role: "resident", managerIds: ctx.managerIds, phase: ctx.phase },
+  });
+  if (decision) return decision;
+
   const messages = sanitizeChatMessages(body.messages);
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
@@ -63,21 +76,22 @@ export async function POST(req: Request) {
       tier: result.tier,
     });
 
-    let pendingAction = null;
-    if (result.proposedAction) {
-      pendingAction = await persistPendingAction(ctx, {
+    // A proposal is persisted server-side; the client only ever receives the
+    // opaque id and the preview it can confirm or deny. The stored input never
+    // leaves the server.
+    const proposal = result.pendingAction;
+    let pendingAction: { id: string; preview: ActionPreview } | null = null;
+    if (proposal) {
+      const actionId = await createPendingAction(ctx, proposal.toolName, proposal.input, proposal.preview, {
         portal: "resident",
         sessionId,
-        toolName: result.proposedAction.toolName,
-        input: result.proposedAction.input,
-        preview: result.proposedAction.preview,
-        destructive: result.proposedAction.destructive,
       });
-      if (pendingAction) {
+      if (actionId) {
+        pendingAction = { id: actionId, preview: proposal.preview };
         track("assistant_action_proposed", ctx.userId, {
           portal: "resident",
-          tool: pendingAction.toolName,
-          batch: pendingAction.preview.batchCount ?? 1,
+          tool: proposal.toolName,
+          batch: proposal.preview.batchCount ?? 1,
         });
       }
     }
@@ -91,7 +105,7 @@ export async function POST(req: Request) {
           tools: result.toolTrace,
           model: result.model,
           tier: result.tier,
-          ...(pendingAction ? { pendingAction: { toolName: pendingAction.toolName } } : {}),
+          ...(proposal ? { pendingAction: { toolName: proposal.toolName } } : {}),
         },
       },
     ]);

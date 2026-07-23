@@ -15,6 +15,7 @@ import { resolveDocumentScope } from "@/lib/reports/parse-filters";
 import type { DocumentScope, ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { rentMonthlyEquivalent } from "@/lib/room-pricing";
+import { householdChargeAmountCents } from "@/lib/stripe-household-charge";
 import {
   queryBalanceSheet,
   queryCashFlowStatement,
@@ -897,6 +898,80 @@ export async function query1099Candidates(
   };
 }
 
+
+/**
+ * The resident's own balance summary. The amount owed comes from the resident's
+ * unpaid household CHARGES — the same records the resident Payments screen
+ * shows — so the assistant and the portal can never disagree; the ledger
+ * supplies the last recorded payment. Scoped exactly like
+ * {@link queryResidentLedger}: the resident's own user id OR their verified
+ * email, so one resident can never read another's balance.
+ *
+ * `meta.balanceCents` is the authoritative number; the rows are the display
+ * projection the assistant reads back.
+ */
+export async function queryResidentBalance(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+): Promise<ReportResult> {
+  const [{ data: chargeRows }, { data: ledgerRows }] = await Promise.all([
+    db
+      .from("portal_household_charge_records")
+      .select("row_data")
+      .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`),
+    db
+      .from("ledger_entries")
+      .select("entry_type, amount_cents, posted_date")
+      .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`)
+      .order("posted_date", { ascending: true }),
+  ]);
+
+  const charges = ((chargeRows ?? []) as { row_data: unknown }[]).map((r) => r.row_data as HouseholdCharge);
+  const outstanding = charges.filter((c) => String(c.status ?? "") !== "paid");
+  const balanceCents = outstanding.reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
+  const paidCents = charges
+    .filter((c) => String(c.status ?? "") === "paid")
+    .reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
+
+  // Soonest unpaid charge by its due-date label (already a display string).
+  const next = [...outstanding]
+    .filter((c) => Boolean(c.dueDateLabel))
+    .sort((a, b) => String(a.dueDateLabel).localeCompare(String(b.dueDateLabel)))[0];
+
+  const lastPayment = ((ledgerRows ?? []) as { entry_type: string; amount_cents: number | string | null; posted_date: string | null }[])
+    .filter((e) => e.entry_type === "payment")
+    .at(-1);
+
+  const rows = [
+    { label: "Balance due", value: centsToUsd(balanceCents) },
+    { label: "Open charges", value: String(outstanding.length) },
+    { label: "Paid to date", value: centsToUsd(paidCents) },
+    {
+      label: "Next charge",
+      value: next
+        ? `${next.title || next.kind || "Charge"} — ${next.balanceLabel || next.amountLabel || "—"} due ${next.dueDateLabel}`
+        : "None scheduled",
+    },
+    {
+      label: "Last payment",
+      value: lastPayment
+        ? `${centsToUsd(Number(lastPayment.amount_cents ?? 0))} on ${lastPayment.posted_date ?? "—"}`
+        : "No payments recorded",
+    },
+  ];
+
+  return {
+    id: "resident-balance",
+    title: "Balance summary",
+    columns: [
+      { key: "label", label: "Item" },
+      { key: "value", label: "Amount", align: "right" },
+    ],
+    rows,
+    meta: { balanceCents, openCharges: outstanding.length, paidCents },
+  };
+}
 
 export async function queryResidentLedger(
   db: SupabaseClient,

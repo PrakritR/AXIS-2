@@ -93,7 +93,6 @@ export const submitBidTool = defineWriteTool({
   name: "submit_bid",
   description:
     "Submit (or update) your cost bid on a work order that is open for bidding — pass the workOrderId from list_my_jobs or list_my_offers, your labor amount in dollars, and optionally when you could do the work. Cannot change a bid the manager already accepted.",
-  kind: "write",
   inputSchema: z
     .object({
       workOrderId: z.string().min(1).describe("Id of a work order open for bidding (from list_my_jobs or list_my_offers)."),
@@ -107,7 +106,7 @@ export const submitBidTool = defineWriteTool({
     .strict(),
   preview: async (ctx: VendorAgentContext, input) => {
     const res = await resolveSubmitBid(ctx, input);
-    if (!res.ok) return res;
+    if (!res.ok) throw new Error(res.error);
     const { target, amountCents, proposedIso } = res.resolved;
     const lines = [
       { label: "Job", value: jobLabel(target.row) },
@@ -116,21 +115,18 @@ export const submitBidTool = defineWriteTool({
     ];
     if (input.note?.trim()) lines.push({ label: "Note", value: input.note.trim().slice(0, 140) });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Submit bid",
-        summary: `Bid ${formatUsd(amountCents)} on "${target.row.title || target.id}" and notify the manager.`,
-        lines,
-        confirmLabel: "Submit bid",
-      },
+      kind: "submit_bid",
+      title: "Submit bid",
+      summary: `Bid ${formatUsd(amountCents)} on "${target.row.title || target.id}" and notify the manager.`,
+      fields: lines,
+      confirmLabel: "Submit bid",
     };
   },
-  execute: async (ctx: VendorAgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     // Re-resolve everything at execute time; the shared lib re-checks access,
     // bidding state, and bid status again before writing.
     const res = await resolveSubmitBid(ctx, input);
-    if (!res.ok) return res;
+    if (!res.ok) throw new Error(res.error);
     const { target, amountCents, proposedIso } = res.resolved;
 
     const dedupeKey = `submit_bid:${ctx.landlordId}:${target.id}:${contentHash(`${amountCents}|${proposedIso}`)}`;
@@ -142,9 +138,9 @@ export const submitBidTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `Already done — this exact ${formatUsd(amountCents)} bid was already submitted on "${target.row.title || target.id}".` };
+        return { reply: `Already done — this exact ${formatUsd(amountCents)} bid was already submitted on "${target.row.title || target.id}".` };
       }
-      return { ok: false, error: "Could not record the action; no bid was submitted." };
+      throw new Error("Could not record the action; no bid was submitted.");
     }
 
     const actor = await vendorWorkOrderActor(ctx);
@@ -156,15 +152,11 @@ export const submitBidTool = defineWriteTool({
     });
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { error: "submit_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { workOrderId: target.id, amountCents });
-    return {
-      ok: true,
-      reply: `Submitted your ${formatUsd(amountCents)} bid on "${jobLabel(target.row)}", proposing ${proposedIso}. The manager will review it.`,
-      resultSummary: { workOrderId: target.id, amountCents },
-    };
+    return { reply: `Submitted your ${formatUsd(amountCents)} bid on "${jobLabel(target.row)}", proposing ${proposedIso}. The manager will review it.`, resultSummary: { workOrderId: target.id, amountCents } };
   },
 });
 
@@ -229,7 +221,6 @@ export const setMyPriceTool = defineWriteTool({
   name: "set_my_price",
   description:
     "Set your labor (and optionally materials) price on a scheduled work order you're assigned to, before marking it done — pass the workOrderId from list_my_jobs. Refused once your bid on the job has been accepted: that amount is locked.",
-  kind: "write",
   inputSchema: z
     .object({
       workOrderId: z.string().min(1).describe("Id of a scheduled work order assigned to you (from list_my_jobs)."),
@@ -244,29 +235,26 @@ export const setMyPriceTool = defineWriteTool({
     .strict(),
   preview: async (ctx: VendorAgentContext, input) => {
     const res = await resolveSetPrice(ctx, input);
-    if (!res.ok) return res;
+    if (!res.ok) throw new Error(res.error);
     const { target, amountCents, materialsCents } = res.resolved;
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Set your price",
-        summary: `Set your price on "${target.row.title || target.id}" to ${formatUsd(amountCents + materialsCents)} total.`,
-        lines: [
+      kind: "set_my_price",
+      title: "Set your price",
+      summary: `Set your price on "${target.row.title || target.id}" to ${formatUsd(amountCents + materialsCents)} total.`,
+      fields: [
           { label: "Job", value: jobLabel(target.row) },
           { label: "Labor", value: formatUsd(amountCents) },
           { label: "Materials", value: formatUsd(materialsCents) },
           { label: "Total", value: formatUsd(amountCents + materialsCents) },
         ],
-        confirmLabel: "Set price",
-      },
+      confirmLabel: "Set price",
     };
   },
-  execute: async (ctx: VendorAgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     // Re-resolve at execute time; the shared lib re-checks the accepted-bid
     // lock in its own read AND in the bid UPDATE's WHERE clause.
     const res = await resolveSetPrice(ctx, input);
-    if (!res.ok) return res;
+    if (!res.ok) throw new Error(res.error);
     const { target, amountCents, materialsCents } = res.resolved;
 
     const dedupeKey = `set_my_price:${ctx.landlordId}:${target.id}:${amountCents}:${materialsCents}`;
@@ -278,9 +266,9 @@ export const setMyPriceTool = defineWriteTool({
     });
     if (!audit.recorded) {
       if (audit.duplicate) {
-        return { ok: true, reply: `Already done — the price on "${target.row.title || target.id}" is already ${formatUsd(amountCents + materialsCents)}.` };
+        return { reply: `Already done — the price on "${target.row.title || target.id}" is already ${formatUsd(amountCents + materialsCents)}.` };
       }
-      return { ok: false, error: "Could not record the action; the price was not changed." };
+      throw new Error("Could not record the action; the price was not changed.");
     }
 
     const actor = await vendorWorkOrderActor(ctx);
@@ -291,15 +279,11 @@ export const setMyPriceTool = defineWriteTool({
     });
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { error: "set_price_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { workOrderId: target.id, amountCents, materialsCents });
-    return {
-      ok: true,
-      reply: `Set your price on "${jobLabel(target.row)}": ${formatUsd(amountCents)} labor + ${formatUsd(materialsCents)} materials (${formatUsd(amountCents + materialsCents)} total).`,
-      resultSummary: { workOrderId: target.id, amountCents, materialsCents },
-    };
+    return { reply: `Set your price on "${jobLabel(target.row)}": ${formatUsd(amountCents)} labor + ${formatUsd(materialsCents)} materials (${formatUsd(amountCents + materialsCents)} total).`, resultSummary: { workOrderId: target.id, amountCents, materialsCents } };
   },
 });
 
@@ -334,7 +318,6 @@ export const markJobDoneTool = defineWriteTool({
   name: "mark_job_done",
   description:
     "Mark a scheduled work order you're assigned to as done, optionally with a short summary of the work — pass the workOrderId from list_my_jobs. This notifies the manager to review and approve payment; it does not complete the job or move money by itself.",
-  kind: "write",
   inputSchema: z
     .object({
       workOrderId: z.string().min(1).describe("Id of a scheduled work order assigned to you (from list_my_jobs)."),
@@ -343,26 +326,23 @@ export const markJobDoneTool = defineWriteTool({
     .strict(),
   preview: async (ctx: VendorAgentContext, input) => {
     const res = await resolveMarkDone(ctx, input);
-    if (!res.ok) return res;
+    if (!res.ok) throw new Error(res.error);
     const lines = [
       { label: "Job", value: jobLabel(res.target.row) },
       { label: "Effect", value: "Notifies the manager to review and approve payment" },
     ];
     if (input.workDoneSummary?.trim()) lines.push({ label: "Summary", value: input.workDoneSummary.trim().slice(0, 140) });
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Mark job done",
-        summary: `Mark "${res.target.row.title || res.target.id}" as done and notify the manager for approval.`,
-        lines,
-        confirmLabel: "Mark done",
-      },
+      kind: "mark_job_done",
+      title: "Mark job done",
+      summary: `Mark "${res.target.row.title || res.target.id}" as done and notify the manager for approval.`,
+      fields: lines,
+      confirmLabel: "Mark done",
     };
   },
-  execute: async (ctx: VendorAgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     const res = await resolveMarkDone(ctx, input);
-    if (!res.ok) return res;
+    if (!res.ok) throw new Error(res.error);
     const { target } = res;
 
     // One-shot state transition: retries return already-done forever.
@@ -374,8 +354,8 @@ export const markJobDoneTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: `Already done — "${target.row.title || target.id}" was already marked done.` };
-      return { ok: false, error: "Could not record the action; the job was not marked done." };
+      if (audit.duplicate) return { reply: `Already done — "${target.row.title || target.id}" was already marked done.` };
+      throw new Error("Could not record the action; the job was not marked done.");
     }
 
     const actor = await vendorWorkOrderActor(ctx);
@@ -385,14 +365,10 @@ export const markJobDoneTool = defineWriteTool({
     });
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { error: "mark_done_failed" }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { workOrderId: target.id });
-    return {
-      ok: true,
-      reply: `Marked "${jobLabel(target.row)}" as done — the manager has been notified to review and approve payment.`,
-      resultSummary: { workOrderId: target.id },
-    };
+    return { reply: `Marked "${jobLabel(target.row)}" as done — the manager has been notified to review and approve payment.`, resultSummary: { workOrderId: target.id } };
   },
 });

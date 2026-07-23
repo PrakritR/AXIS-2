@@ -21,7 +21,13 @@ const SERVICES_TOOLS = [
   "list_my_work_orders",
   "create_service_request",
   "add_service_request_note",
+  // Maintenance filing is a Services capability and a separate model from
+  // add-on service requests (AGENTS.md, "Add-on services vs. work orders").
+  "report_maintenance_issue",
 ];
+
+/** Documents is Pro-gated for residents exactly like Services and Inbox. */
+const DOCUMENTS_TOOLS = ["list_my_shared_documents"];
 
 const INBOX_TOOLS = [
   "list_my_inbox_threads",
@@ -51,7 +57,7 @@ describe("resident registry gating", () => {
 
   it("a free-tier manager hides services and inbox tools but keeps the rest", () => {
     const registry = buildResidentRegistry(gatingCtx("approved", "free"));
-    for (const name of [...SERVICES_TOOLS, ...INBOX_TOOLS]) {
+    for (const name of [...SERVICES_TOOLS, ...INBOX_TOOLS, ...DOCUMENTS_TOOLS]) {
       expect(registry.has(name), `${name} should be tier-gated`).toBe(false);
     }
     for (const name of UNGATED_TOOLS) {
@@ -62,13 +68,13 @@ describe("resident registry gating", () => {
   it("approved phase on a paid manager exposes the full resident toolset", () => {
     const registry = buildResidentRegistry(gatingCtx("approved", "paid"));
     expect([...registry.keys()].sort()).toEqual(
-      [...SERVICES_TOOLS, ...INBOX_TOOLS, ...UNGATED_TOOLS].sort(),
+      [...SERVICES_TOOLS, ...INBOX_TOOLS, ...DOCUMENTS_TOOLS, ...UNGATED_TOOLS].sort(),
     );
   });
 
   it("a null tier (no linked manager purchase) is not treated as free", () => {
     const registry = buildResidentRegistry(gatingCtx("approved", null));
-    for (const name of [...SERVICES_TOOLS, ...INBOX_TOOLS]) {
+    for (const name of [...SERVICES_TOOLS, ...INBOX_TOOLS, ...DOCUMENTS_TOOLS]) {
       expect(registry.has(name), `${name} should be available on null tier`).toBe(true);
     }
   });

@@ -119,7 +119,6 @@ export const sendMessageToManagerTool = defineWriteTool({
   name: "send_message_to_manager",
   description:
     "Send a portal inbox message (plus email when configured) from the resident to their linked property manager(s). Use for questions, updates, or requests that need the manager's attention.",
-  kind: "write",
   inputSchema: z
     .object({
       subject: z.string().min(1).max(200).describe("Short subject line for the message."),
@@ -133,26 +132,23 @@ export const sendMessageToManagerTool = defineWriteTool({
     .strict(),
   preview: async (ctx: ResidentAgentContext, input) => {
     const resolved = await resolveMessageTargets(ctx, input.recipientManagerId);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Send message to manager",
-        summary: `Send "${input.subject.trim()}" to ${resolved.targets.map((t) => t.name).join(", ")}.`,
-        lines: [
+      kind: "send_message_to_manager",
+      title: "Send message to manager",
+      summary: `Send "${input.subject.trim()}" to ${resolved.targets.map((t) => t.name).join(", ")}.`,
+      fields: [
           ...resolved.targets.map((t) => ({ label: "To", value: `${t.name} (${t.email})` })),
           { label: "Subject", value: input.subject.trim() },
           { label: "Message", value: input.body.trim().slice(0, 140) },
         ],
-        confirmLabel: "Send message",
-      },
+      confirmLabel: "Send message",
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     // Re-resolve targets from the authenticated context at execute time.
     const resolved = await resolveMessageTargets(ctx, input.recipientManagerId);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     const subject = input.subject.trim();
     const body = input.body.trim();
 
@@ -164,8 +160,8 @@ export const sendMessageToManagerTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "This exact message was already sent today." };
-      return { ok: false, error: "Could not record the action; no message was sent." };
+      if (audit.duplicate) return { reply: "This exact message was already sent today." };
+      throw new Error("Could not record the action; no message was sent.");
     }
 
     // deliverPortalInboxMessage re-filters recipients through
@@ -185,15 +181,11 @@ export const sendMessageToManagerTool = defineWriteTool({
     });
     if (!result.ok) {
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: result.error };
+      throw new Error(result.error);
     }
 
     await updateAuditResult(ctx, dedupeKey, { recipientCount: result.recipientCount });
-    return {
-      ok: true,
-      reply: `Sent "${subject}" to ${resolved.targets.map((t) => t.name).join(", ")}.`,
-      resultSummary: { recipientCount: result.recipientCount },
-    };
+    return { reply: `Sent "${subject}" to ${resolved.targets.map((t) => t.name).join(", ")}.`, resultSummary: { recipientCount: result.recipientCount } };
   },
 });
 
@@ -201,7 +193,6 @@ export const scheduleMessageTool = defineWriteTool({
   name: "schedule_message",
   description:
     "Schedule a message to the resident's property manager to be sent automatically at a future time. Use get_my_scheduled_messages to review what is queued.",
-  kind: "write",
   inputSchema: z
     .object({
       subject: z.string().min(1).max(200).describe("Short subject line for the message."),
@@ -214,40 +205,37 @@ export const scheduleMessageTool = defineWriteTool({
     .strict(),
   preview: async (ctx: ResidentAgentContext, input) => {
     const resolved = await resolveMessageTargets(ctx, undefined);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     const target = resolved.targets[0]!;
     const sendAt = new Date(input.sendAtIso.trim());
     if (Number.isNaN(sendAt.getTime())) {
-      return { ok: false, error: "Invalid send date — provide an ISO 8601 datetime." };
+      throw new Error("Invalid send date — provide an ISO 8601 datetime.");
     }
     if (sendAt.getTime() < Date.now() - 60_000) {
-      return { ok: false, error: "Send time must be in the future." };
+      throw new Error("Send time must be in the future.");
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Schedule message",
-        summary: `Schedule "${input.subject.trim()}" to ${target.name} for ${sendAt.toISOString()}.`,
-        lines: [
+      kind: "schedule_message",
+      title: "Schedule message",
+      summary: `Schedule "${input.subject.trim()}" to ${target.name} for ${sendAt.toISOString()}.`,
+      fields: [
           { label: "To", value: `${target.name} (${target.email})` },
           { label: "Subject", value: input.subject.trim() },
           { label: "Send at", value: sendAt.toISOString() },
           { label: "Message", value: input.body.trim().slice(0, 140) },
         ],
-        confirmLabel: "Schedule",
-      },
+      confirmLabel: "Schedule",
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     const resolved = await resolveMessageTargets(ctx, undefined);
-    if (!resolved.ok) return resolved;
+    if (!resolved.ok) throw new Error(resolved.error);
     const target = resolved.targets[0]!;
     const subject = input.subject.trim();
     const body = input.body.trim();
     const sendAt = new Date(input.sendAtIso.trim());
     if (Number.isNaN(sendAt.getTime()) || sendAt.getTime() < Date.now() - 60_000) {
-      return { ok: false, error: "Send time must be a valid future datetime." };
+      throw new Error("Send time must be a valid future datetime.");
     }
 
     const dedupeKey = `schedule_message:${ctx.landlordId}:${contentHash(`${subject}\n${body}\n${sendAt.toISOString()}`)}`;
@@ -258,8 +246,8 @@ export const scheduleMessageTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "This exact message is already scheduled for that time." };
-      return { ok: false, error: "Could not record the action; nothing was scheduled." };
+      if (audit.duplicate) return { reply: "This exact message is already scheduled for that time." };
+      throw new Error("Could not record the action; nothing was scheduled.");
     }
 
     // Same server-side scope re-check the scheduled-inbox-messages route runs.
@@ -270,7 +258,7 @@ export const scheduleMessageTool = defineWriteTool({
     );
     if (!allowed.some((r) => r.email.trim().toLowerCase() === target.email)) {
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: "That recipient is not in your messaging scope." };
+      throw new Error("That recipient is not in your messaging scope.");
     }
 
     const record = await createScheduledInboxMessage(ctx.db, {
@@ -292,11 +280,7 @@ export const scheduleMessageTool = defineWriteTool({
     });
 
     await updateAuditResult(ctx, dedupeKey, { messageId: record.id });
-    return {
-      ok: true,
-      reply: `Scheduled "${subject}" to ${target.name} for ${sendAt.toISOString()}.`,
-      resultSummary: { messageId: record.id, sendAt: sendAt.toISOString() },
-    };
+    return { reply: `Scheduled "${subject}" to ${target.name} for ${sendAt.toISOString()}.`, resultSummary: { messageId: record.id, sendAt: sendAt.toISOString() } };
   },
 });
 
@@ -304,7 +288,6 @@ export const cancelScheduledMessageTool = defineWriteTool({
   name: "cancel_scheduled_message",
   description:
     "Cancel one of the resident's own scheduled messages before it sends. Pass the message id from get_my_scheduled_messages.",
-  kind: "write",
   inputSchema: z
     .object({
       messageId: z.string().min(1).describe("Id of your scheduled message (from get_my_scheduled_messages)."),
@@ -315,37 +298,31 @@ export const cancelScheduledMessageTool = defineWriteTool({
       (m) => m.id === input.messageId.trim(),
     );
     if (!own) {
-      return {
-        ok: false,
-        error: `${input.messageId} is not one of your scheduled messages. Use get_my_scheduled_messages to get valid ids.`,
-      };
+      throw new Error(`${input.messageId} is not one of your scheduled messages. Use get_my_scheduled_messages to get valid ids.`);
     }
     if (own.status !== "scheduled") {
-      return { ok: false, error: `That message is already ${own.status} and cannot be cancelled.` };
+      throw new Error(`That message is already ${own.status} and cannot be cancelled.`);
     }
     return {
-      ok: true,
-      input,
-      preview: {
-        title: "Cancel scheduled message",
-        summary: `Cancel "${own.subject}" scheduled for ${own.sendAt}.`,
-        lines: [
+      kind: "cancel_scheduled_message",
+      title: "Cancel scheduled message",
+      summary: `Cancel "${own.subject}" scheduled for ${own.sendAt}.`,
+      fields: [
           { label: "Subject", value: own.subject },
           { label: "To", value: own.recipientEmail },
           { label: "Send at", value: own.sendAt },
         ],
-        confirmLabel: "Cancel message",
-      },
+      confirmLabel: "Cancel message",
     };
   },
-  execute: async (ctx: ResidentAgentContext, input) => {
+  handler: async (ctx: ResidentAgentContext, input) => {
     const messageId = input.messageId.trim();
     // Re-resolve ownership at execute time; the storage helper additionally
     // pins the update to rows this resident scheduled.
     const own = (await loadScheduledInboxMessagesForResident(ctx.db, ctx.userId)).find((m) => m.id === messageId);
-    if (!own) return { ok: false, error: `${messageId} is not one of your scheduled messages.` };
+    if (!own) throw new Error(`${messageId} is not one of your scheduled messages.`);
     if (own.status !== "scheduled") {
-      return { ok: false, error: `That message is already ${own.status} and cannot be cancelled.` };
+      throw new Error(`That message is already ${own.status} and cannot be cancelled.`);
     }
 
     const dedupeKey = `cancel_scheduled_message:${ctx.landlordId}:${messageId}`;
@@ -356,8 +333,8 @@ export const cancelScheduledMessageTool = defineWriteTool({
       dedupeKey,
     });
     if (!audit.recorded) {
-      if (audit.duplicate) return { ok: true, reply: "That scheduled message was already cancelled." };
-      return { ok: false, error: "Could not record the action; nothing was cancelled." };
+      if (audit.duplicate) return { reply: "That scheduled message was already cancelled." };
+      throw new Error("Could not record the action; nothing was cancelled.");
     }
 
     try {
@@ -367,14 +344,10 @@ export const cancelScheduledMessageTool = defineWriteTool({
       });
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { failed: true }, { clearDedupeKey: true });
-      return { ok: false, error: e instanceof Error ? e.message : "Could not cancel the message." };
+      throw new Error(e instanceof Error ? e.message : "Could not cancel the message.");
     }
 
     await updateAuditResult(ctx, dedupeKey, { messageId, cancelled: true });
-    return {
-      ok: true,
-      reply: `Cancelled the scheduled message "${own.subject}" — it will not be sent.`,
-      resultSummary: { messageId },
-    };
+    return { reply: `Cancelled the scheduled message "${own.subject}" — it will not be sent.`, resultSummary: { messageId } };
   },
 });

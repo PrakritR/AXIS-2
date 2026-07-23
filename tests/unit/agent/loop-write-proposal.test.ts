@@ -144,9 +144,11 @@ describe("runAgentTurn write proposals", () => {
 
     const result = await runAgentTurn({ ctx, registry, messages: [{ role: "user", content: "do it" }] });
 
-    // The read before the write still executed; the first write became the
-    // proposal; the second write was never previewed or executed.
-    expect(readHandler).toHaveBeenCalledTimes(1);
+    // The first gated write halts the turn immediately: sibling calls are
+    // dropped (safe — client history is text-only, so the abandoned tool_use
+    // blocks never reach a future API call), and the second write is neither
+    // previewed nor executed.
+    expect(readHandler).not.toHaveBeenCalled();
     expect(writeHandler).not.toHaveBeenCalled();
     expect(writePreview).toHaveBeenCalledTimes(1);
     expect(result.pendingAction?.input).toEqual({ target: "abc" });

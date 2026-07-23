@@ -5,7 +5,7 @@
  * the owning manager; the model never sends SMS itself (delivery is code).
  */
 import { z } from "zod";
-import { defineTool } from "../registry";
+import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
 import { notifyManagerFromAgent } from "@/lib/agent-notify.server";
 import { track } from "@/lib/analytics/posthog";
@@ -447,11 +447,10 @@ export const getSiteLinksTool = defineTool({
   },
 });
 
-export const escalateLeasingToManagerTool = defineTool({
+export const escalateLeasingToManagerTool = defineWriteTool({
   name: LEASING_ESCALATE_TOOL_NAME,
   description:
     "Notify the property manager when you cannot answer from listing tools or the prospect needs a human decision. Call at most once per issue, then tell the prospect the manager will follow up.",
-  kind: "write",
   inputSchema: z
     .object({
       summary: z
@@ -461,6 +460,15 @@ export const escalateLeasingToManagerTool = defineTool({
         .describe("One or two factual sentences describing what the prospect needs."),
     })
     .strict(),
+  // Allow-listed on the SMS surface (no human is present on a webhook turn);
+  // the preview keeps it previewable anywhere it is not allow-listed.
+  preview: async (ctx, input) => ({
+    kind: LEASING_ESCALATE_TOOL_NAME,
+    title: "Notify the manager",
+    summary: "Send the manager a note that this prospect needs a human follow-up.",
+    fields: [{ label: "Summary", value: input.summary }],
+    confirmLabel: "Notify manager",
+  }),
   handler: async (ctx, input) => {
     const scope = ctx.leasingScope;
     if (!scope) return { ok: false, error: "No leasing conversation bound." };

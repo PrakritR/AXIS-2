@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { buildRegistry } from "@/lib/tools/registry";
 import type { AgentContext } from "@/lib/tools/context";
 import {
@@ -13,6 +13,8 @@ import {
   updateThreadTool,
 } from "@/lib/tools/domains/inbox";
 import { MANAGER_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
+import { executeWrite, previewWrite } from "./fake-agent-ctx";
+import { MANAGER_INLINE_WRITE_TOOLS } from "@/lib/tools";
 
 // The delivery lib treats a present RESEND_API_KEY as "email configured"; tests
 // must be deterministic regardless of the developer's local .env.
@@ -176,27 +178,27 @@ describe("send_message", () => {
   });
 
   it("preview resolves an owned resident with name/email lines", async () => {
-    const res = await sendMessageTool.preview(ctx, {
+    const res = await previewWrite(sendMessageTool, ctx, {
       toEmails: ["Pat@X.com"],
       subject: "Hello",
       body: "World",
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines).toContainEqual({ label: "Pat Doe", value: "pat@x.com" });
-    expect(res.preview.lines).toContainEqual({ label: "Subject", value: "Hello" });
+    expect(res.preview.fields).toContainEqual({ label: "Pat Doe", value: "pat@x.com" });
+    expect(res.preview.fields).toContainEqual({ label: "Subject", value: "Hello" });
     expect((res.input as { toEmails?: string[] }).toEmails).toEqual(["pat@x.com"]);
   });
 
   it("preview surfaces out-of-scope recipients instead of silently dropping them", async () => {
-    const res = await sendMessageTool.preview(ctx, {
+    const res = await previewWrite(sendMessageTool, ctx, {
       toEmails: ["pat@x.com", "foreign@x.com"],
       subject: "Hello",
       body: "World",
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const skipped = res.preview.lines.find((l) => l.label.startsWith("Skipped"));
+    const skipped = res.preview.fields.find((l) => l.label.startsWith("Skipped"));
     expect(skipped?.value).toContain("foreign@x.com");
     // The stored input keeps only in-scope emails.
     expect((res.input as { toEmails?: string[] }).toEmails).toEqual(["pat@x.com"]);
@@ -204,7 +206,7 @@ describe("send_message", () => {
   });
 
   it("preview rejects when every recipient belongs to another landlord", async () => {
-    const res = await sendMessageTool.preview(ctx, {
+    const res = await previewWrite(sendMessageTool, ctx, {
       toEmails: ["foreign@x.com"],
       subject: "Hello",
       body: "World",
@@ -215,12 +217,12 @@ describe("send_message", () => {
   });
 
   it("preview requires at least one recipient source", async () => {
-    const res = await sendMessageTool.preview(ctx, { subject: "Hello", body: "World" });
+    const res = await previewWrite(sendMessageTool, ctx, { subject: "Hello", body: "World" });
     expect(res.ok).toBe(false);
   });
 
   it("toAllResidents expands to the landlord's own approved residents only", async () => {
-    const res = await sendMessageTool.preview(ctx, {
+    const res = await previewWrite(sendMessageTool, ctx, {
       toAllResidents: true,
       subject: "Notice",
       body: "Water off Tuesday",
@@ -228,7 +230,7 @@ describe("send_message", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.preview.batchCount).toBe(2);
-    const values = res.preview.lines.map((l) => l.value);
+    const values = res.preview.fields.map((l) => l.value);
     expect(values).toContain("pat@x.com");
     expect(values).toContain("sam@x.com");
     expect(values.join()).not.toContain("foreign@x.com");
@@ -237,7 +239,7 @@ describe("send_message", () => {
 
   it("execute audits first, delivers portal inbox rows, and is idempotent per day", async () => {
     const input = { toEmails: ["pat@x.com"], subject: "Hello", body: "World", deliverViaEmail: false };
-    const first = await sendMessageTool.execute(ctx, input);
+    const first = await executeWrite(sendMessageTool, ctx, input);
     expect(first.ok).toBe(true);
     if (first.ok) expect(first.reply).toContain('Sent "Hello" to 1 recipient');
 
@@ -261,7 +263,7 @@ describe("send_message", () => {
     expect(sentRow.scope).toBe(MANAGER_INBOX_SCOPE);
 
     // Same content + recipients same day => already-done, nothing re-sent.
-    const second = await sendMessageTool.execute(ctx, input);
+    const second = await executeWrite(sendMessageTool, ctx, input);
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already");
     expect(tables.audit_log).toHaveLength(1);
@@ -269,7 +271,7 @@ describe("send_message", () => {
   });
 
   it("execute refuses (and writes no audit row) when recipients are foreign", async () => {
-    const res = await sendMessageTool.execute(ctx, {
+    const res = await executeWrite(sendMessageTool, ctx, {
       toEmails: ["foreign@x.com"],
       subject: "Hello",
       body: "World",
@@ -280,17 +282,25 @@ describe("send_message", () => {
   });
 
   it("execute clears the dedupe key when delivery fails so a retry can record", async () => {
-    // deliverViaEmail defaults to true and RESEND_API_KEY is unset => the
-    // delivery lib reports a hard failure after writing inbox rows.
-    const res = await sendMessageTool.execute(ctx, {
-      toEmails: ["pat@x.com"],
-      subject: "Hello",
-      body: "World",
-    });
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain("not configured");
-    expect(tables.audit_log).toHaveLength(1);
-    expect(tables.audit_log[0]!.dedupe_key).toBeNull();
+    // A missing RESEND key only soft-fails the EMAIL leg (portal delivery still
+    // succeeds), so force a hard delivery failure to exercise the rollback.
+    const delivery = await import("@/lib/portal-inbox-delivery");
+    const spy = vi
+      .spyOn(delivery, "deliverPortalInboxMessage")
+      .mockResolvedValue({ ok: false, error: "Mail transport is not configured." });
+    try {
+      const res = await executeWrite(sendMessageTool, ctx, {
+        toEmails: ["pat@x.com"],
+        subject: "Hello",
+        body: "World",
+      });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toContain("not configured");
+      expect(tables.audit_log).toHaveLength(1);
+      expect(tables.audit_log[0]!.dedupe_key).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -306,7 +316,7 @@ describe("schedule_message", () => {
   const FUTURE = "2027-01-05T10:00:00.000Z";
 
   it("preview rejects past or invalid send times and foreign recipients", async () => {
-    const past = await scheduleMessageTool.preview(ctx, {
+    const past = await previewWrite(scheduleMessageTool, ctx, {
       toEmail: "pat@x.com",
       subject: "Hi",
       body: "B",
@@ -314,7 +324,7 @@ describe("schedule_message", () => {
     });
     expect(past.ok).toBe(false);
 
-    const invalid = await scheduleMessageTool.preview(ctx, {
+    const invalid = await previewWrite(scheduleMessageTool, ctx, {
       toEmail: "pat@x.com",
       subject: "Hi",
       body: "B",
@@ -322,7 +332,7 @@ describe("schedule_message", () => {
     });
     expect(invalid.ok).toBe(false);
 
-    const foreign = await scheduleMessageTool.preview(ctx, {
+    const foreign = await previewWrite(scheduleMessageTool, ctx, {
       toEmail: "foreign@x.com",
       subject: "Hi",
       body: "B",
@@ -333,7 +343,7 @@ describe("schedule_message", () => {
   });
 
   it("preview shows recipient, subject, and send time", async () => {
-    const res = await scheduleMessageTool.preview(ctx, {
+    const res = await previewWrite(scheduleMessageTool, ctx, {
       toEmail: "PAT@x.com",
       subject: "Rent due soon",
       body: "Friendly reminder",
@@ -341,14 +351,14 @@ describe("schedule_message", () => {
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
-    expect(res.preview.lines).toContainEqual({ label: "Send at", value: FUTURE });
+    expect(res.preview.fields).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
+    expect(res.preview.fields).toContainEqual({ label: "Send at", value: FUTURE });
     expect((res.input as { sendAtIso: string }).sendAtIso).toBe(FUTURE);
   });
 
   it("execute creates the scheduled row with a one-shot dedupe key", async () => {
     const input = { toEmail: "pat@x.com", subject: "Rent due soon", body: "Reminder", sendAtIso: FUTURE };
-    const first = await scheduleMessageTool.execute(ctx, input);
+    const first = await executeWrite(scheduleMessageTool, ctx, input);
     expect(first.ok).toBe(true);
 
     const rows = tables.portal_scheduled_inbox_message_records!;
@@ -365,7 +375,7 @@ describe("schedule_message", () => {
     );
 
     // Same recipient + time + subject => already scheduled, no second row.
-    const second = await scheduleMessageTool.execute(ctx, input);
+    const second = await executeWrite(scheduleMessageTool, ctx, input);
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already scheduled");
     expect(rows).toHaveLength(1);
@@ -396,32 +406,32 @@ describe("cancel_scheduled_message", () => {
   });
 
   it("preview rejects unknown, foreign, sent, and resident-originated messages", async () => {
-    const unknown = await cancelScheduledMessageTool.preview(ctx, { messageId: "nope" });
+    const unknown = await previewWrite(cancelScheduledMessageTool, ctx, { messageId: "nope" });
     expect(unknown.ok).toBe(false);
 
-    const foreign = await cancelScheduledMessageTool.preview(ctx, { messageId: "m_foreign" });
+    const foreign = await previewWrite(cancelScheduledMessageTool, ctx, { messageId: "m_foreign" });
     expect(foreign.ok).toBe(false);
 
-    const sent = await cancelScheduledMessageTool.preview(ctx, { messageId: "m_sent" });
+    const sent = await previewWrite(cancelScheduledMessageTool, ctx, { messageId: "m_sent" });
     expect(sent.ok).toBe(false);
     if (!sent.ok) expect(sent.error).toContain("already sent");
 
-    const resident = await cancelScheduledMessageTool.preview(ctx, { messageId: "m_resident" });
+    const resident = await previewWrite(cancelScheduledMessageTool, ctx, { messageId: "m_resident" });
     expect(resident.ok).toBe(false);
     if (!resident.ok) expect(resident.error).toContain("resident");
   });
 
   it("preview shows recipient, subject, and send time for an owned message", async () => {
-    const res = await cancelScheduledMessageTool.preview(ctx, { messageId: "m1" });
+    const res = await previewWrite(cancelScheduledMessageTool, ctx, { messageId: "m1" });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
-    expect(res.preview.lines).toContainEqual({ label: "Subject", value: "Rent due" });
-    expect(res.preview.lines).toContainEqual({ label: "Send at", value: "2027-02-01T09:00:00.000Z" });
+    expect(res.preview.fields).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
+    expect(res.preview.fields).toContainEqual({ label: "Subject", value: "Rent due" });
+    expect(res.preview.fields).toContainEqual({ label: "Send at", value: "2027-02-01T09:00:00.000Z" });
   });
 
   it("execute cancels once with a one-shot dedupe key; repeats report already-done", async () => {
-    const first = await cancelScheduledMessageTool.execute(ctx, { messageId: "m1" });
+    const first = await executeWrite(cancelScheduledMessageTool, ctx, { messageId: "m1" });
     expect(first.ok).toBe(true);
 
     const row = tables.portal_scheduled_inbox_message_records!.find((r) => r.id === "m1")!;
@@ -431,14 +441,14 @@ describe("cancel_scheduled_message", () => {
     expect(tables.audit_log).toHaveLength(1);
     expect(tables.audit_log[0]!.dedupe_key).toBe("cancel_scheduled_message:manager_a:m1");
 
-    const second = await cancelScheduledMessageTool.execute(ctx, { messageId: "m1" });
+    const second = await executeWrite(cancelScheduledMessageTool, ctx, { messageId: "m1" });
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.reply).toContain("already cancelled");
     expect(tables.audit_log).toHaveLength(1);
   });
 
   it("execute cannot touch another landlord's scheduled message", async () => {
-    const res = await cancelScheduledMessageTool.execute(ctx, { messageId: "m_foreign" });
+    const res = await executeWrite(cancelScheduledMessageTool, ctx, { messageId: "m_foreign" });
     expect(res.ok).toBe(false);
     expect(tables.portal_scheduled_inbox_message_records!.find((r) => r.id === "m_foreign")!.status).toBe(
       "scheduled",
@@ -522,12 +532,12 @@ describe("inbox thread tools", () => {
   });
 
   it("update_thread preview rejects a foreign thread id", async () => {
-    const res = await updateThreadTool.preview(ctx, { threadId: "t_foreign", action: "read" });
+    const res = await previewWrite(updateThreadTool, ctx, { threadId: "t_foreign", action: "read" });
     expect(res.ok).toBe(false);
   });
 
   it("update_thread archives with previousFolder and restores it, audit-logged without dedupe", async () => {
-    const archived = await updateThreadTool.execute(ctx, { threadId: "t1", action: "archive" });
+    const archived = await executeWrite(updateThreadTool, ctx, { threadId: "t1", action: "archive" });
     expect(archived.ok).toBe(true);
     let row = tables.portal_inbox_thread_records!.find((r) => r.id === "t1")!;
     let data = row.row_data as Record<string, unknown>;
@@ -537,7 +547,7 @@ describe("inbox thread tools", () => {
     expect(data.body).toContain("IGNORE"); // merge preserved the rest of row_data
     expect(row.updated_at).not.toBe("2026-07-02T00:00:00Z");
 
-    const restored = await updateThreadTool.execute(ctx, { threadId: "t1", action: "restore" });
+    const restored = await executeWrite(updateThreadTool, ctx, { threadId: "t1", action: "restore" });
     expect(restored.ok).toBe(true);
     row = tables.portal_inbox_thread_records!.find((r) => r.id === "t1")!;
     data = row.row_data as Record<string, unknown>;
@@ -552,15 +562,15 @@ describe("inbox thread tools", () => {
   });
 
   it("update_thread toggles unread and cannot touch a foreign thread", async () => {
-    const read = await updateThreadTool.execute(ctx, { threadId: "t1", action: "read" });
+    const read = await executeWrite(updateThreadTool, ctx, { threadId: "t1", action: "read" });
     expect(read.ok).toBe(true);
     expect((tables.portal_inbox_thread_records!.find((r) => r.id === "t1")!.row_data as { unread: boolean }).unread).toBe(false);
 
-    const unread = await updateThreadTool.execute(ctx, { threadId: "t1", action: "unread" });
+    const unread = await executeWrite(updateThreadTool, ctx, { threadId: "t1", action: "unread" });
     expect(unread.ok).toBe(true);
     expect((tables.portal_inbox_thread_records!.find((r) => r.id === "t1")!.row_data as { unread: boolean }).unread).toBe(true);
 
-    const foreign = await updateThreadTool.execute(ctx, { threadId: "t_foreign", action: "read" });
+    const foreign = await executeWrite(updateThreadTool, ctx, { threadId: "t_foreign", action: "read" });
     expect(foreign.ok).toBe(false);
     expect(tables.portal_inbox_thread_records!.find((r) => r.id === "t_foreign")!.row_data).toMatchObject({
       folder: "inbox",
@@ -630,30 +640,30 @@ describe("reply_to_thread", () => {
   });
 
   it("preview builds To/Subject/Reply lines from the owned thread", async () => {
-    const res = await replyToThreadTool.preview(ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
+    const res = await previewWrite(replyToThreadTool, ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.preview.lines).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
-    expect(res.preview.lines).toContainEqual({ label: "Subject", value: "Re: Leaky faucet" });
-    expect(res.preview.lines.find((l) => l.label === "Reply")?.value).toContain("plumber tomorrow");
+    expect(res.preview.fields).toContainEqual({ label: "To", value: "Pat Doe (pat@x.com)" });
+    expect(res.preview.fields).toContainEqual({ label: "Subject", value: "Re: Leaky faucet" });
+    expect(res.preview.fields.find((l) => l.label === "Reply")?.value).toContain("plumber tomorrow");
   });
 
   it("preview rejects another landlord's thread as unknown (anti-enumeration)", async () => {
-    const res = await replyToThreadTool.preview(ctx, { threadId: "t_foreign_owner", body: "hi" });
+    const res = await previewWrite(replyToThreadTool, ctx, { threadId: "t_foreign_owner", body: "hi" });
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.error).toContain("No inbox thread");
   });
 
   it("preview rejects replying when the counterparty is no longer connected", async () => {
-    const res = await replyToThreadTool.preview(ctx, { threadId: "t_disconnected", body: "hi" });
+    const res = await previewWrite(replyToThreadTool, ctx, { threadId: "t_disconnected", body: "hi" });
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.error).toContain("not connected");
   });
 
   it("execute appends the reply to the own thread, delivers to the resident, and audits", async () => {
-    const res = await replyToThreadTool.execute(ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
+    const res = await executeWrite(replyToThreadTool, ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
     expect(res.ok).toBe(true);
     // RESEND_API_KEY is blanked above: the reply degrades to portal-only and says so.
     if (res.ok) expect(res.reply).toContain("portal inbox only");
@@ -677,7 +687,7 @@ describe("reply_to_thread", () => {
 
     // Same reply again the same day: idempotent, no second delivery.
     const countBefore = tables.portal_inbox_thread_records!.length;
-    const again = await replyToThreadTool.execute(ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
+    const again = await executeWrite(replyToThreadTool, ctx, { threadId: "t_pat", body: "On it — plumber tomorrow." });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply.toLowerCase()).toContain("already");
     expect(tables.portal_inbox_thread_records!.length).toBe(countBefore);
@@ -696,6 +706,9 @@ describe("registry acceptance", () => {
       cancelScheduledMessageTool,
     ]);
     expect(registry.size).toBe(7);
-    expect((registry.get("update_thread") as { confirm?: string }).confirm).toBe("none");
+    // update_thread stays a gated write; the manager surfaces opt it into
+    // inline execution through an explicit per-surface allowlist instead.
+    expect(registry.get("update_thread")?.kind).toBe("write");
+    expect(MANAGER_INLINE_WRITE_TOOLS).toContain("update_thread");
   });
 });

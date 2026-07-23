@@ -13,7 +13,7 @@
 import { z } from "zod";
 import { defineTool, defineWriteTool } from "../registry";
 import type { ActionPreview } from "../registry";
-import type { AgentContext } from "../context";
+import type { VendorAgentContext } from "../vendor-context";
 import { track } from "@/lib/analytics/posthog";
 import {
   formatInvoiceMoney,
@@ -56,7 +56,7 @@ export const listVendorInvoicesTool = defineTool({
         .describe("Optional filter to a single invoice status."),
     })
     .strict(),
-  handler: async (ctx: AgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     let query = ctx.db
       .from("vendor_invoices")
       .select(VENDOR_INVOICE_SELECT)
@@ -104,16 +104,21 @@ type SubmitVendorInvoiceInput = z.infer<typeof submitVendorInvoiceSchema>;
 
 export const submitVendorInvoiceTool = defineWriteTool<
   SubmitVendorInvoiceInput,
-  { reply: string; invoice: ReturnType<typeof summarizeInvoice> }
+  { reply: string; invoice: ReturnType<typeof summarizeInvoice> },
+  VendorAgentContext
 >({
   name: "submit_vendor_invoice",
   description:
     "Submit a new invoice from the signed-in vendor to one of the managers they work for. Amounts are integer cents. The vendor sees exactly what will be billed and must confirm before it is submitted. The total is computed server-side from the line items — never trust a model-supplied total.",
   inputSchema: submitVendorInvoiceSchema,
+  // `managerUserId` names the manager to BILL — a target, not the acting
+  // identity — and prepareVendorInvoiceSubmission re-verifies it against this
+  // vendor's own manager links in both preview and handler.
+  allowedIdentityInputs: ["managerUserId"],
   // Preview and handler both re-run the full shared validation
   // (prepareVendorInvoiceSubmission) so the handler re-resolves current state
   // at confirm time; the preview only ever shows the resolved target manager.
-  preview: async (ctx: AgentContext, input): Promise<ActionPreview> => {
+  preview: async (ctx: VendorAgentContext, input): Promise<ActionPreview> => {
     const prepared = await prepareVendorInvoiceSubmission(ctx.db, ctx.userId, input);
     const { data: managerProfile } = await ctx.db
       .from("profiles")
@@ -148,7 +153,7 @@ export const submitVendorInvoiceTool = defineWriteTool<
       ],
     };
   },
-  handler: async (ctx: AgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     const prepared = await prepareVendorInvoiceSubmission(ctx.db, ctx.userId, input);
 
     const now = new Date().toISOString();
@@ -221,7 +226,7 @@ export const listVendorPayoutsTool = defineTool({
         .describe("Optional filter to a single payout status."),
     })
     .strict(),
-  handler: async (ctx: AgentContext, input) => {
+  handler: async (ctx: VendorAgentContext, input) => {
     let query = ctx.db
       .from("vendor_payouts")
       .select("id, work_order_id, amount_cents, stripe_transfer_id, status, failure_reason, created_at")

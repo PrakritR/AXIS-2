@@ -213,6 +213,9 @@ export async function traceAgentTurn<T extends TracedResult>(
   actor: TraceActor,
   messages: TurnInput,
   run: (observer?: AgentObserver) => Promise<T>,
+  /** Non-chat surfaces (the SMS agents, inbox draft replies) name their trace
+   * and bind it to their own session id. */
+  opts?: { name?: string; sessionId?: string },
 ): Promise<T> {
   const lf = getClient();
   if (!lf) return run();
@@ -221,9 +224,9 @@ export async function traceAgentTurn<T extends TracedResult>(
   let trace: ReturnType<Langfuse["trace"]> | null = null;
   try {
     trace = lf.trace({
-      name: "axis-agent-turn",
+      name: opts?.name ?? "axis-agent-turn",
       userId: actor.userId,
-      sessionId: actor.sessionId ?? actor.userId,
+      sessionId: opts?.sessionId ?? actor.sessionId ?? actor.userId,
       metadata: actor.metadata ?? {},
       input: lastUser,
     });

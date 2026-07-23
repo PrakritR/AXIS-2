@@ -6,7 +6,7 @@
  * purpose: answer-only v1 is enforced structurally, not by prompt.
  */
 import { z } from "zod";
-import { defineTool } from "../registry";
+import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
 import { notifyManagerFromAgent } from "@/lib/agent-notify.server";
 import { track } from "@/lib/analytics/posthog";
@@ -138,17 +138,29 @@ export const listMyJobsWithThisManagerTool = defineTool({
   },
 });
 
-export const escalateToManagerTool = defineTool({
+export const escalateToManagerTool = defineWriteTool({
   name: ESCALATE_TOOL_NAME,
   description:
     "Notify the property manager that the vendor needs something you cannot decide: a schedule change, price or scope change, missing access info, a cancellation, or anything else needing a human decision. Call at most once per issue, with a short factual summary of what the vendor asked.",
-  kind: "write",
   inputSchema: z
     .object({
       summary: z.string().min(1).max(500).describe("One or two factual sentences describing what the vendor needs."),
       urgency: z.enum(["normal", "urgent"]).describe("urgent only for same-day blockers like being locked out on site."),
     })
     .strict(),
+  // The SMS surface allow-lists this tool so it runs inline (there is no human
+  // on the other end of a webhook to confirm). The preview exists so the tool
+  // is still previewable wherever it is NOT allow-listed.
+  preview: async (ctx, input) => ({
+    kind: ESCALATE_TOOL_NAME,
+    title: "Notify the manager",
+    summary: "Send the manager a note that this vendor needs a human decision.",
+    fields: [
+      { label: "Summary", value: input.summary },
+      { label: "Urgency", value: input.urgency },
+    ],
+    confirmLabel: "Notify manager",
+  }),
   handler: async (ctx, input) => {
     const scope = ctx.vendorScope;
     const scoped = await loadScopedWorkOrder(ctx);
