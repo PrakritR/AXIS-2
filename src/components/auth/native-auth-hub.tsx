@@ -160,6 +160,7 @@ function NativeAuthHubInner({
   const explicitTier = isPlanTierId(tierParam) ? tierParam : null;
   const initialBilling: "monthly" | "annual" = searchParams.get("billing") === "annual" ? "annual" : "monthly";
   const googleSignedInReturn = searchParams.get("google_signed_in") === "1";
+  const accountReadyReturn = searchParams.get("account_ready") === "1";
   const { isNative } = useIsNativeApp();
 
   const [checkingSession, setCheckingSession] = useState(true);
@@ -440,6 +441,7 @@ function NativeAuthHubInner({
                   disabled={locked}
                   hideLegalFooter
                   googleReturn={googleSignedInReturn}
+                  accountReadyReturn={accountReadyReturn}
                   trialSignup={managerTrialSignup}
                 />
               )
