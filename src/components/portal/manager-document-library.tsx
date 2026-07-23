@@ -7,7 +7,6 @@ import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
@@ -418,29 +417,29 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
     ) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {complianceBanner}
-      <ManagerPortalStatusPills
-        tabs={expiryPills}
-        activeId={expiryFilter}
-        onChange={setExpiryFilter}
-        activeTone="primary"
-        compact
-      />
-      <ManagerPortalFilterRow>
+      <div className="flex flex-wrap items-center gap-2">
+        <ManagerPortalStatusPills
+          tabs={expiryPills}
+          activeId={expiryFilter}
+          onChange={setExpiryFilter}
+          activeTone="primary"
+          compact
+        />
         <Input
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name…"
-          className="h-10 max-w-[16rem]"
+          className="h-8 min-w-[7.5rem] max-w-[10rem] flex-1 text-sm"
           aria-label="Search documents"
           data-attr="document-search"
         />
         <Select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="h-10 max-w-[12rem]"
+          className="h-8 max-w-[9rem] shrink-0 text-sm"
           aria-label="Filter by category"
         >
           <option value="">All categories</option>
@@ -453,7 +452,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         <Select
           value={scopeFilter}
           onChange={(e) => setScopeFilter(e.target.value)}
-          className="h-10 max-w-[12rem]"
+          className="h-8 max-w-[8.5rem] shrink-0 text-sm"
           aria-label="Filter by scope"
         >
           {SCOPE_FILTERS.map((s) => (
@@ -466,7 +465,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
           <Select
             value={propertyFilter}
             onChange={(e) => setPropertyFilter(e.target.value)}
-            className="h-10 max-w-[14rem]"
+            className="h-8 max-w-[9.5rem] shrink-0 text-sm"
             aria-label="Filter by property"
           >
             <option value="">All properties</option>
@@ -480,14 +479,14 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         <Button
           type="button"
           variant="primary"
-          className="ml-auto h-10 shrink-0"
+          className="ml-auto h-8 shrink-0 rounded-full px-4 text-sm font-semibold"
           onClick={() => setUploadOpen(true)}
           disabled={demo}
           data-attr="document-upload-open"
         >
           Upload
         </Button>
-      </ManagerPortalFilterRow>
+      </div>
 
       {demo ? (
         <PortalDataTableEmpty
