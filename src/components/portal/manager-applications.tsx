@@ -344,9 +344,17 @@ export function ManagerApplications() {
   const scopeUserId = resolveManagerScopeUserId(userId);
 
   const propertyOptions = buildManagerPropertyFilterOptions(scopeUserId);
-  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(scopeUserId), [scopeUserId, portfolioTick]);
+  const shareableProperties = useMemo(() => {
+    void portfolioTick;
+    return buildManagerShareablePropertyOptions(scopeUserId);
+  }, [scopeUserId, portfolioTick]);
 
   const scopedRows = useMemo(() => {
+    // `portfolioTick` is a cache-invalidation signal, not a value read here:
+    // `applicationVisibleToPortalUser` consults the module-level property
+    // pipeline cache, which React cannot see. Re-filter once that cache
+    // hydrates so linked-property rows appear without a manual refresh.
+    void portfolioTick;
     if (!scopeUserId) return [];
     return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId, "applications"));
   }, [rows, scopeUserId, portfolioTick]);
