@@ -1,4 +1,5 @@
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
+import { sendPortalConversationEmails } from "@/lib/portal-email-send.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { userHoldsAdminRole } from "@/lib/auth/admin-role";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
@@ -25,7 +26,7 @@ export type InboxDeliveryRecipient = {
   scope: string;
 };
 
-function scopeForRole(role: string | null | undefined): string {
+export function scopeForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
   if (normalized === "vendor") return VENDOR_INBOX_SCOPE;
@@ -143,7 +144,7 @@ export async function appendInboxThreadReply(
  * sent copy, the sender on an inbox copy) — it is what makes "sent 4 times to
  * one person" one thread instead of four.
  */
-type PortalMessageThreadSide = {
+export type PortalMessageThreadSide = {
   scope: string;
   folder: "sent" | "inbox";
   /** owner_user_id column (sender on a sent copy; recipient account on an inbox copy — may be null). */
@@ -162,7 +163,7 @@ type PortalMessageThreadSide = {
  * portable across our fake test client, and the extra rows per identity are few
  * (one per counterparty). Returns the newest match or null.
  */
-async function findExistingPortalMessageThread(
+export async function findExistingPortalMessageThread(
   db: SupabaseClient,
   side: PortalMessageThreadSide,
 ): Promise<{
@@ -171,6 +172,7 @@ async function findExistingPortalMessageThread(
   ownerUserId: string | null;
   participantEmail: string | null;
   scope: string;
+  updatedAt: string | null;
 } | null> {
   const matchCol = side.folder === "sent" ? "owner_user_id" : "participant_email";
   const matchVal = side.folder === "sent" ? side.ownerUserId : side.participantEmail;
@@ -194,6 +196,7 @@ async function findExistingPortalMessageThread(
     owner_user_id: string | null;
     participant_email: string | null;
     scope: string | null;
+    updated_at: string | null;
   }[];
   const otherParty = side.otherPartyEmail.trim().toLowerCase();
   for (const r of rows) {
@@ -206,6 +209,7 @@ async function findExistingPortalMessageThread(
       ownerUserId: r.owner_user_id ?? null,
       participantEmail: r.participant_email ?? null,
       scope: String(r.scope ?? side.scope),
+      updatedAt: r.updated_at ?? null,
     };
   }
   return null;
@@ -217,6 +221,7 @@ async function findExistingPortalMessageThread(
  * when none exists. This is what collapses several "New message" sends to the
  * same person into a single thread the way normal messaging does. SMS threads
  * are untouched — this only ever writes `thread_type: "portal_message"`.
+ * Returns false only when a `messageId` dedupe skipped the write.
  */
 export async function deliverPortalMessageThreadSide(
   db: SupabaseClient,
@@ -232,8 +237,14 @@ export async function deliverPortalMessageThreadSide(
     unread: boolean;
     /** Direction of the appended turn from the owner's view (false = inbound). */
     outbound: boolean;
+    /**
+     * Deterministic id for the appended message. When provided and a message
+     * with this id already exists in the thread, the append is skipped — this
+     * is what makes a redelivered inbound-email webhook idempotent.
+     */
+    messageId?: string;
   },
-): Promise<void> {
+): Promise<boolean> {
   const existing = await findExistingPortalMessageThread(db, args);
   const nowIso = new Date().toISOString();
 
@@ -241,8 +252,15 @@ export async function deliverPortalMessageThreadSide(
     const messages = Array.isArray(existing.rowData.messages)
       ? [...(existing.rowData.messages as unknown[])]
       : [];
+    if (
+      args.messageId &&
+      (existing.rowData.rootMessageId === args.messageId ||
+        messages.some((m) => (m as { id?: unknown } | null)?.id === args.messageId))
+    ) {
+      return false;
+    }
     messages.push({
-      id: `msg-${Date.now().toString(36)}-${messages.length}`,
+      id: args.messageId ?? `msg-${Date.now().toString(36)}-${messages.length}`,
       from: args.fromName,
       body: args.body,
       at: args.when,
@@ -268,7 +286,7 @@ export async function deliverPortalMessageThreadSide(
       },
       { onConflict: "id" },
     );
-    return;
+    return true;
   }
 
   await db.from("portal_inbox_thread_records").upsert(
@@ -289,11 +307,15 @@ export async function deliverPortalMessageThreadSide(
         time: args.when,
         unread: args.unread,
         scope: args.scope,
+        // The root message lives in `body`, not `messages[]` — remember its
+        // deterministic id so a redelivered webhook can still dedupe it.
+        ...(args.messageId ? { rootMessageId: args.messageId } : {}),
       },
       updated_at: nowIso,
     },
     { onConflict: "id" },
   );
+  return true;
 }
 
 export async function deliverPortalInboxMessage(
@@ -492,25 +514,18 @@ export async function deliverPortalInboxMessage(
   }
 
   if (toEmails.length > 0) {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (apiKey) {
-      const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
-      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
-      try {
-        const res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ from, to: toEmails, subject, text, html }),
-        });
-        if (!res.ok) {
-          // Inbox already written — soft-fail email so the manager action still succeeds.
-          for (const email of toEmails) willEmail.delete(email);
-        }
-      } catch {
-        for (const email of toEmails) willEmail.delete(email);
-      }
-    } else {
-      for (const email of toEmails) willEmail.delete(email);
+    const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
+    // Per-recipient sends carrying the signed Reply-To + threading anchor.
+    // Inbox already written — email stays best-effort, now per recipient.
+    const emailResults = await sendPortalConversationEmails({
+      senderUserId: opts.senderUserId,
+      toEmails,
+      subject,
+      text,
+      html,
+    });
+    for (const email of toEmails) {
+      if (!emailResults.get(email)?.sent) willEmail.delete(email);
     }
   }
 

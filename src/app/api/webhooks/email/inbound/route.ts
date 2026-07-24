@@ -21,6 +21,11 @@ import {
   ingestInboundEmail,
   parseInboundEmailWebhook,
 } from "@/lib/inbound-email/inbound-email.server";
+import {
+  backfillInboundEmailReplyBody,
+  ingestInboundEmailReply,
+} from "@/lib/inbound-email/inbound-email-reply.server";
+import { parseReplyAddress } from "@/lib/inbound-email/reply-address.server";
 import { verifyResendWebhookSignature } from "@/lib/inbound-email/verify-signature";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -82,6 +87,36 @@ export async function POST(req: Request) {
   if (!rateLimit(`email-inbound:${parsed.fromEmail}`, 120, 60_000).ok) {
     console.warn("inbound-email rate-limited", parsed.fromEmail, parsed.emailId);
     return ok({ rateLimited: true });
+  }
+
+  // A verified reply token routes the mail into its portal conversation
+  // thread instead of the support inbox. Anything that fails verification
+  // (foreign domain, tampered MAC, mismatched From) falls through to the
+  // support ingest below — visible in the admin inbox, never trusted or lost.
+  const reply = parseReplyAddress(parsed.toEmails, parsed.fromEmail);
+  if (reply) {
+    let handled: boolean;
+    let appended: boolean;
+    try {
+      ({ handled, appended } = await ingestInboundEmailReply(parsed, reply.ownerUserId));
+    } catch (e) {
+      // 5xx → Resend redelivers; the deterministic message id keeps it idempotent.
+      console.error("inbound-email reply ingest failed", parsed.emailId, e);
+      return new Response("Ingest failed", { status: 500 });
+    }
+    if (handled) {
+      const enrichReply = () =>
+        backfillInboundEmailReplyBody(parsed, reply.ownerUserId).catch((e) =>
+          console.warn("inbound-email reply body backfill errored", parsed.emailId, e),
+        );
+      try {
+        after(enrichReply);
+      } catch {
+        void enrichReply();
+      }
+      return appended ? ok({ reply: true }) : ok({ reply: true, idempotent: true });
+    }
+    // Token owner no longer resolves — fall through to the support ingest.
   }
 
   let created: boolean;
