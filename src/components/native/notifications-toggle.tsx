@@ -60,7 +60,7 @@ export function NotificationsToggle() {
           ) : permission === "denied" ? (
             <span className="text-sm text-muted">Blocked</span>
           ) : (
-            <Button variant="secondary" size="sm" onClick={enable} disabled={busy}>
+            <Button variant="secondary" className="h-9 min-h-0 px-4 text-[13px]" onClick={enable} disabled={busy}>
               {busy ? "Enabling…" : "Enable"}
             </Button>
           )}

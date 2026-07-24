@@ -1040,7 +1040,7 @@ export function VendorSettingsPanel() {
           <div className="border-t border-border px-4 py-4">
             <Button
               variant="primary"
-              size="sm"
+              className="h-9 min-h-0 px-4 text-[13px]"
               onClick={() => void saveProfile()}
               disabled={profileSaving || profileLoading || unlinked}
               data-attr="vendor-settings-profile-save"
@@ -1083,7 +1083,7 @@ export function VendorSettingsPanel() {
           <div className="border-t border-border px-4 py-4">
             <Button
               variant="primary"
-              size="sm"
+              className="h-9 min-h-0 px-4 text-[13px]"
               onClick={() => void saveCapabilities()}
               disabled={capabilitiesSaving || profileLoading || unlinked}
               data-attr="vendor-settings-capabilities-save"
