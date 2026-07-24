@@ -194,7 +194,13 @@ export function ManagerLeaseEditorModal({
   };
 
   return (
-    <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
+    <Modal
+      open={open}
+      title={title}
+      onClose={onClose}
+      panelClassName="max-w-2xl"
+      assistantContext="Lease — PropLane standard, custom clauses, or PDF template"
+    >
       {bulkIds.length > 1 ? (
         <p className="mb-4 text-sm text-muted">
           These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
