@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   consumeResidentSetupTokenOnApplication,
   findApplicationForResidentSetup,
+  relinkResidentSetupApplicationEmail,
 } from "@/lib/auth/resident-setup-token";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -46,11 +47,13 @@ export async function POST(req: Request) {
     }
 
     const oauthEmail = user.email.trim().toLowerCase();
+    // A valid setup token already authorizes this handoff, so a Google email that
+    // differs from the one on the application is not an error — the applicant just
+    // chose a different Google account. Relink the application onto the account
+    // they actually control instead of rejecting them.
+    let applicationRow = lookup.row;
     if (oauthEmail !== lookup.email) {
-      return NextResponse.json(
-        { error: "Sign in with the same Google account email you used on your application." },
-        { status: 403 },
-      );
+      applicationRow = await relinkResidentSetupApplicationEmail(service, lookup.row, oauthEmail);
     }
 
     const fullName =
@@ -64,18 +67,20 @@ export async function POST(req: Request) {
       userId: user.id,
       email: oauthEmail,
       fullName,
+      phone: lookup.phone,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
     await service.from("profiles").update({ manager_id: lookup.axisId }).eq("id", user.id);
-    await consumeResidentSetupTokenOnApplication(service, lookup.row);
+    await consumeResidentSetupTokenOnApplication(service, applicationRow);
 
     return NextResponse.json({
       ok: true,
       axisId: lookup.axisId,
       linkedApplication: true,
+      relinkedEmail: oauthEmail !== lookup.email ? oauthEmail : undefined,
       redirectTo: "/resident/applications",
     });
   } catch (e) {

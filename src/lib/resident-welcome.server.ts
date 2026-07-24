@@ -16,6 +16,7 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import { sendSms } from "@/lib/twilio";
+import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
 
 // Domain is matched as dot-separated labels (no char class overlaps the "." delimiter)
 // so there is exactly one way to parse a match — avoids polynomial backtracking on
@@ -108,7 +109,18 @@ export async function deliverResidentWelcome(
   const senderEmail = normalizeEmail(actor.email);
   const skipExternalEmail = to.endsWith("@axis.local") || (Boolean(senderEmail) && to === senderEmail);
 
-  const signupUrl = residentAccountCreationUrl("", axisId);
+  // Mint (or refresh) a setup token on the application so the approval email links
+  // to a working /auth/resident-setup?token=&axis_id= handoff — the same machinery
+  // the guest apply flow uses. Scoped to the sending manager so one manager cannot
+  // rotate another's applicant token. A missing token (application not found under
+  // this manager) falls back to the token-less URL, which the setup page rejects
+  // gracefully with "apply first".
+  const ensured = await ensureResidentSetupTokenForApplication(db, axisId, {
+    managerUserId: actor.userId,
+  });
+  const setupToken = ensured.ok ? ensured.token : undefined;
+
+  const signupUrl = residentAccountCreationUrl("", axisId, setupToken);
   const text = buildResidentWelcomeEmailBody({
     residentName: residentName || undefined,
     axisId,
@@ -124,6 +136,7 @@ export async function deliverResidentWelcome(
     residentName: residentName || undefined,
     axisId,
     origin: "",
+    setupToken,
   });
 
   let payloadId: string | null = null;

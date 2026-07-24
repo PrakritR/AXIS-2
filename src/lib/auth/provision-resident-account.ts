@@ -65,12 +65,15 @@ export type ProvisionResidentResult =
 /** Resident signup without typing an Axis ID — links by email when an application exists. */
 export async function provisionResidentAccountByEmail(
   supabase: SupabaseClient,
-  opts: { userId: string; email: string; fullName?: string | null },
+  opts: { userId: string; email: string; fullName?: string | null; phone?: string | null },
 ): Promise<ProvisionResidentResult> {
   const normalEmail = opts.email.trim().toLowerCase();
   if (!normalEmail.includes("@")) {
     return { ok: false, status: 400, error: "Enter a valid email address." };
   }
+  // A phone the resident confirmed on the setup screen wins over the one from the
+  // application snapshot — it is the most recent value they vouched for.
+  const explicitPhone = opts.phone?.trim() ? normalizeE164(opts.phone.trim()) : null;
 
   const matchingApplication = await findApplicationByEmail(supabase, normalEmail);
   const linkedApplication = Boolean(matchingApplication);
@@ -112,6 +115,7 @@ export async function provisionResidentAccountByEmail(
       // Notifications text this number automatically — carry the phone the
       // resident gave on their rental application onto the profile.
       phone:
+        explicitPhone ||
         (existingProfile?.phone as string | null)?.trim() ||
         (matchingApplication ? normalizeE164(applicationPhone(matchingApplication) ?? "") : null) ||
         null,

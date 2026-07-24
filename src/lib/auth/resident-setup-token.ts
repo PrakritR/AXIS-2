@@ -78,6 +78,7 @@ export type ResidentSetupLookup =
       axisId: string;
       email: string;
       name: string | null;
+      phone: string | null;
       propertyId: string | null;
       row: DemoApplicantRow;
     }
@@ -149,9 +150,40 @@ export async function findApplicationForResidentSetup(
     axisId: match.id,
     email,
     name: match.name?.trim() || match.application?.fullLegalName?.trim() || null,
+    phone: match.application?.phone?.trim() || null,
     propertyId: match.propertyId?.trim() || match.application?.propertyId?.trim() || null,
     row: match,
   };
+}
+
+/**
+ * Relink an application record to a new resident email. Used when a resident
+ * completes account setup via OAuth under a different email than the one on
+ * their application — the valid setup token is the authorization, so we move the
+ * application onto the account they actually control instead of rejecting it.
+ * Rewrites both the `resident_email` column and the snapshot's `email` so the
+ * downstream email-keyed provisioning (`provisionResidentAccountByEmail`) finds it.
+ */
+export async function relinkResidentSetupApplicationEmail(
+  db: SupabaseClient,
+  row: DemoApplicantRow,
+  newEmail: string,
+): Promise<DemoApplicantRow> {
+  const email = newEmail.trim().toLowerCase();
+  const relinked: DemoApplicantRow = { ...row, email };
+  await db.from("manager_application_records").upsert(
+    {
+      id: relinked.id,
+      manager_user_id: relinked.managerUserId || null,
+      resident_email: email,
+      property_id: relinked.propertyId || relinked.application?.propertyId || null,
+      assigned_property_id: relinked.assignedPropertyId || null,
+      row_data: relinked,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  return relinked;
 }
 
 /** Persist a consumed setup token after successful account creation. */
