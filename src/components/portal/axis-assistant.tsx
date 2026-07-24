@@ -84,12 +84,6 @@ function AxisAssistantFixedTrigger() {
 
   const isDesktopCollapsed = !isSmall && dockCollapsed;
 
-  // #region agent log
-  useEffect(() => {
-    fetch('http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'81cbea'},body:JSON.stringify({sessionId:'81cbea',location:'axis-assistant.tsx:AxisAssistantFixedTrigger',message:'fab visibility',data:{open,isSmall,dockCollapsed,renderFab:!(open||(!isSmall&&!dockCollapsed)),isDesktopCollapsed},timestamp:Date.now(),hypothesisId:'H1-H2'})}).catch(()=>{});
-  }, [open, isSmall, dockCollapsed, isDesktopCollapsed]);
-  // #endregion
-
   return (
     <button
       type="button"

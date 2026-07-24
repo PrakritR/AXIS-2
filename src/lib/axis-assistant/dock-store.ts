@@ -12,9 +12,6 @@ export function getAssistantDockCollapsed(): boolean {
 export function setAssistantDockCollapsed(next: boolean): void {
   if (collapsed === next) return;
   collapsed = next;
-  // #region agent log
-  fetch('http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'81cbea'},body:JSON.stringify({sessionId:'81cbea',location:'dock-store.ts:setAssistantDockCollapsed',message:'dock collapse state changed',data:{collapsed:next},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-  // #endregion
   if (typeof document !== "undefined") {
     document.cookie = `${ASSISTANT_DOCK_COLLAPSED_COOKIE}=${next ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
     document.documentElement.toggleAttribute("data-assistant-dock-collapsed", next);
