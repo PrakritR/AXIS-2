@@ -42,7 +42,6 @@ import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts"
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
 import {
   residentPaymentMethodLabel,
-  residentProcessingFeeCents,
   residentProcessingFeeDisplayLabel,
   type ResidentAxisPaymentMethod,
 } from "@/lib/payment-policy";
@@ -612,7 +611,7 @@ export function ResidentPaymentsPanel({
     );
     const options = [
       ...paymentMethodOptions.map((option) => ({ ...option, feeLabel: residentProcessingFeeDisplayLabel(option.id) })),
-      ...manualOptions.map((option) => ({ ...option, feeLabel: "No processing fee" })),
+      ...manualOptions.map((option) => ({ ...option, feeLabel: "No added fees" })),
     ];
     return (
       <div className={`grid gap-2 ${options.length > 2 ? "sm:grid-cols-3" : "grid-cols-2"}`}>
@@ -663,9 +662,18 @@ export function ResidentPaymentsPanel({
         {checkout.totalCents != null && checkout.subtotalCents != null ? (
           <div className="flex items-baseline justify-between rounded-xl border border-border bg-accent/30 px-4 py-3">
             <span className="text-xs text-muted">
-              Subtotal {formatUsd(checkout.subtotalCents)}
-              {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
-              {checkout.axisFeeCents ? ` · PropLane fee ${formatUsd(checkout.axisFeeCents)}` : ""}
+              {/* Both fee fields are 0 — PropLane covers processing — so the
+                  breakdown collapses to "no added fees". The conditional stays
+                  so a fee could never be collected without being shown. */}
+              {(checkout.processingFeeCents ?? 0) + (checkout.axisFeeCents ?? 0) > 0 ? (
+                <>
+                  Subtotal {formatUsd(checkout.subtotalCents)}
+                  {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
+                  {checkout.axisFeeCents ? ` · PropLane fee ${formatUsd(checkout.axisFeeCents)}` : ""}
+                </>
+              ) : (
+                "Total due · no added fees"
+              )}
             </span>
             <span className="text-lg font-bold tabular-nums text-foreground">{formatUsd(checkout.totalCents)}</span>
           </div>
@@ -858,22 +866,6 @@ export function ResidentPaymentsPanel({
 
   const confirmTotalLabel = useMemo(() => formatUsd(confirmSubtotalCents), [confirmSubtotalCents]);
 
-  /**
-   * The resident pays the processing fee on every Stripe method, so the amount
-   * Stripe collects is more than the charge subtotal. Disclose it here — showing
-   * the bare subtotal understated a card payment by 2.9% + $0.30.
-   */
-  const confirmStripeFee = useMemo(() => {
-    if (!payConfirm || !isStripeResidentPayMethod(payConfirm.method)) return null;
-    const method = payConfirm.method as ResidentAxisPaymentMethod;
-    const feeCents = residentProcessingFeeCents(confirmSubtotalCents, method);
-    if (feeCents <= 0) return null;
-    return {
-      feeLabel: formatUsd(feeCents),
-      totalLabel: formatUsd(confirmSubtotalCents + feeCents),
-      methodFeeLabel: residentProcessingFeeDisplayLabel(method),
-    };
-  }, [payConfirm, confirmSubtotalCents]);
 
   return (
     <>
@@ -1091,7 +1083,7 @@ export function ResidentPaymentsPanel({
                 {checkoutMethodOptions.map((option) => {
                   const selected = paymentMethod === option.id;
                   const feeLabel = option.id === "zelle" || option.id === "venmo"
-                    ? "No processing fee"
+                    ? "No added fees"
                     : residentProcessingFeeDisplayLabel(option.id as ResidentAxisPaymentMethod);
                   return (
                     <button
@@ -1160,18 +1152,19 @@ export function ResidentPaymentsPanel({
                 {confirmCharges.length === 1 ? "Amount" : `${confirmCharges.length} charges`}:{" "}
                 <span className="font-semibold tabular-nums">{confirmTotalLabel}</span>
               </p>
-              {confirmStripeFee ? (
-                <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-                  <p className="flex items-center justify-between gap-3 text-muted">
-                    <span>{confirmStripeFee.methodFeeLabel}</span>
-                    <span className="tabular-nums">{confirmStripeFee.feeLabel}</span>
-                  </p>
-                  <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
-                    <span>Total due</span>
-                    <span className="tabular-nums">{confirmStripeFee.totalLabel}</span>
-                  </p>
-                </div>
-              ) : null}
+              {/* Face value, every method: PropLane covers payment processing,
+                  so the amount above is exactly what Stripe collects. */}
+              <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+                <p className="flex items-center justify-between gap-3 text-muted">
+                  <span>Added fees</span>
+                  <span className="tabular-nums">$0.00</span>
+                </p>
+                <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
+                  <span>Total due</span>
+                  <span className="tabular-nums">{confirmTotalLabel}</span>
+                </p>
+                <p className="mt-1.5 text-xs text-muted">PropLane covers payment processing.</p>
+              </div>
             </>
           ) : (
             <>

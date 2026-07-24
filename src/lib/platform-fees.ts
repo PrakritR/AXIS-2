@@ -10,8 +10,9 @@ import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-acce
 
 export type PlatformFeeKind = "application_fee" | "rent";
 
-// PropLane never takes a fee from resident/applicant transactions on ANY tier —
-// residents pay only standard payment processing. All take rates are 0 bps.
+// PropLane never takes a fee from resident/applicant transactions on ANY tier,
+// and absorbs Stripe's processing cost on top of that, so residents and
+// applicants pay exact face value. All take rates are 0 bps.
 export const PLATFORM_FEE_BPS_BY_TIER: Record<ManagerSkuTier, Record<PlatformFeeKind, number>> = {
   free: {
     application_fee: 0,
@@ -59,7 +60,7 @@ export function platformFeeDisplayPercents(tier?: string | null): { applicationF
 export function axisResidentPaymentFeePlanLine(tier: ManagerSkuTier): string {
   const pct = platformRentBps(tier) / 100;
   if (pct <= 0) {
-    return "No PropLane fee on resident online payments (residents pay processing only)";
+    return "No PropLane fee on resident online payments — residents pay face value, PropLane covers payment processing";
   }
-  return `${pct}% PropLane fee on resident online payments (+ processing)`;
+  return `${pct}% PropLane fee on resident online payments (PropLane covers payment processing)`;
 }

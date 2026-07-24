@@ -171,7 +171,11 @@ export type DemoManagerOutgoingPaymentRow = {
   workOrderId?: string;
   /** When true the row came from a logged expense (not a pending vendor payout). */
   fromExpense?: boolean;
-  /** When true the row is an estimated Axis platform / processing fee on a resident payment. */
+  /**
+   * @deprecated Never set on a resident payment: PropLane absorbs Stripe's
+   * processing cost and takes no platform fee, so the manager has no payment
+   * cost row to report (see `manager-outgoing-payments.ts`).
+   */
   fromAxisFee?: boolean;
   vendorId?: string;
   amountCents?: number;

@@ -2579,8 +2579,9 @@ export function ManagerResidents({
                 </label>
                 {pmAxisPaymentsEnabled ? (
                   <p className="pl-7 text-xs leading-relaxed text-muted">
-                    Residents pay through Stripe Checkout with bank (ACH), card, or Link and cover the processing fee, so
-                    the full charge amount transfers to your connected payout account after checkout.
+                    Residents pay through Stripe Checkout with bank (ACH), card, or Link and are charged exactly the
+                    charge amount. PropLane covers payment processing, so the full charge amount transfers to your
+                    connected payout account after checkout.
                     {pmConnectReady === false ? (
                       <>
                         {" "}
@@ -2612,7 +2613,8 @@ export function ManagerResidents({
                 </label>
                 {pmCardEnabled ? (
                   <p className="pl-7 text-xs leading-relaxed text-muted">
-                    Residents can pay by card through Stripe Checkout. Card processing fees apply per Stripe&apos;s rates.
+                    Residents can pay by card through Stripe Checkout at no added cost to them, and you receive the full
+                    charge amount. PropLane covers card processing.
                     {pmConnectReady === false ? (
                       <>
                         {" "}

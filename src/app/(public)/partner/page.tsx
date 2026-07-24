@@ -37,7 +37,7 @@ const CAPABILITIES = [
 const TIER_BLURBS: Record<PlanTierId, string> = {
   free: "1 listing · try the core flow",
   pro: "Residents, leases, inbox, co-managers",
-  business: "Scale listings · 0% payment fee",
+  business: "Scale listings · no payment fees",
 };
 
 function tierMonthlyPrice(id: PlanTierId): string {
