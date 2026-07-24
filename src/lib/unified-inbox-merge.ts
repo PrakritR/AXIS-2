@@ -2,6 +2,8 @@
 
 export type UnifiedInboxChannel = "email" | "sms";
 
+export type CommunicationListSort = "recent" | "resident";
+
 export type UnifiedInboxListItem = {
   /** Stable list key, e.g. `email:thread-id` or `sms:conversation-key`. */
   key: string;
@@ -17,8 +19,25 @@ export type UnifiedInboxListItem = {
   sortMs: number;
 };
 
-export function mergeUnifiedInboxItems(items: UnifiedInboxListItem[]): UnifiedInboxListItem[] {
-  return [...items].sort((a, b) => b.sortMs - a.sortMs);
+export function sortUnifiedInboxItems(
+  items: UnifiedInboxListItem[],
+  mode: CommunicationListSort = "recent",
+): UnifiedInboxListItem[] {
+  const copy = [...items];
+  if (mode === "resident") {
+    return copy.sort(
+      (a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || b.sortMs - a.sortMs,
+    );
+  }
+  return copy.sort((a, b) => b.sortMs - a.sortMs);
+}
+
+export function mergeUnifiedInboxItems(
+  items: UnifiedInboxListItem[],
+  sort: CommunicationListSort = "recent",
+): UnifiedInboxListItem[] {
+  return sortUnifiedInboxItems(items, sort);
 }
 
 export function parseUnifiedInboxKey(key: string): { channel: UnifiedInboxChannel; threadId: string } | null {
