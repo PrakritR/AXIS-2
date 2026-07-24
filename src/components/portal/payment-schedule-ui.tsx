@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
+import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -492,146 +493,125 @@ export type PaymentAutomationSettingsHandle = {
   saveIfDirty: () => Promise<boolean>;
 };
 
-const REMINDER_DAY_CHIP =
-  "inline-flex h-9 w-full items-center justify-center rounded-lg text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-const REMINDER_DAY_CHIP_ON = "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]";
-const REMINDER_DAY_CHIP_OFF =
-  "border border-border bg-card text-foreground hover:border-primary/30 hover:bg-accent/30 [html[data-theme=dark]_&]:portal-outline-control";
+const REMINDER_DAYS_BEFORE_OPTIONS = [
+  ...Array.from({ length: 14 }, (_, i) => i + 1),
+  21,
+  30,
+].map((day) => ({
+  value: String(day),
+  label: `${day} day${day === 1 ? "" : "s"} before due`,
+}));
 
-const QUICK_REMINDER_DAYS = [7, 5, 3, 2, 1] as const;
+const REMINDER_FOLLOW_UP_OPTIONS = [
+  { value: "due_date", label: "Due date" },
+  { value: "every_day_late", label: "Every day late" },
+] as const;
 
-function ReminderDayPicker({
-  draft,
+const FIELD_SELECT_CLASS =
+  "mt-1 flex h-10 w-full rounded-lg border border-border bg-[var(--background-solid,#0a0e18)] px-3 text-sm text-foreground outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-50";
+
+function reminderFollowUpSelection(draft: ManagerAutomationSettings): string[] {
+  const selected: string[] = [];
+  if (draft.sameDayReminderEnabled) selected.push("due_date");
+  if (draft.overdueDailyEnabled) selected.push("every_day_late");
+  return selected;
+}
+
+function ReminderPresetDropdown({
+  activePreset,
   busy,
-  customDay,
-  daysBeforeLabel,
-  onToggleDay,
-  onAddCustomDay,
-  onCustomDayChange,
+  onSelect,
 }: {
-  draft: ManagerAutomationSettings;
+  activePreset: ReminderPresetId;
   busy: boolean;
-  customDay: string;
-  daysBeforeLabel: string;
-  onToggleDay: (day: number) => void;
-  onAddCustomDay: () => void;
-  onCustomDayChange: (value: string) => void;
+  onSelect: (presetId: ReminderPresetId) => void;
 }) {
-  const extraDays = draft.preDueReminderDays.filter(
-    (d) => !(QUICK_REMINDER_DAYS as readonly number[]).includes(d),
-  );
+  const description =
+    activePreset === "custom"
+      ? "Adjust the dropdowns below to build your own schedule."
+      : PAYMENT_REMINDER_PRESETS.find((p) => p.id === activePreset)?.description ?? "";
 
   return (
-    <div className="space-y-3">
-      <div>
-        <p className="text-xs font-medium text-muted">{daysBeforeLabel}</p>
-        <div className="mt-2 grid grid-cols-5 gap-2">
-          {QUICK_REMINDER_DAYS.map((day) => {
-            const active = draft.preDueReminderDays.includes(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                className={`${REMINDER_DAY_CHIP} ${active ? REMINDER_DAY_CHIP_ON : REMINDER_DAY_CHIP_OFF}`}
-                onClick={() => onToggleDay(day)}
-                disabled={busy}
-                aria-pressed={active}
-              >
-                {day}d
-              </button>
-            );
-          })}
-        </div>
-        {extraDays.length > 0 ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {extraDays.map((day) => (
-              <button
-                key={day}
-                type="button"
-                className={`${REMINDER_DAY_CHIP} !w-auto px-3 ${REMINDER_DAY_CHIP_ON}`}
-                onClick={() => onToggleDay(day)}
-                disabled={busy}
-                aria-label={`Remove ${day} days before reminder`}
-              >
-                {day}d ×
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="mt-2 flex items-center gap-2">
-          <Input
-            className="h-8 w-14 shrink-0 text-center text-xs"
-            inputMode="numeric"
-            placeholder="14"
-            value={customDay}
-            onChange={(e) => onCustomDayChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                onAddCustomDay();
-              }
-            }}
-            disabled={busy}
-            aria-label="Custom days before due"
-          />
-          <span className="text-xs text-muted">days before</span>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 shrink-0 rounded-md px-2.5 text-xs"
-            onClick={onAddCustomDay}
-            disabled={busy}
-          >
-            Add
-          </Button>
-        </div>
-      </div>
+    <div>
+      <label className="text-xs font-semibold text-muted">Reminder schedule</label>
+      <select
+        className={FIELD_SELECT_CLASS}
+        value={activePreset}
+        disabled={busy}
+        aria-label="Reminder schedule preset"
+        onChange={(e) => onSelect(e.target.value as ReminderPresetId)}
+      >
+        {PAYMENT_REMINDER_PRESETS.map((preset) => (
+          <option key={preset.id} value={preset.id}>
+            {preset.label}
+            {preset.recommended ? " (recommended)" : ""}
+          </option>
+        ))}
+        <option value="custom">Custom</option>
+      </select>
+      {description ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{description}</p> : null}
     </div>
   );
 }
 
-function ReminderFollowUpToggles({
+function ReminderDaysMultiSelect({
   draft,
   busy,
-  sameDayLabel,
-  followUpLabel,
-  onSameDayChange,
-  onOverdueDailyChange,
-  compactPills = false,
+  daysBeforeLabel,
+  onChangeDays,
 }: {
   draft: ManagerAutomationSettings;
   busy: boolean;
-  sameDayLabel: string;
-  followUpLabel: string;
-  onSameDayChange: (enabled: boolean) => void;
-  onOverdueDailyChange: (enabled: boolean) => void;
-  compactPills?: boolean;
+  daysBeforeLabel: string;
+  onChangeDays: (days: number[]) => void;
 }) {
-  const labelClass = compactPills
-    ? "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
-    : "inline-flex items-center gap-2 text-sm";
+  const options = useMemo(() => {
+    const known = new Set(REMINDER_DAYS_BEFORE_OPTIONS.map((o) => o.value));
+    const extra = draft.preDueReminderDays
+      .filter((d) => !known.has(String(d)))
+      .map((d) => ({ value: String(d), label: `${d} day${d === 1 ? "" : "s"} before due` }));
+    return [...extra, ...REMINDER_DAYS_BEFORE_OPTIONS].sort((a, b) => Number(b.value) - Number(a.value));
+  }, [draft.preDueReminderDays]);
 
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-2">
-      <label className={labelClass}>
-        <input
-          type="checkbox"
-          checked={draft.sameDayReminderEnabled}
-          onChange={(e) => onSameDayChange(e.target.checked)}
-          disabled={busy}
-        />
-        {sameDayLabel}
-      </label>
-      <label className={labelClass}>
-        <input
-          type="checkbox"
-          checked={draft.overdueDailyEnabled}
-          onChange={(e) => onOverdueDailyChange(e.target.checked)}
-          disabled={busy}
-        />
-        {followUpLabel}
-      </label>
-    </div>
+    <CheckboxMultiSelect
+      label={daysBeforeLabel}
+      options={options}
+      selected={draft.preDueReminderDays.map(String)}
+      onChange={(next) => {
+        const days = [...new Set(next.map((v) => Math.round(Number(v))).filter((n) => n >= 1 && n <= 60))].sort(
+          (a, b) => b - a,
+        );
+        onChangeDays(days);
+      }}
+      disabled={busy}
+      emptyLabel="No days selected"
+      dataAttr="payment-reminder-days-before"
+    />
+  );
+}
+
+function ReminderFollowUpMultiSelect({
+  draft,
+  busy,
+  onChangeFollowUp,
+}: {
+  draft: ManagerAutomationSettings;
+  busy: boolean;
+  onChangeFollowUp: (sameDay: boolean, overdueDaily: boolean) => void;
+}) {
+  return (
+    <CheckboxMultiSelect
+      label="Also remind"
+      options={[...REMINDER_FOLLOW_UP_OPTIONS]}
+      selected={reminderFollowUpSelection(draft)}
+      onChange={(next) => {
+        onChangeFollowUp(next.includes("due_date"), next.includes("every_day_late"));
+      }}
+      disabled={busy}
+      emptyLabel="None selected"
+      dataAttr="payment-reminder-follow-up"
+    />
   );
 }
 
@@ -654,7 +634,6 @@ function PaymentAutomationSettingsForm({
   const copy = SCHEDULE_SETTINGS_COPY[variant];
   const [draft, setDraft] = useState(initialSettings);
   const [selectedPreset, setSelectedPreset] = useState<ReminderPresetId>(() => detectReminderPreset(initialSettings));
-  const [customDay, setCustomDay] = useState("");
   const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
   const [busy, setBusy] = useState(false);
 
@@ -717,31 +696,23 @@ function PaymentAutomationSettingsForm({
 
   const saveVisible = !autoSaveOnClose;
 
-  const toggleDay = (day: number) => {
+  const markCustomAndSetDays = (days: number[]) => {
     setSelectedPreset("custom");
-    setDraft((prev) => {
-      const has = prev.preDueReminderDays.includes(day);
-      const nextDays = has ? prev.preDueReminderDays.filter((d) => d !== day) : [...prev.preDueReminderDays, day].sort((a, b) => b - a);
-      return { ...prev, preDueReminderDays: nextDays };
-    });
+    setDraft((prev) => ({ ...prev, preDueReminderDays: days }));
   };
 
-  const addCustomDay = () => {
-    const n = Math.round(Number(customDay));
-    // A custom offset is "N days before due"; 0 would collide with the "Due
-    // date" toggle and is dropped by the projection, so require >= 1.
-    if (!customDay.trim() || !Number.isFinite(n) || n < 1 || n > 60) return;
+  const markCustomAndSetFollowUp = (sameDay: boolean, overdueDaily: boolean) => {
     setSelectedPreset("custom");
     setDraft((prev) => ({
       ...prev,
-      preDueReminderDays: [...new Set([...prev.preDueReminderDays, n])].sort((a, b) => b - a),
+      sameDayReminderEnabled: sameDay,
+      overdueDailyEnabled: overdueDaily,
+      ...(overdueDaily ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
+      postDueReminderDays: overdueDaily ? prev.postDueReminderDays.filter((d) => d !== 1) : prev.postDueReminderDays,
     }));
-    setCustomDay("");
   };
 
   const compact = layout === "modal" && variant === "payments";
-  const activePreset = selectedPreset;
-  const previewLines = buildReminderPreviewLines(draft);
 
   const selectPreset = (presetId: ReminderPresetId) => {
     setSelectedPreset(presetId);
@@ -750,12 +721,8 @@ function PaymentAutomationSettingsForm({
     }
   };
 
-  const presetCardClass = (selected: boolean) =>
-    `rounded-xl border px-3 py-2.5 text-left transition-colors ${
-      selected
-        ? "border-primary bg-primary/5 shadow-[var(--shadow-sm)]"
-        : "border-border bg-card hover:border-primary/30"
-    }`;
+  const activePreset = selectedPreset;
+  const previewLines = buildReminderPreviewLines(draft);
 
   return (
     <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-4"}>
@@ -772,42 +739,7 @@ function PaymentAutomationSettingsForm({
 
       {compact ? (
         <>
-          <div>
-            <p className="text-xs font-semibold text-muted">Reminder schedule</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {PAYMENT_REMINDER_PRESETS.map((preset) => {
-                const selected = activePreset === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={presetCardClass(selected)}
-                    onClick={() => selectPreset(preset.id)}
-                    disabled={busy}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{preset.label}</span>
-                      {preset.recommended ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                          Recommended
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs leading-relaxed text-muted">{preset.description}</p>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                className={presetCardClass(activePreset === "custom")}
-                onClick={() => selectPreset("custom")}
-                disabled={busy}
-              >
-                <span className="text-sm font-semibold text-foreground">Custom</span>
-                <p className="mt-1 text-xs leading-relaxed text-muted">Pick your own days and follow-up rules below.</p>
-              </button>
-            </div>
-          </div>
+          <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
 
           <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
             <p className="text-xs font-semibold text-foreground">What residents will receive</p>
@@ -821,60 +753,24 @@ function PaymentAutomationSettingsForm({
             </ul>
           </div>
 
-          {activePreset === "custom" ? (
-            <div className="space-y-3 border-t border-border pt-3">
-              <ReminderDayPicker
-                draft={draft}
-                busy={busy}
-                customDay={customDay}
-                daysBeforeLabel={copy.daysBeforeLabel}
-                onToggleDay={toggleDay}
-                onAddCustomDay={addCustomDay}
-                onCustomDayChange={setCustomDay}
-              />
-              <ReminderFollowUpToggles
-                draft={draft}
-                busy={busy}
-                sameDayLabel={copy.sameDayLabel}
-                followUpLabel={copy.followUpLabel}
-                compactPills
-                onSameDayChange={(enabled) => {
-                  setSelectedPreset("custom");
-                  setDraft({ ...draft, sameDayReminderEnabled: enabled });
-                }}
-                onOverdueDailyChange={(enabled) => {
-                  setSelectedPreset("custom");
-                  setDraft((prev) => ({
-                    ...prev,
-                    overdueDailyEnabled: enabled,
-                    ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
-                    postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
-                  }));
-                }}
-              />
-            </div>
-          ) : null}
+          <ReminderDaysMultiSelect
+            draft={draft}
+            busy={busy}
+            daysBeforeLabel={copy.daysBeforeLabel}
+            onChangeDays={markCustomAndSetDays}
+          />
+          <ReminderFollowUpMultiSelect draft={draft} busy={busy} onChangeFollowUp={markCustomAndSetFollowUp} />
         </>
       ) : (
         <>
-          <ReminderDayPicker
+          <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
+          <ReminderDaysMultiSelect
             draft={draft}
             busy={busy}
-            customDay={customDay}
             daysBeforeLabel={copy.daysBeforeLabel}
-            onToggleDay={toggleDay}
-            onAddCustomDay={addCustomDay}
-            onCustomDayChange={setCustomDay}
+            onChangeDays={markCustomAndSetDays}
           />
-
-          <ReminderFollowUpToggles
-            draft={draft}
-            busy={busy}
-            sameDayLabel={copy.sameDayLabel}
-            followUpLabel={copy.followUpLabel}
-            onSameDayChange={(enabled) => setDraft({ ...draft, sameDayReminderEnabled: enabled })}
-            onOverdueDailyChange={(enabled) => setDraft({ ...draft, overdueDailyEnabled: enabled })}
-          />
+          <ReminderFollowUpMultiSelect draft={draft} busy={busy} onChangeFollowUp={markCustomAndSetFollowUp} />
         {!compact ? (
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
