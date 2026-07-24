@@ -13,6 +13,12 @@ export function isValidGuestApplicationEmail(email: string): boolean {
   return EMAIL_RE.test(email.trim().toLowerCase());
 }
 
+/**
+ * The manager a listing belongs to — the single server-side source of application
+ * attribution, shared by the guest and signed-in-resident submit paths. Reads the
+ * record's `manager_user_id` first, then the legacy `property_data.managerUserId`.
+ * Returns null when the listing is unknown or carries no manager.
+ */
 export async function resolveManagerUserIdForProperty(
   db: SupabaseClient,
   propertyId: string,
