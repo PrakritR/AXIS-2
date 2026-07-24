@@ -516,6 +516,55 @@ const REMINDER_PRESET_OPTIONS = [
   { value: "custom", label: "Custom" },
 ] as const;
 
+function sortReminderScheduleTokens(tokens: ReminderScheduleToken[]): ReminderScheduleToken[] {
+  const before = tokens
+    .filter((t): t is `before:${number}` => t.startsWith("before:"))
+    .sort((a, b) => Number(b.slice("before:".length)) - Number(a.slice("before:".length)));
+  const ordered: ReminderScheduleToken[] = [...before];
+  if (tokens.includes("due_date")) ordered.push("due_date");
+  if (tokens.includes("every_day_late")) ordered.push("every_day_late");
+  return ordered;
+}
+
+function ReminderScheduleChipRow({
+  tokens,
+  busy,
+  onChange,
+}: {
+  tokens: ReminderScheduleToken[];
+  busy: boolean;
+  onChange: (next: ReminderScheduleToken[]) => void;
+}) {
+  const sorted = sortReminderScheduleTokens(tokens);
+  if (!sorted.length) {
+    return (
+      <p className="rounded-lg border border-dashed border-border bg-accent/15 px-3 py-2 text-xs text-muted">
+        No reminders selected yet. Use the menu below to add days before due, the due date, or daily late notices.
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-wrap gap-1.5" aria-label="Selected reminders">
+      {sorted.map((token) => (
+        <li key={token}>
+          <button
+            type="button"
+            disabled={busy}
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-primary/15 disabled:opacity-50"
+            onClick={() => onChange(tokens.filter((t) => t !== token))}
+            aria-label={`Remove ${labelForReminderScheduleToken(token)}`}
+          >
+            <span className="truncate">{labelForReminderScheduleToken(token)}</span>
+            <span className="text-muted" aria-hidden>
+              ×
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ReminderPresetDropdown({
   activePreset,
   busy,
@@ -527,7 +576,7 @@ function ReminderPresetDropdown({
 }) {
   const description =
     activePreset === "custom"
-      ? "Choose reminders below. Add a custom day from the menu when needed."
+      ? "Tweak the chips below or use the menu to add more reminders."
       : PAYMENT_REMINDER_PRESETS.find((p) => p.id === activePreset)?.description ?? "";
 
   return (
@@ -549,17 +598,25 @@ function ReminderPresetDropdown({
 const REMINDER_PREVIEW_SCROLL_CLASS = "mt-2 max-h-36 space-y-1 overflow-y-auto pr-1";
 
 function ReminderSchedulePreview({ lines }: { lines: string[] }) {
+  const empty = lines.length === 1 && lines[0] === "No automatic reminders";
   return (
-    <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
-      <p className="text-xs font-semibold text-foreground">What residents will receive</p>
-      <ul className={REMINDER_PREVIEW_SCROLL_CLASS}>
-        {lines.map((line) => (
-          <li key={line} className="flex items-center gap-2 text-xs text-muted">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-            {line}
-          </li>
-        ))}
-      </ul>
+    <div className="rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm">
+      <p className="text-xs font-semibold text-foreground">Timeline preview</p>
+      <p className="mt-0.5 text-[11px] text-muted">What residents will get for each unpaid charge.</p>
+      {empty ? (
+        <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">Add at least one reminder below before saving.</p>
+      ) : (
+        <ol className={`${REMINDER_PREVIEW_SCROLL_CLASS} list-none`}>
+          {lines.map((line, index) => (
+            <li key={line} className="flex items-center gap-2 text-xs text-foreground">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                {index + 1}
+              </span>
+              {line}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
@@ -603,24 +660,30 @@ function UnifiedReminderScheduleSelect({
   };
 
   return (
-    <CheckboxMultiSelect
-      label="Reminders"
-      labelClassName={PORTAL_FIELD_LABEL_CLASS}
-      groups={[
-        { label: "Before due", options: beforeDueOptions },
-        {
-          label: "Due & after",
-          options: [
-            { value: "due_date", label: "Due date" },
-            { value: "every_day_late", label: "Every day late" },
-          ],
-        },
-      ]}
-      selected={selected}
-      onChange={(next) => commitSchedule(next as ReminderScheduleToken[])}
-      disabled={busy}
-      emptyLabel="None selected"
-      dataAttr="payment-reminder-schedule"
+    <div className="space-y-2">
+      <ReminderScheduleChipRow
+        tokens={selected}
+        busy={busy}
+        onChange={(next) => commitSchedule(next)}
+      />
+      <CheckboxMultiSelect
+        label="Add or edit reminders"
+        labelClassName={PORTAL_FIELD_LABEL_CLASS}
+        groups={[
+          { label: "Before due", options: beforeDueOptions },
+          {
+            label: "Due & after",
+            options: [
+              { value: "due_date", label: "Due date" },
+              { value: "every_day_late", label: "Every day late" },
+            ],
+          },
+        ]}
+        selected={selected}
+        onChange={(next) => commitSchedule(next as ReminderScheduleToken[])}
+        disabled={busy}
+        emptyLabel="Open menu to choose reminders"
+        dataAttr="payment-reminder-schedule"
       menuFooter={
         <div className="px-3 py-2">
           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">Custom day</p>
@@ -655,6 +718,7 @@ function UnifiedReminderScheduleSelect({
         </div>
       }
     />
+    </div>
   );
 }
 
@@ -699,14 +763,18 @@ function PaymentAutomationSettingsForm({
     [currentPayload, savedBaseline],
   );
 
-  const isPaymentsModal = layout === "modal" && variant === "payments";
+  const previewLines = useMemo(() => buildReminderPreviewLines(draft), [draft]);
+  const scheduleHasReminders = previewLines.length > 0 && previewLines[0] !== "No automatic reminders";
   const saveEnabled =
     !busy &&
-    (isDirty ||
-      (variant === "payments" && saveScope === "future_and_existing") ||
-      isPaymentsModal);
+    scheduleHasReminders &&
+    (isDirty || (variant === "payments" && saveScope === "future_and_existing"));
 
   const save = useCallback(async (options?: { silent?: boolean }) => {
+    if (!scheduleHasReminders) {
+      showToast("Choose at least one reminder before saving.");
+      return false;
+    }
     setBusy(true);
     try {
       const payload = currentPayload;
@@ -748,7 +816,7 @@ function PaymentAutomationSettingsForm({
     } finally {
       setBusy(false);
     }
-  }, [copy.savedToast, currentPayload, onSaved, saveScope, showToast, variant]);
+  }, [copy.savedToast, currentPayload, onSaved, saveScope, scheduleHasReminders, showToast, variant]);
 
   const saveIfDirty = useCallback(async (): Promise<boolean> => {
     if (!isDirty) return true;
@@ -759,28 +827,33 @@ function PaymentAutomationSettingsForm({
 
   const saveVisible = !autoSaveOnClose;
 
-  const markCustomAndApplySchedule = (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => {
-    setSelectedPreset("custom");
-    setDraft((prev) => ({ ...prev, ...patch }));
+  const applySchedulePatch = (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => {
+    setDraft((prev) => {
+      const next = { ...prev, ...patch };
+      setSelectedPreset(detectReminderPreset(next));
+      return next;
+    });
   };
 
   const compact = layout === "modal" && variant === "payments";
 
   const selectPreset = (presetId: ReminderPresetId) => {
-    setSelectedPreset(presetId);
-    if (presetId !== "custom") {
-      setDraft((prev) => applyReminderPreset(prev, presetId));
+    if (presetId === "custom") {
+      setSelectedPreset("custom");
+      return;
     }
+    setDraft((prev) => applyReminderPreset(prev, presetId));
+    setSelectedPreset(presetId);
   };
 
   const activePreset = selectedPreset;
-  const previewLines = buildReminderPreviewLines(draft);
-  const isCustom = activePreset === "custom";
 
-  const scheduleEditors = isCustom ? (
-    <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={markCustomAndApplySchedule} />
-  ) : (
-    <ReminderSchedulePreview lines={previewLines} />
+  const paymentsScheduleBlock = (
+    <div className="space-y-4">
+      <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
+      <ReminderSchedulePreview lines={previewLines} />
+      <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={applySchedulePatch} />
+    </div>
   );
 
   return (
@@ -792,19 +865,17 @@ function PaymentAutomationSettingsForm({
         </div>
       ) : compact ? (
         <p className="text-sm text-muted">
-          Choose how residents are reminded about unpaid charges. You can still turn off individual sends per payment.
+          Pick a starting template, then adjust the timeline. You can still turn off individual sends on each payment.
         </p>
       ) : null}
 
       {compact ? (
-        <>
-          <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
-          {scheduleEditors}
-        </>
+        paymentsScheduleBlock
       ) : (
         <>
           <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
-          {scheduleEditors}
+          <ReminderSchedulePreview lines={previewLines} />
+          <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={applySchedulePatch} />
         {!compact ? (
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
@@ -954,7 +1025,9 @@ function PaymentAutomationSettingsForm({
             onClick={() => void save()}
             disabled={!saveEnabled}
           >
-            {copy.saveLabel}
+            {!isDirty && saveScope === "future_and_existing" && variant === "payments"
+              ? "Apply to existing payments"
+              : copy.saveLabel}
           </Button>
         </>
       ) : null}
@@ -1060,7 +1133,8 @@ export function ReminderSettingsModal({
       onClose={onClose}
       title={variant === "inbox" ? "Schedule settings" : "Payment reminders"}
       dense={variant === "payments"}
-      panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}
+      assistantStrip={variant !== "payments"}
+      panelClassName={variant === "payments" ? "max-w-md p-3 sm:p-4" : undefined}
     >
       <PaymentAutomationSettingsPanel
         settings={settings}
