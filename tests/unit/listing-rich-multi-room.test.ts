@@ -25,6 +25,22 @@ function mockProperty(overrides: Partial<MockProperty> & Pick<MockProperty, "id"
 }
 
 describe("listing multi-room lease basics", () => {
+  it("sorts rooms within a floor by room number in rich content", () => {
+    const sub = createDefaultListingSubmission();
+    const base = sub.rooms[0]!;
+    sub.rooms = [5, 3, 4, 1, 2].map((n) => ({
+      ...base,
+      id: `room-${n}`,
+      name: `Room ${n}`,
+      floor: "1st / main floor",
+      monthlyRent: 1000 + n,
+    }));
+    const property = mockProperty({ id: "sort-test", listingSubmission: sub });
+    const rich = listingRichFromManagerSubmission(property, sub);
+    const names = rich.floorPlans.flatMap((f) => f.rooms.map((r) => r.name));
+    expect(names).toEqual(["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]);
+  });
+
   it("adds a two-or-more-rooms row to lease basics for shared listings", () => {
     const sub = createDefaultListingSubmission();
     sub.rooms = [

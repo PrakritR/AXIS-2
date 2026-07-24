@@ -72,6 +72,23 @@ After saving, new sign-ins should show your **Axis** name and logo (like other a
 | Supabase → Auth → URL config | Site URL = `https://www.axis-seattle-housing.com`, redirect URLs include `/auth/callback` |
 | Supabase → Auth → Google provider | Same Google client ID + secret as Cloud Console |
 
+### Manager personal Google Calendar (per-manager OAuth)
+
+Sign-in Google OAuth (above) is separate from **Calendar sync**. Each manager connects **their own** Google account from **Portal → Calendar**. Tokens are stored per manager in `manager_automation_settings.google_calendar` — managers never see each other's Google events.
+
+**One-time app setup (deploy admin):**
+
+1. In Google Cloud Console, create or reuse an OAuth 2.0 **Web application** client.
+2. Enable the **Google Calendar API** for the project.
+3. Add **Authorized redirect URIs**:
+   - Local: `http://localhost:3009/api/portal/google-calendar/callback`
+   - Production: `https://www.axis-seattle-housing.com/api/portal/google-calendar/callback`
+4. Set `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET` in `.env.local` / Vercel.
+   Use the **same** Google OAuth client ID and secret as Supabase **Authentication → Providers → Google** so sign-in tokens work for calendar sync.
+5. Apply migration `20260723220000_google_calendar_integration.sql` on Supabase.
+
+**Per manager:** signing in with Google as a manager requests calendar access once and links automatically. They can also connect manually from Calendar → **Connect my Google Calendar**.
+
 ### Production Axis (`www.axis-seattle-housing.com`)
 
 Use these exact values when configuring Google + Supabase for the live site:

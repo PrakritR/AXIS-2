@@ -1,5 +1,3 @@
-import { expandAssistantDock } from "@/lib/axis-assistant/dock-store";
-
 type Listener = () => void;
 
 let open = false;
@@ -20,15 +18,8 @@ export function subscribeAxisAssistantOpen(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-function prefersDesktopAssistantDock(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
-}
-
+/** Opens the floating popup assistant (default on every viewport). */
 export function openAxisAssistant(): void {
-  if (prefersDesktopAssistantDock()) {
-    expandAssistantDock();
-    return;
-  }
   setAxisAssistantOpen(true);
 }
 

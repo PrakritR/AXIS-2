@@ -123,6 +123,7 @@ import {
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
+import { buildApplicationGroups, groupForRow } from "@/lib/rental-application/application-groups";
 import {
   invalidatePersistedInboxCache,
   loadPersistedInbox,
@@ -130,8 +131,6 @@ import {
   persistInbox,
   PORTAL_INBOX_CHANGED_EVENT,
   syncPersistedInboxFromServer,
-  upsertPersistedInboxRows,
-  deleteInboxThreadIds,
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
@@ -143,20 +142,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
-import {
-  PortalInboxSelectionToolbar,
-  useInboxRowSelection,
-} from "@/components/portal/portal-inbox-selection";
-import {
-  INBOX_TAB_DEFS,
-  PortalInboxEmptyState,
-  PortalInboxMessageTable,
-  inboxTabEmptyCopy,
-  type PortalInboxTableRow,
-} from "@/components/portal/portal-inbox-ui";
+import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
+import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ServiceStatusBadge,
 } from "@/components/portal/resident-services-panel";
@@ -174,11 +165,7 @@ import {
   type ManagerServiceResidentOption,
 } from "@/components/portal/manager-create-service-request-modal";
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
-import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
-import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
-import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
-import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 
 /**
  * Expanded-resident section: collapsed to a one-line summary by default; clicking the
@@ -249,7 +236,13 @@ const AR_LEASE_TERM_CUSTOM = "__custom__";
 const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 months"] as const;
 
 
-export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
+export function ManagerResidents({
+  tabId = "current",
+  smsUiEnabled = false,
+}: {
+  tabId?: ResidentsTabId;
+  smsUiEnabled?: boolean;
+}) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
@@ -306,11 +299,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [svcWoBucket, setSvcWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
 
-  // Communication tab replica (Email folders / SMS by phone)
-  const [inboxSubTab, setInboxSubTab] = useState<"unopened" | "opened" | "schedule" | "sent" | "trash">("unopened");
-  const [residentCommChannel, setResidentCommChannel] = useState<"email" | "sms">("email");
   const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
-  const [inboxExpandedId, setInboxExpandedId] = useState<string | null>(null);
 
   // Expanded-resident detail: collapsed section summaries, opened one at a time on click
   const [expandedResidentSection, setExpandedResidentSection] = useState<
@@ -669,8 +658,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       setSvcReqBucket("pending");
       setSvcWoBucket("open");
       setSvcExpandedId(null);
-      setInboxSubTab("unopened");
-      setInboxExpandedId(null);
       setExpandedResidentSection(null);
       setChargeExpandedId(null);
     }
@@ -804,6 +791,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return readManagerApplicationRows().find((row) => row.id === selected.id) ?? null;
   }, [selected, hcTick]);
 
+  const applicationGroups = useMemo(() => {
+    void hcTick;
+    return buildApplicationGroups(readManagerApplicationRows().map(groupRowInputForRow));
+  }, [hcTick]);
+
+  const selectedApplicationGroup = useMemo(() => {
+    if (!selectedApplicationRow) return null;
+    return groupForRow(applicationGroups, { groupId: groupIdForRow(selectedApplicationRow) });
+  }, [applicationGroups, selectedApplicationRow]);
+
   // The resident's Application section is hidden for a LINKED (co-managed)
   // property when the co-manager lacks the `applications` grant on it. Own
   // properties always show it.
@@ -865,86 +862,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return c;
   }, [residentWorkOrders]);
 
-  // Scheduled-message count for this resident's Inbox → Schedule tab (mirrors manager-inbox.tsx's scheduleCount).
-  const { messages: residentScheduledAutomationMessages } = useScheduledPaymentMessages({ includeHidden: false });
-  const [residentManualScheduledMessages, setResidentManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
-
-  useEffect(() => {
-    if (isDemoModeActive()) return;
-    let cancelled = false;
-    void (async () => {
-      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
-      if (!res.ok || cancelled) return;
-      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
-      setResidentManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const residentScheduleCount = useMemo(() => {
-    const targetEmail = selected?.email?.trim().toLowerCase();
-    if (!targetEmail) return 0;
-    const upcoming = (status: string, sendAt: string) =>
-      status === "scheduled" && isUpcomingScheduledInboxMessage(sendAt, status);
-    return (
-      residentManualScheduledMessages.filter(
-        (m) => upcoming(m.status, m.sendAt) && m.recipientEmail?.trim().toLowerCase() === targetEmail,
-      ).length +
-      residentScheduledAutomationMessages.filter(
-        (m) => upcoming(m.status, m.sendAt) && m.residentEmail?.trim().toLowerCase() === targetEmail,
-      ).length
-    );
-  }, [residentManualScheduledMessages, residentScheduledAutomationMessages, selected]);
-
-  const residentInboxCounts = useMemo(
-    () => ({
-      unopened: residentInboxThreads.filter((t) => t.folder === "inbox" && t.unread).length,
-      opened: residentInboxThreads.filter((t) => t.folder === "inbox" && !t.unread).length,
-      schedule: residentScheduleCount,
-      sent: residentInboxThreads.filter((t) => t.folder === "sent").length,
-      trash: residentInboxThreads.filter((t) => t.folder === "trash").length,
-    }),
-    [residentInboxThreads, residentScheduleCount],
-  );
-
-  const residentInboxRowsForTab = useMemo(
-    () =>
-      residentInboxThreads.filter((t) => {
-        if (inboxSubTab === "unopened") return t.folder === "inbox" && t.unread;
-        if (inboxSubTab === "opened") return t.folder === "inbox" && !t.unread;
-        if (inboxSubTab === "sent") return t.folder === "sent";
-        return t.folder === "trash";
-      }),
-    [residentInboxThreads, inboxSubTab],
-  );
-
-  const residentInboxTableRows = useMemo<PortalInboxTableRow[]>(
-    () =>
-      residentInboxRowsForTab.map((t) => ({
-        id: t.id,
-        name: inboxSubTab === "sent" ? t.email || "Unknown recipient" : t.from,
-        email: inboxSubTab === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
-        subject: t.subject,
-        whenLabel: t.time,
-        read: !t.unread,
-      })),
-    [residentInboxRowsForTab, inboxSubTab],
-  );
-
-  const residentInboxRowIds = useMemo(
-    () => residentInboxRowsForTab.map((t) => t.id),
-    [residentInboxRowsForTab],
-  );
-  const residentInboxSelection = useInboxRowSelection(residentInboxRowIds);
-
-  const residentInboxBodyById = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const t of residentInboxThreads) m[t.id] = t.body;
-    return m;
+  const residentCommSummary = useMemo(() => {
+    const live = residentInboxThreads.filter((t) => t.folder !== "trash");
+    const unread = live.filter((t) => t.folder === "inbox" && t.unread).length;
+    if (unread > 0) return `${unread} unread conversation${unread === 1 ? "" : "s"}`;
+    if (live.length > 0) return `${live.length} conversation${live.length === 1 ? "" : "s"}`;
+    return "No messages yet.";
   }, [residentInboxThreads]);
-
 
   async function sendResidentMessage() {
     if (!selected || messageBusy) return;
@@ -1031,135 +955,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setMessageSendAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
     setMessageScheduleLater(false);
     setMessageOpen(true);
-  }
-
-  function markResidentInboxThreadRead(id: string) {
-    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
-    const target = all.find((t) => t.id === id);
-    if (!target || target.folder !== "inbox") return;
-    const updated: PersistedInboxThread = { ...target, unread: false };
-    const next = all.map((t) => (t.id === id ? updated : t));
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
-    setInboxTick((n) => n + 1);
-    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
-    showToast("Marked as read.");
-  }
-
-  function markResidentInboxThreadUnread(id: string) {
-    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
-    const target = all.find((t) => t.id === id);
-    if (!target || target.folder !== "inbox") return;
-    const updated: PersistedInboxThread = { ...target, unread: true };
-    const next = all.map((t) => (t.id === id ? updated : t));
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
-    setInboxTick((n) => n + 1);
-    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
-    showToast("Marked as unread.");
-  }
-
-  function moveResidentInboxThreadToTrash(id: string) {
-    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
-    const target = all.find((t) => t.id === id);
-    if (!target || target.folder === "trash") return;
-    const updated: PersistedInboxThread = { ...target, folder: "trash", previousFolder: target.folder, unread: false };
-    const next = all.map((t) => (t.id === id ? updated : t));
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
-    setInboxTick((n) => n + 1);
-    setInboxExpandedId(null);
-    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next).then((ok) => {
-      showToast(ok ? "Moved to trash." : "Could not move message to trash.");
-    });
-  }
-
-  function restoreResidentInboxThreadFromTrash(id: string) {
-    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
-    const target = all.find((t) => t.id === id && t.folder === "trash");
-    if (!target) return;
-    const dest = target.previousFolder ?? "inbox";
-    const updated: PersistedInboxThread = { ...target, folder: dest, previousFolder: undefined };
-    const next = all.map((t) => (t.id === id ? updated : t));
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
-    setInboxTick((n) => n + 1);
-    setInboxExpandedId(null);
-    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next).then((ok) => {
-      showToast(ok ? "Restored." : "Could not restore message.");
-    });
-  }
-
-  function deleteResidentInboxThreadForever(id: string) {
-    void (async () => {
-      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
-      const ok = await deleteInboxThreadIds([id]);
-      if (!ok) {
-        showToast("Could not delete message.");
-        return;
-      }
-      const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
-      const next = all.filter((t) => t.id !== id);
-      persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
-      setInboxTick((n) => n + 1);
-      setInboxExpandedId(null);
-      showToast("Deleted permanently.");
-    })();
-  }
-
-  function bulkMarkResidentInboxRead() {
-    for (const id of residentInboxSelection.selectedIds) markResidentInboxThreadRead(id);
-    residentInboxSelection.clearSelection();
-  }
-
-  function bulkMarkResidentInboxUnread() {
-    for (const id of residentInboxSelection.selectedIds) markResidentInboxThreadUnread(id);
-    residentInboxSelection.clearSelection();
-  }
-
-  function bulkMoveResidentInboxToTrash() {
-    for (const id of residentInboxSelection.selectedIds) moveResidentInboxThreadToTrash(id);
-    residentInboxSelection.clearSelection();
-  }
-
-  function bulkRestoreResidentInboxFromTrash() {
-    for (const id of residentInboxSelection.selectedIds) restoreResidentInboxThreadFromTrash(id);
-    residentInboxSelection.clearSelection();
-  }
-
-  function bulkDeleteResidentInboxForever() {
-    if (!window.confirm(`Delete ${residentInboxSelection.selectedIds.size} message(s) permanently?`)) return;
-    void (async () => {
-      const ids = [...residentInboxSelection.selectedIds];
-      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
-      const ok = await deleteInboxThreadIds(ids);
-      if (!ok) {
-        showToast("Could not delete messages.");
-        return;
-      }
-      const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
-      const next = all.filter((t) => !ids.includes(t.id));
-      persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
-      setInboxTick((n) => n + 1);
-      setInboxExpandedId(null);
-      residentInboxSelection.clearSelection();
-      showToast(ids.length === 1 ? "Deleted permanently." : `Deleted ${ids.length} messages.`);
-    })();
-  }
-
-  async function replyToResidentInboxThread(thread: PersistedInboxThread, text: string) {
-    if (!selected) return;
-    const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
-    const result = await deliverPortalInboxMessage({
-      eventCategory: "messages",
-      fromName: managerEmail ?? "Property Manager",
-      toEmails: [selected.email],
-      subject,
-      text,
-    });
-    if (!result.ok) {
-      throw new Error(result.error ?? "Message could not be sent.");
-    }
-    invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
-    const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
-    setInboxTick((n) => n + 1);
   }
 
   async function sendResidentAccountEmail(res: ActiveResident) {
@@ -1904,7 +1699,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         Move to pending
                                       </Button>
                                     )}
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                      data-attr="resident-application-delete"
+                                      onClick={() => void deleteSelectedResident()}
+                                    >
+                                      Delete
+                                    </Button>
                                   </PortalTableDetailActions>
+                                  {selectedApplicationGroup ? (
+                                    <ApplicationGroupSection
+                                      group={selectedApplicationGroup}
+                                      currentRowId={selectedApplicationRow.id}
+                                    />
+                                  ) : null}
                                   <ApplicationDocumentPreview row={selectedApplicationRow} />
                                   <ApplicationScreeningPanel
                                     row={selectedApplicationRow}
@@ -2485,168 +2295,28 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
                             <ResidentDetailSection
                               title="Communication"
-                              summary={
-                                residentInboxCounts.unopened > 0
-                                  ? `${residentInboxCounts.unopened} unopened email${residentInboxCounts.unopened === 1 ? "" : "s"}`
-                                  : "No unopened email."
-                              }
+                              summary={residentCommSummary}
                               expanded={expandedResidentSection === "communication"}
                               onToggle={() =>
                                 setExpandedResidentSection((cur) => (cur === "communication" ? null : "communication"))
                               }
                               headerAction={
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {residentCommChannel === "email" ? (
-                                    <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={openResidentMessageModal}>
-                                      New message
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="rounded-full px-3 py-1 text-xs"
-                                      data-attr="resident-detail-sms-new-message"
-                                      onClick={() => residentSmsPanelRef.current?.openCompose()}
-                                    >
-                                      New message
-                                    </Button>
-                                  )}
-                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full px-3 py-1 text-xs"
+                                  onClick={openResidentMessageModal}
+                                >
+                                  New message
+                                </Button>
                               }
                             >
-                              <div className="mb-4 space-y-4">
-                                <PillTabs
-                                  items={[
-                                    { id: "email", label: "Email" },
-                                    { id: "sms", label: "SMS" },
-                                  ]}
-                                  activeId={residentCommChannel}
-                                  onChange={(id) => setResidentCommChannel(id as "email" | "sms")}
-                                />
-                                {residentCommChannel === "email" ? (
-                                  <ManagerPortalStatusPills
-                                    activeTone="primary"
-                                    tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
-                                      id,
-                                      label,
-                                      count: residentInboxCounts[id as keyof typeof residentInboxCounts],
-                                    }))}
-                                    activeId={inboxSubTab}
-                                    onChange={(id) => {
-                                      setInboxSubTab(id as "unopened" | "opened" | "schedule" | "sent" | "trash");
-                                      setInboxExpandedId(null);
-                                    }}
-                                  />
-                                ) : null}
-                              </div>
-                              {residentCommChannel === "sms" ? (
-                                <ManagerSmsPanel
-                                  ref={residentSmsPanelRef}
-                                  filterResidentEmail={selected.email}
-                                />
-                              ) : inboxSubTab === "schedule" ? (
-                                <ManagerInboxSchedulePanel portalBase={portalBase} filterResidentEmail={selected.email} />
-                              ) : residentInboxTableRows.length === 0 ? (
-                                <PortalInboxEmptyState title={inboxTabEmptyCopy(inboxSubTab)} />
-                              ) : (
-                                <div className="space-y-3">
-                                  <PortalInboxSelectionToolbar
-                                    count={residentInboxSelection.selectedIds.size}
-                                    onClear={residentInboxSelection.clearSelection}
-                                  >
-                                    {inboxSubTab === "unopened" ? (
-                                      <>
-                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkResidentInboxRead}>
-                                          Mark read
-                                        </Button>
-                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveResidentInboxToTrash}>
-                                          Trash
-                                        </Button>
-                                      </>
-                                    ) : null}
-                                    {inboxSubTab === "opened" ? (
-                                      <>
-                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkResidentInboxUnread}>
-                                          Mark unread
-                                        </Button>
-                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveResidentInboxToTrash}>
-                                          Trash
-                                        </Button>
-                                      </>
-                                    ) : null}
-                                    {inboxSubTab === "sent" ? (
-                                      <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveResidentInboxToTrash}>
-                                        Trash
-                                      </Button>
-                                    ) : null}
-                                    {inboxSubTab === "trash" ? (
-                                      <>
-                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreResidentInboxFromTrash}>
-                                          Restore
-                                        </Button>
-                                        <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteResidentInboxForever}>
-                                          Delete forever
-                                        </Button>
-                                      </>
-                                    ) : null}
-                                  </PortalInboxSelectionToolbar>
-                                  <PortalInboxMessageTable
-                                    rows={residentInboxTableRows}
-                                    primaryPartyHeader={inboxSubTab === "sent" ? "To" : "From"}
-                                    onMarkRead={inboxSubTab === "unopened" ? markResidentInboxThreadRead : undefined}
-                                    getDetailBody={(row) => residentInboxBodyById[row.id]}
-                                    onReply={
-                                      inboxSubTab === "trash"
-                                        ? undefined
-                                        : (row, text) => {
-                                            const thread = residentInboxThreads.find((t) => t.id === row.id);
-                                            if (!thread) return;
-                                            return replyToResidentInboxThread(thread, text);
-                                          }
-                                    }
-                                    expandedId={inboxExpandedId}
-                                    onToggleExpand={(id) => setInboxExpandedId((cur) => (cur === id ? null : id))}
-                                    selection={{
-                                      selectedIds: residentInboxSelection.selectedIds,
-                                      onToggleSelected: residentInboxSelection.toggleSelected,
-                                      onToggleSelectAll: residentInboxSelection.toggleSelectAll,
-                                      allSelected: residentInboxSelection.allSelected,
-                                      selectableCount: residentInboxRowIds.length,
-                                    }}
-                                    renderExtraActions={(row) => {
-                                    if (inboxSubTab === "trash") {
-                                      return (
-                                        <>
-                                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => restoreResidentInboxThreadFromTrash(row.id)}>
-                                            Restore
-                                          </Button>
-                                          <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => deleteResidentInboxThreadForever(row.id)}>
-                                            Delete forever
-                                          </Button>
-                                        </>
-                                      );
-                                    }
-                                    if (inboxSubTab === "opened") {
-                                      return (
-                                        <>
-                                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markResidentInboxThreadUnread(row.id)}>
-                                            Mark unread
-                                          </Button>
-                                          <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveResidentInboxThreadToTrash(row.id)}>
-                                            Trash
-                                          </Button>
-                                        </>
-                                      );
-                                    }
-                                    return (
-                                      <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveResidentInboxThreadToTrash(row.id)}>
-                                        Trash
-                                      </Button>
-                                    );
-                                  }}
-                                />
-                                </div>
-                              )}
+                              <ManagerResidentDetailInbox
+                                residentEmail={selected.email}
+                                portalBase={portalBase}
+                                smsUiEnabled={smsUiEnabled}
+                                smsRef={residentSmsPanelRef}
+                              />
                             </ResidentDetailSection>
                           </div>
     ) : null;

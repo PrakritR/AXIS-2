@@ -10,6 +10,7 @@
  * drift apart on double-booking protection.
  */
 import { PRODUCTION_APP_ORIGIN } from "@/lib/app-url";
+import { syncPlannedTourToGoogleCalendar } from "@/lib/google-calendar/sync.server";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { notifyTenantTourConfirmed } from "@/lib/tour-notification-delivery.server";
@@ -294,6 +295,18 @@ export async function confirmTourInquiry(db: Db, opts: ConfirmTourOptions): Prom
       instructions || undefined,
     );
   }
+
+  void syncPlannedTourToGoogleCalendar(db, managerUserId, {
+    title: String(plannedEvent.title),
+    start,
+    end,
+    propertyTitle: textField(row, "propertyTitle") || undefined,
+    attendeeName: textField(row, "name") || undefined,
+    attendeeEmail: textField(row, "email") || undefined,
+    attendeePhone: textField(row, "phone") || undefined,
+    notes: textField(row, "notes") || undefined,
+    instructions: instructions || undefined,
+  }).catch(() => undefined);
 
   return { ok: true, plannedEvent, message: formatRangeLabel(start, end), tenantNotification };
 }

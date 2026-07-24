@@ -1,6 +1,7 @@
 "use client";
 
 import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
+import { AxisAssistantSparkleIcon } from "@/components/portal/assistant-shared";
 import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
 
 /**
@@ -13,7 +14,10 @@ export function ModalAssistantStrip({ contextHint }: { contextHint?: string | nu
 
   return (
     <div className="mt-3 border-t border-border pt-3" data-attr="modal-assistant-strip">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">PropLane Assistant</p>
+      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-primary">
+        <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
+        PropLane Assistant
+      </p>
       <AssistantDockPanel
         managerName={config.managerName}
         endpoint={config.endpoint}

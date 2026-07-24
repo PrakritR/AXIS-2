@@ -17,7 +17,7 @@ function row(overrides: Partial<GroupRowInput> & Pick<GroupRowInput, "id">): Gro
     name: "Applicant",
     email: `${overrides.id}@test.local`,
     role: "joining",
-    groupId: "AXISGRP-ABCD1234",
+    groupId: "PROPLANE-ABCD1234",
     groupSize: "",
     status: "submitted",
     ...overrides,
@@ -25,10 +25,10 @@ function row(overrides: Partial<GroupRowInput> & Pick<GroupRowInput, "id">): Gro
 }
 
 describe("makeApplicationGroupId", () => {
-  it("produces an AXISGRP- id that passes the group-id length/prefix rule", () => {
+  it("produces a PROPLANE- id that passes the group-id length/prefix rule", () => {
     const id = makeApplicationGroupId();
-    expect(id.startsWith("AXISGRP-")).toBe(true);
-    expect(id.length).toBe(16);
+    expect(id.startsWith("PROPLANE-")).toBe(true);
+    expect(id.length).toBe(17);
     expect(normalizeGroupId(id)).toBe(id.toUpperCase());
   });
 
@@ -40,6 +40,7 @@ describe("makeApplicationGroupId", () => {
 
 describe("normalizeGroupId", () => {
   it("uppercases and trims", () => {
+    expect(normalizeGroupId("  proplane-abcd1234 ")).toBe("PROPLANE-ABCD1234");
     expect(normalizeGroupId("  axisgrp-abcd1234 ")).toBe("AXISGRP-ABCD1234");
     expect(normalizeGroupId(null)).toBe("");
     expect(normalizeGroupId(undefined)).toBe("");
@@ -48,9 +49,9 @@ describe("normalizeGroupId", () => {
 
 describe("applicationHasGroup", () => {
   it("is true only for an in-group application with an id", () => {
-    expect(applicationHasGroup({ applyingAsGroup: "yes", groupId: "AXISGRP-1" })).toBe(true);
+    expect(applicationHasGroup({ applyingAsGroup: "yes", groupId: "PROPLANE-1" })).toBe(true);
     expect(applicationHasGroup({ applyingAsGroup: "yes", groupId: "" })).toBe(false);
-    expect(applicationHasGroup({ applyingAsGroup: "no", groupId: "AXISGRP-1" })).toBe(false);
+    expect(applicationHasGroup({ applyingAsGroup: "no", groupId: "PROPLANE-1" })).toBe(false);
     expect(applicationHasGroup(null)).toBe(false);
   });
 });
@@ -59,9 +60,9 @@ describe("resolveSubmitGroupId", () => {
   it("mints a new id for the first applicant when none is set", () => {
     const id = resolveSubmitGroupId(
       { applyingAsGroup: "yes", groupRole: "first", groupId: "" },
-      () => "AXISGRP-MINTED",
+      () => "PROPLANE-MINTED",
     );
-    expect(id).toBe("AXISGRP-MINTED");
+    expect(id).toBe("PROPLANE-MINTED");
   });
 
   it("keeps the pasted id for a joining applicant and never mints one", () => {
@@ -81,26 +82,26 @@ describe("resolveEditGroupId", () => {
     expect(
       resolveEditGroupId(
         { applyingAsGroup: "yes", groupRole: "first", groupId: "" },
-        "AXISGRP-ABCD1234",
-        () => "AXISGRP-NEWMINT",
+        "PROPLANE-ABCD1234",
+        () => "PROPLANE-NEWMINT",
       ),
-    ).toBe("AXISGRP-ABCD1234");
+    ).toBe("PROPLANE-ABCD1234");
   });
 
   it("keeps one stable id across an edit and re-save for a joining member", () => {
     expect(
       resolveEditGroupId(
-        { applyingAsGroup: "yes", groupRole: "joining", groupId: "AXISGRP-ABCD1234" },
-        "AXISGRP-ABCD1234",
-        () => "AXISGRP-NEWMINT",
+        { applyingAsGroup: "yes", groupRole: "joining", groupId: "PROPLANE-ABCD1234" },
+        "PROPLANE-ABCD1234",
+        () => "PROPLANE-NEWMINT",
       ),
-    ).toBe("AXISGRP-ABCD1234");
+    ).toBe("PROPLANE-ABCD1234");
   });
 
   it("mints only when a group application has never had an id", () => {
     expect(
-      resolveEditGroupId({ applyingAsGroup: "yes", groupRole: "first", groupId: "" }, "", () => "AXISGRP-NEWMINT"),
-    ).toBe("AXISGRP-NEWMINT");
+      resolveEditGroupId({ applyingAsGroup: "yes", groupRole: "first", groupId: "" }, "", () => "PROPLANE-NEWMINT"),
+    ).toBe("PROPLANE-NEWMINT");
     expect(
       resolveEditGroupId({ applyingAsGroup: "yes", groupRole: "joining", groupId: "" }, undefined, () => "NOPE"),
     ).toBe("");
@@ -108,7 +109,7 @@ describe("resolveEditGroupId", () => {
 
   it("drops the id only when the resident deliberately opts out of the group", () => {
     expect(
-      resolveEditGroupId({ applyingAsGroup: "no", groupRole: null, groupId: "" }, "AXISGRP-ABCD1234", () => "NOPE"),
+      resolveEditGroupId({ applyingAsGroup: "no", groupRole: null, groupId: "" }, "PROPLANE-ABCD1234", () => "NOPE"),
     ).toBe("");
   });
 });
@@ -118,13 +119,13 @@ describe("buildApplicationGroups", () => {
     const rows: GroupRowInput[] = [
       row({ id: "a", role: "first", groupSize: "3", status: "submitted" }),
       row({ id: "b", role: "joining", status: "submitted" }),
-      row({ id: "c", role: "joining", groupId: "axisgrp-abcd1234", status: "in_progress" }),
+      row({ id: "c", role: "joining", groupId: "proplane-abcd1234", status: "in_progress" }),
       // unrelated / non-group rows are ignored
       row({ id: "d", groupId: "", role: null }),
     ];
     const groups = buildApplicationGroups(rows);
     expect(groups.size).toBe(1);
-    const g = groups.get("AXISGRP-ABCD1234")!;
+    const g = groups.get("PROPLANE-ABCD1234")!;
     expect(g.expectedSize).toBe(3);
     expect(g.totalCount).toBe(3);
     expect(g.submittedCount).toBe(2);
@@ -141,14 +142,14 @@ describe("buildApplicationGroups", () => {
       row({ id: "a", role: "first", groupSize: "2", status: "submitted" }),
       row({ id: "b", role: "joining", status: "approved" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.isComplete).toBe(true);
     expect(g.missingCount).toBe(0);
   });
 
   it("reports missing members when fewer have applied than the declared size", () => {
     const rows: GroupRowInput[] = [row({ id: "a", role: "first", groupSize: "4", status: "submitted" })];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.missingCount).toBe(3);
     expect(g.isComplete).toBe(false);
     expect(summarizeGroupProgress(g).label).toContain("waiting on 3");
@@ -156,7 +157,7 @@ describe("buildApplicationGroups", () => {
 
   it("leaves expected size null when no first applicant has submitted yet", () => {
     const rows: GroupRowInput[] = [row({ id: "b", role: "joining", status: "submitted" })];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.expectedSize).toBeNull();
     expect(g.missingCount).toBeNull();
     expect(summarizeGroupProgress(g).label).toBe("1 applicant");
@@ -169,7 +170,7 @@ describe("buildApplicationGroups", () => {
       row({ id: "c", role: "joining", status: "submitted" }),
       row({ id: "d", role: "joining", status: "submitted" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.totalCount).toBe(4);
     expect(g.expectedSize).toBe(3);
     expect(g.isOverSubscribed).toBe(true);
@@ -183,7 +184,7 @@ describe("buildApplicationGroups", () => {
       row({ id: "b", role: "joining", status: "submitted" }),
       row({ id: "c", role: "joining", status: "submitted" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.hasFirst).toBe(false);
     const badge = describeGroupBadge(g);
     expect(badge.label).toBe("Group 2 · organizer not shown");
@@ -197,7 +198,7 @@ describe("buildApplicationGroups", () => {
       row({ id: "a", role: "first", groupSize: "2" }),
       row({ id: "a", role: "first", groupSize: "2" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.totalCount).toBe(1);
   });
 });
@@ -206,9 +207,9 @@ describe("groupForRow", () => {
   it("returns the group for a member row and null for a non-group row", () => {
     const rows: GroupRowInput[] = [row({ id: "a", role: "first", groupSize: "2" })];
     const groups = buildApplicationGroups(rows);
-    expect(groupForRow(groups, { groupId: "axisgrp-abcd1234" })?.groupId).toBe("AXISGRP-ABCD1234");
+    expect(groupForRow(groups, { groupId: "proplane-abcd1234" })?.groupId).toBe("PROPLANE-ABCD1234");
     expect(groupForRow(groups, { groupId: "" })).toBeNull();
-    expect(groupForRow(groups, { groupId: "AXISGRP-OTHER" })).toBeNull();
+    expect(groupForRow(groups, { groupId: "PROPLANE-OTHER" })).toBeNull();
   });
 });
 
@@ -218,7 +219,7 @@ describe("summarizeGroupProgress", () => {
       row({ id: "a", role: "first", groupSize: "2", status: "submitted" }),
       row({ id: "b", role: "joining", status: "submitted" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(summarizeGroupProgress(g)).toEqual({ label: "All 2 applied", tone: "confirmed" });
   });
 });
@@ -229,7 +230,7 @@ describe("describeGroupBadge", () => {
       row({ id: "a", role: "first", groupSize: "", status: "submitted" }),
       row({ id: "b", role: "joining", status: "submitted" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(g.expectedSize).toBeNull();
     expect(describeGroupBadge(g).label).toBe("Group 2");
   });
@@ -240,7 +241,7 @@ describe("describeGroupBadge", () => {
       row({ id: "b", role: "joining", status: "flagged" }),
       row({ id: "c", role: "joining", status: "in_progress" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(describeGroupBadge(g).label).toBe("Group 2/3");
     expect(summarizeGroupProgress(g).label).toBe("2 of 3 applied · waiting on 1");
     expect(g.isComplete).toBe(false);
@@ -251,11 +252,11 @@ describe("describeGroupBadge", () => {
       row({ id: "a", role: "first", groupSize: "2", status: "screened" }),
       row({ id: "b", role: "joining", status: "approved" }),
     ];
-    const g = buildApplicationGroups(rows).get("AXISGRP-ABCD1234")!;
+    const g = buildApplicationGroups(rows).get("PROPLANE-ABCD1234")!;
     expect(describeGroupBadge(g)).toEqual({
       label: "Group 2/2",
       tone: "confirmed",
-      title: "Group ID AXISGRP-ABCD1234",
+      title: "Group ID PROPLANE-ABCD1234",
     });
   });
 });

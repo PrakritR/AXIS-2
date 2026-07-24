@@ -72,7 +72,7 @@ export function ManagerApplicationReadonlyReview({
           <>
             <Row k="Role" v={form.groupRole === "first" ? "First applicant" : form.groupRole === "joining" ? "Joining group" : "—"} />
             {form.groupRole === "first" ? <Row k="Group size" v={displayOrDash(form.groupSize)} /> : null}
-            {form.groupId?.trim() ? <Row k="Group ID" v={displayOrDash(form.groupId)} /> : null}
+            {form.groupId?.trim() ? <Row k="PropLane Group ID" v={displayOrDash(form.groupId)} /> : null}
           </>
         ) : null}
       </ReviewSection>

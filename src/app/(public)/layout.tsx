@@ -3,6 +3,7 @@ import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { HideOnNative } from "@/components/native/hide-on-native";
 import { PublicMainTransition } from "@/components/motion/public-main-transition";
+import { PublicLightThemeLock } from "@/components/providers/public-light-theme-lock";
 
 export default function PublicLayout({
   children,
@@ -11,6 +12,7 @@ export default function PublicLayout({
 }) {
   return (
     <div className="axis-page-frame relative flex min-h-screen flex-col">
+      <PublicLightThemeLock />
       <HideOnNative>
         <ChromeSubstrate variant="quiet" />
         <PublicNavbar />

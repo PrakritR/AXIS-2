@@ -34,7 +34,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('axis:theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
+            __html: `(function(){try{var p=location.pathname||'/';if(!/^\\/(portal|resident|admin|vendor|auth)(\\/|$)/.test(p)){document.documentElement.setAttribute('data-theme','light');return;}var t=localStorage.getItem('axis:theme');if(t!=='light'&&t!=='dark'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`,
           }}
         />
         <script
@@ -44,7 +44,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full overflow-x-clip bg-background text-foreground">
-        <ThemeProvider defaultTheme="dark">
+        <ThemeProvider defaultTheme="light">
           <AppUiProvider>
             <AuthOAuthErrorHandler />
             <NativeBridge />

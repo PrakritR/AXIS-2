@@ -1,0 +1,60 @@
+import { NextResponse } from "next/server";
+
+import { listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
+import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
+import { googleCalendarEventsToMeetings } from "@/lib/google-calendar/meetings";
+import { loadGoogleCalendarConnection } from "@/lib/google-calendar/settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+
+export const runtime = "nodejs";
+
+async function requireManager() {
+  const supabaseAuth = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabaseAuth.auth.getUser();
+  if (!user?.id) return null;
+
+  const db = createSupabaseServiceRoleClient();
+  const [{ data: profile }, { data: roles }] = await Promise.all([
+    db.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+    db.from("profile_roles").select("role").eq("user_id", user.id),
+  ]);
+  const roleList = (roles ?? []).map((r) => String(r.role).toLowerCase());
+  const legacy = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+  const isManager = roleList.includes("manager") || legacy === "manager" || legacy === "admin";
+  if (!isManager) return null;
+  return { db, userId: user.id };
+}
+
+export async function GET(req: Request) {
+  try {
+    const ctx = await requireManager();
+    if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const url = new URL(req.url);
+    const timeMin = url.searchParams.get("timeMin");
+    const timeMax = url.searchParams.get("timeMax");
+    if (!timeMin || !timeMax) {
+      return NextResponse.json({ error: "timeMin and timeMax are required." }, { status: 400 });
+    }
+    const connection = await loadGoogleCalendarConnection(ctx.db, ctx.userId);
+    debugGoogleCalendarLog("events/route.ts:GET", "loaded connection", {
+      hypothesisId: "H2",
+      connected: connection.connected,
+      managerSuffix: ctx.userId.slice(-6),
+    });
+    if (!connection.connected) {
+      return NextResponse.json({ meetings: [] });
+    }
+    const events = await listGoogleCalendarEvents(ctx.db, ctx.userId, timeMin, timeMax);
+    return NextResponse.json({ meetings: googleCalendarEventsToMeetings(events) });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed";
+    debugGoogleCalendarLog("events/route.ts:GET", "events fetch failed", {
+      hypothesisId: "H2",
+      message,
+    });
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

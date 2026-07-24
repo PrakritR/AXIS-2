@@ -20,7 +20,7 @@ import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-serv
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
-import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
+import { getAssistantDockCollapsed, getAssistantDocked } from "@/lib/assistant-dock-state";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
   await assertPortalLayoutRole("resident", "resident");
@@ -36,9 +36,10 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     email: profile?.email ?? user?.email ?? null,
     managerSubscriptionTier,
   });
-  const [sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
+  const [sidebarCollapsed, assistantDockCollapsed, assistantDocked] = await Promise.all([
     getSidebarCollapsed(),
     getAssistantDockCollapsed(),
+    getAssistantDocked(),
   ]);
 
   return (
@@ -79,6 +80,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
           managerName={profile?.full_name ?? null}
           endpoint="/api/agent/resident-chat"
           initialCollapsed={assistantDockCollapsed}
+          initialDocked={assistantDocked}
         />
       </div>
     </div>

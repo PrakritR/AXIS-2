@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/input";
 import { PromotionForm, type PromotionDraft } from "@/components/portal/promotion-form";
 import {
   PromotionTextComposer,
+  type PromotionTextComposerHandle,
   type PromotionTextGenerateOptions,
 } from "@/components/portal/promotion-text-generate-modal";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
@@ -108,6 +109,7 @@ export function PromotionNewModal({
   const flyerBaseRef = useRef<PromotionDraft>(draft);
   const flyerBasePropertyRef = useRef<string>(draft.propertyKey);
   const textDirtyRef = useRef(false);
+  const textComposerRef = useRef<PromotionTextComposerHandle>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -177,6 +179,14 @@ export function PromotionNewModal({
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={textBusy}
+              data-attr="promotion-text-generate-submit"
+              onClick={() => textComposerRef.current?.generate()}
+            >
+              {textBusy ? "Generating…" : "Generate promotion text"}
+            </Button>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
@@ -217,6 +227,7 @@ export function PromotionNewModal({
           />
         ) : (
           <PromotionTextComposer
+            ref={textComposerRef}
             onGenerate={onGenerateText}
             busy={textBusy}
             initialFormat={textInitialFormat}

@@ -1,50 +1,64 @@
 "use client";
 
 import { ChevronsLeft } from "lucide-react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
-import { AxisAssistantSparkleIcon } from "@/components/portal/assistant-shared";
 import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
+import { openAxisAssistant } from "@/lib/axis-assistant/open-store";
 import {
   getAssistantDockCollapsed,
-  initAssistantDockCollapsed,
+  getAssistantDocked,
+  initAssistantDockState,
   subscribeAssistantDockCollapsed,
+  subscribeAssistantDocked,
   toggleAssistantDock,
+  undockAssistantFromRail,
 } from "@/lib/axis-assistant/dock-store";
 import { cn } from "@/lib/utils";
 
-function useAssistantDockCollapsed(initialCollapsed: boolean) {
+function useAssistantDockState(initial: { collapsed: boolean; docked: boolean }) {
   const collapsed = useSyncExternalStore(
     subscribeAssistantDockCollapsed,
     getAssistantDockCollapsed,
-    () => initialCollapsed,
+    () => initial.collapsed,
   );
+  const docked = useSyncExternalStore(subscribeAssistantDocked, getAssistantDocked, () => initial.docked);
 
   useEffect(() => {
-    initAssistantDockCollapsed(initialCollapsed);
-  }, [initialCollapsed]);
+    initAssistantDockState(initial);
+  }, [initial.collapsed, initial.docked]);
 
-  return collapsed;
+  return { collapsed, docked };
 }
 
 /**
- * Desktop right rail — mirrors the left nav sidebar: expanded chat panel by
- * default, collapses to a narrow icon column. Hidden below `lg` (FAB + popup).
+ * Desktop right rail — shown only after the user docks the popup assistant.
+ * Collapses to a narrow icon column; hidden entirely until docked.
  */
 export function PortalAssistantRail({
   managerName,
   endpoint = "/api/agent/chat",
-  initialCollapsed = false,
+  initialCollapsed = true,
+  initialDocked = false,
 }: {
   managerName?: string | null;
   endpoint?: string;
   initialCollapsed?: boolean;
+  initialDocked?: boolean;
 }) {
   const isSmall = useIsSmallPortalViewport();
-  const collapsed = useAssistantDockCollapsed(initialCollapsed);
+  const { collapsed, docked } = useAssistantDockState({
+    collapsed: initialCollapsed,
+    docked: initialDocked,
+  });
 
-  if (isSmall) return null;
+  const undockToPopup = useCallback(() => {
+    undockAssistantFromRail();
+    openAxisAssistant();
+  }, []);
+
+  if (isSmall || !docked) return null;
 
   return (
     <aside
@@ -56,7 +70,7 @@ export function PortalAssistantRail({
       aria-label="PropLane Assistant"
     >
       {collapsed ? (
-        <div className="flex h-full flex-col items-center py-2 pb-4">
+        <div className="flex h-full flex-col items-center py-2">
           <button
             type="button"
             onClick={toggleAssistantDock}
@@ -66,16 +80,6 @@ export function PortalAssistantRail({
           >
             <ChevronsLeft className="h-4 w-4" aria-hidden />
           </button>
-          <button
-            type="button"
-            onClick={toggleAssistantDock}
-            aria-label="Open PropLane Assistant"
-            data-attr="axis-assistant-rail-fab"
-            className="mt-auto flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
-            style={{ background: "var(--btn-primary)" }}
-          >
-            <AxisAssistantSparkleIcon className="h-5 w-5" />
-          </button>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col p-2 pt-0">
@@ -83,6 +87,7 @@ export function PortalAssistantRail({
             managerName={managerName}
             endpoint={endpoint}
             onCollapse={toggleAssistantDock}
+            onUndockToPopup={undockToPopup}
             className="h-full"
           />
         </div>

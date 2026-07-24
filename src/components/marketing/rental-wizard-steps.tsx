@@ -25,6 +25,7 @@ import {
 } from "@/lib/rental-application/listing-fees-display";
 import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
+import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import {
   customFieldAnswerValue,
@@ -403,12 +404,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <Label htmlFor="groupId" required>
                   Group ID
                 </Label>
-                <p className="text-xs text-muted">Paste the Group ID shared by the first applicant. Format: AXISGRP-…</p>
+                <p className="text-xs text-muted">Paste the Group ID shared by the first applicant. Format: {GROUP_ID_FORMAT_HINT}</p>
                 <Input
                   id="groupId"
                   value={form.groupId}
                   onChange={(e) => patch({ groupId: e.target.value })}
-                  placeholder="AXISGRP-…"
+                  placeholder={GROUP_ID_FORMAT_HINT}
                   autoComplete="off"
                   className={errors.groupId ? "border-red-400 ring-2 ring-red-100" : ""}
                 />

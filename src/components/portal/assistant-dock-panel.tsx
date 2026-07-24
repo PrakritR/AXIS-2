@@ -1,14 +1,18 @@
 "use client";
 
+import { ChevronsRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
+import {
+  AssistantUndockToPopupButton,
+} from "@/components/portal/assistant-layout-controls";
 import {
   AssistantPendingActionCard,
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
-import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
+import { useOptionalAssistantConversation } from "@/lib/axis-assistant/assistant-conversation-context";
 import { cn } from "@/lib/utils";
 
 export type AssistantDockPanelProps = {
@@ -21,6 +25,8 @@ export type AssistantDockPanelProps = {
   compact?: boolean;
   /** When set, shows a collapse control in the header (desktop rail). */
   onCollapse?: () => void;
+  /** When set, shows a switch-to-popup control (desktop rail). */
+  onUndockToPopup?: () => void;
 };
 
 /**
@@ -35,9 +41,10 @@ export function AssistantDockPanel({
   className,
   compact = false,
   onCollapse,
+  onUndockToPopup,
 }: AssistantDockPanelProps) {
   const { input, setInput, messages, lastTools, pendingAction, loading, error, send, resolvePendingAction, reset } =
-    useAssistantConversation(endpoint);
+    useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -93,6 +100,7 @@ export function AssistantDockPanel({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
+            {onUndockToPopup ? <AssistantUndockToPopupButton onClick={onUndockToPopup} /> : null}
             {hasConversation ? (
               <button
                 type="button"
@@ -119,11 +127,10 @@ export function AssistantDockPanel({
                 type="button"
                 onClick={onCollapse}
                 aria-label="Collapse PropLane Assistant"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25"
+                aria-expanded
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] text-muted transition-colors duration-150 hover:bg-[var(--secondary)]/60 hover:text-foreground"
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <ChevronsRight className="h-4 w-4" aria-hidden />
               </button>
             ) : null}
             </div>
@@ -152,7 +159,7 @@ export function AssistantDockPanel({
                 What should we look at first?
               </h3>
               <p className="mx-auto max-w-[16rem] text-sm leading-relaxed text-muted">
-                Rent, leases, reminders. Grounded in your live portfolio data.
+                Rent, leases, applications, and reminders — grounded in your live portfolio data.
               </p>
             </div>
             <AssistantSuggestionChips

@@ -1,3 +1,5 @@
+import { GROUP_ID_PREFIX, LEGACY_GROUP_ID_PREFIX } from "@/lib/rental-application/application-groups";
+
 /** US state / territory postal abbreviations used for rental address validation */
 export const US_STATE_ABBREVS = new Set([
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
@@ -81,8 +83,9 @@ export function validateAxisGroupId(id: string): { ok: true } | { ok: false; mes
   if (!t) {
     return { ok: false, message: "Paste the Group ID the first applicant received after submitting." };
   }
-  if (!/^AXISGRP-/i.test(t)) {
-    return { ok: false, message: "Group ID must start with AXISGRP-." };
+  const prefixPattern = new RegExp(`^(${GROUP_ID_PREFIX}|${LEGACY_GROUP_ID_PREFIX})`, "i");
+  if (!prefixPattern.test(t)) {
+    return { ok: false, message: `Group ID must start with ${GROUP_ID_PREFIX}.` };
   }
   if (t.length < 12) {
     return { ok: false, message: "Paste the Group ID the first applicant received after submitting." };

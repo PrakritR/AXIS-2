@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import {
+  PortalSettingsGroup,
+  PortalSettingsRow,
+  PortalSettingsSection,
+} from "@/components/portal/portal-settings-ui";
 import { getPushPermission, requestPushPermission, type PushPermission } from "@/lib/native/push-client";
 
 /**
@@ -29,7 +33,6 @@ export function NotificationsToggle() {
     };
   }, []);
 
-  // Only meaningful inside the native app.
   if (permission === null || permission === "unsupported") return null;
 
   async function enable() {
@@ -41,36 +44,28 @@ export function NotificationsToggle() {
     }
   }
 
+  const description =
+    permission === "granted"
+      ? "Rent reminders and updates arrive on this device."
+      : permission === "denied"
+        ? "Turn on notifications for PropLane in your device Settings."
+        : "Get rent reminders, work-order updates, and announcements.";
+
   return (
-    <PortalCollapsibleSection
-      title="Push notifications"
-      subtitle={
-        permission === "granted"
-          ? "On. Rent reminders and updates arrive on this device."
-          : permission === "denied"
-            ? "Turn on notifications for PropLane in your device Settings to enable."
-            : "Get rent reminders, work-order updates, and announcements."
-      }
-      surfaceMuted={false}
-      contentClassName="px-4 pb-4"
-      toggleDataAttr="portal-notifications-toggle"
-      headerActions={
-        permission === "granted" ? (
-          <span className="shrink-0 text-sm font-semibold text-emerald-400">Enabled</span>
-        ) : permission === "denied" ? null : (
-          <Button variant="secondary" onClick={enable} disabled={busy} className="h-8 shrink-0 rounded-full px-3 text-xs">
-            {busy ? "Enabling…" : "Enable"}
-          </Button>
-        )
-      }
-    >
-      <p className="text-sm text-muted">
-        {permission === "granted"
-          ? "Notifications are enabled for this device."
-          : permission === "denied"
-            ? "Open your device Settings to allow notifications from PropLane."
-            : "Tap Enable to allow push notifications on this device."}
-      </p>
-    </PortalCollapsibleSection>
+    <PortalSettingsSection title="Notifications" description="Manage push alerts on this device.">
+      <PortalSettingsGroup>
+        <PortalSettingsRow label="Push notifications" description={description}>
+          {permission === "granted" ? (
+            <span className="text-sm font-medium text-emerald-600">On</span>
+          ) : permission === "denied" ? (
+            <span className="text-sm text-muted">Blocked</span>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={enable} disabled={busy}>
+              {busy ? "Enabling…" : "Enable"}
+            </Button>
+          )}
+        </PortalSettingsRow>
+      </PortalSettingsGroup>
+    </PortalSettingsSection>
   );
 }

@@ -19,15 +19,15 @@ import { track } from "@/lib/analytics/track-client";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
+  AssistantDockToRailButton,
+} from "@/components/portal/assistant-layout-controls";
+import {
   AssistantPendingActionCard,
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
-import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { useIsClient } from "@/hooks/use-is-client";
-import { useNativeChrome } from "@/hooks/use-is-native-app";
-import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
+import { useOptionalAssistantConversation } from "@/lib/axis-assistant/assistant-conversation-context";
+import { AssistantConversationProvider } from "@/lib/axis-assistant/assistant-conversation-context";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
@@ -36,9 +36,17 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
+import {
+  dockAssistantToRail,
+  getAssistantDocked,
+  subscribeAssistantDocked,
+} from "@/lib/axis-assistant/dock-store";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
 import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
-import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { useIsClient } from "@/hooks/use-is-client";
+import { useIsSmallPortalViewport, useNativeChrome } from "@/hooks/use-is-native-app";
+import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
 
@@ -60,17 +68,21 @@ function handleOpenAssistant() {
   });
 }
 
+function useAssistantDocked() {
+  return useSyncExternalStore(subscribeAssistantDocked, getAssistantDocked, () => false);
+}
+
 /**
- * Desktop: when the right rail is expanded or collapsed, no floating button — the
- * rail owns the launcher (bottom of the collapsed strip). Mobile/tablet: bottom-right
- * FAB opens the popup panel.
+ * Floating trigger when the popup is closed. On desktop, hidden while the
+ * assistant is docked to the right rail.
  */
 function AxisAssistantFixedTrigger() {
   const open = useAxisAssistantOpen();
   const isSmall = useIsSmallPortalViewport();
+  const docked = useAssistantDocked();
 
   if (open) return null;
-  if (!isSmall) return null;
+  if (!isSmall && docked) return null;
 
   return (
     <button
@@ -83,7 +95,7 @@ function AxisAssistantFixedTrigger() {
       data-attr="axis-assistant-fab"
       className={cn(
         "axis-assistant-fab group fixed z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 max-lg:h-11 max-lg:w-11 [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
-        "bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]",
+        "bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] lg:bottom-6 lg:right-6 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]",
       )}
       style={{ background: "var(--btn-primary)" }}
     >
@@ -119,7 +131,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     send,
     resolvePendingAction,
     reset,
-  } = useAssistantConversation(endpoint);
+  } = useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -178,6 +190,11 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     closeAxisAssistant();
   }, []);
 
+  const dockToRail = useCallback(() => {
+    dockAssistantToRail();
+    closeAxisAssistant();
+  }, []);
+
   // Scripted prompts (the /demo "Run demo" auto-play) submit through here.
   const sendRef = useRef<(prompt?: string) => void>(() => {});
   useEffect(() => {
@@ -215,7 +232,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
       : undefined;
 
   const panel =
-    open && panelReady && isSmall ? (
+    open && panelReady ? (
       <div className="axis-assistant-root fixed inset-0 z-[65]">
         <button
           type="button"
@@ -254,6 +271,9 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {!isSmall ? (
+                  <AssistantDockToRailButton onClick={dockToRail} />
+                ) : null}
                 {hasConversation && (
                   <button
                     type="button"
@@ -312,7 +332,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       </h3>
                     </div>
                     <p className="max-w-[18rem] text-sm leading-relaxed text-muted">
-                      Rent, leases, reminders. Grounded in your live portfolio data.
+                      Rent, leases, applications, and reminders — grounded in your live portfolio data.
                     </p>
                   </div>
                   <AssistantSuggestionChips
@@ -402,22 +422,6 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
           </form>
         </div>
       </div>
-    ) : open && isSmall ? (
-      <div className="axis-assistant-root fixed inset-0 z-[65]">
-        <button
-          type="button"
-          aria-label="Close PropLane Assistant"
-          className="axis-assistant-backdrop fixed inset-0"
-          onClick={closePanel}
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-busy="true"
-          aria-label="Opening PropLane Assistant"
-          className="axis-assistant-panel glass-card fixed z-[66] flex h-[min(38rem,calc(100dvh-7.5rem))] flex-col overflow-hidden border border-primary/15 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45),0_0_0_1px_rgba(47,107,255,0.08)] backdrop-blur-xl"
-        />
-      </div>
     ) : null;
 
   return (
@@ -458,8 +462,10 @@ export function AxisAssistant({
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
       <PortalAssistantConfigProvider endpoint={endpoint} managerName={managerName ?? null}>
-        <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-        <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+        <AssistantConversationProvider endpoint={endpoint}>
+          <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
+          <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+        </AssistantConversationProvider>
       </PortalAssistantConfigProvider>
     </AxisAssistantPresenceContext.Provider>
   );

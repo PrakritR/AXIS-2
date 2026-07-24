@@ -17,15 +17,16 @@ import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { vendorPortal } from "@/lib/portals/vendor";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
-import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
+import { getAssistantDockCollapsed, getAssistantDocked } from "@/lib/assistant-dock-state";
 
 export default async function VendorLayout({ children }: { children: React.ReactNode }) {
   await assertPortalLayoutRole("vendor", "vendor");
 
   const { profile } = await getEffectiveSessionForPortal("vendor");
-  const [sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
+  const [sidebarCollapsed, assistantDockCollapsed, assistantDocked] = await Promise.all([
     getSidebarCollapsed(),
     getAssistantDockCollapsed(),
+    getAssistantDocked(),
   ]);
 
   return (
@@ -64,6 +65,7 @@ export default async function VendorLayout({ children }: { children: React.React
           managerName={profile?.full_name ?? null}
           endpoint="/api/agent/vendor-chat"
           initialCollapsed={assistantDockCollapsed}
+          initialDocked={assistantDocked}
         />
       </div>
     </div>

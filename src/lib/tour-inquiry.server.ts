@@ -14,6 +14,7 @@
  */
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { resolveShareableAppOrigin } from "@/lib/app-url";
+import { syncPlannedTourToGoogleCalendar } from "@/lib/google-calendar/sync.server";
 import { notifyTenantTourConfirmed } from "@/lib/tour-notification-delivery.server";
 
 type Db = ReturnType<typeof import("@/lib/supabase/service").createSupabaseServiceRoleClient>;
@@ -272,6 +273,18 @@ export async function acceptTourInquiry(
       instructions || undefined,
     );
   }
+
+  void syncPlannedTourToGoogleCalendar(db, rowManagerUserId, {
+    title: String(plannedEvent.title),
+    start,
+    end,
+    propertyTitle: textField(row, "propertyTitle") || undefined,
+    attendeeName: textField(row, "name") || undefined,
+    attendeeEmail: textField(row, "email") || undefined,
+    attendeePhone: textField(row, "phone") || undefined,
+    notes: textField(row, "notes") || undefined,
+    instructions: instructions || undefined,
+  }).catch(() => undefined);
 
   return { ok: true, plannedEvent, message: formatTourRangeLabel(start, end), tenantNotification };
 }

@@ -1,10 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  applyDocumentTheme,
+  readStoredTheme,
+  THEME_STORAGE_KEY,
+  type Theme,
+} from "@/lib/theme-storage";
 
-export type Theme = "light" | "dark";
-
-const STORAGE_KEY = "axis:theme";
+export type { Theme } from "@/lib/theme-storage";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -15,14 +19,6 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function readStoredTheme(defaultTheme: Theme): Theme {
-  if (typeof window === "undefined") return defaultTheme;
-  const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-  if (stored === "light" || stored === "dark") return stored;
-  if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
-  return defaultTheme;
-}
-
 function readThemeFromDocument(defaultTheme: Theme): Theme {
   if (typeof document === "undefined") return defaultTheme;
   const attr = document.documentElement.getAttribute("data-theme");
@@ -30,13 +26,9 @@ function readThemeFromDocument(defaultTheme: Theme): Theme {
   return readStoredTheme(defaultTheme);
 }
 
-function applyTheme(theme: Theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-}
-
 export function ThemeProvider({
   children,
-  defaultTheme = "dark",
+  defaultTheme = "light",
 }: {
   children: ReactNode;
   defaultTheme?: Theme;
@@ -49,15 +41,15 @@ export function ThemeProvider({
     if (synced.current) return;
     synced.current = true;
     const initial = readThemeFromDocument(defaultTheme);
-    applyTheme(initial);
+    applyDocumentTheme(initial);
     setThemeState(initial);
     setMounted(true);
   }, [defaultTheme]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    applyTheme(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
+    applyDocumentTheme(next);
+    window.localStorage.setItem(THEME_STORAGE_KEY, next);
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -78,9 +70,9 @@ export function SurfaceThemeDefault({ theme: surfaceDefault }: { theme: Theme })
 
   useLayoutEffect(() => {
     if (applied.current || typeof window === "undefined" || !ctx?.mounted) return;
-    if (!window.localStorage.getItem(STORAGE_KEY)) {
+    if (!window.localStorage.getItem(THEME_STORAGE_KEY)) {
       applied.current = true;
-      applyTheme(surfaceDefault);
+      applyDocumentTheme(surfaceDefault);
       ctx.setTheme(surfaceDefault);
     }
   }, [surfaceDefault, ctx?.mounted, ctx?.setTheme]);

@@ -36,6 +36,8 @@ export function Modal({
   panelClassName?: string;
   /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
   stackClassName?: string;
+  /** Tighter padding for compact dialogs. */
+  dense?: boolean;
   /** When true (default in portal), show a compact PropLane Assistant strip. */
   assistantStrip?: boolean;
   /** Passed to the assistant as modal context (defaults to stringified title). */
@@ -110,10 +112,7 @@ export function Modal({
           </div>
           <div
             className={cn(
-              "min-h-0 flex-1 overscroll-contain",
-              // With a sticky footer, keep the shell fixed and let children scroll
-              // internally (e.g. message body only) so the popup fits one screen.
-              footer ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+              "min-h-0 flex-1 overflow-y-auto overscroll-contain",
               dense ? "pt-2" : "pt-4",
             )}
           >

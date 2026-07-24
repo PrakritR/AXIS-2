@@ -1265,12 +1265,15 @@ export function InboxTwoPane({
   thread,
   threadOpen,
   className = "",
+  /** When true, hide the list pane and show only the thread (e.g. single-resident chat). */
+  listHidden = false,
 }: {
   list: ReactNode;
   thread: ReactNode;
   /** On narrow widths, show the thread pane (and hide the list) when true. */
   threadOpen: boolean;
   className?: string;
+  listHidden?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
@@ -1311,16 +1314,16 @@ export function InboxTwoPane({
       style={{ height }}
       data-attr="portal-inbox-two-pane"
     >
-      <div className="grid h-full lg:grid-cols-[minmax(300px,34%)_1fr]">
+      <div className={`grid h-full ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(300px,34%)_1fr]"}`}>
         <section
           className={`portal-inbox-list-pane min-h-0 min-w-0 flex-col border-border lg:border-r ${
-            threadOpen ? "hidden lg:flex" : "flex"
+            listHidden ? "hidden" : threadOpen ? "hidden lg:flex" : "flex"
           }`}
         >
           {list}
         </section>
         <section
-          className={`portal-inbox-thread-pane min-h-0 min-w-0 flex-col ${threadOpen ? "flex" : "hidden lg:flex"}`}
+          className={`portal-inbox-thread-pane min-h-0 min-w-0 flex-col ${listHidden || threadOpen ? "flex" : "hidden lg:flex"}`}
         >
           {thread}
         </section>

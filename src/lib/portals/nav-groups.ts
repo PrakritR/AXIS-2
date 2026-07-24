@@ -6,15 +6,15 @@ import type { PortalKind } from "@/lib/portal-types";
  * platform-parity tests are untouched; this only decides how the desktop sidebar
  * buckets sections under headings.
  *
- * `label: null` renders the items with no heading (Home row, trailing Settings).
- * `profile` (Settings) is the sole member of the trailing "account" group for
- * manager/pro/resident/vendor, so `PortalSidebar`'s `mt-auto` pins it to the
- * bottom. Admin Feedback (`bugs-feedback`) is a standalone Operations item;
- * manager/resident/vendor feedback stays inside Settings (embedded panel).
+ * `label: null` renders the items with no heading (Home row).
+ * `profile` (Settings) is excluded from the desktop sidebar — it lives in the
+ * top-right account menu (and the mobile profile menu). Admin Feedback
+ * (`bugs-feedback`) is a standalone Operations item; manager/resident/vendor
+ * feedback stays inside Settings (embedded panel).
  */
 export type NavGroupConfig = { id: string; label: string | null; sections: string[] };
 
-/** Sections never rendered in the desktop sidebar for non-admin portals (Settings stays in account group). */
+/** Sections never rendered in the desktop sidebar (Settings → account menu). */
 export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedback"]);
 
 /**
@@ -34,7 +34,6 @@ const PRO_GROUPS: NavGroupConfig[] = [
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
   { id: "finances", label: "Finances", sections: ["financials", "documents"] },
-  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const ADMIN_GROUPS: NavGroupConfig[] = [
@@ -42,7 +41,6 @@ const ADMIN_GROUPS: NavGroupConfig[] = [
   { id: "portfolio", label: "Portfolio", sections: ["properties"] },
   { id: "people", label: "People", sections: ["axis-users"] },
   { id: "operations", label: "Operations", sections: ["events", "communication", "bugs-feedback"] },
-  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [
@@ -50,7 +48,6 @@ const RESIDENT_GROUPS: NavGroupConfig[] = [
   { id: "my-home", label: "My home", sections: ["lease", "move-in", "services"] },
   { id: "finances", label: "Finances", sections: ["payments", "documents"] },
   { id: "messages", label: "Messages", sections: ["communication"] },
-  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const VENDOR_GROUPS: NavGroupConfig[] = [
@@ -58,7 +55,6 @@ const VENDOR_GROUPS: NavGroupConfig[] = [
   { id: "work", label: "Work", sections: ["work-orders", "calendar"] },
   { id: "operations", label: "Operations", sections: ["communication"] },
   { id: "finances", label: "Finances", sections: ["financials", "payments", "documents"] },
-  { id: "account", label: null, sections: ["profile"] },
 ];
 
 export const PORTAL_NAV_GROUPS: Record<PortalKind, NavGroupConfig[]> = {
@@ -82,16 +78,12 @@ export function groupNavItems<T extends { section: string }>(
 ): GroupedNav<T>[] {
   const byId = new Map(items.map((i) => [i.section, i] as const));
 
-  // Application phase: only Application + Settings — keep Application at the top row
-  // and pin Settings to the bottom (account group gets mt-auto in PortalSidebar).
+  // Application phase: only Application in the sidebar; Settings → account menu.
   if (kind === "resident" && items.length === 2) {
     const applications = byId.get("applications");
     const profile = byId.get("profile");
     if (applications && profile) {
-      return [
-        { id: "home", label: null, items: [applications] },
-        { id: "account", label: null, items: [profile] },
-      ];
+      return [{ id: "home", label: null, items: [applications] }];
     }
   }
 

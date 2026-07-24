@@ -19,18 +19,19 @@ import {
 } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
-import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
+import { getAssistantDockCollapsed, getAssistantDocked } from "@/lib/assistant-dock-state";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
   // A production admin (founder/ops) identity must not cross into the property
   // portal even by typing the URL — hiding the switch is not access control.
   await assertPropertyPortalAccess();
 
-  const [nav, { profile }, sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
+  const [nav, { profile }, sidebarCollapsed, assistantDockCollapsed, assistantDocked] = await Promise.all([
     buildProPortalDefinition(),
     getServerSessionProfile(),
     getSidebarCollapsed(),
     getAssistantDockCollapsed(),
+    getAssistantDocked(),
   ]);
 
   return (
@@ -70,6 +71,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
           <PortalAssistantRail
             managerName={profile?.full_name ?? null}
             initialCollapsed={assistantDockCollapsed}
+            initialDocked={assistantDocked}
           />
         </div>
       </div>

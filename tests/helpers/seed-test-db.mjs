@@ -593,6 +593,112 @@ try {
     roomAmenitiesText: extras.roomAmenitiesText ?? "Closet\nHeating\nAC",
   });
   const catalog = [
+    // manager@test workflow portfolio (Cascade Lofts, Emerald Court, …)
+    {
+      id: "mgr-demo-cascade",
+      name: "Cascade Lofts",
+      address: "1200 Cascade Ave, Seattle, WA 98122",
+      zip: "98122",
+      neighborhood: "Capitol Hill",
+      tagline: "Modern shared lofts with skyline views.",
+      overview:
+        "A five-bedroom shared loft building on Capitol Hill with rooftop deck, coworking nook, and quick access to light rail.",
+      structureNote: "5-story loft building",
+      petFriendly: true,
+      deposit: 1200,
+      ownerUserId: managerUserId,
+      rooms: [
+        room(1, "2nd floor", 1050, "Bright room with city view.", { name: "Unit 2A" }),
+        room(2, "3rd floor", 1100, "Corner room with extra closet.", { name: "Unit 3C" }),
+        room(3, "4th floor", 1150, "Quiet top-floor room.", { name: "Unit 4B" }),
+        room(4, "4th floor", 1125, "Compact room near shared bath.", { name: "Unit 4A" }),
+        room(5, "5th floor", 1200, "Penthouse room with deck access.", { name: "Unit 5D" }),
+      ],
+    },
+    {
+      id: "mgr-demo-emerald",
+      name: "Emerald Court",
+      address: "455 Boren Ave, Seattle, WA 98101",
+      zip: "98101",
+      neighborhood: "South Lake Union",
+      tagline: "Whole-unit rental near the waterfront.",
+      overview:
+        "A furnished 3-bedroom flat in South Lake Union with open kitchen, in-unit laundry, and a short walk to Lake Union Park.",
+      structureNote: "Unit in a 6-story building",
+      petFriendly: false,
+      deposit: 2400,
+      ownerUserId: managerUserId,
+      rooms: [
+        {
+          id: "room-1",
+          name: "Unit 3",
+          floor: "3rd floor",
+          rent: 2400,
+          detail: "Whole 3-bed unit with open kitchen and canal views.",
+          furnishing: "Fully furnished",
+          roomAmenitiesText: "Open kitchen\nCanal views\nIn-unit laundry",
+        },
+      ],
+    },
+    {
+      id: "mgr-demo-pioneer",
+      name: "The Pioneer",
+      address: "88 Pioneer Square, Seattle, WA 98104",
+      zip: "98104",
+      neighborhood: "Pioneer Square",
+      tagline: "Historic building, modern rooms.",
+      overview: "Shared rooms in a renovated Pioneer Square building with exposed brick and shared roof deck.",
+      structureNote: "4-story historic building",
+      petFriendly: true,
+      deposit: 1100,
+      ownerUserId: managerUserId,
+      rooms: [
+        room(1, "2nd floor", 1100, "Queen bed and desk.", { name: "Room 12A" }),
+        room(2, "3rd floor", 1150, "Corner room with brick accent wall.", { name: "Room 8B" }),
+      ],
+    },
+    {
+      id: "mgr-demo-lakeview",
+      name: "Lakeview Studio",
+      address: "2100 Westlake Ave N, Seattle, WA 98109",
+      zip: "98109",
+      neighborhood: "South Lake Union",
+      tagline: "Water-view studio steps from the park.",
+      overview: "Top-floor studio with kitchenette and lake views, ideal for a single professional.",
+      structureNote: "Top-floor studio",
+      petFriendly: false,
+      deposit: 1800,
+      ownerUserId: managerUserId,
+      rooms: [
+        {
+          id: "room-1",
+          name: "Studio",
+          floor: "6th floor",
+          rent: 1800,
+          detail: "Open studio with kitchenette and lake views.",
+          furnishing: "Fully furnished",
+          roomAmenitiesText: "Kitchenette\nLake views\nCloset",
+        },
+      ],
+    },
+    {
+      id: "mgr-demo-ballard",
+      name: "Ballard House",
+      address: "5400 Ballard Ave NW, Seattle, WA 98107",
+      zip: "98107",
+      neighborhood: "Ballard",
+      tagline: "Cozy shared house near the market.",
+      overview: "A 3-room shared house in Ballard with backyard, shared kitchen, and walkable restaurants.",
+      structureNote: "2-story house",
+      petFriendly: true,
+      deposit: 1050,
+      ownerUserId: managerUserId,
+      rooms: [
+        room(1, "1st floor", 1050, "Garden-level room.", { name: "Room 1" }),
+        room(2, "2nd floor", 1100, "Front-facing room.", { name: "Room 2" }),
+        room(3, "2nd floor", 1125, "Rear quiet room.", { name: "Room 3" }),
+      ],
+    },
     {
       id: "mgr-test-alder",
       name: "Alder Row — 3 rooms",
@@ -844,6 +950,20 @@ try {
   // mix of passed vs needs-manual-review and the manual screening flow is
   // demonstrable. Everyone else gets a clear (passed) report.
   const people = [
+    // manager@test workflow residents — full applications + leases across pipeline stages
+    { axisId: "AXIS-DEMMARCUSC", first: "Marcus", last: "Chen", propId: "mgr-demo-emerald", roomId: "room-1", bucket: "approved", leaseStage: "manager", income: 115000 },
+    { axisId: "AXIS-DEMPRIYAS", first: "Priya", last: "Sharma", propId: "mgr-demo-cascade", roomId: "room-3", bucket: "approved", leaseStage: "manager", income: 108000 },
+    { axisId: "AXIS-DEMOJORDL", first: "Jordan", last: "Lee", propId: "mgr-demo-pioneer", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 96000 },
+    { axisId: "AXIS-DEMOAVAN", first: "Ava", last: "Nguyen", propId: "mgr-demo-lakeview", roomId: "room-1", bucket: "approved", leaseStage: "manager_sign", income: 88000 },
+    { axisId: "AXIS-DEMODIEGM", first: "Diego", last: "Morales", propId: "mgr-demo-cascade", roomId: "room-1", bucket: "approved", leaseStage: "resident_sign", income: 91000 },
+    { axisId: "AXIS-DEMOSOFID", first: "Sofia", last: "Diaz", propId: "mgr-demo-ballard", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 104000 },
+    { axisId: "AXIS-DEMOMYACH", first: "Maya", last: "Chen", propId: "mgr-demo-cascade", roomId: "room-5", bucket: "approved", leaseStage: "signed", income: 99000 },
+    { axisId: "AXIS-DEMOLIAMF", first: "Liam", last: "Foster", propId: "mgr-demo-pioneer", roomId: "room-2", bucket: "approved", leaseStage: "signed", income: 98000 },
+    { axisId: "AXIS-DEMOETHW", first: "Ethan", last: "Wright", propId: "mgr-demo-cascade", roomId: "room-2", bucket: "pending", income: 71000, screen: "consider" },
+    { axisId: "AXIS-DEMOOLIB", first: "Olivia", last: "Brooks", propId: "mgr-demo-cascade", roomId: "room-4", bucket: "pending", income: 68000 },
+    { axisId: "AXIS-DEMOLUCK", first: "Lucas", last: "Kim", propId: "mgr-demo-ballard", roomId: "room-3", bucket: "rejected", income: 40000, rejectReason: "Income below 2.5x rent.", screen: "consider" },
+    { axisId: "AXIS-DEMOMASC", first: "Mason", last: "Clark", propId: "mgr-demo-ballard", roomId: "room-2", bucket: "pending", income: 88000, screen: "consider" },
+    // manager2@test browse catalog residents
     { axisId: "AXIS-TESTMAYACH", first: "Maya", last: "Chen", propId: "mgr-test-alder", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 96000 },
     { axisId: "AXIS-TESTETHANW", first: "Ethan", last: "Wright", propId: "mgr-test-alder", roomId: "room-2", bucket: "pending", income: 71000, screen: "consider" },
     { axisId: "AXIS-TESTDIEGOM", first: "Diego", last: "Morales", propId: "mgr-test-birch", roomId: "room-1", bucket: "approved", leaseStage: "resident_sign", income: 91000 },
@@ -858,11 +978,12 @@ try {
   ].map((p, i) => {
     const prop = propById.get(p.propId);
     const roomDef = prop.rooms.find((r) => r.id === p.roomId);
+    const suffix = prop.ownerUserId === managerUserId ? "workflow" : "e2e";
     return {
       ...p,
       index: i,
       name: `${p.first} ${p.last}`,
-      email: `${p.first}.${p.last}.e2e@test.axis.local`.toLowerCase(),
+      email: `${p.first}.${p.last}.${suffix}@test.axis.local`.toLowerCase(),
       prop,
       room: roomDef,
       rent: roomDef.rent,
@@ -874,13 +995,15 @@ try {
   function buildCatalogApplication(p) {
     const appLeaseStart = isoDate(daysFromNow(10));
     const appLeaseEnd = isoDate(daysFromNow(375));
+    const ssnGroup = String(12 + (p.index % 88)).padStart(2, "0");
+    const ssnSerial = String(1000 + p.index).padStart(4, "0");
     return {
       fullLegalName: p.name,
       email: p.email,
       phone: p.index % 2 === 0 ? "(510) 309-8345" : "(510) 579-4001",
-      dateOfBirth: "1995-05-14",
-      ssn: "000-00-0000",
-      driversLicense: "WA-DL-4821990",
+      dateOfBirth: `199${p.index % 10}-0${(p.index % 9) + 1}-14`,
+      ssn: `000-${ssnGroup}-${ssnSerial}`,
+      driversLicense: `WA-DL-${4821000 + p.index}`,
       employer: "Northwest Tech Co.",
       jobTitle: "Analyst",
       employerAddress: "500 Union St, Seattle, WA",
@@ -977,7 +1100,42 @@ try {
     };
   }
 
-  const applicationRows = people.map((p) => {
+  async function provisionSeedResidentAccount(p) {
+    const claimedAt = NOW.toISOString();
+    const approved = p.bucket === "approved";
+    const userId = await ensureUser(p.email, AUTO_RESIDENT_PASSWORD, "resident", {
+      metadata: {
+        axis_id: p.axisId,
+        auto_provisioned_resident: false,
+        resident_password_claimed_at: claimedAt,
+      },
+      fullName: p.name,
+    });
+    await must(
+      supabase.from("profiles").upsert(
+        {
+          id: userId,
+          email: p.email,
+          role: "resident",
+          manager_id: p.axisId,
+          full_name: p.name,
+          application_approved: approved,
+        },
+        { onConflict: "id" },
+      ),
+      `profiles(${p.email})`,
+    );
+    p.residentUserId = userId;
+    p.setupTokenConsumedAt = claimedAt;
+    return userId;
+  }
+
+  // Resident accounts for every seeded applicant (approved + pending + rejected).
+  for (const p of people) {
+    await provisionSeedResidentAccount(p);
+  }
+
+  function buildApplicationRow(p) {
     const approved = p.bucket === "approved";
     const stage = approved ? "Approved - placed" : p.bucket === "rejected" ? "Rejected" : "Submitted";
     const detail = approved
@@ -1006,6 +1164,8 @@ try {
         backgroundCheckStatus: backgroundCheck.result === "clear" ? "passed" : "flagged",
         managerUserId: p.prop.ownerUserId,
         propertyId: p.propId,
+        residentUserId: p.residentUserId ?? null,
+        setupTokenConsumedAt: p.setupTokenConsumedAt ?? null,
         ...(approved
           ? {
               assignedPropertyId: p.propId,
@@ -1017,32 +1177,12 @@ try {
       },
       updated_at: NOW.toISOString(),
     };
-  });
+  }
+
+  const applicationRows = people.map(buildApplicationRow);
   await must(supabase.from("manager_application_records").upsert(applicationRows, { onConflict: "id" }), "manager_application_records(catalog)");
 
-  // ── Resident accounts for approved applicants (mirrors provisionApprovedResidentAccount) ──
   const approvedPeople = people.filter((p) => p.bucket === "approved");
-  for (const p of approvedPeople) {
-    p.residentUserId = await ensureUser(p.email, AUTO_RESIDENT_PASSWORD, "resident", {
-      metadata: { axis_id: p.axisId, auto_provisioned_resident: true },
-    });
-    // Keep catalog auto-residents phoneless — only resident@ uses the real test cell
-    // so Claw inbound routing is unambiguous.
-    await must(
-      supabase.from("profiles").upsert(
-        {
-          id: p.residentUserId,
-          email: p.email,
-          role: "resident",
-          manager_id: p.axisId,
-          full_name: p.name,
-          application_approved: true,
-        },
-        { onConflict: "id" },
-      ),
-      `profiles(${p.email})`,
-    );
-  }
 
   // ── Leases: one per approved application, spread across pipeline stages.
   //    Ids use the app's own convention (lease_app_<axisId>, see
@@ -1164,10 +1304,132 @@ try {
       resident_email: p.email,
       property_id: p.propId,
       status: row.bucket,
-      row_data: row,
+      row_data: { ...row, residentUserId: p.residentUserId ?? null },
       updated_at: NOW.toISOString(),
     };
   });
+  await must(
+    supabase.from("portal_lease_pipeline_records").upsert(leaseRows, { onConflict: "id" }),
+    "portal_lease_pipeline_records(catalog)",
+  );
+
+  // Repair: any lease/application on test managers whose resident email lacks a
+  // resident profile gets provisioned (covers legacy rows or manual approvals).
+  async function repairResidentAccountsForTestManagers() {
+    const testManagerIds = [managerUserId, manager2UserId];
+    const { data: leaseRecords, error: leaseErr } = await supabase
+      .from("portal_lease_pipeline_records")
+      .select("id, resident_email, resident_user_id, row_data")
+      .in("manager_user_id", testManagerIds);
+    if (leaseErr) throw new Error(`select leases(repair): ${leaseErr.message}`);
+
+    const { data: appRecords, error: appErr } = await supabase
+      .from("manager_application_records")
+      .select("id, resident_email, row_data")
+      .in("manager_user_id", testManagerIds);
+    if (appErr) throw new Error(`select applications(repair): ${appErr.message}`);
+
+    const byEmail = new Map();
+    for (const app of appRecords ?? []) {
+      const email = String(app.resident_email ?? app.row_data?.email ?? "").trim().toLowerCase();
+      if (!email) continue;
+      byEmail.set(email, {
+        axisId: app.id,
+        name: app.row_data?.name ?? email.split("@")[0],
+        bucket: app.row_data?.bucket ?? "approved",
+        application: app.row_data?.application,
+      });
+    }
+    for (const lease of leaseRecords ?? []) {
+      const email = String(lease.resident_email ?? lease.row_data?.residentEmail ?? "").trim().toLowerCase();
+      if (!email) continue;
+      if (!byEmail.has(email)) {
+        byEmail.set(email, {
+          axisId: lease.row_data?.axisId ?? lease.id.replace(/^lease_app_/, ""),
+          name: lease.row_data?.residentName ?? email.split("@")[0],
+          bucket: "approved",
+          application: lease.row_data?.application,
+        });
+      }
+    }
+
+    const { data: existingProfiles, error: profileErr } = await supabase
+      .from("profiles")
+      .select("id, email, role")
+      .in(
+        "email",
+        [...byEmail.keys()],
+      );
+    if (profileErr) throw new Error(`select profiles(repair): ${profileErr.message}`);
+    const profileByEmail = new Map(
+      (existingProfiles ?? []).map((row) => [String(row.email).trim().toLowerCase(), row]),
+    );
+
+    let repaired = 0;
+    for (const [email, info] of byEmail) {
+      const existing = profileByEmail.get(email);
+      if (existing?.role === "resident") continue;
+      const claimedAt = NOW.toISOString();
+      const userId = await ensureUser(email, AUTO_RESIDENT_PASSWORD, "resident", {
+        metadata: {
+          axis_id: info.axisId,
+          auto_provisioned_resident: false,
+          resident_password_claimed_at: claimedAt,
+        },
+        fullName: info.name,
+      });
+      await must(
+        supabase.from("profiles").upsert(
+          {
+            id: userId,
+            email,
+            role: "resident",
+            manager_id: info.axisId,
+            full_name: info.name,
+            application_approved: info.bucket === "approved",
+          },
+          { onConflict: "id" },
+        ),
+        `profiles(repair ${email})`,
+      );
+      const appRecord = (appRecords ?? []).find((a) => String(a.resident_email ?? "").trim().toLowerCase() === email);
+      if (appRecord) {
+        await must(
+          supabase
+            .from("manager_application_records")
+            .update({
+              row_data: {
+                ...(appRecord.row_data ?? {}),
+                residentUserId: userId,
+                setupTokenConsumedAt: claimedAt,
+              },
+              updated_at: NOW.toISOString(),
+            })
+            .eq("id", appRecord.id),
+          `manager_application_records(repair ${email})`,
+        );
+      }
+      const leaseId = `lease_app_${info.axisId}`;
+      const leaseRow = (leaseRecords ?? []).find((l) => l.id === leaseId);
+      if (leaseRow) {
+        await must(
+          supabase
+            .from("portal_lease_pipeline_records")
+            .update({
+              resident_user_id: userId,
+              row_data: { ...(leaseRow.row_data ?? {}), residentUserId: userId },
+              updated_at: NOW.toISOString(),
+            })
+            .eq("id", leaseId),
+          `portal_lease_pipeline_records(repair ${email})`,
+        );
+      }
+      repaired += 1;
+    }
+    if (repaired) console.error(`Repaired ${repaired} resident account(s) for lease/application emails`);
+  }
+
+  await repairResidentAccountsForTestManagers();
 
   // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
   const demoPortfolioPropertyIds = [

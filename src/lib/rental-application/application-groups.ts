@@ -5,7 +5,7 @@ import type { GroupRole, RentalWizardFormState } from "./types";
  * ------------------
  * A "group application" is several *independent* rental applications — each with its
  * own applicant, email, AXIS id, screening, and (once approved) its own resident
- * account and lease — tied together by a shared **Group ID** (`AXISGRP-…`).
+ * account and lease — tied together by a shared **Group ID** (`PROPLANE-…`).
  *
  * The first applicant generates the Group ID on submit and shares it; joining
  * applicants paste it in step 1 of the wizard. Nothing here merges the applications
@@ -18,7 +18,11 @@ import type { GroupRole, RentalWizardFormState } from "./types";
  * resident portal.
  */
 
-export const GROUP_ID_PREFIX = "AXISGRP-";
+export const GROUP_ID_PREFIX = "PROPLANE-";
+/** Pre-rebrand group ids; still accepted when pasted or stored on older applications. */
+export const LEGACY_GROUP_ID_PREFIX = "AXISGRP-";
+
+export const GROUP_ID_FORMAT_HINT = `${GROUP_ID_PREFIX}…`;
 
 /** 32 unambiguous characters — a byte masked to 5 bits indexes it without modulo bias. */
 const GROUP_ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -46,7 +50,7 @@ function randomGroupIdSuffix(): string {
 
 /**
  * Generate a shareable Group ID for the first applicant of a group application.
- * Format `AXISGRP-XXXXXXXX` (16 chars) — satisfies `validateAxisGroupId`
+ * Format `PROPLANE-XXXXXXXX` — satisfies `validateAxisGroupId`
  * (prefix + length ≥ 12) in `../../app/(public)/rent/apply/apply-validation`.
  */
 export function makeApplicationGroupId(): string {

@@ -966,6 +966,13 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-vacant"
             />
             <KpiTile
+              label="Applicants to review"
+              value={pendingApps.length}
+              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
+              href={`${BASE}/applications`}
+              dataAttr="dashboard-kpi-applications"
+            />
+            <KpiTile
               label="Leases to sign"
               value={pendingLeaseRows.length}
               sub={
@@ -978,13 +985,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               accent={managerSignatureLeaseCount > 0}
               href={`${BASE}/leases`}
               dataAttr="dashboard-kpi-leases"
-            />
-            <KpiTile
-              label="Applicants to review"
-              value={pendingApps.length}
-              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
-              href={`${BASE}/applications`}
-              dataAttr="dashboard-kpi-applications"
             />
             <KpiTile
               label="Overdue balance"

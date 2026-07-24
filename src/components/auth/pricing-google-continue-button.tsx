@@ -44,6 +44,7 @@ export function PricingGoogleContinueButton({
       nextPath={nextPath}
       viaContinue={false}
       fixedCallbackPath="/auth/callback/partner-pricing"
+      intent="manager"
       disabled={disabled}
       onBeforeRedirect={onBeforeOAuth}
     />

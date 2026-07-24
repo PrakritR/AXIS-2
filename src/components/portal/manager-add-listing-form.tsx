@@ -30,6 +30,13 @@ import {
   stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
+import {
+  propertyMediaReadinessLabel,
+  scoreRoomMedia,
+  shouldWarnOnPublish,
+  summarizePropertyMediaReadiness,
+  type RoomMediaScore,
+} from "@/lib/listing-room-media-quality";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
   BUSINESS_MAX_PROPERTIES,
@@ -288,6 +295,30 @@ function ListingWizardChevron({ open }: { open: boolean }) {
 
 const LISTING_WIZARD_ACTION_BTN = "h-8 rounded-full px-3 text-xs";
 const LISTING_WIZARD_REMOVE_BTN = `${LISTING_WIZARD_ACTION_BTN} shrink-0 border-rose-200 text-rose-800 portal-danger-outline`;
+
+function roomMediaTierBadgeClass(score: RoomMediaScore): string {
+  if (score.tier === "gold") {
+    return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  }
+  if (score.tier === "silver") {
+    return "border border-sky-200 bg-sky-50 text-sky-900 [html[data-theme=dark]_&]:border-sky-800 [html[data-theme=dark]_&]:bg-sky-950/40 [html[data-theme=dark]_&]:text-sky-200";
+  }
+  if (score.tier === "bronze") {
+    return "border border-amber-200 bg-amber-50 text-amber-900 [html[data-theme=dark]_&]:border-amber-800 [html[data-theme=dark]_&]:bg-amber-950/40 [html[data-theme=dark]_&]:text-amber-200";
+  }
+  return "border border-rose-200 bg-rose-50 text-rose-800 [html[data-theme=dark]_&]:border-rose-800 [html[data-theme=dark]_&]:bg-rose-950/40 [html[data-theme=dark]_&]:text-rose-200";
+}
+
+function RoomMediaTierBadge({ score }: { score: RoomMediaScore }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${roomMediaTierBadgeClass(score)}`}
+      data-testid="room-media-tier-badge"
+    >
+      {score.label}
+    </span>
+  );
+}
 
 function listingItemKey(kind: string, id: string) {
   return `${kind}:${id}`;
@@ -2226,6 +2257,15 @@ export function ManagerAddListingForm({
       return;
     }
 
+    const mediaReadiness = summarizePropertyMediaReadiness(submission.rooms);
+    if (!isPreviewWizard && shouldWarnOnPublish(mediaReadiness)) {
+      const pct = Math.round(mediaReadiness.percentReady * 100);
+      const proceed = window.confirm(
+        `Only ${mediaReadiness.readyCount} of ${mediaReadiness.listedCount} listed rooms have photos or video (${pct}%). Applicants may see rooms without media. Submit anyway?`,
+      );
+      if (!proceed) return;
+    }
+
     setBusy(true);
     try {
       if (!authReady || !userId) {
@@ -3581,9 +3621,11 @@ export function ManagerAddListingForm({
                   room.floor.trim() || null,
                   room.furnishing.trim() || null,
                   room.photoDataUrls.length > 0 ? `${room.photoDataUrls.length} photo${room.photoDataUrls.length === 1 ? "" : "s"}` : null,
+                  room.videoDataUrl?.trim() ? "Video" : null,
                 ]
                   .filter(Boolean)
                   .join(" · ") || "Tap to add name, floor, and amenities";
+                const roomMediaScore = scoreRoomMedia(room);
                 const roomKey = listingItemKey("room", room.id);
                 return (
                   <ListingWizardCollapsibleCard
@@ -3597,6 +3639,7 @@ export function ManagerAddListingForm({
                     toggleDataAttr={`listing-room-toggle-${room.id}`}
                     headerActions={
                       <>
+                        <RoomMediaTierBadge score={roomMediaScore} />
                         <Button
                           type="button"
                           variant="outline"
@@ -3848,6 +3891,32 @@ export function ManagerAddListingForm({
                 );
               })}
             </div>
+
+            {(() => {
+              const readiness = summarizePropertyMediaReadiness(sub.rooms);
+              const pct = Math.round(readiness.percentReady * 100);
+              return (
+                <div
+                  className="mt-4 rounded-xl border border-border bg-accent/25 p-4"
+                  data-testid="listing-media-readiness"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">Room media readiness</p>
+                    <p className="text-xs text-muted">{propertyMediaReadinessLabel(readiness)}</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-border/60">
+                    <div
+                      className={`h-full rounded-full transition-all ${pct >= 70 ? "bg-emerald-500" : "bg-amber-500"}`}
+                      style={{ width: `${readiness.listedCount ? Math.max(pct, 4) : 0}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                    Bronze = 1+ photo or video · Silver = 3+ photos · Gold = 3+ photos + video. Aim for 70%+ before
+                    publishing.
+                  </p>
+                </div>
+              );
+            })()}
 
             <ListingSubsection
               title="Floor plans"

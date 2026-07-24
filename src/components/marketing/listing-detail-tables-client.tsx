@@ -62,13 +62,6 @@ function AvailabilityPill({ text, variant = "default" }: { text: string; variant
   );
 }
 
-function formatBathroomIncludes(r: ListingBathroomRow): string {
-  const parts: string[] = [];
-  if (r.shower) parts.push("Shower");
-  if (r.toilet) parts.push("Toilet");
-  if (r.bathtub) parts.push("Bathtub");
-  return parts.length ? parts.join(", ") : "—";
-}
 
 function DetailsButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
   return (
@@ -286,11 +279,13 @@ function ListingModalVideo({
   videoSrc,
   placeholderTitle,
   placeholderSubtitle,
+  autoPlayMuted = false,
 }: {
   label: string;
   videoSrc?: string | null;
   placeholderTitle: string;
   placeholderSubtitle: string;
+  autoPlayMuted?: boolean;
 }) {
   return (
     <ListingModalSection label={label}>
@@ -300,6 +295,9 @@ function ListingModalVideo({
             src={videoSrc}
             controls
             playsInline
+            autoPlay={autoPlayMuted}
+            muted={autoPlayMuted}
+            loop={autoPlayMuted}
             className={`${LISTING_MODAL_MEDIA_FRAME} bg-black object-cover`}
           />
         ) : (
@@ -419,7 +417,7 @@ type ModalState =
   | { kind: "amenity"; row: AmenityItem }
   | null;
 
-function ListingDetailModal({
+export function ListingDetailModal({
   state,
   onClose,
   listingPropertyId,
@@ -490,6 +488,18 @@ function ListingDetailModal({
               return (
                 <>
                   <ListingModalHeader eyebrow={state.floorLabel} title={state.room.name} />
+                  {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
+                    <ListingModalSection label="Photos">
+                      <PhotoStrip imageUrls={state.room.modal.photoUrls} />
+                    </ListingModalSection>
+                  ) : null}
+                  <ListingModalVideo
+                    label={state.room.modal.tourEyebrow}
+                    videoSrc={state.room.modal.videoSrc}
+                    placeholderTitle={state.room.modal.tourTitle}
+                    placeholderSubtitle={state.room.modal.tourSubtitle}
+                    autoPlayMuted
+                  />
                   <ListingModalStatGrid
                     items={[
                       {
@@ -556,17 +566,6 @@ function ListingDetailModal({
                       </p>
                     )}
                   </ListingModalSection>
-                  {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
-                    <ListingModalSection label="Photos">
-                      <PhotoStrip imageUrls={state.room.modal.photoUrls} />
-                    </ListingModalSection>
-                  ) : null}
-                  <ListingModalVideo
-                    label={state.room.modal.tourEyebrow}
-                    videoSrc={state.room.modal.videoSrc}
-                    placeholderTitle={state.room.modal.tourTitle}
-                    placeholderSubtitle={state.room.modal.tourSubtitle}
-                  />
                   {(() => {
                     const bathTagPattern = /^(private|shared|house hall)\s+bath$/i;
                     const highlightTags = state.room.modal.includedTags.filter((t) => !bathTagPattern.test(t));
@@ -664,21 +663,24 @@ function ListingDetailModal({
         {state.kind === "bathroom" ? (
           <ListingModalBody>
             <ListingModalHeader eyebrow={state.row.modal.eyebrow} title={state.row.name} subtitle={state.row.detail} />
+            {(state.row.modal.photoUrls?.length ?? 0) > 0 ? (
+              <ListingModalSection label="Photos">
+                <PhotoStrip imageUrls={state.row.modal.photoUrls} />
+              </ListingModalSection>
+            ) : null}
+            <ListingModalVideo
+              label="Bathroom tour"
+              videoSrc={state.row.modal.videoSrc}
+              placeholderTitle="Video tour"
+              placeholderSubtitle="Add a bathroom video in the manager form to replace this placeholder."
+              autoPlayMuted
+            />
             <ListingModalSection label="Setup">
               <p>{state.row.modal.setupCard}</p>
             </ListingModalSection>
             <ListingModalSection label="Info">
               <ListingModalTags tags={state.row.modal.includedTags} />
             </ListingModalSection>
-            <ListingModalSection label="Photos">
-              <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
-            </ListingModalSection>
-            <ListingModalVideo
-              label="Bathroom tour"
-              videoSrc={state.row.modal.videoSrc}
-              placeholderTitle="Video tour"
-              placeholderSubtitle="Add a bathroom video in the manager form to replace this placeholder."
-            />
             <ListingModalActions
               newTabProps={newTabProps}
               primary={{
@@ -698,18 +700,21 @@ function ListingDetailModal({
         {state.kind === "shared" ? (
           <ListingModalBody>
             <ListingModalHeader eyebrow={state.row.modal.eyebrow} title={state.row.name} subtitle={state.row.detail} />
-            {state.row.useNote ? <p className="text-sm text-muted">{state.row.useNote}</p> : null}
             <ListingModalVideo
               label={state.row.modal.tourEyebrow}
               videoSrc={state.row.modal.videoSrc}
               placeholderTitle={state.row.modal.tourTitle}
               placeholderSubtitle={state.row.modal.tourSubtitle}
+              autoPlayMuted
             />
+            {(state.row.modal.photoUrls?.length ?? 0) > 0 ? (
+              <ListingModalSection label="Photos">
+                <PhotoStrip imageUrls={state.row.modal.photoUrls} />
+              </ListingModalSection>
+            ) : null}
+            {state.row.useNote ? <p className="text-sm text-muted">{state.row.useNote}</p> : null}
             <ListingModalSection label="What's included">
               <ListingModalTags tags={state.row.modal.includedTags} />
-            </ListingModalSection>
-            <ListingModalSection label="Photos">
-              <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
@@ -892,196 +897,8 @@ export function InteractiveFloorPlanCard({
   return (
     <>
       <div className={LISTING_FLOOR_CARD}>
-        <div className="border-b border-border/50 px-4 py-3.5 sm:px-5">
+        <div className="px-4 py-3.5 sm:px-5">
           <FloorPlanSummaryBar floor={floor} onOpenFloorPlan={() => setModal({ kind: "floorPlan", floor })} />
-        </div>
-        <div className="relative isolate px-4 py-3 sm:px-5 sm:py-4 md:overflow-x-auto">
-          <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
-        </div>
-      </div>
-      <ListingDetailModal
-        state={modal}
-        onClose={() => setModal(null)}
-        listingPropertyId={listingPropertyId}
-        propertyLabel={propertyLabel}
-        contactSmsPhone={contactSmsPhone}
-      />
-    </>
-  );
-}
-
-function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpen: (r: ListingRoomRow) => void }) {
-  return (
-    <>
-      <div className="space-y-3 md:hidden">
-        {rooms.map((r) => (
-          <div key={r.id} className={`flex flex-col gap-2 sm:gap-2.5 ${LISTING_ROW_SURFACE}`}>
-            <div>
-              <p className="text-sm font-semibold text-foreground">{r.name}</p>
-              <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-              <AvailabilityPill text={r.availability} variant="room" />
-            </div>
-            <DetailsButton className="w-full" onClick={() => onOpen(r)} />
-          </div>
-        ))}
-      </div>
-      <div className="hidden min-w-0 md:block">
-        <div className="min-w-[560px] lg:min-w-0">
-          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
-            <span>Room</span>
-            <span>Price</span>
-            <span>Availability</span>
-            <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
-          </div>
-          {rooms.map((r) => (
-            <div
-              key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
-            >
-              <div>
-                <p className="text-sm font-semibold text-foreground">{r.name}</p>
-                <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-              </div>
-              <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-              <AvailabilityPill text={r.availability} variant="room" />
-              <DetailsButton onClick={() => onOpen(r)} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-export function BathroomTableInteractive({
-  rows,
-  listingPropertyId,
-  propertyLabel = null,
-  contactSmsPhone = null,
-}: {
-  rows: ListingBathroomRow[];
-  listingPropertyId: string;
-  propertyLabel?: string | null;
-  contactSmsPhone?: string | null;
-}) {
-  const [modal, setModal] = useState<ModalState>(null);
-
-  return (
-    <>
-      <div className="space-y-2.5 md:hidden">
-        {rows.map((r) => (
-          <div key={r.id} className={LISTING_ROW_SURFACE}>
-            <p className="text-sm font-semibold text-foreground">{r.name}</p>
-            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-            <p className="mt-2 text-xs text-foreground sm:text-sm">
-              <span className="font-semibold text-muted">Info: </span>
-              {formatBathroomIncludes(r)}
-            </p>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "bathroom", row: r })} />
-          </div>
-        ))}
-      </div>
-      <div className="hidden min-w-0 md:block">
-        <div className="min-w-[520px] lg:min-w-0">
-          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
-            <span>Bathroom</span>
-            <span>Info</span>
-            <span className="w-[80px] sm:w-[88px]" />
-          </div>
-          {rows.map((r) => (
-            <div
-              key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
-            >
-              <div>
-                <p className="text-sm font-semibold text-foreground">{r.name}</p>
-                <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-              </div>
-              <p className="text-xs font-medium text-foreground sm:text-sm">{formatBathroomIncludes(r)}</p>
-              <DetailsButton onClick={() => setModal({ kind: "bathroom", row: r })} />
-            </div>
-          ))}
-        </div>
-      </div>
-      <ListingDetailModal
-        state={modal}
-        onClose={() => setModal(null)}
-        listingPropertyId={listingPropertyId}
-        propertyLabel={propertyLabel}
-        contactSmsPhone={contactSmsPhone}
-      />
-    </>
-  );
-}
-
-/** Table-only: avoid long room lists and full manager notes — full text stays in the modal. */
-function sharedSpaceAccessSummary(detail: string): string {
-  const t = detail.trim();
-  if (!t || t === "Select room access in manager form") return "Set room access in listing editor";
-  const prefix = "Room access:";
-  if (!t.startsWith(prefix)) {
-    return t.length > 72 ? `${t.slice(0, 69)}…` : t;
-  }
-  const rest = t.slice(prefix.length).trim();
-  const parts = rest.split(",").map((s) => s.trim()).filter(Boolean);
-  const n = parts.length;
-  if (n === 0) return "Room access TBD";
-  if (n <= 2) return t.length > 80 ? `${t.slice(0, 77)}…` : t;
-  return `${n} listed bedrooms have access`;
-}
-
-function sharedSpaceInfoSummary(useNote: string): string {
-  return useNote.trim() ? "With listing" : "—";
-}
-
-export function SharedTableInteractive({
-  rows,
-  listingPropertyId,
-  propertyLabel = null,
-  contactSmsPhone = null,
-}: {
-  rows: ListingSharedRow[];
-  listingPropertyId: string;
-  propertyLabel?: string | null;
-  contactSmsPhone?: string | null;
-}) {
-  const [modal, setModal] = useState<ModalState>(null);
-
-  return (
-    <>
-      <div className="space-y-2.5 md:hidden">
-        {rows.map((r) => (
-          <div key={r.id} className={LISTING_ROW_SURFACE}>
-            <p className="text-sm font-semibold text-foreground">{r.name}</p>
-            <p className="mt-0.5 text-xs text-muted">{sharedSpaceAccessSummary(r.detail)}</p>
-            <p className="mt-2 text-xs text-muted sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "shared", row: r })} />
-          </div>
-        ))}
-      </div>
-      <div className="hidden min-w-0 md:block">
-        <div className="min-w-[520px] lg:min-w-0">
-          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
-            <span>Space</span>
-            <span>Info</span>
-            <span className="w-[80px] sm:w-[88px]" />
-          </div>
-          {rows.map((r) => (
-            <div
-              key={r.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
-            >
-              <div>
-                <p className="text-sm font-semibold text-foreground">{r.name}</p>
-                <p className="mt-0.5 text-xs text-muted">{sharedSpaceAccessSummary(r.detail)}</p>
-              </div>
-              <p className="text-xs text-muted sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
-              <DetailsButton onClick={() => setModal({ kind: "shared", row: r })} />
-            </div>
-          ))}
         </div>
       </div>
       <ListingDetailModal

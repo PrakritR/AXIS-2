@@ -325,6 +325,16 @@ export function ManagerUnifiedInbox({
     setQuery("");
   }, [showArchived]);
 
+  useEffect(() => {
+    if (mergedRows.length === 0) {
+      setSelectedKey(null);
+      return;
+    }
+    setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0].key));
+  }, [mergedRows]);
+
+  const listHidden = mergedRows.length <= 1;
+
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="portal-inbox-list-toolbar shrink-0 border-b border-border p-2.5">
@@ -433,6 +443,6 @@ export function ManagerUnifiedInbox({
     );
 
   return (
-    <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />
+    <InboxTwoPane threadOpen={Boolean(selection)} listHidden={listHidden} list={listPane} thread={threadPane} />
   );
 }

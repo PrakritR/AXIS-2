@@ -604,7 +604,7 @@ export function ResidentDashboard({
             <KpiTile
               label="Unread messages"
               value={inbox}
-              href={`${BASE}/inbox/unopened`}
+              href={`${BASE}/communication/inbox/unopened`}
               dataAttr="resident-dashboard-kpi-inbox"
             />
           </div>
@@ -790,7 +790,7 @@ export function ResidentDashboard({
 
           <AttentionGroup
             title="Communication"
-            href={`${BASE}/inbox/unopened`}
+            href={`${BASE}/communication/inbox/unopened`}
             linkLabel="Communication →"
             badge={
               inbox > 0 ? (
@@ -805,7 +805,7 @@ export function ResidentDashboard({
             keyForItem={(thread) => thread.id}
             renderRow={(thread) => (
               <IssueRow
-                href={`${BASE}/inbox/unopened`}
+                href={`${BASE}/communication/inbox/unopened`}
                 dot={DOT_INFO}
                 title={thread.from || "Unknown sender"}
                 subtitle={thread.subject || thread.preview || "—"}

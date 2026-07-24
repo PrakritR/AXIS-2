@@ -43,8 +43,8 @@ export const ASSISTANT_SUGGESTIONS: AssistantSuggestion[] = [
     ),
   },
   {
-    label: "Leases to sign",
-    prompt: "How many leases are awaiting signature?",
+    label: "Lease pipeline",
+    prompt: "Summarize my lease pipeline — manager review, resident signature pending, manager signature pending, and signed.",
     toneClass: "text-primary",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -59,8 +59,8 @@ export const ASSISTANT_SUGGESTIONS: AssistantSuggestion[] = [
     ),
   },
   {
-    label: "Overdue balance",
-    prompt: "What's the total overdue balance across my portfolio?",
+    label: "Applications",
+    prompt: "How many rental applications are pending review, and who are the applicants?",
     toneClass: "text-[var(--status-pending-fg)]",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

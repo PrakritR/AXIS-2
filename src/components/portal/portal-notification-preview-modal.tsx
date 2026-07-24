@@ -5,15 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import {
   Modal,
-  MODAL_FIELD_LABEL_CLASS,
   MODAL_INSET_BOX_CLASS,
   MODAL_WARNING_BOX_CLASS,
 } from "@/components/ui/modal";
-import {
-  PORTAL_TOOLBAR_GROUP,
-  PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
-} from "@/components/portal/portal-metrics";
 import { cn } from "@/lib/utils";
 
 export type NotificationDeliveryChannels = {
@@ -26,10 +20,45 @@ export type NotificationConfirmDraft = {
   body: string;
 };
 
+function fieldLabel(className?: string) {
+  return cn("text-xs font-medium text-muted", className);
+}
+
+function ChannelToggle({
+  label,
+  active,
+  disabled,
+  onClick,
+  dataAttr,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  dataAttr: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "min-h-9 flex-1 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
+        active
+          ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
+          : "text-muted hover:bg-accent/40 hover:text-foreground",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+      aria-pressed={active}
+      disabled={disabled}
+      data-attr={dataAttr}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
 /**
  * Shared resident-message popup (payment reminders, service approve, etc.).
- * Matches Communication → New message: autofilled fields, Send via pills,
- * modal fits the viewport — only the message body scrolls.
  */
 export function PortalNotificationPreviewModal({
   open,
@@ -43,15 +72,12 @@ export function PortalNotificationPreviewModal({
   footerNote,
   showSkipMessage = true,
   skipMessageLabel = "Don't message resident",
-  /** When true, show Email / SMS pills (New message style). */
   showChannelPicker = false,
   emailAvailable = true,
   smsAvailable = true,
   defaultViaEmail = true,
   defaultViaSms = true,
-  /** Allow editing the message body (default on — New message format). */
   editableBody = true,
-  /** Allow editing the subject line (default on). */
   editableSubject = true,
   confirmLabel,
   confirmLabelWithoutMessage,
@@ -154,30 +180,25 @@ export function PortalNotificationPreviewModal({
       onClose={onClose}
       dense
       footer={footer}
-      panelClassName={cn(
-        // Fit one viewport; only the message block scrolls internally.
-        "max-h-[min(92dvh,36rem)]",
-        panelClassName,
-      )}
+      panelClassName={cn("max-w-lg", panelClassName)}
     >
-      <div className="flex min-h-0 flex-col gap-2.5">
+      <div className="space-y-4">
         {warning ? (
-          <p className={`${MODAL_WARNING_BOX_CLASS} shrink-0 py-1.5 text-xs`}>
+          <p className={`${MODAL_WARNING_BOX_CLASS} py-1.5 text-xs`}>
             <strong>AI-generated draft.</strong> {warning}
           </p>
         ) : null}
-        {intro ? <p className="shrink-0 text-xs leading-snug text-muted">{intro}</p> : null}
+        {intro ? <p className="text-sm leading-snug text-muted">{intro}</p> : null}
 
-        <div className="shrink-0">
-          <p className={MODAL_FIELD_LABEL_CLASS}>To</p>
-          <p className={`mt-1 truncate ${MODAL_INSET_BOX_CLASS} py-2`}>{recipient}</p>
+        <div>
+          <p className={fieldLabel()}>To</p>
+          <p className={cn("mt-1 truncate text-sm text-foreground", MODAL_INSET_BOX_CLASS, "py-2")}>
+            {recipient}
+          </p>
         </div>
 
-        <div className="shrink-0">
-          <label
-            className={MODAL_FIELD_LABEL_CLASS}
-            htmlFor={editableSubject ? "portal-notification-subject" : undefined}
-          >
+        <div>
+          <label className={fieldLabel()} htmlFor={editableSubject ? "portal-notification-subject" : undefined}>
             Subject
           </label>
           {editableSubject && !skipMessage ? (
@@ -189,23 +210,61 @@ export function PortalNotificationPreviewModal({
               data-attr="portal-notification-subject"
             />
           ) : (
-            <p className={`mt-1 truncate ${MODAL_INSET_BOX_CLASS} py-2 ${skipMessage ? "opacity-50" : ""}`}>
+            <p
+              className={cn(
+                "mt-1 truncate text-sm",
+                MODAL_INSET_BOX_CLASS,
+                "py-2",
+                skipMessage ? "opacity-50" : "",
+              )}
+            >
               {draftSubject}
             </p>
           )}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col">
-          <label
-            className={MODAL_FIELD_LABEL_CLASS}
-            htmlFor={editableBody ? "portal-notification-body" : undefined}
-          >
+        {showChannelPicker && !skipMessage ? (
+          <div>
+            <p className={fieldLabel("mb-2")}>Send via</p>
+            <div
+              className="flex gap-1 rounded-lg border border-border bg-accent/20 p-1"
+              role="group"
+              aria-label="Send platform"
+            >
+              <ChannelToggle
+                label="Email"
+                active={viaEmail && emailAvailable}
+                disabled={!emailAvailable}
+                dataAttr="portal-notification-via-email"
+                onClick={() => setViaEmail((v) => !v)}
+              />
+              <ChannelToggle
+                label="SMS"
+                active={viaSms && smsAvailable}
+                disabled={!smsAvailable}
+                dataAttr="portal-notification-via-sms"
+                onClick={() => setViaSms((v) => !v)}
+              />
+            </div>
+            {!channelsOk ? (
+              <p className="mt-1.5 text-xs font-medium text-red-600">Choose email and/or SMS.</p>
+            ) : (
+              <p className="mt-1.5 text-xs text-muted">
+                {footerNote?.trim() ||
+                  "Saved to PropLane inbox. SMS uses your work number when enabled."}
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        <div>
+          <label className={fieldLabel()} htmlFor={editableBody ? "portal-notification-body" : undefined}>
             Message
           </label>
           {editableBody && !skipMessage ? (
             <Textarea
               id="portal-notification-body"
-              className="mt-1 max-h-[min(28dvh,10.5rem)] min-h-[5.5rem] resize-none overflow-y-auto overscroll-contain"
+              className="mt-1 min-h-[9rem] resize-y"
               value={draftBody}
               onChange={(e) => setDraftBody(e.target.value)}
               data-attr="portal-notification-body"
@@ -215,7 +274,7 @@ export function PortalNotificationPreviewModal({
             <pre
               className={cn(
                 MODAL_INSET_BOX_CLASS,
-                "mt-1 max-h-[min(28dvh,10.5rem)] min-h-[5.5rem] overflow-y-auto overscroll-contain whitespace-pre-wrap py-2 text-sm leading-relaxed",
+                "mt-1 min-h-[9rem] overflow-y-auto whitespace-pre-wrap py-2 text-sm leading-relaxed",
                 skipMessage ? "opacity-50" : "",
               )}
             >
@@ -224,44 +283,8 @@ export function PortalNotificationPreviewModal({
           )}
         </div>
 
-        {showChannelPicker && !skipMessage ? (
-          <div className="shrink-0 border-t border-border pt-2.5">
-            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send via</p>
-            <div className={PORTAL_TOOLBAR_GROUP} role="group" aria-label="Send platform">
-              <button
-                type="button"
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaEmail && emailAvailable ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""} ${!emailAvailable ? "opacity-50" : ""}`}
-                aria-pressed={viaEmail && emailAvailable}
-                disabled={!emailAvailable}
-                data-attr="portal-notification-via-email"
-                onClick={() => setViaEmail((v) => !v)}
-              >
-                Email
-              </button>
-              <button
-                type="button"
-                className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaSms && smsAvailable ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""} ${!smsAvailable ? "opacity-50" : ""}`}
-                aria-pressed={viaSms && smsAvailable}
-                disabled={!smsAvailable}
-                data-attr="portal-notification-via-sms"
-                onClick={() => setViaSms((v) => !v)}
-              >
-                SMS
-              </button>
-            </div>
-            {!channelsOk ? (
-              <p className="mt-1.5 text-xs font-medium text-red-600">Choose Email and/or SMS.</p>
-            ) : (
-              <p className="mt-1.5 text-xs text-muted">
-                {footerNote?.trim() ||
-                  "Pick one or both. Always saved to PropLane inbox. SMS uses your work number."}
-              </p>
-            )}
-          </div>
-        ) : null}
-
         {showSkipMessage ? (
-          <label className="flex shrink-0 items-start gap-2 text-sm">
+          <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
               checked={skipMessage}
@@ -274,10 +297,10 @@ export function PortalNotificationPreviewModal({
         ) : null}
 
         {!showChannelPicker && footerNote && !skipMessage ? (
-          <p className="shrink-0 text-xs text-muted">{footerNote}</p>
+          <p className="text-xs text-muted">{footerNote}</p>
         ) : null}
         {skipMessage ? (
-          <p className="shrink-0 text-xs text-muted">The action will complete without sending this message.</p>
+          <p className="text-xs text-muted">The action will complete without sending this message.</p>
         ) : null}
       </div>
     </Modal>

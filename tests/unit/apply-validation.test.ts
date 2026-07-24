@@ -36,6 +36,7 @@ describe("apply-validation", () => {
   });
 
   it("validates group id and household count", () => {
+    expect(validateAxisGroupId("PROPLANE-abc12345").ok).toBe(true);
     expect(validateAxisGroupId("AXISGRP-abc12345").ok).toBe(true);
     expect(validateAxisGroupId("BAD").ok).toBe(false);
     expect(validateHouseholdCount("3").ok).toBe(true);

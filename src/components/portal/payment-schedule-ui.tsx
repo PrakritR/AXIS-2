@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -477,22 +477,178 @@ const SCHEDULE_SETTINGS_COPY: Record<
   },
 };
 
-const REMINDER_DAY_PILL =
-  "inline-flex shrink-0 items-center rounded-full min-h-8 px-3 py-1 text-xs font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50";
-const REMINDER_DAY_PILL_ACTIVE = "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]";
-const REMINDER_DAY_PILL_INACTIVE =
-  "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card [html[data-theme=dark]_&]:portal-outline-control";
+function normalizeAutomationPayload(
+  settings: ManagerAutomationSettings,
+  visibilityDaysRaw?: string,
+): ManagerAutomationSettings {
+  const visibilityDays =
+    visibilityDaysRaw !== undefined
+      ? Math.max(0, Math.min(30, Math.round(Number(visibilityDaysRaw)) || settings.scheduleVisibilityDays))
+      : settings.scheduleVisibilityDays;
+  return { ...settings, scheduleVisibilityDays: visibilityDays };
+}
+
+export type PaymentAutomationSettingsHandle = {
+  saveIfDirty: () => Promise<boolean>;
+};
+
+const REMINDER_DAY_CHIP =
+  "inline-flex h-9 w-full items-center justify-center rounded-lg text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+const REMINDER_DAY_CHIP_ON = "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]";
+const REMINDER_DAY_CHIP_OFF =
+  "border border-border bg-card text-foreground hover:border-primary/30 hover:bg-accent/30 [html[data-theme=dark]_&]:portal-outline-control";
+
+const QUICK_REMINDER_DAYS = [7, 5, 3, 2, 1] as const;
+
+function ReminderDayPicker({
+  draft,
+  busy,
+  customDay,
+  daysBeforeLabel,
+  onToggleDay,
+  onAddCustomDay,
+  onCustomDayChange,
+}: {
+  draft: ManagerAutomationSettings;
+  busy: boolean;
+  customDay: string;
+  daysBeforeLabel: string;
+  onToggleDay: (day: number) => void;
+  onAddCustomDay: () => void;
+  onCustomDayChange: (value: string) => void;
+}) {
+  const extraDays = draft.preDueReminderDays.filter(
+    (d) => !(QUICK_REMINDER_DAYS as readonly number[]).includes(d),
+  );
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-xs font-medium text-muted">{daysBeforeLabel}</p>
+        <div className="mt-2 grid grid-cols-5 gap-2">
+          {QUICK_REMINDER_DAYS.map((day) => {
+            const active = draft.preDueReminderDays.includes(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                className={`${REMINDER_DAY_CHIP} ${active ? REMINDER_DAY_CHIP_ON : REMINDER_DAY_CHIP_OFF}`}
+                onClick={() => onToggleDay(day)}
+                disabled={busy}
+                aria-pressed={active}
+              >
+                {day}d
+              </button>
+            );
+          })}
+        </div>
+        {extraDays.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {extraDays.map((day) => (
+              <button
+                key={day}
+                type="button"
+                className={`${REMINDER_DAY_CHIP} !w-auto px-3 ${REMINDER_DAY_CHIP_ON}`}
+                onClick={() => onToggleDay(day)}
+                disabled={busy}
+                aria-label={`Remove ${day} days before reminder`}
+              >
+                {day}d ×
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-2 flex items-center gap-2">
+          <Input
+            className="h-8 w-14 shrink-0 text-center text-xs"
+            inputMode="numeric"
+            placeholder="14"
+            value={customDay}
+            onChange={(e) => onCustomDayChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onAddCustomDay();
+              }
+            }}
+            disabled={busy}
+            aria-label="Custom days before due"
+          />
+          <span className="text-xs text-muted">days before</span>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 shrink-0 rounded-md px-2.5 text-xs"
+            onClick={onAddCustomDay}
+            disabled={busy}
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReminderFollowUpToggles({
+  draft,
+  busy,
+  sameDayLabel,
+  followUpLabel,
+  onSameDayChange,
+  onOverdueDailyChange,
+  compactPills = false,
+}: {
+  draft: ManagerAutomationSettings;
+  busy: boolean;
+  sameDayLabel: string;
+  followUpLabel: string;
+  onSameDayChange: (enabled: boolean) => void;
+  onOverdueDailyChange: (enabled: boolean) => void;
+  compactPills?: boolean;
+}) {
+  const labelClass = compactPills
+    ? "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
+    : "inline-flex items-center gap-2 text-sm";
+
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-2">
+      <label className={labelClass}>
+        <input
+          type="checkbox"
+          checked={draft.sameDayReminderEnabled}
+          onChange={(e) => onSameDayChange(e.target.checked)}
+          disabled={busy}
+        />
+        {sameDayLabel}
+      </label>
+      <label className={labelClass}>
+        <input
+          type="checkbox"
+          checked={draft.overdueDailyEnabled}
+          onChange={(e) => onOverdueDailyChange(e.target.checked)}
+          disabled={busy}
+        />
+        {followUpLabel}
+      </label>
+    </div>
+  );
+}
 
 function PaymentAutomationSettingsForm({
   initialSettings,
   onSaved,
   variant = "payments",
   layout = "card",
+  autoSaveOnClose = false,
+  formRef,
 }: {
   initialSettings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
   variant?: ScheduleSettingsVariant;
   layout?: "card" | "modal";
+  autoSaveOnClose?: boolean;
+  formRef?: React.Ref<PaymentAutomationSettingsHandle>;
 }) {
   const { showToast } = useAppUi();
   const copy = SCHEDULE_SETTINGS_COPY[variant];
@@ -505,18 +661,23 @@ function PaymentAutomationSettingsForm({
   useEffect(() => {
     setDraft(initialSettings);
     setSelectedPreset(detectReminderPreset(initialSettings));
+    setVisibilityDaysInput(String(initialSettings.scheduleVisibilityDays));
   }, [initialSettings]);
 
-  const parseVisibilityDays = (raw: string) =>
-    Math.max(0, Math.min(30, Math.round(Number(raw)) || initialSettings.scheduleVisibilityDays));
+  const savedBaseline = useMemo(() => normalizeAutomationPayload(initialSettings), [initialSettings]);
+  const currentPayload = useMemo(
+    () => normalizeAutomationPayload(draft, visibilityDaysInput),
+    [draft, visibilityDaysInput],
+  );
+  const isDirty = useMemo(
+    () => JSON.stringify(currentPayload) !== JSON.stringify(savedBaseline),
+    [currentPayload, savedBaseline],
+  );
 
-  const save = async () => {
+  const save = useCallback(async (options?: { silent?: boolean }) => {
     setBusy(true);
     try {
-      const payload = {
-        ...draft,
-        scheduleVisibilityDays: parseVisibilityDays(visibilityDaysInput),
-      };
+      const payload = currentPayload;
       const res = await fetch("/api/portal/automation-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -524,8 +685,8 @@ function PaymentAutomationSettingsForm({
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload.error ?? "Could not save settings.");
+        const errBody = (await res.json()) as { error?: string };
+        throw new Error(errBody.error ?? "Could not save settings.");
       }
       const body = (await res.json()) as { settings: ManagerAutomationSettings };
       setDraft(body.settings);
@@ -535,13 +696,26 @@ function PaymentAutomationSettingsForm({
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(PAYMENT_AUTOMATION_SETTINGS_EVENT));
       }
-      showToast(copy.savedToast);
+      if (!options?.silent) {
+        showToast(copy.savedToast);
+      }
+      return true;
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not save settings.");
+      return false;
     } finally {
       setBusy(false);
     }
-  };
+  }, [copy.savedToast, currentPayload, onSaved, showToast]);
+
+  const saveIfDirty = useCallback(async (): Promise<boolean> => {
+    if (!isDirty) return true;
+    return save({ silent: true });
+  }, [isDirty, save, autoSaveOnClose]);
+
+  useImperativeHandle(formRef, () => ({ saveIfDirty }), [saveIfDirty]);
+
+  const saveVisible = !autoSaveOnClose;
 
   const toggleDay = (day: number) => {
     setSelectedPreset("custom");
@@ -570,20 +744,6 @@ function PaymentAutomationSettingsForm({
   const previewLines = buildReminderPreviewLines(draft);
 
   const selectPreset = (presetId: ReminderPresetId) => {
-    // #region agent log
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        location: "payment-schedule-ui.tsx:selectPreset",
-        message: "reminder preset selected",
-        data: { presetId },
-        timestamp: Date.now(),
-        hypothesisId: "H1",
-      }),
-    }).catch(() => {});
-    // #endregion
     setSelectedPreset(presetId);
     if (presetId !== "custom") {
       setDraft((prev) => applyReminderPreset(prev, presetId));
@@ -662,177 +822,65 @@ function PaymentAutomationSettingsForm({
           </div>
 
           {activePreset === "custom" ? (
-            <div className="space-y-3 rounded-xl border border-border bg-accent/15 p-3">
-              <p className="text-xs font-semibold text-foreground">Customize timing</p>
-              <div>
-                <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {[7, 5, 3, 2, 1, ...draft.preDueReminderDays]
-                    .filter((d, i, arr) => arr.indexOf(d) === i)
-                    .sort((a, b) => b - a)
-                    .map((day) => {
-                      const active = draft.preDueReminderDays.includes(day);
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          className={`${REMINDER_DAY_PILL} ${active ? REMINDER_DAY_PILL_ACTIVE : REMINDER_DAY_PILL_INACTIVE}`}
-                          onClick={() => toggleDay(day)}
-                          disabled={busy}
-                        >
-                          {day} day{day === 1 ? "" : "s"} before
-                        </button>
-                      );
-                    })}
-                  <div className="flex flex-wrap items-center gap-1">
-                    <Input
-                      className="h-8 w-16 text-xs"
-                      inputMode="numeric"
-                      placeholder="Day"
-                      value={customDay}
-                      onChange={(e) => setCustomDay(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addCustomDay();
-                        }
-                      }}
-                      disabled={busy}
-                    />
-                    <button
-                      type="button"
-                      className={`${REMINDER_DAY_PILL} ${REMINDER_DAY_PILL_INACTIVE} px-2`}
-                      onClick={addCustomDay}
-                      disabled={busy}
-                    >
-                      Add day
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.sameDayReminderEnabled}
-                    onChange={(e) => {
-                      setSelectedPreset("custom");
-                      setDraft({ ...draft, sameDayReminderEnabled: e.target.checked });
-                    }}
-                    disabled={busy}
-                  />
-                  {copy.sameDayLabel}
-                </label>
-                <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.overdueDailyEnabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      setSelectedPreset("custom");
-                      setDraft((prev) => ({
-                        ...prev,
-                        overdueDailyEnabled: enabled,
-                        ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
-                        postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
-                      }));
-                    }}
-                    disabled={busy}
-                  />
-                  Every day late
-                </label>
-              </div>
+            <div className="space-y-3 border-t border-border pt-3">
+              <ReminderDayPicker
+                draft={draft}
+                busy={busy}
+                customDay={customDay}
+                daysBeforeLabel={copy.daysBeforeLabel}
+                onToggleDay={toggleDay}
+                onAddCustomDay={addCustomDay}
+                onCustomDayChange={setCustomDay}
+              />
+              <ReminderFollowUpToggles
+                draft={draft}
+                busy={busy}
+                sameDayLabel={copy.sameDayLabel}
+                followUpLabel={copy.followUpLabel}
+                compactPills
+                onSameDayChange={(enabled) => {
+                  setSelectedPreset("custom");
+                  setDraft({ ...draft, sameDayReminderEnabled: enabled });
+                }}
+                onOverdueDailyChange={(enabled) => {
+                  setSelectedPreset("custom");
+                  setDraft((prev) => ({
+                    ...prev,
+                    overdueDailyEnabled: enabled,
+                    ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
+                    postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
+                  }));
+                }}
+              />
             </div>
           ) : null}
         </>
       ) : (
         <>
-      <div>
-        <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {[3, 2, 1, ...draft.preDueReminderDays]
-            .filter((d, i, arr) => arr.indexOf(d) === i)
-            .sort((a, b) => b - a)
-            .map((day) => {
-              const active = draft.preDueReminderDays.includes(day);
-              return (
-              <button
-                key={day}
-                type="button"
-                className={`${REMINDER_DAY_PILL} ${active ? REMINDER_DAY_PILL_ACTIVE : REMINDER_DAY_PILL_INACTIVE}`}
-                onClick={() => toggleDay(day)}
-                disabled={busy}
-              >
-                {day} day{day === 1 ? "" : "s"} before
-              </button>
-              );
-            })}
-          <div className="flex flex-wrap items-center gap-1">
-            <Input
-              className="h-8 w-16 text-xs"
-              inputMode="numeric"
-              placeholder="Day"
-              value={customDay}
-              onChange={(e) => setCustomDay(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addCustomDay();
-                }
-              }}
-              disabled={busy}
-            />
-            <button
-              type="button"
-              className={`${REMINDER_DAY_PILL} ${REMINDER_DAY_PILL_INACTIVE} px-2`}
-              onClick={addCustomDay}
-              disabled={busy}
-            >
-              Add day
-            </button>
-          </div>
-        </div>
-      </div>
+          <ReminderDayPicker
+            draft={draft}
+            busy={busy}
+            customDay={customDay}
+            daysBeforeLabel={copy.daysBeforeLabel}
+            onToggleDay={toggleDay}
+            onAddCustomDay={addCustomDay}
+            onCustomDayChange={setCustomDay}
+          />
 
-      <div className={compact ? "flex flex-wrap gap-2" : "grid gap-3 sm:grid-cols-2"}>
-        <label
-          className={`flex items-center gap-2 text-sm ${compact ? "rounded-full border border-border bg-card px-3 py-2" : ""}`}
-        >
-          <input type="checkbox" checked={draft.sameDayReminderEnabled} onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })} disabled={busy} />
-          {copy.sameDayLabel}
-        </label>
-        {compact ? (
-          <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.overdueDailyEnabled}
-              onChange={(e) => {
-                const enabled = e.target.checked;
-                setDraft((prev) => ({
-                  ...prev,
-                  overdueDailyEnabled: enabled,
-                  ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
-                  postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
-                }));
-              }}
-              disabled={busy}
-            />
-            Every day late
-          </label>
-        ) : null}
-        {!compact ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={draft.overdueDailyEnabled} onChange={(e) => setDraft({ ...draft, overdueDailyEnabled: e.target.checked })} disabled={busy} />
-          {copy.followUpLabel}
-        </label>
-        ) : null}
+          <ReminderFollowUpToggles
+            draft={draft}
+            busy={busy}
+            sameDayLabel={copy.sameDayLabel}
+            followUpLabel={copy.followUpLabel}
+            onSameDayChange={(enabled) => setDraft({ ...draft, sameDayReminderEnabled: enabled })}
+            onOverdueDailyChange={(enabled) => setDraft({ ...draft, overdueDailyEnabled: enabled })}
+          />
         {!compact ? (
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
             Late fee notices
           </label>
         ) : null}
-      </div>
 
       {!compact && draft.overdueDailyEnabled ? (
         <label className="block text-xs font-semibold text-muted">
@@ -930,9 +978,11 @@ function PaymentAutomationSettingsForm({
       </div>
       ) : null}
 
-      <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
-        {copy.saveLabel}
-      </Button>
+      {saveVisible ? (
+        <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
+          {copy.saveLabel}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -942,11 +992,15 @@ export function PaymentAutomationSettingsPanel({
   onSaved,
   variant = "payments",
   layout = "card",
+  autoSaveOnClose = false,
+  formRef,
 }: {
   settings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
   variant?: ScheduleSettingsVariant;
   layout?: "card" | "modal";
+  autoSaveOnClose?: boolean;
+  formRef?: React.Ref<PaymentAutomationSettingsHandle>;
 }) {
   return (
     <PaymentAutomationSettingsForm
@@ -955,6 +1009,8 @@ export function PaymentAutomationSettingsPanel({
       onSaved={onSaved}
       variant={variant}
       layout={layout}
+      autoSaveOnClose={autoSaveOnClose}
+      formRef={formRef}
     />
   );
 }
@@ -1021,19 +1077,36 @@ export function ReminderSettingsModal({
   onSaved: (next: ManagerAutomationSettings) => void;
   variant?: ScheduleSettingsVariant;
 }) {
+  const formRef = useRef<PaymentAutomationSettingsHandle>(null);
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = () => {
+    if (closing) return;
+    setClosing(true);
+    void (formRef.current?.saveIfDirty() ?? Promise.resolve(true)).then((ok) => {
+      setClosing(false);
+      if (ok) onClose();
+    });
+  };
+
   if (!settings) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Payment reminders"} dense={variant === "payments"} panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}>
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={variant === "inbox" ? "Schedule settings" : "Payment reminders"}
+      dense={variant === "payments"}
+      panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}
+    >
       {settings ? (
         <PaymentAutomationSettingsPanel
           settings={settings}
           variant={variant}
           layout={variant === "payments" ? "modal" : "card"}
-          onSaved={(next) => {
-            onSaved(next);
-            onClose();
-          }}
+          autoSaveOnClose
+          formRef={formRef}
+          onSaved={onSaved}
         />
       ) : null}
     </Modal>

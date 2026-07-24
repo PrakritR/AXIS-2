@@ -497,6 +497,7 @@ export default function CreateAccountClient() {
                 label="Continue with Google"
                 nextPath={managerOauthFinishPath(sessionIdFromUrl)}
                 viaContinue={false}
+                intent="manager"
                 disabled={busy}
               />
               <div className="my-4 flex items-center gap-3">
@@ -592,6 +593,7 @@ export default function CreateAccountClient() {
                   label="Continue with Google"
                   nextPath="/auth/manager-register-oauth"
                   viaContinue={false}
+                  intent="manager"
                   disabled={busy || googleSessionLoading}
                 />
                 <div className="my-4 flex items-center gap-3">

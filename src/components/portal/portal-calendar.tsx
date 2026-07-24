@@ -33,6 +33,8 @@ import { buildManagerPropertyFilterOptions, MANAGER_PORTFOLIO_REFRESH_EVENTS } f
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
+import { GoogleCalendarConnectPanel } from "@/components/portal/google-calendar-connect-panel";
+import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
 
 type CopyRange = "week" | "future" | "all";
 
@@ -98,6 +100,8 @@ export function PortalCalendar({
   const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
   const [coManagerPeers, setCoManagerPeers] = useState<CoManagerCalendarPeerDto[]>([]);
   const [shareAvailability, setShareAvailability] = useState(false);
+  const [googleExternalMeetings, setGoogleExternalMeetings] = useState<DemoMeeting[]>([]);
+  const [googleCalendarTick, setGoogleCalendarTick] = useState(0);
 
   useEffect(() => {
     if (portal !== "manager") return;
@@ -111,6 +115,31 @@ export function PortalCalendar({
       }
     };
   }, [portal]);
+
+  useEffect(() => {
+    if (portal !== "manager" || !authReady || !userId) return;
+    let cancelled = false;
+    const weekStart = startOfWeekMonday(new Date());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 14);
+    void fetch(
+      `/api/portal/google-calendar/events?timeMin=${encodeURIComponent(weekStart.toISOString())}&timeMax=${encodeURIComponent(weekEnd.toISOString())}`,
+      { credentials: "include" },
+    )
+      .then(async (res) => {
+        if (!res.ok) return { meetings: [] as DemoMeeting[] };
+        return (await res.json()) as { meetings?: DemoMeeting[] };
+      })
+      .then((data) => {
+        if (!cancelled) setGoogleExternalMeetings(Array.isArray(data.meetings) ? data.meetings : []);
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleExternalMeetings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [portal, authReady, userId, calendarRefreshSignal, googleCalendarTick]);
 
   useEffect(() => {
     if (portal !== "manager" || !authReady || !userId) return;
@@ -467,7 +496,7 @@ export function PortalCalendar({
                 onChange={setCalendarPropertyId}
               />
               {showCoManagerCoordination ? (
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
                   <input
                     type="checkbox"
                     className="mt-0.5 accent-primary"
@@ -482,6 +511,7 @@ export function PortalCalendar({
                   </span>
                 </label>
               ) : null}
+              <GoogleCalendarConnectPanel onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
             </div>
           ) : undefined
         }
@@ -516,6 +546,7 @@ export function PortalCalendar({
                 : undefined
             }
             coManagerAvailabilityOverlays={showCoManagerCoordination ? coManagerAvailabilityOverlays : undefined}
+            externalMeetings={portal === "manager" ? googleExternalMeetings : undefined}
             otherProperties={
               portal === "manager" && activeCalendarPropertyId
                 ? managerProperties.filter((p) => p.id !== activeCalendarPropertyId)

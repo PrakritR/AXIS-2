@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -13,12 +13,13 @@ import { ListingStickySubnav } from "@/components/marketing/listing-detail-subna
 import { ListingLocationBlock } from "@/components/marketing/listing-location-block";
 import {
   AmenitiesTableInteractive,
-  BathroomTableInteractive,
   BundleTableInteractive,
-  InteractiveFloorPlanCard,
   LeaseBasicsTableInteractive,
-  SharedTableInteractive,
+  ListingDetailModal,
 } from "@/components/marketing/listing-detail-tables-client";
+import { ListingBathroomMediaBrowser, ListingSharedMediaBrowser } from "@/components/marketing/listing-amenity-media-browsers";
+import { ListingRoomMediaBrowser } from "@/components/marketing/listing-room-media-browser";
+import { compareListingRoomMediaEntries } from "@/lib/listing-floor-order";
 import {
   ListingPreviewNewTabContext,
 } from "@/components/marketing/listing-preview-context";
@@ -286,6 +287,86 @@ function Sidebar({
   );
 }
 
+function FloorPlansSectionBody({
+  property,
+  rich,
+  propertyLabel,
+}: {
+  property: MockProperty;
+  rich: ListingRichContent;
+  propertyLabel: string | null;
+}) {
+  const [detailModal, setDetailModal] = useState<
+    | {
+        kind: "room";
+        room: (typeof rich.floorPlans)[number]["rooms"][number];
+        floorLabel: string;
+      }
+    | { kind: "bathroom"; row: (typeof rich.bathrooms)[number] }
+    | { kind: "shared"; row: (typeof rich.sharedSpaces)[number] }
+    | null
+  >(null);
+
+  const mediaEntries = useMemo(
+    () =>
+      rich.floorPlans
+        .flatMap((f) =>
+          f.rooms.map((room) => ({
+            room,
+            floorLabel: f.floorLabel,
+          })),
+        )
+        .sort(compareListingRoomMediaEntries),
+    [rich.floorPlans],
+  );
+
+  return (
+    <>
+      {mediaEntries.length > 0 ? (
+        <ListingRoomMediaBrowser
+          entries={mediaEntries}
+          listingPropertyId={property.id}
+          propertyLabel={propertyLabel}
+          contactSmsPhone={property.contactSmsPhone}
+          onOpenDetails={(entry) =>
+            setDetailModal({ kind: "room", room: entry.room, floorLabel: entry.floorLabel })
+          }
+          className="mb-4"
+        />
+      ) : null}
+      <ListingDetailModal
+        state={detailModal}
+        onClose={() => setDetailModal(null)}
+        listingPropertyId={property.id}
+        propertyLabel={propertyLabel}
+        contactSmsPhone={property.contactSmsPhone}
+      />
+      {rich.bathrooms.length > 0 ? (
+        <ListingSubsection title="Bathrooms">
+          <ListingBathroomMediaBrowser
+            rows={rich.bathrooms}
+            listingPropertyId={property.id}
+            propertyLabel={propertyLabel}
+            contactSmsPhone={property.contactSmsPhone}
+            onOpenDetails={(row) => setDetailModal({ kind: "bathroom", row })}
+          />
+        </ListingSubsection>
+      ) : null}
+      {rich.sharedSpaces.length > 0 ? (
+        <ListingSubsection title="Shared spaces" id="listing-shared">
+          <ListingSharedMediaBrowser
+            rows={rich.sharedSpaces}
+            listingPropertyId={property.id}
+            propertyLabel={propertyLabel}
+            contactSmsPhone={property.contactSmsPhone}
+            onOpenDetails={(row) => setDetailModal({ kind: "shared", row })}
+          />
+        </ListingSubsection>
+      ) : null}
+    </>
+  );
+}
+
 export function ListingDetailSections({
   property,
   rich,
@@ -365,21 +446,12 @@ export function ListingDetailSections({
                 }
               >
                 <div className="space-y-4">
-                  {rich.floorPlans.map((f) => (
-                    <InteractiveFloorPlanCard
-                      key={f.cardKey ?? f.floorLabel}
-                      floor={f}
-                      listingPropertyId={property.id}
-                      propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone}
-                    />
-                  ))}
+                  <FloorPlansSectionBody
+                    property={property}
+                    rich={rich}
+                    propertyLabel={propertyLabel}
+                  />
                 </div>
-                <ListingSubsection title="Bathrooms">
-                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
-                </ListingSubsection>
-                <ListingSubsection title="Shared spaces" id="listing-shared">
-                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
-                </ListingSubsection>
               </ListingDetailCollapsibleSection>
 
               <ListingDetailCollapsibleSection
