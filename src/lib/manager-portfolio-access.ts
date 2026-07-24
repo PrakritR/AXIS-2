@@ -272,8 +272,8 @@ export function applicationVisibleToPortalUser(
     const linked = module ? collectLinkedPropertyIdsForModule(userId, module) : collectLinkedPropertyIds(userId);
     return linked.has(pid);
   }
-  // Manual / unplaced rows are only visible to the attributed manager.
-  return Boolean(row.managerUserId && row.managerUserId === userId);
+  // An unscoped row (no attribution, no property) stays hidden.
+  return false;
 }
 
 /** Minimal lease shape for portfolio visibility checks (avoids circular imports). */
@@ -286,6 +286,12 @@ export type LeaseVisibilityRow = {
 /** Whether a lease row should appear for this portal user (direct owner or linked property). */
 export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string | null): boolean {
   if (!userId) return false;
+  // Same attribution-first rule as `applicationVisibleToPortalUser` /
+  // `moduleRowVisibleToPortalUser`: a lease attributed to THIS manager is
+  // theirs even when the property cache has not hydrated yet. This gates lease
+  // WRITES via `leaseAccessibleToManager`, so a cold cache otherwise fails the
+  // manager's own lease actions outright.
+  if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (pid) {
     if (ownedPropertyIdsForUser(userId).has(pid)) return true;

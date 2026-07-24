@@ -349,7 +349,7 @@ export function ManagerApplications() {
   const scopedRows = useMemo(() => {
     if (!scopeUserId) return [];
     return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId, "applications"));
-  }, [rows, scopeUserId]);
+  }, [rows, scopeUserId, portfolioTick]);
 
   // Reconcile group applications across every bucket (a group can span pending / approved /
   // in-progress) so the whole household is visible from any one member's row.
