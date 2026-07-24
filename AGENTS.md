@@ -925,10 +925,14 @@ portal, and identity while the household reads as one unit.
 
 **Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
 `destructive` variant) was deleted — `src/components/ui/button.tsx` is the only Button, and it now
-supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop;
-translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
-`h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
-never reintroduce a filled-red destructive variant.
+supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop
+(do not reintroduce one); translate an old `size="sm"` into `px-4 text-[13px]` at the call site —
+horizontal padding + text size only. Never add `h-9 min-h-0`: `min-h-0` defeats the Button's
+default `min-h-[44px]`, breaking the 44px touch-target minimum (`docs/design.md`) on buttons that
+ship in the Capacitor WebView. Explicit sub-44px heights (`h-9 min-h-0 …`, icon
+`h-10 w-10 min-h-0 px-0`) are reserved for deliberately compact desktop chrome (marketing navbar
+CTAs, inbox toolbar) — never portal action buttons. `danger` stays text-only red per
+`docs/design.md` — never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both
