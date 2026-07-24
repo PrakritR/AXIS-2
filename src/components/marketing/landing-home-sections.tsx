@@ -202,7 +202,7 @@ const FAQ_NOTES: { q: string; a: string }[] = [
   },
   {
     q: "How do my residents get in?",
-    a: "You don't hand out passwords. When you approve someone's application, PropLane emails them a one-time link to set up their own account with the same email they applied with. Then they can pay rent, sign leases, and message you.",
+    a: "You don't hand out passwords. When someone applies, PropLane emails them a one-time link — tied to the same email they applied with — to set up their own account. Once you approve them, they can pay rent, sign leases, and message you.",
   },
   {
     q: "Can I use it on my phone?",
