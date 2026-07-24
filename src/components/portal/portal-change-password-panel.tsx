@@ -102,7 +102,6 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
         <Button
           type="button"
           variant="primary"
-          className="h-9 min-h-0 px-4 text-[13px]"
           disabled={passwordBusy || resetBusy}
           onClick={() => void changePassword()}
         >
