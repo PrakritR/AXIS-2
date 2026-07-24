@@ -536,13 +536,7 @@ function ReminderScheduleChipRow({
   onChange: (next: ReminderScheduleToken[]) => void;
 }) {
   const sorted = sortReminderScheduleTokens(tokens);
-  if (!sorted.length) {
-    return (
-      <p className="rounded-lg border border-dashed border-border bg-accent/15 px-3 py-2 text-xs text-muted">
-        No reminders selected yet. Use the menu below to add days before due, the due date, or daily late notices.
-      </p>
-    );
-  }
+  if (!sorted.length) return null;
   return (
     <ul className="flex flex-wrap gap-1.5" aria-label="Selected reminders">
       {sorted.map((token) => (
@@ -576,7 +570,7 @@ function ReminderPresetDropdown({
 }) {
   const description =
     activePreset === "custom"
-      ? "Tweak the chips below or use the menu to add more reminders."
+      ? ""
       : PAYMENT_REMINDER_PRESETS.find((p) => p.id === activePreset)?.description ?? "";
 
   return (
@@ -599,24 +593,20 @@ const REMINDER_PREVIEW_SCROLL_CLASS = "mt-2 max-h-36 space-y-1 overflow-y-auto p
 
 function ReminderSchedulePreview({ lines }: { lines: string[] }) {
   const empty = lines.length === 1 && lines[0] === "No automatic reminders";
+  if (empty) return null;
   return (
     <div className="rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm">
-      <p className="text-xs font-semibold text-foreground">Timeline preview</p>
-      <p className="mt-0.5 text-[11px] text-muted">What residents will get for each unpaid charge.</p>
-      {empty ? (
-        <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">Add at least one reminder below before saving.</p>
-      ) : (
-        <ol className={`${REMINDER_PREVIEW_SCROLL_CLASS} list-none`}>
-          {lines.map((line, index) => (
-            <li key={line} className="flex items-center gap-2 text-xs text-foreground">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
-                {index + 1}
-              </span>
-              {line}
-            </li>
-          ))}
-        </ol>
-      )}
+      <p className="text-xs font-semibold text-foreground">Timeline</p>
+      <ol className={`${REMINDER_PREVIEW_SCROLL_CLASS} list-none`}>
+        {lines.map((line, index) => (
+          <li key={line} className="flex items-center gap-2 text-xs text-foreground">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+              {index + 1}
+            </span>
+            {line}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -667,7 +657,7 @@ function UnifiedReminderScheduleSelect({
         onChange={(next) => commitSchedule(next)}
       />
       <CheckboxMultiSelect
-        label="Add or edit reminders"
+        label="Reminders"
         labelClassName={PORTAL_FIELD_LABEL_CLASS}
         groups={[
           { label: "Before due", options: beforeDueOptions },
@@ -682,7 +672,7 @@ function UnifiedReminderScheduleSelect({
         selected={selected}
         onChange={(next) => commitSchedule(next as ReminderScheduleToken[])}
         disabled={busy}
-        emptyLabel="Open menu to choose reminders"
+        emptyLabel="Choose reminders…"
         dataAttr="payment-reminder-schedule"
       menuFooter={
         <div className="px-3 py-2">
@@ -849,9 +839,8 @@ function PaymentAutomationSettingsForm({
   const activePreset = selectedPreset;
 
   const paymentsScheduleBlock = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
-      <ReminderSchedulePreview lines={previewLines} />
       <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={applySchedulePatch} />
     </div>
   );
@@ -863,10 +852,6 @@ function PaymentAutomationSettingsForm({
           <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
           {copy.description ? <p className="mt-1 text-xs text-muted">{copy.description}</p> : null}
         </div>
-      ) : compact ? (
-        <p className="text-sm text-muted">
-          Pick a starting template, then adjust the timeline. You can still turn off individual sends on each payment.
-        </p>
       ) : null}
 
       {compact ? (
