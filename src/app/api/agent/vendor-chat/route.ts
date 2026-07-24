@@ -4,7 +4,7 @@ import { vendorAgentRegistry } from "@/lib/tools/vendor-index";
 import { runAgentTurn } from "@/lib/agent/loop";
 import type { ActionPreview } from "@/lib/tools/registry";
 import { VENDOR_SYSTEM_PROMPT } from "@/lib/agent/vendor-system-prompt";
-import { sanitizeChatMessages, lastUserText } from "@/lib/agent/chat-handler";
+import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
@@ -50,10 +50,14 @@ export async function POST(req: Request) {
   });
   if (decision) return decision;
 
-  const messages = sanitizeChatMessages(body.messages);
+  let messages = sanitizeChatMessages(body.messages);
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
   }
+
+  const attached = applyChatAttachments(messages, body);
+  if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
+  messages = attached.messages;
 
   const sessionId = await ensureAgentSession(ctx, "vendor", body.sessionId as string | undefined);
 
@@ -74,6 +78,8 @@ export async function POST(req: Request) {
       tools: result.toolTrace.length,
       model: result.model,
       tier: result.tier,
+      images: attached.imageCount,
+      documents: attached.documentCount,
     });
 
     // A proposal is persisted server-side; the client only ever receives the

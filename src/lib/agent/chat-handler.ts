@@ -4,8 +4,56 @@
  * only the genuinely common message plumbing lives here.
  */
 import type Anthropic from "@anthropic-ai/sdk";
+import {
+  buildAttachmentUserMessage,
+  parseChatDocuments,
+  parseChatImages,
+} from "@/lib/agent/images";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export type AppliedChatAttachments = {
+  imageCount: number;
+  documentCount: number;
+};
+
+/**
+ * Optional image/PDF attachments apply to the LAST user message only; history
+ * stays text-only so tool_use blocks never cross a turn boundary.
+ */
+export function applyChatAttachments(
+  messages: Anthropic.MessageParam[],
+  body: Record<string, unknown>,
+):
+  | ({ ok: true; messages: Anthropic.MessageParam[] } & AppliedChatAttachments)
+  | { ok: false; error: string } {
+  const images = parseChatImages(body.images);
+  if (!images.ok) return { ok: false, error: images.error };
+  const documents = parseChatDocuments(body.documents);
+  if (!documents.ok) return { ok: false, error: documents.error };
+  if (images.blocks.length === 0 && documents.blocks.length === 0) {
+    return { ok: true, messages, imageCount: 0, documentCount: 0 };
+  }
+  if (images.blocks.length + documents.blocks.length > 4) {
+    return { ok: false, error: "At most 4 attachments per message." };
+  }
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "user" || typeof last.content !== "string") {
+    return { ok: false, error: "A user message is required." };
+  }
+  const next = [...messages];
+  next[next.length - 1] = buildAttachmentUserMessage(
+    last.content,
+    images.blocks,
+    documents.blocks,
+  );
+  return {
+    ok: true,
+    messages: next,
+    imageCount: images.blocks.length,
+    documentCount: documents.blocks.length,
+  };
+}
 
 /**
  * Sanitize client-supplied conversation history: user/assistant string
@@ -36,7 +84,13 @@ export function sanitizeChatMessages(
 export function lastUserText(messages: Anthropic.MessageParam[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m && m.role === "user" && typeof m.content === "string") return m.content;
+    if (!m || m.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    if (Array.isArray(m.content)) {
+      for (const block of m.content) {
+        if (block.type === "text" && "text" in block) return String(block.text);
+      }
+    }
   }
   return "";
 }

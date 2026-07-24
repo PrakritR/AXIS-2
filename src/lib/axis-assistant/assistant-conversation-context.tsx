@@ -12,11 +12,16 @@ import {
 export type AssistantConversationValue = {
   input: string;
   setInput: (value: string) => void;
+  attachments: import("@/lib/assistant-chat-attachments.client").PendingChatAttachment[];
+  setAttachments: (
+    value: import("@/lib/assistant-chat-attachments.client").PendingChatAttachment[],
+  ) => void;
   messages: ChatMessage[];
   lastTools: ToolTraceEntry[];
   pendingAction: PendingAction | null;
   loading: boolean;
   error: string | null;
+  setError: (message: string | null) => void;
   send: (prompt?: string) => Promise<void>;
   resolvePendingAction: (decision: "confirm" | "deny") => Promise<void>;
   reset: () => void;
