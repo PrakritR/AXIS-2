@@ -107,7 +107,7 @@ function DocumentLibraryFilterSelect({
       hideLabel
       label={ariaLabel}
       variant="pill"
-      className="w-fit max-w-full shrink-0"
+      wrapperClassName="w-fit max-w-full shrink-0"
       value={value}
       options={options}
       onChange={onChange}

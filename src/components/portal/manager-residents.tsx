@@ -2682,7 +2682,7 @@ export function ManagerResidents({
               <Select
                 value={arPropertyId}
                 onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); }}
-                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+               
               >
                 <option value="">Select property…</option>
                 {propertyOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -2702,7 +2702,7 @@ export function ManagerResidents({
                   }
                   setArLeaseTerm(selected);
                 }}
-                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+               
               >
                 <option value="">Select…</option>
                 <option value="Month-to-month">Month-to-month</option>
@@ -2729,7 +2729,7 @@ export function ManagerResidents({
                     const roomId = e.target.value;
                     setArRoomId(roomId);
                   }}
-                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                 
                 >
                   <option value="">Select room…</option>
                   {arRoomOptions.map((r) => (
@@ -2807,7 +2807,7 @@ export function ManagerResidents({
                   setErPropertyId(e.target.value);
                   setErRoomId("");
                 }}
-                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+               
               >
                 <option value="">Select property…</option>
                 {propertyOptions.map((p) => (
@@ -2831,7 +2831,7 @@ export function ManagerResidents({
                   }
                   setErLeaseTerm(selected);
                 }}
-                className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+               
               >
                 <option value="">Select…</option>
                 <option value="Month-to-month">Month-to-month</option>
@@ -2858,7 +2858,7 @@ export function ManagerResidents({
                     const roomId = e.target.value;
                     setErRoomId(roomId);
                   }}
-                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                 
                 >
                   <option value="">Select room…</option>
                   {erRoomOptions.map((r) => (

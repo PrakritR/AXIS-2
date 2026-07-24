@@ -102,7 +102,7 @@ export function AdminInboxSchedulePanel({
           <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
             <span className="sr-only">Show messages scheduled within</span>
             <Select
-              className="h-9 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground outline-none focus:border-primary"
+             
               value={horizonId}
               onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
             >

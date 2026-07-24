@@ -703,7 +703,7 @@ export function PortalCalendarPanels({
     <div className="flex flex-wrap items-center gap-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</p>
       <Select
-        className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
+       
         value={String(visibleStartSlot)}
         onChange={(e) => {
           const nextStart = Number.parseInt(e.target.value, 10);
@@ -722,7 +722,7 @@ export function PortalCalendarPanels({
       </Select>
       <span className="text-sm font-medium text-muted">to</span>
       <Select
-        className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
+       
         value={String(visibleEndSlotExclusive)}
         onChange={(e) => {
           const nextEnd = Number.parseInt(e.target.value, 10);

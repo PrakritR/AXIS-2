@@ -132,7 +132,7 @@ export function VendorTaxProfileModal({
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Entity type
             <Select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+             
               value={draft.entityType}
               onChange={(e) => setDraft({ ...draft, entityType: e.target.value as VendorTaxDraft["entityType"] })}
             >
@@ -143,7 +143,7 @@ export function VendorTaxProfileModal({
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             TIN type
             <Select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+             
               value={draft.tinType}
               onChange={(e) => setDraft({ ...draft, tinType: e.target.value as VendorTaxDraft["tinType"] })}
             >

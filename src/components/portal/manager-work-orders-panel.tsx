@@ -1250,7 +1250,7 @@ export function ManagerWorkOrdersPanel({
             <label className="flex flex-col gap-1 text-xs font-medium text-muted">
               Category
               <Select
-                className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+               
                 value={completeDraft.category}
                 onChange={(e) => setCompleteDraft({ ...completeDraft, category: e.target.value as WorkOrderCategory })}
                 disabled={completeBusy}

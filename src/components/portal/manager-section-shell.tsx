@@ -39,7 +39,7 @@ function PortalFilterSelect({
         hideLabel
         label={ariaLabel}
         variant="pill"
-        className="w-full min-w-0 max-w-full sm:w-fit"
+        wrapperClassName="w-full min-w-0 max-w-full sm:w-fit"
         value={value}
         placeholder={placeholder}
         options={selectOptions}

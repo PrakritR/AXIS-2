@@ -53,9 +53,6 @@ export function ScheduleInboxRecipientPicker({
     [contacts, propertyFilter],
   );
 
-  const selectClass =
-    "mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary disabled:opacity-60";
-
   return (
     <div className="space-y-3">
       {SECTION_META.map((section) => (
@@ -132,7 +129,7 @@ export function ScheduleInboxRecipientPicker({
                     <div>
                       <label className="text-xs font-semibold text-muted">Property</label>
                       <Select
-                        className={selectClass}
+                        
                         value={propertyFilter}
                         disabled={disabled}
                         onChange={(e) => setPropertyFilter(e.target.value)}

@@ -427,7 +427,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                         <label className="mt-3 block text-xs font-semibold text-muted">
                           Choose admin
                           <Select
-                            className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                           
                             value={window.selectedAdminUserId}
                             onChange={(e) => setSelectedHostBySlot((prev) => ({ ...prev, [window.key]: e.target.value }))}
                           >

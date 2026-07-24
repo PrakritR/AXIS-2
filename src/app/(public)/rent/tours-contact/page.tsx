@@ -1040,7 +1040,7 @@ function MessageFlow({
           . These topics are for leasing questions, the area around our homes, and availability.
         </p>
         <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
-        <div className="relative mt-2">
+        <div className="mt-2">
           <Select
             value={topic}
             onChange={(e) => {
@@ -1048,7 +1048,6 @@ function MessageFlow({
               setTopic(v);
               if (v !== "Other") setOtherTopicDetail("");
             }}
-            className={`${inputCls} appearance-none pr-8`}
           >
             <option value="">Select a topic</option>
             {TOPICS.map((t) => (
@@ -1057,9 +1056,6 @@ function MessageFlow({
               </option>
             ))}
           </Select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted/70">
-            <ChevronDownIcon />
-          </span>
         </div>
         {isOther ? (
           <div className="mt-4">

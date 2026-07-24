@@ -10,6 +10,7 @@ import {
 } from "react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import type { CheckboxMultiSelectOption } from "@/components/ui/checkbox-multi-select";
+import { partitionFieldSelectClasses } from "@/components/ui/field-select-styles";
 
 const fieldBase =
   "min-h-[44px] w-full rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-[16px] text-foreground outline-none shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 placeholder:text-muted/70 hover:border-primary/25 focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm";
@@ -53,12 +54,14 @@ export function Select({
   const emptyOption = options.find((o) => o.value === "");
   const placeholder = emptyOption?.label ?? "Select…";
   const ariaLabel = props["aria-label"] ?? props.name ?? placeholder;
+  const { wrapperClassName, triggerClassName } = partitionFieldSelectClasses(className);
 
   return (
     <FieldSingleSelect
       hideLabel
       label={typeof ariaLabel === "string" ? ariaLabel : "Select"}
-      className={className}
+      wrapperClassName={wrapperClassName}
+      triggerClassName={triggerClassName}
       value={String(value ?? "")}
       onChange={(next) => {
         const synthetic = {

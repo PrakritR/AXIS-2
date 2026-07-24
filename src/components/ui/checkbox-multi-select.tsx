@@ -10,6 +10,8 @@ import {
   FIELD_SELECT_MENU_CLASS,
   FIELD_SELECT_TRIGGER_CLASS,
   FIELD_SELECT_TRIGGER_COMPACT_CLASS,
+  FIELD_SELECT_TRIGGER_INLINE_CLASS,
+  partitionFieldSelectClasses,
 } from "@/components/ui/field-select-styles";
 
 export type CheckboxMultiSelectOption = { value: string; label: string };
@@ -33,9 +35,14 @@ function summarizeSelection(
   return `${selected.length} selected`;
 }
 
-function triggerClassForVariant(variant: "field" | "pill", extra?: string) {
-  const base = variant === "pill" ? FIELD_SELECT_TRIGGER_COMPACT_CLASS : FIELD_SELECT_TRIGGER_CLASS;
-  return extra ? `${base} ${extra}` : base;
+function triggerClassForVariant(variant: "field" | "pill", hideLabel: boolean, extra?: string) {
+  const base =
+    variant === "pill"
+      ? FIELD_SELECT_TRIGGER_COMPACT_CLASS
+      : hideLabel
+        ? FIELD_SELECT_TRIGGER_INLINE_CLASS
+        : FIELD_SELECT_TRIGGER_CLASS;
+  return extra ? `${base} ${extra}`.trim() : base;
 }
 
 /** Compact multi-select dropdown with checkboxes (opaque menu). */
@@ -78,6 +85,7 @@ export function CheckboxMultiSelect({
   const [open, setOpen] = useState(false);
   const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const pill = variant === "pill";
+  const { wrapperClassName, triggerClassName } = partitionFieldSelectClasses(className);
 
   const flatOptions = useMemo(() => {
     if (groups?.length) return groups.flatMap((g) => g.options);
@@ -202,7 +210,7 @@ export function CheckboxMultiSelect({
     ) : null;
 
   return (
-    <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${className ?? ""}`}>
+    <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
       {!hideLabel && !pill ? (
         <label className={labelClassName ?? FIELD_SELECT_LABEL_CLASS}>{label}</label>
       ) : null}
@@ -215,7 +223,7 @@ export function CheckboxMultiSelect({
         aria-expanded={open}
         aria-controls={listId}
         data-attr={dataAttr}
-        className={triggerClassForVariant(variant)}
+        className={triggerClassForVariant(variant, pill || hideLabel, triggerClassName)}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={`min-w-0 truncate ${selected.length === 0 ? "text-muted" : ""}`}>{buttonLabel}</span>
@@ -237,6 +245,8 @@ export function FieldSingleSelect({
   placeholder = "Select…",
   dataAttr,
   className,
+  wrapperClassName: wrapperClassNameProp,
+  triggerClassName: triggerClassNameProp,
   labelClassName,
   hideLabel = false,
   variant = "field",
@@ -248,7 +258,10 @@ export function FieldSingleSelect({
   disabled?: boolean;
   placeholder?: string;
   dataAttr?: string;
+  /** @deprecated Prefer wrapperClassName + triggerClassName */
   className?: string;
+  wrapperClassName?: string;
+  triggerClassName?: string;
   labelClassName?: string;
   hideLabel?: boolean;
   variant?: "field" | "pill";
@@ -260,8 +273,36 @@ export function FieldSingleSelect({
   const [open, setOpen] = useState(false);
   const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const pill = variant === "pill";
+  const partitioned = partitionFieldSelectClasses(className);
+  const wrapperClassName = wrapperClassNameProp ?? partitioned.wrapperClassName;
+  const triggerClassName = triggerClassNameProp ?? partitioned.triggerClassName;
 
   const buttonLabel = options.find((o) => o.value === value)?.label ?? placeholder;
+
+  // #region agent log
+  useEffect(() => {
+    const button = buttonRef.current;
+    const wrap = wrapRef.current;
+    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+      body: JSON.stringify({
+        sessionId: "81cbea",
+        runId: "select-single-box",
+        hypothesisId: "H1",
+        location: "checkbox-multi-select.tsx:FieldSingleSelect",
+        message: "select trigger layout",
+        data: {
+          hideLabel,
+          wrapperHasBorder: Boolean(wrap && getComputedStyle(wrap).borderWidth !== "0px"),
+          triggerHasBorder: Boolean(button && getComputedStyle(button).borderWidth !== "0px"),
+          legacyClassStripped: className !== `${wrapperClassName} ${triggerClassName}`.trim(),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [className, hideLabel, triggerClassName, wrapperClassName]);
+  // #endregion
 
   const updateMenuRect = () => {
     const button = buttonRef.current;
@@ -346,7 +387,7 @@ export function FieldSingleSelect({
     ) : null;
 
   return (
-    <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${className ?? ""}`}>
+    <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
       {!hideLabel && !pill ? (
         <label className={labelClassName ?? FIELD_SELECT_LABEL_CLASS}>{label}</label>
       ) : null}
@@ -359,7 +400,7 @@ export function FieldSingleSelect({
         aria-expanded={open}
         aria-controls={listId}
         data-attr={dataAttr}
-        className={triggerClassForVariant(variant)}
+        className={triggerClassForVariant(variant, hideLabel || pill, triggerClassName)}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={`min-w-0 truncate ${value ? "" : "text-muted"}`}>{buttonLabel}</span>

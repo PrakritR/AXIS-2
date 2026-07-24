@@ -215,7 +215,7 @@ export function ManagerBankReconciliationPanel() {
           <div>
             <label className="text-xs font-semibold text-muted">Bank account</label>
             <Select
-              className="mt-1 block h-10 min-w-[14rem] rounded-lg border border-border bg-background px-3 text-sm"
+             
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
               data-attr="bank-reconciliation-account"
@@ -233,7 +233,7 @@ export function ManagerBankReconciliationPanel() {
             <div>
               <label className="text-xs font-semibold text-muted">Statement</label>
               <Select
-                className="mt-1 block h-10 min-w-[12rem] rounded-lg border border-border bg-background px-3 text-sm"
+               
                 value={selectedStatementId}
                 onChange={(e) => setSelectedStatementId(e.target.value)}
                 data-attr="bank-reconciliation-statement"
@@ -347,7 +347,7 @@ export function ManagerBankReconciliationPanel() {
           <div>
             <label className="text-xs font-semibold text-muted">Type</label>
             <Select
-              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+             
               value={accountDraft.accountType}
               onChange={(e) => setAccountDraft((d) => ({ ...d, accountType: e.target.value as BankAccountType }))}
             >

@@ -46,9 +46,7 @@ export function FormalDocumentScopeBar({
       ? "flex w-full flex-col gap-1.5 text-xs font-medium text-muted"
       : "flex flex-col gap-1.5 text-xs font-medium text-muted"
     : "flex flex-col gap-1 text-xs font-medium text-muted";
-  const selectClass = inline
-    ? "h-10 w-full rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
-    : "h-9 w-full rounded-xl border border-border bg-card px-3 text-sm";
+  const selectClass = "w-full";
 
   const fieldClass = (minWidth: string) =>
     stacked ? labelClass : `${minWidth} ${labelClass}`;
