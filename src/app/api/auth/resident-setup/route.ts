@@ -8,6 +8,7 @@ import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-a
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { sendResidentPropLaneAssistantIntro } from "@/lib/claw-onboarding-sms.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { normalizeE164 } from "@/lib/phone-e164";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,7 @@ type Body = {
   email?: string;
   password?: string;
   fullName?: string;
+  phone?: string;
   token?: string;
   axisId?: string;
 };
@@ -35,6 +37,7 @@ export async function GET(req: Request) {
       axisId: lookup.axisId,
       email: lookup.email,
       name: lookup.name,
+      phone: lookup.phone,
       propertyId: lookup.propertyId,
     });
   } catch (e) {
@@ -55,6 +58,7 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const rawPhone = typeof body.phone === "string" ? body.phone.trim() : "";
     const token = typeof body.token === "string" ? body.token.trim() : "";
     const axisId = typeof body.axisId === "string" ? body.axisId.trim() : "";
 
@@ -69,6 +73,14 @@ export async function POST(req: Request) {
     }
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    }
+    // Phone is required on resident setup so tenancy/notification texts reach the
+    // resident. The setup form prefills it from the application, so a missing or
+    // unparseable value here means the resident cleared it — reject rather than
+    // silently drop it.
+    const phone = normalizeE164(rawPhone);
+    if (!phone) {
+      return NextResponse.json({ error: "Enter a valid phone number." }, { status: 400 });
     }
 
     const supabase = createSupabaseServiceRoleClient();
@@ -123,6 +135,7 @@ export async function POST(req: Request) {
       userId,
       email,
       fullName: fullName || lookup.name,
+      phone,
     });
     if (!provisioned.ok) {
       return NextResponse.json({ error: provisioned.error }, { status: provisioned.status });

@@ -6,7 +6,12 @@ import {
   buildApplicationSubmittedMailtoHref,
 } from "@/lib/application-submitted-email";
 import { notifyApplicantApplicationSms } from "@/lib/application-lifecycle-sms.server";
-import { ensureResidentSetupTokenForApplication, buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
+import {
+  ensureResidentSetupTokenForApplication,
+  buildResidentSetupHref,
+  isResidentSetupTokenValid,
+} from "@/lib/auth/resident-setup-token";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
@@ -44,6 +49,7 @@ export async function POST(req: Request) {
       applicantName?: unknown;
       propertyTitle?: unknown;
       includeSetupHandoff?: unknown;
+      setupToken?: unknown;
     };
     try {
       body = (await req.json()) as typeof body;
@@ -56,6 +62,7 @@ export async function POST(req: Request) {
     const applicantName = typeof body.applicantName === "string" ? body.applicantName.trim() : "";
     const propertyTitle = typeof body.propertyTitle === "string" ? body.propertyTitle.trim() : "";
     const includeSetupHandoff = body.includeSetupHandoff === true;
+    const providedSetupToken = typeof body.setupToken === "string" ? body.setupToken.trim() : "";
 
     if (!email || !EMAIL_RE.test(email)) {
       return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
@@ -74,25 +81,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Application not found for this email and ID." }, { status: 403 });
     }
 
-    const ensured = await ensureResidentSetupTokenForApplication(db, match.id);
-    if (!ensured.ok) {
-      return NextResponse.json({ error: ensured.error }, { status: 500 });
+    // When the caller (the guest wizard) already holds the setup token minted at
+    // submit, reuse it verbatim so the emailed link matches the one already shown
+    // on the finish screen. Rotating here would silently invalidate that link.
+    // Fall back to a fresh (rotated) token for callers without one (e.g. resend).
+    const matchRow = (match.row_data ?? {}) as Partial<DemoApplicantRow>;
+    const reuseToken =
+      providedSetupToken &&
+      isResidentSetupTokenValid(
+        {
+          setupTokenHash: matchRow.setupTokenHash ?? null,
+          setupTokenExpiresAt: matchRow.setupTokenExpiresAt ?? null,
+          setupTokenConsumedAt: matchRow.setupTokenConsumedAt ?? null,
+        },
+        providedSetupToken,
+      );
+
+    let token: string;
+    let ensuredAxisId: string;
+    if (reuseToken) {
+      token = providedSetupToken;
+      ensuredAxisId = normalizeApplicationAxisId(match.id);
+    } else {
+      const ensured = await ensureResidentSetupTokenForApplication(db, match.id);
+      if (!ensured.ok) {
+        return NextResponse.json({ error: ensured.error }, { status: 500 });
+      }
+      token = ensured.token;
+      ensuredAxisId = ensured.axisId;
     }
 
     const origin = appOrigin();
-    const signupUrl = residentAccountCreationUrl(origin, ensured.axisId, ensured.token);
-    const setupHref = buildResidentSetupHref(ensured.token, ensured.axisId);
+    const signupUrl = residentAccountCreationUrl(origin, ensuredAxisId, token);
+    const setupHref = buildResidentSetupHref(token, ensuredAxisId);
     const text = buildApplicationSubmittedEmailBody({
       applicantName: applicantName || undefined,
       applicantEmail: email,
-      axisId: ensured.axisId,
+      axisId: ensuredAxisId,
       signupUrl,
       propertyTitle: propertyTitle || undefined,
     });
     const html = buildApplicationSubmittedEmailHtml({
       applicantName: applicantName || undefined,
       applicantEmail: email,
-      axisId: ensured.axisId,
+      axisId: ensuredAxisId,
       signupUrl,
       propertyTitle: propertyTitle || undefined,
     });
@@ -100,10 +132,10 @@ export async function POST(req: Request) {
       to: email,
       applicantName: applicantName || undefined,
       applicantEmail: email,
-      axisId: ensured.axisId,
+      axisId: ensuredAxisId,
       origin,
       propertyTitle: propertyTitle || undefined,
-      setupToken: ensured.token,
+      setupToken: token,
     });
 
     const rowData = (match.row_data ?? {}) as {
@@ -118,7 +150,7 @@ export async function POST(req: Request) {
     // pair), so without the guard anyone holding the pair could loop it to
     // SMS-bomb the applicant at platform cost.
     try {
-      const smsDedupId = `application_submitted_sms_${ensured.axisId}`;
+      const smsDedupId = `application_submitted_sms_${ensuredAxisId}`;
       const { data: alreadySent } = await db
         .from("portal_outbound_mail_records")
         .select("id")
@@ -136,7 +168,7 @@ export async function POST(req: Request) {
               to: applicantPhone,
               subject: "Application submitted (SMS)",
               sentAt: new Date().toISOString(),
-              axisId: ensured.axisId,
+              axisId: ensuredAxisId,
             },
           },
           { onConflict: "id" },
@@ -156,7 +188,7 @@ export async function POST(req: Request) {
           applicantPhone,
           applicantName: applicantName || rowData.name || null,
           propertyTitle: propertyTitle || null,
-          axisId: ensured.axisId,
+          axisId: ensuredAxisId,
           signupUrl,
           managerUserId,
           fromNumber,

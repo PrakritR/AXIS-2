@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upsert";
+import { buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
@@ -669,7 +670,16 @@ export async function POST(req: Request) {
       if (row.bucket === "pending" && row.application?.consentCredit) {
         void tryAutoOrderScreening(db, row);
       }
-      return NextResponse.json({ ok: true, setupTokenIssued: true });
+      // Return the setup handoff built from the token just minted on the row, so
+      // the guest finish screen can offer "Create your resident account" without
+      // depending on the follow-up email route succeeding.
+      return NextResponse.json({
+        ok: true,
+        setupTokenIssued: true,
+        setupToken: guest.setupToken,
+        setupHref: buildResidentSetupHref(guest.setupToken, row.id),
+        axisId: row.id,
+      });
     }
     const { role, email } = await resolvePortalRole(db, user);
     if (role === "resident") {

@@ -634,7 +634,10 @@ function RentalApplicationWizardInner({
 
       let emailSent = false;
       let mailtoHref: string | undefined;
-      let setupHref: string | undefined;
+      // Seed the finish CTA from the server-authoritative handoff minted during the
+      // application upsert. This holds even if the follow-up email route fails, so
+      // "Create your resident account" is never lost to a flaky send.
+      let setupHref: string | undefined = sync.setupHref;
       const propertyTitle = (listing?.title?.trim() || pid.trim()) || undefined;
       const isGuestSubmit = !residentUserId && !isDemoModeActive();
       if (sync.ok && emailTrim.includes("@") && isGuestSubmit) {
@@ -648,6 +651,9 @@ function RentalApplicationWizardInner({
               applicantName: applicantName !== "Applicant" ? applicantName : undefined,
               propertyTitle,
               includeSetupHandoff: true,
+              // Reuse the token already minted on the row so the emailed link
+              // matches the finish-screen link (the route skips token rotation).
+              setupToken: sync.setupToken,
             }),
           });
           const payload = (await res.json().catch(() => ({}))) as { mailtoHref?: string; setupHref?: string };

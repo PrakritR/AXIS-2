@@ -61,10 +61,6 @@ export default function CreateAccountClient() {
     () => searchParams.get("email")?.trim().toLowerCase() || "",
     [searchParams],
   );
-  const nextFromUrl = useMemo(() => {
-    const raw = searchParams.get("next")?.trim() ?? "";
-    return raw.startsWith("/") ? raw : "";
-  }, [searchParams]);
   const urlDerivedRole: CreateAccountRole = axisIdFromUrl
     ? "resident"
     : sessionIdFromUrl
@@ -352,65 +348,34 @@ export default function CreateAccountClient() {
       return;
     }
 
-    if (!email.trim() || password.length < 8) {
-      showToast("Enter a valid email and password (8+ characters).");
-      return;
-    }
-    if (role === "resident" && phone.replace(/\D/g, "").length < 10) {
-      showToast("Enter a valid phone number.");
-      return;
-    }
-
     if (role !== "resident") {
       showToast("Manager signup starts from Partner pricing.");
       return;
     }
 
+    // Resident accounts are never created from a self-serve email/password here —
+    // that path required the disabled `resident-register` endpoint. Residents create
+    // accounts from the emailed setup link (or the in-session handoff after applying),
+    // so route to the setup-link flow instead of posting to a dead endpoint.
+    if (!email.trim().includes("@")) {
+      showToast("Enter the email you used on your rental application.");
+      return;
+    }
     setBusy(true);
     try {
-      // Email-only resident signup: the application is matched by email, so no Axis ID
-      // is required. Existing logins are verified by password (never silently reset).
-      const res = await fetch("/api/auth/resident-register", {
+      const res = await fetch("/api/auth/resident-setup-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-          fullName: fullName.trim() || undefined,
-          phone: phone.trim(),
-        }),
+        body: JSON.stringify({ email: email.trim() }),
       });
-      const body = (await res.json()) as {
-        error?: string;
-        linkedApplication?: boolean;
-        axisId?: string;
-        redirectTo?: string;
-      };
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(body.error ?? "Could not create resident account.");
+        showToast(body.error ?? "Could not send your setup link. Apply first, then check your email.");
         return;
       }
-      const supabase = createSupabaseBrowserClient();
-      const { data: residentSignInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      if (signInError) {
-        showToast("Resident account created. Sign in with your email.");
-        router.push("/auth/sign-in");
-        return;
-      }
-      if (residentSignInData?.user) {
-        posthog.identify(residentSignInData.user.id);
-      }
-      showToast("Resident account created. You are signed in.");
-      const destination =
-        nextFromUrl ||
-        (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications/apply");
-      router.push(nativeAwarePath(destination));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Sign up failed";
-      showToast(msg);
+      showToast("If an application matches that email, we've sent your account setup link. Check your inbox.");
+    } catch {
+      showToast("Network error. Try again.");
     } finally {
       setBusy(false);
     }

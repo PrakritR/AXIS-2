@@ -288,7 +288,7 @@ export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
 /** Await server persistence before showing post-submit UI or create-account links. */
 export async function upsertApplicationRowToServerAwait(
   row: DemoApplicantRow,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; setupHref?: string; setupToken?: string }> {
   if (typeof window === "undefined") return { ok: false, error: "Not in browser." };
   if (isDemoModeActive()) return { ok: true };
   try {
@@ -298,9 +298,18 @@ export async function upsertApplicationRowToServerAwait(
       credentials: "include",
       body: JSON.stringify({ action: "upsert", row }),
     });
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    const body = (await res.json().catch(() => null)) as
+      | { error?: string; setupHref?: string; setupToken?: string }
+      | null;
     if (!res.ok) return { ok: false, error: body?.error ?? "Could not save application." };
-    return { ok: true };
+    // Guest submits return a server-authoritative setup handoff (token minted on
+    // the row); the wizard uses it so the finish CTA never hinges on the email route.
+    const setupHref =
+      typeof body?.setupHref === "string" && body.setupHref.startsWith("/auth/resident-setup")
+        ? body.setupHref
+        : undefined;
+    const setupToken = typeof body?.setupToken === "string" && body.setupToken ? body.setupToken : undefined;
+    return { ok: true, setupHref, setupToken };
   } catch {
     return { ok: false, error: "Could not save application." };
   }
