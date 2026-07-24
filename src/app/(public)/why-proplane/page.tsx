@@ -62,9 +62,9 @@ const PROPLANE_WAY = [
 ] as const;
 
 const PRICING_TIERS = [
-  { name: "Free", price: "$0", cadence: "forever", detail: "1 listing · 0.5% payment fee" },
-  { name: "Pro", price: "$20", cadence: "/mo", detail: "2 listings · 0.25% payment fee" },
-  { name: "Business", price: "$200", cadence: "/mo", detail: "20 listings · 0% payment fee" },
+  { name: "Free", price: "$0", cadence: "forever", detail: "1 listing · no payment fees" },
+  { name: "Pro", price: "$20", cadence: "/mo", detail: "2 listings · no payment fees" },
+  { name: "Business", price: "$200", cadence: "/mo", detail: "20 listings · no payment fees" },
 ] as const;
 
 export default function WhyPropLanePage() {

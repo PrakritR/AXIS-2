@@ -15,9 +15,10 @@ vi.mock("@/lib/push-notifications.server", () => ({
 }));
 
 describe("stripe-household-charge", () => {
-  it("charges ACH processing only — PropLane takes no platform fee", () => {
-    // $100 ACH: 0.8% processing (80¢) + 0 PropLane fee = 80¢ on every tier.
-    expect(axisAchPlatformFeeCents(10000)).toBe(80);
+  it("retains nothing from an ACH charge — no processing pass-through, no platform fee", () => {
+    // PropLane absorbs Stripe's processing cost, so the Connect application fee
+    // is 0 and the manager receives the full $100.
+    expect(axisAchPlatformFeeCents(10000)).toBe(0);
     expect(axisAchPlatformFeeCents(0)).toBe(0);
   });
 

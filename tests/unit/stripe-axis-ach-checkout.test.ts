@@ -167,4 +167,85 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
     expect(calls[0]?.payment_method_types).toEqual(["us_bank_account"]);
     expect(calls[0]).not.toHaveProperty("payment_method_configuration");
   });
+
+  // ── Money path: face value in, full subtotal out, PropLane bears Stripe's fee.
+  //
+  // These assert the ACTUAL session params, not just the policy helpers: the
+  // payer is charged the subtotal and nothing else, `application_fee_amount` is
+  // never sent, and the charge is a DESTINATION charge on PropLane's platform
+  // account (transfer_data.destination, no on_behalf_of, no Stripe-Account
+  // header) — which is what puts Stripe's processing fee on PropLane instead of
+  // the manager.
+  describe("no fees: payer charged subtotal, manager paid subtotal", () => {
+    const methods = ["ach", "card", "link"] as const;
+    const tiers = ["free", "pro", "business", null] as const;
+    // $1.00 floor, a $0.30-fixed-fee-sensitive amount, the old ACH cap boundary,
+    // and a large rent payment.
+    const subtotals = [100, 5_000, 62_500, 499_900];
+
+    function lineItemTotal(params: Record<string, unknown>): number {
+      const items = params.line_items as { price_data: { unit_amount: number }; quantity: number }[];
+      return items.reduce((sum, item) => sum + item.price_data.unit_amount * item.quantity, 0);
+    }
+
+    for (const method of methods) {
+      for (const tier of tiers) {
+        for (const subtotal of subtotals) {
+          it(`${method} @ $${(subtotal / 100).toFixed(2)} (tier=${tier ?? "none"})`, async () => {
+            const { stripe, calls } = captureStripe();
+            const result = await createAxisAchCheckoutSession(stripe, {
+              ...baseInput,
+              amountCents: subtotal,
+              paymentMethod: method,
+              managerTier: tier,
+            });
+            const params = calls[0]!;
+            const pid = params.payment_intent_data as Record<string, unknown>;
+
+            // 1. The payer is charged EXACTLY the subtotal: no fee line item.
+            expect(lineItemTotal(params)).toBe(subtotal);
+            expect((params.line_items as unknown[]).length).toBe(1);
+            expect(result.totalCents).toBe(subtotal);
+            expect(result.subtotalCents).toBe(subtotal);
+            expect(result.processingFeeCents).toBe(0);
+            expect(result.axisFeeCents).toBe(0);
+
+            // 2. Nothing is retained, so the FULL subtotal transfers out.
+            expect(pid).not.toHaveProperty("application_fee_amount");
+            expect(result.platformFeeCents).toBe(0);
+            expect(lineItemTotal(params) - 0).toBe(subtotal);
+
+            // 3. Destination charge on the PLATFORM account — PropLane is
+            //    merchant of record and therefore bears Stripe's fee.
+            expect(pid.transfer_data).toEqual({ destination: "acct_test" });
+            expect(pid).not.toHaveProperty("on_behalf_of");
+
+            // 4. The disclosed metadata matches what was charged.
+            const metadata = params.metadata as Record<string, string>;
+            expect(metadata.subtotal_cents).toBe(String(subtotal));
+            expect(metadata.processing_fee_cents).toBe("0");
+            expect(metadata.axis_fee_cents).toBe("0");
+          });
+        }
+      }
+    }
+
+    it("never emits a processing/service fee line item on a multi-charge session", async () => {
+      const { stripe, calls } = captureStripe();
+      const result = await createAxisAchCheckoutSession(stripe, {
+        ...baseInput,
+        amountCents: undefined,
+        lineItems: [
+          { amountCents: 180_000, productName: "Rent — March" },
+          { amountCents: 7_350, productName: "Utilities — March" },
+        ],
+        paymentMethod: "card",
+      });
+      const params = calls[0]!;
+      const items = params.line_items as { price_data: { product_data: { name: string } } }[];
+      expect(items.map((i) => i.price_data.product_data.name)).toEqual(["Rent — March", "Utilities — March"]);
+      expect(result.totalCents).toBe(187_350);
+      expect(params.payment_intent_data).not.toHaveProperty("application_fee_amount");
+    });
+  });
 });

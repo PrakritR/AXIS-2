@@ -78,19 +78,19 @@ export function axisAchCheckoutProcessing(session: Stripe.Checkout.Session): boo
  * Stripe rejects a session that sets the two together.
  *
  * Apple Pay / Google Pay are card wallets: they only ride on the `card`
- * method-class sessions, whose processing fee (2.9% + $0.30) is identical for a
- * plain card, Apple Pay, or Google Pay — so the fee line item baked before the
- * session (see below) is correct no matter which the buyer taps. When
+ * method-class sessions, and the payer is charged face value on every method
+ * anyway (PropLane absorbs Stripe's processing cost), so the total is the same
+ * no matter which the buyer taps. When
  * `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION` names a card-scoped PMC we
  * use dynamic payment methods (Stripe's recommended path for surfacing wallets,
  * matching the subscription flow in `subscription-checkout-session.ts`); the
- * PMC must exclude bank/ACH so a card session never surfaces a method with a
- * different fee. Without the env we fall back to an explicit `["card"]` type,
+ * PMC must exclude bank/ACH so `metadata.payment_method` the webhook reads back
+ * stays truthful. Without the env we fall back to an explicit `["card"]` type,
  * which still surfaces Apple Pay on one-time (`mode: "payment"`) Checkout once
- * the domain is registered, and never leaks a wrong-fee method.
+ * the domain is registered.
  *
- * `ach` stays an explicit `us_bank_account` session (its own lower fee); `link`
- * keeps its explicit Link+card allowlist.
+ * `ach` stays an explicit `us_bank_account` session; `link` keeps its explicit
+ * Link+card allowlist.
  */
 async function paymentMethodStripeConfig(
   stripe: Stripe,
@@ -129,12 +129,10 @@ async function paymentMethodStripeConfig(
 }
 
 /**
- * Payment methods whose Stripe processing cost is the card rate (2.9% + $0.30),
- * i.e. the ones the card session's pre-baked fee line item already prices
- * correctly. Apple Pay / Google Pay are card wallets and settle as `card`; Link
- * is priced identically (`RESIDENT_PROCESSING_FEE_BPS.link` in
- * `payment-policy.ts`) and Stripe commonly enables it alongside card, so a PMC
- * carrying it is still fee-exact and must not be rejected.
+ * Payment methods that settle as the card method-class, i.e. the ones a "card"
+ * session may legitimately surface. Apple Pay / Google Pay are card wallets and
+ * settle as `card`; Link is commonly enabled alongside card, so a PMC carrying
+ * it must not be rejected.
  */
 const CARD_CLASS_PAYMENT_METHODS = new Set(["card", "apple_pay", "google_pay", "link"]);
 
@@ -143,13 +141,12 @@ const CARD_PMC_CACHE_TTL_MS = 10 * 60_000;
 const CARD_PMC_ERROR_CACHE_TTL_MS = 60_000;
 
 /**
- * A card session bakes the card processing fee AND the Connect
- * `application_fee_amount` before the session exists, so a PMC that also enables
- * a different-fee method (`us_bank_account`, Klarna, Affirm, …) would silently
- * break the "manager payout == full subtotal" invariant and mislabel
- * `metadata.payment_method` for the webhook. Verify the configuration really is
- * card-scoped before trusting it; anything else (including a failed lookup)
- * falls back to the explicit `["card"]` allowlist, which is always fee-correct.
+ * A card session records `metadata.payment_method = "card"` before the session
+ * exists, so a PMC that also enables a different method (`us_bank_account`,
+ * Klarna, Affirm, …) would mislabel the payment for the webhook and for
+ * reporting. Verify the configuration really is card-scoped before trusting it;
+ * anything else (including a failed lookup) falls back to the explicit
+ * `["card"]` allowlist, which is always truthful.
  */
 async function cardScopedPaymentMethodConfiguration(stripe: Stripe, pmcId: string): Promise<boolean> {
   const cached = cardPmcScopeCache.get(pmcId);
@@ -174,7 +171,7 @@ async function cardScopedPaymentMethodConfiguration(stripe: Stripe, pmcId: strin
   const cardScoped = offending.length === 0;
   if (!cardScoped) {
     console.error(
-      `[stripe] STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) enables non-card methods [${offending.join(", ")}] whose processing fee differs from card; falling back to explicit card payment methods. Scope the configuration to card + Apple Pay + Google Pay (+ Link).`,
+      `[stripe] STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION (${pmcId}) enables non-card methods [${offending.join(", ")}], which would mislabel metadata.payment_method; falling back to explicit card payment methods. Scope the configuration to card + Apple Pay + Google Pay (+ Link).`,
     );
   }
   cardPmcScopeCache.set(pmcId, { cardScoped, expiresAt: Date.now() + CARD_PMC_CACHE_TTL_MS });
@@ -189,8 +186,21 @@ function paymentMethodEntryEnabled(value: unknown): boolean {
 }
 
 /**
- * Creates a Stripe Checkout Session for Connect destination charges.
- * Used for resident portal payments (rent, utilities, application fees) — not manager subscriptions.
+ * Creates a Stripe Checkout Session for Connect DESTINATION charges: the charge
+ * is created on the PLATFORM account (PropLane is merchant of record) with
+ * `transfer_data.destination` pointing at the manager's connected account. It is
+ * never a direct charge and never uses `on_behalf_of`, so Stripe's processing
+ * fee is debited from PropLane's balance, not the manager's.
+ *
+ * Today `residentProcessingFeeCents` and the tier fee are both 0, so:
+ *   payer is charged `subtotalCents`, `application_fee_amount` is omitted, and
+ *   the FULL subtotal transfers to the manager — leaving PropLane net short by
+ *   exactly Stripe's fee. That is the intended arrangement: residents and
+ *   applicants pay face value, managers are kept whole, PropLane absorbs
+ *   processing.
+ *
+ * Used for resident portal payments (rent, utilities, application fees) — not
+ * manager subscriptions.
  */
 export async function createAxisAchCheckoutSession(
   stripe: Stripe,
@@ -256,6 +266,10 @@ export async function createAxisAchCheckoutSession(
     quantity: 1,
   }));
 
+  // Unreached while PropLane absorbs processing (both fees are 0), and kept
+  // deliberately: it is what keeps the add-on the payer is charged and the
+  // application fee we retain in lockstep, so no future fee can be retained
+  // without also being disclosed as its own line item.
   if (processingFeeCents + axisFeeCents > 0) {
     const feeParts: string[] = [residentProcessingFeeLabel(paymentMethod)];
     if (axisFeeCents > 0) {
@@ -275,6 +289,15 @@ export async function createAxisAchCheckoutSession(
   }
 
   const totalCents = subtotalCents + processingFeeCents + axisFeeCents;
+
+  // Hard money invariant, checked against the numbers actually sent to Stripe:
+  // whatever the payer is charged, minus whatever PropLane retains, must equal
+  // the subtotal the manager is owed. Today that reduces to
+  // `totalCents === subtotalCents` with no application fee at all.
+  if (totalCents - applicationFeeAmount !== subtotalCents) {
+    throw new Error("Checkout total does not reconcile with the manager payout.");
+  }
+
   const paymentMethodConfig = await paymentMethodStripeConfig(stripe, paymentMethod);
 
   const sessionBase = {

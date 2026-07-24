@@ -3402,7 +3402,7 @@ export function ManagerAddListingForm({
                       }
                     />
                     <span className="text-sm font-medium text-foreground">
-                      Bank (ACH) with Stripe — low {0.8}% processing fee
+                      Bank (ACH) with Stripe — no added fees, PropLane covers processing
                     </span>
                   </label>
                   <div className="border-t border-border pt-3">

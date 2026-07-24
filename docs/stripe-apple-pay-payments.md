@@ -19,11 +19,11 @@ builder, `createAxisAchCheckoutSession()` (`src/lib/stripe-axis-ach-checkout.ts`
 | Application fee | `/api/stripe/application-fee-checkout` | Hosted redirect | **Card** (was ACH) |
 
 Apple Pay and Google Pay are **card wallets** — they only ride on the **card**
-method-class, never on the bank/ACH session. Their Stripe processing fee (2.9% +
-$0.30) is identical to a plain card, so the fee line item the builder bakes
-*before* creating the session is correct whether the buyer taps Apple Pay, Google
-Pay, or types a card. The manager's Connect payout stays the full subtotal on
-every method (see [`docs/agents/resident-payments.md`](agents/resident-payments.md)).
+method-class, never on the bank/ACH session. The payer is charged **face value on
+every method** (PropLane absorbs Stripe's processing cost), so the total is the
+same whether the buyer taps Apple Pay, Google Pay, or types a card, and the
+manager's Connect payout stays the full subtotal on every method (see
+[`docs/agents/resident-payments.md`](agents/resident-payments.md)).
 
 **Surfacing the wallets.** Stripe only shows Apple Pay/Google Pay when the session
 uses **dynamic payment methods** scoped to card. `paymentMethodStripeConfig()`:
@@ -31,19 +31,19 @@ uses **dynamic payment methods** scoped to card. `paymentMethodStripeConfig()`:
 - **Card + `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION` set** → omits
   `payment_method_types` and passes that **card-scoped** Payment Method
   Configuration (PMC). This is the recommended path and mirrors the subscription
-  flow's dynamic payment methods. The PMC **must exclude bank/ACH** so a card
-  session never surfaces a different-fee method — and that is *enforced at
-  runtime*, not just documented: before using the PMC the builder retrieves it
-  from Stripe (cached 10 min) and checks that no method outside
-  card / Apple Pay / Google Pay / Link is enabled. Link is allowed because this
-  repo prices it at exactly the card rate, so it cannot skew the baked fee line
-  item — and Stripe commonly enables it alongside card. A PMC that also offers
-  `us_bank_account`, Klarna, Affirm, … (or a PMC that cannot be retrieved) logs a
-  `console.error` and falls back to the explicit `["card"]` allowlist rather than
-  creating a session whose baked fee line item could be wrong.
+  flow's dynamic payment methods. The PMC **must exclude bank/ACH** so the
+  `metadata.payment_method = "card"` the webhook reads back stays truthful — and
+  that is *enforced at runtime*, not just documented: before using the PMC the
+  builder retrieves it from Stripe (cached 10 min) and checks that no method
+  outside card / Apple Pay / Google Pay / Link is enabled. Link is allowed
+  because it settles as the card method-class, and Stripe commonly enables it
+  alongside card. A PMC that also offers `us_bank_account`, Klarna, Affirm, … (or
+  a PMC that cannot be retrieved) logs a `console.error` and falls back to the
+  explicit `["card"]` allowlist rather than creating a session that would
+  mislabel `metadata.payment_method`.
 - **Card, no PMC env** → explicit `payment_method_types: ["card"]`. Apple Pay
   still appears on one-time (`mode: "payment"`) Checkout once the domain is
-  registered, and this never leaks a wrong-fee method. Safe default.
+  registered, and this never mislabels the payment method. Safe default.
 - **ACH** → explicit `["us_bank_account"]` (its own lower fee). **Link** →
   `["link","card"]`.
 
@@ -87,8 +87,8 @@ checkout wallet.
 3. **Recommended:** create a **card-scoped** Payment Method Configuration
    (Apple Pay + Google Pay + Card, optionally Link, **no** ACH) and set
    `STRIPE_RESIDENT_CARD_PAYMENT_METHOD_CONFIGURATION=pmc_…` in the app env. This
-   guarantees the wallets surface via dynamic payment methods while keeping the
-   card-fee model exact. Without it, card sessions fall back to `["card"]`.
+   guarantees the wallets surface via dynamic payment methods while keeping
+   `metadata.payment_method` truthful. Without it, card sessions fall back to `["card"]`.
 
 ## Native iOS (Capacitor WKWebView) caveat
 

@@ -43,7 +43,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can I change plans later?",
-    a: "Yes. Upgrade or downgrade anytime. Upgrading unlocks residents, leases, the inbox, and more co-managers right away; the payment fee drops as you move up.",
+    a: "Yes. Upgrade or downgrade anytime. Upgrading unlocks residents, leases, the inbox, and more co-managers right away. Every tier is the same on payments: residents pay face value, you receive it in full, and PropLane covers payment processing.",
   },
 ];
 

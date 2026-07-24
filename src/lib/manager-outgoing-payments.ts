@@ -283,9 +283,10 @@ export function buildManagerOutgoingPaymentRows(input: {
     rows.push(enrichOutgoingRowWithVendorPayments(baseRow, vendor));
   }
 
-  // No manager-side processing-cost rows: residents cover the processing/service
-  // fee on every method (see managerAbsorbedPaymentFeeCents === 0), so the manager
-  // receives the full charge amount and has no PropLane payment cost to report.
+  // No manager-side processing-cost rows: PropLane absorbs Stripe's processing
+  // cost and takes no platform fee (see managerAbsorbedPaymentFeeCents === 0),
+  // so the manager receives the full charge amount and has no PropLane payment
+  // cost to report.
 
   return rows.sort((a, b) => {
     const bucketOrder: Record<ManagerPaymentBucket, number> = { overdue: 0, pending: 1, paid: 2 };

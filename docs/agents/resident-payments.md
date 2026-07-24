@@ -1,33 +1,53 @@
 > Moved out of AGENTS.md to keep every-session context lean. This file is the
 > source of truth for its area — READ IT BEFORE changing code in this area.
 
-# Resident payments: resident-paid processing on every method + clearing-window `processing` status
+# Resident payments: face value on every method (PropLane absorbs processing) + clearing-window `processing` status
 
-**The resident always pays the payment processing/service fee — on card, Link,
-AND bank/ACH — so the manager receives the full charge amount on every method**
-(captain decision 2026-07, superseding the earlier "free ACH" model). The fee is
-added on top of the charge as a visible service-fee line item and recovered from
-the checkout total via the Connect `application_fee_amount`, so the manager's
-payout equals the subtotal regardless of method.
+**Residents and applicants pay EXACTLY the subtotal — on card, Link, AND
+bank/ACH — the manager still receives the full subtotal, and PropLane's own
+Stripe balance bears the processing cost** (captain decision 2026-07-23,
+superseding the earlier "resident pays processing" pass-through model, which
+itself superseded "free ACH").
 
-Per-method resident processing fee (`residentProcessingFeeCents`,
-`src/lib/payment-policy.ts`): bank/ACH = Stripe's real cost **0.8% capped at $5**
-(`achProcessingFeeCents`, also exported as the deprecated alias
-`achPlatformRecoupCents`); card/Link = **2.9% + $0.30**. `residentConnectApplicationFeeCents`
-= processing + tier fee for the chosen method, and is set as the session
-`application_fee_amount`; `managerAbsorbedPaymentFeeCents()` is `0` on every
-method by construction. Never charge more than Stripe's real cost, and never
-route a Stripe fee back onto the manager's payout. (ACH fee math and the
-"manager kept whole on every method" invariant are locked by
-`tests/unit/resident-processing-fees.test.ts`.)
+The mechanism is the arrangement, not an arithmetic offset. Every resident and
+applicant payment is a Connect **destination charge** created on the PLATFORM
+account (PropLane is merchant of record) with
+`transfer_data.destination = <manager connected account>` and **no
+`application_fee_amount`**. On a destination charge Stripe's fee is the
+platform's liability by default, so with a 0 application fee the whole subtotal
+transfers to the manager and PropLane is left net short by exactly Stripe's fee.
+No path may use a direct charge / `on_behalf_of` / a `Stripe-Account` header for
+these — that flips the fee liability onto the MANAGER.
 
-**Every pre-Stripe confirmation MUST disclose the fee and the real total.**
-Because the resident pays the processing fee on top of the subtotal, any surface
-that states an amount before handing off to Stripe has to show the processing
-fee line and the resulting total due — not the bare sum of charge balances.
-A QA sweep (2026-07-21) found the resident Payments "Continue to Stripe?" dialog
-showing only the subtotal, understating a $17,781.61 card payment by $515.96.
-When adding a new pay entry point, derive the disclosure from
+`src/lib/payment-policy.ts` is the single source of truth and all three helpers
+return `0`: `residentProcessingFeeCents`, `achProcessingFeeCents` (with its
+deprecated `achPlatformRecoupCents` alias), and `residentConnectApplicationFeeCents`
+(= processing + tier fee; the platform take rate is 0 bps on every tier).
+`managerAbsorbedPaymentFeeCents()` is `0` too — nobody but PropLane pays.
+The composition in `createAxisAchCheckoutSession` is kept generic on purpose: a
+fee could never be retained without also being charged as its own disclosed line
+item, and a runtime invariant (`totalCents - applicationFeeAmount === subtotalCents`)
+throws before the session is created if that ever stops holding.
+
+Coverage: `tests/unit/resident-processing-fees.test.ts` (policy math),
+`tests/unit/stripe-axis-ach-checkout.test.ts` (the params actually sent to
+Stripe: one line item at face value, no `application_fee_amount`,
+`transfer_data` destination, no `on_behalf_of`), and
+`tests/unit/stripe-ledger-fees.test.ts` (fee attribution).
+
+**Ledger attribution: the Stripe fee is NOT the manager's.** `ledger_entries` is
+the manager's book, so `enrichLedgerPaymentFromStripeCharge` writes
+`stripe_fee_cents = 0` and `net_cents = charge.amount - application_fee` (the
+destination transfer), rather than the platform balance transaction's fee/net.
+PropLane's real cost lives in PropLane's own Stripe balance. Do not post a
+`stripe_fee` GL entry against a manager — nothing left their payout.
+
+**Every pre-Stripe confirmation states the exact total and that there are no
+added fees.** Any surface that names an amount before handing off to Stripe
+shows the total due plus "no added fees" / "PropLane covers payment processing"
+— never a processing-fee line. A QA sweep (2026-07-21) under the old model found
+the "Continue to Stripe?" dialog understating a card payment by $515.96; the fix
+then, and the rule now, is to derive the disclosure from
 `residentProcessingFeeCents` / `residentProcessingFeeDisplayLabel` rather than
 re-deriving the amount, so it can never drift from what checkout collects.
 

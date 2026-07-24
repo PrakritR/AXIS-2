@@ -1826,6 +1826,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
+    // PropLane covers Stripe's processing cost, so the applicant is charged the
+    // listing's application fee at face value on every channel. This stays
+    // derived from `residentProcessingFeeCents` (rather than hard-coded to 0) so
+    // the disclosure can never drift from what checkout actually collects.
     const appFeeProcessingCents = !applicationFeeGate.paid && channels.ach && isAchApplicationFeeChannel(payChannel)
       ? residentProcessingFeeCents(appFeeSubtotalCents, "card")
       : 0;
@@ -1869,6 +1873,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <p className="mt-1 text-xs text-muted">
                 Includes ${(appFeeProcessingCents / 100).toFixed(2)} card processing fee.
               </p>
+            ) : applicationFeeGate.needsFee && !applicationFeeGate.paid ? (
+              <p className="mt-1 text-xs text-muted">No added fees — PropLane covers payment processing.</p>
             ) : null}
             {applicationFeeGate.paid ? (
               <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
@@ -1898,7 +1904,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <span>
                   <span className="text-sm font-semibold text-foreground">Card or Apple Pay</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Pay instantly with Apple Pay, Google Pay, or any debit/credit card. Standard 2.9% + $0.30 card processing.
+                    Pay instantly with Apple Pay, Google Pay, or any debit/credit card. No added fees — PropLane covers payment processing.
                   </span>
                 </span>
               </label>
