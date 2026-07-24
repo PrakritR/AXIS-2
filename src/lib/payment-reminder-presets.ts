@@ -1,7 +1,7 @@
 import type { ManagerAutomationSettings } from "./payment-automation-settings";
 import { formatStandardReminderSchedule } from "./payment-automation-settings";
 
-export type ReminderPresetId = "standard" | "gentle" | "minimal" | "custom";
+export type ReminderPresetId = "basics" | "standard" | "gentle" | "minimal" | "custom";
 
 export type ReminderPreset = {
   id: Exclude<ReminderPresetId, "custom">;
@@ -16,10 +16,22 @@ export type ReminderPreset = {
 
 export const PAYMENT_REMINDER_PRESETS: ReminderPreset[] = [
   {
+    id: "basics",
+    label: "Basics",
+    description: "1 week, 2 days, and 1 day before due, then every day late until paid.",
+    recommended: true,
+    settings: {
+      preDueReminderDays: [7, 2, 1],
+      sameDayReminderEnabled: false,
+      overdueDailyEnabled: true,
+      overdueDailyStartDays: 1,
+      postDueReminderDays: [],
+    },
+  },
+  {
     id: "standard",
     label: "Standard",
     description: "3, 2, and 1 days before, on the due date, then daily until paid.",
-    recommended: true,
     settings: {
       preDueReminderDays: [3, 2, 1],
       sameDayReminderEnabled: true,
@@ -115,4 +127,17 @@ export function formatFriendlyReminderSchedule(settings: ManagerAutomationSettin
     if (match) return match.label;
   }
   return formatStandardReminderSchedule(settings);
+}
+
+/** Parse comma- or space-separated day counts for custom reminder schedules. */
+export function parsePreDueReminderDaysInput(raw: string): number[] {
+  const days = raw
+    .split(/[,\s]+/)
+    .map((part) => Math.round(Number(part.trim())))
+    .filter((day) => Number.isFinite(day) && day >= 1 && day <= 60);
+  return [...new Set(days)].sort((a, b) => b - a);
+}
+
+export function formatPreDueReminderDaysInput(days: number[]): string {
+  return [...days].sort((a, b) => b - a).join(", ");
 }

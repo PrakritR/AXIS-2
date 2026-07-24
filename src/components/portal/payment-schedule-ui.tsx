@@ -25,7 +25,9 @@ import {
   applyReminderPreset,
   buildReminderPreviewLines,
   detectReminderPreset,
+  formatPreDueReminderDaysInput,
   formatFriendlyReminderSchedule,
+  parsePreDueReminderDaysInput,
   PAYMENT_REMINDER_PRESETS,
   type ReminderPresetId,
 } from "@/lib/payment-reminder-presets";
@@ -493,15 +495,6 @@ export type PaymentAutomationSettingsHandle = {
   saveIfDirty: () => Promise<boolean>;
 };
 
-const REMINDER_DAYS_BEFORE_OPTIONS = [
-  ...Array.from({ length: 14 }, (_, i) => i + 1),
-  21,
-  30,
-].map((day) => ({
-  value: String(day),
-  label: `${day} day${day === 1 ? "" : "s"} before due`,
-}));
-
 const REMINDER_FOLLOW_UP_OPTIONS = [
   { value: "due_date", label: "Due date" },
   { value: "every_day_late", label: "Every day late" },
@@ -509,6 +502,8 @@ const REMINDER_FOLLOW_UP_OPTIONS = [
 
 const FIELD_SELECT_CLASS =
   "mt-1 flex h-10 w-full rounded-lg border border-border bg-[var(--background-solid,#0a0e18)] px-3 text-sm text-foreground outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-50";
+
+const REMINDER_PREVIEW_SCROLL_CLASS = "mt-2 max-h-36 space-y-1 overflow-y-auto pr-1";
 
 function reminderFollowUpSelection(draft: ManagerAutomationSettings): string[] {
   const selected: string[] = [];
@@ -528,7 +523,7 @@ function ReminderPresetDropdown({
 }) {
   const description =
     activePreset === "custom"
-      ? "Adjust the dropdowns below to build your own schedule."
+      ? "Type days before due below, then choose due-date or overdue reminders."
       : PAYMENT_REMINDER_PRESETS.find((p) => p.id === activePreset)?.description ?? "";
 
   return (
@@ -554,40 +549,68 @@ function ReminderPresetDropdown({
   );
 }
 
-function ReminderDaysMultiSelect({
-  draft,
+function ReminderSchedulePreview({ lines }: { lines: string[] }) {
+  return (
+    <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
+      <p className="text-xs font-semibold text-foreground">What residents will receive</p>
+      <ul className={REMINDER_PREVIEW_SCROLL_CLASS}>
+        {lines.map((line) => (
+          <li key={line} className="flex items-center gap-2 text-xs text-muted">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CustomReminderDaysInput({
+  days,
   busy,
-  daysBeforeLabel,
+  label,
   onChangeDays,
 }: {
-  draft: ManagerAutomationSettings;
+  days: number[];
   busy: boolean;
-  daysBeforeLabel: string;
+  label: string;
   onChangeDays: (days: number[]) => void;
 }) {
-  const options = useMemo(() => {
-    const known = new Set(REMINDER_DAYS_BEFORE_OPTIONS.map((o) => o.value));
-    const extra = draft.preDueReminderDays
-      .filter((d) => !known.has(String(d)))
-      .map((d) => ({ value: String(d), label: `${d} day${d === 1 ? "" : "s"} before due` }));
-    return [...extra, ...REMINDER_DAYS_BEFORE_OPTIONS].sort((a, b) => Number(b.value) - Number(a.value));
-  }, [draft.preDueReminderDays]);
+  const [text, setText] = useState(() => formatPreDueReminderDaysInput(days));
+
+  useEffect(() => {
+    setText(formatPreDueReminderDaysInput(days));
+  }, [days]);
+
+  const commit = (raw: string) => {
+    const parsed = parsePreDueReminderDaysInput(raw);
+    onChangeDays(parsed);
+    setText(formatPreDueReminderDaysInput(parsed));
+  };
 
   return (
-    <CheckboxMultiSelect
-      label={daysBeforeLabel}
-      options={options}
-      selected={draft.preDueReminderDays.map(String)}
-      onChange={(next) => {
-        const days = [...new Set(next.map((v) => Math.round(Number(v))).filter((n) => n >= 1 && n <= 60))].sort(
-          (a, b) => b - a,
-        );
-        onChangeDays(days);
-      }}
-      disabled={busy}
-      emptyLabel="No days selected"
-      dataAttr="payment-reminder-days-before"
-    />
+    <div>
+      <label className="text-xs font-semibold text-muted">{label}</label>
+      <Input
+        className="mt-1"
+        value={text}
+        disabled={busy}
+        placeholder="e.g. 30, 14, 7, 3, 1"
+        aria-label={label}
+        data-attr="payment-reminder-days-custom"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => commit(text)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(text);
+          }
+        }}
+      />
+      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+        Type how many days before the due date to remind, separated by commas.
+      </p>
+    </div>
   );
 }
 
@@ -723,6 +746,21 @@ function PaymentAutomationSettingsForm({
 
   const activePreset = selectedPreset;
   const previewLines = buildReminderPreviewLines(draft);
+  const isCustom = activePreset === "custom";
+
+  const scheduleEditors = isCustom ? (
+    <>
+      <CustomReminderDaysInput
+        days={draft.preDueReminderDays}
+        busy={busy}
+        label={copy.daysBeforeLabel}
+        onChangeDays={markCustomAndSetDays}
+      />
+      <ReminderFollowUpMultiSelect draft={draft} busy={busy} onChangeFollowUp={markCustomAndSetFollowUp} />
+    </>
+  ) : (
+    <ReminderSchedulePreview lines={previewLines} />
+  );
 
   return (
     <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-4"}>
@@ -740,37 +778,12 @@ function PaymentAutomationSettingsForm({
       {compact ? (
         <>
           <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
-
-          <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
-            <p className="text-xs font-semibold text-foreground">What residents will receive</p>
-            <ul className="mt-2 space-y-1">
-              {previewLines.map((line) => (
-                <li key={line} className="flex items-center gap-2 text-xs text-muted">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <ReminderDaysMultiSelect
-            draft={draft}
-            busy={busy}
-            daysBeforeLabel={copy.daysBeforeLabel}
-            onChangeDays={markCustomAndSetDays}
-          />
-          <ReminderFollowUpMultiSelect draft={draft} busy={busy} onChangeFollowUp={markCustomAndSetFollowUp} />
+          {scheduleEditors}
         </>
       ) : (
         <>
           <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
-          <ReminderDaysMultiSelect
-            draft={draft}
-            busy={busy}
-            daysBeforeLabel={copy.daysBeforeLabel}
-            onChangeDays={markCustomAndSetDays}
-          />
-          <ReminderFollowUpMultiSelect draft={draft} busy={busy} onChangeFollowUp={markCustomAndSetFollowUp} />
+          {scheduleEditors}
         {!compact ? (
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
