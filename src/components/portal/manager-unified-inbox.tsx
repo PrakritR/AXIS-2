@@ -26,6 +26,7 @@ import {
   mergeUnifiedInboxItems,
   parseUnifiedInboxKey,
   unifiedInboxKey,
+  type CommunicationListSort,
   type UnifiedInboxListItem,
 } from "@/lib/unified-inbox-merge";
 import {
@@ -107,6 +108,7 @@ export function ManagerUnifiedInbox({
   commBase,
   threadFilters,
   filterContacts,
+  listSort = "recent",
   smsUiEnabled = false,
   onSmsUnreadCountChange,
   inboxRef,
@@ -116,6 +118,8 @@ export function ManagerUnifiedInbox({
   commBase: string;
   threadFilters?: CommunicationThreadFilters;
   filterContacts?: InboxScopedContact[];
+  /** Conversation list order — default is most recent activity. */
+  listSort?: CommunicationListSort;
   /** When false, SMS conversations / rows / panel are hidden (transport unaffected). */
   smsUiEnabled?: boolean;
   onSmsUnreadCountChange?: (unread: number) => void;
@@ -307,8 +311,8 @@ export function ManagerUnifiedInbox({
   }, [allSmsItems, query, showArchived]);
 
   const mergedRows = useMemo(
-    () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems]),
-    [emailListItems, smsListItems],
+    () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems], listSort),
+    [emailListItems, smsListItems, listSort],
   );
 
   const archivedCount = useMemo(
