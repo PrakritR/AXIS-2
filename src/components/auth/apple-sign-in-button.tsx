@@ -51,12 +51,18 @@ export function AppleSignInButton({
 
     let cancelled = false;
     void (async () => {
-      const supabase = createSupabaseBrowserClient();
-      const origin = resolveOAuthBrowserOrigin();
-      const redirectTo = appleWebOAuthRedirectUrl(origin, fixedCallbackPath);
-      const result = await resolveAppleWebOAuthSignIn(supabase, redirectTo);
-      if (!cancelled && !result.ok && process.env.NODE_ENV !== "production") {
-        console.info(`[Apple Sign In] Web OAuth probe: ${result.message}`);
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const origin = resolveOAuthBrowserOrigin();
+        const redirectTo = appleWebOAuthRedirectUrl(origin, fixedCallbackPath);
+        const result = await resolveAppleWebOAuthSignIn(supabase, redirectTo);
+        if (!cancelled && !result.ok && process.env.NODE_ENV !== "production") {
+          console.info(`[Apple Sign In] Web OAuth probe: ${result.message}`);
+        }
+      } catch (err) {
+        if (!cancelled && process.env.NODE_ENV !== "production") {
+          console.info("[Apple Sign In] Skipping web OAuth probe:", err instanceof Error ? err.message : err);
+        }
       }
     })();
     return () => {
