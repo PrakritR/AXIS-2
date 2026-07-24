@@ -1,7 +1,18 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Enrich a payment ledger row with Stripe fee/net from the balance transaction. */
+/**
+ * Enrich a payment ledger row with the fee/net the MANAGER actually experienced.
+ *
+ * `ledger_entries` is the manager's book, and these charges are Connect
+ * destination charges created on PropLane's platform account. Stripe's
+ * processing fee is therefore debited from PropLane's balance, never the
+ * manager's — so `stripe_fee_cents` on the manager's row is 0, and their net is
+ * the destination transfer (charge amount minus whatever PropLane retained as
+ * the application fee, which is also 0 today). The platform's real cost lives in
+ * PropLane's own Stripe balance transactions; attributing it here would tell the
+ * manager they paid a fee that never left their payout.
+ */
 export async function enrichLedgerPaymentFromStripeCharge(
   db: SupabaseClient,
   stripe: Stripe,
@@ -11,24 +22,16 @@ export async function enrichLedgerPaymentFromStripeCharge(
     applicationFeeCents?: number | null;
   },
 ): Promise<boolean> {
-  const charge = await stripe.charges.retrieve(opts.stripeChargeId, { expand: ["balance_transaction"] });
-  const bt = charge.balance_transaction;
-  let stripeFeeCents: number | null = null;
-  let netCents: number | null = null;
-  if (bt && typeof bt === "object") {
-    stripeFeeCents = bt.fee;
-    netCents = bt.net;
-  } else if (typeof bt === "string") {
-    const txn = await stripe.balanceTransactions.retrieve(bt);
-    stripeFeeCents = txn.fee;
-    netCents = txn.net;
-  }
+  const charge = await stripe.charges.retrieve(opts.stripeChargeId);
+  const applicationFeeCents = typeof opts.applicationFeeCents === "number" ? opts.applicationFeeCents : 0;
+  const netCents =
+    typeof charge.amount === "number" ? Math.max(0, charge.amount - applicationFeeCents) : null;
 
   const patch: Record<string, unknown> = {
     stripe_charge_id: opts.stripeChargeId,
+    stripe_fee_cents: 0,
     updated_at: new Date().toISOString(),
   };
-  if (stripeFeeCents !== null) patch.stripe_fee_cents = stripeFeeCents;
   if (netCents !== null) patch.net_cents = netCents;
   if (typeof opts.applicationFeeCents === "number") patch.axis_fee_cents = opts.applicationFeeCents;
 
