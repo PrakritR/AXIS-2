@@ -186,7 +186,7 @@ const FAQ_NOTES: { q: string; a: string }[] = [
   },
   {
     q: "What does the AI actually do?",
-    a: "It reads your live numbers and answers questions, and it can draft things like a rent reminder or a message. It never sends a message, charges a card, or signs a lease on its own — it shows you exactly what it wrote, and those actions only go out once you approve.",
+    a: "It reads your live numbers and answers questions, and it can draft things like a rent reminder or a message. It never sends or changes anything on its own — it shows you exactly what it wrote, and nothing happens until you press approve.",
   },
   {
     q: "Is there a free plan?",
@@ -198,11 +198,11 @@ const FAQ_NOTES: { q: string; a: string }[] = [
   },
   {
     q: "Do I need a credit card to try it?",
-    a: "No. Paid plans start with a 14-day trial and no card — you only add payment if you decide to keep it.",
+    a: "No. Paid plans start with a 14-day trial and no card — you only add payment if you decide to keep it. You can also open the live demo and click around with no signup at all.",
   },
   {
     q: "How do my residents get in?",
-    a: "You don't hand out passwords. When someone applies, PropLane emails them a one-time link — tied to the same email they applied with — to set up their own account. Once you approve them, they can pay rent, sign leases, and message you.",
+    a: "You don't hand out passwords. When you approve someone's application, PropLane emails them a one-time link to set up their own account with the same email they applied with. Then they can pay rent, sign leases, and message you.",
   },
   {
     q: "Can I use it on my phone?",
