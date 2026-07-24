@@ -3,8 +3,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
-import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerAutomationSettings } from "@/lib/payment-automation-settings";
@@ -502,6 +502,14 @@ export type PaymentAutomationSettingsHandle = {
 
 const PORTAL_FIELD_LABEL_CLASS = "text-xs font-semibold text-muted";
 
+const REMINDER_PRESET_OPTIONS = [
+  ...PAYMENT_REMINDER_PRESETS.map((preset) => ({
+    value: preset.id,
+    label: `${preset.label}${preset.recommended ? " (recommended)" : ""}`,
+  })),
+  { value: "custom", label: "Custom" },
+] as const;
+
 function ReminderPresetDropdown({
   activePreset,
   busy,
@@ -518,24 +526,15 @@ function ReminderPresetDropdown({
 
   return (
     <div>
-      <label className={PORTAL_FIELD_LABEL_CLASS}>Reminder schedule</label>
-      <div className="mt-1">
-        <Select
-          className="h-10 rounded-lg text-sm"
-          value={activePreset}
-          disabled={busy}
-          aria-label="Reminder schedule preset"
-          onChange={(e) => onSelect(e.target.value as ReminderPresetId)}
-        >
-        {PAYMENT_REMINDER_PRESETS.map((preset) => (
-          <option key={preset.id} value={preset.id}>
-            {preset.label}
-            {preset.recommended ? " (recommended)" : ""}
-          </option>
-        ))}
-        <option value="custom">Custom</option>
-        </Select>
-      </div>
+      <FieldSingleSelect
+        label="Reminder schedule"
+        labelClassName={PORTAL_FIELD_LABEL_CLASS}
+        options={[...REMINDER_PRESET_OPTIONS]}
+        value={activePreset}
+        disabled={busy}
+        dataAttr="payment-reminder-schedule-preset"
+        onChange={(next) => onSelect(next as ReminderPresetId)}
+      />
       {description ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{description}</p> : null}
     </div>
   );

@@ -226,3 +226,155 @@ export function CheckboxMultiSelect({
     </div>
   );
 }
+
+/** Single-select field dropdown — same trigger/menu styling as CheckboxMultiSelect. */
+export function FieldSingleSelect({
+  label,
+  options,
+  value,
+  onChange,
+  disabled,
+  placeholder = "Select…",
+  dataAttr,
+  className,
+  labelClassName,
+  variant = "field",
+}: {
+  label: string;
+  options: CheckboxMultiSelectOption[];
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  dataAttr?: string;
+  className?: string;
+  labelClassName?: string;
+  variant?: "field" | "pill";
+}) {
+  const listId = useId();
+  const isClient = useIsClient();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const pill = variant === "pill";
+
+  const buttonLabel = options.find((o) => o.value === value)?.label ?? placeholder;
+
+  const updateMenuRect = () => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    setMenuRect({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuRect(null);
+      return;
+    }
+    updateMenuRect();
+    window.addEventListener("resize", updateMenuRect);
+    window.addEventListener("scroll", updateMenuRect, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuRect);
+      window.removeEventListener("scroll", updateMenuRect, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (document.getElementById(listId)?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [listId, open]);
+
+  const menu =
+    open && menuRect && isClient ? (
+      <div
+        id={listId}
+        role="listbox"
+        className={`fixed z-[80] ${MENU_PANEL_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        style={{
+          top: menuRect.top,
+          left: menuRect.left,
+          width: pill ? undefined : menuRect.width,
+        }}
+      >
+        {options.map((opt) => {
+          const active = opt.value === value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              role="option"
+              aria-selected={active}
+              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent/50 ${
+                active ? "bg-accent/30 font-medium text-foreground" : "text-foreground"
+              }`}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
+                {active ? "✓" : ""}
+              </span>
+              <span className="leading-snug">{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    ) : null;
+
+  return (
+    <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${className ?? ""}`}>
+      {pill ? null : (
+        <label className={labelClassName ?? DEFAULT_LABEL_CLASS}>{label}</label>
+      )}
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        data-attr={dataAttr}
+        className={
+          pill
+            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-card px-3.5 text-left text-sm text-foreground outline-none transition hover:bg-accent/40 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            : FIELD_TRIGGER_CLASS
+        }
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={`min-w-0 truncate ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
+        <svg className="h-4 w-4 shrink-0 text-muted" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {menu ? createPortal(menu, document.body) : null}
+    </div>
+  );
+}
