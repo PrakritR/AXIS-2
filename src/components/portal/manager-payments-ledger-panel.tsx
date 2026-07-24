@@ -23,6 +23,7 @@ import {
 } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
+import { paymentReminderRecipientLabel } from "@/lib/payment-reminder-ui";
 
 function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
@@ -34,12 +35,6 @@ function isPaidRow(row: DemoManagerPaymentLedgerRow): boolean {
 
 function isRemindableRow(row: DemoManagerPaymentLedgerRow): boolean {
   return !isPaidRow(row) && Boolean(row.householdChargeId || row.id);
-}
-
-function paymentReminderRecipientLabel(row: DemoManagerPaymentLedgerRow): string {
-  const name = row.residentName?.trim();
-  if (name) return `${name} (Resident)`;
-  return row.residentEmail?.trim() || "Resident";
 }
 
 function dueDateDisplayToInputValue(display: string): string {
@@ -397,6 +392,12 @@ export function ManagerPaymentsLedgerPanel({
       showToast(lastError || "Could not send reminder. Please try again.");
       return;
     }
+    if (failed > 0) {
+      showToast(
+        `Sent ${ok} reminder${ok === 1 ? "" : "s"}; ${failed} could not be sent${lastError ? `: ${lastError}` : "."}`,
+      );
+      return;
+    }
     if (skipped === ok) {
       showToast(ok === 1 ? "Reminder saved to PropLane inbox." : `Sent ${ok} reminders to PropLane inbox.`);
     } else if (skipped > 0) {
@@ -587,9 +588,9 @@ export function ManagerPaymentsLedgerPanel({
         emailAvailable={Boolean(reminderPreview.row.residentEmail?.includes("@"))}
         smsAvailable
         defaultViaEmail={Boolean(reminderPreview.row.residentEmail?.includes("@"))}
-        defaultViaSms
+        defaultViaSms={false}
         confirmLabel="Send reminder"
-        confirmBusy={!!sendingReminderId}
+        confirmBusy={sendingReminderId === reminderPreview.row.id}
         confirmBusyLabel="Sending…"
         onConfirm={(skipMessage, channels, draft) => void doSendReminder(skipMessage, channels, draft)}
       />
@@ -638,7 +639,7 @@ export function ManagerPaymentsLedgerPanel({
               data-attr="payments-send-reminder"
               title={
                 remindableSelectedRows.length === 0
-                  ? "Selected payments have no resident email on file."
+                  ? "Select at least one unpaid charge."
                   : undefined
               }
               onClick={() => {

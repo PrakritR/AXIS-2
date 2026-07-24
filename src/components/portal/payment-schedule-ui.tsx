@@ -279,7 +279,7 @@ export function ChargeRemindersModal({
                 <li
                   key={m.id}
                   className={`rounded-xl border px-3 py-2.5 ${
-                    cancelled ? "border-border bg-accent/15" : "border-border bg-card"
+                    cancelled ? "border-border bg-accent/15" : "border-border bg-white dark:bg-[#111827]"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -317,7 +317,15 @@ export function ChargeRemindersModal({
           </ul>
         )}
         {onOpenSettings ? (
-          <Button type="button" variant="outline" className="h-9 w-full rounded-full text-sm" onClick={onOpenSettings}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-full rounded-full text-sm"
+            onClick={() => {
+              onClose();
+              onOpenSettings();
+            }}
+          >
             Change default schedule for all payments
           </Button>
         ) : null}
@@ -729,6 +737,9 @@ function PaymentAutomationSettingsForm({
         } else {
           showToast(copy.savedToast);
         }
+      }
+      if (variant === "payments") {
+        setSaveScope("future_only");
       }
       return true;
     } catch (e) {
