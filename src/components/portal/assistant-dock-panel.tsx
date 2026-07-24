@@ -3,6 +3,7 @@
 import { ChevronsRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
   AssistantUndockToPopupButton,
@@ -12,6 +13,7 @@ import {
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
+import { userMessageContentFromInput } from "@/lib/assistant-chat-attachments.client";
 import { useOptionalAssistantConversation } from "@/lib/axis-assistant/assistant-conversation-context";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +45,7 @@ export function AssistantDockPanel({
   onCollapse,
   onUndockToPopup,
 }: AssistantDockPanelProps) {
-  const { input, setInput, messages, lastTools, pendingAction, loading, error, send, resolvePendingAction, reset } =
+  const { input, setInput, attachments, setAttachments, messages, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset } =
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -61,7 +63,7 @@ export function AssistantDockPanel({
       await send(prompt);
       return;
     }
-    const body = prompt?.trim() || input.trim();
+    const body = prompt?.trim() || userMessageContentFromInput(input, attachments);
     if (!body) return;
     const scoped = `[Context: ${hint}]\n\n${body}`;
     if (prompt?.trim()) {
@@ -217,36 +219,18 @@ export function AssistantDockPanel({
             onResolve={(decision) => void resolvePendingAction(decision)}
           />
         ) : null}
-        <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                void sendWithContext();
-              }
-            }}
-            rows={compact ? 1 : 1}
-            placeholder={compact ? "Ask PropLane to help with this…" : "Ask about your portfolio…"}
-            className={cn(
-              "w-full resize-none [field-sizing:content] rounded-2xl bg-transparent py-3 pl-4 pr-12 text-sm text-foreground outline-none placeholder:text-muted/70",
-              compact ? "max-h-20 min-h-[2.5rem]" : "max-h-32 min-h-[2.75rem]",
-            )}
-          />
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            aria-label="Send message"
-            className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full text-white outline-none transition-[filter,opacity,transform] duration-200 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ background: "var(--btn-primary)" }}
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-              <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+        <AssistantChatComposer
+          input={input}
+          setInput={setInput}
+          attachments={attachments}
+          onAttachmentsChange={setAttachments}
+          onAttachmentError={(message) => setError(message)}
+          loading={loading}
+          compact={compact}
+          inputRef={inputRef}
+          placeholder={compact ? "Ask PropLane to help with this…" : "Ask about your portfolio…"}
+          onSend={() => void sendWithContext()}
+        />
       </form>
     </div>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import {
   LeaseConfigForm,
@@ -152,12 +151,12 @@ export function ManagerLeaseEditorModal({
   const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
   const isBulkSave = bulkIds.length > 0;
 
-  const save = () => {
+  const save = (): boolean => {
     const validationError = validateLeaseDraft(draft, source);
     if (validationError) {
       setError(validationError);
       showToast(validationError);
-      return;
+      return false;
     }
     const leaseFields = leaseFieldsFromDraft(draft);
 
@@ -165,7 +164,7 @@ export function ManagerLeaseEditorModal({
       const { saved, failed } = persistLeaseConfigToPropertyIds(managerUserId, bulkIds, leaseFields);
       if (saved === 0) {
         showToast("Could not save lease settings.");
-        return;
+        return false;
       }
       if (failed > 0) {
         showToast(`Updated lease settings for ${saved} properties (${failed} could not be saved).`);
@@ -176,35 +175,70 @@ export function ManagerLeaseEditorModal({
       }
       onClose();
       onSaved();
-      return;
+      return true;
     }
 
     if (!saveTarget) {
       showToast("Could not save lease settings.");
-      return;
+      return false;
     }
     const next: ManagerListingSubmissionV1 = { ...sub, ...leaseFields };
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not save lease settings.");
-      return;
+      return false;
     }
     showToast("Lease settings saved.");
     onClose();
     onSaved();
+    return true;
+  };
+
+  const closeAndSave = () => {
+    // #region agent log
+    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+      body: JSON.stringify({
+        sessionId: "81cbea",
+        location: "manager-lease-editor-modal.tsx:closeAndSave",
+        message: "Lease modal close",
+        data: { source },
+        timestamp: Date.now(),
+        hypothesisId: "H1",
+        runId: "post-fix",
+      }),
+    }).catch(() => {});
+    // #endregion
+    const saved = save();
+    // #region agent log
+    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+      body: JSON.stringify({
+        sessionId: "81cbea",
+        location: "manager-lease-editor-modal.tsx:closeAndSave",
+        message: "Lease modal close result",
+        data: { source, saved },
+        timestamp: Date.now(),
+        hypothesisId: "H1",
+        runId: "post-fix",
+      }),
+    }).catch(() => {});
+    // #endregion
   };
 
   return (
     <Modal
       open={open}
       title={title}
-      onClose={onClose}
+      onClose={closeAndSave}
       panelClassName="max-w-2xl"
       assistantContext="Lease — PropLane standard, custom clauses, or PDF template"
     >
       {bulkIds.length > 1 ? (
         <p className="mb-4 text-sm text-muted">
           These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
-          replaced when you save.
+          replaced when you close.
         </p>
       ) : null}
       <LeaseConfigForm
@@ -226,14 +260,6 @@ export function ManagerLeaseEditorModal({
         <LeaseConfigPreview preview={preview} />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button type="button" variant="primary" className="rounded-full" data-attr="property-lease-save" onClick={save}>
-          Save
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
     </Modal>
   );
 }

@@ -2,6 +2,12 @@
 
 import { useCallback, useState } from "react";
 
+import {
+  attachmentsToApiPayload,
+  revokeAttachmentPreview,
+  userMessageContentFromInput,
+  type PendingChatAttachment,
+} from "@/lib/assistant-chat-attachments.client";
 import { notifyAgentPendingActionsChanged } from "@/lib/axis-assistant/pending-actions-events";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -45,6 +51,7 @@ function isRetryableConfirmStatus(status: number): boolean {
  */
 export function useAssistantConversation(endpoint: string) {
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -53,7 +60,7 @@ export function useAssistantConversation(endpoint: string) {
 
   const send = useCallback(
     async (prompt?: string) => {
-      const text = (prompt ?? input).trim();
+      const text = userMessageContentFromInput(prompt ?? input, attachments);
       if (!text || loading) return;
       setError(null);
       let hadPending = false;
@@ -61,16 +68,19 @@ export function useAssistantConversation(endpoint: string) {
         hadPending = prev !== null;
         return null;
       });
+      const attachmentPayload = attachmentsToApiPayload(attachments);
       const next: ChatMessage[] = [...messages, { role: "user", content: text }];
       setMessages(next);
       setInput("");
+      const sentAttachments = attachments;
+      setAttachments([]);
       setLoading(true);
       setLastTools([]);
       try {
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: next }),
+          body: JSON.stringify({ messages: next, ...attachmentPayload }),
         });
         const data = (await res.json()) as {
           reply?: string;
@@ -80,6 +90,7 @@ export function useAssistantConversation(endpoint: string) {
         };
         if (!res.ok || data.error) {
           setError(data.error ?? "Something went wrong.");
+          setAttachments(sentAttachments);
         } else {
           setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
           setLastTools(data.toolTrace ?? []);
@@ -90,11 +101,12 @@ export function useAssistantConversation(endpoint: string) {
         }
       } catch {
         setError("Network error.");
+        setAttachments(sentAttachments);
       } finally {
         setLoading(false);
       }
     },
-    [endpoint, input, loading, messages],
+    [endpoint, input, loading, messages, attachments],
   );
 
   /** Confirm or cancel the proposed action; either way the outcome is appended
@@ -142,21 +154,26 @@ export function useAssistantConversation(endpoint: string) {
   );
 
   const reset = useCallback(() => {
+    attachments.forEach(revokeAttachmentPreview);
     setMessages([]);
     setLastTools([]);
     setPendingAction(null);
     setError(null);
     setInput("");
-  }, []);
+    setAttachments([]);
+  }, [attachments]);
 
   return {
     input,
     setInput,
+    attachments,
+    setAttachments,
     messages,
     lastTools,
     pendingAction,
     loading,
     error,
+    setError,
     send,
     resolvePendingAction,
     reset,

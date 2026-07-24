@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { track } from "@/lib/analytics/track-client";
+import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
+import {
+  attachmentsToApiPayload,
+  revokeAttachmentPreview,
+  userMessageContentFromInput,
+  type PendingChatAttachment,
+} from "@/lib/assistant-chat-attachments.client";
 import type { ActionPreview } from "@/lib/tools/registry";
 import {
   closeAxisAssistant,
@@ -61,6 +68,7 @@ function useOpen() {
 export function DemoFrameAssistant() {
   const open = useOpen();
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -82,12 +90,15 @@ export function DemoFrameAssistant() {
 
   const send = useCallback(
     async (prompt?: string) => {
-      const text = (prompt ?? input).trim();
+      const text = userMessageContentFromInput(prompt ?? input, attachments);
       if (!text || loading) return;
       setError(null);
       const next: ChatMessage[] = [...messages, { role: "user", content: text }];
       setMessages(next);
       setInput("");
+      const sentAttachments = attachments;
+      setAttachments([]);
+      const attachmentPayload = attachmentsToApiPayload(sentAttachments);
       setLoading(true);
       setLastTools([]);
       setPendingAction(null);
@@ -95,7 +106,7 @@ export function DemoFrameAssistant() {
         const res = await fetch("/api/agent/demo-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: next }),
+          body: JSON.stringify({ messages: next, ...attachmentPayload }),
         });
         const data = (await res.json()) as {
           reply?: string;
@@ -105,6 +116,7 @@ export function DemoFrameAssistant() {
         };
         if (!res.ok || data.error) {
           setError(data.error ?? "Something went wrong.");
+          setAttachments(sentAttachments);
         } else {
           if (data.reply || !data.pendingAction) {
             setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
@@ -114,11 +126,12 @@ export function DemoFrameAssistant() {
         }
       } catch {
         setError("Network error.");
+        setAttachments(sentAttachments);
       } finally {
         setLoading(false);
       }
     },
-    [input, loading, messages],
+    [input, loading, messages, attachments],
   );
 
   const resolvePendingAction = useCallback(
@@ -163,11 +176,13 @@ export function DemoFrameAssistant() {
   }, []);
 
   function resetConversation() {
+    attachments.forEach(revokeAttachmentPreview);
     setMessages([]);
     setLastTools([]);
     setPendingAction(null);
     setError(null);
     setInput("");
+    setAttachments([]);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -351,33 +366,18 @@ export function DemoFrameAssistant() {
                   </div>
                 </div>
               ) : null}
-              <div className="relative rounded-2xl border border-border bg-auth-input-bg transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                  rows={1}
-                  placeholder="Ask about this portfolio…"
-                  className="max-h-28 min-h-[2.5rem] w-full resize-none [field-sizing:content] rounded-2xl bg-transparent py-2.5 pl-3.5 pr-11 text-sm text-foreground outline-none placeholder:text-muted/70"
-                />
-                <button
-                  type="submit"
-                  disabled={loading || !input.trim()}
-                  aria-label="Send message"
-                  className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full text-white outline-none transition-[filter,opacity,transform] duration-200 hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ background: "var(--btn-primary)" }}
-                >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-                    <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </div>
+              <AssistantChatComposer
+                input={input}
+                setInput={setInput}
+                attachments={attachments}
+                onAttachmentsChange={setAttachments}
+                onAttachmentError={(message) => setError(message)}
+                loading={loading}
+                compact
+                inputRef={inputRef}
+                placeholder="Ask about this portfolio…"
+                onSend={() => void send()}
+              />
             </form>
           </div>
         </div>
