@@ -26,7 +26,10 @@ vi.mock("@/lib/auth/guest-application-upsert", () => ({
   prepareGuestApplicationUpsert: vi.fn(),
 }));
 vi.mock("@/lib/auth/link-resident-on-application-submit", () => ({
-  linkResidentOnApplicationSubmit: vi.fn(async (_db: unknown, args: { row: DemoApplicantRow }) => args.row),
+  linkResidentOnApplicationSubmit: vi.fn(async (_db: unknown, args: { row: DemoApplicantRow }) => ({
+    ok: true,
+    row: args.row,
+  })),
 }));
 vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: vi.fn(async () => true) }));
 vi.mock("@/lib/auth/manager-lease-scope", () => ({
