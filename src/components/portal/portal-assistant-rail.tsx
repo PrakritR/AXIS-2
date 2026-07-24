@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronsLeft } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
@@ -56,7 +56,7 @@ export function PortalAssistantRail({
       aria-label="PropLane Assistant"
     >
       {collapsed ? (
-        <div className="flex h-full flex-col items-center py-2">
+        <div className="flex h-full flex-col items-center py-2 pb-4">
           <button
             type="button"
             onClick={toggleAssistantDock}
