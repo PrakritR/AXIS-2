@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { buildGoogleCalendarOAuthUrl } from "@/lib/google-calendar/api.server";
+import { buildGoogleCalendarOAuthUrl, googleCalendarOAuthRedirectUri } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import { isGoogleCalendarOAuthConfigured, warmGoogleCalendarOAuthConfig } from "@/lib/google-calendar/settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -28,23 +28,47 @@ async function requireManager() {
 }
 
 export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const originParam = url.searchParams.get("origin")?.trim();
+  const origin = originParam || url.origin;
+  const returnTo = `${origin.replace(/\/$/, "")}/portal/calendar`;
+
   try {
     await warmGoogleCalendarOAuthConfig();
     if (!isGoogleCalendarOAuthConfigured()) {
-      return NextResponse.json({ error: "Google Calendar is not configured on this server." }, { status: 503 });
+      debugGoogleCalendarLog("connect/route.ts:GET", "calendar oauth not configured", {
+        hypothesisId: "H7",
+        origin,
+      });
+      const reason = encodeURIComponent("Google Calendar OAuth is not configured on this server.");
+      return NextResponse.redirect(`${returnTo}?gcal=error&reason=${reason}`);
     }
     const ctx = await requireManager();
-    if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const origin = new URL(req.url).searchParams.get("origin")?.trim() || new URL(req.url).origin;
-    const redirectUri = `${origin.replace(/\/$/, "")}/api/portal/google-calendar/callback`;
+    if (!ctx) {
+      debugGoogleCalendarLog("connect/route.ts:GET", "calendar oauth unauthorized", {
+        hypothesisId: "H6",
+        origin,
+      });
+      const reason = encodeURIComponent("Sign in as a manager on this port, then try again.");
+      return NextResponse.redirect(`${returnTo}?gcal=error&reason=${reason}`);
+    }
+    const redirectUri = googleCalendarOAuthRedirectUri(origin);
     debugGoogleCalendarLog("connect/route.ts:GET", "calendar oauth redirect", {
+      hypothesisId: "H2",
+      runId: "post-fix-v8",
       managerSuffix: ctx.userId.slice(-6),
-      origin,
+      browserOrigin: origin,
       redirectUri,
     });
-    const url = buildGoogleCalendarOAuthUrl(origin, ctx.userId);
-    return NextResponse.redirect(url);
+    const oauthUrl = buildGoogleCalendarOAuthUrl(origin, ctx.userId);
+    return NextResponse.redirect(oauthUrl);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Failed" }, { status: 500 });
+    debugGoogleCalendarLog("connect/route.ts:GET", "calendar oauth failed", {
+      hypothesisId: "H8",
+      message: e instanceof Error ? e.message : "unknown",
+      origin,
+    });
+    const reason = encodeURIComponent(e instanceof Error ? e.message : "Failed to start Google Calendar connect.");
+    return NextResponse.redirect(`${returnTo}?gcal=error&reason=${reason}`);
   }
 }

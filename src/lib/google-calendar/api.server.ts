@@ -9,6 +9,7 @@ import {
   saveGoogleCalendarConnection,
 } from "@/lib/google-calendar/settings";
 import { GOOGLE_CALENDAR_OAUTH_SCOPES } from "@/lib/google-calendar/scopes";
+import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -29,9 +30,26 @@ function stateSecret(): string {
   return clientSecret();
 }
 
-export function buildGoogleCalendarOAuthUrl(origin: string, managerUserId: string): string {
-  const state = signOAuthState(managerUserId);
-  const redirectUri = `${origin.replace(/\/$/, "")}/api/portal/google-calendar/callback`;
+/** OAuth redirect host — override when multiple dev ports share one Google redirect URI. */
+export function resolveGoogleCalendarRedirectOrigin(browserOrigin: string): string {
+  const override = process.env.GOOGLE_CALENDAR_REDIRECT_ORIGIN?.trim().replace(/\/$/, "");
+  if (override) return override;
+  return browserOrigin.replace(/\/$/, "");
+}
+
+export function googleCalendarOAuthRedirectUri(browserOrigin: string): string {
+  return `${resolveGoogleCalendarRedirectOrigin(browserOrigin)}/api/portal/google-calendar/callback`;
+}
+
+export type GoogleCalendarOAuthState = {
+  userId: string;
+  returnOrigin: string;
+};
+
+export function buildGoogleCalendarOAuthUrl(browserOrigin: string, managerUserId: string): string {
+  const returnOrigin = browserOrigin.replace(/\/$/, "");
+  const redirectUri = googleCalendarOAuthRedirectUri(browserOrigin);
+  const state = signOAuthState(managerUserId, returnOrigin);
   const params = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri,
@@ -44,28 +62,68 @@ export function buildGoogleCalendarOAuthUrl(origin: string, managerUserId: strin
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
-function signOAuthState(managerUserId: string): string {
-  const payload = JSON.stringify({ uid: managerUserId, t: Date.now() });
+function signOAuthState(managerUserId: string, returnOrigin: string): string {
+  const payload = JSON.stringify({ uid: managerUserId, t: Date.now(), returnOrigin });
   const sig = createHmac("sha256", stateSecret()).update(payload).digest("base64url");
   return Buffer.from(`${payload}|${sig}`).toString("base64url");
 }
 
-export function verifyOAuthState(state: string): string | null {
+export function verifyOAuthState(state: string): GoogleCalendarOAuthState | null {
   try {
     const decoded = Buffer.from(state, "base64url").toString("utf8");
     const sep = decoded.lastIndexOf("|");
-    if (sep < 0) return null;
+    if (sep < 0) {
+      debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
+        hypothesisId: "H17",
+        reason: "no_separator",
+      });
+      return null;
+    }
     const payload = decoded.slice(0, sep);
     const sig = decoded.slice(sep + 1);
     const expected = createHmac("sha256", stateSecret()).update(payload).digest("base64url");
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-    const parsed = JSON.parse(payload) as { uid?: string; t?: number };
-    if (!parsed.uid || typeof parsed.t !== "number") return null;
-    if (Date.now() - parsed.t > 15 * 60 * 1000) return null;
-    return parsed.uid;
-  } catch {
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
+        hypothesisId: "H17",
+        reason: "bad_signature",
+      });
+      return null;
+    }
+    const parsed = JSON.parse(payload) as { uid?: string; t?: number; returnOrigin?: string };
+    if (!parsed.uid || typeof parsed.t !== "number") {
+      debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
+        hypothesisId: "H17",
+        reason: "bad_payload",
+      });
+      return null;
+    }
+    if (Date.now() - parsed.t > 15 * 60 * 1000) {
+      debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
+        hypothesisId: "H17",
+        reason: "expired",
+      });
+      return null;
+    }
+    const returnOrigin =
+      typeof parsed.returnOrigin === "string" && parsed.returnOrigin.trim()
+        ? parsed.returnOrigin.trim().replace(/\/$/, "")
+        : null;
+    if (!returnOrigin) {
+      debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
+        hypothesisId: "H17",
+        reason: "missing_return_origin",
+      });
+      return null;
+    }
+    return { userId: parsed.uid, returnOrigin };
+  } catch (error) {
+    debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
+      hypothesisId: "H17",
+      reason: "parse_error",
+      message: error instanceof Error ? error.message : "unknown",
+    });
     return null;
   }
 }
@@ -74,9 +132,9 @@ export async function exchangeGoogleCalendarCode(
   db: SupabaseClient,
   managerUserId: string,
   code: string,
-  origin: string,
+  browserOrigin: string,
 ): Promise<GoogleCalendarConnection> {
-  const redirectUri = `${origin.replace(/\/$/, "")}/api/portal/google-calendar/callback`;
+  const redirectUri = googleCalendarOAuthRedirectUri(browserOrigin);
   const body = new URLSearchParams({
     code,
     client_id: clientId(),
@@ -94,9 +152,22 @@ export async function exchangeGoogleCalendarCode(
     refresh_token?: string;
     expires_in?: number;
     error?: string;
+    error_description?: string;
   };
   if (!res.ok || !data.access_token) {
-    throw new Error(data.error ?? "Could not connect Google Calendar.");
+    const detail = data.error_description?.trim() || data.error || "Could not connect Google Calendar.";
+    // #region agent log
+    const { debugGoogleCalendarLog } = await import("@/lib/google-calendar/debug-log.server");
+    debugGoogleCalendarLog("api.server.ts:exchangeGoogleCalendarCode", "token exchange failed", {
+      hypothesisId: "H10",
+      error: data.error,
+      errorDescription: data.error_description,
+      redirectUri,
+      browserOrigin,
+      managerSuffix: managerUserId.slice(-6),
+    });
+    // #endregion
+    throw new Error(detail);
   }
 
   const email = await fetchGoogleAccountEmail(data.access_token);
@@ -185,6 +256,37 @@ export type GoogleCalendarApiEvent = {
   end: string;
   htmlLink?: string;
 };
+
+export function isGoogleCalendarApiDisabledError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("calendar api") && (normalized.includes("disabled") || normalized.includes("has not been used"));
+}
+
+export function classifyGoogleCalendarEventsFetchError(message: string): {
+  warning: string;
+  hint: string;
+} | null {
+  const normalized = message.toLowerCase();
+  if (isGoogleCalendarApiDisabledError(message)) {
+    return {
+      warning: "calendar_api_disabled",
+      hint: "Enable the Google Calendar API in Google Cloud Console, then refresh this page.",
+    };
+  }
+  if (normalized.includes("not configured")) {
+    return {
+      warning: "calendar_oauth_not_configured",
+      hint: "Server is missing Google Calendar OAuth credentials. Set GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET, then restart the dev server.",
+    };
+  }
+  if (normalized.includes("not connected") || normalized.includes("reconnect") || normalized.includes("expired")) {
+    return {
+      warning: "calendar_not_connected",
+      hint: "Google Calendar is not linked yet. Use Continue with Google when creating your manager account, or connect from the Google Calendar button.",
+    };
+  }
+  return null;
+}
 
 export async function listGoogleCalendarEvents(
   db: SupabaseClient,
