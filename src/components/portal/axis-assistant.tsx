@@ -36,11 +36,7 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
-import {
-  dockAssistantToRail,
-  getAssistantDocked,
-  subscribeAssistantDocked,
-} from "@/lib/axis-assistant/dock-store";
+import { dockAssistantToRail, useAssistantDocked } from "@/lib/axis-assistant/dock-store";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
 import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
@@ -66,10 +62,6 @@ function handleOpenAssistant() {
   startTransition(() => {
     openAxisAssistant();
   });
-}
-
-function useAssistantDocked() {
-  return useSyncExternalStore(subscribeAssistantDocked, getAssistantDocked, () => false);
 }
 
 /**

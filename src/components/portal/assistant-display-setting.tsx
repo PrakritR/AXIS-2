@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useId, useRef, type KeyboardEvent } from "react";
 
 import {
   PortalSettingsGroup,
@@ -9,18 +9,12 @@ import {
 } from "@/components/portal/portal-settings-ui";
 import {
   dockAssistantToRail,
-  getAssistantDocked,
-  subscribeAssistantDocked,
   undockAssistantFromRail,
+  useAssistantDocked,
 } from "@/lib/axis-assistant/dock-store";
 import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { cn } from "@/lib/utils";
-
-/** Reactive read of the shipped "pinned to the right rail" preference. */
-function useAssistantDocked() {
-  return useSyncExternalStore(subscribeAssistantDocked, getAssistantDocked, () => false);
-}
 
 const OPTIONS: { docked: boolean; label: string; description: string }[] = [
   {
@@ -34,6 +28,11 @@ const OPTIONS: { docked: boolean; label: string; description: string }[] = [
     description: "A full-height panel stays open beside the portal on wide screens.",
   },
 ];
+
+function selectOption(docked: boolean) {
+  if (docked) dockAssistantToRail();
+  else undockAssistantFromRail();
+}
 
 /**
  * Settings entry point for the assistant display mode, on the manager Settings
@@ -52,6 +51,25 @@ const OPTIONS: { docked: boolean; label: string; description: string }[] = [
 export function AssistantDisplaySetting() {
   const docked = useAssistantDocked();
   const isSmall = useIsSmallPortalViewport();
+  const groupId = useId();
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    const step =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    event.preventDefault();
+
+    const current = optionRefs.current.findIndex((node) => node === document.activeElement);
+    const from = current === -1 ? OPTIONS.findIndex((option) => option.docked === docked) : current;
+    const next = (from + step + OPTIONS.length) % OPTIONS.length;
+    selectOption(OPTIONS[next].docked);
+    optionRefs.current[next]?.focus();
+  }, [docked]);
 
   if (isDemoModeActive()) return null;
 
@@ -62,6 +80,7 @@ export function AssistantDisplaySetting() {
     >
       <PortalSettingsGroup>
         <PortalSettingsRow
+          className="flex-col items-start gap-3 sm:flex-row sm:items-center"
           label="Display"
           description={
             isSmall
@@ -74,27 +93,46 @@ export function AssistantDisplaySetting() {
           <div
             role="radiogroup"
             aria-label="Assistant display"
+            onKeyDown={onKeyDown}
             className="flex flex-col gap-2 sm:flex-row"
           >
-            {OPTIONS.map((option) => {
+            {OPTIONS.map((option, index) => {
               const selected = docked === option.docked;
+              const labelId = `${groupId}-${index}-label`;
+              const descriptionId = `${groupId}-${index}-description`;
               return (
                 <button
                   key={option.label}
+                  ref={(node) => {
+                    optionRefs.current[index] = node;
+                  }}
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  title={option.description}
-                  onClick={() => (option.docked ? dockAssistantToRail() : undockAssistantFromRail())}
+                  aria-labelledby={labelId}
+                  aria-describedby={descriptionId}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => selectOption(option.docked)}
                   data-attr={`assistant-display-${option.docked ? "docked" : "popup"}`}
                   className={cn(
-                    "rounded-lg border px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/25",
+                    "rounded-lg border px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/25 sm:max-w-[15rem]",
                     selected
-                      ? "border-primary/50 bg-primary/5 text-foreground"
-                      : "border-border text-muted hover:border-primary/30 hover:text-foreground",
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border hover:border-primary/30",
                   )}
                 >
-                  {option.label}
+                  <span
+                    id={labelId}
+                    className={cn(
+                      "block text-sm font-medium",
+                      selected ? "text-foreground" : "text-muted",
+                    )}
+                  >
+                    {option.label}
+                  </span>
+                  <span id={descriptionId} className="mt-0.5 block text-xs leading-relaxed text-muted">
+                    {option.description}
+                  </span>
                 </button>
               );
             })}

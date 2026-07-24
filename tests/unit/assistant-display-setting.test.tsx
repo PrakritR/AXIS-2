@@ -6,7 +6,7 @@
 // that store: default is the floating popup, each option flips `getAssistantDocked`,
 // it is hidden in /demo, and small screens keep the popup with an explanatory note.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 let demoActive = false;
 let smallViewport = false;
@@ -74,9 +74,46 @@ describe("AssistantDisplaySetting", () => {
     expect(screen.getByText(/no room for a side panel/i)).toBeTruthy();
   });
 
-  it("exposes an accessible radiogroup", () => {
+  it("exposes an accessible radiogroup with roving tabindex", () => {
     render(<AssistantDisplaySetting />);
     expect(screen.getByRole("radiogroup", { name: /assistant display/i })).toBeTruthy();
     expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(popupBtn()!.tabIndex).toBe(0);
+    expect(dockedBtn()!.tabIndex).toBe(-1);
+  });
+
+  it("moves the selection with arrow keys", () => {
+    render(<AssistantDisplaySetting />);
+    const group = screen.getByRole("radiogroup", { name: /assistant display/i });
+
+    popupBtn()!.focus();
+    fireEvent.keyDown(group, { key: "ArrowRight" });
+    expect(getAssistantDocked()).toBe(true);
+    expect(dockedBtn()!.getAttribute("aria-checked")).toBe("true");
+    expect(document.activeElement).toBe(dockedBtn());
+
+    fireEvent.keyDown(group, { key: "ArrowUp" });
+    expect(getAssistantDocked()).toBe(false);
+    expect(document.activeElement).toBe(popupBtn());
+  });
+
+  it("shows each option's description as visible text", () => {
+    render(<AssistantDisplaySetting />);
+    expect(screen.getByText(/opens the assistant over your work/i)).toBeTruthy();
+    expect(screen.getByText(/full-height panel stays open beside the portal/i)).toBeTruthy();
+  });
+
+  it("picks up the cookie-backed state seeded after it mounts", () => {
+    render(<AssistantDisplaySetting />);
+    expect(popupBtn()!.getAttribute("aria-checked")).toBe("true");
+
+    // The rail seeds the SSR cookie value from an effect that runs AFTER this
+    // control (it is rendered after {children} in the portal layout).
+    act(() => {
+      initAssistantDockState({ collapsed: false, docked: true });
+    });
+
+    expect(dockedBtn()!.getAttribute("aria-checked")).toBe("true");
+    expect(popupBtn()!.getAttribute("aria-checked")).toBe("false");
   });
 });
