@@ -786,6 +786,20 @@ html {
   opacity: 1;
 }
 
+/* Opaque floating field menus (multi-select, etc.) — never use translucent bg-card. */
+.field-dropdown-menu {
+  background: #ffffff;
+  background-color: #ffffff;
+  opacity: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme="dark"] .field-dropdown-menu {
+  background: #111827;
+  background-color: #111827;
+}
+
 /*
  * Public /demo sandbox: reused portal modals (New listing, Add payment,
  * Compose, …) render bounded inside the demo frame rather than covering the

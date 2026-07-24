@@ -11,7 +11,7 @@ const FIELD_TRIGGER_CLASS =
   "mt-1 flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-border bg-auth-input-bg px-3 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
 
 const MENU_PANEL_CLASS =
-  "max-h-64 overflow-auto rounded-lg border border-border bg-card py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
+  "field-dropdown-menu max-h-64 overflow-auto rounded-lg border border-border py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
 
 const DEFAULT_LABEL_CLASS = "text-[11px] font-bold uppercase tracking-[0.12em] text-muted";
 
@@ -143,7 +143,7 @@ export function CheckboxMultiSelect({
         ) : groups?.length ? (
           groups.map((group) => (
             <div key={group.label}>
-              <p className="sticky top-0 z-[1] bg-card px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+              <p className="field-dropdown-menu sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
                 {group.label}
               </p>
               {group.options.map((opt) => {
@@ -153,7 +153,7 @@ export function CheckboxMultiSelect({
                     key={opt.value}
                     role="option"
                     aria-selected={checked}
-                    className="flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm hover:bg-accent/40"
+                    className="flex cursor-pointer items-start gap-2.5 bg-inherit px-3 py-2 text-sm hover:bg-accent/50"
                   >
                     <input
                       type="checkbox"
@@ -175,7 +175,7 @@ export function CheckboxMultiSelect({
                 key={opt.value}
                 role="option"
                 aria-selected={checked}
-                className="flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm hover:bg-accent/40"
+                className="flex cursor-pointer items-start gap-2.5 bg-inherit px-3 py-2 text-sm hover:bg-accent/50"
               >
                 <input
                   type="checkbox"
