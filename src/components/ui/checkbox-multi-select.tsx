@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useIsClient } from "@/hooks/use-is-client";
 
 export type CheckboxMultiSelectOption = { value: string; label: string };
 export type CheckboxMultiSelectGroup = { label: string; options: CheckboxMultiSelectOption[] };
+
+const FIELD_TRIGGER_CLASS =
+  "mt-1 flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-border bg-auth-input-bg px-3 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
+
+const MENU_PANEL_CLASS =
+  "max-h-64 overflow-auto rounded-lg border border-border bg-card py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
+
+const DEFAULT_LABEL_CLASS = "text-[11px] font-bold uppercase tracking-[0.12em] text-muted";
 
 function summarizeSelection(
   selected: string[],
@@ -35,6 +45,7 @@ export function CheckboxMultiSelect({
   emptyLabel = "None selected",
   dataAttr,
   className,
+  labelClassName,
   /** Toolbar pill like Services property filter — sits beside TabNav. */
   variant = "field",
 }: {
@@ -48,11 +59,15 @@ export function CheckboxMultiSelect({
   emptyLabel?: string;
   dataAttr?: string;
   className?: string;
+  labelClassName?: string;
   variant?: "field" | "pill";
 }) {
   const listId = useId();
+  const isClient = useIsClient();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const pill = variant === "pill";
 
   const flatOptions = useMemo(() => {
@@ -60,10 +75,38 @@ export function CheckboxMultiSelect({
     return options ?? [];
   }, [groups, options]);
 
+  const updateMenuRect = () => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    setMenuRect({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuRect(null);
+      return;
+    }
+    updateMenuRect();
+    window.addEventListener("resize", updateMenuRect);
+    window.addEventListener("scroll", updateMenuRect, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuRect);
+      window.removeEventListener("scroll", updateMenuRect, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (document.getElementById(listId)?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
@@ -74,7 +117,7 @@ export function CheckboxMultiSelect({
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [listId, open]);
 
   const toggle = (value: string) => {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
@@ -82,12 +125,79 @@ export function CheckboxMultiSelect({
 
   const buttonLabel = summarizeSelection(selected, flatOptions, emptyLabel);
 
+  const menu =
+    open && menuRect && isClient ? (
+      <div
+        id={listId}
+        role="listbox"
+        aria-multiselectable="true"
+        className={`fixed z-[80] ${MENU_PANEL_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        style={{
+          top: menuRect.top,
+          left: menuRect.left,
+          width: pill ? undefined : menuRect.width,
+        }}
+      >
+        {flatOptions.length === 0 ? (
+          <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
+        ) : groups?.length ? (
+          groups.map((group) => (
+            <div key={group.label}>
+              <p className="sticky top-0 z-[1] bg-card px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+                {group.label}
+              </p>
+              {group.options.map((opt) => {
+                const checked = selected.includes(opt.value);
+                return (
+                  <label
+                    key={opt.value}
+                    role="option"
+                    aria-selected={checked}
+                    className="flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm hover:bg-accent/40"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                      checked={checked}
+                      onChange={() => toggle(opt.value)}
+                    />
+                    <span className="leading-snug text-foreground">{opt.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          ))
+        ) : (
+          (options ?? []).map((opt) => {
+            const checked = selected.includes(opt.value);
+            return (
+              <label
+                key={opt.value}
+                role="option"
+                aria-selected={checked}
+                className="flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm hover:bg-accent/40"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                  checked={checked}
+                  onChange={() => toggle(opt.value)}
+                />
+                <span className="leading-snug text-foreground">{opt.label}</span>
+              </label>
+            );
+          })
+        )}
+      </div>
+    ) : null;
+
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${className ?? ""}`}>
       {pill ? null : (
-        <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</label>
+        <label className={labelClassName ?? DEFAULT_LABEL_CLASS}>{label}</label>
       )}
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         aria-label={label}
@@ -98,7 +208,7 @@ export function CheckboxMultiSelect({
         className={
           pill
             ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-card px-3.5 text-left text-sm text-foreground outline-none transition hover:bg-accent/40 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            : "mt-1 flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-border bg-[var(--background-solid,#0a0e18)] px-3 text-left text-sm text-foreground outline-none transition hover:brightness-110 focus:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+            : FIELD_TRIGGER_CLASS
         }
         onClick={() => setOpen((v) => !v)}
       >
@@ -112,66 +222,7 @@ export function CheckboxMultiSelect({
         </svg>
       </button>
 
-      {open ? (
-        <div
-          id={listId}
-          role="listbox"
-          aria-multiselectable="true"
-          className={`absolute z-50 mt-1 max-h-56 overflow-auto rounded-lg border border-border py-1 shadow-2xl ${pill ? "left-0 w-[min(18rem,calc(100vw-2rem))]" : "w-full"}`}
-          style={{ backgroundColor: "var(--background-solid, #0a0e18)" }}
-        >
-          {flatOptions.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
-          ) : groups?.length ? (
-            groups.map((group) => (
-              <div key={group.label}>
-                <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">{group.label}</p>
-                {group.options.map((opt) => {
-                  const checked = selected.includes(opt.value);
-                  return (
-                    <label
-                      key={opt.value}
-                      role="option"
-                      aria-selected={checked}
-                      className="flex cursor-pointer items-start gap-2.5 px-3 py-1.5 text-sm hover:brightness-125"
-                      style={{ backgroundColor: "var(--background-solid, #0a0e18)" }}
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                        checked={checked}
-                        onChange={() => toggle(opt.value)}
-                      />
-                      <span className="leading-snug text-foreground">{opt.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            ))
-          ) : (
-            (options ?? []).map((opt) => {
-              const checked = selected.includes(opt.value);
-              return (
-                <label
-                  key={opt.value}
-                  role="option"
-                  aria-selected={checked}
-                  className="flex cursor-pointer items-start gap-2.5 px-3 py-1.5 text-sm hover:brightness-125"
-                  style={{ backgroundColor: "var(--background-solid, #0a0e18)" }}
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                    checked={checked}
-                    onChange={() => toggle(opt.value)}
-                  />
-                  <span className="leading-snug text-foreground">{opt.label}</span>
-                </label>
-              );
-            })
-          )}
-        </div>
-      ) : null}
+      {menu ? createPortal(menu, document.body) : null}
     </div>
   );
 }

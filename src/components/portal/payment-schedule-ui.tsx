@@ -4,7 +4,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
 import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerAutomationSettings } from "@/lib/payment-automation-settings";
@@ -500,15 +500,7 @@ export type PaymentAutomationSettingsHandle = {
   saveIfDirty: () => Promise<boolean>;
 };
 
-const REMINDER_FOLLOW_UP_OPTIONS = [
-  { value: "due_date", label: "Due date" },
-  { value: "every_day_late", label: "Every day late" },
-] as const;
-
-const FIELD_SELECT_CLASS =
-  "mt-1 flex h-10 w-full rounded-lg border border-border bg-[var(--background-solid,#0a0e18)] px-3 text-sm text-foreground outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-50";
-
-const REMINDER_PREVIEW_SCROLL_CLASS = "mt-2 max-h-36 space-y-1 overflow-y-auto pr-1";
+const PORTAL_FIELD_LABEL_CLASS = "text-xs font-semibold text-muted";
 
 function ReminderPresetDropdown({
   activePreset,
@@ -526,14 +518,15 @@ function ReminderPresetDropdown({
 
   return (
     <div>
-      <label className="text-xs font-semibold text-muted">Reminder schedule</label>
-      <select
-        className={FIELD_SELECT_CLASS}
-        value={activePreset}
-        disabled={busy}
-        aria-label="Reminder schedule preset"
-        onChange={(e) => onSelect(e.target.value as ReminderPresetId)}
-      >
+      <label className={PORTAL_FIELD_LABEL_CLASS}>Reminder schedule</label>
+      <div className="mt-1">
+        <Select
+          className="h-10 rounded-lg text-sm"
+          value={activePreset}
+          disabled={busy}
+          aria-label="Reminder schedule preset"
+          onChange={(e) => onSelect(e.target.value as ReminderPresetId)}
+        >
         {PAYMENT_REMINDER_PRESETS.map((preset) => (
           <option key={preset.id} value={preset.id}>
             {preset.label}
@@ -541,11 +534,14 @@ function ReminderPresetDropdown({
           </option>
         ))}
         <option value="custom">Custom</option>
-      </select>
+        </Select>
+      </div>
       {description ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{description}</p> : null}
     </div>
   );
 }
+
+const REMINDER_PREVIEW_SCROLL_CLASS = "mt-2 max-h-36 space-y-1 overflow-y-auto pr-1";
 
 function ReminderSchedulePreview({ lines }: { lines: string[] }) {
   return (
@@ -607,6 +603,7 @@ function UnifiedReminderScheduleSelect({
     <div className="space-y-2">
       <CheckboxMultiSelect
         label="Reminders"
+        labelClassName={PORTAL_FIELD_LABEL_CLASS}
         groups={[
           { label: "Before due", options: beforeDueOptions },
           {
@@ -625,9 +622,9 @@ function UnifiedReminderScheduleSelect({
       />
       {allowExtraDays ? (
         <div>
-          <label className="text-xs font-semibold text-muted">Other days before due</label>
+          <label className={PORTAL_FIELD_LABEL_CLASS}>Other days before due</label>
           <Input
-            className="mt-1"
+            className="mt-1 h-10 rounded-lg text-sm"
             value={extraDaysText}
             disabled={busy}
             placeholder="e.g. 30, 6, 4"
