@@ -8,6 +8,8 @@ import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { MODAL_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
+import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
+import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
 import { cn } from "@/lib/utils";
 
 export { MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_PANEL_CLASS, MODAL_WARNING_BOX_CLASS, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal-styles";
@@ -21,6 +23,8 @@ export function Modal({
   panelClassName,
   stackClassName,
   dense = false,
+  assistantStrip = true,
+  assistantContext,
 }: {
   open: boolean;
   title: ReactNode;
@@ -32,8 +36,10 @@ export function Modal({
   panelClassName?: string;
   /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
   stackClassName?: string;
-  /** Tighter header/body spacing for compact forms. */
-  dense?: boolean;
+  /** When true (default in portal), show a compact PropLane Assistant strip. */
+  assistantStrip?: boolean;
+  /** Passed to the assistant as modal context (defaults to stringified title). */
+  assistantContext?: string;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -53,6 +59,13 @@ export function Modal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  const portalAssistant = usePortalAssistantConfig();
+  const showAssistantStrip = assistantStrip && portalAssistant != null;
+  const assistantHint =
+    assistantContext?.trim() ||
+    (typeof title === "string" ? title.trim() : "") ||
+    "Portal modal";
 
   if (!open || !isClient) return null;
 
@@ -116,6 +129,7 @@ export function Modal({
               {footer}
             </div>
           ) : null}
+          {showAssistantStrip ? <ModalAssistantStrip contextHint={assistantHint} /> : null}
         </div>
       </div>
     </div>,

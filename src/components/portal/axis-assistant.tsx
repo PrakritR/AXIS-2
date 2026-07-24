@@ -36,7 +36,14 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
+import {
+  expandAssistantDock,
+  getAssistantDockCollapsed,
+  subscribeAssistantDockCollapsed,
+} from "@/lib/axis-assistant/dock-store";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
+import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
+import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
 
@@ -58,23 +65,50 @@ function handleOpenAssistant() {
   });
 }
 
+function useAssistantDockCollapsed() {
+  return useSyncExternalStore(subscribeAssistantDockCollapsed, getAssistantDockCollapsed, () => false);
+}
+
 /**
- * Assistant FAB — floats above the bottom nav bar in the native app (clearing it
- * via the same measured `--portal-native-bottom-nav-inset` the bar itself uses),
- * bottom-right on web. Always rendered: the assistant is no longer a bar slot.
+ * Desktop: when the right rail is expanded, no floating button. When collapsed,
+ * a bottom-left sparkle opens the rail. Mobile/tablet: bottom-right FAB opens
+ * the popup panel (unchanged).
  */
 function AxisAssistantFixedTrigger() {
   const open = useAxisAssistantOpen();
+  const isSmall = useIsSmallPortalViewport();
+  const dockCollapsed = useAssistantDockCollapsed();
+
   if (open) return null;
+  if (!isSmall && !dockCollapsed) return null;
+
+  const isDesktopCollapsed = !isSmall && dockCollapsed;
+
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'81cbea'},body:JSON.stringify({sessionId:'81cbea',location:'axis-assistant.tsx:AxisAssistantFixedTrigger',message:'fab visibility',data:{open,isSmall,dockCollapsed,renderFab:!(open||(!isSmall&&!dockCollapsed)),isDesktopCollapsed},timestamp:Date.now(),hypothesisId:'H1-H2'})}).catch(()=>{});
+  }, [open, isSmall, dockCollapsed, isDesktopCollapsed]);
+  // #endregion
 
   return (
     <button
       type="button"
-      onClick={handleOpenAssistant}
+      onClick={() => {
+        if (isDesktopCollapsed) {
+          expandAssistantDock();
+          return;
+        }
+        handleOpenAssistant();
+      }}
       aria-label="Open PropLane Assistant"
       aria-expanded={open}
       data-attr="axis-assistant-fab"
-      className="axis-assistant-fab group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:h-11 max-lg:w-11 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:h-11 [html[data-native]_&]:w-11"
+      className={cn(
+        "axis-assistant-fab group fixed z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 max-lg:h-11 max-lg:w-11 [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
+        isDesktopCollapsed
+          ? "bottom-6 left-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:left-auto max-lg:right-[max(1.25rem,env(safe-area-inset-right))] [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]"
+          : "bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]",
+      )}
       style={{ background: "var(--btn-primary)" }}
     >
       <AxisAssistantSparkleIcon className="h-5 w-5 max-lg:h-[18px] max-lg:w-[18px] [html[data-native]_&]:h-[18px] [html[data-native]_&]:w-[18px]" />
@@ -93,6 +127,7 @@ const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { chil
 function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { managerName?: string | null; endpoint?: string }) {
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
+  const isSmall = useIsSmallPortalViewport();
   const open = useAxisAssistantOpen();
   const [panelReady, setPanelReady] = useState(false);
   // Single shared conversation loop (same send/confirm/deny transport the
@@ -204,7 +239,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
       : undefined;
 
   const panel =
-    open && panelReady ? (
+    open && panelReady && isSmall ? (
       <div className="axis-assistant-root fixed inset-0 z-[65]">
         <button
           type="button"
@@ -391,7 +426,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
           </form>
         </div>
       </div>
-    ) : open ? (
+    ) : open && isSmall ? (
       <div className="axis-assistant-root fixed inset-0 z-[65]">
         <button
           type="button"
@@ -424,7 +459,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
  */
 export function AxisAssistant({
   managerName,
-  endpoint,
+  endpoint = "/api/agent/chat",
   children,
 }: {
   managerName?: string | null;
@@ -446,8 +481,10 @@ export function AxisAssistant({
 
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
-      <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-      <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+      <PortalAssistantConfigProvider endpoint={endpoint} managerName={managerName ?? null}>
+        <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
+        <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+      </PortalAssistantConfigProvider>
     </AxisAssistantPresenceContext.Provider>
   );
 }

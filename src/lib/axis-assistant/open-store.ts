@@ -1,3 +1,5 @@
+import { expandAssistantDock } from "@/lib/axis-assistant/dock-store";
+
 type Listener = () => void;
 
 let open = false;
@@ -18,7 +20,19 @@ export function subscribeAxisAssistantOpen(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+function prefersDesktopAssistantDock(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+}
+
 export function openAxisAssistant(): void {
+  const desktop = prefersDesktopAssistantDock();
+  // #region agent log
+  fetch('http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'81cbea'},body:JSON.stringify({sessionId:'81cbea',location:'open-store.ts:openAxisAssistant',message:'open assistant requested',data:{desktop},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
+  if (desktop) {
+    expandAssistantDock();
+    return;
+  }
   setAxisAssistantOpen(true);
 }
 

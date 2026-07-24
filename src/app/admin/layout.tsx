@@ -1,4 +1,5 @@
 import { AxisAssistant } from "@/components/portal/axis-assistant";
+import { PortalAssistantRail } from "@/components/portal/portal-assistant-rail";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
@@ -15,13 +16,17 @@ import {
 } from "@/lib/portal-layout-classes";
 import { adminPortal } from "@/lib/portals/admin";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
+import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await assertAdminPortalAccess();
   const { profile } = await getServerSessionProfile();
-  const sidebarCollapsed = await getSidebarCollapsed();
+  const [sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
+    getSidebarCollapsed(),
+    getAssistantDockCollapsed(),
+  ]);
   return (
     <AxisAssistant managerName={profile?.full_name ?? null}>
       <div className={PORTAL_SHELL_ROOT_CLASS} data-surface="admin">
@@ -48,6 +53,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </main>
           </div>
+          <PortalAssistantRail managerName={profile?.full_name ?? null} initialCollapsed={assistantDockCollapsed} />
         </div>
       </div>
     </AxisAssistant>

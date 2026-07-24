@@ -1,6 +1,7 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PropertyPipelineAccountSync } from "@/components/portal/property-pipeline-account-sync";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
+import { PortalAssistantRail } from "@/components/portal/portal-assistant-rail";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
@@ -18,16 +19,18 @@ import {
 } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
+import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
   // A production admin (founder/ops) identity must not cross into the property
   // portal even by typing the URL — hiding the switch is not access control.
   await assertPropertyPortalAccess();
 
-  const [nav, { profile }, sidebarCollapsed] = await Promise.all([
+  const [nav, { profile }, sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
     buildProPortalDefinition(),
     getServerSessionProfile(),
     getSidebarCollapsed(),
+    getAssistantDockCollapsed(),
   ]);
 
   return (
@@ -64,6 +67,10 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
               </div>
             </main>
           </div>
+          <PortalAssistantRail
+            managerName={profile?.full_name ?? null}
+            initialCollapsed={assistantDockCollapsed}
+          />
         </div>
       </div>
     </AxisAssistant>
