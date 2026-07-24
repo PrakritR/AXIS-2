@@ -297,7 +297,10 @@ export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string
     if (ownedPropertyIdsForUser(userId).has(pid)) return true;
     return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
   }
-  return Boolean(row.managerUserId && row.managerUserId === userId);
+  // An unscoped row (no attribution, no property) stays hidden. Attribution is
+  // already handled by the attribution-first check above, so there is nothing
+  // left to fall back to here.
+  return false;
 }
 
 export type ManagerPropertyFilterOption = { id: string; label: string };
