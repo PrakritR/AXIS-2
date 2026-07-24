@@ -88,6 +88,7 @@ import { getManagerProfileTool, getDashboardSummaryTool } from "./domains/profil
 import {
   listPromotionsTool,
   createPromotionTool,
+  generatePromotionFlyerTool,
   updatePromotionTool,
   deletePromotionTool,
 } from "./domains/promotions";
@@ -190,6 +191,7 @@ export const agentRegistry = buildRegistry([
   recordExpenseTool,
   recordIncomeTool,
   createPromotionTool,
+  generatePromotionFlyerTool,
   updatePromotionTool,
   deletePromotionTool,
   ...managerServicesWriteTools,

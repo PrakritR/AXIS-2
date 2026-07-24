@@ -130,21 +130,6 @@ export async function prepareChatAttachmentsFromFiles(
     if (att) prepared.push(att);
     else skipped += 1;
   }
-  // #region agent log
-  fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-    body: JSON.stringify({
-      sessionId: "81cbea",
-      location: "assistant-chat-attachments.client.ts:prepareChatAttachmentsFromFiles",
-      message: "Prepared chat attachments",
-      data: { prepared: prepared.length, skipped, existingCount },
-      timestamp: Date.now(),
-      hypothesisId: "H-attach",
-      runId: "feature",
-    }),
-  }).catch(() => {});
-  // #endregion
   let error: string | null = null;
   if (prepared.length === 0 && slice.length > 0) {
     error = "Use JPEG, PNG, WebP, GIF images (up to 15 MB) or PDFs (up to 4 MB).";

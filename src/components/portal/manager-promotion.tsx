@@ -86,6 +86,7 @@ import {
   PROPERTY_PIPELINE_EVENT,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
+import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 
 /** Content-type filter pills at the top of the Promotion page. `image` maps to
  *  flyer assets (`kind: "flyer"`), `text` to text assets. The pills are mutually
@@ -160,11 +161,16 @@ export function ManagerPromotion() {
   useEffect(() => {
     const onPromos = () => setTick((n) => n + 1);
     const onProps = () => setPropertyTick((n) => n + 1);
+    const onAgentActions = () => {
+      void syncManagerPromotionsFromServer({ force: true }).then(() => setTick((n) => n + 1));
+    };
     window.addEventListener(MANAGER_PROMOTIONS_EVENT, onPromos);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, onProps);
+    window.addEventListener(AGENT_PENDING_ACTIONS_EVENT, onAgentActions);
     return () => {
       window.removeEventListener(MANAGER_PROMOTIONS_EVENT, onPromos);
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, onProps);
+      window.removeEventListener(AGENT_PENDING_ACTIONS_EVENT, onAgentActions);
     };
   }, []);
 
