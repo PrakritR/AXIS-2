@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useAppUi } from "@/components/providers/app-ui-provider";
 
 type ProposalPreview = {
   title: string;
