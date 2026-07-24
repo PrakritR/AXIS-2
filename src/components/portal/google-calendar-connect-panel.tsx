@@ -170,11 +170,11 @@ export function GoogleCalendarConnectPanel({
         </div>
         <div className="flex shrink-0 gap-2">
           {status.connected ? (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void disconnect()}>
+            <Button type="button" variant="outline" className="px-4 text-[13px]" disabled={busy} onClick={() => void disconnect()}>
               Disconnect
             </Button>
           ) : (
-            <Button type="button" variant="primary" disabled={busy || !status.configured} onClick={connect}>
+            <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={busy || !status.configured} onClick={connect}>
               {status.googleAuthUser ? "Grant calendar access" : "Connect"}
             </Button>
           )}
@@ -192,7 +192,7 @@ export function GoogleCalendarConnectPanel({
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 flex-1 truncate text-[11px] text-muted">{calendarCallbackUri}</code>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void copyRedirectUri()}>
+            <Button type="button" variant="outline" className="px-4 text-[13px]" disabled={busy} onClick={() => void copyRedirectUri()}>
               Copy
             </Button>
           </div>
