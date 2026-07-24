@@ -422,8 +422,10 @@ Two branches, two roles:
 - **`prakrit` — integration branch.** Day-to-day work merges here. Pushes to
   `prakrit` and feature branches do **not** trigger Vercel builds (previews are
   disabled). Verify on localhost or the dev worktree before promoting to `main`.
+  **Never push feature branches (`claude`, `cursor-*`, etc.) expecting a deploy**
+  — only `main` builds.
 
-**Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
+**Promote `prakrit` → `main` to ship.** When `prakrit` is verified locally and
 you want it live:
 
 ```
@@ -439,9 +441,16 @@ Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
 point `main` at the previous known-good commit and push, or use Vercel's
 **Instant Rollback** in the dashboard.
 
-Only `main` deploys to Vercel (`vercel.json` sets `git.deploymentEnabled` so
-feature branches and `prakrit` do not build). Do not re-enable preview deploys
-without an explicit captain decision.
+Only `main` deploys to Vercel. Enforcement is **three layers** (do not weaken):
+
+1. **Vercel project** `axis-2` → Settings → Git → **Ignored Build Step**:
+   `[ "$VERCEL_GIT_COMMIT_REF" != "main" ]` (skips every non-`main` push, even
+   old branches without current `vercel.json`).
+2. **`vercel.json`** `git.deploymentEnabled`: only `main` is `true`.
+3. **`vercel.json`** `ignoreCommand`: `scripts/vercel-should-build.sh` (same rule).
+
+Do not re-enable preview deploys or remove the Ignored Build Step without an
+explicit captain decision.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
 Git**. It is `main`; don't change it.
@@ -520,7 +529,7 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Reviews complete (security + bugbot + cache/rendering as applicable)
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
-[ ] prakrit verified on staging preview
+[ ] prakrit verified on localhost / dev worktree (no Vercel preview)
 [ ] ff-only merge prakrit → main + push
 [ ] Vercel production deploy healthy
 [ ] iOS TestFlight workflow green (or secrets gap reported)

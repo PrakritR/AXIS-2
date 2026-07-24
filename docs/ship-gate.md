@@ -6,8 +6,9 @@ substantial feature. Agents must follow it (see `AGENTS.md` and
 
 ## Why
 
-- **Web** deploys from Vercel on every push to `main` only (the production branch;
-  preview deploys for other branches are disabled in `vercel.json`).
+- **Web** deploys from Vercel on every push to `main` only (the production branch).
+  Non-`main` pushes are skipped via the Vercel project Ignored Build Step plus
+  `vercel.json` (`git.deploymentEnabled` + `scripts/vercel-should-build.sh`).
 - **iOS** uploads to TestFlight from GitHub Actions on the same push
   (`.github/workflows/ios-testflight.yml`), keeping the Capacitor shell aligned
   with the repo while the WebView loads the live site.
