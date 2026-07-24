@@ -76,7 +76,6 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { DashboardSectionId } from "@/lib/dashboard-preferences";
 import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
-import { DashboardAssistantDock } from "@/components/portal/dashboard-assistant-dock";
 import { useDashboardVisibility } from "@/hooks/use-dashboard-visibility";
 import { useAgentPendingActions } from "@/hooks/use-agent-pending-actions";
 import {
@@ -936,12 +935,12 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
     >
-      {/* Split: dashboard content left, docked assistant on a right rail (desktop
-          only). The rail is `hidden lg:block`, so on mobile/tablet the floating
-          FAB/popup stays the only assistant surface. `min-w-0` on the left keeps
-          the horizontally-scrolling KPI row from forcing page overflow. */}
-      <div className="flex items-start gap-5 xl:gap-6">
-        <div className={`min-w-0 flex-1 ${PORTAL_DASHBOARD_STACK}`}>
+      {/* Full width: the assistant is the floating popup by default, and a
+          manager who pins it gets the portal-wide rail from the shell layout
+          (`PortalAssistantDockRail`) rather than a dashboard-only column.
+          `min-w-0` keeps the horizontally-scrolling KPI row from forcing page
+          overflow. */}
+      <div className={`min-w-0 ${PORTAL_DASHBOARD_STACK}`}>
         {showDocExpiryBanner ? (
           <Link
             href={docExpiryHref}
@@ -1271,20 +1270,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             </div>
           ) : null}
         </div>
-        </div>
-        {assistantEnabled ? (
-          <aside
-            className="hidden w-[21rem] shrink-0 lg:block xl:w-[23rem]"
-            data-attr="dashboard-assistant-rail"
-            aria-label="PropLane Assistant"
-          >
-            <div className="sticky top-6 h-[calc(100dvh-7rem)]">
-              <DashboardAssistantDock
-                managerName={displayName && displayName !== "there" ? displayName : null}
-              />
-            </div>
-          </aside>
-        ) : null}
       </div>
 
       <DashboardCustomizeModal

@@ -145,11 +145,10 @@ Framework invariants worth knowing before you touch `src/lib/tools/registry.ts`:
   `tests/unit/tools/confirm-gate-portal-scope.test.ts`.
 
 **One conversation loop, multiple surfaces.** The floating popup
-(`axis-assistant.tsx`) and the manager dashboard's right-dock
-(`dashboard-assistant-dock.tsx`, desktop `hidden lg:block` only — mobile keeps
-FAB/popup) both drive the SAME send/confirm transport,
-`useAssistantConversation(endpoint)`, and share the suggestion chips +
-preview/confirm card from `assistant-shared.tsx`. A dashboard-initiated approval
+(`axis-assistant.tsx`) and the right-side dock (`assistant-dock.tsx`) both drive
+the SAME send/confirm transport, `useAssistantConversation(endpoint)`, and share
+the suggestion chips + preview/confirm card from `assistant-shared.tsx`. A
+dashboard-initiated approval
 is NOT a new send path: proposed writes surface as "AI drafts" chips in Needs
 attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
 `useAgentPendingActions` off owner-scoped `GET /api/agent/pending-actions`), and
@@ -158,6 +157,33 @@ Approve/Discard POST ONLY the action id to `/api/agent/chat` →
 one-click execute that skips that gate; the list route returns only the preview,
 never the stored input. `aiDrafts` is a `MANAGER_DASHBOARD_SECTIONS` entry gated
 on `visibility.aiDrafts` like every other dashboard section.
+
+**Which surface a manager sees is a preference, and the DEFAULT IS THE POPUP.**
+`src/lib/assistant-display-preferences.ts` stores `popup` (default) or `docked`
+per user in localStorage, override-only, exactly like
+`dashboard-preferences.ts`; `useAssistantDisplayMode` reads it reactively. It is
+a pure UI preference with no server consumer, so it is deliberately NOT a
+`notification-preferences.ts`-style row — the cost is that it is per-device.
+Rules:
+
+- **`docked` renders the portal-wide rail** (`PortalAssistantDockRail`, the last
+  flex child of `src/app/portal/layout.tsx`'s `lg:flex-row`), not a
+  dashboard-only column — so it spans every manager section. It is
+  `hidden lg:flex`: below `lg` the FAB/popup is the assistant no matter what is
+  stored, and the FAB only steps aside (`lg:hidden`) when docked.
+- **The rail is opt-in per portal** via `<AxisAssistant dockable>`, and
+  `dockable` additionally requires a resolved session and `!isDemoModeActive()`.
+  Every dock affordance reads that one flag through `useAxisAssistantDock`, so
+  /demo and the resident/vendor/admin portals show no control that leads nowhere.
+- **All three entry points write the same preference**: the popup header's pin,
+  the dock header's unpin, and the Settings radio group
+  (`assistant-display-mode-setting.tsx`). Add a fourth the same way; never a
+  second store.
+- The top bar's "Ask PropLane" / ⌘K focuses the dock's composer
+  (`ASSISTANT_DOCK_INPUT_ID`) when one is laid out, instead of stacking a popup —
+  and a second, separate conversation — on top of it.
+- Coverage: `tests/unit/assistant-display-preferences.test.ts`,
+  `tests/unit/assistant-display-mode-toggle.test.tsx`.
 
 **One registry + one context resolver per role.** The assistant is mounted in
 every portal, so each role needs its own three-piece set — resolver, registry,

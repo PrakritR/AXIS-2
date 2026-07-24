@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -20,14 +21,19 @@ import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
   AssistantPendingActionCard,
+  AssistantPinIcon,
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
 import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
+import { useAssistantDisplayMode } from "@/hooks/use-assistant-display-mode";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useIsClient } from "@/hooks/use-is-client";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import type { AssistantDisplayMode } from "@/lib/assistant-display-preferences";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
@@ -47,6 +53,34 @@ export function useHasAxisAssistant() {
   return useContext(AxisAssistantPresenceContext);
 }
 
+export type AxisAssistantDockState = {
+  /**
+   * True only where a full-height right rail can actually be shown: a portal
+   * that opted in via `dockable`, with a live signed-in session, outside the
+   * /demo sandbox. False everywhere else, which makes every dock affordance
+   * (the pin button, the rail, the Settings toggle) disappear rather than
+   * writing a preference nothing honors.
+   */
+  dockable: boolean;
+  mode: AssistantDisplayMode;
+  setMode: (mode: AssistantDisplayMode) => void;
+};
+
+const AxisAssistantDockContext = createContext<AxisAssistantDockState>({
+  dockable: false,
+  mode: "popup",
+  setMode: () => {},
+});
+
+/**
+ * The manager's assistant display preference plus whether this portal can honor
+ * it. Consumed by the popup's pin control, the right-rail dock, and the Settings
+ * toggle so all three write the SAME persisted preference.
+ */
+export function useAxisAssistantDock(): AxisAssistantDockState {
+  return useContext(AxisAssistantDockContext);
+}
+
 function useAxisAssistantOpen() {
   return useSyncExternalStore(subscribeAxisAssistantOpen, getAxisAssistantOpen, () => false);
 }
@@ -62,8 +96,12 @@ function handleOpenAssistant() {
  * Assistant FAB — floats above the bottom nav bar in the native app (clearing it
  * via the same measured `--portal-native-bottom-nav-inset` the bar itself uses),
  * bottom-right on web. Always rendered: the assistant is no longer a bar slot.
+ *
+ * In docked mode the rail already puts the assistant on screen at `lg`+, so the
+ * FAB hides there (`lg:hidden`) and stays the assistant below `lg`, where the
+ * rail never renders.
  */
-function AxisAssistantFixedTrigger() {
+function AxisAssistantFixedTrigger({ docked }: { docked: boolean }) {
   const open = useAxisAssistantOpen();
   if (open) return null;
 
@@ -74,7 +112,10 @@ function AxisAssistantFixedTrigger() {
       aria-label="Open PropLane Assistant"
       aria-expanded={open}
       data-attr="axis-assistant-fab"
-      className="axis-assistant-fab group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:h-11 max-lg:w-11 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:h-11 [html[data-native]_&]:w-11"
+      className={cn(
+        "axis-assistant-fab group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:h-11 max-lg:w-11 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
+        docked && "lg:hidden",
+      )}
       style={{ background: "var(--btn-primary)" }}
     >
       <AxisAssistantSparkleIcon className="h-5 w-5 max-lg:h-[18px] max-lg:w-[18px] [html[data-native]_&]:h-[18px] [html[data-native]_&]:w-[18px]" />
@@ -92,6 +133,7 @@ const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { chil
  */
 function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { managerName?: string | null; endpoint?: string }) {
   const isClient = useIsClient();
+  const { dockable, mode, setMode } = useAxisAssistantDock();
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
   const [panelReady, setPanelReady] = useState(false);
@@ -166,6 +208,13 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const closePanel = useCallback(() => {
     closeAxisAssistant();
   }, []);
+
+  // Presentation only: switching modes writes the preference and closes the
+  // popup so the rail takes over. It never touches the conversation transport.
+  const pinToRail = useCallback(() => {
+    setMode("docked");
+    closeAxisAssistant();
+  }, [setMode]);
 
   // Scripted prompts (the /demo "Run demo" auto-play) submit through here.
   const sendRef = useRef<(prompt?: string) => void>(() => {});
@@ -243,6 +292,20 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {dockable && (
+                  // Desktop-only: below `lg` there is no rail to pin into, so
+                  // offering the control there would be a dead end.
+                  <button
+                    type="button"
+                    onClick={pinToRail}
+                    aria-label="Pin PropLane Assistant to the right side"
+                    title="Pin to the right side"
+                    data-attr="axis-assistant-pin-to-dock"
+                    className="hidden h-8 w-8 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25 lg:flex"
+                  >
+                    <AssistantPinIcon className="h-4 w-4" />
+                  </button>
+                )}
                 {hasConversation && (
                   <button
                     type="button"
@@ -411,7 +474,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
 
   return (
     <>
-      <AxisAssistantFixedTrigger />
+      <AxisAssistantFixedTrigger docked={dockable && mode === "docked"} />
       {isClient && panel ? createPortal(panel, document.body) : null}
     </>
   );
@@ -425,6 +488,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
 export function AxisAssistant({
   managerName,
   endpoint,
+  dockable = false,
   children,
 }: {
   managerName?: string | null;
@@ -434,8 +498,19 @@ export function AxisAssistant({
    * context resolver rejects non-managers; the public demo passes the sandboxed
    * `/api/agent/demo-chat`. */
   endpoint?: string;
+  /**
+   * Opt this portal into the docked presentation: it must render
+   * `<PortalAssistantDockRail />` somewhere the rail can occupy the full-height
+   * right edge. Off by default, so every other portal — and the /demo sandbox,
+   * which drives its own scripted assistant — keeps the popup and never shows a
+   * pin control that leads nowhere.
+   */
+  dockable?: boolean;
   children: ReactNode;
 }) {
+  const { userId, ready: authReady } = useManagerUserId();
+  const { mode, setMode } = useAssistantDisplayMode(userId);
+
   useEffect(() => {
     return () => setAxisAssistantOpen(false);
   }, []);
@@ -444,10 +519,20 @@ export function AxisAssistant({
   // FAB is on screen, so it lifts its own FAB above ours (both are bottom-right).
   useEffect(() => registerPortalAssistant(), []);
 
+  // The dock is a live, auth-gated surface: it is only offered once the session
+  // is known and never inside /demo (which must not reach `/api/agent/chat`).
+  const dockEnabled = dockable && authReady && !!userId && !isDemoModeActive();
+  const dockState = useMemo<AxisAssistantDockState>(
+    () => ({ dockable: dockEnabled, mode, setMode }),
+    [dockEnabled, mode, setMode],
+  );
+
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
-      <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-      <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+      <AxisAssistantDockContext.Provider value={dockState}>
+        <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
+        <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+      </AxisAssistantDockContext.Provider>
     </AxisAssistantPresenceContext.Provider>
   );
 }
