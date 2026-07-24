@@ -1,6 +1,7 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
 import { PropertyPipelineAccountSync } from "@/components/portal/property-pipeline-account-sync";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
+import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
@@ -31,7 +32,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
   ]);
 
   return (
-    <AxisAssistant managerName={profile?.full_name ?? null}>
+    <AxisAssistant managerName={profile?.full_name ?? null} dockable>
       <div className={PORTAL_SHELL_ROOT_CLASS}>
         <SurfaceThemeDefault theme="light" />
         <PublicHomePrefetch />
@@ -64,6 +65,9 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
               </div>
             </main>
           </div>
+          {/* Opt-in, desktop-only assistant rail. Renders nothing on the `popup`
+              default, so the content column above keeps the full width. */}
+          <PortalAssistantDockRail managerName={profile?.full_name ?? null} />
         </div>
       </div>
     </AxisAssistant>

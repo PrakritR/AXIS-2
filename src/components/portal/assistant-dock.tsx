@@ -6,26 +6,33 @@ import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
   AssistantPendingActionCard,
   AssistantSuggestionChips,
+  AssistantUnpinIcon,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
+import { ASSISTANT_DOCK_INPUT_ID } from "@/components/portal/assistant-dock-input-id";
 import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
 
 /**
- * Inline, right-docked PropLane Assistant for the manager dashboard. It shares
- * the exact conversation loop (`useAssistantConversation`) and auth-gated
- * `/api/agent/chat` endpoint the floating popup uses — the same manager context
- * resolver, the same preview→confirm gate. This is presentation only: no new
- * send/execute path, no bypass of `claimPendingAction`.
+ * Inline, right-docked PropLane Assistant. It shares the exact conversation loop
+ * (`useAssistantConversation`) and auth-gated `/api/agent/chat` endpoint the
+ * floating popup uses — the same manager context resolver, the same
+ * preview→confirm gate. This is presentation only: no new send/execute path, no
+ * bypass of `claimPendingAction`.
  *
- * Rendered by `manager-dashboard.tsx` inside a `hidden lg:block` rail, so on
- * mobile/tablet the FAB/popup remains the only assistant surface.
+ * Rendered by `portal-assistant-dock-rail.tsx` inside a `hidden lg:flex` rail
+ * and only for a manager who opted into docked mode, so on mobile/tablet — and
+ * for everyone on the `popup` default — the FAB/popup remains the only
+ * assistant surface.
  */
-export function DashboardAssistantDock({
+export function AssistantDock({
   managerName,
   endpoint = "/api/agent/chat",
+  onUnpin,
 }: {
   managerName?: string | null;
   endpoint?: string;
+  /** Shown as an "unpin" control in the header when provided. */
+  onUnpin?: () => void;
 }) {
   const { input, setInput, messages, lastTools, pendingAction, loading, error, send, resolvePendingAction, reset } =
     useAssistantConversation(endpoint);
@@ -39,6 +46,9 @@ export function DashboardAssistantDock({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, loading]);
 
+  // `data-attr` is deliberately unchanged now that the dock has moved off the
+  // dashboard: PostHog autocapture Actions are keyed on the attribute value, so
+  // renaming it would silently orphan the existing ones.
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-primary/15 bg-card shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
@@ -61,27 +71,41 @@ export function DashboardAssistantDock({
               <p className="truncate text-xs text-muted">Ask about your portfolio in plain language</p>
             </div>
           </div>
-          {hasConversation ? (
-            <button
-              type="button"
-              onClick={() => {
-                reset();
-                requestAnimationFrame(() => inputRef.current?.focus());
-              }}
-              aria-label="Start a new conversation"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                <path
-                  d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-1">
+            {hasConversation ? (
+              <button
+                type="button"
+                onClick={() => {
+                  reset();
+                  requestAnimationFrame(() => inputRef.current?.focus());
+                }}
+                aria-label="Start a new conversation"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                  <path
+                    d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            ) : null}
+            {onUnpin ? (
+              <button
+                type="button"
+                onClick={onUnpin}
+                aria-label="Unpin PropLane Assistant, use the floating popup instead"
+                title="Unpin — back to the floating popup"
+                data-attr="assistant-dock-unpin"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25"
+              >
+                <AssistantUnpinIcon className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -160,6 +184,8 @@ export function DashboardAssistantDock({
         <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
           <textarea
             ref={inputRef}
+            id={ASSISTANT_DOCK_INPUT_ID}
+            aria-label="Ask the PropLane Assistant about your portfolio"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
