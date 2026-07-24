@@ -1,4 +1,5 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { resolveManagerUserIdForProperty } from "@/lib/auth/guest-application-upsert";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -9,27 +10,6 @@ function readPropertyId(row: DemoApplicantRow): string {
     row.application?.propertyId?.trim() ||
     ""
   );
-}
-
-async function resolveManagerUserIdForProperty(
-  db: SupabaseClient,
-  propertyId: string,
-): Promise<string | null> {
-  const { data: propertyRecord } = await db
-    .from("manager_property_records")
-    .select("manager_user_id, property_data")
-    .eq("id", propertyId)
-    .maybeSingle();
-
-  const direct = typeof propertyRecord?.manager_user_id === "string" ? propertyRecord.manager_user_id.trim() : "";
-  if (direct) return direct;
-
-  const propertyData =
-    propertyRecord?.property_data && typeof propertyRecord.property_data === "object" && !Array.isArray(propertyRecord.property_data)
-      ? (propertyRecord.property_data as Record<string, unknown>)
-      : null;
-  const fromData = typeof propertyData?.managerUserId === "string" ? propertyData.managerUserId.trim() : "";
-  return fromData || null;
 }
 
 export type ResidentApplicationSubmitResult =

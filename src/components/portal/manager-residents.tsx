@@ -68,6 +68,7 @@ import {
   applicationVisibleToPortalUser,
   collectLinkedPropertyIds,
   collectLinkedPropertyIdsForModule,
+  MANAGER_PORTFOLIO_REFRESH_EVENTS,
 } from "@/lib/manager-portfolio-access";
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
@@ -75,7 +76,6 @@ import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submi
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import {
   buildMockPropertyFromDraft,
-  PROPERTY_PIPELINE_EVENT,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
@@ -400,11 +400,13 @@ export function ManagerResidents({
 
   useEffect(() => {
     const bump = () => setPropertyTick((n) => n + 1);
-    window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
-    window.addEventListener("storage", bump);
+    for (const ev of MANAGER_PORTFOLIO_REFRESH_EVENTS) {
+      window.addEventListener(ev, bump);
+    }
     return () => {
-      window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
-      window.removeEventListener("storage", bump);
+      for (const ev of MANAGER_PORTFOLIO_REFRESH_EVENTS) {
+        window.removeEventListener(ev, bump);
+      }
     };
   }, []);
 
