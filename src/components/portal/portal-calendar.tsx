@@ -33,7 +33,7 @@ import { buildManagerPropertyFilterOptions, MANAGER_PORTFOLIO_REFRESH_EVENTS } f
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
-import { GoogleCalendarConnectPanel } from "@/components/portal/google-calendar-connect-panel";
+import { GoogleCalendarConnectDialog } from "@/components/portal/google-calendar-connect-dialog";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
 
 type CopyRange = "week" | "future" | "all";
@@ -127,11 +127,26 @@ export function PortalCalendar({
       { credentials: "include" },
     )
       .then(async (res) => {
-        if (!res.ok) return { meetings: [] as DemoMeeting[] };
-        return (await res.json()) as { meetings?: DemoMeeting[] };
+        const data = (await res.json()) as {
+          meetings?: DemoMeeting[];
+          warning?: string;
+          hint?: string;
+        };
+        if (!res.ok) return { meetings: [] as DemoMeeting[], warning: undefined as string | undefined };
+        return data;
       })
       .then((data) => {
-        if (!cancelled) setGoogleExternalMeetings(Array.isArray(data.meetings) ? data.meetings : []);
+        if (!cancelled) {
+          setGoogleExternalMeetings(Array.isArray(data.meetings) ? data.meetings : []);
+          if (data.warning === "calendar_api_disabled") {
+            showToast(
+              data.hint ??
+                "Enable the Google Calendar API in Google Cloud Console, then refresh this page.",
+            );
+          } else if (data.warning === "calendar_oauth_not_configured" || data.warning === "calendar_not_connected") {
+            showToast(data.hint ?? "Google Calendar sync is not ready yet.");
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setGoogleExternalMeetings([]);
@@ -139,7 +154,7 @@ export function PortalCalendar({
     return () => {
       cancelled = true;
     };
-  }, [portal, authReady, userId, calendarRefreshSignal, googleCalendarTick]);
+  }, [portal, authReady, userId, calendarRefreshSignal, googleCalendarTick, showToast]);
 
   useEffect(() => {
     if (portal !== "manager" || !authReady || !userId) return;
@@ -462,6 +477,9 @@ export function PortalCalendar({
         title={pageTitle}
         titleAside={
           <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+            {portal === "manager" ? (
+              <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
+            ) : null}
             {portal === "manager" && managerProperties.length > 1 ? (
               <Button
                 type="button"
@@ -511,7 +529,6 @@ export function PortalCalendar({
                   </span>
                 </label>
               ) : null}
-              <GoogleCalendarConnectPanel onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
             </div>
           ) : undefined
         }

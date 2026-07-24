@@ -145,6 +145,31 @@ import { PortalTableDetailActions, PORTAL_DETAIL_BTN } from "@/components/portal
 
 Admin/manager tab tables use `ManagerPortalPageShell` with `filterRow` above the divider — see `admin-inbox-client.tsx` and `AGENTS.md` → Admin portal table tabs.
 
+## Modals scroll in ONE place
+
+The `Modal` body (`src/components/ui/modal.tsx`) is the modal's single scroll
+container in both variants (with and without `footer`). Do not wrap modal
+children in another `overflow-y-auto` — nested scrollers trap touch scrolling
+in the native WebView — and never reintroduce `overflow-hidden` on the body:
+that clipped every below-the-fold field on phones for footer modals whose
+children didn't hand-roll a scroller (`tests/unit/modal-scroll-container.test.tsx`
+pins this). A child may still pin an inner scroll region (`min-h-0 flex-1
+overflow-y-auto`, e.g. a message body) — the footer variant keeps the flex
+column chain for that. Field-level scrolling (a `max-h` textarea) is fine.
+
+Native shell: the panel caps at `100dvh` minus the safe-area insets and the
+backdrop wrapper pads by the same insets (see `MODAL_PANEL_CLASS`), so the
+header/Close never sits under the notch.
+
+Client-generated file saves (flyers, exports) must go through
+`downloadOrShareFile` (`src/lib/native/download-or-share.ts`) — a synthetic
+`<a download>` on a blob URL is silently ignored in iOS WKWebView; the helper
+web-downloads on web and presents the native share sheet in the app shell.
+Fixed-width document previews (the flyer iframe) scale to fit the container
+width instead of relying on iframe-internal scrolling, which is unreliable in
+WKWebView — see `computeFlyerFit` + `useFlyerFit` in
+`promotion-flyer-preview.tsx`.
+
 ## Checklist for new expandable UI
 
 1. Chevron inline after primary label (`PortalTableInlineExpand` or `PortalCollapsibleSection`)

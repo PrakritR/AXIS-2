@@ -1,6 +1,9 @@
-/** Opaque modal shell — solid card surface so background content does not bleed through. */
+/** Opaque modal shell — solid card surface so background content does not bleed through.
+ * Native cap subtracts the notch / home-indicator safe areas (85dvh centered can push the
+ * header under the status bar on tall phones); the wrapper in `Modal` pads by the same
+ * insets so the panel always sits inside the visible viewport. */
 export const MODAL_PANEL_CLASS =
-  "modal-panel relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border p-5 shadow-[var(--shadow-card)] sm:p-6";
+  "modal-panel relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border p-5 shadow-[var(--shadow-card)] sm:p-6 [html[data-native]_&]:max-h-[calc(100dvh-max(1rem,var(--native-safe-top))-max(1rem,var(--native-safe-bottom))-1rem)]";
 
 /** Bordered inset panel for message previews, link URLs, and read-only blocks inside modals. */
 export const MODAL_INSET_BOX_CLASS =

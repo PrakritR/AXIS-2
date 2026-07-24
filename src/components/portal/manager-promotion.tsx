@@ -691,10 +691,9 @@ export function ManagerPromotion() {
           </div>
         }
       >
-        {/* Modal's footer variant fixes the shell and expects the CHILD to scroll,
-            so without this wrapper the tail of the form (Flyer name, Headline
-            idea, …) was simply clipped and unreachable. */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+        {/* The Modal body scrolls — no nested scroller, which trapped touch
+            scrolling in the native WebView. */}
+        <div className="pr-1">
           <PromotionForm
             draft={draft}
             setDraft={setDraft}

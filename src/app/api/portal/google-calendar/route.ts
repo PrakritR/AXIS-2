@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { signedInWithGoogle } from "@/lib/google-calendar/link-from-auth.server";
+import { googleCalendarOAuthRedirectUri } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import {
   clearGoogleCalendarConnection,
@@ -36,8 +37,10 @@ async function requireManager() {
   return { db, userId: user.id, user };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+    const browserOrigin = url.searchParams.get("origin")?.trim() || url.origin;
     await warmGoogleCalendarOAuthConfig();
     const ctx = await requireManager();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -58,6 +61,7 @@ export async function GET() {
     return NextResponse.json({
       ...status,
       missingSecret: !status.configured && Boolean(status.googleAuthUser),
+      oauthRedirectUri: googleCalendarOAuthRedirectUri(browserOrigin),
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed" }, { status: 500 });

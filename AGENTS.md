@@ -743,6 +743,7 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 | Manager account creation ("Get started") | `docs/agents/manager-account-creation.md` | `/auth/create-account` NEVER auto-redirects to a portal — a signed-in user still gets the full create form, and the partner-pricing OAuth callback returns there on every branch (free tier included, `account_ready=1` when provisioned) instead of resolving a portal path. Entering a portal is always an explicit click. The email/password form must send `fullName` + `phone`; `/api/auth/manager-register` 400s without them. |
+| Resident account creation (after applying) | `docs/agents/resident-onboarding.md` | Residents create accounts ONLY from a setup token (emailed / in-session handoff after applying) or an OAuth email match — `POST /api/auth/resident-register` stays disabled (403). Phone is required on `/auth/resident-setup`. The finish CTA's `setupHref` is minted at application upsert (email-independent). A mismatched Google email RELINKS the application, never rejects. The setup token never returns to the browser except the guest's own in-session handoff. |
 | Inbound support email → admin inbox | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Receive-only — an in-app reply never emails the sender. Never widen the founder identity — attribute TO it. |
 
 ## Per-room rent basis: monthly (default) vs daily
@@ -925,10 +926,14 @@ portal, and identity while the household reads as one unit.
 
 **Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
 `destructive` variant) was deleted — `src/components/ui/button.tsx` is the only Button, and it now
-supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop;
-translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
-`h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
-never reintroduce a filled-red destructive variant.
+supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop
+(do not reintroduce one); translate an old `size="sm"` into `px-4 text-[13px]` at the call site —
+horizontal padding + text size only. Never add `h-9 min-h-0`: `min-h-0` defeats the Button's
+default `min-h-[44px]`, breaking the 44px touch-target minimum (`docs/design.md`) on buttons that
+ship in the Capacitor WebView. Explicit sub-44px heights (`h-9 min-h-0 …`, icon
+`h-10 w-10 min-h-0 px-0`) are reserved for deliberately compact desktop chrome (marketing navbar
+CTAs, inbox toolbar) — never portal action buttons. `danger` stays text-only red per
+`docs/design.md` — never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both

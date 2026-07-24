@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ function ResidentSetupInner() {
   const [axisId, setAxisId] = useState(axisIdFromUrl);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,6 +58,7 @@ function ResidentSetupInner() {
           axisId?: string;
           email?: string;
           name?: string | null;
+          phone?: string | null;
         };
         if (cancelled) return;
         if (!res.ok) {
@@ -66,6 +69,7 @@ function ResidentSetupInner() {
         setAxisId(body.axisId ?? axisIdFromUrl);
         setEmail(body.email ?? "");
         if (body.name) setFullName(body.name);
+        if (body.phone) setPhone(body.phone);
       } catch {
         if (!cancelled) {
           setInvalid(true);
@@ -81,6 +85,10 @@ function ResidentSetupInner() {
   }, [token, axisIdFromUrl]);
 
   const submit = async () => {
+    if (phone.replace(/\D/g, "").length < 10) {
+      showToast("Enter a valid phone number.");
+      return;
+    }
     if (password.length < 8) {
       showToast("Password must be at least 8 characters.");
       return;
@@ -98,6 +106,7 @@ function ResidentSetupInner() {
           email,
           password,
           fullName: fullName.trim() || undefined,
+          phone: phone.trim(),
           token,
           axisId,
         }),
@@ -171,7 +180,21 @@ function ResidentSetupInner() {
 
       <p className="mt-3 text-center font-mono text-xs text-muted">{axisId}</p>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6">
+        <ResidentGoogleSignUpButton
+          axisId={axisId}
+          setupToken={token}
+          nextPath="/resident/applications"
+          disabled={busy}
+        />
+        <div className="my-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" aria-hidden />
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+          <div className="h-px flex-1 bg-border" aria-hidden />
+        </div>
+      </div>
+
+      <div className="space-y-3">
         <div>
           <label className={FIELD_LABEL_CLASS} htmlFor="resident-setup-email">
             Email
@@ -190,6 +213,23 @@ function ResidentSetupInner() {
             disabled={busy}
             autoComplete="name"
           />
+        </div>
+        <div>
+          <label className={FIELD_LABEL_CLASS} htmlFor="resident-setup-phone">
+            Phone number
+          </label>
+          <Input
+            id="resident-setup-phone"
+            className="mt-1.5"
+            type="tel"
+            inputMode="tel"
+            placeholder="(555) 555-0100"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            disabled={busy}
+            autoComplete="tel"
+          />
+          <p className="mt-1 text-xs text-muted/70">Used for account and tenancy text updates. Reply STOP anytime.</p>
         </div>
         <div>
           <label className={FIELD_LABEL_CLASS} htmlFor="resident-setup-password">

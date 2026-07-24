@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
+import { classifyGoogleCalendarEventsFetchError, listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import { googleCalendarEventsToMeetings } from "@/lib/google-calendar/meetings";
 import { loadGoogleCalendarConnection } from "@/lib/google-calendar/settings";
@@ -55,6 +55,14 @@ export async function GET(req: Request) {
       hypothesisId: "H2",
       message,
     });
+    const classified = classifyGoogleCalendarEventsFetchError(message);
+    if (classified) {
+      return NextResponse.json({
+        meetings: [],
+        warning: classified.warning,
+        hint: classified.hint,
+      });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
