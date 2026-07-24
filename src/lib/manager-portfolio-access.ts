@@ -250,10 +250,24 @@ export function applicationVisibleToPortalUser(
   module?: CoManagerPermissionId,
 ): boolean {
   if (!userId) return false;
+  // A row attributed to THIS manager is always theirs — even when its property
+  // is missing from the local owned/linked cache (property just created and the
+  // pipeline cache not hydrated yet on first paint, or an archived/unlisted own
+  // listing). The server GET already scoped this list by manager_user_id, so
+  // trusting the attribution here only ever un-hides the manager's OWN rows; it
+  // can never surface another manager's, because a co-manager's linked rows are
+  // attributed to the OWNER (managerUserId !== this userId) and fall through to
+  // the property-scoped check below. Without this, a resident's freshly
+  // submitted application — correctly stored and returned — vanished from the
+  // manager's Applications tab whenever the property cache lost the hydration
+  // race. This mirrors the same fix already in `moduleRowVisibleToPortalUser`.
+  if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (pid) {
-    // Property-scoped rows must still belong to the live portfolio (owned or
-    // currently linked). Otherwise residents/housing stick after unlink/delete.
+    // Foreign (co-manager linked) rows must still belong to the live portfolio,
+    // so unlink/delete scope changes stick (the row is attributed to the owner,
+    // never this co-manager). Otherwise residents/housing would stick after an
+    // unlink.
     if (ownedPropertyIdsForUser(userId).has(pid)) return true;
     const linked = module ? collectLinkedPropertyIdsForModule(userId, module) : collectLinkedPropertyIds(userId);
     return linked.has(pid);

@@ -1,4 +1,5 @@
 import type { AccountLinkInviteDto } from "@/lib/account-links";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   collectLinkedPropertyIds,
@@ -73,7 +74,12 @@ describe("manager portfolio access", () => {
     expect([...collectLinkedPropertyIds("co-user")]).toEqual(["still-linked"]);
   });
 
-  it("hides attributed application rows once the property leaves the portfolio", async () => {
+  it("hides a co-manager's linked (owner-attributed) rows once the property leaves the portfolio", async () => {
+    // Unlink/delete scope must stick: a co-manager whose link to the property was
+    // removed no longer has it in their linked cache, so an OWNER-attributed row
+    // (managerUserId is the owner, not this co-manager) must disappear. This is the
+    // genuine scoping guarantee — it is unaffected by the own-attribution shortcut,
+    // because the row is not attributed to this viewer.
     const { applicationVisibleToPortalUser } = await import("@/lib/manager-portfolio-access");
     vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
     vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
@@ -91,12 +97,123 @@ describe("manager portfolio access", () => {
           detail: "",
           propertyId: "brooklyn-id",
           assignedPropertyId: "brooklyn-id",
-          managerUserId: "co-user",
+          managerUserId: "owner-user",
         },
         "co-user",
         "residents",
       ),
     ).toBe(false);
+  });
+
+  it("shows a resident's freshly submitted application to its manager before the property cache hydrates", async () => {
+    // Regression (pending-application-invisible): a resident applies to a live
+    // listing; the server stores the row with manager_user_id = this manager and
+    // returns it. On the manager's Applications tab the row is filtered client-side
+    // by applicationVisibleToPortalUser. If the property pipeline cache has not
+    // hydrated yet (its sync races the applications sync on first paint), the pid
+    // is absent from ownedPropertyIdsForUser — yet the row IS the manager's own and
+    // must still appear. Before the fix it vanished, matching the bug report
+    // ("not seeing pending application... idk if it takes longer to process").
+    const { applicationVisibleToPortalUser } = await import("@/lib/manager-portfolio-access");
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([]);
+
+    expect(
+      applicationVisibleToPortalUser(
+        {
+          id: "AXIS-NEWAPP1",
+          name: "New Applicant",
+          property: "The Magnolia",
+          stage: "Submitted",
+          bucket: "pending",
+          detail: "",
+          propertyId: "mgr-magnolia-2b-abc123",
+          managerUserId: "manager-self",
+          application: { propertyId: "mgr-magnolia-2b-abc123" } as DemoApplicantRow["application"],
+        },
+        "manager-self",
+        "applications",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not surface another manager's application even when the local cache is empty", async () => {
+    // The own-attribution shortcut keys strictly on managerUserId === userId, so it
+    // can never leak: a row attributed to a different manager, on a property this
+    // user neither owns nor is linked to, stays hidden.
+    const { applicationVisibleToPortalUser } = await import("@/lib/manager-portfolio-access");
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([]);
+
+    expect(
+      applicationVisibleToPortalUser(
+        {
+          id: "AXIS-OTHER1",
+          name: "Someone Else's Applicant",
+          property: "Not Yours",
+          stage: "Submitted",
+          bucket: "pending",
+          detail: "",
+          propertyId: "mgr-other-manager-prop",
+          managerUserId: "another-manager",
+          application: { propertyId: "mgr-other-manager-prop" } as DemoApplicantRow["application"],
+        },
+        "manager-self",
+        "applications",
+      ),
+    ).toBe(false);
+  });
+
+  it("still shows a co-manager the owner's application on a linked property with the right grant", async () => {
+    // The linked-property path is unchanged: an owner-attributed row remains visible
+    // to a co-manager who currently has the applications grant on that property.
+    const { applicationVisibleToPortalUser } = await import("@/lib/manager-portfolio-access");
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([
+      {
+        id: "invite-app",
+        tabKind: "manager",
+        status: "accepted",
+        direction: "incoming",
+        inviterAxisId: "axis-owner",
+        inviteeAxisId: "axis-co",
+        inviterDisplayName: "Owner",
+        inviteeDisplayName: "Co",
+        linkedAxisId: "axis-owner",
+        linkedDisplayName: "Owner",
+        linkedUserId: "owner-user",
+        assignedPropertyIds: ["mgr-linked-1"],
+        payoutPercentForManager: 15,
+        coManagerPermissions: { applications: true },
+        propertyCoManagerPermissions: { "mgr-linked-1": { applications: true } },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        respondedAt: "2026-01-02T00:00:00.000Z",
+      } satisfies AccountLinkInviteDto,
+    ]);
+
+    expect(
+      applicationVisibleToPortalUser(
+        {
+          id: "AXIS-LINKED1",
+          name: "Linked Applicant",
+          property: "Linked House",
+          stage: "Submitted",
+          bucket: "pending",
+          detail: "",
+          propertyId: "mgr-linked-1",
+          managerUserId: "owner-user",
+          application: { propertyId: "mgr-linked-1" } as DemoApplicantRow["application"],
+        },
+        "co-user",
+        "applications",
+      ),
+    ).toBe(true);
   });
 
   it("falls back to incoming accepted invites when relationship rows are empty", () => {
