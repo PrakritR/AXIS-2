@@ -36,6 +36,12 @@ function isRemindableRow(row: DemoManagerPaymentLedgerRow): boolean {
   return !isPaidRow(row) && Boolean(row.householdChargeId || row.id);
 }
 
+function paymentReminderRecipientLabel(row: DemoManagerPaymentLedgerRow): string {
+  const name = row.residentName?.trim();
+  if (name) return `${name} (Resident)`;
+  return row.residentEmail?.trim() || "Resident";
+}
+
 function dueDateDisplayToInputValue(display: string): string {
   const stripped = display.replace(/^(by|before)\s+/i, "").trim();
   const parsed = new Date(stripped);
@@ -326,6 +332,7 @@ export function ManagerPaymentsLedgerPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: AbortSignal.timeout(45_000),
         body: JSON.stringify({
           chargeId,
           viaEmail: channels?.viaEmail !== false,
@@ -352,8 +359,9 @@ export function ManagerPaymentsLedgerPanel({
         emailSent: data.emailSent,
         smsSent: data.smsSent,
       };
-    } catch {
-      return { ok: false, error: "Network error." };
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      return { ok: false, error: timedOut ? "Reminder request timed out." : "Network error." };
     }
   };
 
@@ -366,18 +374,24 @@ export function ManagerPaymentsLedgerPanel({
     setSendingReminderId("bulk");
     let ok = 0;
     let skipped = 0;
+    let failed = 0;
     let lastError = "";
-    for (const row of targets) {
-      const result = await sendReminderForRow(row, { viaEmail: true, viaSms: true });
-      if (result.chargePaid) continue;
-      if (result.ok) {
-        ok += 1;
-        if (result.skipped) skipped += 1;
-      } else if (result.error) {
-        lastError = result.error;
+    try {
+      for (const row of targets) {
+        // Bulk sends inbox + email only — SMS requires per-charge preview and channel pick.
+        const result = await sendReminderForRow(row, { viaEmail: true, viaSms: false });
+        if (result.chargePaid) continue;
+        if (result.ok) {
+          ok += 1;
+          if (result.skipped) skipped += 1;
+        } else {
+          failed += 1;
+          if (result.error) lastError = result.error;
+        }
       }
+    } finally {
+      setSendingReminderId(null);
     }
-    setSendingReminderId(null);
     setSelectedIds(new Set());
     if (ok === 0) {
       showToast(lastError || "Could not send reminder. Please try again.");
@@ -565,11 +579,7 @@ export function ManagerPaymentsLedgerPanel({
         open
         title="Send payment reminder"
         onClose={() => setReminderPreview(null)}
-        recipient={
-          reminderPreview.row.residentEmail?.trim() ||
-          reminderPreview.row.residentName ||
-          "Resident"
-        }
+        recipient={paymentReminderRecipientLabel(reminderPreview.row)}
         subject={reminderPreview.subject}
         body={reminderPreview.body}
         showSkipMessage={false}

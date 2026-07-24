@@ -194,6 +194,7 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({ from, to: [inboxEmail], subject, text: messageBody, html }),
+          signal: AbortSignal.timeout(15_000),
         });
         emailSent = res.ok;
       } catch {

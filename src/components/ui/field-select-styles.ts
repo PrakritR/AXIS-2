@@ -15,6 +15,9 @@ export const FIELD_SELECT_TRIGGER_COMPACT_CLASS =
 export const FIELD_SELECT_MENU_CLASS =
   "field-dropdown-menu max-h-64 overflow-auto rounded-2xl border border-border py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
 
+/** Opaque row surface — backgrounds owned by `.field-dropdown-menu-option` in globals.css. */
+export const FIELD_SELECT_MENU_OPTION_CLASS = "field-dropdown-menu-option";
+
 export const FIELD_SELECT_LABEL_CLASS = "text-[11px] font-bold uppercase tracking-[0.12em] text-muted";
 
 export const FIELD_SELECT_CHEVRON_CLASS = "h-4 w-4 shrink-0 text-muted";

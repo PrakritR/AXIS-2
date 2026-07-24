@@ -8,6 +8,7 @@ import {
   FIELD_SELECT_CHEVRON_CLASS,
   FIELD_SELECT_LABEL_CLASS,
   FIELD_SELECT_MENU_CLASS,
+  FIELD_SELECT_MENU_OPTION_CLASS,
   FIELD_SELECT_TRIGGER_CLASS,
   FIELD_SELECT_TRIGGER_COMPACT_CLASS,
   FIELD_SELECT_TRIGGER_INLINE_CLASS,
@@ -148,19 +149,20 @@ export function CheckboxMultiSelect({
         id={listId}
         role="listbox"
         aria-multiselectable="true"
-        className={`fixed z-[80] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[200] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
+          backgroundColor: "#ffffff",
         }}
       >
         {flatOptions.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
+          <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
         ) : groups?.length ? (
           groups.map((group) => (
             <div key={group.label}>
-              <p className="field-dropdown-menu sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+              <p className="field-dropdown-menu-option sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
                 {group.label}
               </p>
               {group.options.map((opt) => {
@@ -170,7 +172,7 @@ export function CheckboxMultiSelect({
                     key={opt.value}
                     role="option"
                     aria-selected={checked}
-                    className="flex cursor-pointer items-start gap-2.5 bg-inherit px-3 py-2 text-sm hover:bg-accent/50"
+                    className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
                   >
                     <input
                       type="checkbox"
@@ -192,7 +194,7 @@ export function CheckboxMultiSelect({
                 key={opt.value}
                 role="option"
                 aria-selected={checked}
-                className="flex cursor-pointer items-start gap-2.5 bg-inherit px-3 py-2 text-sm hover:bg-accent/50"
+                className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
               >
                 <input
                   type="checkbox"
@@ -205,7 +207,9 @@ export function CheckboxMultiSelect({
             );
           })
         )}
-        {menuFooter ? <div className="border-t border-border">{menuFooter}</div> : null}
+        {menuFooter ? (
+          <div className={`border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
+        ) : null}
       </div>
     ) : null;
 
@@ -279,31 +283,6 @@ export function FieldSingleSelect({
 
   const buttonLabel = options.find((o) => o.value === value)?.label ?? placeholder;
 
-  // #region agent log
-  useEffect(() => {
-    const button = buttonRef.current;
-    const wrap = wrapRef.current;
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        runId: "select-single-box",
-        hypothesisId: "H1",
-        location: "checkbox-multi-select.tsx:FieldSingleSelect",
-        message: "select trigger layout",
-        data: {
-          hideLabel,
-          wrapperHasBorder: Boolean(wrap && getComputedStyle(wrap).borderWidth !== "0px"),
-          triggerHasBorder: Boolean(button && getComputedStyle(button).borderWidth !== "0px"),
-          legacyClassStripped: className !== `${wrapperClassName} ${triggerClassName}`.trim(),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [className, hideLabel, triggerClassName, wrapperClassName]);
-  // #endregion
-
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
@@ -353,11 +332,12 @@ export function FieldSingleSelect({
       <div
         id={listId}
         role="listbox"
-        className={`fixed z-[80] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[200] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
+          backgroundColor: "#ffffff",
         }}
       >
         {options.map((opt) => {
@@ -368,8 +348,8 @@ export function FieldSingleSelect({
               type="button"
               role="option"
               aria-selected={active}
-              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent/50 ${
-                active ? "bg-accent/30 font-medium text-foreground" : "text-foreground"
+              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm ${FIELD_SELECT_MENU_OPTION_CLASS} ${
+                active ? "text-foreground" : "text-foreground"
               }`}
               onClick={() => {
                 onChange(opt.value);
