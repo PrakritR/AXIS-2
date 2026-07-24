@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip, PortalToolbarSelectWrap } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -13,9 +14,6 @@ export type ShellAction = {
   onClick?: () => void;
   disabled?: boolean;
 };
-
-const selectClass =
-  "col-start-1 row-start-1 h-10 w-full min-w-0 max-w-full appearance-none truncate rounded-full border border-border bg-card px-3.5 pr-9 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
 
 function PortalFilterSelect({
   "aria-label": ariaLabel,
@@ -30,29 +28,23 @@ function PortalFilterSelect({
   placeholder: string;
   options: ManagerPropertyFilterOption[];
 }) {
-  const selectedLabel =
-    value === "" ? placeholder : (options.find((o) => o.id === value)?.label ?? placeholder);
+  const selectOptions = useMemo(
+    () => [{ value: "", label: placeholder }, ...options.map((o) => ({ value: o.id, label: o.label }))],
+    [options, placeholder],
+  );
 
   return (
     <div className="w-full min-w-0 max-w-full sm:w-fit">
-      <PortalToolbarSelectWrap className="w-full min-w-0 max-w-full sm:w-fit">
-        <div className="grid w-full min-w-0 max-w-full sm:w-fit [&>select]:col-start-1 [&>select]:row-start-1">
-          <span
-            aria-hidden
-            className="invisible col-start-1 row-start-1 max-w-full truncate whitespace-nowrap px-3.5 pr-9 text-sm"
-          >
-            {selectedLabel}
-          </span>
-          <select className={selectClass} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
-            <option value="">{placeholder}</option>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </PortalToolbarSelectWrap>
+      <FieldSingleSelect
+        label={ariaLabel}
+        variant="pill"
+        className="w-full min-w-0 max-w-full sm:w-fit"
+        value={value}
+        placeholder={placeholder}
+        options={selectOptions}
+        dataAttr={`portal-filter-${ariaLabel.toLowerCase().replace(/\s+/g, "-")}`}
+        onChange={onChange}
+      />
     </div>
   );
 }

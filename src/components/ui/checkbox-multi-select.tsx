@@ -207,7 +207,7 @@ export function CheckboxMultiSelect({
         data-attr={dataAttr}
         className={
           pill
-            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-card px-3.5 text-left text-sm text-foreground outline-none transition hover:bg-accent/40 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-auth-input-bg px-3.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             : FIELD_TRIGGER_CLASS
         }
         onClick={() => setOpen((v) => !v)}
@@ -359,7 +359,7 @@ export function FieldSingleSelect({
         data-attr={dataAttr}
         className={
           pill
-            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-card px-3.5 text-left text-sm text-foreground outline-none transition hover:bg-accent/40 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-auth-input-bg px-3.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             : FIELD_TRIGGER_CLASS
         }
         onClick={() => setOpen((v) => !v)}
