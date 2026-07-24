@@ -35,7 +35,7 @@ export function PromotionFlyerHeaderActions({
         type="button"
         variant="outline"
         className={PROMOTION_ROW_ACTION_BUTTON_CLASS}
-        onClick={() => downloadPromotionFlyer(flyerRowForEntry(asset.row, entry))}
+        onClick={() => void downloadPromotionFlyer(flyerRowForEntry(asset.row, entry))}
         data-attr="promotion-flyer-download"
       >
         Download
@@ -123,7 +123,7 @@ export function PromotionFlyerAssetDetail({ asset }: { asset: PromotionAsset }) 
   if (!entry) return null;
 
   return (
-    <div className="min-w-0 overflow-x-auto rounded-xl border border-border bg-card">
+    <div className="min-w-0 rounded-xl border border-border bg-card">
       <PromotionFlyerPreview
         key={`${entry.id}-${entry.updatedAt}`}
         promotion={flyerRowForEntry(asset.row, entry)}
