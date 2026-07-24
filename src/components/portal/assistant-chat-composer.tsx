@@ -1,7 +1,7 @@
 "use client";
 
 import { Paperclip, X } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -40,6 +40,8 @@ export function AssistantChatComposer({
   className,
 }: AssistantChatComposerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
+  const [dragOver, setDragOver] = useState(false);
   const canSend = !loading && (input.trim().length > 0 || attachments.length > 0);
 
   async function onPickFiles(files: FileList | null) {
@@ -50,6 +52,40 @@ export function AssistantChatComposer({
     }
     if (error) onAttachmentError?.(error);
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function onDragEnter(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current += 1;
+    setDragOver(true);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragOver(false);
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = attachments.length >= MAX_CHAT_ATTACHMENTS ? "none" : "copy";
+    setDragOver(true);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    dragDepthRef.current = 0;
+    if (loading || attachments.length >= MAX_CHAT_ATTACHMENTS) return;
+    void onPickFiles(e.dataTransfer.files);
   }
 
   function removeAttachment(id: string) {
@@ -88,7 +124,18 @@ export function AssistantChatComposer({
           ))}
         </div>
       ) : null}
-      <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
+      <div
+        className={cn(
+          "relative rounded-2xl border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10",
+          dragOver
+            ? "border-primary/50 ring-4 ring-primary/15"
+            : "border-border",
+        )}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
         <input
           ref={fileRef}
           type="file"
