@@ -141,3 +141,52 @@ export function parsePreDueReminderDaysInput(raw: string): number[] {
 export function formatPreDueReminderDaysInput(days: number[]): string {
   return [...days].sort((a, b) => b - a).join(", ");
 }
+
+export const REMINDER_BEFORE_DUE_DAY_OPTIONS = [30, 21, 14, 7, 3, 2, 1] as const;
+
+export type ReminderScheduleToken = `before:${number}` | "due_date" | "every_day_late";
+
+export function reminderScheduleTokensFromSettings(
+  settings: Pick<
+    ManagerAutomationSettings,
+    "preDueReminderDays" | "sameDayReminderEnabled" | "overdueDailyEnabled"
+  >,
+): ReminderScheduleToken[] {
+  const tokens: ReminderScheduleToken[] = settings.preDueReminderDays.map((day) => `before:${day}`);
+  if (settings.sameDayReminderEnabled) tokens.push("due_date");
+  if (settings.overdueDailyEnabled) tokens.push("every_day_late");
+  return tokens;
+}
+
+export function settingsPatchFromReminderScheduleTokens(
+  selected: ReminderScheduleToken[],
+): Pick<
+  ManagerAutomationSettings,
+  "preDueReminderDays" | "sameDayReminderEnabled" | "overdueDailyEnabled" | "overdueDailyStartDays" | "postDueReminderDays"
+> {
+  const preDueReminderDays = [
+    ...new Set(
+      selected
+        .filter((token): token is `before:${number}` => token.startsWith("before:"))
+        .map((token) => Math.round(Number(token.slice("before:".length))))
+        .filter((day) => Number.isFinite(day) && day >= 1 && day <= 60),
+    ),
+  ].sort((a, b) => b - a);
+
+  const overdueDailyEnabled = selected.includes("every_day_late");
+
+  return {
+    preDueReminderDays,
+    sameDayReminderEnabled: selected.includes("due_date"),
+    overdueDailyEnabled,
+    overdueDailyStartDays: 1,
+    postDueReminderDays: overdueDailyEnabled ? [] : [],
+  };
+}
+
+export function labelForReminderScheduleToken(token: ReminderScheduleToken): string {
+  if (token === "due_date") return "Due date";
+  if (token === "every_day_late") return "Every day late";
+  const days = Number(token.slice("before:".length));
+  return `${days} day${days === 1 ? "" : "s"} before due`;
+}

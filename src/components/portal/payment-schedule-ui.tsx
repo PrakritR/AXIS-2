@@ -27,9 +27,14 @@ import {
   detectReminderPreset,
   formatPreDueReminderDaysInput,
   formatFriendlyReminderSchedule,
+  labelForReminderScheduleToken,
   parsePreDueReminderDaysInput,
+  REMINDER_BEFORE_DUE_DAY_OPTIONS,
+  reminderScheduleTokensFromSettings,
+  settingsPatchFromReminderScheduleTokens,
   PAYMENT_REMINDER_PRESETS,
   type ReminderPresetId,
+  type ReminderScheduleToken,
 } from "@/lib/payment-reminder-presets";
 import {
   filterScheduledPaymentMessagesForUnpaidCharges,
@@ -505,13 +510,6 @@ const FIELD_SELECT_CLASS =
 
 const REMINDER_PREVIEW_SCROLL_CLASS = "mt-2 max-h-36 space-y-1 overflow-y-auto pr-1";
 
-function reminderFollowUpSelection(draft: ManagerAutomationSettings): string[] {
-  const selected: string[] = [];
-  if (draft.sameDayReminderEnabled) selected.push("due_date");
-  if (draft.overdueDailyEnabled) selected.push("every_day_late");
-  return selected;
-}
-
 function ReminderPresetDropdown({
   activePreset,
   busy,
@@ -523,7 +521,7 @@ function ReminderPresetDropdown({
 }) {
   const description =
     activePreset === "custom"
-      ? "Type days before due below, then choose due-date or overdue reminders."
+      ? "Choose reminders below. Add extra days before due if needed."
       : PAYMENT_REMINDER_PRESETS.find((p) => p.id === activePreset)?.description ?? "";
 
   return (
@@ -565,76 +563,94 @@ function ReminderSchedulePreview({ lines }: { lines: string[] }) {
   );
 }
 
-function CustomReminderDaysInput({
-  days,
-  busy,
-  label,
-  onChangeDays,
-}: {
-  days: number[];
-  busy: boolean;
-  label: string;
-  onChangeDays: (days: number[]) => void;
-}) {
-  const [text, setText] = useState(() => formatPreDueReminderDaysInput(days));
-
-  useEffect(() => {
-    setText(formatPreDueReminderDaysInput(days));
-  }, [days]);
-
-  const commit = (raw: string) => {
-    const parsed = parsePreDueReminderDaysInput(raw);
-    onChangeDays(parsed);
-    setText(formatPreDueReminderDaysInput(parsed));
-  };
-
-  return (
-    <div>
-      <label className="text-xs font-semibold text-muted">{label}</label>
-      <Input
-        className="mt-1"
-        value={text}
-        disabled={busy}
-        placeholder="e.g. 30, 14, 7, 3, 1"
-        aria-label={label}
-        data-attr="payment-reminder-days-custom"
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => commit(text)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit(text);
-          }
-        }}
-      />
-      <p className="mt-1.5 text-xs leading-relaxed text-muted">
-        Type how many days before the due date to remind, separated by commas.
-      </p>
-    </div>
-  );
-}
-
-function ReminderFollowUpMultiSelect({
+function UnifiedReminderScheduleSelect({
   draft,
   busy,
-  onChangeFollowUp,
+  allowExtraDays,
+  onChange,
 }: {
   draft: ManagerAutomationSettings;
   busy: boolean;
-  onChangeFollowUp: (sameDay: boolean, overdueDaily: boolean) => void;
+  allowExtraDays: boolean;
+  onChange: (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => void;
 }) {
+  const extraDaysOnly = useMemo(
+    () => draft.preDueReminderDays.filter((day) => !(REMINDER_BEFORE_DUE_DAY_OPTIONS as readonly number[]).includes(day)),
+    [draft.preDueReminderDays],
+  );
+  const [extraDaysText, setExtraDaysText] = useState(() => formatPreDueReminderDaysInput(extraDaysOnly));
+
+  useEffect(() => {
+    setExtraDaysText(formatPreDueReminderDaysInput(extraDaysOnly));
+  }, [extraDaysOnly]);
+
+  const beforeDueOptions = useMemo(() => {
+    const known = new Set<number>(REMINDER_BEFORE_DUE_DAY_OPTIONS);
+    const extras = draft.preDueReminderDays.filter((day) => !known.has(day));
+    const days = [...extras, ...REMINDER_BEFORE_DUE_DAY_OPTIONS].sort((a, b) => b - a);
+    return days.map((day) => ({
+      value: `before:${day}` satisfies ReminderScheduleToken,
+      label: labelForReminderScheduleToken(`before:${day}`),
+    }));
+  }, [draft.preDueReminderDays]);
+
+  const selected = reminderScheduleTokensFromSettings(draft);
+
+  const commitSchedule = (tokens: ReminderScheduleToken[], extraRaw: string) => {
+    const patch = settingsPatchFromReminderScheduleTokens(tokens);
+    const extras = parsePreDueReminderDaysInput(extraRaw);
+    patch.preDueReminderDays = [...new Set([...patch.preDueReminderDays, ...extras])].sort((a, b) => b - a);
+    onChange(patch);
+  };
+
   return (
-    <CheckboxMultiSelect
-      label="Also remind"
-      options={[...REMINDER_FOLLOW_UP_OPTIONS]}
-      selected={reminderFollowUpSelection(draft)}
-      onChange={(next) => {
-        onChangeFollowUp(next.includes("due_date"), next.includes("every_day_late"));
-      }}
-      disabled={busy}
-      emptyLabel="None selected"
-      dataAttr="payment-reminder-follow-up"
-    />
+    <div className="space-y-2">
+      <CheckboxMultiSelect
+        label="Reminders"
+        groups={[
+          { label: "Before due", options: beforeDueOptions },
+          {
+            label: "Due & after",
+            options: [
+              { value: "due_date", label: "Due date" },
+              { value: "every_day_late", label: "Every day late" },
+            ],
+          },
+        ]}
+        selected={selected}
+        onChange={(next) => commitSchedule(next as ReminderScheduleToken[], extraDaysText)}
+        disabled={busy}
+        emptyLabel="None selected"
+        dataAttr="payment-reminder-schedule"
+      />
+      {allowExtraDays ? (
+        <div>
+          <label className="text-xs font-semibold text-muted">Other days before due</label>
+          <Input
+            className="mt-1"
+            value={extraDaysText}
+            disabled={busy}
+            placeholder="e.g. 30, 6, 4"
+            aria-label="Other days before due"
+            data-attr="payment-reminder-days-custom"
+            onChange={(e) => setExtraDaysText(e.target.value)}
+            onBlur={() => {
+              const formatted = formatPreDueReminderDaysInput(parsePreDueReminderDaysInput(extraDaysText));
+              setExtraDaysText(formatted);
+              commitSchedule(selected, formatted);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const formatted = formatPreDueReminderDaysInput(parsePreDueReminderDaysInput(extraDaysText));
+                setExtraDaysText(formatted);
+                commitSchedule(selected, formatted);
+              }
+            }}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -719,20 +735,9 @@ function PaymentAutomationSettingsForm({
 
   const saveVisible = !autoSaveOnClose;
 
-  const markCustomAndSetDays = (days: number[]) => {
+  const markCustomAndApplySchedule = (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => {
     setSelectedPreset("custom");
-    setDraft((prev) => ({ ...prev, preDueReminderDays: days }));
-  };
-
-  const markCustomAndSetFollowUp = (sameDay: boolean, overdueDaily: boolean) => {
-    setSelectedPreset("custom");
-    setDraft((prev) => ({
-      ...prev,
-      sameDayReminderEnabled: sameDay,
-      overdueDailyEnabled: overdueDaily,
-      ...(overdueDaily ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
-      postDueReminderDays: overdueDaily ? prev.postDueReminderDays.filter((d) => d !== 1) : prev.postDueReminderDays,
-    }));
+    setDraft((prev) => ({ ...prev, ...patch }));
   };
 
   const compact = layout === "modal" && variant === "payments";
@@ -749,15 +754,12 @@ function PaymentAutomationSettingsForm({
   const isCustom = activePreset === "custom";
 
   const scheduleEditors = isCustom ? (
-    <>
-      <CustomReminderDaysInput
-        days={draft.preDueReminderDays}
-        busy={busy}
-        label={copy.daysBeforeLabel}
-        onChangeDays={markCustomAndSetDays}
-      />
-      <ReminderFollowUpMultiSelect draft={draft} busy={busy} onChangeFollowUp={markCustomAndSetFollowUp} />
-    </>
+    <UnifiedReminderScheduleSelect
+      draft={draft}
+      busy={busy}
+      allowExtraDays
+      onChange={markCustomAndApplySchedule}
+    />
   ) : (
     <ReminderSchedulePreview lines={previewLines} />
   );
