@@ -31,24 +31,6 @@ function formatGcalConnectError(reason: string | null): string {
   return `Could not connect Google Calendar: ${decoded}`;
 }
 
-function debugCalendarPanel(location: string, message: string, data: Record<string, unknown>): void {
-  // #region agent log
-  fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-    body: JSON.stringify({
-      sessionId: "81cbea",
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-      hypothesisId: "H1-H3",
-      runId: "auto-link-v6",
-    }),
-  }).catch(() => undefined);
-  // #endregion
-}
-
 export function GoogleCalendarConnectPanel({
   onConnectionChange,
   presentation = "card",
@@ -74,24 +56,13 @@ export function GoogleCalendarConnectPanel({
         `/api/portal/google-calendar?origin=${encodeURIComponent(window.location.origin)}`,
         { credentials: "include" },
       );
-      if (!res.ok) {
-        debugCalendarPanel("google-calendar-connect-panel.tsx", "status fetch failed", { status: res.status });
-        return;
-      }
+      if (!res.ok) return;
       const data = (await res.json()) as GoogleCalendarStatus;
       setStatus(data);
-      debugCalendarPanel("google-calendar-connect-panel.tsx", "status loaded", {
-        connected: data.connected,
-        configured: data.configured,
-        presentation,
-      });
-    } catch (error) {
-      debugCalendarPanel("google-calendar-connect-panel.tsx", "status load error", {
-        message: error instanceof Error ? error.message : "unknown",
-      });
+    } catch {
       setStatus(null);
     }
-  }, [presentation]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -102,10 +73,6 @@ export function GoogleCalendarConnectPanel({
     try {
       await navigator.clipboard.writeText(calendarCallbackUri);
       showToast("Redirect URI copied.");
-      debugCalendarPanel("google-calendar-connect-panel.tsx", "copied redirect uri", {
-        redirectUri: calendarCallbackUri,
-        hypothesisId: "H2",
-      });
     } catch {
       showToast("Could not copy. Add this URI in Google Cloud: " + calendarCallbackUri);
     }
@@ -117,16 +84,9 @@ export function GoogleCalendarConnectPanel({
       return;
     }
     const origin = encodeURIComponent(window.location.origin);
-    debugCalendarPanel("google-calendar-connect-panel.tsx", "connect navigate", {
-      origin: window.location.origin,
-      redirectUri: calendarCallbackUri,
-      port: window.location.port,
-      hypothesisId: "H2",
-      runId: "post-fix-v7",
-    });
     showToast("Opening Google sign-in…");
     window.location.assign(`/api/portal/google-calendar/connect?origin=${origin}`);
-  }, [calendarCallbackUri, showToast, status?.configured]);
+  }, [showToast, status?.configured]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -136,10 +96,6 @@ export function GoogleCalendarConnectPanel({
     if (gcal === "error") {
       const reason = params.get("reason");
       showToast(formatGcalConnectError(reason));
-      debugCalendarPanel("google-calendar-connect-panel.tsx", "connect error returned", {
-        reason: reason ? decodeURIComponent(reason) : null,
-        hypothesisId: "H15",
-      });
     }
     params.delete("gcal");
     params.delete("reason");
@@ -147,7 +103,7 @@ export function GoogleCalendarConnectPanel({
     window.history.replaceState({}, "", next);
     void load();
     onConnectionChange?.();
-  }, [calendarCallbackUri, load, onConnectionChange, showToast]);
+  }, [load, onConnectionChange, showToast]);
 
   const disconnect = async () => {
     setBusy(true);

@@ -156,17 +156,6 @@ export async function exchangeGoogleCalendarCode(
   };
   if (!res.ok || !data.access_token) {
     const detail = data.error_description?.trim() || data.error || "Could not connect Google Calendar.";
-    // #region agent log
-    const { debugGoogleCalendarLog } = await import("@/lib/google-calendar/debug-log.server");
-    debugGoogleCalendarLog("api.server.ts:exchangeGoogleCalendarCode", "token exchange failed", {
-      hypothesisId: "H10",
-      error: data.error,
-      errorDescription: data.error_description,
-      redirectUri,
-      browserOrigin,
-      managerSuffix: managerUserId.slice(-6),
-    });
-    // #endregion
     throw new Error(detail);
   }
 

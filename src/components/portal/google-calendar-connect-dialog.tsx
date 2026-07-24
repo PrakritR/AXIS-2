@@ -21,22 +21,7 @@ export function GoogleCalendarConnectDialog({ onConnectionChange }: { onConnecti
         type="button"
         variant="outline"
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => {
-          // #region agent log
-          fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-            body: JSON.stringify({
-              sessionId: "81cbea",
-              location: "google-calendar-connect-dialog.tsx:onClick",
-              message: "header button clicked",
-              data: { hypothesisId: "H9" },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => undefined);
-          // #endregion
-          setOpen(true);
-        }}
+        onClick={() => setOpen(true)}
         data-attr="google-calendar-header-btn"
       >
         Google Calendar

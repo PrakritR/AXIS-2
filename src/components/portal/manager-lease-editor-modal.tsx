@@ -194,37 +194,7 @@ export function ManagerLeaseEditorModal({
   };
 
   const closeAndSave = () => {
-    // #region agent log
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        location: "manager-lease-editor-modal.tsx:closeAndSave",
-        message: "Lease modal close",
-        data: { source },
-        timestamp: Date.now(),
-        hypothesisId: "H1",
-        runId: "post-fix",
-      }),
-    }).catch(() => {});
-    // #endregion
-    const saved = save();
-    // #region agent log
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        location: "manager-lease-editor-modal.tsx:closeAndSave",
-        message: "Lease modal close result",
-        data: { source, saved },
-        timestamp: Date.now(),
-        hypothesisId: "H1",
-        runId: "post-fix",
-      }),
-    }).catch(() => {});
-    // #endregion
+    save();
   };
 
   return (
