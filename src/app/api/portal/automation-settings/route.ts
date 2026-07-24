@@ -1,5 +1,6 @@
 import { saveManagerAutomationSettings, normalizeManagerAutomationSettings } from "@/lib/payment-automation-settings";
 import { loadManagerAutomationSettings } from "@/lib/payment-automation-settings";
+import { clearReminderOverridesForUnpaidCharges } from "@/lib/payment-reminder-lifecycle.server";
 import { loadVendorDispatchSettings, saveVendorDispatchSettings } from "@/lib/vendor-dispatch-settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -46,7 +47,7 @@ export async function PATCH(req: Request) {
     const ctx = await requireManager();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const body = (await req.json()) as Record<string, unknown>;
-    const { vendorDispatch: vendorDispatchPatch, ...rest } = body;
+    const { vendorDispatch: vendorDispatchPatch, applyReminderScope, ...rest } = body;
 
     let settings = await loadManagerAutomationSettings(ctx.db, ctx.userId);
     if (Object.keys(rest).length > 0) {
@@ -57,6 +58,11 @@ export async function PATCH(req: Request) {
       );
     }
 
+    let clearedOverrides = 0;
+    if (applyReminderScope === "future_and_existing") {
+      clearedOverrides = await clearReminderOverridesForUnpaidCharges(ctx.db, ctx.userId);
+    }
+
     let vendorDispatch = await loadVendorDispatchSettings(ctx.db, ctx.userId);
     if (vendorDispatchPatch && typeof vendorDispatchPatch === "object") {
       vendorDispatch = await saveVendorDispatchSettings(ctx.db, ctx.userId, {
@@ -64,7 +70,7 @@ export async function PATCH(req: Request) {
         ...(vendorDispatchPatch as Record<string, unknown>),
       });
     }
-    return NextResponse.json({ settings, vendorDispatch });
+    return NextResponse.json({ settings, vendorDispatch, clearedOverrides });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });

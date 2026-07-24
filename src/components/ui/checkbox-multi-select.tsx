@@ -54,6 +54,7 @@ export function CheckboxMultiSelect({
   hideLabel = false,
   /** Toolbar compact width — same visual tokens as form fields. */
   variant = "field",
+  menuFooter,
 }: {
   label: string;
   options?: CheckboxMultiSelectOption[];
@@ -68,6 +69,7 @@ export function CheckboxMultiSelect({
   labelClassName?: string;
   hideLabel?: boolean;
   variant?: "field" | "pill";
+  menuFooter?: React.ReactNode;
 }) {
   const listId = useId();
   const isClient = useIsClient();
@@ -195,6 +197,7 @@ export function CheckboxMultiSelect({
             );
           })
         )}
+        {menuFooter ? <div className="border-t border-border">{menuFooter}</div> : null}
       </div>
     ) : null;
 

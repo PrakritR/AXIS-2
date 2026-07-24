@@ -25,13 +25,11 @@ import {
   applyReminderPreset,
   buildReminderPreviewLines,
   detectReminderPreset,
-  formatPreDueReminderDaysInput,
   formatFriendlyReminderSchedule,
   labelForReminderScheduleToken,
-  parsePreDueReminderDaysInput,
-  REMINDER_BEFORE_DUE_DAY_OPTIONS,
   reminderScheduleTokensFromSettings,
   settingsPatchFromReminderScheduleTokens,
+  REMINDER_BEFORE_DUE_DAY_OPTIONS,
   PAYMENT_REMINDER_PRESETS,
   type ReminderPresetId,
   type ReminderScheduleToken,
@@ -521,7 +519,7 @@ function ReminderPresetDropdown({
 }) {
   const description =
     activePreset === "custom"
-      ? "Choose reminders below. Add extra days before due if needed."
+      ? "Choose reminders below. Add a custom day from the menu when needed."
       : PAYMENT_REMINDER_PRESETS.find((p) => p.id === activePreset)?.description ?? "";
 
   return (
@@ -561,23 +559,13 @@ function ReminderSchedulePreview({ lines }: { lines: string[] }) {
 function UnifiedReminderScheduleSelect({
   draft,
   busy,
-  allowExtraDays,
   onChange,
 }: {
   draft: ManagerAutomationSettings;
   busy: boolean;
-  allowExtraDays: boolean;
   onChange: (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => void;
 }) {
-  const extraDaysOnly = useMemo(
-    () => draft.preDueReminderDays.filter((day) => !(REMINDER_BEFORE_DUE_DAY_OPTIONS as readonly number[]).includes(day)),
-    [draft.preDueReminderDays],
-  );
-  const [extraDaysText, setExtraDaysText] = useState(() => formatPreDueReminderDaysInput(extraDaysOnly));
-
-  useEffect(() => {
-    setExtraDaysText(formatPreDueReminderDaysInput(extraDaysOnly));
-  }, [extraDaysOnly]);
+  const [customDayInput, setCustomDayInput] = useState("");
 
   const beforeDueOptions = useMemo(() => {
     const known = new Set<number>(REMINDER_BEFORE_DUE_DAY_OPTIONS);
@@ -591,64 +579,78 @@ function UnifiedReminderScheduleSelect({
 
   const selected = reminderScheduleTokensFromSettings(draft);
 
-  const commitSchedule = (tokens: ReminderScheduleToken[], extraRaw: string) => {
-    const patch = settingsPatchFromReminderScheduleTokens(tokens);
-    const extras = parsePreDueReminderDaysInput(extraRaw);
-    patch.preDueReminderDays = [...new Set([...patch.preDueReminderDays, ...extras])].sort((a, b) => b - a);
+  const commitSchedule = (tokens: ReminderScheduleToken[]) => {
+    onChange(settingsPatchFromReminderScheduleTokens(tokens));
+  };
+
+  const addCustomDay = () => {
+    const day = Math.round(Number(customDayInput.trim()));
+    if (!Number.isFinite(day) || day < 1 || day > 60) return;
+    const token = `before:${day}` as ReminderScheduleToken;
+    const nextTokens = selected.includes(token) ? selected : [...selected, token];
+    const patch = settingsPatchFromReminderScheduleTokens(nextTokens);
+    patch.preDueReminderDays = [...new Set([...patch.preDueReminderDays, day])].sort((a, b) => b - a);
     onChange(patch);
+    setCustomDayInput("");
   };
 
   return (
-    <div className="space-y-2">
-      <CheckboxMultiSelect
-        label="Reminders"
-        labelClassName={PORTAL_FIELD_LABEL_CLASS}
-        groups={[
-          { label: "Before due", options: beforeDueOptions },
-          {
-            label: "Due & after",
-            options: [
-              { value: "due_date", label: "Due date" },
-              { value: "every_day_late", label: "Every day late" },
-            ],
-          },
-        ]}
-        selected={selected}
-        onChange={(next) => commitSchedule(next as ReminderScheduleToken[], extraDaysText)}
-        disabled={busy}
-        emptyLabel="None selected"
-        dataAttr="payment-reminder-schedule"
-      />
-      {allowExtraDays ? (
-        <div>
-          <label className={PORTAL_FIELD_LABEL_CLASS}>Other days before due</label>
-          <Input
-            className="mt-1 h-10 rounded-lg text-sm"
-            value={extraDaysText}
-            disabled={busy}
-            placeholder="e.g. 30, 6, 4"
-            aria-label="Other days before due"
-            data-attr="payment-reminder-days-custom"
-            onChange={(e) => setExtraDaysText(e.target.value)}
-            onBlur={() => {
-              const formatted = formatPreDueReminderDaysInput(parsePreDueReminderDaysInput(extraDaysText));
-              setExtraDaysText(formatted);
-              commitSchedule(selected, formatted);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                const formatted = formatPreDueReminderDaysInput(parsePreDueReminderDaysInput(extraDaysText));
-                setExtraDaysText(formatted);
-                commitSchedule(selected, formatted);
-              }
-            }}
-          />
+    <CheckboxMultiSelect
+      label="Reminders"
+      labelClassName={PORTAL_FIELD_LABEL_CLASS}
+      groups={[
+        { label: "Before due", options: beforeDueOptions },
+        {
+          label: "Due & after",
+          options: [
+            { value: "due_date", label: "Due date" },
+            { value: "every_day_late", label: "Every day late" },
+          ],
+        },
+      ]}
+      selected={selected}
+      onChange={(next) => commitSchedule(next as ReminderScheduleToken[])}
+      disabled={busy}
+      emptyLabel="None selected"
+      dataAttr="payment-reminder-schedule"
+      menuFooter={
+        <div className="px-3 py-2">
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">Custom day</p>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              className="h-9 min-h-0 flex-1"
+              placeholder="Days before due"
+              value={customDayInput}
+              disabled={busy}
+              data-attr="payment-reminder-custom-day"
+              onChange={(e) => setCustomDayInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomDay();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 rounded-full px-3 text-xs"
+              disabled={busy || !customDayInput.trim()}
+              onClick={addCustomDay}
+            >
+              Add
+            </Button>
+          </div>
         </div>
-      ) : null}
-    </div>
+      }
+    />
   );
 }
+
+export type PaymentReminderSaveScope = "future_only" | "future_and_existing";
 
 function PaymentAutomationSettingsForm({
   initialSettings,
@@ -670,6 +672,7 @@ function PaymentAutomationSettingsForm({
   const [draft, setDraft] = useState(initialSettings);
   const [selectedPreset, setSelectedPreset] = useState<ReminderPresetId>(() => detectReminderPreset(initialSettings));
   const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
+  const [saveScope, setSaveScope] = useState<PaymentReminderSaveScope>("future_only");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -692,17 +695,35 @@ function PaymentAutomationSettingsForm({
     setBusy(true);
     try {
       const payload = currentPayload;
+      // #region agent log
+      fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+        body: JSON.stringify({
+          sessionId: "81cbea",
+          runId: "payment-reminders-save",
+          hypothesisId: "H4",
+          location: "payment-schedule-ui.tsx:save",
+          message: "payment reminder save",
+          data: { saveScope, variant, isDirty },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const res = await fetch("/api/portal/automation-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          ...(variant === "payments" ? { applyReminderScope: saveScope } : {}),
+        }),
       });
       if (!res.ok) {
         const errBody = (await res.json()) as { error?: string };
         throw new Error(errBody.error ?? "Could not save settings.");
       }
-      const body = (await res.json()) as { settings: ManagerAutomationSettings };
+      const body = (await res.json()) as { settings: ManagerAutomationSettings; clearedOverrides?: number };
       setDraft(body.settings);
       setSelectedPreset(detectReminderPreset(body.settings));
       setVisibilityDaysInput(String(body.settings.scheduleVisibilityDays));
@@ -711,7 +732,11 @@ function PaymentAutomationSettingsForm({
         window.dispatchEvent(new Event(PAYMENT_AUTOMATION_SETTINGS_EVENT));
       }
       if (!options?.silent) {
-        showToast(copy.savedToast);
+        if (variant === "payments" && saveScope === "future_and_existing" && (body.clearedOverrides ?? 0) > 0) {
+          showToast("Reminder schedule saved for future and existing unpaid payments.");
+        } else {
+          showToast(copy.savedToast);
+        }
       }
       return true;
     } catch (e) {
@@ -720,7 +745,7 @@ function PaymentAutomationSettingsForm({
     } finally {
       setBusy(false);
     }
-  }, [copy.savedToast, currentPayload, onSaved, showToast]);
+  }, [copy.savedToast, currentPayload, onSaved, saveScope, showToast, variant]);
 
   const saveIfDirty = useCallback(async (): Promise<boolean> => {
     if (!isDirty) return true;
@@ -750,12 +775,7 @@ function PaymentAutomationSettingsForm({
   const isCustom = activePreset === "custom";
 
   const scheduleEditors = isCustom ? (
-    <UnifiedReminderScheduleSelect
-      draft={draft}
-      busy={busy}
-      allowExtraDays
-      onChange={markCustomAndApplySchedule}
-    />
+    <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={markCustomAndApplySchedule} />
   ) : (
     <ReminderSchedulePreview lines={previewLines} />
   );
@@ -886,9 +906,54 @@ function PaymentAutomationSettingsForm({
       ) : null}
 
       {saveVisible ? (
-        <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
-          {copy.saveLabel}
-        </Button>
+        <>
+          {compact && variant === "payments" ? (
+            <fieldset className="space-y-2.5 rounded-xl border border-border bg-accent/20 px-3 py-3">
+              <legend className="px-1 text-xs font-semibold text-muted">Apply this schedule to</legend>
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="radio"
+                  name="payment-reminder-save-scope"
+                  className="mt-0.5"
+                  checked={saveScope === "future_only"}
+                  onChange={() => setSaveScope("future_only")}
+                  disabled={busy}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Future payments only</span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    New charges use this schedule. Existing per-payment reminder edits stay as they are.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="radio"
+                  name="payment-reminder-save-scope"
+                  className="mt-0.5"
+                  checked={saveScope === "future_and_existing"}
+                  onChange={() => setSaveScope("future_and_existing")}
+                  disabled={busy}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Future and existing unpaid payments</span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    Clears per-payment reminder customizations and applies this schedule to all unpaid charges.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+          ) : null}
+          <Button
+            type="button"
+            variant="primary"
+            className={`rounded-full ${compact && variant === "payments" ? "w-full" : ""}`}
+            onClick={() => void save()}
+            disabled={busy || !isDirty}
+          >
+            {copy.saveLabel}
+          </Button>
+        </>
       ) : null}
     </div>
   );
@@ -984,38 +1049,22 @@ export function ReminderSettingsModal({
   onSaved: (next: ManagerAutomationSettings) => void;
   variant?: ScheduleSettingsVariant;
 }) {
-  const formRef = useRef<PaymentAutomationSettingsHandle>(null);
-  const [closing, setClosing] = useState(false);
-
-  const handleClose = () => {
-    if (closing) return;
-    setClosing(true);
-    void (formRef.current?.saveIfDirty() ?? Promise.resolve(true)).then((ok) => {
-      setClosing(false);
-      if (ok) onClose();
-    });
-  };
-
   if (!settings) return null;
 
   return (
     <Modal
       open={open}
-      onClose={handleClose}
+      onClose={onClose}
       title={variant === "inbox" ? "Schedule settings" : "Payment reminders"}
       dense={variant === "payments"}
       panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}
     >
-      {settings ? (
-        <PaymentAutomationSettingsPanel
-          settings={settings}
-          variant={variant}
-          layout={variant === "payments" ? "modal" : "card"}
-          autoSaveOnClose
-          formRef={formRef}
-          onSaved={onSaved}
-        />
-      ) : null}
+      <PaymentAutomationSettingsPanel
+        settings={settings}
+        variant={variant}
+        layout={variant === "payments" ? "modal" : "card"}
+        onSaved={onSaved}
+      />
     </Modal>
   );
 }
