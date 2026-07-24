@@ -577,7 +577,7 @@ describe("promotions tools", () => {
     expect(generated.promotions.map((p) => p.id)).toEqual(["promo-2"]);
   });
 
-  it("create_promotion validates property ownership and writes an audited draft", async () => {
+  it("create_promotion validates property ownership and writes an audited promotion with flyer", async () => {
     const { ctx, store } = makeWritableCtx({
       manager_property_records: [
         { id: "p1", manager_user_id: "manager_a", status: "live", row_data: { title: "12 Main Street" } },
@@ -589,18 +589,26 @@ describe("promotions tools", () => {
 
     const preview = await previewWrite(createPromotionTool, ctx, { title: "Summer special", propertyId: "p1" });
     expect(preview.ok).toBe(true);
-    if (preview.ok) expect(preview.preview.summary).toContain("Promotions page");
+    if (preview.ok) expect(preview.preview.summary).toMatch(/flyer/i);
 
     const res = await executeWrite(createPromotionTool, ctx, { title: "Summer special", propertyId: "p1", notes: "Near park" });
     expect(res.ok).toBe(true);
     expect(store.manager_promotion_records).toHaveLength(1);
     const created = store.manager_promotion_records![0]!;
     expect(created.manager_user_id).toBe("manager_a");
-    const rowData = created.row_data as { title: string; status: string; propertyLabel: string; inputs: { customDetails: string } };
+    const rowData = created.row_data as {
+      title: string;
+      status: string;
+      propertyLabel: string;
+      inputs: { customDetails: string };
+      flyers?: unknown[];
+      copy?: unknown;
+    };
     expect(rowData.title).toBe("Summer special");
-    expect(rowData.status).toBe("draft");
+    expect(rowData.status).toBe("generated");
     expect(rowData.propertyLabel).toBe("12 Main Street");
     expect(rowData.inputs.customDetails).toBe("Near park");
+    expect(rowData.flyers?.length ?? (rowData.copy ? 1 : 0)).toBeGreaterThan(0);
     expect(store.audit_log).toHaveLength(1);
     expect(String(store.audit_log![0]!.dedupe_key)).toMatch(/^create_promotion:manager_a:[0-9a-f]+:\d{4}-\d{2}-\d{2}$/);
 

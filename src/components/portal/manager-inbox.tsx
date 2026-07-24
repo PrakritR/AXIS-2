@@ -1117,6 +1117,11 @@ export const ManagerInbox = forwardRef<
           ? activeThread.email || "Unknown recipient"
           : activeThread.from || activeThread.email || "Unknown sender"
       }
+      avatarName={
+        activeIsSent
+          ? activeThread.email || undefined
+          : activeThread.from || activeThread.email || undefined
+      }
       subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
       messages={activeBubbles}
       afterMessages={scheduledCards}

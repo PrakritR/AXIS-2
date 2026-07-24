@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   attachmentsToApiPayload,
@@ -8,6 +8,11 @@ import {
   userMessageContentFromInput,
   type PendingChatAttachment,
 } from "@/lib/assistant-chat-attachments.client";
+import {
+  clearAssistantChatMessages,
+  loadAssistantChatMessages,
+  saveAssistantChatMessages,
+} from "@/lib/axis-assistant/assistant-chat-storage";
 import { notifyAgentPendingActionsChanged } from "@/lib/axis-assistant/pending-actions-events";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -53,10 +58,21 @@ export function useAssistantConversation(endpoint: string) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatHydrated, setChatHydrated] = useState(false);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMessages(loadAssistantChatMessages(endpoint));
+    setChatHydrated(true);
+  }, [endpoint]);
+
+  useEffect(() => {
+    if (!chatHydrated) return;
+    saveAssistantChatMessages(endpoint, messages);
+  }, [chatHydrated, endpoint, messages]);
 
   const send = useCallback(
     async (prompt?: string) => {
@@ -156,12 +172,13 @@ export function useAssistantConversation(endpoint: string) {
   const reset = useCallback(() => {
     attachments.forEach(revokeAttachmentPreview);
     setMessages([]);
+    clearAssistantChatMessages(endpoint);
     setLastTools([]);
     setPendingAction(null);
     setError(null);
     setInput("");
     setAttachments([]);
-  }, [attachments]);
+  }, [attachments, endpoint]);
 
   return {
     input,

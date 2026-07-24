@@ -45,8 +45,12 @@ export function AssistantConversationProvider({
   );
 }
 
-export function useOptionalAssistantConversation(endpoint: string): AssistantConversationValue {
+/** Shared conversation from {@link AssistantConversationProvider} (popup + dock). */
+export function useOptionalAssistantConversation(_endpoint?: string): AssistantConversationValue {
+  void _endpoint;
   const shared = useContext(AssistantConversationContext);
-  const local = useAssistantConversation(endpoint);
-  return shared ?? local;
+  if (!shared) {
+    throw new Error("useOptionalAssistantConversation requires AssistantConversationProvider");
+  }
+  return shared;
 }
