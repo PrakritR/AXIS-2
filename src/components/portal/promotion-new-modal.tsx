@@ -194,8 +194,9 @@ export function PromotionNewModal({
         )
       }
     >
-      {/* Footer variant fixes the shell and expects the child to scroll. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+      {/* The Modal body is the one scroll container — no nested scroller here,
+          which trapped touch scrolling in the native WebView. */}
+      <div className="pr-1">
         <div className="mb-3">
           <label className="text-xs font-semibold text-muted" htmlFor="promotion-new-kind">
             Promotion type
