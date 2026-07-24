@@ -16,6 +16,7 @@ import {
   PortalSettingsSections,
 } from "@/components/portal/portal-settings-ui";
 import { ManagerPlan } from "@/components/portal/manager-plan";
+import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -117,15 +118,15 @@ export function PortalProfileClient({
 
   const editAction = editing ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="outline" size="sm" onClick={cancel}>
+      <Button type="button" variant="outline" className="h-9 min-h-0 px-4 text-[13px]" onClick={cancel}>
         Cancel
       </Button>
-      <Button type="button" variant="primary" size="sm" disabled={saving} onClick={() => void save()}>
+      <Button type="button" variant="primary" className="h-9 min-h-0 px-4 text-[13px]" disabled={saving} onClick={() => void save()}>
         {saving ? "Saving…" : "Save"}
       </Button>
     </div>
   ) : (
-    <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
+    <Button type="button" variant="outline" className="h-9 min-h-0 px-4 text-[13px]" onClick={() => setEditing(true)}>
       Edit
     </Button>
   );
@@ -197,6 +198,7 @@ export function PortalProfileClient({
           </PortalSettingsGroup>
         </PortalSettingsSection>
       ) : null}
+      {variant === "manager" ? <AssistantDisplaySetting /> : null}
       <NotificationsToggle />
       <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
       <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />

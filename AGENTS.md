@@ -145,13 +145,20 @@ Framework invariants worth knowing before you touch `src/lib/tools/registry.ts`:
   `tests/unit/tools/confirm-gate-portal-scope.test.ts`.
 
 **One conversation loop, multiple surfaces.** The floating popup
-(`axis-assistant.tsx`) and the manager dashboard's right-dock
-(`dashboard-assistant-dock.tsx`, desktop `hidden lg:block` only — mobile keeps
-FAB/popup) both drive the SAME send/confirm transport,
+(`axis-assistant.tsx`) and the portal-wide right rail
+(`portal-assistant-rail.tsx`, desktop only — it hides below `lg`, so small
+screens always get the FAB/popup) both drive the SAME send/confirm transport,
 `useAssistantConversation(endpoint)`, and share the suggestion chips +
-preview/confirm card from `assistant-shared.tsx`. A dashboard-initiated approval
-is NOT a new send path: proposed writes surface as "AI drafts" chips in Needs
-attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
+preview/confirm card from `assistant-shared.tsx`. Which of the two renders is
+ONE cookie-backed preference in `src/lib/axis-assistant/dock-store.ts` (popup by
+default, SSR-seeded from the cookie by `assistant-dock-state.ts`); the
+in-assistant pin, the rail's unpin, and the manager Settings picker
+(`assistant-display-setting.tsx`) are all drivers of that same store. Add a new
+entry point by calling `dockAssistantToRail()` / `undockAssistantFromRail()` and
+reading `useAssistantDocked()` — never a second persistence layer, which would
+let two controls disagree about the same preference. A dashboard-initiated
+approval is NOT a new send path: proposed writes surface as "AI drafts" chips in
+Needs attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
 `useAgentPendingActions` off owner-scoped `GET /api/agent/pending-actions`), and
 Approve/Discard POST ONLY the action id to `/api/agent/chat` →
 `claimPendingAction` re-validates the stored input server-side. Never add a

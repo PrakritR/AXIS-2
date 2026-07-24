@@ -100,7 +100,7 @@ export function TourProposalsPanel() {
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 type="button"
-                size="sm"
+                className="h-9 min-h-0 px-4 text-[13px]"
                 disabled={busyId === proposal.id}
                 onClick={() => void decide(proposal.id, "approve")}
                 data-attr="tour-proposal-approve"
@@ -110,7 +110,7 @@ export function TourProposalsPanel() {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                className="h-9 min-h-0 px-4 text-[13px]"
                 disabled={busyId === proposal.id}
                 onClick={() => void decide(proposal.id, "discard")}
                 data-attr="tour-proposal-discard"

@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+
 import {
   ASSISTANT_DOCK_COLLAPSED_COOKIE,
   ASSISTANT_DOCKED_COOKIE,
@@ -59,10 +61,22 @@ export function subscribeAssistantDocked(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * Seeds the singleton from the SSR cookie values. It runs from the rail's mount
+ * effect, i.e. after readers rendered earlier in the tree (the Settings picker
+ * lives in `{children}`), so it notifies them instead of mutating silently.
+ */
 export function initAssistantDockState(initial: { collapsed: boolean; docked: boolean }): void {
+  const changed = collapsed !== initial.collapsed || docked !== initial.docked;
   collapsed = initial.collapsed;
   docked = initial.docked;
   syncDomAttributes();
+  if (changed) notify();
+}
+
+/** Reactive read of the "pinned to the right rail" preference. */
+export function useAssistantDocked(): boolean {
+  return useSyncExternalStore(subscribeAssistantDocked, getAssistantDocked, () => false);
 }
 
 export function expandAssistantDock(): void {

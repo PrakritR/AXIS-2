@@ -192,7 +192,7 @@ export function GoogleCalendarConnectPanel({ onConnectionChange }: { onConnectio
                 : null}
             </p>
           </div>
-          <Button type="button" variant="primary" size="sm" disabled={busy} onClick={() => void connect()}>
+          <Button type="button" variant="primary" className="h-9 min-h-0 px-4 text-[13px]" disabled={busy} onClick={() => void connect()}>
             {status.googleAuthUser ? "Grant calendar access" : "Continue with Google"}
           </Button>
         </div>
@@ -225,11 +225,11 @@ export function GoogleCalendarConnectPanel({ onConnectionChange }: { onConnectio
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {status.connected ? (
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void disconnect()}>
+            <Button type="button" variant="outline" className="h-9 min-h-0 px-4 text-[13px]" disabled={busy} onClick={() => void disconnect()}>
               Disconnect
             </Button>
           ) : (
-            <Button type="button" variant="primary" size="sm" disabled={busy} onClick={connect}>
+            <Button type="button" variant="primary" className="h-9 min-h-0 px-4 text-[13px]" disabled={busy} onClick={connect}>
               Connect my Google Calendar
             </Button>
           )}

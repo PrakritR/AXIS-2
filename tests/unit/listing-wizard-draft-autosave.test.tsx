@@ -404,6 +404,20 @@ describe("closing the add-listing wizard saves the work in progress", () => {
 });
 
 describe("submitting the wizard", () => {
+  // A listing whose rooms carry no media hits the publish-time readiness
+  // warning (`shouldWarnOnPublish`) before anything uploads, and jsdom's
+  // `window.confirm` is not implemented — it answers `undefined`, which reads
+  // as "cancel" and aborts the submit silently. These tests are about the
+  // upload/publish path, so answer the dialog the way a manager who proceeds
+  // would.
+  beforeEach(() => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   /** Passes every step's validation, so the wizard reaches the upload stage. */
   function validSubmission(): ManagerListingSubmissionV1 {
     const base = createDefaultListingSubmission();
