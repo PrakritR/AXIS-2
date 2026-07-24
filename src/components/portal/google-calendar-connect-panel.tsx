@@ -16,24 +16,6 @@ type GoogleCalendarStatus = {
   missingSecret?: boolean;
 };
 
-function debugCalendarPanel(location: string, message: string, data: Record<string, unknown>): void {
-  // #region agent log
-  fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-    body: JSON.stringify({
-      sessionId: "81cbea",
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-      hypothesisId: "H1-H3",
-      runId: "auto-link-v5",
-    }),
-  }).catch(() => undefined);
-  // #endregion
-}
-
 export function GoogleCalendarConnectPanel({ onConnectionChange }: { onConnectionChange?: () => void }) {
   const { showToast } = useAppUi();
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
@@ -49,25 +31,10 @@ export function GoogleCalendarConnectPanel({ onConnectionChange }: { onConnectio
         credentials: "include",
       }).catch(() => undefined);
       const res = await fetch("/api/portal/google-calendar", { credentials: "include" });
-      if (!res.ok) {
-        debugCalendarPanel("google-calendar-connect-panel.tsx", "status fetch failed", {
-          status: res.status,
-        });
-        return;
-      }
+      if (!res.ok) return;
       const data = (await res.json()) as GoogleCalendarStatus;
       setStatus(data);
-      debugCalendarPanel("google-calendar-connect-panel.tsx", "status loaded", {
-        connected: data.connected,
-        configured: data.configured,
-        schemaReady: data.schemaReady,
-        googleAuthUser: data.googleAuthUser,
-        missingSecret: data.missingSecret,
-      });
-    } catch (error) {
-      debugCalendarPanel("google-calendar-connect-panel.tsx", "status load error", {
-        message: error instanceof Error ? error.message : "unknown",
-      });
+    } catch {
       setStatus(null);
     }
   }, []);
@@ -78,20 +45,12 @@ export function GoogleCalendarConnectPanel({ onConnectionChange }: { onConnectio
   }, [load]);
 
   const connectWithDedicatedOAuth = useCallback(() => {
-    debugCalendarPanel("google-calendar-connect-panel.tsx", "connect via dedicated oauth", {
-      origin: window.location.origin,
-      redirectUri: calendarCallbackUri,
-    });
     const origin = encodeURIComponent(window.location.origin);
     window.location.href = `/api/portal/google-calendar/connect?origin=${origin}`;
   }, [calendarCallbackUri]);
 
   const connectWithGoogleSignIn = useCallback(async () => {
     setBusy(true);
-    debugCalendarPanel("google-calendar-connect-panel.tsx", "connect via supabase oauth", {
-      configured: status?.configured,
-      googleAuthUser: status?.googleAuthUser,
-    });
     const result = await runOAuthSignIn({
       provider: "google",
       intent: "manager",
@@ -118,9 +77,6 @@ export function GoogleCalendarConnectPanel({ onConnectionChange }: { onConnectio
     if (params.get("gcal")) return;
     if (autoConnectStarted.current) return;
     autoConnectStarted.current = true;
-    debugCalendarPanel("google-calendar-connect-panel.tsx", "auto-start dedicated oauth", {
-      googleAuthUser: status.googleAuthUser,
-    });
     connectWithDedicatedOAuth();
   }, [status, connectWithDedicatedOAuth]);
 
