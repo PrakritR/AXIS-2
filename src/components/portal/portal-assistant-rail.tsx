@@ -70,7 +70,9 @@ export function PortalAssistantRail({
             type="button"
             onClick={toggleAssistantDock}
             aria-label="Open PropLane Assistant"
-            className="mt-3 flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:scale-105"
+            data-attr="axis-assistant-rail-fab"
+            className="mt-auto flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
+            style={{ background: "var(--btn-primary)" }}
           >
             <AxisAssistantSparkleIcon className="h-5 w-5" />
           </button>

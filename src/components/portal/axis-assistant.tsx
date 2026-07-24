@@ -36,11 +36,6 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
-import {
-  expandAssistantDock,
-  getAssistantDockCollapsed,
-  subscribeAssistantDockCollapsed,
-} from "@/lib/axis-assistant/dock-store";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
 import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
 import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
@@ -65,33 +60,22 @@ function handleOpenAssistant() {
   });
 }
 
-function useAssistantDockCollapsed() {
-  return useSyncExternalStore(subscribeAssistantDockCollapsed, getAssistantDockCollapsed, () => false);
-}
-
 /**
- * Desktop: when the right rail is expanded, no floating button. When collapsed,
- * a bottom-left sparkle opens the rail. Mobile/tablet: bottom-right FAB opens
- * the popup panel (unchanged).
+ * Desktop: when the right rail is expanded or collapsed, no floating button — the
+ * rail owns the launcher (bottom of the collapsed strip). Mobile/tablet: bottom-right
+ * FAB opens the popup panel.
  */
 function AxisAssistantFixedTrigger() {
   const open = useAxisAssistantOpen();
   const isSmall = useIsSmallPortalViewport();
-  const dockCollapsed = useAssistantDockCollapsed();
 
   if (open) return null;
-  if (!isSmall && !dockCollapsed) return null;
-
-  const isDesktopCollapsed = !isSmall && dockCollapsed;
+  if (!isSmall) return null;
 
   return (
     <button
       type="button"
       onClick={() => {
-        if (isDesktopCollapsed) {
-          expandAssistantDock();
-          return;
-        }
         handleOpenAssistant();
       }}
       aria-label="Open PropLane Assistant"
@@ -99,9 +83,7 @@ function AxisAssistantFixedTrigger() {
       data-attr="axis-assistant-fab"
       className={cn(
         "axis-assistant-fab group fixed z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 max-lg:h-11 max-lg:w-11 [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
-        isDesktopCollapsed
-          ? "bottom-6 left-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:left-auto max-lg:right-[max(1.25rem,env(safe-area-inset-right))] [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]"
-          : "bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]",
+        "bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]",
       )}
       style={{ background: "var(--btn-primary)" }}
     >
