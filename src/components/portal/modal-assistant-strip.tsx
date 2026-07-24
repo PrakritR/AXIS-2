@@ -13,7 +13,7 @@ export function ModalAssistantStrip({ contextHint }: { contextHint?: string | nu
   if (!config) return null;
 
   return (
-    <div className="mt-3 border-t border-border pt-3" data-attr="modal-assistant-strip">
+    <div className="mt-3 shrink-0 border-t border-border pt-3" data-attr="modal-assistant-strip">
       <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-primary">
         <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
         PropLane Assistant

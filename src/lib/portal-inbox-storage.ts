@@ -188,13 +188,17 @@ export async function syncPersistedInboxFromServer(
     const rows = (Array.isArray(body.rows) ? body.rows : []).filter(looksLikeThread);
     const existing = memoryByKey.get(key) ?? [];
     const merged = mergeInboxRowsWithLocalTrash(rows, existing, { excludeIds: opts?.excludeIds });
-    memoryByKey.set(key, merged);
-    persistInboxToSession(key, merged);
+    const collapsed =
+      key === MANAGER_INBOX_STORAGE_KEY
+        ? collapsePersonInboxThreads(merged, { mergeFolders: true })
+        : merged;
+    memoryByKey.set(key, collapsed);
+    persistInboxToSession(key, collapsed);
     inboxLastSyncedAtByKey.set(key, Date.now());
-    if (inboxRowsChanged(existing, merged)) {
+    if (inboxRowsChanged(existing, collapsed)) {
       window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
     }
-    return merged;
+    return collapsed;
   })();
   inboxSyncPromiseByKey.set(key, promise);
   try {
@@ -209,7 +213,10 @@ export function loadPersistedInbox(key: string, fallback: PersistedInboxThread[]
   if (!canUse()) return fallback;
   hydrateInboxFromSession(key);
   if (memoryByKey.has(key)) {
-    return memoryByKey.get(key) ?? [];
+    const rows = memoryByKey.get(key) ?? [];
+    return key === MANAGER_INBOX_STORAGE_KEY
+      ? collapsePersonInboxThreads(rows, { mergeFolders: true })
+      : rows;
   }
   void syncPersistedInboxFromServer(key).catch(() => undefined);
   return fallback;
@@ -357,6 +364,17 @@ export function inboxThreadSortMs(id: string, fallbackTime?: string | null): num
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/** Stable resident/counterparty key for collapsing duplicate person-threads. */
+export function inboxThreadCounterpartyEmail(
+  thread: Pick<PersistedInboxThread, "email" | "from">,
+): string {
+  const email = String(thread.email ?? "").trim().toLowerCase();
+  if (email.includes("@")) return email;
+  const from = String(thread.from ?? "").trim().toLowerCase();
+  if (from.includes("@")) return from;
+  return email;
+}
+
 export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMessage[] {
   const root: InboxThreadMessage = {
     id: `${thread.id}-root`,
@@ -377,4 +395,86 @@ export function appendReplyToInboxThread(
     preview: reply.body.slice(0, 100).replace(/\n/g, " "),
     unread: false,
   };
+}
+
+/**
+ * Collapse duplicate person-threads into one row for display. Payment reminders
+ * and manual sends used to mint a fresh thread id per message; this merges their
+ * message history without rewriting storage.
+ */
+export function collapsePersonInboxThreads(
+  threads: PersistedInboxThread[],
+  opts?: { mergeFolders?: boolean },
+): PersistedInboxThread[] {
+  const mergeFolders = opts?.mergeFolders === true;
+  const solo: PersistedInboxThread[] = [];
+  const groups = new Map<string, PersistedInboxThread[]>();
+
+  for (const thread of threads) {
+    const counterparty = inboxThreadCounterpartyEmail(thread);
+    if (!counterparty.includes("@") || thread.folder === "trash") {
+      solo.push(thread);
+      continue;
+    }
+    const key = mergeFolders ? counterparty : `${thread.folder}:${counterparty}`;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(thread);
+    groups.set(key, bucket);
+  }
+
+  const merged: PersistedInboxThread[] = [...solo];
+  for (const group of groups.values()) {
+    if (group.length <= 1) {
+      merged.push(group[0]!);
+      continue;
+    }
+    const sorted = [...group].sort(
+      (a, b) => inboxThreadSortMs(a.id, a.time) - inboxThreadSortMs(b.id, b.time),
+    );
+    const canonical = sorted[sorted.length - 1]!;
+    const allMessages: InboxThreadMessage[] = [];
+    for (const th of sorted) {
+      allMessages.push(...inboxThreadMessages(th));
+    }
+    const seenIds = new Set<string>();
+    const ordered = allMessages.filter((m) => {
+      if (seenIds.has(m.id)) return false;
+      seenIds.add(m.id);
+      return true;
+    });
+    const first = ordered[0];
+    if (!first) {
+      merged.push(canonical);
+      continue;
+    }
+    const last = ordered[ordered.length - 1]!;
+    merged.push({
+      ...canonical,
+      body: first.body,
+      from: first.from,
+      time: canonical.time,
+      preview: last.body.slice(0, 100).replace(/\n/g, " "),
+      messages: ordered.slice(1),
+      unread: group.some((t) => t.unread),
+    });
+  }
+  return merged;
+}
+
+/** Resolve the collapsed thread row for the open conversation (merged message history). */
+export function resolveCollapsedInboxThread(
+  expandedId: string | null,
+  collapsed: PersistedInboxThread[],
+  raw: PersistedInboxThread[],
+): PersistedInboxThread | null {
+  if (!expandedId) return null;
+  const direct = collapsed.find((t) => t.id === expandedId);
+  if (direct) return direct;
+  const legacy = raw.find((t) => t.id === expandedId);
+  if (!legacy) return null;
+  const counterparty = inboxThreadCounterpartyEmail(legacy);
+  if (!counterparty.includes("@")) return legacy;
+  return (
+    collapsed.find((t) => inboxThreadCounterpartyEmail(t) === counterparty) ?? legacy
+  );
 }

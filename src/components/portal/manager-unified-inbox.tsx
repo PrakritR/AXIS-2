@@ -20,9 +20,11 @@ import {
 import {
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
+  collapsePersonInboxThreads,
   loadPersistedInbox,
   inboxThreadMessages,
   inboxThreadSortMs,
+  syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import {
   mergeUnifiedInboxItems,
@@ -144,6 +146,12 @@ export function ManagerUnifiedInbox({
     return () => window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
   }, []);
 
+  useEffect(() => {
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setEmailThreads(rows);
+    });
+  }, []);
+
   const loadSms = useCallback(async () => {
     // SMS UI hidden until A2P clears — never fetch SMS conversations. Inbound
     // texts still land as inbox notices and fall through to the unified list
@@ -197,7 +205,10 @@ export function ManagerUnifiedInbox({
     // When SMS UI is hidden, KEEP SMS-like inbound notices so an inbound text is
     // still visible in the person's conversation instead of vanishing into a
     // hidden SMS panel.
-    const base = filterEmailInboxThreads(emailThreads, { keepSmsLike: !smsUiEnabled });
+    const base = collapsePersonInboxThreads(
+      filterEmailInboxThreads(emailThreads, { keepSmsLike: !smsUiEnabled }),
+      { mergeFolders: true },
+    );
     if (!threadFilters || !filterContacts) return base;
     return base.filter((t) =>
       threadPassesCommunicationFilters({

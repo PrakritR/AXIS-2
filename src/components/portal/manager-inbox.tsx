@@ -23,6 +23,8 @@ import {
   inboxThreadMessages,
   inboxThreadSortMs,
   appendReplyToInboxThread,
+  collapsePersonInboxThreads,
+  resolveCollapsedInboxThread,
   type InboxThreadMessage,
   type InboxAiDraft,
 } from "@/lib/portal-inbox-storage";
@@ -250,14 +252,17 @@ export const ManagerInbox = forwardRef<
 
   const emailThreads = useMemo(() => {
     const base = embeddedInCommunication ? filterEmailInboxThreads(local) : local;
-    if (!threadFilters || !filterContacts) return base;
-    return base.filter((t) =>
-      threadPassesCommunicationFilters({
-        filters: threadFilters,
-        contacts: filterContacts,
-        counterpartyEmail: t.email,
-      }),
-    );
+    const scoped =
+      !threadFilters || !filterContacts
+        ? base
+        : base.filter((t) =>
+            threadPassesCommunicationFilters({
+              filters: threadFilters,
+              contacts: filterContacts,
+              counterpartyEmail: t.email,
+            }),
+          );
+    return collapsePersonInboxThreads(scoped, { mergeFolders: embeddedInCommunication });
   }, [embeddedInCommunication, local, threadFilters, filterContacts]);
 
   const counts = useMemo(() => countThreads(emailThreads, scheduleCount), [emailThreads, scheduleCount]);
@@ -588,8 +593,8 @@ export const ManagerInbox = forwardRef<
   const [replySending, setReplySending] = useState(false);
 
   const activeThread = useMemo(
-    () => (expandedId ? local.find((t) => t.id === expandedId) ?? null : null),
-    [expandedId, local],
+    () => resolveCollapsedInboxThread(expandedId, emailThreads, local),
+    [expandedId, emailThreads, local],
   );
 
   // A fresh draft per conversation.

@@ -541,7 +541,7 @@ export function ManagerPaymentsLedgerPanel({
           </Button>
           {row.householdChargeId ? (
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
-              View reminders
+              Edit reminder
             </Button>
           ) : null}
         </>

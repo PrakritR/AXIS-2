@@ -181,7 +181,6 @@ async function findExistingPortalMessageThread(
     .from("portal_inbox_thread_records")
     .select("id, row_data, owner_user_id, participant_email, scope, updated_at")
     .eq("scope", side.scope)
-    .eq("thread_type", "portal_message")
     .eq(matchCol, matchVal)
     .eq("row_data->>folder", side.folder)
     .eq("row_data->>email", otherPartyNormalized)
@@ -233,7 +232,7 @@ export async function deliverPortalMessageThreadSide(
     /** Direction of the appended turn from the owner's view (false = inbound). */
     outbound: boolean;
   },
-): Promise<void> {
+): Promise<{ action: "append" | "create"; threadId: string }> {
   const existing = await findExistingPortalMessageThread(db, args);
   const nowIso = new Date().toISOString();
 
@@ -268,7 +267,7 @@ export async function deliverPortalMessageThreadSide(
       },
       { onConflict: "id" },
     );
-    return;
+    return { action: "append", threadId: existing.id };
   }
 
   await db.from("portal_inbox_thread_records").upsert(
@@ -294,6 +293,7 @@ export async function deliverPortalMessageThreadSide(
     },
     { onConflict: "id" },
   );
+  return { action: "create", threadId: args.fallbackId };
 }
 
 export async function deliverPortalInboxMessage(

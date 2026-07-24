@@ -24,6 +24,10 @@ vi.mock("@/lib/auth/manager-lease-scope", () => ({
   collectLinkedPropertyIdsForUser: vi.fn().mockResolvedValue(new Set<string>()),
 }));
 
+vi.mock("@/lib/portal-inbox-delivery", () => ({
+  deliverPortalMessageThreadSide: vi.fn().mockResolvedValue({ action: "create", threadId: "test-thread" }),
+}));
+
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";

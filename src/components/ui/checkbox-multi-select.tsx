@@ -56,6 +56,8 @@ export function CheckboxMultiSelect({
   disabled,
   emptyMenuText = "No options",
   emptyLabel = "None selected",
+  /** When set and `selected` is non-empty, shown on the trigger instead of summarizing selected labels. */
+  selectionTriggerLabel,
   dataAttr,
   className,
   labelClassName,
@@ -72,6 +74,7 @@ export function CheckboxMultiSelect({
   disabled?: boolean;
   emptyMenuText?: string;
   emptyLabel?: string;
+  selectionTriggerLabel?: string;
   dataAttr?: string;
   className?: string;
   labelClassName?: string;
@@ -141,7 +144,10 @@ export function CheckboxMultiSelect({
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
 
-  const buttonLabel = summarizeSelection(selected, flatOptions, emptyLabel);
+  const buttonLabel =
+    selected.length > 0 && selectionTriggerLabel
+      ? selectionTriggerLabel
+      : summarizeSelection(selected, flatOptions, emptyLabel);
 
   const menu =
     open && menuRect && isClient ? (
