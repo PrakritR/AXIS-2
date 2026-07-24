@@ -186,7 +186,7 @@ const FAQ_NOTES: { q: string; a: string }[] = [
   },
   {
     q: "What does the AI actually do?",
-    a: "It reads your live numbers and answers questions, and it can draft things like a rent reminder or a message. It never sends or changes anything on its own — it shows you exactly what it wrote, and nothing happens until you press approve.",
+    a: "It reads your live numbers and answers questions, and it can draft things like a rent reminder or a message. It never sends a message, charges a card, or signs a lease on its own — it shows you exactly what it wrote, and those actions only go out once you approve.",
   },
   {
     q: "Is there a free plan?",
