@@ -49,7 +49,7 @@ export function Select({
   onChange,
   disabled,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
+}: SelectHTMLAttributes<HTMLSelectElement> & { "data-attr"?: string }) {
   const options = useMemo(() => optionsFromSelectChildren(children), [children]);
   const emptyOption = options.find((o) => o.value === "");
   const placeholder = emptyOption?.label ?? "Select…";

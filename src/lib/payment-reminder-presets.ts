@@ -152,7 +152,9 @@ export function reminderScheduleTokensFromSettings(
     "preDueReminderDays" | "sameDayReminderEnabled" | "overdueDailyEnabled"
   >,
 ): ReminderScheduleToken[] {
-  const tokens: ReminderScheduleToken[] = settings.preDueReminderDays.map((day) => `before:${day}`);
+  const tokens: ReminderScheduleToken[] = settings.preDueReminderDays.map(
+    (day) => `before:${day}` as ReminderScheduleToken,
+  );
   if (settings.sameDayReminderEnabled) tokens.push("due_date");
   if (settings.overdueDailyEnabled) tokens.push("every_day_late");
   return tokens;

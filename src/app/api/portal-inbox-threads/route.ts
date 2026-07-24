@@ -6,16 +6,16 @@ import {
   MANAGER_INBOX_SCOPE,
   resolveInboxScopeUser,
 } from "@/lib/portal-inbox-thread-scope";
-import { collapsePersonInboxThreads } from "@/lib/portal-inbox-storage";
+import { collapsePersonInboxThreads, type PersistedInboxThread } from "@/lib/portal-inbox-storage";
 
 export const runtime = "nodejs";
 
-function normalizeInboxRow(row: Record<string, unknown>) {
+function normalizeInboxRow(row: Record<string, unknown>): PersistedInboxThread {
   return {
     ...row,
     id: String(row.id ?? "").trim(),
     email: String(row.email ?? row.participantEmail ?? row.participant_email ?? "").trim().toLowerCase(),
-  };
+  } as PersistedInboxThread;
 }
 
 export async function GET(request: Request) {
