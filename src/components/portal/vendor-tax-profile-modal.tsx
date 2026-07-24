@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {Input, Select} from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
@@ -131,25 +131,25 @@ export function VendorTaxProfileModal({
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Entity type
-            <select
+            <Select
               className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
               value={draft.entityType}
               onChange={(e) => setDraft({ ...draft, entityType: e.target.value as VendorTaxDraft["entityType"] })}
             >
               <option value="business">Business</option>
               <option value="individual">Individual</option>
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             TIN type
-            <select
+            <Select
               className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
               value={draft.tinType}
               onChange={(e) => setDraft({ ...draft, tinType: e.target.value as VendorTaxDraft["tinType"] })}
             >
               <option value="ein">EIN</option>
               <option value="ssn">SSN</option>
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Address line 1

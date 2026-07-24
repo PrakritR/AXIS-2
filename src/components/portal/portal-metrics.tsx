@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
@@ -542,23 +545,18 @@ export function PortalToolbarSortSelect<T extends string>({
   ariaLabel?: string;
 }) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-full border border-border bg-accent/30 p-1 pr-1.5">
-      <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{label}</span>
-      <PortalToolbarSelectWrap>
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value as T)}
-          aria-label={ariaLabel ?? label}
-          className={PORTAL_TOOLBAR_SELECT}
-        >
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </PortalToolbarSelectWrap>
-    </label>
+    <div className="inline-flex min-w-0 items-center gap-2">
+      <span className={PORTAL_TOOLBAR_LABEL}>{label}</span>
+      <FieldSingleSelect
+        hideLabel
+        label={ariaLabel ?? label}
+        variant="pill"
+        value={value}
+        options={options.map((opt) => ({ value: opt.value, label: opt.label }))}
+        onChange={(next) => onChange(next as T)}
+        dataAttr={`portal-sort-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      />
+    </div>
   );
 }
 

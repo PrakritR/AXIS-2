@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal } from "@/components/ui/modal";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "./portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -38,8 +40,6 @@ import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
 
 type CopyRange = "week" | "future" | "all";
 
-const selectClassName = `${PORTAL_TOOLBAR_SELECT} min-w-[12rem] max-w-full [html[data-theme=dark]_&]:border-white/32 [html[data-theme=dark]_&]:bg-white/10`;
-
 function ManagerCalendarPropertyFilter({
   properties,
   value,
@@ -51,26 +51,19 @@ function ManagerCalendarPropertyFilter({
 }) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-      <div className="min-w-0 sm:shrink-0">
-        <label htmlFor="portal-calendar-property" className="sr-only">
-          Property
-        </label>
-        <PortalToolbarSelectWrap>
-          <select
-            id="portal-calendar-property"
-            className={selectClassName}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          >
-            <option value="">Select a house</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </PortalToolbarSelectWrap>
-      </div>
+      <FieldSingleSelect
+        hideLabel
+        label="Property"
+        variant="pill"
+        className="min-w-[12rem] max-w-full"
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: "", label: "Select a house" },
+          ...properties.map((p) => ({ value: p.id, label: p.name })),
+        ]}
+        dataAttr="portal-calendar-property"
+      />
     </div>
   );
 }
@@ -378,8 +371,7 @@ export function PortalCalendar({
 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Copy from</label>
-          <select
-            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          <Select
             value={copySourceId}
             onChange={(e) => {
               setCopySourceId(e.target.value);
@@ -390,13 +382,12 @@ export function PortalCalendar({
             {managerProperties.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Copy to</label>
-          <select
-            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          <Select
             value={copyDestId}
             onChange={(e) => setCopyDestId(e.target.value)}
           >
@@ -406,7 +397,7 @@ export function PortalCalendar({
               .map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-2">

@@ -36,6 +36,7 @@ function PortalFilterSelect({
   return (
     <div className="w-full min-w-0 max-w-full sm:w-fit">
       <FieldSingleSelect
+        hideLabel
         label={ariaLabel}
         variant="pill"
         className="w-full min-w-0 max-w-full sm:w-fit"

@@ -32,6 +32,7 @@ import {
   type PropertySearchOption,
 } from "@/components/marketing/property-search-picker";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import { Select } from "@/components/ui/input";
 import {
   TOUR_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
@@ -1040,7 +1041,7 @@ function MessageFlow({
         </p>
         <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
         <div className="relative mt-2">
-          <select
+          <Select
             value={topic}
             onChange={(e) => {
               const v = e.target.value;
@@ -1055,7 +1056,7 @@ function MessageFlow({
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted/70">
             <ChevronDownIcon />
           </span>

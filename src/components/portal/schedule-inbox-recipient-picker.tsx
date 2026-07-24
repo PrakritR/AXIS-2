@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
+import { Select } from "@/components/ui/input";
 import {
   axisAdminScheduleContact,
   propertyOptionsFromContacts,
@@ -130,7 +131,7 @@ export function ScheduleInboxRecipientPicker({
                   {propertyOptions.length > 0 ? (
                     <div>
                       <label className="text-xs font-semibold text-muted">Property</label>
-                      <select
+                      <Select
                         className={selectClass}
                         value={propertyFilter}
                         disabled={disabled}
@@ -142,7 +143,7 @@ export function ScheduleInboxRecipientPicker({
                             {property.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   ) : null}
                   <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">

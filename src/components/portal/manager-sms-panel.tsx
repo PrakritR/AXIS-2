@@ -39,6 +39,7 @@ import {
 import { counterpartyRoleLabel } from "@/lib/sms-conversation-identity";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { formatPacificDate } from "@/lib/pacific-time";
+import { Select } from "@/components/ui/input";
 
 const SMS_OPENED_STORAGE_KEY = "axis_manager_sms_opened_v1";
 // v2 stores CONVERSATION IDs, not phones: since one phone can be two threads
@@ -561,7 +562,7 @@ export const ManagerSmsPanel = forwardRef<
         <label className="sr-only" htmlFor="sms-sort">
           Sort conversations
         </label>
-        <select
+        <Select
           id="sms-sort"
           value={sort}
           onChange={(e) => setSort(e.target.value as ManagerSmsSortId)}
@@ -574,7 +575,7 @@ export const ManagerSmsPanel = forwardRef<
               {opt.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className={INBOX_LIST_SCROLL}>

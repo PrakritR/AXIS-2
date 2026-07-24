@@ -19,6 +19,7 @@ import {
   sendAtWithinScheduleHorizon,
   type InboxScheduleHorizonId,
 } from "@/lib/inbox-schedule-horizon";
+import { Select } from "@/components/ui/input";
 import {
   isUpcomingScheduledInboxMessage,
   type ScheduledInboxMessageRecord,
@@ -100,7 +101,7 @@ export function AdminInboxSchedulePanel({
         <div className="flex flex-wrap items-center gap-2">
           <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
             <span className="sr-only">Show messages scheduled within</span>
-            <select
+            <Select
               className="h-9 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground outline-none focus:border-primary"
               value={horizonId}
               onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
@@ -110,7 +111,7 @@ export function AdminInboxSchedulePanel({
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <Button type="button" variant="primary" className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={onScheduleNew}>
             Schedule message

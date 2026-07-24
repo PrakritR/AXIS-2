@@ -4154,7 +4154,7 @@ export function ManagerAddListingForm({
                                   {checked ? (
                                     <div className="mt-2 pl-6">
                                       <label className="block text-[11px] font-semibold text-muted">Bathroom situation for this room</label>
-                                      <select
+                                      <Select
                                         className={`${selectInputCls} mt-1 text-xs`}
                                         value={b.accessKindByRoomId?.[room.id] ?? ""}
                                         onChange={(e) =>
@@ -4165,7 +4165,7 @@ export function ManagerAddListingForm({
                                         <option value="ensuite">En suite (private to this room)</option>
                                         <option value="shared">Shared (other checked rooms use it too)</option>
                                         <option value="hall">Hall / common (not private to this room)</option>
-                                      </select>
+                                      </Select>
                                     </div>
                                   ) : null}
                                 </div>

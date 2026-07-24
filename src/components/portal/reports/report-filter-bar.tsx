@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
 
 export type ReportFilterState = {
@@ -77,18 +77,14 @@ export function ReportFilterBar({
       {showProperty && propertyOptions && propertyOptions.length > 0 ? (
         <label className={`flex flex-col gap-1.5 text-xs font-medium text-muted ${stacked ? "w-full" : "min-w-[10rem]"}`}>
           Property
-          <select
-            className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
-            value={filters.propertyId}
-            onChange={(e) => onChange({ propertyId: e.target.value })}
-          >
+          <Select value={filters.propertyId} onChange={(e) => onChange({ propertyId: e.target.value })}>
             <option value="">All properties</option>
             {propertyOptions.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
 

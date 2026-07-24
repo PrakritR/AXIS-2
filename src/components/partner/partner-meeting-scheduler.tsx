@@ -10,6 +10,7 @@ import {
   localDateAtSlotStart,
 } from "@/lib/demo-admin-scheduling";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import { Select } from "@/components/ui/input";
 import {
   PARTNER_MEETING_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
@@ -425,7 +426,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                       {window.hosts.length > 1 ? (
                         <label className="mt-3 block text-xs font-semibold text-muted">
                           Choose admin
-                          <select
+                          <Select
                             className="mt-1 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                             value={window.selectedAdminUserId}
                             onChange={(e) => setSelectedHostBySlot((prev) => ({ ...prev, [window.key]: e.target.value }))}
@@ -436,7 +437,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
                                 {host.adminLabel}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                       ) : window.hosts[0] ? (
                         <p className="mt-2 text-xs font-medium text-muted">With {window.hosts[0].adminLabel}</p>

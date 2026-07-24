@@ -8,6 +8,7 @@ import { PUBLIC_SUPPORT_EMAIL } from "@/lib/marketing/public-contact";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import "@/components/marketing/landing-proplane.css";
+import { Select } from "@/components/ui/input";
 
 const TOPICS = [
   "General question",
@@ -156,12 +157,12 @@ function ContactMessageForm({ showToast }: { showToast: (m: string) => void }) {
 
       <div className="lp-page-field">
         <label htmlFor="contact-topic">Topic *</label>
-        <select id="contact-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
+        <Select id="contact-topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
           <option value="">Select…</option>
           {TOPICS.map((t) => (
             <option key={t}>{t}</option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="lp-page-field">

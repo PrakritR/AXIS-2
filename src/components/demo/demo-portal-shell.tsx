@@ -40,6 +40,7 @@ import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
 import { DemoCursorPlayback } from "@/components/demo/demo-cursor-playback";
 import { DemoSegmentPlayback } from "@/components/demo/demo-segment-playback";
+import { Select } from "@/components/ui/input";
 
 /** App routes a reused portal panel might try to navigate to. In the demo these
  * must never reach the real (auth-gated) router — either they map to an in-demo
@@ -386,7 +387,7 @@ export function DemoPortalShell() {
             <>
               <label className="hidden items-center gap-2 sm:flex">
                 <span className="sr-only">Demo segment</span>
-                <select
+                <Select
                   value={selectedSegment}
                   onChange={(e) => setSelectedSegment(e.target.value as DemoSegment)}
                   data-attr="demo-segment-select"
@@ -397,7 +398,7 @@ export function DemoPortalShell() {
                       {DEMO_SEGMENT_LABELS[id]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <button
                 type="button"

@@ -8,6 +8,7 @@ import { usePublicListings } from "@/hooks/use-public-listings";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
 import { parseUSZip } from "@/lib/listings-search";
 import { track } from "@/lib/analytics/track-client";
+import { Select } from "@/components/ui/input";
 
 const ZIP_RADIUS_MILES = 50;
 
@@ -165,7 +166,7 @@ export function ResidentListingSearch() {
 
         <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-3">
           <FieldBlock label="Bedrooms">
-            <select
+            <Select
               value={bedroom}
               onChange={(e) => setBedroom(e.target.value)}
               aria-label="Bedrooms"
@@ -177,11 +178,11 @@ export function ResidentListingSearch() {
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </FieldBlock>
 
           <FieldBlock label="Bathroom type">
-            <select
+            <Select
               value={bathroom}
               onChange={(e) => setBathroom(e.target.value)}
               aria-label="Bathroom type"
@@ -193,7 +194,7 @@ export function ResidentListingSearch() {
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </FieldBlock>
 
           <FieldBlock label="Zip code" className="col-span-2 lg:col-span-1">

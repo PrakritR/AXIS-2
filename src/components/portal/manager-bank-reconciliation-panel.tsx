@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {Input, Select} from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -214,7 +214,7 @@ export function ManagerBankReconciliationPanel() {
         <div className="flex min-w-0 flex-wrap items-end gap-3">
           <div>
             <label className="text-xs font-semibold text-muted">Bank account</label>
-            <select
+            <Select
               className="mt-1 block h-10 min-w-[14rem] rounded-lg border border-border bg-background px-3 text-sm"
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
@@ -227,12 +227,12 @@ export function ManagerBankReconciliationPanel() {
                   {account.lastFour ? ` ···${account.lastFour}` : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {selectedAccountId ? (
             <div>
               <label className="text-xs font-semibold text-muted">Statement</label>
-              <select
+              <Select
                 className="mt-1 block h-10 min-w-[12rem] rounded-lg border border-border bg-background px-3 text-sm"
                 value={selectedStatementId}
                 onChange={(e) => setSelectedStatementId(e.target.value)}
@@ -245,7 +245,7 @@ export function ManagerBankReconciliationPanel() {
                     {statement.reconciledAt ? " (reconciled)" : ""}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : null}
         </div>
@@ -346,7 +346,7 @@ export function ManagerBankReconciliationPanel() {
           </div>
           <div>
             <label className="text-xs font-semibold text-muted">Type</label>
-            <select
+            <Select
               className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
               value={accountDraft.accountType}
               onChange={(e) => setAccountDraft((d) => ({ ...d, accountType: e.target.value as BankAccountType }))}
@@ -356,7 +356,7 @@ export function ManagerBankReconciliationPanel() {
                   {ACCOUNT_TYPE_LABELS[type]}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="text-xs font-semibold text-muted">Last four (optional)</label>

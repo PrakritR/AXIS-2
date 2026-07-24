@@ -5,7 +5,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import {Input, Textarea, Select} from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -2679,18 +2679,18 @@ export function ManagerResidents({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Property</span>
-              <select
+              <Select
                 value={arPropertyId}
                 onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); }}
                 className="rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
               >
                 <option value="">Select property…</option>
                 {propertyOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Lease term</span>
-              <select
+              <Select
                 value={arLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
@@ -2710,7 +2710,7 @@ export function ManagerResidents({
                 <option value="6 months">6 months</option>
                 <option value="3 months">3 months</option>
                 <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
-              </select>
+              </Select>
               {arLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
@@ -2723,7 +2723,7 @@ export function ManagerResidents({
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Room</span>
               {arRoomOptions.length > 0 ? (
-                <select
+                <Select
                   value={arRoomId}
                   onChange={(e) => {
                     const roomId = e.target.value;
@@ -2737,7 +2737,7 @@ export function ManagerResidents({
                       {r.name}{r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : (
                 <p className="rounded-xl border border-dashed border-border bg-accent/30 px-3 py-2 text-xs text-muted">
                   Add rooms to this property in listing setup to assign a resident room here.
@@ -2801,7 +2801,7 @@ export function ManagerResidents({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Property</span>
-              <select
+              <Select
                 value={erPropertyId}
                 onChange={(e) => {
                   setErPropertyId(e.target.value);
@@ -2815,11 +2815,11 @@ export function ManagerResidents({
                     {p.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Lease term</span>
-              <select
+              <Select
                 value={erLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
@@ -2839,7 +2839,7 @@ export function ManagerResidents({
                 <option value="6 months">6 months</option>
                 <option value="3 months">3 months</option>
                 <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
-              </select>
+              </Select>
               {erLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
@@ -2852,7 +2852,7 @@ export function ManagerResidents({
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Room</span>
               {erRoomOptions.length > 0 ? (
-                <select
+                <Select
                   value={erRoomId}
                   onChange={(e) => {
                     const roomId = e.target.value;
@@ -2867,7 +2867,7 @@ export function ManagerResidents({
                       {r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : (
                 <p className="rounded-xl border border-dashed border-border bg-accent/30 px-3 py-2 text-xs text-muted">
                   Add rooms to this property in listing setup to assign a resident room here.

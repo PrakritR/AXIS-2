@@ -1249,7 +1249,7 @@ export function ManagerWorkOrdersPanel({
             </p>
             <label className="flex flex-col gap-1 text-xs font-medium text-muted">
               Category
-              <select
+              <Select
                 className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
                 value={completeDraft.category}
                 onChange={(e) => setCompleteDraft({ ...completeDraft, category: e.target.value as WorkOrderCategory })}
@@ -1263,7 +1263,7 @@ export function ManagerWorkOrdersPanel({
                 <option value="appliance">Appliance</option>
                 <option value="access">Access / Locks</option>
                 <option value="general">General maintenance</option>
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1 text-xs font-medium text-muted">
               Vendor / labor cost (USD)

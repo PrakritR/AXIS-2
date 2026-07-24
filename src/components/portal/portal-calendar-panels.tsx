@@ -702,7 +702,7 @@ export function PortalCalendarPanels({
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</p>
-      <select
+      <Select
         className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
         value={String(visibleStartSlot)}
         onChange={(e) => {
@@ -719,9 +719,9 @@ export function PortalCalendarPanels({
             {formatAvailabilitySlotLabel(slot)}
           </option>
         ))}
-      </select>
+      </Select>
       <span className="text-sm font-medium text-muted">to</span>
-      <select
+      <Select
         className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
         value={String(visibleEndSlotExclusive)}
         onChange={(e) => {
@@ -739,7 +739,7 @@ export function PortalCalendarPanels({
               {formatSlotEndLabel(slot)}
             </option>
           ))}
-      </select>
+      </Select>
     </div>
   );
 

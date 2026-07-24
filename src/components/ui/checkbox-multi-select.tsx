@@ -2,18 +2,18 @@
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ChevronDown } from "lucide-react";
 import { useIsClient } from "@/hooks/use-is-client";
+import {
+  FIELD_SELECT_CHEVRON_CLASS,
+  FIELD_SELECT_LABEL_CLASS,
+  FIELD_SELECT_MENU_CLASS,
+  FIELD_SELECT_TRIGGER_CLASS,
+  FIELD_SELECT_TRIGGER_COMPACT_CLASS,
+} from "@/components/ui/field-select-styles";
 
 export type CheckboxMultiSelectOption = { value: string; label: string };
 export type CheckboxMultiSelectGroup = { label: string; options: CheckboxMultiSelectOption[] };
-
-const FIELD_TRIGGER_CLASS =
-  "mt-1 flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-border bg-auth-input-bg px-3 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
-
-const MENU_PANEL_CLASS =
-  "field-dropdown-menu max-h-64 overflow-auto rounded-lg border border-border py-1 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
-
-const DEFAULT_LABEL_CLASS = "text-[11px] font-bold uppercase tracking-[0.12em] text-muted";
 
 function summarizeSelection(
   selected: string[],
@@ -33,6 +33,11 @@ function summarizeSelection(
   return `${selected.length} selected`;
 }
 
+function triggerClassForVariant(variant: "field" | "pill", extra?: string) {
+  const base = variant === "pill" ? FIELD_SELECT_TRIGGER_COMPACT_CLASS : FIELD_SELECT_TRIGGER_CLASS;
+  return extra ? `${base} ${extra}` : base;
+}
+
 /** Compact multi-select dropdown with checkboxes (opaque menu). */
 export function CheckboxMultiSelect({
   label,
@@ -46,7 +51,8 @@ export function CheckboxMultiSelect({
   dataAttr,
   className,
   labelClassName,
-  /** Toolbar pill like Services property filter — sits beside TabNav. */
+  hideLabel = false,
+  /** Toolbar compact width — same visual tokens as form fields. */
   variant = "field",
 }: {
   label: string;
@@ -60,6 +66,7 @@ export function CheckboxMultiSelect({
   dataAttr?: string;
   className?: string;
   labelClassName?: string;
+  hideLabel?: boolean;
   variant?: "field" | "pill";
 }) {
   const listId = useId();
@@ -131,7 +138,7 @@ export function CheckboxMultiSelect({
         id={listId}
         role="listbox"
         aria-multiselectable="true"
-        className={`fixed z-[80] ${MENU_PANEL_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[80] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
@@ -193,9 +200,9 @@ export function CheckboxMultiSelect({
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${className ?? ""}`}>
-      {pill ? null : (
-        <label className={labelClassName ?? DEFAULT_LABEL_CLASS}>{label}</label>
-      )}
+      {!hideLabel && !pill ? (
+        <label className={labelClassName ?? FIELD_SELECT_LABEL_CLASS}>{label}</label>
+      ) : null}
       <button
         ref={buttonRef}
         type="button"
@@ -205,21 +212,11 @@ export function CheckboxMultiSelect({
         aria-expanded={open}
         aria-controls={listId}
         data-attr={dataAttr}
-        className={
-          pill
-            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-auth-input-bg px-3.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            : FIELD_TRIGGER_CLASS
-        }
+        className={triggerClassForVariant(variant)}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={`min-w-0 truncate ${selected.length === 0 ? "text-muted" : ""}`}>{buttonLabel}</span>
-        <svg className="h-4 w-4 shrink-0 text-muted" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-            clipRule="evenodd"
-          />
-        </svg>
+        <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 
       {menu ? createPortal(menu, document.body) : null}
@@ -238,6 +235,7 @@ export function FieldSingleSelect({
   dataAttr,
   className,
   labelClassName,
+  hideLabel = false,
   variant = "field",
 }: {
   label: string;
@@ -249,6 +247,7 @@ export function FieldSingleSelect({
   dataAttr?: string;
   className?: string;
   labelClassName?: string;
+  hideLabel?: boolean;
   variant?: "field" | "pill";
 }) {
   const listId = useId();
@@ -310,7 +309,7 @@ export function FieldSingleSelect({
       <div
         id={listId}
         role="listbox"
-        className={`fixed z-[80] ${MENU_PANEL_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[80] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
@@ -345,9 +344,9 @@ export function FieldSingleSelect({
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${className ?? ""}`}>
-      {pill ? null : (
-        <label className={labelClassName ?? DEFAULT_LABEL_CLASS}>{label}</label>
-      )}
+      {!hideLabel && !pill ? (
+        <label className={labelClassName ?? FIELD_SELECT_LABEL_CLASS}>{label}</label>
+      ) : null}
       <button
         ref={buttonRef}
         type="button"
@@ -357,21 +356,11 @@ export function FieldSingleSelect({
         aria-expanded={open}
         aria-controls={listId}
         data-attr={dataAttr}
-        className={
-          pill
-            ? "flex h-10 min-w-[9.5rem] max-w-[16rem] items-center justify-between gap-2 rounded-full border border-border bg-auth-input-bg px-3.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition hover:border-primary/25 focus:border-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            : FIELD_TRIGGER_CLASS
-        }
+        className={triggerClassForVariant(variant)}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={`min-w-0 truncate ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
-        <svg className="h-4 w-4 shrink-0 text-muted" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-            clipRule="evenodd"
-          />
-        </svg>
+        <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 
       {menu ? createPortal(menu, document.body) : null}

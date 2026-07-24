@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { DocumentScope } from "@/lib/reports/types";
+import { Select } from "@/components/ui/input";
 
 export type FormalDocumentFilterState = {
   scope: DocumentScope;
@@ -56,7 +57,7 @@ export function FormalDocumentScopeBar({
     <>
       <label className={fieldClass("min-w-[9rem]")}>
         Scope
-        <select
+        <Select
           className={selectClass}
           value={filters.scope}
           onChange={(e) =>
@@ -72,13 +73,13 @@ export function FormalDocumentScopeBar({
           <option value="property">Per property</option>
           <option value="tenant">Per tenant</option>
           <option value="room">Per room</option>
-        </select>
+        </Select>
       </label>
 
       {filters.scope === "property" || filters.scope === "tenant" || filters.scope === "room" ? (
         <label className={fieldClass("min-w-[10rem]")}>
           Property
-          <select
+          <Select
             className={selectClass}
             value={filters.propertyId}
             onChange={(e) => onChange({ propertyId: e.target.value, residentEmail: "", roomLabel: "" })}
@@ -89,14 +90,14 @@ export function FormalDocumentScopeBar({
                 {p.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
 
       {filters.scope === "tenant" ? (
         <label className={fieldClass("min-w-[10rem]")}>
           Tenant
-          <select
+          <Select
             className={selectClass}
             value={filters.residentEmail}
             onChange={(e) => onChange({ residentEmail: e.target.value })}
@@ -107,14 +108,14 @@ export function FormalDocumentScopeBar({
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
 
       {filters.scope === "room" ? (
         <label className={fieldClass("min-w-[9rem]")}>
           Room / unit
-          <select
+          <Select
             className={selectClass}
             value={filters.roomLabel}
             onChange={(e) => onChange({ roomLabel: e.target.value })}
@@ -125,7 +126,7 @@ export function FormalDocumentScopeBar({
                 {r.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
     </>

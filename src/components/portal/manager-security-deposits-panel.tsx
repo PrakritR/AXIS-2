@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {Input, Select} from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -168,7 +168,7 @@ export function ManagerSecurityDepositsPanel() {
             </p>
             <div>
               <label className="text-xs font-semibold text-muted">Disposition type</label>
-              <select
+              <Select
                 className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 value={draft.dispositionType}
                 onChange={(e) => setDraft((d) => ({ ...d, dispositionType: e.target.value as SecurityDepositDispositionType }))}
@@ -176,7 +176,7 @@ export function ManagerSecurityDepositsPanel() {
                 <option value="full_refund">Full refund</option>
                 <option value="itemized_partial">Itemized partial withhold</option>
                 <option value="full_withhold">Full withhold</option>
-              </select>
+              </Select>
             </div>
             {draft.dispositionType !== "full_refund" ? (
               <div>

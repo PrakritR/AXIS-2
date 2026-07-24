@@ -26,6 +26,7 @@ import {
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
+import { Select } from "@/components/ui/input";
 
 const SORT_OPTIONS: { id: BrowseSortId; label: string }[] = [
   { id: "price-asc", label: "Price · lowest first" },
@@ -255,7 +256,7 @@ function BrowseManualFilters({
           />
         </ResidentHousingFieldBlock>
         <ResidentHousingFieldBlock label="Room type">
-          <select
+          <Select
             value={roomType}
             onChange={(e) => setRoomType(e.target.value)}
             aria-label="Room type"
@@ -267,10 +268,10 @@ function BrowseManualFilters({
                 {opt.label}
               </option>
             ))}
-          </select>
+          </Select>
         </ResidentHousingFieldBlock>
         <ResidentHousingFieldBlock label="Shared bathroom">
-          <select
+          <Select
             value={bathroom}
             onChange={(e) => setBathroom(e.target.value)}
             aria-label="Shared bathroom"
@@ -286,7 +287,7 @@ function BrowseManualFilters({
                     : `Shared · ${opt.label}`}
               </option>
             ))}
-          </select>
+          </Select>
         </ResidentHousingFieldBlock>
         <ResidentHousingFieldBlock label={`Max budget · ${budgetLabel}`} className="col-span-2 lg:col-span-1">
           <input
@@ -463,7 +464,7 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
             <label className="sr-only" htmlFor="browse-sort">
               Sort homes
             </label>
-            <select
+            <Select
               id="browse-sort"
               value={sort}
               onChange={(e) => setSort(e.target.value as BrowseSortId)}
@@ -475,7 +476,7 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
             {activeFilterCount > 0 ? (
               <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
                 {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
