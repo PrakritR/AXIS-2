@@ -411,19 +411,17 @@ deleted after the production branch was migrated to `main`; don't recreate it.
 Two branches, two roles:
 
 - **`main` — the live site.** Every push here triggers a **production deploy** to
-  the real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
+  Vercel (the only branch that deploys — see `vercel.json` `git.deploymentEnabled`).
+  Real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
   legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
   still recognized as production by `isProductionAxisHost`), and
   `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
   (see below). Outbound email/SMS and shareable links use the canonical origin
   (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
   this branch. Never commit straight to it.
-- **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
-  produces a **preview deploy**, and Vercel keeps a stable branch alias that
-  always points at the latest `prakrit` build —
-  `axis-2-git-prakrit-prakritramachandran-6082s-projects.vercel.app`. That URL is
-  the staging preview the ship gate asks you to verify. Feature branches also get
-  their own preview URLs.
+- **`prakrit` — integration branch.** Day-to-day work merges here. Pushes to
+  `prakrit` and feature branches do **not** trigger Vercel builds (previews are
+  disabled). Verify on localhost or the dev worktree before promoting to `main`.
 
 **Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
 you want it live:
@@ -441,10 +439,9 @@ Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
 point `main` at the previous known-good commit and push, or use Vercel's
 **Instant Rollback** in the dashboard.
 
-Deploying `prakrit` as a staging step is standard practice on Vercel: its
-preview/branch alias is your staging environment, and `main` is the gated
-promotion target. Don't add a separate Vercel project for staging — the branch
-model above already gives you prod + staging from one project.
+Only `main` deploys to Vercel (`vercel.json` sets `git.deploymentEnabled` so
+feature branches and `prakrit` do not build). Do not re-enable preview deploys
+without an explicit captain decision.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
 Git**. It is `main`; don't change it.
