@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useAppUi } from "@/components/providers/app-ui-provider";
 
 type ProposalPreview = {
   title: string;
@@ -100,7 +99,7 @@ export function TourProposalsPanel() {
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 type="button"
-                className="h-9 min-h-0 px-4 text-[13px]"
+                className="px-4 text-[13px]"
                 disabled={busyId === proposal.id}
                 onClick={() => void decide(proposal.id, "approve")}
                 data-attr="tour-proposal-approve"
@@ -110,7 +109,7 @@ export function TourProposalsPanel() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 min-h-0 px-4 text-[13px]"
+                className="px-4 text-[13px]"
                 disabled={busyId === proposal.id}
                 onClick={() => void decide(proposal.id, "discard")}
                 data-attr="tour-proposal-discard"
