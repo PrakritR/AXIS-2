@@ -925,10 +925,14 @@ portal, and identity while the household reads as one unit.
 
 **Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
 `destructive` variant) was deleted — `src/components/ui/button.tsx` is the only Button, and it now
-supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop;
-translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
-`h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
-never reintroduce a filled-red destructive variant.
+supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop, so a
+later lane still passing `size="sm"` is a TS2322 that breaks `next build` (`next.config.ts`
+deliberately does not set `typescript.ignoreBuildErrors`). **Delete the prop rather than translating
+it** — the default pill carries the 44px minimum touch target `docs/design.md` requires, and the
+compact overrides (`h-9 min-h-0 px-4 text-[13px]`, or `h-10 w-10 min-h-0 px-0` for an old
+`size="icon"`) shrink it below that. Use a compact override only inside chrome that is already dense
+(top nav, inbox toolbar), never on a portal form or card action. `danger` stays text-only red per
+`docs/design.md` — never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both
