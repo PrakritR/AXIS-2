@@ -12,6 +12,7 @@ import {
   DEMO_LISTING_SUBMITTED_EVENT,
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
+import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
@@ -4716,6 +4717,9 @@ export function ManagerAddListingForm({
               )}
             </div>
           </div>
+          <ModalAssistantStrip
+            contextHint={`${wizardTitlePrefix} · ${LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing"}`}
+          />
         </div>
       </form>
 
