@@ -24,9 +24,18 @@ function FinishContent() {
           // trial (no card). The pricing flow's free-select caller omits this.
           body: JSON.stringify({ trial: true }),
         });
-        const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
+        const body = (await res.json()) as {
+          error?: string;
+          redirectTo?: string;
+          existingAccount?: boolean;
+          calendarConnectPath?: string | null;
+        };
         if (!res.ok) {
           router.replace(`/auth/create-account?role=manager&message=${encodeURIComponent(body.error ?? "Could not create manager account.")}`);
+          return;
+        }
+        if (body.calendarConnectPath?.startsWith("/")) {
+          window.location.replace(body.calendarConnectPath);
           return;
         }
         router.replace(

@@ -308,7 +308,11 @@ export function PortalCalendarPanels({
     if (!storageKey) return;
     let cancelled = false;
     const load = async () => {
-      await syncScheduleRecordsFromServer();
+      try {
+        await syncScheduleRecordsFromServer();
+      } catch {
+        /* offline or dev server restart — calendar still renders */
+      }
       if (!cancelled) {
         setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
       }
@@ -324,7 +328,10 @@ export function PortalCalendarPanels({
   // tabs, and refresh once immediately when the tab becomes visible again.
   useEffect(() => {
     if (!storageKey) return;
-    const refresh = () => syncScheduleRecordsFromServer().then(() => setMeetingRefresh((n) => n + 1));
+    const refresh = () =>
+      syncScheduleRecordsFromServer()
+        .then(() => setMeetingRefresh((n) => n + 1))
+        .catch(() => undefined);
     const id = setInterval(() => {
       if (document.hidden) return;
       void refresh();

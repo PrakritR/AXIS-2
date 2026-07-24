@@ -79,17 +79,31 @@ Sign-in Google OAuth (above) is separate from **Calendar sync**. Each manager co
 **One-time app setup (deploy admin):**
 
 1. In Google Cloud Console, create or reuse an OAuth 2.0 **Web application** client.
-2. Enable the **Google Calendar API** for the project.
-3. Add **Authorized redirect URIs**:
-   - Local: `http://localhost:3009/api/portal/google-calendar/callback`
-   - Production: `https://www.axis-seattle-housing.com/api/portal/google-calendar/callback`
+2. Enable the **Google Calendar API** for the same project: APIs & Services → Library → search “Google Calendar API” → **Enable**. (Without this, connect succeeds but event sync fails.)
+3. Add **Authorized redirect URIs** (use the port you open in the browser — each port needs its own URI unless `GOOGLE_CALENDAR_REDIRECT_ORIGIN` is set):
+   - `http://localhost:3010/api/portal/google-calendar/callback` (Cursor 1)
+   - `http://localhost:3009/api/portal/google-calendar/callback` (prakrit integration)
+   - `http://localhost:3011/api/portal/google-calendar/callback` (Cursor 2)
+   - Production: `{NEXT_PUBLIC_APP_URL}/api/portal/google-calendar/callback` (read from Vercel / `.env.local` — do not hardcode a marketing domain)
 4. Set `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET` in `.env.local` / Vercel.
    Use the **same** Google OAuth client ID and secret as Supabase **Authentication → Providers → Google** so sign-in tokens work for calendar sync.
 5. Apply migration `20260723220000_google_calendar_integration.sql` on Supabase.
 
-**Per manager:** signing in with Google as a manager requests calendar access once and links automatically. They can also connect manually from Calendar → **Connect my Google Calendar**.
+**Per manager:** managers who **create an account with Google** automatically request Calendar scopes during sign-in; tokens are saved when provisioning finishes (no manual **Connect** step when Supabase returns provider tokens). If inline tokens are missing, the app redirects through calendar OAuth once after account setup.
 
-### Production Axis (`www.axis-seattle-housing.com`)
+**Allow any manager Google account (no per-user test-user list):** publish the OAuth consent screen to **In production** in Google Cloud. Testing mode only allows manually listed test users — that restriction is enforced by Google, not PropPlane. Production still requires privacy policy and terms URLs; Calendar scopes may need Google verification.
+
+#### Error: `Access blocked` / `403 access_denied` on Google’s sign-in page
+
+Google shows this **before** PropPlane receives a token. The OAuth consent screen is in **Testing** mode, so only emails listed as **Test users** may authorize the app (named “axis” or similar in Cloud Console).
+
+Fix (pick one):
+
+1. **Development (fastest):** [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **OAuth consent screen** → **Test users** → **Add users** → add every Google account that will connect Calendar (e.g. `ramachandranprakrit@gmail.com`, `founders@axis-seattle-housing.com`). Save, then retry **Connect** on `http://localhost:3010`.
+2. **Production:** Publish the consent screen to **In production** (requires privacy policy URL, terms, and possibly Google verification for sensitive scopes like Calendar).
+
+This is not a redirect-URI or localhost bug — Connect is reaching Google correctly; Google is refusing the account until it is on the test-user list or the app is published.
+
 
 Use these exact values when configuring Google + Supabase for the live site:
 
