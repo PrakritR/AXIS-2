@@ -19,6 +19,11 @@ import {
   parseMoneyAmount,
   readHouseholdCharges,
 } from "@/lib/household-charges";
+import {
+  CLIENT_SCHEDULED_MESSAGE_OVERRIDES_EVENT,
+  applyClientPatchesToMessages,
+  mergeClientScheduledMessagePatch,
+} from "@/lib/client-scheduled-message-overrides";
 import { readPortalApiError } from "@/lib/portal-api-error";
 import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import {
@@ -234,8 +239,32 @@ export function ChargeRemindersModal({
   onOpenSettings?: () => void;
   onAddSetDate?: (isoDate: string) => void | Promise<void>;
 }) {
+  const { showToast } = useAppUi();
   const [editingMessage, setEditingMessage] = useState<ScheduledPaymentMessage | null>(null);
-  const manageable = messages.filter((m) => m.status === "scheduled" || m.status === "cancelled");
+  const manageableFromProps = useMemo(
+    () => messages.filter((m) => m.status === "scheduled" || m.status === "cancelled"),
+    [messages],
+  );
+  const [manageable, setManageable] = useState(manageableFromProps);
+
+  useEffect(() => {
+    setManageable(manageableFromProps);
+  }, [manageableFromProps]);
+
+  const toggleCancelled = async (message: ScheduledPaymentMessage, cancelled: boolean) => {
+    setManageable((prev) =>
+      prev.map((row) =>
+        row.id === message.id ? { ...row, status: cancelled ? "cancelled" : "scheduled" } : row,
+      ),
+    );
+    try {
+      await onToggleCancel(message, cancelled);
+      onMessageSaved?.();
+    } catch {
+      setManageable(manageableFromProps);
+      showToast("Could not update reminder.");
+    }
+  };
 
   return (
     <Modal
@@ -308,7 +337,10 @@ export function ChargeRemindersModal({
                       type="button"
                       variant="outline"
                       className="h-8 shrink-0 rounded-full px-3 text-xs"
-                      onClick={() => void onToggleCancel(m, !cancelled)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleCancelled(m, !cancelled);
+                      }}
                     >
                       {cancelled ? "Turn on" : "Turn off"}
                     </Button>
@@ -352,7 +384,14 @@ export function ScheduledMessageEditForm({
   const [subject, setSubject] = useState(message.subject);
   const [body, setBody] = useState(message.body);
   const [sendAtLocal, setSendAtLocal] = useState(toLocalInputValue(message.sendAt));
+  const [applyToFuture, setApplyToFuture] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const templateKeyForKind = (kind: ScheduledPaymentMessage["kind"]) => {
+    if (kind === "late_fee") return "lateFee" as const;
+    if (kind === "pre_due" || kind === "same_day" || kind === "set_date") return "preDue" as const;
+    return "overdue" as const;
+  };
 
   const save = async () => {
     const sendAt = new Date(sendAtLocal);
@@ -376,6 +415,24 @@ export function ScheduledMessageEditForm({
       if (!res.ok) {
         throw new Error(await readPortalApiError(res, "Could not save."));
       }
+      mergeClientScheduledMessagePatch(message.id, {
+        customSubject: subject,
+        customBody: body,
+        customSendAt: sendAt.toISOString(),
+      });
+      if (applyToFuture) {
+        const templateKey = templateKeyForKind(message.kind);
+        await fetch("/api/portal/automation-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            templates: {
+              [templateKey]: { subject, body },
+            },
+          }),
+        });
+      }
       showToast("Scheduled message updated.");
       onSaved();
       onClose();
@@ -397,6 +454,7 @@ export function ScheduledMessageEditForm({
         body: JSON.stringify({ cancelled }),
       });
       if (!res.ok) throw new Error(await readPortalApiError(res, "Could not update."));
+      mergeClientScheduledMessagePatch(message.id, { cancelled });
       showToast(cancelled ? "Send cancelled." : "Send restored.");
       onSaved();
       onClose();
@@ -430,6 +488,15 @@ export function ScheduledMessageEditForm({
           <label className="text-xs font-semibold text-muted">Message</label>
           <Textarea className="mt-1 min-h-[160px]" value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
         </div>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={applyToFuture}
+            onChange={(e) => setApplyToFuture(e.target.checked)}
+            disabled={busy}
+          />
+          Apply to future payments
+        </label>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
             Save
@@ -717,7 +784,7 @@ function PaymentAutomationSettingsForm({
   const [draft, setDraft] = useState(initialSettings);
   const [selectedPreset, setSelectedPreset] = useState<ReminderPresetId>(() => detectReminderPreset(initialSettings));
   const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
-  const [saveScope, setSaveScope] = useState<PaymentReminderSaveScope>("future_only");
+  const [applyToExisting, setApplyToExisting] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -741,7 +808,7 @@ function PaymentAutomationSettingsForm({
   const saveEnabled =
     !busy &&
     scheduleHasReminders &&
-    (isDirty || (variant === "payments" && saveScope === "future_and_existing"));
+    (isDirty || (variant === "payments" && applyToExisting));
 
   const save = useCallback(async (options?: { silent?: boolean }) => {
     if (!scheduleHasReminders) {
@@ -757,7 +824,9 @@ function PaymentAutomationSettingsForm({
         credentials: "include",
         body: JSON.stringify({
           ...payload,
-          ...(variant === "payments" ? { applyReminderScope: saveScope } : {}),
+          ...(variant === "payments"
+            ? { applyReminderScope: applyToExisting ? "future_and_existing" : "future_only" }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -774,14 +843,14 @@ function PaymentAutomationSettingsForm({
         window.dispatchEvent(new Event(PAYMENT_AUTOMATION_SETTINGS_EVENT));
       }
       if (!options?.silent) {
-        if (variant === "payments" && saveScope === "future_and_existing" && (body.clearedOverrides ?? 0) > 0) {
+        if (variant === "payments" && applyToExisting && (body.clearedOverrides ?? 0) > 0) {
           showToast("Reminder schedule saved for future and existing unpaid payments.");
         } else {
           showToast(copy.savedToast);
         }
       }
       if (variant === "payments") {
-        setSaveScope("future_only");
+        setApplyToExisting(false);
       }
       return true;
     } catch (e) {
@@ -790,7 +859,7 @@ function PaymentAutomationSettingsForm({
     } finally {
       setBusy(false);
     }
-  }, [copy.savedToast, currentPayload, onAfterSave, onSaved, saveScope, scheduleHasReminders, showToast, variant]);
+  }, [copy.savedToast, currentPayload, onAfterSave, onSaved, applyToExisting, scheduleHasReminders, showToast, variant]);
 
   const saveIfDirty = useCallback(async (): Promise<boolean> => {
     if (!isDirty) return true;
@@ -947,41 +1016,15 @@ function PaymentAutomationSettingsForm({
       {saveVisible ? (
         <>
           {compact && variant === "payments" ? (
-            <fieldset className="space-y-2.5 rounded-xl border border-border bg-accent/20 px-3 py-3">
-              <legend className="px-1 text-xs font-semibold text-muted">Apply this schedule to</legend>
-              <label className="flex items-start gap-2.5 text-sm">
-                <input
-                  type="radio"
-                  name="payment-reminder-save-scope"
-                  className="mt-0.5"
-                  checked={saveScope === "future_only"}
-                  onChange={() => setSaveScope("future_only")}
-                  disabled={busy}
-                />
-                <span>
-                  <span className="font-medium text-foreground">Future payments only</span>
-                  <span className="mt-0.5 block text-xs text-muted">
-                    New charges use this schedule. Existing per-payment reminder edits stay as they are.
-                  </span>
-                </span>
-              </label>
-              <label className="flex items-start gap-2.5 text-sm">
-                <input
-                  type="radio"
-                  name="payment-reminder-save-scope"
-                  className="mt-0.5"
-                  checked={saveScope === "future_and_existing"}
-                  onChange={() => setSaveScope("future_and_existing")}
-                  disabled={busy}
-                />
-                <span>
-                  <span className="font-medium text-foreground">Future and existing unpaid payments</span>
-                  <span className="mt-0.5 block text-xs text-muted">
-                    Clears per-payment reminder customizations and applies this schedule to all unpaid charges.
-                  </span>
-                </span>
-              </label>
-            </fieldset>
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={applyToExisting}
+                onChange={(e) => setApplyToExisting(e.target.checked)}
+                disabled={busy}
+              />
+              Apply to existing unpaid payments
+            </label>
           ) : null}
           <Button
             type="button"
@@ -990,9 +1033,7 @@ function PaymentAutomationSettingsForm({
             onClick={() => void save()}
             disabled={!saveEnabled}
           >
-            {!isDirty && saveScope === "future_and_existing" && variant === "payments"
-              ? "Apply to existing payments"
-              : copy.saveLabel}
+            {copy.saveLabel}
           </Button>
         </>
       ) : null}
@@ -1050,8 +1091,13 @@ export async function patchScheduledMessage(
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
+    if (isDemoModeActive() && patch.cancelled !== undefined) {
+      mergeClientScheduledMessagePatch(messageId, patch);
+      return;
+    }
     throw new Error(await readPortalApiError(res, "Could not update reminder."));
   }
+  mergeClientScheduledMessagePatch(messageId, patch);
 }
 
 /** Cancel upcoming auto reminders when a charge is marked paid (demo + immediate UI). */
@@ -1154,11 +1200,14 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
   useEffect(() => {
     const onChargesChanged = () => setChargeRevision((n) => n + 1);
     const onSettingsChanged = () => setSettingsRevision((n) => n + 1);
+    const onClientOverrides = () => setSettingsRevision((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, onChargesChanged);
     window.addEventListener(PAYMENT_AUTOMATION_SETTINGS_EVENT, onSettingsChanged);
+    window.addEventListener(CLIENT_SCHEDULED_MESSAGE_OVERRIDES_EVENT, onClientOverrides);
     return () => {
       window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, onChargesChanged);
       window.removeEventListener(PAYMENT_AUTOMATION_SETTINGS_EVENT, onSettingsChanged);
+      window.removeEventListener(CLIENT_SCHEDULED_MESSAGE_OVERRIDES_EVENT, onClientOverrides);
     };
   }, []);
 
@@ -1173,7 +1222,7 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
     if (applyVisibilityFilter && settings) {
       list = filterScheduledPaymentMessagesForVisibility(list, settings);
     }
-    return list;
+    return applyClientPatchesToMessages(list);
   }, [rawMessages, chargeRevision, settingsRevision, settings, applyVisibilityFilter]);
 
   return { settings, messages, loading, reload, setSettings };

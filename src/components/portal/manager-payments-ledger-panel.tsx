@@ -606,12 +606,8 @@ export function ManagerPaymentsLedgerPanel({
         scheduleSummary={reminderScheduleSummary}
         onMessageSaved={() => onScheduleChanged?.()}
         onToggleCancel={async (message, cancelled) => {
-          try {
-            await patchScheduledMessage(message.id, { cancelled });
-            onScheduleChanged?.();
-          } catch {
-            showToast("Could not update reminder.");
-          }
+          await patchScheduledMessage(message.id, { cancelled });
+          onScheduleChanged?.();
         }}
         onOpenSettings={onOpenReminderSettings}
       />
