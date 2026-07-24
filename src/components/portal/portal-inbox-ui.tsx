@@ -592,6 +592,7 @@ export function InboxConversationRow({
   preview,
   time,
   unread = false,
+  unreadCount,
   selected = false,
   onOpen,
   leading,
@@ -603,6 +604,8 @@ export function InboxConversationRow({
   preview: string;
   time: string;
   unread?: boolean;
+  /** When set, shows a numeric badge (CRM-style). Defaults to 1 when `unread`. */
+  unreadCount?: number;
   selected?: boolean;
   onOpen: () => void;
   /** Optional slot before the avatar (e.g. a bulk-select checkbox). */
@@ -612,10 +615,13 @@ export function InboxConversationRow({
   /** Small label for unified email + SMS lists. */
   channelBadge?: "Email" | "SMS";
 }) {
+  const badgeCount = unreadCount ?? (unread ? 1 : 0);
   return (
     <div
-      className={`portal-inbox-row flex items-center gap-2.5 px-3 py-2.5 transition-colors ${
-        selected ? "portal-inbox-row--selected bg-accent" : "hover:bg-foreground/[0.03]"
+      className={`portal-inbox-row flex items-center gap-2.5 border-b border-border/50 px-3 py-3 transition-colors ${
+        selected
+          ? "portal-inbox-row--selected border-l-[3px] border-l-primary bg-primary/[0.06]"
+          : "border-l-[3px] border-l-transparent hover:bg-foreground/[0.03]"
       }`}
     >
       {leading}
@@ -647,10 +653,69 @@ export function InboxConversationRow({
               {previewPrefix ?? ""}
               {preview || " "}
             </p>
-            {unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden /> : null}
+            {badgeCount > 0 ? (
+              <span
+                className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-white"
+                aria-label={`${badgeCount} unread`}
+              >
+                {badgeCount > 9 ? "9+" : badgeCount}
+              </span>
+            ) : null}
           </div>
         </div>
       </button>
+    </div>
+  );
+}
+
+export type InboxListSegment = "active" | "unread" | "archived";
+
+/** CRM-style segment tabs above the conversation list (Active / Unread / Archived). */
+export function InboxListSegmentTabs({
+  value,
+  onChange,
+  unreadTotal = 0,
+  archivedTotal = 0,
+}: {
+  value: InboxListSegment;
+  onChange: (segment: InboxListSegment) => void;
+  unreadTotal?: number;
+  archivedTotal?: number;
+}) {
+  const tabs: { id: InboxListSegment; label: string; count?: number }[] = [
+    { id: "active", label: "Active" },
+    { id: "unread", label: "Unread", count: unreadTotal },
+    { id: "archived", label: "Archived", count: archivedTotal },
+  ];
+  return (
+    <div
+      className="flex gap-1 rounded-xl bg-foreground/[0.04] p-1"
+      role="tablist"
+      aria-label="Conversation folders"
+      data-attr="inbox-list-segments"
+    >
+      {tabs.map((tab) => {
+        const selected = value === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onChange(tab.id)}
+            className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+              selected
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+            {tab.count != null && tab.count > 0 ? (
+              <span className="ml-1 tabular-nums text-[10px] font-bold text-primary">({tab.count})</span>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1146,6 +1211,7 @@ export function InboxThreadEmpty({
 export function InboxThreadView({
   title,
   subtitle,
+  avatarName,
   messages,
   showAuthors = false,
   onBack,
@@ -1157,6 +1223,8 @@ export function InboxThreadView({
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Shows initials avatar beside the thread title (CRM-style header). */
+  avatarName?: string;
   messages: InboxBubbleMessage[];
   /** Show the author name above inbound bubbles (multi-party threads). */
   showAuthors?: boolean;
@@ -1226,9 +1294,12 @@ export function InboxThreadView({
             <span>Inbox</span>
           </button>
         ) : null}
-        <div className="min-w-0 flex-1 px-1">
-          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-          {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 px-1">
+          {avatarName ? <InboxAvatar name={avatarName} className="h-9 w-9 text-[11px]" /> : null}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+            {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+          </div>
         </div>
         {headerActions ? <div className="flex shrink-0 items-center gap-1.5">{headerActions}</div> : null}
       </header>
@@ -1314,7 +1385,7 @@ export function InboxTwoPane({
       style={{ height }}
       data-attr="portal-inbox-two-pane"
     >
-      <div className={`grid h-full ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(300px,34%)_1fr]"}`}>
+      <div className={`grid h-full ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(320px,38%)_1fr]"}`}>
         <section
           className={`portal-inbox-list-pane min-h-0 min-w-0 flex-col border-border lg:border-r ${
             listHidden ? "hidden" : threadOpen ? "hidden lg:flex" : "flex"

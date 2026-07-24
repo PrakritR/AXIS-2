@@ -6,9 +6,11 @@ import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal
 import {
   INBOX_LIST_SCROLL,
   InboxConversationRow,
+  InboxListSegmentTabs,
   InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
+  type InboxListSegment,
 } from "@/components/portal/portal-inbox-ui";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
@@ -134,8 +136,7 @@ export function ManagerUnifiedInbox({
   const [smsHiddenIds, setSmsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // Archived (trashed) conversations are reachable via a toggle, not a tab.
-  const [showArchived, setShowArchived] = useState(false);
+  const [listSegment, setListSegment] = useState<InboxListSegment>("active");
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
@@ -217,12 +218,11 @@ export function ManagerUnifiedInbox({
         const hay = [t.from, t.email, t.subject, t.body, t.preview].filter(Boolean).join(" ").toLowerCase();
         return hay.includes(q);
       });
-    } else if (showArchived) {
-      // Archived view: only trashed conversations.
+    } else if (listSegment === "archived") {
       rows = rows.filter((t) => t.folder === "trash");
+    } else if (listSegment === "unread") {
+      rows = rows.filter((t) => t.folder !== "trash" && t.folder === "inbox" && t.unread);
     } else {
-      // Default: ONE unified list of all live conversations (inbox + sent),
-      // no folder tabs. Unread is surfaced per-row, not as a separate section.
       rows = rows.filter((t) => t.folder !== "trash");
     }
 
@@ -245,7 +245,7 @@ export function ManagerUnifiedInbox({
         sortMs: inboxThreadSortMs(t.id, lastMsg?.at),
       };
     });
-  }, [filteredEmail, query, showArchived]);
+  }, [filteredEmail, query, listSegment]);
 
   // SMS rows (scoped + de-hidden), each tagged with its haystack and
   // last-message direction. Empty unless the SMS UI flag is on.
@@ -302,13 +302,14 @@ export function ManagerUnifiedInbox({
   }, [filterContacts, smsHiddenIds, smsOpenedIds, smsResidents, threadFilters, smsUiEnabled]);
 
   const smsListItems = useMemo((): UnifiedInboxListItem[] => {
-    // SMS threads have no archived folder — hide them in the archived view.
-    if (showArchived) return [];
+    if (listSegment === "archived") return [];
     const q = query.trim().toLowerCase();
-    return allSmsItems
-      .filter(({ haystack }) => (q ? haystack.includes(q) : true))
-      .map(({ item }) => item);
-  }, [allSmsItems, query, showArchived]);
+    let items = allSmsItems;
+    if (listSegment === "unread") {
+      items = items.filter(({ item }) => item.unread);
+    }
+    return items.filter(({ haystack }) => (q ? haystack.includes(q) : true)).map(({ item }) => item);
+  }, [allSmsItems, query, listSegment]);
 
   const mergedRows = useMemo(
     () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems], listSort),
@@ -320,14 +321,18 @@ export function ManagerUnifiedInbox({
     [filteredEmail],
   );
 
+  const unreadCount = useMemo(() => {
+    const emailUnread = filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length;
+    const smsUnread = allSmsItems.filter(({ item }) => item.unread).length;
+    return emailUnread + smsUnread;
+  }, [filteredEmail, allSmsItems]);
+
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
-  // Toggling the archived view is a different result set — clear the open thread
-  // and the search so the right pane never strands a row that left the list.
+  // Toggling the segment is a different result set — clear search; keep selection when possible.
   useEffect(() => {
-    setSelectedKey(null);
     setQuery("");
-  }, [showArchived]);
+  }, [listSegment]);
 
   useEffect(() => {
     if (mergedRows.length === 0) {
@@ -337,46 +342,31 @@ export function ManagerUnifiedInbox({
     setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0].key));
   }, [mergedRows]);
 
-  const listHidden = mergedRows.length <= 1;
-
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="portal-inbox-list-toolbar shrink-0 border-b border-border p-2.5">
+      <div className="portal-inbox-list-toolbar shrink-0 space-y-2.5 border-b border-border p-2.5">
+        <InboxListSegmentTabs
+          value={listSegment}
+          onChange={setListSegment}
+          unreadTotal={unreadCount}
+          archivedTotal={archivedCount}
+        />
         <div className="relative min-w-0">
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search messages"
-            className="portal-inbox-search h-9 w-full rounded-full border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+            placeholder="Search residents or messages"
+            className="portal-inbox-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
             data-attr="unified-inbox-search"
           />
         </div>
-        <div className="mt-2 flex items-center justify-between gap-2 px-1">
-          {mergedRows.length > 0 ? (
-            <p className="text-[11px] text-muted">
-              {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
-              {query.trim() ? ` matching “${query.trim()}”` : showArchived ? " · archived" : ""}
-            </p>
-          ) : (
-            <span />
-          )}
-          {!query.trim() ? (
-            <button
-              type="button"
-              onClick={() => setShowArchived((v) => !v)}
-              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
-                showArchived
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted hover:bg-foreground/5 hover:text-foreground"
-              }`}
-              data-attr="unified-inbox-archived-toggle"
-              aria-pressed={showArchived}
-            >
-              {showArchived ? "← Conversations" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
-            </button>
-          ) : null}
-        </div>
+        {mergedRows.length > 0 ? (
+          <p className="px-1 text-[11px] text-muted">
+            {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
+            {query.trim() ? ` matching “${query.trim()}”` : ""}
+          </p>
+        ) : null}
       </div>
       <div className={INBOX_LIST_SCROLL}>
         {mergedRows.length === 0 ? (
@@ -385,9 +375,11 @@ export function ManagerUnifiedInbox({
               title={
                 query.trim()
                   ? `No messages match “${query.trim()}”.`
-                  : showArchived
+                  : listSegment === "archived"
                     ? "No archived conversations."
-                    : "No conversations yet."
+                    : listSegment === "unread"
+                      ? "No unread conversations."
+                      : "No conversations yet."
               }
             />
           </div>
@@ -401,6 +393,7 @@ export function ManagerUnifiedInbox({
               previewPrefix={row.previewPrefix}
               time={row.time}
               unread={row.unread}
+              unreadCount={row.unread ? 1 : 0}
               selected={selectedKey === row.key}
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
               onOpen={() => setSelectedKey(row.key)}
@@ -443,10 +436,13 @@ export function ManagerUnifiedInbox({
         onConversationOpened={handleSmsConversationOpened}
       />
     ) : (
-      <InboxThreadEmpty />
+      <InboxThreadEmpty
+        title="Select a conversation"
+        hint="Choose a resident on the left to read and reply."
+      />
     );
 
   return (
-    <InboxTwoPane threadOpen={Boolean(selection)} listHidden={listHidden} list={listPane} thread={threadPane} />
+    <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />
   );
 }
