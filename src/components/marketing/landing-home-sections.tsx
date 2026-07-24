@@ -198,7 +198,7 @@ const FAQ_NOTES: { q: string; a: string }[] = [
   },
   {
     q: "Do I need a credit card to try it?",
-    a: "No. Paid plans start with a 14-day trial and no card — you only add payment if you decide to keep it. You can also open the live demo and click around with no signup at all.",
+    a: "No. Paid plans start with a 14-day trial and no card — you only add payment if you decide to keep it.",
   },
   {
     q: "How do my residents get in?",
