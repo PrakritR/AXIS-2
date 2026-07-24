@@ -32,27 +32,37 @@ async function resolveManagerUserIdForProperty(
   return fromData || null;
 }
 
-/** Enriches an application row and links the resident profile to the manager workspace on submit. */
+export type ResidentApplicationSubmitResult =
+  | { ok: true; row: DemoApplicantRow }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Enriches an application row and links the resident profile to the manager workspace on submit.
+ * Attribution is derived from the listing (or the already-stored value on an edit) — never from
+ * the request body, since `managerUserId` alone decides who sees the row in the manager portal.
+ */
 export async function linkResidentOnApplicationSubmit(
   db: SupabaseClient,
   params: {
     userId: string;
     row: DemoApplicantRow;
     isNewSubmit: boolean;
+    existingManagerUserId?: string | null;
   },
-): Promise<DemoApplicantRow> {
+): Promise<ResidentApplicationSubmitResult> {
   const propertyId = readPropertyId(params.row);
-  let managerUserId = params.row.managerUserId?.trim() || null;
+  const resolvedManagerUserId = propertyId ? await resolveManagerUserIdForProperty(db, propertyId) : null;
+  const managerUserId = resolvedManagerUserId || params.existingManagerUserId?.trim() || null;
 
-  if (!managerUserId && propertyId) {
-    managerUserId = await resolveManagerUserIdForProperty(db, propertyId);
+  if (!managerUserId && params.isNewSubmit) {
+    return { ok: false, status: 400, error: "This listing cannot accept applications yet." };
   }
 
   const normalizedRow: DemoApplicantRow = {
     ...params.row,
     id: normalizeApplicationAxisId(params.row.id),
     propertyId: propertyId || params.row.propertyId,
-    managerUserId: managerUserId || params.row.managerUserId || null,
+    managerUserId,
   };
 
   const axisId = normalizeApplicationAxisId(normalizedRow.id);
@@ -67,5 +77,5 @@ export async function linkResidentOnApplicationSubmit(
     await db.from("profiles").update({ manager_id: axisId }).eq("id", params.userId);
   }
 
-  return normalizedRow;
+  return { ok: true, row: normalizedRow };
 }

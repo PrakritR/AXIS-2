@@ -697,7 +697,7 @@ export async function POST(req: Request) {
         assignedPropertyId: existing?.assignedPropertyId ?? row.assignedPropertyId,
         assignedRoomChoice: existing?.assignedRoomChoice ?? row.assignedRoomChoice,
         signedMonthlyRent: existing?.signedMonthlyRent ?? row.signedMonthlyRent,
-        managerUserId: existing?.managerUserId ?? row.managerUserId,
+        managerUserId: existing?.managerUserId ?? null,
         backgroundCheckStatus: existing?.backgroundCheckStatus ?? row.backgroundCheckStatus,
         screening: existing?.screening ?? row.screening,
         manuallyAdded: existing?.manuallyAdded ?? row.manuallyAdded,
@@ -715,11 +715,16 @@ export async function POST(req: Request) {
               }
             : row.application,
       };
-      row = await linkResidentOnApplicationSubmit(db, {
+      const linked = await linkResidentOnApplicationSubmit(db, {
         userId: user.id,
         row,
         isNewSubmit: !existing,
+        existingManagerUserId: existing?.managerUserId ?? null,
       });
+      if (!linked.ok) {
+        return NextResponse.json({ error: linked.error }, { status: linked.status });
+      }
+      row = linked.row;
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;

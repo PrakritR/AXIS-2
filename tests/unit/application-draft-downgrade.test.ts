@@ -134,7 +134,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/auth/link-resident-on-application-submit", () => ({
-  linkResidentOnApplicationSubmit: async (_db: unknown, params: { row: Row }) => params.row,
+  linkResidentOnApplicationSubmit: async (_db: unknown, params: { row: Row }) => ({ ok: true, row: params.row }),
 }));
 
 vi.mock("@/lib/auth/provision-approved-resident", () => ({

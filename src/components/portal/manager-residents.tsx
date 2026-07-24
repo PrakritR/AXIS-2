@@ -526,6 +526,11 @@ export function ManagerResidents({
 
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
+    // `propertyTick` is a cache-invalidation signal, not a value read here:
+    // `applicationVisibleToPortalUser` consults the module-level property
+    // pipeline cache, which React cannot see. Re-filter once that cache
+    // hydrates so linked-property rows appear without a manual refresh.
+    void propertyTick;
     return readManagerApplicationRows()
       .filter((row) => isResidentDirectoryRow(row) && applicationVisibleToPortalUser(row, userId, "residents"))
       .map((row) => {
@@ -555,7 +560,7 @@ export function ManagerResidents({
           isPrevious: isPreviousResidentDirectoryRow(row),
         };
       });
-  }, [userId, hcTick]);
+  }, [userId, hcTick, propertyTick]);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;

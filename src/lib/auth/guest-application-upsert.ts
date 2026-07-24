@@ -76,10 +76,7 @@ export async function prepareGuestApplicationUpsert(
   }
 
   const managerUserId =
-    (await resolveManagerUserIdForProperty(db, propertyId)) ||
-    params.existing?.managerUserId?.trim() ||
-    params.row.managerUserId?.trim() ||
-    null;
+    (await resolveManagerUserIdForProperty(db, propertyId)) || params.existing?.managerUserId?.trim() || null;
 
   if (!managerUserId) {
     return { ok: false, status: 400, error: "This listing cannot accept applications yet." };

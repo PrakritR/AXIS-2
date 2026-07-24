@@ -59,15 +59,17 @@ describe("linkResidentOnApplicationSubmit", () => {
       application: { propertyId: "prop-1" } as DemoApplicantRow["application"],
     };
 
-    const linked = await linkResidentOnApplicationSubmit(db as never, {
+    const result = await linkResidentOnApplicationSubmit(db as never, {
       userId: "user-1",
       row,
       isNewSubmit: true,
     });
 
-    expect(linked.id).toBe("AXIS-ABC123");
-    expect(linked.managerUserId).toBe("manager-1");
-    expect(linked.propertyId).toBe("prop-1");
+    expect(result.ok).toBe(true);
+    const linked = result.ok ? result.row : null;
+    expect(linked?.id).toBe("AXIS-ABC123");
+    expect(linked?.managerUserId).toBe("manager-1");
+    expect(linked?.propertyId).toBe("prop-1");
     expect(db.profileUpdate).toHaveBeenCalledWith({ manager_id: "AXIS-ABC123" });
     expect(db.profileUpdateEq).toHaveBeenCalledWith("id", "user-1");
   });
@@ -93,8 +95,59 @@ describe("linkResidentOnApplicationSubmit", () => {
       userId: "user-1",
       row,
       isNewSubmit: false,
+      existingManagerUserId: "manager-1",
     });
 
     expect(db.profileUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a new submit whose property resolves to no manager, ignoring a forged managerUserId", async () => {
+    const db = makeDbMock({ propertyRecord: null, profile: { manager_id: null } });
+    const row: DemoApplicantRow = {
+      id: "AXIS-ABC123",
+      name: "Resident",
+      property: "Test House",
+      propertyId: "prop-unknown",
+      managerUserId: "victim-manager",
+      stage: "Submitted",
+      bucket: "pending",
+      detail: "",
+      email: "resident@example.com",
+    };
+
+    const result = await linkResidentOnApplicationSubmit(db as never, {
+      userId: "user-1",
+      row,
+      isNewSubmit: true,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.status).toBe(400);
+    expect(db.profileUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not trust a forged managerUserId on an edit, keeping the stored attribution", async () => {
+    const db = makeDbMock({ propertyRecord: null, profile: { manager_id: "AXIS-EXISTING" } });
+    const row: DemoApplicantRow = {
+      id: "AXIS-ABC123",
+      name: "Resident",
+      property: "Test House",
+      propertyId: "prop-unknown",
+      managerUserId: "victim-manager",
+      stage: "Submitted",
+      bucket: "pending",
+      detail: "",
+      email: "resident@example.com",
+    };
+
+    const result = await linkResidentOnApplicationSubmit(db as never, {
+      userId: "user-1",
+      row,
+      isNewSubmit: false,
+      existingManagerUserId: "manager-1",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.row.managerUserId : null).toBe("manager-1");
   });
 });
