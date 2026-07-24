@@ -497,9 +497,15 @@ function PaymentAutomationSettingsForm({
   const { showToast } = useAppUi();
   const copy = SCHEDULE_SETTINGS_COPY[variant];
   const [draft, setDraft] = useState(initialSettings);
+  const [selectedPreset, setSelectedPreset] = useState<ReminderPresetId>(() => detectReminderPreset(initialSettings));
   const [customDay, setCustomDay] = useState("");
   const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setDraft(initialSettings);
+    setSelectedPreset(detectReminderPreset(initialSettings));
+  }, [initialSettings]);
 
   const parseVisibilityDays = (raw: string) =>
     Math.max(0, Math.min(30, Math.round(Number(raw)) || initialSettings.scheduleVisibilityDays));
@@ -523,6 +529,7 @@ function PaymentAutomationSettingsForm({
       }
       const body = (await res.json()) as { settings: ManagerAutomationSettings };
       setDraft(body.settings);
+      setSelectedPreset(detectReminderPreset(body.settings));
       setVisibilityDaysInput(String(body.settings.scheduleVisibilityDays));
       onSaved(body.settings);
       if (typeof window !== "undefined") {
@@ -537,6 +544,7 @@ function PaymentAutomationSettingsForm({
   };
 
   const toggleDay = (day: number) => {
+    setSelectedPreset("custom");
     setDraft((prev) => {
       const has = prev.preDueReminderDays.includes(day);
       const nextDays = has ? prev.preDueReminderDays.filter((d) => d !== day) : [...prev.preDueReminderDays, day].sort((a, b) => b - a);
@@ -549,6 +557,7 @@ function PaymentAutomationSettingsForm({
     // A custom offset is "N days before due"; 0 would collide with the "Due
     // date" toggle and is dropped by the projection, so require >= 1.
     if (!customDay.trim() || !Number.isFinite(n) || n < 1 || n > 60) return;
+    setSelectedPreset("custom");
     setDraft((prev) => ({
       ...prev,
       preDueReminderDays: [...new Set([...prev.preDueReminderDays, n])].sort((a, b) => b - a),
@@ -557,12 +566,28 @@ function PaymentAutomationSettingsForm({
   };
 
   const compact = layout === "modal" && variant === "payments";
-  const activePreset = detectReminderPreset(draft);
+  const activePreset = selectedPreset;
   const previewLines = buildReminderPreviewLines(draft);
 
   const selectPreset = (presetId: ReminderPresetId) => {
-    if (presetId === "custom") return;
-    setDraft((prev) => applyReminderPreset(prev, presetId));
+    // #region agent log
+    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+      body: JSON.stringify({
+        sessionId: "81cbea",
+        location: "payment-schedule-ui.tsx:selectPreset",
+        message: "reminder preset selected",
+        data: { presetId },
+        timestamp: Date.now(),
+        hypothesisId: "H1",
+      }),
+    }).catch(() => {});
+    // #endregion
+    setSelectedPreset(presetId);
+    if (presetId !== "custom") {
+      setDraft((prev) => applyReminderPreset(prev, presetId));
+    }
   };
 
   const presetCardClass = (selected: boolean) =>
@@ -615,7 +640,7 @@ function PaymentAutomationSettingsForm({
               <button
                 type="button"
                 className={presetCardClass(activePreset === "custom")}
-                onClick={() => setDraft((prev) => prev)}
+                onClick={() => selectPreset("custom")}
                 disabled={busy}
               >
                 <span className="text-sm font-semibold text-foreground">Custom</span>
@@ -690,7 +715,10 @@ function PaymentAutomationSettingsForm({
                   <input
                     type="checkbox"
                     checked={draft.sameDayReminderEnabled}
-                    onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })}
+                    onChange={(e) => {
+                      setSelectedPreset("custom");
+                      setDraft({ ...draft, sameDayReminderEnabled: e.target.checked });
+                    }}
                     disabled={busy}
                   />
                   {copy.sameDayLabel}
@@ -701,6 +729,7 @@ function PaymentAutomationSettingsForm({
                     checked={draft.overdueDailyEnabled}
                     onChange={(e) => {
                       const enabled = e.target.checked;
+                      setSelectedPreset("custom");
                       setDraft((prev) => ({
                         ...prev,
                         overdueDailyEnabled: enabled,
