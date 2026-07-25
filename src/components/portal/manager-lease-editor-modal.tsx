@@ -15,7 +15,8 @@ import {
   type ManagerPropertySaveTarget,
 } from "@/lib/manager-property-save-target";
 import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
-import { leaseSourceFromDraft, type PropertyLeaseSource } from "@/lib/property-lease-source";
+import { leaseSourceFromDraft } from "@/lib/property-lease-source";
+import type { PropertyLeaseSource } from "@/lib/property-lease-source";
 import { buildLeaseModalAssistantContext } from "@/lib/lease-assistant-context";
 
 function draftFromSubmission(sub: ManagerListingSubmissionV1): LeaseConfigDraft {
