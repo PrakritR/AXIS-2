@@ -11,7 +11,9 @@ import {
   formatListingBasicsSummary,
   isListingFeeAmountFilled,
   resolveAllowedLeaseTerms,
+  syncShortTermLeaseTermInAllowed,
 } from "@/lib/manager-listing-submission";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import {
   firstInvalidListingStep,
   listingBathroomNameKey,
@@ -199,6 +201,23 @@ describe("listing fee and lease helpers", () => {
     const sub = createDefaultListingSubmission();
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month"];
     expect(resolveAllowedLeaseTerms(sub)).toEqual(["12-Month", "Month-to-Month"]);
+  });
+
+  it("includes short-term stay when short-term rentals are enabled", () => {
+    const sub = createDefaultListingSubmission();
+    sub.allowedLeaseTerms = ["12-Month"];
+    sub.shortTermRentalsAllowed = true;
+    expect(resolveAllowedLeaseTerms(sub)).toEqual(["12-Month", SHORT_TERM_LEASE_TERM]);
+  });
+
+  it("syncShortTermLeaseTermInAllowed adds and removes the short-term label", () => {
+    expect(syncShortTermLeaseTermInAllowed(["12-Month"], true)).toEqual(["12-Month", SHORT_TERM_LEASE_TERM]);
+    expect(syncShortTermLeaseTermInAllowed(["12-Month", SHORT_TERM_LEASE_TERM], false)).toEqual(["12-Month"]);
+  });
+
+  it("defaults holding deposit on new listings", () => {
+    const sub = createDefaultListingSubmission();
+    expect(sub.holdingDeposit).toBe("$100");
   });
 });
 

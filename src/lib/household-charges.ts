@@ -26,6 +26,15 @@ import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
+/** Default holding deposit for new listings when the manager leaves the field blank. */
+export const DEFAULT_HOLDING_DEPOSIT_LABEL = "$100";
+
+export function normalizeHoldingDepositLabel(raw: string | undefined | null): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return DEFAULT_HOLDING_DEPOSIT_LABEL;
+  return trimmed;
+}
+
 let memoryCharges: HouseholdCharge[] = [];
 let memoryRentProfiles: RecurringRentProfile[] = [];
 const HOUSEHOLD_CHARGES_SYNC_TTL_MS = 15_000;
@@ -48,6 +57,7 @@ export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__"
 
 export type HouseholdChargeKind =
   | "application_fee"
+  | "holding_deposit"
   | "first_month_rent"
   | "prorated_rent"
   | "prorated_last_month_rent"
@@ -479,6 +489,9 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
   if (charge.kind === "application_fee") {
     return `application_fee|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}`;
   }
+  if (charge.kind === "holding_deposit") {
+    return `holding_deposit|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}`;
+  }
   if (charge.applicationId && (
     charge.kind === "first_month_rent" ||
     charge.kind === "prorated_rent" ||
@@ -796,6 +809,7 @@ export function chargeDueLabel(charge: HouseholdCharge): string {
   }
   switch (charge.kind) {
     case "application_fee":
+    case "holding_deposit":
       return "Before approval";
     case "security_deposit":
     case "move_in_fee":
@@ -817,6 +831,8 @@ function chargeTitle(kind: HouseholdChargeKind): string {
   switch (kind) {
     case "application_fee":
       return "Application fee";
+    case "holding_deposit":
+      return "Holding deposit";
     case "first_month_rent":
       return "First month's rent";
     case "prorated_rent":
@@ -852,6 +868,8 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
   switch (kind) {
     case "application_fee":
       return sub.applicationFee;
+    case "holding_deposit":
+      return normalizeHoldingDepositLabel(sub.holdingDeposit);
     case "first_month_rent":
     case "prorated_rent":
     case "prorated_last_month_rent":
@@ -1336,6 +1354,117 @@ export function ensurePendingApplicationFeeCharge(input: {
   };
   writeAll([...readAll(), charge]);
   return charge;
+}
+
+function holdingDepositChargeIdForApplication(applicationId: string): string {
+  return `hc_holding_${applicationId}`;
+}
+
+function holdingDepositFallbackChargeId(residentEmail: string, propertyId: string): string {
+  return `hc_holding_${chargeKeyPart(residentEmail)}_${chargeKeyPart(propertyId)}`;
+}
+
+export function listingHoldingDepositAmount(propertyId: string): { amount: number; displayLabel: string } {
+  if (!propertyId.trim()) {
+    return { amount: 0, displayLabel: "—" };
+  }
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission;
+  if (!sub) {
+    return { amount: 0, displayLabel: "—" };
+  }
+  const raw = normalizeHoldingDepositLabel(sub.holdingDeposit);
+  const amount = parseMoneyAmount(raw);
+  const displayLabel = raw.trim() || (amount > 0 ? `$${amount.toFixed(2)}` : "—");
+  return { amount, displayLabel };
+}
+
+function findHoldingDepositCharge(
+  residentEmail: string,
+  propertyId: string,
+  residentUserId: string | null,
+  applicationId?: string | null,
+  propertyIdAliases?: string[] | null,
+): HouseholdCharge | undefined {
+  const email = residentEmail.trim().toLowerCase();
+  const ids = new Set([propertyId.trim(), ...(propertyIdAliases ?? []).map((id) => id.trim())].filter(Boolean));
+  return readAll().find((charge) => {
+    if (charge.kind !== "holding_deposit") return false;
+    if (charge.residentEmail.trim().toLowerCase() !== email) return false;
+    if (!ids.has(charge.propertyId)) return false;
+    if (applicationId?.trim() && charge.applicationId && charge.applicationId !== applicationId.trim()) return false;
+    if (residentUserId && charge.residentUserId && charge.residentUserId !== residentUserId) return false;
+    return true;
+  });
+}
+
+/**
+ * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
+ */
+export function ensurePendingHoldingDepositCharge(input: {
+  residentEmail: string;
+  residentName: string;
+  residentUserId: string | null;
+  propertyId: string;
+  applicationId?: string | null;
+  managerUserId?: string | null;
+  propertyIdAliases?: string[] | null;
+}): HouseholdCharge | null {
+  const email = input.residentEmail.trim();
+  if (!email || !email.includes("@")) return null;
+  const prop = getPropertyById(input.propertyId);
+  const sub = prop?.listingSubmission;
+  if (!sub) return null;
+  const raw = normalizeHoldingDepositLabel(sub.holdingDeposit);
+  const amt = parseMoneyAmount(raw);
+  if (amt <= 0) return null;
+
+  const existing = findHoldingDepositCharge(
+    email,
+    input.propertyId,
+    input.residentUserId,
+    input.applicationId,
+    input.propertyIdAliases,
+  );
+  if (existing) return existing;
+
+  const zelleSnap =
+    sub && sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
+  const venmoSnap =
+    sub && sub.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
+
+  const label = raw.trim() || `$${amt.toFixed(2)}`;
+  const charge: HouseholdCharge = {
+    id: input.applicationId?.trim()
+      ? holdingDepositChargeIdForApplication(input.applicationId.trim())
+      : holdingDepositFallbackChargeId(email, input.propertyId),
+    createdAt: new Date().toISOString(),
+    applicationId: input.applicationId?.trim() || undefined,
+    residentEmail: email,
+    residentName: input.residentName.trim() || "Applicant",
+    residentUserId: input.residentUserId,
+    propertyId: input.propertyId,
+    propertyLabel: prop?.title ?? sub.buildingName,
+    managerUserId: input.managerUserId ?? prop?.managerUserId ?? null,
+    kind: "holding_deposit",
+    title: chargeTitle("holding_deposit"),
+    amountLabel: label,
+    balanceLabel: label.includes("$") ? label : `$${amt.toFixed(2)}`,
+    status: "pending",
+    zelleContactSnapshot: zelleSnap,
+    venmoContactSnapshot: venmoSnap,
+    blocksLeaseUntilPaid: false,
+  };
+  writeAll([...readAll(), charge]);
+  return charge;
+}
+
+function paidHoldingDepositCreditCents(applicationId: string): number {
+  const appId = applicationId.trim();
+  if (!appId) return 0;
+  const charge = readAll().find((c) => c.applicationId === appId && c.kind === "holding_deposit" && c.status === "paid");
+  if (!charge) return 0;
+  return Math.round(parseMoneyAmount(charge.amountLabel) * 100);
 }
 
 /**
@@ -2035,8 +2164,12 @@ export function recordApplicationCharges(
     return;
   }
 
-  if (opts?.skipApplicationFee || existingAppFee) return;
+  if (opts?.skipApplicationFee || existingAppFee) {
+    ensurePendingHoldingDepositCharge(input);
+    return;
+  }
   ensurePendingApplicationFeeCharge(input);
+  ensurePendingHoldingDepositCharge(input);
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
@@ -2054,6 +2187,15 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   if (!propertyId) return false;
   const beforeIds = new Set(readAll().map((charge) => charge.id));
   const charge = ensurePendingApplicationFeeCharge({
+    residentEmail,
+    residentName: row.name || row.application?.fullLegalName || "Applicant",
+    residentUserId: null,
+    propertyId,
+    applicationId: row.id,
+    managerUserId: managerUserId ?? row.managerUserId ?? null,
+    propertyIdAliases,
+  });
+  ensurePendingHoldingDepositCharge({
     residentEmail,
     residentName: row.name || row.application?.fullLegalName || "Applicant",
     residentUserId: null,
@@ -2267,7 +2409,17 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         ? sub?.securityDeposit
         : undefined,
   );
-  pushCharge("security_deposit", securityDeposit, chargeTitle("security_deposit"), true, "Before lease signing");
+  const holdingCredit = paidHoldingDepositCreditCents(applicationId) / 100;
+  const netSecurityDeposit = Math.max(0, securityDeposit - holdingCredit);
+  const securityTitle =
+    holdingCredit > 0 && netSecurityDeposit > 0
+      ? `${chargeTitle("security_deposit")} ($${holdingCredit.toFixed(2)} holding deposit credited)`
+      : holdingCredit > 0 && netSecurityDeposit <= 0
+        ? `${chargeTitle("security_deposit")} (fully covered by holding deposit)`
+        : chargeTitle("security_deposit");
+  if (netSecurityDeposit > 0) {
+    pushCharge("security_deposit", netSecurityDeposit, securityTitle, true, "Before lease signing");
+  }
 
   const moveInFee = savedAmount(
     row.application?.managerMoveInFeeOverride,
@@ -2790,6 +2942,10 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
         ? c.status === "paid"
           ? "Application fee recorded as paid."
           : "Application fee pending — mark as paid after you receive the manual payment."
+        : c.kind === "holding_deposit"
+          ? c.status === "paid"
+            ? "Holding deposit recorded as paid — credited toward security deposit on approval."
+            : "Holding deposit pending — secures the application and credits toward security deposit when paid."
         : c.kind === "work_order_charge"
           ? "Work order pass-through — resident is billed this amount; mark as paid when you receive payment."
           : c.zelleContactSnapshot
