@@ -17,6 +17,7 @@ import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 import { isProductionPublicSite } from "@/lib/public-demo-access";
 import {
   ensurePendingApplicationFeeCharge,
+  ensurePendingHoldingDepositCharge,
   findApplicationFeeCharge,
   HOUSEHOLD_CHARGES_EVENT,
   markApplicationFeePaidAfterStripe,
@@ -800,6 +801,12 @@ function RentalApplicationWizardInner({
             residentUserId: feeStepUserId,
             propertyId: pid,
           });
+          ensurePendingHoldingDepositCharge({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId: feeStepUserId,
+            propertyId: pid,
+          });
           processedApplicationFeeSessions.add(sessionId);
           showToast("Bank transfer submitted. Your application fee will be marked paid when the transfer clears.");
           finalizeApplicationSubmit(feeStepUserId);
@@ -821,6 +828,12 @@ function RentalApplicationWizardInner({
         return;
       }
       ensurePendingApplicationFeeCharge({
+        residentEmail: form.email,
+        residentName: form.fullLegalName,
+        residentUserId: feeStepUserId,
+        propertyId: pid,
+      });
+      ensurePendingHoldingDepositCharge({
         residentEmail: form.email,
         residentName: form.fullLegalName,
         residentUserId: feeStepUserId,
@@ -932,6 +945,12 @@ function RentalApplicationWizardInner({
             return;
           }
           ensurePendingApplicationFeeCharge({
+            residentEmail: form.email,
+            residentName: form.fullLegalName,
+            residentUserId,
+            propertyId: pid,
+          });
+          ensurePendingHoldingDepositCharge({
             residentEmail: form.email,
             residentName: form.fullLegalName,
             residentUserId,

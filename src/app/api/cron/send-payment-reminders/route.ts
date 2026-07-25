@@ -259,7 +259,11 @@ export async function GET(req: Request) {
         const listing = listingByPropertyId.get(charge.propertyId);
         const policy = lateFeePolicyFromSubmission(listing);
         const daysPastDue = daysBetween(dueDate, now);
-        if (policy.enabled && daysPastDue >= policy.graceDays) {
+        // Automated fee creation is opt-in via the same manager toggle that
+        // gates the notice — matching the schedule projection
+        // (scheduled-payment-messages.ts), which already requires both. A
+        // listing-level policy alone must never create charges.
+        if (settings.lateFeeNoticeEnabled && policy.enabled && daysPastDue >= policy.graceDays) {
           const lateFeeId = `hc_late_fee_${charge.id}`;
           const lateFeeCharge: HouseholdCharge = {
             id: lateFeeId,
@@ -286,7 +290,9 @@ export async function GET(req: Request) {
             {
               id: lateFeeId,
               manager_user_id: lateFeeCharge.managerUserId,
+              resident_user_id: lateFeeCharge.residentUserId ?? null,
               resident_email: charge.residentEmail.trim().toLowerCase(),
+              kind: "late_fee",
               status: "pending",
               row_data: lateFeeCharge,
               updated_at: new Date().toISOString(),

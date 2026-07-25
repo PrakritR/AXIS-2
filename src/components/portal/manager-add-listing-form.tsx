@@ -60,6 +60,7 @@ import {
   normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
+  syncShortTermLeaseTermInAllowed,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
@@ -140,6 +141,7 @@ import {
   wizardSectionErrorClass,
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
@@ -988,10 +990,10 @@ function ListingSubsection({
   children: React.ReactNode;
 }) {
   return (
-    <div id={id} className="space-y-4 border-t border-border pt-5">
-      <div>
-        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-        {description ? <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p> : null}
+    <div id={id} className="space-y-5 border-t border-border pt-6 first:border-t-0 first:pt-0">
+      <div className="space-y-1.5">
+        <h4 className="text-[15px] font-semibold tracking-tight text-foreground">{title}</h4>
+        {description ? <p className="text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -2978,16 +2980,21 @@ export function ManagerAddListingForm({
                 )}
               </ListingSubsection>
 
-              <ListingSubsection title="Lease terms">
+              <ListingSubsection
+                title="Lease terms"
+                description="Choose which lease lengths applicants can select. Short-term stays add “Short-Term Stay” automatically when enabled below."
+              >
                 <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
-                  <FieldLabel required>Lease terms offered</FieldLabel>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <FieldLabel required>Lease lengths offered</FieldLabel>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {LEASE_TERM_OPTIONS.map((term) => {
                       const selected = resolveAllowedLeaseTerms(sub).includes(term);
                       return (
                         <label
                           key={term}
-                          className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm shadow-sm"
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
+                            selected ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
+                          }`}
                         >
                           <input
                             type="checkbox"
@@ -2997,10 +3004,14 @@ export function ManagerAddListingForm({
                               clearListingFieldError("allowedLeaseTerms");
                               const on = e.target.checked;
                               setSub((s) => {
-                                const current = resolveAllowedLeaseTerms(s);
-                                const next = on
+                                const current = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                                const nextStandard = on
                                   ? [...new Set([...current, term])]
                                   : current.filter((t) => t !== term);
+                                const next = syncShortTermLeaseTermInAllowed(
+                                  nextStandard,
+                                  Boolean(s.shortTermRentalsAllowed),
+                                );
                                 return {
                                   ...s,
                                   allowedLeaseTerms: next,
@@ -3014,27 +3025,47 @@ export function ManagerAddListingForm({
                       );
                     })}
                   </div>
+                  {sub.shortTermRentalsAllowed ? (
+                    <p className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-foreground">
+                      <span className="font-semibold">{SHORT_TERM_LEASE_TERM}</span>
+                      <span className="text-muted">— included because short-term stays are enabled</span>
+                    </p>
+                  ) : null}
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>
               </ListingSubsection>
 
               <ListingSubsection
                 title="Short-term stays"
-                description="Enable this only if this property may host temporary lodger / guest stays."
+                description="Temporary guest / lodger stays with nightly pricing. Applicants choose “Short-term stay” when this is on."
               >
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-4">
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-border"
                     checked={Boolean(sub.shortTermRentalsAllowed)}
-                    onChange={(e) => setSub((s) => ({ ...s, shortTermRentalsAllowed: e.target.checked }))}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setSub((s) => {
+                        const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                        const next = syncShortTermLeaseTermInAllowed(standard, on);
+                        return {
+                          ...s,
+                          shortTermRentalsAllowed: on,
+                          allowedLeaseTerms: next,
+                          leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                        };
+                      });
+                    }}
                   />
                   <span className="text-sm font-medium text-foreground">This property allows short-term room stays</span>
                 </label>
                 {sub.shortTermRentalsAllowed ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Short-term pricing</p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <GridField>
-                      <FieldLabel>Daily cost</FieldLabel>
+                      <FieldLabel hint="Nightly rate shown on the listing and application.">Daily cost</FieldLabel>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
@@ -3082,6 +3113,7 @@ export function ManagerAddListingForm({
                         onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
                         placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
                       />
+                    </div>
                     </div>
                   </div>
                 ) : null}
@@ -3253,82 +3285,174 @@ export function ManagerAddListingForm({
                 )}
               </ListingSubsection>
 
-              <ListingSubsection title="Fees">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {(
-                    [
-                      ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim()],
-                      ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
-                      ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
-                      ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
-                      ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim()],
-                      ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim()],
-                      ["monthToMonthSurcharge", "Month-to-month surcharge", (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim()],
-                    ] as const
-                  ).map(([key, label, value]) => (
-                    <GridField key={key}>
-                      <div data-wizard-field={key}>
-                        <FieldLabel required>{label}</FieldLabel>
-                      </div>
-                      <div>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
-                            inputMode="decimal"
-                            value={value}
-                            onChange={(e) => {
-                              clearListingFieldError(key);
-                              setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
-                            }}
-                            placeholder="0"
-                          />
-                        </div>
-                        <StepFieldError msg={stepFieldErrors[key]} />
-                      </div>
-                    </GridField>
-                  ))}
-                </div>
-                <div className="mt-4 space-y-3 rounded-xl border border-border bg-card p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application options</p>
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                      checked={Boolean(sub.allowMultiplePropertyApplications)}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          allowMultiplePropertyApplications: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm text-foreground">
-                      <span className="font-medium">Allow multiple applications</span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Residents can apply to more than one property or room on this listing.
-                      </span>
-                    </span>
-                  </label>
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                      checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          applicationFeeOnlyFirstApplication: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm text-foreground">
-                      <span className="font-medium">Application fee only for first application</span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Charge the application fee once per resident; skip payment on later applications.
-                      </span>
-                    </span>
-                  </label>
+              <ListingSubsection
+                title="Fees & deposits"
+                description="Application charges are one-time. Monthly amounts repeat on the resident ledger."
+              >
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application & holding</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted">
+                      Collected when someone applies. Holding deposit secures the application and credits toward the security deposit when they are approved (defaults to $100 if left blank).
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      {(
+                        [
+                          ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim(), true],
+                          [
+                            "holdingDeposit",
+                            "Holding deposit",
+                            (sub.holdingDeposit ?? "").replace(/^\$/, "").trim(),
+                            false,
+                          ],
+                        ] as const
+                      ).map(([key, label, value, required]) => (
+                        <GridField key={key}>
+                          <div data-wizard-field={key}>
+                            <FieldLabel required={required} hint={key === "holdingDeposit" ? "One-time — not monthly." : undefined}>
+                              {label}
+                            </FieldLabel>
+                          </div>
+                          <div>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
+                                $
+                              </span>
+                              <Input
+                                className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
+                                inputMode="decimal"
+                                value={value}
+                                onChange={(e) => {
+                                  clearListingFieldError(key);
+                                  setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
+                                }}
+                                placeholder={key === "holdingDeposit" ? "100" : "0"}
+                              />
+                            </div>
+                            <StepFieldError msg={stepFieldErrors[key]} />
+                          </div>
+                        </GridField>
+                      ))}
+                    </div>
+                    <div className="mt-4 space-y-3 border-t border-border pt-4">
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                          checked={Boolean(sub.allowMultiplePropertyApplications)}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              allowMultiplePropertyApplications: e.target.checked,
+                            }))
+                          }
+                        />
+                        <span className="text-sm text-foreground">
+                          <span className="font-medium">Allow multiple applications</span>
+                          <span className="mt-0.5 block text-xs text-muted">
+                            Residents can apply to more than one property or room on this listing.
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                          checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              applicationFeeOnlyFirstApplication: e.target.checked,
+                            }))
+                          }
+                        />
+                        <span className="text-sm text-foreground">
+                          <span className="font-medium">Application fee only for first application</span>
+                          <span className="mt-0.5 block text-xs text-muted">
+                            Charge the application fee once per resident; skip payment on later applications.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Move-in & security</p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      {(
+                        [
+                          ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
+                          ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
+                        ] as const
+                      ).map(([key, label, value]) => (
+                        <GridField key={key}>
+                          <div data-wizard-field={key}>
+                            <FieldLabel required>{label}</FieldLabel>
+                          </div>
+                          <div>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
+                                $
+                              </span>
+                              <Input
+                                className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
+                                inputMode="decimal"
+                                value={value}
+                                onChange={(e) => {
+                                  clearListingFieldError(key);
+                                  setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
+                                }}
+                                placeholder="0"
+                              />
+                            </div>
+                            <StepFieldError msg={stepFieldErrors[key]} />
+                          </div>
+                        </GridField>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Monthly add-ons</p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {(
+                        [
+                          ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
+                          ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim()],
+                          ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim()],
+                          [
+                            "monthToMonthSurcharge",
+                            "Month-to-month surcharge",
+                            (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim(),
+                          ],
+                        ] as const
+                      ).map(([key, label, value]) => (
+                        <GridField key={key}>
+                          <div data-wizard-field={key}>
+                            <FieldLabel required>{label}</FieldLabel>
+                          </div>
+                          <div>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
+                                $
+                              </span>
+                              <Input
+                                className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
+                                inputMode="decimal"
+                                value={value}
+                                onChange={(e) => {
+                                  clearListingFieldError(key);
+                                  setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
+                                }}
+                                placeholder="0"
+                              />
+                            </div>
+                            <StepFieldError msg={stepFieldErrors[key]} />
+                          </div>
+                        </GridField>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 {(sub.customFees ?? []).length > 0 ? (
                   <div className="mt-4 space-y-3">
@@ -4719,6 +4843,7 @@ export function ManagerAddListingForm({
           </div>
           <ModalAssistantStrip
             contextHint={`${wizardTitlePrefix} · ${LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing"}`}
+            storageScopeKey={wizardTitlePrefix}
           />
         </div>
       </form>

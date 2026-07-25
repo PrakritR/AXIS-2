@@ -86,6 +86,14 @@ export type DemoApplicantRow = {
     roomNumber?: string;
     leaseTerm?: string;
     notes?: string;
+    /** ISO timestamp when the existing-resident portal welcome email was sent. */
+    onboardingWelcomeSentAt?: string;
+    /** Signed lease PDF uploaded by manager for off-platform leases. */
+    signedLeaseFileName?: string;
+    signedLeaseDataUrl?: string;
+    signedLeaseUploadedAt?: string;
+    /** Lease treated as executed off-platform; skips e-sign workflow. */
+    externallySignedLease?: true;
   };
 };
 

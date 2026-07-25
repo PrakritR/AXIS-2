@@ -571,7 +571,7 @@ describe("update_automation_settings", () => {
     expect(rowData.sameDayReminderEnabled).toBe(false);
     expect(rowData.preDueReminderDays).toEqual([5, 1]);
 
-    const expectedHash = stableInputHash({ sameDayReminderEnabled: false, preDueReminderDays: [5, 1] });
+    const expectedHash = stableInputHash({ sameDayReminderEnabled: false, preDueReminderDays: [5, 1], applyExisting: false });
     const audit = (tables.get("audit_log") ?? [])[0]!;
     expect(audit.dedupe_key).toBe(`update_automation_settings:${LANDLORD}:${expectedHash}`);
 

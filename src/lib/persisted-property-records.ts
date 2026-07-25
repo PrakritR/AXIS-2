@@ -163,7 +163,58 @@ export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): Proper
     const side = (snapshot.sideByUser[uid] ??= { requestChange: [], unlisted: [], rejected: [], drafts: [] });
     side[key].push(adminRow);
   }
+  for (const uid of Object.keys(snapshot.extrasByUser)) {
+    snapshot.extrasByUser[uid] = sortMockPropertiesForDisplay(snapshot.extrasByUser[uid] ?? []);
+  }
+  for (const key of ["requestChange", "unlisted", "rejected", "drafts"] as const) {
+    snapshot.sideGlobal[key] = sortAdminPropertyRowsForSnapshot(snapshot.sideGlobal[key]);
+  }
+  for (const side of Object.values(snapshot.sideByUser)) {
+    side.requestChange = sortAdminPropertyRowsForSnapshot(side.requestChange);
+    side.unlisted = sortAdminPropertyRowsForSnapshot(side.unlisted);
+    side.rejected = sortAdminPropertyRowsForSnapshot(side.rejected);
+    side.drafts = sortAdminPropertyRowsForSnapshot(side.drafts);
+  }
   return snapshot;
+}
+
+function adminRowSortLabel(row: AdminPropertyRow): string {
+  return (
+    row.buildingName?.trim() ||
+    row.submission?.buildingName?.trim() ||
+    row.unitLabel?.trim() ||
+    row.address?.trim() ||
+    row.listingId?.trim() ||
+    row.adminRefId?.trim() ||
+    ""
+  );
+}
+
+/** Local sort helper — must not import demo-admin-property-inventory (circular via pipeline). */
+function sortAdminPropertyRowsForSnapshot(rows: AdminPropertyRow[]): AdminPropertyRow[] {
+  return [...rows].sort((a, b) => {
+    const byLabel = adminRowSortLabel(a).localeCompare(adminRowSortLabel(b), undefined, {
+      sensitivity: "base",
+      numeric: true,
+    });
+    if (byLabel !== 0) return byLabel;
+    const byAddress = (a.address ?? "").localeCompare(b.address ?? "", undefined, {
+      sensitivity: "base",
+      numeric: true,
+    });
+    if (byAddress !== 0) return byAddress;
+    return (a.listingId ?? a.adminRefId).localeCompare(b.listingId ?? b.adminRefId);
+  });
+}
+
+function sortMockPropertiesForDisplay(list: MockProperty[]): MockProperty[] {
+  return [...list].sort((a, b) => {
+    const label = (p: MockProperty) =>
+      (p.buildingName || p.listingSubmission?.buildingName || p.title || p.address || p.id).trim();
+    const byLabel = label(a).localeCompare(label(b), undefined, { sensitivity: "base", numeric: true });
+    if (byLabel !== 0) return byLabel;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 export function statusForBucket(bucket: AdminPropertyBucketIndex): ManagerPropertyRecordStatus {

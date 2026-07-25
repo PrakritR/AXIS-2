@@ -453,7 +453,11 @@ Do not re-enable preview deploys or remove the Ignored Build Step without an
 explicit captain decision.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. It is `main`; don't change it.
+Environments → Production → Branch Tracking**. It must be **`main`**; do not
+point production at a `production` git branch (that branch is retired).
+
+See **`docs/agents/deployment-workflow.md`** for the branch ladder every agent
+must follow.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
@@ -750,7 +754,7 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 | Manager account creation ("Get started") | `docs/agents/manager-account-creation.md` | `/auth/create-account` NEVER auto-redirects to a portal — a signed-in user still gets the full create form, and the partner-pricing OAuth callback returns there on every branch (free tier included, `account_ready=1` when provisioned) instead of resolving a portal path. Entering a portal is always an explicit click. The email/password form must send `fullName` + `phone`; `/api/auth/manager-register` 400s without them. |
 | Resident account creation (after applying) | `docs/agents/resident-onboarding.md` | Residents create accounts ONLY from a setup token (emailed / in-session handoff after applying) or an OAuth email match — `POST /api/auth/resident-register` stays disabled (403). Phone is required on `/auth/resident-setup`. The finish CTA's `setupHref` is minted at application upsert (email-independent). A mismatched Google email RELINKS the application, never rejects. The setup token never returns to the browser except the guest's own in-session handoff. |
-| Inbound support email → admin inbox | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Receive-only — an in-app reply never emails the sender. Never widen the founder identity — attribute TO it. |
+| Inbound email → inboxes (support + conversation replies) | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Support threads are receive-only — an in-app reply never emails the sender. Conversation emails carry a pair-HMAC `reply+…@RESEND_REPLY_DOMAIN` Reply-To; a verified emailed reply routes into both sides of the portal thread (message id `email_<email_id>` dedupes redelivery), anything unverified falls back to the admin inbox. Never widen the founder identity — attribute TO it. |
 
 ## Per-room rent basis: monthly (default) vs daily
 

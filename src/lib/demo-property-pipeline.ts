@@ -5,6 +5,7 @@ import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/li
 import { scopePropertyPipelineSnapshotForViewer } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1, ManagerListingServiceOption } from "@/lib/manager-listing-submission";
 import { parseRecordOfArrays } from "@/lib/safe-local-storage";
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
 
 /** Admin-only / legacy listings not tied to a real manager auth user (demo localStorage bucket). */
 export const LEGACY_MANAGER_SCOPE_USER_ID = "__axis_legacy__";
@@ -29,7 +30,9 @@ const EXTRAS_BY_USER_KEY = "axis_manager_extras_by_user_v1";
 
 /** Pre–per-account migration (single global arrays) — reserved for future migration helpers. */
 
-export const PROPERTY_PIPELINE_EVENT = "axis-property-pipeline";
+// Re-export from the leaf module so existing `@/lib/demo-property-pipeline`
+// import sites keep working, while the constant itself lives cycle-free.
+export { PROPERTY_PIPELINE_EVENT };
 const memoryStore = new Map<string, unknown>();
 const SESSION_CACHE_PREFIX = "axis_property_pipeline_cache_v1:";
 const PROPERTY_PIPELINE_SYNC_META_KEY = `${SESSION_CACHE_PREFIX}__synced_at`;

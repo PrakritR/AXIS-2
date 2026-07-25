@@ -28,7 +28,7 @@ export async function GET() {
     const baseQuery = db
       .from("manager_property_records")
       .select("id, manager_user_id, status, row_data, property_data, edit_request_note")
-      .order("updated_at", { ascending: false });
+      .order("created_at", { ascending: true });
     if (admin) {
       const { data, error } = await baseQuery;
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -85,7 +85,7 @@ export async function GET() {
         .from("manager_property_records")
         .select("id, manager_user_id, status, row_data, property_data, edit_request_note")
         .in("id", [...linkedPropertyIds])
-        .order("updated_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
 

@@ -6,7 +6,6 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { MockProperty } from "@/data/types";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
-  PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
   readAllPendingManagerProperties,
   readExtraListingsForUser,
@@ -15,6 +14,11 @@ import {
   syncPropertyPipelineFromServer,
   buildMockPropertyFromDraft,
 } from "@/lib/demo-property-pipeline";
+// Import the event name from the cycle-free leaf module, NOT from
+// demo-property-pipeline: this module reads it at eval time (in
+// MANAGER_PORTFOLIO_REFRESH_EVENTS below), and the property-pipeline import
+// cycle would otherwise hit its TDZ. See property-pipeline-events.ts.
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships, syncProRelationshipsFromServer } from "@/lib/pro-relationships";
 import { readCachedAccountLinkInvites } from "@/lib/portal-data-store";

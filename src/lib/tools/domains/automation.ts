@@ -11,6 +11,13 @@ import {
   type PaymentReminderKind,
 } from "@/lib/payment-automation-settings";
 import { loadManagerScheduledMessages } from "@/lib/payment-automation-server";
+import { clearReminderOverridesForUnpaidCharges } from "@/lib/payment-reminder-lifecycle.server";
+import {
+  applyReminderPreset,
+  detectReminderPreset,
+  PAYMENT_REMINDER_PRESETS,
+  type ReminderPresetId,
+} from "@/lib/payment-reminder-presets";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { writeAuditLog, updateAuditResult } from "../audit";
 import { stableInputHash } from "./charges";
@@ -45,12 +52,15 @@ export const getAutomationSettingsTool = defineTool({
     const settings = await loadManagerAutomationSettings(ctx.db, ctx.landlordId);
     return {
       scheduleSummary: formatStandardReminderSchedule(settings),
+      activePreset: detectReminderPreset(settings),
       settings: settingsProjection(settings),
     };
   },
 });
 
 type SettingsPatch = {
+  reminderPreset?: ReminderPresetId;
+  applyToExistingUnpaidPayments?: boolean;
   preDueReminderDays?: number[];
   sameDayReminderEnabled?: boolean;
   overdueDailyEnabled?: boolean;
@@ -61,7 +71,7 @@ type SettingsPatch = {
   scheduleVisibilityDays?: number;
 };
 
-const PATCH_LABELS: Record<keyof SettingsPatch, string> = {
+const PATCH_LABELS: Record<keyof Omit<SettingsPatch, "reminderPreset" | "applyToExistingUnpaidPayments">, string> = {
   preDueReminderDays: "Pre-due reminder days",
   sameDayReminderEnabled: "Same-day reminder",
   overdueDailyEnabled: "Daily overdue reminders",
@@ -87,12 +97,29 @@ function definedPatch(input: SettingsPatch): SettingsPatch {
   return out as SettingsPatch;
 }
 
+function settingsAfterPatch(current: ManagerAutomationSettings, patch: SettingsPatch): ManagerAutomationSettings {
+  let next = { ...current };
+  if (patch.reminderPreset) {
+    next = applyReminderPreset(next, patch.reminderPreset);
+  }
+  const { reminderPreset: _preset, applyToExistingUnpaidPayments: _apply, ...fieldPatch } = patch;
+  return normalizeManagerAutomationSettings({ ...next, ...fieldPatch });
+}
+
 export const updateAutomationSettingsTool = defineWriteTool({
   name: "update_automation_settings",
   description:
-    "Change the landlord's payment-reminder automation settings: pre-due reminder days, same-day reminder, daily overdue reminders and their start day, late-fee notice and its grace days, and schedule visibility. Reminder message templates cannot be edited with this tool.",
+    "Change the landlord's default payment-reminder automation: pick a preset (basics, standard, gentle, minimal), customize pre-due days, same-day and daily overdue reminders, late-fee notice timing, and schedule visibility. Optionally apply the new schedule to all existing unpaid charges (clears per-charge reminder customizations). Use get_automation_settings first. Per-charge turn-offs use cancel_scheduled_reminder / restore_scheduled_reminder with a charge id from list_charges.",
   inputSchema: z
     .object({
+      reminderPreset: z
+        .enum(["basics", "standard", "gentle", "minimal"])
+        .optional()
+        .describe("Apply a built-in reminder cadence preset (overrides individual day fields when set)."),
+      applyToExistingUnpaidPayments: z
+        .boolean()
+        .optional()
+        .describe("When true, apply the saved schedule to all existing unpaid charges (not only future charges)."),
       preDueReminderDays: z
         .array(z.number().int().min(0).max(60))
         .max(10)
@@ -130,32 +157,52 @@ export const updateAutomationSettingsTool = defineWriteTool({
     .strict(),
   preview: async (ctx, input) => {
     const patch = definedPatch(input);
-    const keys = Object.keys(patch) as (keyof SettingsPatch)[];
-    if (keys.length === 0) {
-      throw new Error("Nothing to update — pass at least one automation setting field.");
+    const keys = Object.keys(patch).filter(
+      (k) => k !== "applyToExistingUnpaidPayments" && patch[k as keyof SettingsPatch] !== undefined,
+    ) as (keyof SettingsPatch)[];
+    if (keys.length === 0 && !patch.applyToExistingUnpaidPayments) {
+      throw new Error("Nothing to update — pass a preset, at least one setting field, or applyToExistingUnpaidPayments.");
     }
     const current = await loadManagerAutomationSettings(ctx.db, ctx.landlordId);
-    const next = normalizeManagerAutomationSettings({ ...current, ...patch });
+    const next = settingsAfterPatch(current, patch);
 
-    // Before → after diff, both sides normalized server-side.
-    const lines = keys.map((key) => ({
-      label: PATCH_LABELS[key],
-      value: `${formatSettingValue(current[key])} → ${formatSettingValue(next[key])}`,
-    }));
+    const lines: { label: string; value: string }[] = [];
+    if (patch.reminderPreset) {
+      const label = PAYMENT_REMINDER_PRESETS.find((p) => p.id === patch.reminderPreset)?.label ?? patch.reminderPreset;
+      lines.push({ label: "Preset", value: `${detectReminderPreset(current)} → ${label}` });
+    }
+    for (const key of keys) {
+      if (key === "reminderPreset") continue;
+      const label = PATCH_LABELS[key as keyof typeof PATCH_LABELS];
+      if (!label) continue;
+      lines.push({
+        label,
+        value: `${formatSettingValue(current[key as keyof ManagerAutomationSettings])} → ${formatSettingValue(next[key as keyof ManagerAutomationSettings])}`,
+      });
+    }
     lines.push({ label: "New cadence", value: formatStandardReminderSchedule(next) });
+    if (patch.applyToExistingUnpaidPayments) {
+      lines.push({ label: "Existing unpaid charges", value: "Apply this schedule (clears per-charge customizations)" });
+    }
     return {
       kind: "update_automation_settings",
       title: "Update automation settings",
-      summary: `Update ${keys.length} payment-automation setting${keys.length === 1 ? "" : "s"}.`,
+      summary: patch.applyToExistingUnpaidPayments
+        ? "Update the default reminder schedule and apply it to existing unpaid payments."
+        : `Update ${Math.max(keys.length, patch.reminderPreset ? 1 : 0)} payment-automation setting${keys.length === 1 ? "" : "s"}.`,
       fields: lines,
       confirmLabel: "Update settings",
     };
   },
   handler: async (ctx, input) => {
     const patch = definedPatch(input);
-    if (Object.keys(patch).length === 0) throw new Error("Nothing to update.");
+    const applyExisting = patch.applyToExistingUnpaidPayments === true;
+    const keys = Object.keys(patch).filter(
+      (k) => k !== "applyToExistingUnpaidPayments" && patch[k as keyof SettingsPatch] !== undefined,
+    );
+    if (keys.length === 0 && !applyExisting) throw new Error("Nothing to update.");
 
-    const dedupeKey = `update_automation_settings:${ctx.landlordId}:${stableInputHash(patch)}`;
+    const dedupeKey = `update_automation_settings:${ctx.landlordId}:${stableInputHash({ ...patch, applyExisting })}`;
     const audit = await writeAuditLog(ctx, {
       action: "update_automation_settings",
       toolName: "update_automation_settings",
@@ -172,18 +219,21 @@ export const updateAutomationSettingsTool = defineWriteTool({
     let saved: ManagerAutomationSettings;
     try {
       const current = await loadManagerAutomationSettings(ctx.db, ctx.landlordId);
-      saved = await saveManagerAutomationSettings(
-        ctx.db,
-        ctx.landlordId,
-        normalizeManagerAutomationSettings({ ...current, ...patch }),
-      );
+      saved = await saveManagerAutomationSettings(ctx.db, ctx.landlordId, settingsAfterPatch(current, patch));
+      if (applyExisting) {
+        await clearReminderOverridesForUnpaidCharges(ctx.db, ctx.landlordId);
+      }
     } catch (e) {
       await updateAuditResult(ctx, dedupeKey, { error: "settings_save_failed" }, { clearDedupeKey: true });
       throw new Error(e instanceof Error ? e.message : "The settings could not be saved.");
     }
 
-    await updateAuditResult(ctx, dedupeKey, { fields: Object.keys(patch), saved: true });
-    return { reply: `Updated payment automation settings. Reminder cadence is now: ${formatStandardReminderSchedule(saved)}.`, resultSummary: { fields: Object.keys(patch) } };
+    await updateAuditResult(ctx, dedupeKey, { fields: keys, saved: true, applyExisting });
+    const existingNote = applyExisting ? " Applied to existing unpaid payments." : "";
+    return {
+      reply: `Updated payment automation settings. Reminder cadence is now: ${formatStandardReminderSchedule(saved)}.${existingNote}`,
+      resultSummary: { fields: keys, applyExisting },
+    };
   },
 });
 
@@ -316,6 +366,77 @@ export const cancelScheduledReminderTool = defineWriteTool({
 
     await updateAuditResult(ctx, dedupeKey, { cancelled: true });
     return { reply: `Cancelled the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}" (was scheduled for ${slotSendLabel(slot)}).`, resultSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue } };
+  },
+});
+
+export const restoreScheduledReminderTool = defineWriteTool({
+  name: "restore_scheduled_reminder",
+  description:
+    "Turn a cancelled automatic payment reminder back on for one charge (the inverse of cancel_scheduled_reminder). Pass the charge id from list_charges plus the reminder kind.",
+  inputSchema: z.object(scheduledSlotInput).strict(),
+  preview: async (ctx, input) => {
+    const { messages } = await loadManagerScheduledMessages(ctx.db, ctx.landlordId, { includeHidden: true });
+    const forCharge = messages.filter((m) => m.chargeId === input.chargeId);
+    const matches = forCharge.filter(
+      (m) => m.kind === input.kind && (input.daysBeforeDue == null || m.daysBeforeDue === input.daysBeforeDue),
+    );
+    if (!matches.length) throw new Error(`No ${input.kind} reminder exists for this charge.`);
+    const cancelled = matches.filter((m) => m.status === "cancelled");
+    if (!cancelled.length) {
+      throw new Error("That reminder is already active.");
+    }
+    const slot = cancelled[0]!;
+    return {
+      kind: "restore_scheduled_reminder",
+      title: "Restore scheduled reminder",
+      summary: `Turn the ${slot.typeLabel} back on for ${slot.residentName}'s "${slot.chargeTitle}".`,
+      fields: [
+        { label: "Resident", value: slot.residentName },
+        { label: "Charge", value: slot.chargeTitle },
+        { label: "Reminder", value: slot.typeLabel },
+      ],
+      confirmLabel: "Restore reminder",
+    };
+  },
+  handler: async (ctx, input) => {
+    const { messages } = await loadManagerScheduledMessages(ctx.db, ctx.landlordId, { includeHidden: true });
+    const forCharge = messages.filter((m) => m.chargeId === input.chargeId);
+    const matches = forCharge.filter(
+      (m) => m.kind === input.kind && (input.daysBeforeDue == null || m.daysBeforeDue === input.daysBeforeDue),
+    );
+    const slot = matches.find((m) => m.status === "cancelled");
+    if (!slot) throw new Error("No cancelled reminder matched those arguments.");
+
+    const dedupeKey = `restore_scheduled_reminder:${ctx.landlordId}:${slot.chargeId}:${slot.kind}:${slotDayPart(slot)}`;
+    const audit = await writeAuditLog(ctx, {
+      action: "restore_scheduled_reminder",
+      toolName: "restore_scheduled_reminder",
+      inputSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue },
+      dedupeKey,
+    });
+    if (!audit.recorded) {
+      if (audit.duplicate) return { reply: "That reminder was already restored by this action." };
+      throw new Error("Could not record the action; the reminder was not restored.");
+    }
+
+    try {
+      await upsertScheduledMessageOverride(ctx.db, {
+        managerUserId: ctx.landlordId,
+        chargeId: slot.chargeId,
+        kind: slot.kind,
+        daysBeforeDue: slot.daysBeforeDue,
+        patch: { cancelled: false },
+      });
+    } catch (e) {
+      await updateAuditResult(ctx, dedupeKey, { error: "override_write_failed" }, { clearDedupeKey: true });
+      throw new Error(e instanceof Error ? e.message : "The reminder could not be restored.");
+    }
+
+    await updateAuditResult(ctx, dedupeKey, { restored: true });
+    return {
+      reply: `Restored the ${slot.typeLabel} for ${slot.residentName}'s "${slot.chargeTitle}".`,
+      resultSummary: { chargeId: slot.chargeId, kind: slot.kind, daysBeforeDue: slot.daysBeforeDue },
+    };
   },
 });
 

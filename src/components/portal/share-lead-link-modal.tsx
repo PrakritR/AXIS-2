@@ -66,8 +66,7 @@ export function ShareLeadLinkModal({
     });
   }, [open, kind, preselectedPropertyId, properties]);
 
-  // The room selector and single-listing summary only make sense for exactly one
-  // property; a multi-property listing send links to the filtered browse grid.
+  // Room pre-selection applies to apply invites only; listing sends link to the whole property.
   const singlePropertyId = propertyIds.length === 1 ? propertyIds[0] : "";
   const isMultiListing = multiEnabled && propertyIds.length > 1;
 
@@ -78,7 +77,7 @@ export function ShareLeadLinkModal({
   }, [properties, singlePropertyId, isMultiListing, propertyIds.length]);
 
   const roomOptions = useMemo(() => {
-    if ((kind !== "apply" && kind !== "listing") || !singlePropertyId) return [];
+    if (kind !== "apply" || !singlePropertyId) return [];
     return getRoomOptionsForProperty(singlePropertyId, { includeUnavailable: true }).filter((o) => o.value);
   }, [kind, singlePropertyId]);
 
@@ -102,10 +101,8 @@ export function ShareLeadLinkModal({
     if (kind !== "listing" || isMultiListing || !singlePropertyId) return null;
     const property = getPropertyById(singlePropertyId);
     if (!property) return null;
-    const { listingRoomId } = roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
-    const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
-    return buildListingShareSummary(property, { roomChoice: roomName, roomId: listingRoomId });
-  }, [kind, singlePropertyId, isMultiListing, roomChoice, roomOptions]);
+    return buildListingShareSummary(property);
+  }, [kind, singlePropertyId, isMultiListing]);
 
   const invitePreviewBody = useMemo(() => {
     if (!linkUrl) return "";
@@ -125,8 +122,6 @@ export function ShareLeadLinkModal({
       propertyTitle,
       linkUrl: kind === "listing" ? buildManagerApplyUrl(typeof window !== "undefined" ? window.location.origin : "", {
         propertyId: singlePropertyId,
-        listingRoomId: roomChoice ? parseRoomChoiceValue(roomChoice).listingRoomId || undefined : undefined,
-        roomName: roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined,
       }) : linkUrl,
       listingPageUrl: kind === "listing" ? linkUrl : undefined,
       tourUrl:
@@ -137,6 +132,18 @@ export function ShareLeadLinkModal({
       managerNote: note.trim() || undefined,
     });
   }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiListing, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
+
+  const sendListingRoomParams = useMemo(() => {
+    if (kind === "listing" || isMultiListing) {
+      return { listingRoomId: undefined, roomName: undefined };
+    }
+    if (!roomChoice) return { listingRoomId: undefined, roomName: undefined };
+    const { listingRoomId } = parseRoomChoiceValue(roomChoice);
+    return {
+      listingRoomId: listingRoomId || undefined,
+      roomName: roomOptions.find((o) => o.value === roomChoice)?.label,
+    };
+  }, [kind, isMultiListing, roomChoice, roomOptions]);
 
   const handleCopy = async () => {
     if (!linkUrl) {
@@ -161,9 +168,7 @@ export function ShareLeadLinkModal({
 
   const sendInvite = async () => {
     if (propertyIds.length === 0 || !prospectEmail.trim()) return;
-    // Room targeting only applies to a single-property send.
-    const { listingRoomId } = !isMultiListing && roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
-    const roomName = !isMultiListing && roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
+    const { listingRoomId, roomName } = sendListingRoomParams;
     setSendBusy(true);
     try {
       if (isDemoModeActive()) {
@@ -214,9 +219,21 @@ export function ShareLeadLinkModal({
 
   const title = kind === "listing" ? "Send listing" : kind === "apply" ? "Invite to apply" : "Share tour link";
 
+  const actionFooter =
+    properties.length > 0 ? (
+      <div className="flex justify-start gap-2">
+        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+          Close
+        </Button>
+        <Button type="button" variant="primary" className="rounded-full" disabled={propertyIds.length === 0} onClick={openSendPreview}>
+          Preview & send
+        </Button>
+      </div>
+    ) : undefined;
+
   return (
     <>
-      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-lg">
+      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-lg" footer={actionFooter}>
         <div className="space-y-4">
           {properties.length === 0 ? (
             <p className="text-sm text-muted">
@@ -292,7 +309,7 @@ export function ShareLeadLinkModal({
                 )}
               </div>
 
-              {(kind === "apply" || kind === "listing") && !isMultiListing && roomOptions.length > 0 ? (
+              {kind === "apply" && !isMultiListing && roomOptions.length > 0 ? (
                 <div>
                   <label htmlFor="share-lead-room" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
                     Room (optional)
@@ -395,15 +412,6 @@ export function ShareLeadLinkModal({
                     placeholder="Add context for the prospect…"
                   />
                 </div>
-              </div>
-
-              <div className="sticky bottom-0 z-10 -mx-5 flex justify-start gap-2 border-t border-border bg-inherit px-5 py-4 sm:-mx-6 sm:px-6">
-                <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-                  Close
-                </Button>
-                <Button type="button" variant="primary" className="rounded-full" disabled={propertyIds.length === 0} onClick={openSendPreview}>
-                  Preview & send
-                </Button>
               </div>
             </>
           )}

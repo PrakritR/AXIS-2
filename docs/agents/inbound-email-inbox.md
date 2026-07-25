@@ -1,8 +1,15 @@
-# Inbound support email → admin portal inbox
+# Inbound email → portal inboxes
 
-Mail sent to the public support address (**support@prop-lane.space**) shows up as
-a message in the **admin portal inbox** (the founder/`PRIMARY_ADMIN_EMAIL` scope),
-so support mail is handled inside the app next to the rest of the unified inbox.
+Two kinds of mail arrive through the same Resend Inbound webhook, decided by the
+To address:
+
+1. **Conversation replies** — outbound portal conversation emails carry a signed
+   `reply+…@${RESEND_REPLY_DOMAIN}` Reply-To; a verified reply is routed into the
+   manager↔resident conversation thread (see "Conversation replies" below).
+2. **Everything else** (including **support@prop-lane.space**) shows up as a
+   message in the **admin portal inbox** (the founder/`PRIMARY_ADMIN_EMAIL`
+   scope), so support mail is handled inside the app next to the rest of the
+   unified inbox.
 
 ## How it works
 
@@ -35,13 +42,75 @@ body enrichment (below) runs in `after()`.
 No DB migration is required — this reuses the existing `portal_inbox_thread_records`
 table and the `admin` inbox scope.
 
-## Receive-only — replies do not reach the sender
+## Receive-only — SUPPORT replies do not reach the sender
 
-This is **inbound display only**. Replying to a support thread in the admin inbox
-calls `appendThreadReply`, which appends to `row.thread` and persists it — it does
-**NOT** email the sender back. There is no outbound path wired for these threads;
-answering a customer still means sending mail from the support mailbox. Building
-an outbound round trip is deliberately out of scope here.
+The support inbox is **inbound display only**. Replying to a support thread in
+the admin inbox calls `appendThreadReply`, which appends to `row.thread` and
+persists it — it does **NOT** email the sender back. There is no outbound path
+wired for these threads; answering a customer still means sending mail from the
+support mailbox. Building an outbound round trip for SUPPORT threads is
+deliberately out of scope. Portal conversation threads are different — their
+round trip is the reply-token loop below.
+
+## Conversation replies (`reply+` tokens)
+
+The "manager replies on website ↔ resident replies from email" loop:
+
+- **Outbound.** Both portal conversation send paths
+  (`deliverPortalInboxMessage` in `src/lib/portal-inbox-delivery.ts` and
+  `POST /api/portal/send-inbox-message`) send through
+  `sendPortalConversationEmails` (`src/lib/portal-email-send.server.ts`): one
+  personalized payload per recipient (never a shared `to:` array — that used to
+  leak broadcast recipients to each other), sent via `POST /emails` for one
+  recipient or `POST /emails/batch` in chunks of 100. Each payload carries:
+  - `reply_to`: `reply+<sender-uuid-hex>.<mac-hex>@${RESEND_REPLY_DOMAIN}`
+    (`src/lib/inbound-email/reply-address.server.ts`). The MAC (HMAC-SHA256,
+    key = `RESEND_INBOUND_WEBHOOK_SECRET`, domain-separated input) binds the
+    PAIR (sender user id, recipient email) — a leaked address only lets mail be
+    injected into that one thread, as that one counterparty. Both halves are
+    lowercase hex on purpose: mail software lowercases local parts, so a
+    case-sensitive encoding would be corrupted in transit.
+  - `In-Reply-To`/`References`: a deterministic synthetic per-pair anchor
+    (`conversationAnchorMessageId`) so consecutive portal emails group in the
+    recipient's mail client with no persisted Message-ID chain.
+- **Inbound.** The webhook checks `parseReplyAddress(toEmails, fromEmail)`
+  BEFORE the support ingest. A verified token routes to
+  `ingestInboundEmailReply` (`src/lib/inbound-email/inbound-email-reply.server.ts`),
+  which appends the reply to BOTH sides of the person-thread via
+  `deliverPortalMessageThreadSide` — the token owner's inbox copy (unread,
+  inbound, plus a best-effort push) and the replier's own copy (outbound) — with
+  quoted history stripped (`stripEmailReplyQuote`). Anything that fails
+  verification (foreign domain, tampered MAC, a From the MAC wasn't bound to,
+  an owner whose profile no longer resolves) falls through to the admin support
+  ingest: visible, never trusted, never lost.
+- **Durability mirrors the support path.** The append runs inline from webhook
+  metadata (placeholder body when Resend sent metadata only; a failed write
+  500s so Resend redelivers) and `backfillInboundEmailReplyBody` swaps in the
+  real body in `after()`, only ever overwriting the placeholder. Idempotency is
+  the deterministic message id `email_<resend-email-id>` —
+  `deliverPortalMessageThreadSide` skips an append whose id already landed
+  (`rootMessageId` covers the created-thread case), which also makes a
+  redelivery after a partial one-of-two-rows append safe.
+- **Feature gate.** Unset `RESEND_REPLY_DOMAIN` → no Reply-To is added and no
+  token ever validates. (Per-recipient sends and the anchor headers still apply
+  — they are unconditional, and per-recipient is what fixed the old shared
+  `to:` recipient-list leak.) Rotating `RESEND_INBOUND_WEBHOOK_SECRET`
+  invalidates reply addresses in old emails — those replies fall to the admin
+  inbox rather than being lost.
+- **Accepted residuals.** (1) From-spoofing: the MAC proves possession of a
+  reply address, and the counterparty is the MAC-bound From — but From is
+  sender-chosen, so someone who OBTAINS a reply address (a forwarded email) can
+  inject a message into that one thread as that one counterparty. Resend's
+  `email.received` payload carries no SPF/DMARC verdict to gate on; if one
+  appears, check it in the reply branch before trusting From. Content is
+  untrusted display text either way. (2) A legit reply sent from a different
+  address than the one emailed (alias/forwarder) fails the pair MAC and lands
+  in the admin support inbox — visible there, but the manager's thread does not
+  get it.
+- Tests: `tests/unit/email-reply-address.test.ts`,
+  `tests/unit/portal-email-send.test.ts`,
+  `tests/unit/inbound-email-reply.test.ts`, and the routing cases in
+  `tests/unit/inbound-email-webhook.test.ts`.
 
 ### Signature verification
 
@@ -126,6 +195,11 @@ The code is ready; these steps must be done in the Resend dashboard + DNS:
 3. **Secret.** Set `RESEND_INBOUND_WEBHOOK_SECRET=<whsec_…>` in Vercel (Production,
    and Preview if you want staging to accept inbound). Confirm `RESEND_API_KEY` is
    already set (used to fetch the email body).
+
+4. **Conversation replies (optional).** Add the reply subdomain (e.g.
+   `in.prop-lane.space`) to Resend **Receiving** with its own MX record, and set
+   `RESEND_REPLY_DOMAIN=<that subdomain>` in Vercel. Until it is set, outbound
+   conversation emails carry no Reply-To and the reply loop stays dark.
 
 Until `RESEND_INBOUND_WEBHOOK_SECRET` is set in a deployed environment, the route
 **rejects all inbound** (fail-closed) — that is intentional.

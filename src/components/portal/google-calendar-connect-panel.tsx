@@ -41,9 +41,6 @@ export function GoogleCalendarConnectPanel({
   const { showToast } = useAppUi();
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const calendarCallbackUri =
-    status?.oauthRedirectUri ??
-    (typeof window !== "undefined" ? `${window.location.origin}/api/portal/google-calendar/callback` : "");
   const inDialog = presentation === "dialog";
 
   const load = useCallback(async () => {
@@ -67,16 +64,6 @@ export function GoogleCalendarConnectPanel({
   useEffect(() => {
     void load();
   }, [load]);
-
-  const copyRedirectUri = useCallback(async () => {
-    if (!calendarCallbackUri) return;
-    try {
-      await navigator.clipboard.writeText(calendarCallbackUri);
-      showToast("Redirect URI copied.");
-    } catch {
-      showToast("Could not copy. Add this URI in Google Cloud: " + calendarCallbackUri);
-    }
-  }, [calendarCallbackUri, showToast]);
 
   const connect = useCallback(() => {
     if (!status?.configured) {
@@ -170,34 +157,16 @@ export function GoogleCalendarConnectPanel({
         </div>
         <div className="flex shrink-0 gap-2">
           {status.connected ? (
-            <Button type="button" variant="outline" className="px-4 text-[13px]" disabled={busy} onClick={() => void disconnect()}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void disconnect()}>
               Disconnect
             </Button>
           ) : (
-            <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={busy || !status.configured} onClick={connect}>
+            <Button type="button" variant="primary" disabled={busy || !status.configured} onClick={connect}>
               {status.googleAuthUser ? "Grant calendar access" : "Connect"}
             </Button>
           )}
         </div>
       </div>
-      {!status.connected && status.configured ? (
-        <div className="space-y-2 border-t border-border pt-3">
-          <p className="text-[11px] text-muted">
-            Add this exact URI in Google Cloud → Credentials → OAuth client → Authorized redirect URIs
-            {status.oauthRedirectUri &&
-            typeof window !== "undefined" &&
-            status.oauthRedirectUri !== `${window.location.origin}/api/portal/google-calendar/callback`
-              ? " (shared callback host — works from any dev port):"
-              : ` (port ${typeof window !== "undefined" ? window.location.port || "80" : ""}):`}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="min-w-0 flex-1 truncate text-[11px] text-muted">{calendarCallbackUri}</code>
-            <Button type="button" variant="outline" className="px-4 text-[13px]" disabled={busy} onClick={() => void copyRedirectUri()}>
-              Copy
-            </Button>
-          </div>
-        </div>
-      ) : null}
       {status.connected ? (
         <label className="flex cursor-pointer items-start gap-3 border-t border-border pt-3">
           <input

@@ -11,6 +11,11 @@ import {
 } from "@/lib/lead-invite.server";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
+import { copyListingMediaBetweenSubmissions } from "@/lib/listing-media-copy";
+import {
+  normalizeManagerListingSubmissionV1,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
 
 /**
  * Property records vary in shape by lifecycle status: `property_data` holds the
@@ -202,7 +207,7 @@ export function buildDraftPropertyRowData(fields: DraftPropertyFields, submitted
 export const createPropertyTool = defineWriteTool({
   name: "create_property",
   description:
-    "Create a new draft property listing for the current landlord from basic facts (title, address, beds/baths, rent). The draft is saved with status 'pending' — an Axis admin must review and approve it before it goes live; it does not publish anything immediately.",
+    "Create a minimal property stub from basic facts only (no photos or rich marketing copy). Prefer create_listing_draft for the chat-guided full listing flow. Saves status 'pending' for admin review.",
   inputSchema: z
     .object({
       title: z.string().min(1).describe("Listing title / building name."),
@@ -501,6 +506,137 @@ export const updatePropertyTool = defineWriteTool({
     if (input.description !== undefined) parts.push("the description");
     if (input.status) parts.push(`status to ${input.status}`);
     return { reply: `Updated ${title}: ${parts.join(", ")}.`, resultSummary: { propertyId: rec.id, fields: changedFields, status: nextStatus } };
+  },
+});
+
+function listingSubmissionFromRecord(rec: RawPropertyRecord): ManagerListingSubmissionV1 | null {
+  const raw = listingSubmissionOf(rec);
+  if (!raw) return null;
+  return normalizeManagerListingSubmissionV1(raw as ManagerListingSubmissionV1);
+}
+
+function writeSubmissionToRecordPayloads(
+  rec: RawPropertyRecord,
+  submission: ManagerListingSubmissionV1,
+): { row_data: unknown; property_data: unknown } {
+  const normalized = normalizeManagerListingSubmissionV1(submission);
+  const rowData = asObject(rec.row_data);
+  const propertyData = asObject(rec.property_data);
+  const nextRow: Record<string, unknown> | null = rowData ? { ...rowData } : null;
+  const nextProp: Record<string, unknown> | null = propertyData ? { ...propertyData } : null;
+  if (nextRow) {
+    if (asObject(nextRow.submission) || "submission" in nextRow) {
+      nextRow.submission = normalized;
+    }
+  }
+  if (nextProp) {
+    nextProp.listingSubmission = normalized;
+  }
+  return { row_data: nextRow ?? rec.row_data, property_data: nextProp ?? rec.property_data };
+}
+
+export const copyListingPhotosTool = defineWriteTool({
+  name: "copy_listing_photos",
+  description:
+    "Copy uploaded listing photos and videos from one of the landlord's properties to another (house gallery, room photos, bathroom and shared-space photos, floor plans, and house video). Both listings must belong to this landlord. Use list_properties to resolve ids by address or title. Does not change rent, text, or publish status.",
+  inputSchema: z
+    .object({
+      sourcePropertyId: z.string().min(1).describe("Property id to copy media from (list_properties)."),
+      targetPropertyId: z.string().min(1).describe("Property id to copy media onto (list_properties)."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    if (input.sourcePropertyId.trim() === input.targetPropertyId.trim()) {
+      throw new Error("sourcePropertyId and targetPropertyId must be different properties.");
+    }
+    const [sourceRec, targetRec] = await Promise.all([
+      loadOwnedPropertyRecord(ctx, input.sourcePropertyId),
+      loadOwnedPropertyRecord(ctx, input.targetPropertyId),
+    ]);
+    if (!sourceRec) throw new Error("Source property not found for this landlord.");
+    if (!targetRec) throw new Error("Target property not found for this landlord.");
+    const sourceSub = listingSubmissionFromRecord(sourceRec);
+    const targetSub = listingSubmissionFromRecord(targetRec);
+    if (!sourceSub) throw new Error("The source property has no listing media on file.");
+    if (!targetSub) throw new Error("The target property has no listing submission to update.");
+
+    const { summary } = copyListingMediaBetweenSubmissions(sourceSub, targetSub);
+    const srcLabel =
+      str(asObject(sourceRec.property_data) ?? asObject(sourceRec.row_data), "buildingName") ??
+      str(asObject(sourceRec.property_data) ?? asObject(sourceRec.row_data), "address") ??
+      sourceRec.id;
+    const tgtLabel =
+      str(asObject(targetRec.property_data) ?? asObject(targetRec.row_data), "buildingName") ??
+      str(asObject(targetRec.property_data) ?? asObject(targetRec.row_data), "address") ??
+      targetRec.id;
+
+    return {
+      kind: "copy_listing_photos",
+      title: "Copy listing photos",
+      summary: `Copy photos from ${srcLabel} onto ${tgtLabel}.`,
+      fields: [
+        { label: "From", value: srcLabel },
+        { label: "To", value: tgtLabel },
+        { label: "House photos", value: String(summary.housePhotos) },
+        { label: "Rooms updated", value: String(summary.roomsUpdated) },
+        { label: "Bathrooms updated", value: String(summary.bathroomsUpdated) },
+        { label: "Shared spaces updated", value: String(summary.sharedSpacesUpdated) },
+      ],
+      confirmLabel: "Copy photos",
+      warnings: ["This overwrites the target listing's current photos and videos with the source listing's media."],
+    };
+  },
+  handler: async (ctx, input) => {
+    if (input.sourcePropertyId.trim() === input.targetPropertyId.trim()) {
+      throw new Error("sourcePropertyId and targetPropertyId must be different properties.");
+    }
+    const [sourceRec, targetRec] = await Promise.all([
+      loadOwnedPropertyRecord(ctx, input.sourcePropertyId),
+      loadOwnedPropertyRecord(ctx, input.targetPropertyId),
+    ]);
+    if (!sourceRec || !targetRec) throw new Error("One or both properties were not found.");
+
+    const sourceSub = listingSubmissionFromRecord(sourceRec);
+    const targetSub = listingSubmissionFromRecord(targetRec);
+    if (!sourceSub || !targetSub) throw new Error("Could not load listing submissions for both properties.");
+
+    const dedupeKey = `copy_listing_photos:${ctx.landlordId}:${sourceRec.id}:${targetRec.id}`;
+    const audit = await writeAuditLog(ctx, {
+      action: "copy_listing_photos",
+      toolName: "copy_listing_photos",
+      inputSummary: { sourcePropertyId: sourceRec.id, targetPropertyId: targetRec.id },
+      dedupeKey,
+    });
+    if (!audit.recorded) {
+      if (audit.duplicate) return { reply: "Those listing photos were already copied by this action." };
+      throw new Error("Could not record the action; photos were not copied.");
+    }
+
+    const { submission, summary } = copyListingMediaBetweenSubmissions(sourceSub, targetSub);
+    const payloads = writeSubmissionToRecordPayloads(targetRec, submission);
+    const { error } = await ctx.db
+      .from("manager_property_records")
+      .update({
+        row_data: payloads.row_data,
+        property_data: payloads.property_data,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", targetRec.id)
+      .eq("manager_user_id", ctx.landlordId);
+    if (error) {
+      await updateAuditResult(ctx, dedupeKey, { error: "update_failed" }, { clearDedupeKey: true });
+      throw new Error(error.message);
+    }
+
+    await updateAuditResult(ctx, dedupeKey, { targetPropertyId: targetRec.id, summary });
+    const tgtLabel =
+      str(asObject(targetRec.property_data) ?? asObject(targetRec.row_data), "buildingName") ??
+      str(asObject(targetRec.property_data) ?? asObject(targetRec.row_data), "address") ??
+      targetRec.id;
+    return {
+      reply: `Copied listing media onto ${tgtLabel} (${summary.housePhotos} house photo${summary.housePhotos === 1 ? "" : "s"}, ${summary.roomsUpdated} room${summary.roomsUpdated === 1 ? "" : "s"}, ${summary.bathroomsUpdated} bath${summary.bathroomsUpdated === 1 ? "" : "s"}, ${summary.sharedSpacesUpdated} shared space${summary.sharedSpacesUpdated === 1 ? "" : "s"}).`,
+      resultSummary: { targetPropertyId: targetRec.id, ...summary },
+    };
   },
 });
 
