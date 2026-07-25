@@ -175,7 +175,7 @@ export async function fetchResendReceivedEmailBody(emailId: string): Promise<Res
  */
 const INBOUND_EMAIL_BODY_RETRY_DELAYS_MS = [500, 1_000];
 
-async function fetchResendReceivedEmailBodyWithRetry(emailId: string): Promise<ResendReceivedEmailBodyResult> {
+export async function fetchResendReceivedEmailBodyWithRetry(emailId: string): Promise<ResendReceivedEmailBodyResult> {
   for (let attempt = 0; ; attempt += 1) {
     const result = await fetchResendReceivedEmailBody(emailId);
     if (result.kind !== "error") return result;

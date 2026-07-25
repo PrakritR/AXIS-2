@@ -2418,7 +2418,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         ? `${chargeTitle("security_deposit")} (fully covered by holding deposit)`
         : chargeTitle("security_deposit");
   if (netSecurityDeposit > 0) {
-    pushCharge("security_deposit", netSecurityDeposit, securityTitle, true, "Before lease signing");
+    pushCharge(
+      "security_deposit",
+      netSecurityDeposit,
+      securityTitle,
+      !row.manuallyAdded,
+      row.manuallyAdded ? moveInDue : "Before lease signing",
+    );
   }
 
   const moveInFee = savedAmount(

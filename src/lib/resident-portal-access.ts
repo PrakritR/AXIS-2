@@ -208,6 +208,11 @@ export async function loadResidentLeaseSignedStatus(email: string): Promise<bool
   return data.some((record) => {
     const row = record.row_data as Record<string, unknown> | null;
     if (!row) return false;
+    if (row.externallySignedLease === true) {
+      const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
+      const res = row.residentSignature as Record<string, unknown> | null | undefined;
+      return Boolean(mgr?.name && mgr?.signedAtIso && res?.name && res?.signedAtIso);
+    }
     const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
     const res = row.residentSignature as Record<string, unknown> | null | undefined;
     const legacyName = typeof row.signatureName === "string" ? row.signatureName : null;

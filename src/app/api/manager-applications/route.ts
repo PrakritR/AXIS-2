@@ -10,6 +10,7 @@ import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
+import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -502,6 +503,7 @@ export async function POST(req: Request) {
       id?: string;
       row?: DemoApplicantRow;
       rows?: DemoApplicantRow[];
+      existingResidentOnboarding?: { sendWelcomeEmail?: boolean };
     };
     const db = createSupabaseServiceRoleClient();
     const user = await sessionUser();
@@ -765,6 +767,40 @@ export async function POST(req: Request) {
     if (row.bucket === "pending" && row.application?.consentCredit) {
       void tryAutoOrderScreening(db, row);
     }
+
+    if (row.manuallyAdded && body.existingResidentOnboarding) {
+      const { data: profile } = await db.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+      const onboarding = await runExistingResidentOnboarding(
+        db,
+        {
+          userId: user.id,
+          email: user.email ?? null,
+          managerName: String(profile?.full_name ?? ""),
+        },
+        row,
+        { sendWelcomeEmail: body.existingResidentOnboarding.sendWelcomeEmail !== false },
+      );
+      if (!onboarding.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: onboarding.error,
+            mailtoHref: onboarding.mailtoHref,
+            leaseId: onboarding.leaseId,
+          },
+          { status: onboarding.status },
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        existingResidentOnboarding: {
+          leaseId: onboarding.leaseId,
+          welcomeEmailSent: onboarding.welcomeEmailSent,
+          axisId: onboarding.axisId,
+        },
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save application.";
