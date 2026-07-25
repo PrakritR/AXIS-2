@@ -251,6 +251,7 @@ export function ApplicationQuestionEditModal({
       onClose={onClose}
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
+      hideHeaderClose
     >
       <div className="space-y-3">
         <ApplicationQuestionFields

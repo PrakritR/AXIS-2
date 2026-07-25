@@ -226,7 +226,7 @@ export function ManagerApplicationQuestionsEditorModal({
 
   return (
     <>
-      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
+      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl" hideHeaderClose>
         {isBulkSave ? (
           <p className="mb-4 text-sm text-muted">
             These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are

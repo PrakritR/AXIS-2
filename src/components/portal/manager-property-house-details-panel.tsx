@@ -216,7 +216,7 @@ export function ManagerPropertyHouseDetailsPanel({
         </div>
       </PortalCollapsibleSection>
 
-      <Modal open={modalOpen} title="House details" onClose={closeModal} panelClassName="max-w-2xl">
+      <Modal open={modalOpen} title="House details" onClose={closeModal} panelClassName="max-w-2xl" hideHeaderClose>
         {editForm}
       </Modal>
     </>

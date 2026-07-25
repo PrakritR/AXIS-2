@@ -25,6 +25,7 @@ export function Modal({
   dense = false,
   assistantStrip = true,
   assistantContext,
+  hideHeaderClose = false,
 }: {
   open: boolean;
   title: ReactNode;
@@ -42,6 +43,8 @@ export function Modal({
   assistantStrip?: boolean;
   /** Passed to the assistant as modal context (defaults to stringified title). */
   assistantContext?: string;
+  /** Hide the header Close pill when the body or footer already provides dismiss actions. */
+  hideHeaderClose?: boolean;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -108,16 +111,18 @@ export function Modal({
             >
               {title}
             </h3>
-            <button
-              type="button"
-              onClick={onClose}
-              className={cn(
-                "shrink-0 rounded-full border border-border bg-card font-semibold text-muted hover:bg-foreground/5",
-                dense ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-sm",
-              )}
-            >
-              Close
-            </button>
+            {hideHeaderClose ? null : (
+              <button
+                type="button"
+                onClick={onClose}
+                className={cn(
+                  "shrink-0 rounded-full border border-border bg-card font-semibold text-muted hover:bg-foreground/5",
+                  dense ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-sm",
+                )}
+              >
+                Close
+              </button>
+            )}
           </div>
           <div
             className={cn(
