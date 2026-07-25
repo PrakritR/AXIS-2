@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -128,6 +128,10 @@ function deferCatalogMutation(fn: () => void) {
   requestAnimationFrame(() => {
     requestAnimationFrame(fn);
   });
+}
+
+function ListingSectionActions({ children }: { children: ReactNode }) {
+  return <div className="mb-3 flex flex-wrap gap-2 border-b border-border pb-3">{children}</div>;
 }
 
 const MANAGER_STAGES = [
@@ -318,6 +322,221 @@ function ManagerPropertyInlineDetails({
   const openFullListingEditor = () => setListingEditorOpen(true);
   const openPreviewEditor = () => setPreviewEditorOpen(true);
 
+  const copyApplyLink = () => {
+    if (!listingId) return;
+    void (async () => {
+      const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
+      const ok = await copyTextToClipboard(url);
+      showToast(ok ? "Apply link copied." : "Could not copy link.");
+    })();
+  };
+
+  const copyTourLink = () => {
+    if (!listingId) return;
+    void (async () => {
+      const url = buildManagerTourUrl(window.location.origin, listingId);
+      const ok = await copyTextToClipboard(url);
+      showToast(ok ? "Tour link copied." : "Could not copy link.");
+    })();
+  };
+
+  const applicationSectionActions =
+    bucket === 2 && listingId ? (
+      <ListingSectionActions>
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} text-xs`}
+          data-attr="listing-send-to-prospect"
+          onClick={() => onSendToProspect?.(listingId)}
+        >
+          Send to prospect
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} text-xs`}
+          data-attr="listing-copy-apply-link"
+          onClick={copyApplyLink}
+        >
+          Copy apply link
+        </Button>
+      </ListingSectionActions>
+    ) : null;
+
+  const promotionHeaderExtra =
+    bucket === 2 && listingId ? (
+      <Button
+        type="button"
+        variant="outline"
+        className="h-8 rounded-full px-3 text-xs"
+        data-attr="listing-copy-tour-link"
+        onClick={copyTourLink}
+      >
+        Copy tour link
+      </Button>
+    ) : null;
+
+  const previewHeaderActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {bucket === 2 && listingId ? (
+        <>
+          {canEditListing ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={sectionHeaderBtn}
+              data-attr="listing-preview-edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                openPreviewEditor();
+              }}
+            >
+              Edit preview
+            </Button>
+          ) : null}
+          {canEditAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={sectionHeaderBtn}
+              data-attr="listing-edit-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFullListingEditor();
+              }}
+            >
+              Edit listing
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className={sectionHeaderBtn}
+            data-attr="listing-unlist"
+            onClick={(e) => {
+              e.stopPropagation();
+              deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)));
+            }}
+          >
+            Unlist
+          </Button>
+          {canDeleteAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+                deferCatalogMutation(() =>
+                  run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
+                );
+              }}
+            >
+              Delete listing
+            </Button>
+          ) : null}
+        </>
+      ) : null}
+
+      {bucket === 3 ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className={sectionHeaderBtn}
+            data-attr="listing-relist"
+            onClick={(e) => {
+              e.stopPropagation();
+              deferCatalogMutation(() => {
+                const id = listAdminRow(row, managerUserId);
+                if (!id) {
+                  showToast("Could not relist.");
+                  return;
+                }
+                showToast("Listing is live again.");
+                onUpdated();
+              });
+            }}
+          >
+            Relist property
+          </Button>
+          {canEditListing && canEditAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={sectionHeaderBtn}
+              data-attr="listing-edit-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFullListingEditor();
+              }}
+            >
+              Edit listing
+            </Button>
+          ) : null}
+          {canEditListing && canDeleteAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
+                deferCatalogMutation(() =>
+                  run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
+                );
+              }}
+            >
+              Delete from queue
+            </Button>
+          ) : null}
+        </>
+      ) : null}
+
+      {bucket === 5 ? (
+        <>
+          <Button
+            type="button"
+            variant="primary"
+            className={sectionHeaderBtn}
+            data-attr="draft-continue-editing"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!skuLoaded) {
+                showToast("Loading subscription…");
+                return;
+              }
+              setDraftEditorOpen(true);
+            }}
+          >
+            Continue editing
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            data-attr="draft-delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
+              deferCatalogMutation(() => {
+                void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) =>
+                  run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again."),
+                );
+              });
+            }}
+          >
+            Delete draft
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+
   const listingFormProps = portalSub
     ? {
         onClose: () => {
@@ -364,240 +583,8 @@ function ManagerPropertyInlineDetails({
         }
       : null;
 
-  const footer = (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Actions</p>
-
-      {bucket === 2 && listingId ? (
-        <div className="grid grid-cols-3 gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} w-full`}
-            data-attr="listing-send-to-prospect"
-            onClick={() => onSendToProspect?.(listingId)}
-          >
-            Send to prospect
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} w-full`}
-            data-attr="listing-copy-apply-link"
-            onClick={() => {
-              void (async () => {
-                const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
-                const ok = await copyTextToClipboard(url);
-                showToast(ok ? "Apply link copied." : "Could not copy link.");
-              })();
-            }}
-          >
-            Copy apply link
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} w-full`}
-            data-attr="listing-copy-tour-link"
-            onClick={() => {
-              void (async () => {
-                const url = buildManagerTourUrl(window.location.origin, listingId);
-                const ok = await copyTextToClipboard(url);
-                showToast(ok ? "Tour link copied." : "Could not copy link.");
-              })();
-            }}
-          >
-            Copy tour link
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} w-full`}
-            data-attr="listing-unlist"
-            onClick={() =>
-              deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)))
-            }
-          >
-            Unlist
-          </Button>
-          {canEditAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${actionBtnClass} w-full`}
-              data-attr="listing-edit-full"
-              onClick={openFullListingEditor}
-            >
-              Edit
-            </Button>
-          ) : null}
-          {canDeleteAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${actionBtnClass} w-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              data-attr="listing-delete"
-              onClick={() => {
-                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-                deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)));
-              }}
-            >
-              Delete listing
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {bucket === 3 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className={actionBtnClass}
-            data-attr="listing-relist"
-            onClick={() => {
-              deferCatalogMutation(() => {
-                const id = listAdminRow(row, managerUserId);
-                if (!id) {
-                  showToast("Could not relist.");
-                  return;
-                }
-                showToast("Listing is live again.");
-                onUpdated();
-              });
-            }}
-          >
-            Relist property
-          </Button>
-          {canEditListing ? (
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className={actionBtnClass}
-                data-attr="listing-edit-full"
-                onClick={openFullListingEditor}
-              >
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                data-attr="listing-delete"
-                onClick={() => {
-                  if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
-                  deferCatalogMutation(() =>
-                    run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
-                  );
-                }}
-              >
-                Delete from queue
-              </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${actionBtnClass} ml-auto border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              data-attr="listing-delete"
-              onClick={() => {
-                if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
-                deferCatalogMutation(() =>
-                  run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
-                );
-              }}
-            >
-              Delete from queue
-            </Button>
-          )}
-        </div>
-      ) : null}
-
-      {bucket === 5 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="primary"
-            className={actionBtnClass}
-            data-attr="draft-continue-editing"
-            onClick={() => {
-              // Publishing from the wizard is gated on the plan property limit,
-              // and an unknown tier reads as "no limit" — so don't open until
-              // the subscription load has settled.
-              if (!skuLoaded) {
-                showToast("Loading subscription…");
-                return;
-              }
-              setDraftEditorOpen(true);
-            }}
-          >
-            Continue editing
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} ml-auto border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            data-attr="draft-delete"
-            onClick={() => {
-              if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
-              deferCatalogMutation(() => {
-                void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) =>
-                  run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again."),
-                );
-              });
-            }}
-          >
-            Delete draft
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
-
-      <PortalCollapsibleSection
-        title="Preview"
-        titleVariant="label"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
-        collapsible={hasPreview}
-        surfaceMuted={false}
-        toggleDataAttr="listing-preview-toggle"
-        headerActions={
-          canEditListing ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={sectionHeaderBtn}
-              data-attr="listing-preview-edit"
-              onClick={(e) => {
-                e.stopPropagation();
-                openPreviewEditor();
-              }}
-            >
-              Edit
-            </Button>
-          ) : null
-        }
-        contentClassName="p-0"
-      >
-        {hasPreview ? (
-          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
-            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
-          </ListingPreviewScrollShell>
-        ) : null}
-      </PortalCollapsibleSection>
-
-      {/* Neither a draft (bucket 5) nor an unlisted row (bucket 3) has a live
-          listing behind it, so every panel that persists through
-          `houseSaveTarget` is withheld — that save writes the LIVE catalog, and
-          for these rows it would either publish an unvalidated draft or silently
-          re-list a property the manager took down. A draft is changed by the
-          wizard ("Continue editing"); an unlisted row by relisting it first. */}
       {bucket !== 3 && bucket !== 5 ? (
         <>
           <ManagerPropertyHouseDetailsPanel
@@ -615,6 +602,7 @@ function ManagerPropertyInlineDetails({
             managerUserId={managerUserId}
             onUpdated={onUpdated}
             showToast={showToast}
+            sectionActions={applicationSectionActions}
           />
 
           <ManagerPropertyLeasePanel
@@ -630,8 +618,37 @@ function ManagerPropertyInlineDetails({
       ) : null}
 
       {bucket === 2 && listingId ? (
-        <ManagerPropertyPromotionPanel listingId={listingId} showToast={showToast} onUpdated={onUpdated} />
+        <ManagerPropertyPromotionPanel
+          listingId={listingId}
+          showToast={showToast}
+          onUpdated={onUpdated}
+          headerActionsExtra={promotionHeaderExtra}
+        />
       ) : null}
+
+      <PortalCollapsibleSection
+        title="Preview"
+        titleVariant="label"
+        expanded={previewExpanded}
+        onExpandedChange={setPreviewExpanded}
+        collapsible={hasPreview || bucket === 3 || bucket === 5}
+        surfaceMuted={false}
+        toggleDataAttr="listing-preview-toggle"
+        headerActions={previewHeaderActions}
+        contentClassName="p-0"
+      >
+        {hasPreview ? (
+          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
+            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
+          </ListingPreviewScrollShell>
+        ) : bucket === 3 || bucket === 5 ? (
+          <p className="px-4 py-3 text-sm text-muted">
+            {bucket === 5
+              ? "Finish the draft wizard to see a public preview."
+              : "Relist this property to restore the public preview."}
+          </p>
+        ) : null}
+      </PortalCollapsibleSection>
 
       {previewEditorOpen && listingFormProps ? (
         <ManagerAddListingForm {...listingFormProps} wizardScope="preview" />
