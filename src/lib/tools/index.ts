@@ -21,6 +21,7 @@ import {
   getAutomationSettingsTool,
   updateAutomationSettingsTool,
   cancelScheduledReminderTool,
+  restoreScheduledReminderTool,
   rescheduleReminderTool,
 } from "./domains/automation";
 import {
@@ -64,6 +65,7 @@ import {
   getPropertyDetailsTool,
   createPropertyTool,
   updatePropertyTool,
+  copyListingPhotosTool,
   sharePropertyLinkTool,
 } from "./domains/properties";
 import { listInboxThreadsTool, getThreadMessagesTool, updateThreadTool } from "./domains/inbox";
@@ -149,6 +151,7 @@ export const agentRegistry = buildRegistry([
   markChargePaidTool,
   updateAutomationSettingsTool,
   cancelScheduledReminderTool,
+  restoreScheduledReminderTool,
   rescheduleReminderTool,
   sendMessageTool,
   replyToThreadTool,
@@ -176,6 +179,7 @@ export const agentRegistry = buildRegistry([
   inviteVendorTool,
   createPropertyTool,
   updatePropertyTool,
+  copyListingPhotosTool,
   sharePropertyLinkTool,
   setResidentApprovalTool,
   sendResidentWelcomeTool,
