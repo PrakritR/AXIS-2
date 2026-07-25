@@ -67,47 +67,69 @@ export function optedOutFromTimestamps(
  * Every send funnels through this choke point. Supersede is computed GLOBALLY
  * across both stores: the latest opt-in anywhere beats an older opt-out
  * anywhere, so a STOP on one line followed by a START on the other re-enables
- * the number instead of dead-ending. A number we've never seen is NOT opted
- * out; a profiles-side error falls back to the ledger alone.
+ * the number instead of dead-ending. When `opts.userId` is given, that
+ * profile row's timestamps join the same comparison even if its stored phone
+ * is empty or unmatchable — a legacy user-keyed STOP keeps blocking until a
+ * later opt-in on any store supersedes it. A number we've never seen is NOT
+ * opted out; a secondary-store error drops only that store's timestamps, so
+ * the ledger alone still governs.
  */
-export async function isPhoneOptedOut(db: SupabaseClient, phone: string): Promise<boolean> {
+export async function isPhoneOptedOut(
+  db: SupabaseClient,
+  phone: string,
+  opts?: { userId?: string | null },
+): Promise<boolean> {
   const key = normalizeConsentPhone(phone);
-  if (!key) return false;
+  const userId = opts?.userId ?? null;
+  if (!key && !userId) return false;
 
-  const parseTs = (raw: unknown): number | null => {
-    const t = raw ? Date.parse(String(raw)) : NaN;
-    return Number.isNaN(t) ? null : t;
-  };
   const optIns: number[] = [];
   const optOuts: number[] = [];
   const push = (arr: number[], raw: unknown) => {
-    const t = parseTs(raw);
-    if (t != null) arr.push(t);
+    const t = raw ? Date.parse(String(raw)) : NaN;
+    if (!Number.isNaN(t)) arr.push(t);
   };
 
-  // 1) Canonical phone-keyed ledger.
-  const { data: ledger } = await db
-    .from("sms_consent")
-    .select("opted_in_at, opted_out_at")
-    .eq("phone", key)
-    .maybeSingle();
-  push(optIns, ledger?.opted_in_at);
-  push(optOuts, ledger?.opted_out_at);
+  if (key) {
+    // 1) Canonical phone-keyed ledger.
+    const { data: ledger } = await db
+      .from("sms_consent")
+      .select("opted_in_at, opted_out_at")
+      .eq("phone", key)
+      .maybeSingle();
+    push(optIns, ledger?.opted_in_at);
+    push(optOuts, ledger?.opted_out_at);
 
-  // 2) Bridge the vendor store: any profile whose phone matches this number
-  // contributes its opt-out/consent timestamps to the global comparison.
-  try {
-    const { data: profiles } = await db
-      .from("profiles")
-      .select("sms_opt_out_at, sms_consent_at")
-      .in("phone", profilePhoneVariants(phone));
-    for (const p of profiles ?? []) {
-      push(optIns, p.sms_consent_at);
-      push(optOuts, p.sms_opt_out_at);
+    // 2) Bridge the vendor store: any profile whose phone matches this number
+    // contributes its opt-out/consent timestamps to the global comparison.
+    try {
+      const { data: profiles } = await db
+        .from("profiles")
+        .select("sms_opt_out_at, sms_consent_at")
+        .in("phone", profilePhoneVariants(phone));
+      for (const p of profiles ?? []) {
+        push(optIns, p.sms_consent_at);
+        push(optOuts, p.sms_opt_out_at);
+      }
+    } catch {
+      /* fail open on the secondary store — the timestamps gathered above still govern */
     }
-  } catch {
-    // Fail open on the secondary store — the ledger alone still governs.
-    return optedOutFromTimestamps(ledger?.opted_in_at, ledger?.opted_out_at);
+  }
+
+  // 3) Explicit user-keyed row (e.g. the vendor bound to a session), covering
+  // opt-outs recorded against a profile whose phone column doesn't match.
+  if (userId) {
+    try {
+      const { data: own } = await db
+        .from("profiles")
+        .select("sms_opt_out_at, sms_consent_at")
+        .eq("id", userId)
+        .maybeSingle();
+      push(optIns, own?.sms_consent_at);
+      push(optOuts, own?.sms_opt_out_at);
+    } catch {
+      /* fail open on the secondary store — the timestamps gathered above still govern */
+    }
   }
 
   if (optOuts.length === 0) return false;

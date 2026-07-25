@@ -55,8 +55,11 @@ honors both** — a STOP recorded on either path blocks every outbound rail:
   vendor STOP is durably recorded on the canonical store too.
 
 The vendor agent's own gates (`vendor-agent.server.ts`) also consult
-`isPhoneOptedOut` for the vendor's phone, so a ledger STOP blocks the vendor
-agent as well. Opt-in supersede is computed GLOBALLY across both stores: the
+`isPhoneOptedOut` for the vendor's phone, passing `{ userId }` so the vendor's
+own profile row joins the comparison even when its stored phone is empty or
+unmatchable — a legacy user-keyed STOP (recorded before the ledger existed)
+still blocks until a later opt-in supersedes it. Opt-in supersede is computed
+GLOBALLY across both stores: the
 latest opt-in anywhere (`opted_in_at` or `sms_consent_at`) beats an older
 opt-out anywhere, so a STOP on one line followed by a START on the other
 re-enables the number instead of dead-ending. The vendor webhook's START also

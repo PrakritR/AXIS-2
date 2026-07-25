@@ -154,4 +154,14 @@ describe("vendor SMS gate follows the unified cross-store consent read", () => {
     await deliverVendorAgentReply(db, session, "hello", "sms");
     expect(vi.mocked(sendSms)).not.toHaveBeenCalled();
   });
+
+  it("stays muted for a legacy user-keyed STOP with an unmatchable profile phone", async () => {
+    // Pre-ledger STOP: sms_opt_out_at set, profiles.phone empty, no ledger row.
+    const db = makeDb({
+      profile: { phone: "", sms_opt_out_at: EARLIER, sms_consent_at: null },
+      consent: [],
+    });
+    await deliverVendorAgentReply(db, session, "hello", "sms");
+    expect(vi.mocked(sendSms)).not.toHaveBeenCalled();
+  });
 });

@@ -110,17 +110,16 @@ async function vendorSmsState(db: Db, session: VendorAgentSessionRow): Promise<{
     .eq("id", session.vendor_user_id)
     .maybeSingle();
   let optedOut = optedOutFromTimestamps(data?.sms_consent_at, data?.sms_opt_out_at);
-  // The phone-keyed unified read (global supersede across the ledger and the
-  // profiles store) is AUTHORITATIVE whenever a number is known, so this gate
-  // always agrees with the send-time choke point — a STOP recorded on either
-  // store blocks, and a later cross-store START re-enables.
+  // The unified read (global supersede across the ledger, phone-matched
+  // profiles, AND the vendor's own user-keyed row) is AUTHORITATIVE, so this
+  // gate always agrees with the send-time choke point — a STOP recorded on
+  // either store blocks, and a later cross-store START re-enables — while a
+  // legacy user-keyed STOP with an unmatchable phone still counts.
   const phone = String((data?.phone as string | null) ?? "").trim() || session.vendor_phone_e164 || null;
-  if (phone) {
-    try {
-      optedOut = await isPhoneOptedOut(db, phone);
-    } catch {
-      /* fail open — same posture as the send-time choke point */
-    }
+  try {
+    optedOut = await isPhoneOptedOut(db, phone ?? "", { userId: session.vendor_user_id });
+  } catch {
+    /* fail open — same posture as the send-time choke point */
   }
   return { optedOut, consentAt: (data?.sms_consent_at as string | null) ?? null };
 }
@@ -317,12 +316,13 @@ export async function ensureVendorAgentSession(
     rawPhone = ((data?.row_data as { phone?: string } | null)?.phone ?? "").trim() || null;
   }
   const phoneE164 = rawPhone ? normalizeE164(rawPhone) : null;
-  // Unified opt-out: the phone-keyed global read (ledger + profile variants,
-  // global supersede) is AUTHORITATIVE when a number is known, covering the
-  // directory-only number and cross-store re-opt-ins alike.
-  if (phoneE164) {
+  // Unified opt-out: the global read (ledger + profile variants + the
+  // vendor's own user-keyed row, global supersede) is AUTHORITATIVE, covering
+  // the directory-only number, cross-store re-opt-ins, and legacy user-keyed
+  // STOPs with an unmatchable phone alike.
+  if (phoneE164 || args.vendorUserId) {
     try {
-      optedOut = await isPhoneOptedOut(db, phoneE164);
+      optedOut = await isPhoneOptedOut(db, phoneE164 ?? "", { userId: args.vendorUserId });
     } catch {
       /* fail open — consistent with the send-time choke point */
     }

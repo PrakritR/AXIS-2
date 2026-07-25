@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { isPhoneOptedOut, normalizeConsentPhone } from "@/lib/sms-consent";
 
 type ConsentRow = { phone: string; opted_in_at?: string | null; opted_out_at?: string | null };
-type ProfileRow = { phone: string; sms_opt_out_at?: string | null; sms_consent_at?: string | null };
+type ProfileRow = { id?: string; phone: string; sms_opt_out_at?: string | null; sms_consent_at?: string | null };
 
 // Minimal Supabase-shaped stub for the two tables `isPhoneOptedOut` reads.
 function makeDb(opts: { consent?: ConsentRow[]; profiles?: ProfileRow[]; profilesThrows?: boolean }) {
@@ -38,12 +38,18 @@ function makeDb(opts: { consent?: ConsentRow[]; profiles?: ProfileRow[]; profile
           return chain;
         }
         let phoneVariants: string[] = [];
+        let idEq: string | null = null;
         const chain: Record<string, unknown> = {
           select: () => chain,
+          eq: (_col: string, val: string) => {
+            idEq = val;
+            return chain;
+          },
           in: (_col: string, vals: string[]) => {
             phoneVariants = vals;
             return chain;
           },
+          maybeSingle: async () => ({ data: profiles.find((p) => p.id === idEq) ?? null, error: null }),
           then: (resolve: (v: unknown) => unknown) =>
             Promise.resolve({
               data: profiles.filter((p) => phoneVariants.includes(p.phone)),
@@ -141,5 +147,31 @@ describe("cross-store re-opt-in — a later START on one store supersedes a STOP
     expect(await isPhoneOptedOut(blocked, "+15551234567")).toBe(true);
     const clean = makeDb({ consent: [], profilesThrows: true });
     expect(await isPhoneOptedOut(clean, "+15551234567")).toBe(false);
+  });
+});
+
+describe("user-keyed read — a legacy profile-only STOP participates via opts.userId", () => {
+  it("blocks when the STOP lives only on the user row with an unmatchable phone", async () => {
+    // Pre-ledger STOP: sms_opt_out_at set, profiles.phone empty, no ledger row.
+    const db = makeDb({ profiles: [{ id: "u1", phone: "", sms_opt_out_at: NOW }] });
+    expect(await isPhoneOptedOut(db, "+15551234567", { userId: "u1" })).toBe(true);
+  });
+
+  it("re-enables that legacy STOP after a later ledger opt-in", async () => {
+    const db = makeDb({
+      consent: [{ phone: "5551234567", opted_in_at: LATER }],
+      profiles: [{ id: "u1", phone: "", sms_opt_out_at: EARLIER }],
+    });
+    expect(await isPhoneOptedOut(db, "+15551234567", { userId: "u1" })).toBe(false);
+  });
+
+  it("re-enables that legacy STOP after a later consent on the same user row", async () => {
+    const db = makeDb({ profiles: [{ id: "u1", phone: "", sms_opt_out_at: EARLIER, sms_consent_at: LATER }] });
+    expect(await isPhoneOptedOut(db, "+15551234567", { userId: "u1" })).toBe(false);
+  });
+
+  it("governs from the user row alone when no phone is available", async () => {
+    const db = makeDb({ profiles: [{ id: "u1", phone: "", sms_opt_out_at: NOW }] });
+    expect(await isPhoneOptedOut(db, "", { userId: "u1" })).toBe(true);
   });
 });
