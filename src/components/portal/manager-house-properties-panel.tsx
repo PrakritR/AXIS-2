@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -130,10 +130,6 @@ function deferCatalogMutation(fn: () => void) {
   });
 }
 
-function ListingSectionActions({ children }: { children: ReactNode }) {
-  return <div className="mb-3 flex flex-wrap gap-2 border-b border-border pb-3">{children}</div>;
-}
-
 const MANAGER_STAGES = [
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
@@ -192,7 +188,7 @@ function ManagerPropertyInlineDetails({
   );
   const rich = useMemo(() => (previewProperty ? getListingRichContent(previewProperty) : null), [previewProperty]);
   const hasPreview = Boolean(previewProperty && rich);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState(true);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -340,28 +336,34 @@ function ManagerPropertyInlineDetails({
     })();
   };
 
-  const applicationSectionActions =
+  const applicationHeaderExtra =
     bucket === 2 && listingId ? (
-      <ListingSectionActions>
+      <>
         <Button
           type="button"
           variant="outline"
-          className={`${actionBtnClass} text-xs`}
+          className={`${actionBtnClass} h-8 px-3 text-xs`}
           data-attr="listing-send-to-prospect"
-          onClick={() => onSendToProspect?.(listingId)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSendToProspect?.(listingId);
+          }}
         >
           Send to prospect
         </Button>
         <Button
           type="button"
           variant="outline"
-          className={`${actionBtnClass} text-xs`}
+          className={`${actionBtnClass} h-8 px-3 text-xs`}
           data-attr="listing-copy-apply-link"
-          onClick={copyApplyLink}
+          onClick={(e) => {
+            e.stopPropagation();
+            copyApplyLink();
+          }}
         >
           Copy apply link
         </Button>
-      </ListingSectionActions>
+      </>
     ) : null;
 
   const promotionHeaderExtra =
@@ -371,7 +373,10 @@ function ManagerPropertyInlineDetails({
         variant="outline"
         className="h-8 rounded-full px-3 text-xs"
         data-attr="listing-copy-tour-link"
-        onClick={copyTourLink}
+        onClick={(e) => {
+          e.stopPropagation();
+          copyTourLink();
+        }}
       >
         Copy tour link
       </Button>
@@ -381,63 +386,68 @@ function ManagerPropertyInlineDetails({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {bucket === 2 && listingId ? (
         <>
-          {canEditListing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {canEditListing ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={sectionHeaderBtn}
+                data-attr="listing-preview-edit"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openPreviewEditor();
+                }}
+              >
+                Edit preview
+              </Button>
+            ) : null}
+            {canEditAction ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={sectionHeaderBtn}
+                data-attr="listing-edit-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openFullListingEditor();
+                }}
+              >
+                Edit listing
+              </Button>
+            ) : null}
+          </div>
+          <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               className={sectionHeaderBtn}
-              data-attr="listing-preview-edit"
+              data-attr="listing-unlist"
               onClick={(e) => {
                 e.stopPropagation();
-                openPreviewEditor();
+                deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)));
               }}
             >
-              Edit preview
+              Unlist
             </Button>
-          ) : null}
-          {canEditAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={sectionHeaderBtn}
-              data-attr="listing-edit-full"
-              onClick={(e) => {
-                e.stopPropagation();
-                openFullListingEditor();
-              }}
-            >
-              Edit listing
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className={sectionHeaderBtn}
-            data-attr="listing-unlist"
-            onClick={(e) => {
-              e.stopPropagation();
-              deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)));
-            }}
-          >
-            Unlist
-          </Button>
-          {canDeleteAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              data-attr="listing-delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-                deferCatalogMutation(() =>
-                  run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
-                );
-              }}
-            >
-              Delete listing
-            </Button>
-          ) : null}
+            {canDeleteAction ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                data-attr="listing-delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+                  deferCatalogMutation(() =>
+                    run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
+                  );
+                }}
+              >
+                Delete listing
+              </Button>
+            ) : null}
+          </div>
         </>
       ) : null}
 
@@ -626,7 +636,7 @@ function ManagerPropertyInlineDetails({
             managerUserId={managerUserId}
             onUpdated={onUpdated}
             showToast={showToast}
-            sectionActions={applicationSectionActions}
+            headerActionsExtra={applicationHeaderExtra}
           />
 
           <ManagerPropertyLeasePanel

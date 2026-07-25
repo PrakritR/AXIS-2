@@ -33,6 +33,7 @@ export function Modal({
   onClose,
   children,
   footer,
+  description,
   panelClassName,
   stackClassName,
   dense = false,
@@ -43,6 +44,8 @@ export function Modal({
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
+  /** Optional one-line context under the title (visual + `aria-describedby`). */
+  description?: ReactNode;
   /** Sticky footer below the scrollable body (action buttons, etc.). */
   footer?: ReactNode;
   /** Width / layout overrides merged onto the default glass panel shell. */
@@ -108,19 +111,27 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
+          aria-describedby={description ? "modal-description" : undefined}
         >
           <div
             className={cn(
-              "flex shrink-0 items-center justify-between gap-3 border-b border-border",
+              "flex shrink-0 items-start justify-between gap-3 border-b border-border",
               dense ? "gap-2 pb-2" : "gap-4 pb-4",
             )}
           >
-            <h3
-              id="modal-title"
-              className={cn("min-w-0 flex-1 font-semibold text-foreground", dense ? "text-base" : "text-lg")}
-            >
-              {title}
-            </h3>
+            <div className="min-w-0 flex-1">
+              <h3
+                id="modal-title"
+                className={cn("font-semibold text-foreground", dense ? "text-base" : "text-lg")}
+              >
+                {title}
+              </h3>
+              {description ? (
+                <p id="modal-description" className="mt-1 text-sm leading-relaxed text-muted">
+                  {description}
+                </p>
+              ) : null}
+            </div>
             <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
               <X className="h-5 w-5" aria-hidden />
             </button>
