@@ -585,6 +585,30 @@ function ManagerPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
+      <PortalCollapsibleSection
+        title="Preview"
+        titleVariant="label"
+        expanded={previewExpanded}
+        onExpandedChange={setPreviewExpanded}
+        collapsible={hasPreview || bucket === 3 || bucket === 5}
+        surfaceMuted={false}
+        toggleDataAttr="listing-preview-toggle"
+        headerActions={previewHeaderActions}
+        contentClassName="p-0"
+      >
+        {hasPreview ? (
+          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
+            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
+          </ListingPreviewScrollShell>
+        ) : bucket === 3 || bucket === 5 ? (
+          <p className="px-4 py-3 text-sm text-muted">
+            {bucket === 5
+              ? "Finish the draft wizard to see a public preview."
+              : "Relist this property to restore the public preview."}
+          </p>
+        ) : null}
+      </PortalCollapsibleSection>
+
       {bucket !== 3 && bucket !== 5 ? (
         <>
           <ManagerPropertyHouseDetailsPanel
@@ -625,30 +649,6 @@ function ManagerPropertyInlineDetails({
           headerActionsExtra={promotionHeaderExtra}
         />
       ) : null}
-
-      <PortalCollapsibleSection
-        title="Preview"
-        titleVariant="label"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
-        collapsible={hasPreview || bucket === 3 || bucket === 5}
-        surfaceMuted={false}
-        toggleDataAttr="listing-preview-toggle"
-        headerActions={previewHeaderActions}
-        contentClassName="p-0"
-      >
-        {hasPreview ? (
-          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
-            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
-          </ListingPreviewScrollShell>
-        ) : bucket === 3 || bucket === 5 ? (
-          <p className="px-4 py-3 text-sm text-muted">
-            {bucket === 5
-              ? "Finish the draft wizard to see a public preview."
-              : "Relist this property to restore the public preview."}
-          </p>
-        ) : null}
-      </PortalCollapsibleSection>
 
       {previewEditorOpen && listingFormProps ? (
         <ManagerAddListingForm {...listingFormProps} wizardScope="preview" />
