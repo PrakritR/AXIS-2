@@ -39,8 +39,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Capacitor CLI requires Node >= 22.
-          node-version: "22"
+          # Capacitor CLI requires Node >= 22; use 24 to match Vercel and local
+          # dev (the npm 11 lockfile fails `npm ci` under node 22's npm 10).
+          node-version: "24"
           cache: npm
 
       - name: Install JS dependencies

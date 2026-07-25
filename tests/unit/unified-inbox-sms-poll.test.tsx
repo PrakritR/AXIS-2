@@ -10,9 +10,30 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, cleanup, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/portal-inbox-storage", () => ({
+  collapsePersonInboxThreads: (threads: unknown[]) => threads,
+  resolveCollapsedInboxThread: (id: string | null, collapsed: Array<{ id: string }>) => collapsed.find((t) => t.id === id) ?? null,
+  inboxThreadCounterpartyEmail: (t: { email?: string }) => t.email ?? "",
+  mergeInboxRowsWithLocalTrash: (rows: unknown[]) => rows,
+  countUnopenedPersistedInbox: () => 0,
+  beginInboxMutation: () => {},
+  endInboxMutation: () => {},
+  appendPersistedInboxThread: () => {},
+  seedDemoInbox: () => {},
+  RESIDENT_INBOX_STORAGE_KEY: "resident-inbox",
+  VENDOR_INBOX_STORAGE_KEY: "vendor-inbox",
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => [],
+  syncPersistedInboxFromServer: () => Promise.resolve([]),
+  persistInbox: () => {},
+  persistInboxAwait: () => Promise.resolve(),
+  invalidatePersistedInboxCache: () => {},
+  inboxMutationInFlight: () => false,
+  runInboxMutation: (fn: () => unknown) => fn(),
+  stagePersistedInboxRows: () => {},
+  upsertPersistedInboxRows: () => Promise.resolve(true),
+  deleteInboxThreadIds: () => Promise.resolve(true),
+  appendReplyToInboxThread: () => null,
   inboxThreadSortMs: (id: string, t?: string) => {
     const m = String(id ?? "").match(/(\d{10,})/);
     if (m) return parseInt(m[1]!, 10);
