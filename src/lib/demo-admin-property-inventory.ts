@@ -25,7 +25,7 @@ import {
 import { deleteSubmissionMediaObjects } from "@/lib/listing-media-storage";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
+import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser, safePropertyOptionLabel } from "@/lib/manager-portfolio-access";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { monthlyRentListingLabel } from "@/lib/rental-application/listing-fees-display";
@@ -247,7 +247,7 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
   const rentNum = parseMonthlyRent(prop.rentLabel ?? "") ?? 0;
   return normalizeAdminPropertyRow({
     adminRefId: listingId,
-    buildingName: prop.buildingName,
+    buildingName: prop.buildingName?.trim() || prop.title?.trim() || "",
     unitLabel: prop.unitLabel,
     address: prop.address,
     zip: prop.zip,
@@ -269,13 +269,13 @@ export function adminPropertyRentDisplayLabel(row: AdminPropertyRow): string {
   return row.rentRangeLabel || `$${row.monthlyRent}/mo`;
 }
 
-/** Stable display label for sorting manager property tables (never empty). */
+/** Stable display label for sorting manager property tables (matches picker labels). */
 export function adminPropertyRowDisplayLabel(row: AdminPropertyRow): string {
-  const name = row.buildingName.trim();
-  if (name) return name;
-  const address = row.address.trim();
-  if (address) return address;
-  return "Untitled property";
+  const id = (row.listingId ?? row.adminRefId).trim() || row.adminRefId;
+  return safePropertyOptionLabel(
+    [row.buildingName, row.unitLabel, row.submission?.buildingName, row.address],
+    id,
+  );
 }
 
 /** Deterministic manager-portal property order (name, then address, then id). */
