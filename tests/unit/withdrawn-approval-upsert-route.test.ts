@@ -40,8 +40,8 @@ vi.mock("@/lib/auth/co-manager-module-scope", () => ({
   linkedPropertyIdsForModule: vi.fn(async () => []),
 }));
 vi.mock("@/lib/auth/provision-approved-resident", () => ({ provisionApprovedResidentAccount }));
-vi.mock("@/lib/manager-applications-storage", () => ({
-  MANAGER_APPLICATIONS_EVENT: "axis:manager-applications",
+vi.mock("@/lib/manager-applications-storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/manager-applications-storage")>()),
   isDraftApplicationRow: () => false,
   normalizeApplicationAxisId: (id: string) => id.trim(),
 }));
