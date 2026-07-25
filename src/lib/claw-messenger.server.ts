@@ -1,9 +1,11 @@
 /**
  * Claw Messenger client (iMessage / RCS / SMS via Emotion Machine relay).
  *
- * PRODUCTION PropLane messaging transport (single shared agent line).
- * Enable with CLAW_MESSENGER_ENABLED=1 + CLAW_MESSENGER_API_KEY.
- * Twilio per-manager numbers are a future endeavour.
+ * LEGACY FALLBACK transport (single shared agent line), being retired. Twilio
+ * per-manager work numbers are the authoritative primary rail — see
+ * `sms-transport-mode.ts` and `docs/agents/sms-system.md`. This path is engaged
+ * only while the Claw fallback flag is on (CLAW_MESSENGER_ENABLED=1 +
+ * CLAW_MESSENGER_API_KEY, mirrored by NEXT_PUBLIC_CLAW_MESSENGER_ENABLED).
  *
  * Outbound: pooled WebSocket send via sendClawMessengerText.
  * Inbound: persistent gateway (`scripts/claw-messenger-gateway.mjs`) keeps a

@@ -3,6 +3,65 @@
 
 # SMS / phone system (Twilio)
 
+## Which rail is authoritative (read this first)
+
+**Twilio is the single primary transport.** Every manager- and resident-scoped
+SMS routes through the unified Twilio path (`sendPropLaneSms` →
+`sendSms`), sending from the per-manager work number
+(`profiles.sms_from_number`). The Claw Messenger shared agent line
+(`+12053690702`, a NON-Twilio WebSocket gateway to `claw-messenger.onrender.com`
+driven by `scripts/claw-messenger-gateway.mjs`) is a **legacy fallback that is
+being retired** — it is engaged only while its flag is on.
+
+The rail is decided in ONE place: **`src/lib/sms-transport-mode.ts`**.
+- `smsPrimaryTransport()` → `"twilio"` unless the Claw fallback is engaged.
+- `isClawFallbackEnabled()` — the single master switch (client-safe,
+  `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED`, keeping the old
+  `isClawSharedLineBridgeEnabled()` truthiness so no deployment changed). That
+  old name is now a thin deprecated alias.
+- `isClawTransportEnabled()` (`proplane-sms-transport.server.ts`) is the
+  server-side send gate: the Claw fallback only transmits when its flag is
+  engaged AND it is configured with an API key (`CLAW_MESSENGER_ENABLED=1` +
+  `CLAW_MESSENGER_API_KEY`). No flag → Twilio.
+
+There is NO second "which rail is primary" flag and no contradictory doctrine:
+if you find code or a comment implying Claw is primary, it is stale — fix it to
+match this section.
+
+**Two money / live-traffic guards, both OFF by default — do not weaken:**
+- **`SMS_PROVISIONING_ENABLED`** (`isSmsProvisioningEnabled()`) gates BUYING a
+  per-manager Twilio number in `ensureManagerSmsNumber`. Twilio being the primary
+  transport does NOT authorize spend; until firstmate flips this on (alongside
+  A2P campaign registration), every purchase path returns `provisioning_disabled`
+  and buys nothing.
+- **`SMS_RELAY_POOL_AUTOBUY`** (unchanged) gates the relay pool auto-buy.
+
+**Retiring Claw for good** is a config flip firstmate owns: turn the Claw
+fallback flag OFF and turn `SMS_PROVISIONING_ENABLED` + A2P registration ON.
+Production keeps the fallback flag on today, so its behavior is unchanged until
+that flip. The Claw code (gateway script, `/api/webhooks/claw-messenger`,
+`claw-*` modules) is retained as the fallback, not deleted, because A2P is not
+yet production-ready and removing it would strand production with no rail.
+
+## Opt-out (STOP) is unified across BOTH stores
+
+STOP is recorded in two places by different webhooks, and **every send funnels
+through one unified read, `isPhoneOptedOut` (`src/lib/sms-consent.ts`), which
+honors both** — a STOP recorded on either path blocks every outbound rail:
+- **`sms_consent` ledger** (phone-keyed) — written by the manager work-line
+  webhook `/api/twilio/inbound` (`recordOptOut`/`recordOptIn`).
+- **`profiles.sms_opt_out_at`** (user-keyed) — written by the vendor-agent
+  webhook `/api/webhooks/twilio/sms`, which now ALSO writes the ledger so a
+  vendor STOP is durably recorded on the canonical store too.
+
+The vendor agent's own gates (`vendor-agent.server.ts`) also consult
+`isPhoneOptedOut` for the vendor's phone, so a ledger STOP blocks the vendor
+agent as well. `sms_consent_at` (a later opt-in) supersedes an older
+`sms_opt_out_at`, mirroring the ledger's opt-in-wins rule. Both stores fail OPEN
+on infra error (a DB blip never drops all messaging). Coverage:
+`tests/unit/sms-opt-out-unified.test.ts`,
+`tests/unit/sms-transport-authoritative.test.ts`.
+
 ## Conversation identity is per-counterparty, NOT the phone pair (read this first)
 
 A conversation used to be derived from the phone-number pair on the wire
@@ -165,11 +224,12 @@ Carriers do not allow sending SMS *from* a personal number — do not fake it.
   `TWILIO_WEBHOOK_URL` + `TWILIO_VERIFY_SERVICE_SID`; per-manager numbers go
   in `profiles.sms_from_number`. Everything no-ops gracefully without them.
 
-**Claw shared agent line (mapped-manager trial + admin oversight).**
-`src/lib/claw-resident-messaging.server.ts` / `claw-relay.server.ts` run a
-SEPARATE transport from the Twilio work-number system above: when Claw is
-enabled (`isClawTransportEnabled()`), all sends route through one shared
-agent line. A small trial cohort (`clawMappedManagerEmails()`, env
+**Claw shared agent line (LEGACY FALLBACK — mapped-manager trial + admin
+oversight).** `src/lib/claw-resident-messaging.server.ts` /
+`claw-relay.server.ts` run a SEPARATE, non-Twilio transport from the primary
+work-number system above. It is a fallback, not a co-primary: only while the
+Claw fallback flag is engaged (`isClawTransportEnabled()`) do sends route
+through the one shared agent line instead of Twilio. A small trial cohort (`clawMappedManagerEmails()`, env
 `CLAW_MESSENGER_MANAGER_EMAILS`) shares that line; forwarding targets for
 their threads are the env `CLAW_MESSENGER_MANAGER_FORWARD_PHONES` list plus
 `resolveAdminForwardPhone()` — the Axis admin account's own `profiles.phone`
@@ -222,13 +282,15 @@ Bought numbers must join the Messaging Service
 releases the number. A2P compliance pages: `/sms-terms` + the SMS opt-in
 section on `/privacy`.
 
-## Claw Messenger (production shared line, `+12053690702`)
+## Claw Messenger (LEGACY FALLBACK shared line, `+12053690702`)
 
-The live PropLane messaging system today is ONE shared agent line (Twilio
-per-manager numbers above are provisioned but dormant while Claw is primary —
-`ensureManagerSmsNumber` deliberately keeps `sms_from_number` on the Claw
-line and does not buy a Twilio number while `isClawSharedLineBridgeEnabled()`).
-Inbound flow: `scripts/claw-messenger-gateway.mjs` (a long-running WS client,
+Twilio is the authoritative primary (see "Which rail is authoritative" at the
+top). The Claw shared agent line is the legacy fallback and is only live while
+its flag is engaged. While engaged, `ensureManagerSmsNumber` keeps
+`sms_from_number` on the Claw line and does not buy a Twilio number (and even
+with the fallback off, the `SMS_PROVISIONING_ENABLED` money guard keeps
+purchases dark until firstmate flips it). When the fallback is on, its inbound
+flow is: `scripts/claw-messenger-gateway.mjs` (a long-running WS client,
 NOT a Vercel function) → `POST /api/webhooks/claw-messenger` →
 `handleClawLeasingInbound` (`src/lib/claw-leasing-bot.server.ts`) → either the
 resident/payment/lease hub (`claw-resident-actions.server.ts`) or the

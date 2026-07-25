@@ -2,10 +2,10 @@ import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   clawLeasingAgentPhoneE164,
-  isClawSharedLineBridgeEnabled,
   isLegacyClawSharedSmsNumber,
   isPlaceholderManagerWorkNumber,
 } from "@/lib/claw-leasing-links";
+import { isClawFallbackEnabled, isSmsProvisioningEnabled } from "@/lib/sms-transport-mode";
 import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 export type EnsureManagerSmsNumberResult =
@@ -49,8 +49,9 @@ export async function ensureManagerSmsNumber(
     if (error) return { ok: false, error: error.message };
     const current = String(existing?.sms_from_number ?? "").trim();
     if (current) {
-      // Keep the shared Claw line while A2P is pending — do not buy Twilio yet.
-      if (isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
+      // Keep the shared Claw line while the legacy fallback is engaged — do not
+      // buy Twilio yet.
+      if (isLegacyClawSharedSmsNumber(current) && isClawFallbackEnabled()) {
         return { ok: true, number: current };
       }
       if (!isPlaceholderManagerWorkNumber(current)) {
@@ -71,6 +72,14 @@ export async function ensureManagerSmsNumber(
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   if (!accountSid || !authToken) {
     return { ok: false, error: "SMS is not configured (missing Twilio credentials)." };
+  }
+
+  // MONEY GUARD: buying a Twilio number costs real money and must not happen
+  // until firstmate flips `SMS_PROVISIONING_ENABLED` on (alongside A2P campaign
+  // registration). Twilio being the primary transport does NOT authorize spend.
+  // Off by default, so every purchase path stays dark until that flip.
+  if (!isSmsProvisioningEnabled()) {
+    return { ok: false, error: "provisioning_disabled" };
   }
 
   const areaCodeDigits = opts?.areaCode?.replace(/\D/g, "").slice(0, 3);
@@ -154,20 +163,21 @@ export async function ensureManagerSmsNumber(
 
 /**
  * Read the manager's work number for SMS UI / sends.
- * Keeps the Claw shared line while the bridge is on; otherwise provisions Twilio.
+ * Keeps the Claw shared line while the legacy fallback is engaged; otherwise
+ * provisions a per-manager Twilio number (behind the provisioning money guard).
  */
 export async function resolveManagerWorkNumber(
   db: SupabaseClient,
   managerUserId: string,
 ): Promise<string | null> {
   if (!managerUserId) return null;
-  // Claw-primary: one shared agent line for every manager.
-  if (isClawSharedLineBridgeEnabled()) {
+  // Claw legacy fallback: one shared agent line for every manager.
+  if (isClawFallbackEnabled()) {
     return clawLeasingAgentPhoneE164();
   }
   const { data } = await db.from("profiles").select("sms_from_number").eq("id", managerUserId).maybeSingle();
   const current = String(data?.sms_from_number ?? "").trim();
-  if (current && isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
+  if (current && isLegacyClawSharedSmsNumber(current) && isClawFallbackEnabled()) {
     return current;
   }
   if (current && !isPlaceholderManagerWorkNumber(current)) return current;

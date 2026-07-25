@@ -1,6 +1,8 @@
 /**
- * Resident outbound SMS — Claw Messenger shared agent line (production).
- * Twilio is only used when Claw is disabled (future per-manager numbers).
+ * Resident outbound SMS — routes through the unified transport
+ * (`sendPropLaneSms`). PRIMARY rail is Twilio (per-manager work number); the
+ * Claw shared agent line is a legacy fallback used only while its flag is
+ * engaged. See `sms-transport-mode.ts`.
  */
 
 import {

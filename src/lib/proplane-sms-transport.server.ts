@@ -1,7 +1,9 @@
 /**
- * PropLane SMS transport — Claw Messenger is the production source of truth
- * (one shared agent line). Twilio is a future per-manager endeavour and is
- * only used when Claw is explicitly disabled.
+ * PropLane SMS transport — Twilio is the authoritative primary rail (per-manager
+ * work numbers). The Claw Messenger shared agent line is a LEGACY FALLBACK,
+ * used only while its flag is engaged (`isClawFallbackEnabled()` /
+ * `CLAW_MESSENGER_ENABLED`+key). No flag → Twilio. See `sms-transport-mode.ts`
+ * for the single rail decision and `docs/agents/sms-system.md` for the topology.
  */
 
 import { after } from "next/server";
@@ -13,9 +15,9 @@ import {
 } from "@/lib/claw-messenger.server";
 import {
   clawLeasingAgentPhoneE164,
-  isClawSharedLineBridgeEnabled,
   managerContactSmsPhoneForPublicCta,
 } from "@/lib/claw-leasing-links";
+import { isClawFallbackEnabled } from "@/lib/sms-transport-mode";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164, sendSms } from "@/lib/twilio";
 
@@ -64,14 +66,19 @@ async function logOutboundIfNeeded(args: {
   }
 }
 
-/** True when Claw Messenger is configured for PropLane messaging. */
+/**
+ * True when the Claw legacy fallback should actually transmit: its flag is
+ * engaged AND it is configured with an API key. When false (the default), sends
+ * take the primary Twilio rail. This is the server-side send gate; the
+ * client-safe rail decision is `smsPrimaryTransport()`.
+ */
 export function isClawTransportEnabled(): boolean {
   return isClawMessengerConfigured();
 }
 
 /**
- * Send an SMS. Claw-primary: always send via the shared agent line.
- * Twilio is only attempted when Claw is disabled (future per-manager numbers).
+ * Send an SMS. PRIMARY rail is Twilio (per-manager work number). The Claw
+ * shared agent line is only used when the legacy fallback is engaged.
  */
 export async function sendPropLaneSms(args: {
   to: string;
@@ -94,7 +101,9 @@ export async function sendPropLaneSms(args: {
   const to = normalizeTo(args.to);
   if (!to) return { ok: false, error: "invalid_to" };
 
-  // Claw-primary: one agent line runs the entire messaging system.
+  // LEGACY FALLBACK — only when the Claw flag is engaged. Routes through the one
+  // shared agent line instead of the primary Twilio rail below. Retired by
+  // turning the flag off (see sms-transport-mode.ts).
   if (isClawTransportEnabled()) {
     const from = clawLeasingAgentPhoneE164();
     await registerClawMessengerRoute(to);
@@ -116,7 +125,7 @@ export async function sendPropLaneSms(args: {
     };
   }
 
-  // Future Twilio path (Claw disabled).
+  // PRIMARY rail: Twilio from the manager's per-manager work number.
   const from = managerContactSmsPhoneForPublicCta(args.fromNumber);
   if (from) {
     const twilio = await sendSms(to, text, from);
@@ -137,8 +146,9 @@ export async function sendPropLaneSms(args: {
 }
 
 /**
- * Send from the PropLane messaging number for this manager.
- * Under Claw-primary that is always the shared agent line.
+ * Send from the PropLane messaging number for this manager — the per-manager
+ * Twilio work number on the primary rail. While the Claw legacy fallback is
+ * engaged, that is instead the single shared agent line.
  */
 export async function sendFromManagerWorkNumber(args: {
   managerUserId: string;
@@ -158,7 +168,7 @@ export async function sendFromManagerWorkNumber(args: {
   if (!managerUserId) return { ok: false, error: "missing_manager" };
 
   let from: string | null = null;
-  if (isClawTransportEnabled() || isClawSharedLineBridgeEnabled()) {
+  if (isClawTransportEnabled() || isClawFallbackEnabled()) {
     from = clawLeasingAgentPhoneE164();
   } else {
     from = managerContactSmsPhoneForPublicCta(args.fromNumber);
@@ -200,8 +210,10 @@ export async function sendFromManagerWorkNumber(args: {
 }
 
 /**
- * Stamp the shared Claw agent line on the manager (Claw-primary), or buy a
- * Twilio work number when Claw is off (future).
+ * Make the manager ready to message. While the Claw legacy fallback is engaged,
+ * stamp the shared agent line; otherwise buy a per-manager Twilio work number
+ * (gated by the `SMS_PROVISIONING_ENABLED` money guard, so this no-ops until
+ * firstmate turns provisioning on).
  */
 export function scheduleManagerMessagingReady(managerUserId: string): void {
   const uid = managerUserId.trim();
@@ -210,7 +222,7 @@ export function scheduleManagerMessagingReady(managerUserId: string): void {
   const run = async () => {
     try {
       const db = createSupabaseServiceRoleClient();
-      if (isClawSharedLineBridgeEnabled() || isClawTransportEnabled()) {
+      if (isClawFallbackEnabled() || isClawTransportEnabled()) {
         const agent = clawLeasingAgentPhoneE164();
         await db
           .from("profiles")

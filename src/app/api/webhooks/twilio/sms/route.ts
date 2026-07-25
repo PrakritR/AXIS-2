@@ -11,6 +11,7 @@ import twilio from "twilio";
 import { findVendorAgentSessionByPhone, runVendorAgentSessionTurn } from "@/lib/agent/vendor-agent.server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { rateLimit } from "@/lib/rate-limit";
+import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164 } from "@/lib/twilio";
 
@@ -62,6 +63,10 @@ export async function POST(req: Request) {
   const keyword = body.toUpperCase().replace(/[.!?]/g, "").trim();
 
   if (STOP_WORDS.has(keyword)) {
+    // Also record the canonical phone-keyed ledger so this STOP blocks EVERY
+    // send rail (manager console, reminders), not just the vendor agent. The
+    // ledger + the profiles column are unified on read by `isPhoneOptedOut`.
+    await recordOptOut(db, from);
     const { data: sessions } = await db
       .from("agent_sessions")
       .select("vendor_user_id")
@@ -82,6 +87,8 @@ export async function POST(req: Request) {
   }
 
   if (START_WORDS.has(keyword)) {
+    // Clear the ledger opt-out too, so re-opt-in is honored on every rail.
+    await recordOptIn(db, from);
     const { data: profs } = await db.from("profiles").select("id").eq("phone", from);
     const ids = ((profs ?? []) as { id: string }[]).map((p) => p.id);
     if (ids.length > 0) {
