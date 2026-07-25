@@ -244,6 +244,74 @@ inbound STOP still supersedes the recorded opt-in. Coverage:
 `tests/unit/partner-inquiry-sms-consent.test.ts`,
 `tests/unit/tours-contact-sms-consent-ui.test.tsx`.
 
+## Per-manager number: provisioning + registration state machine
+
+`profiles.sms_from_number` is the denormalized "active number" cache every send /
+inbound path reads; **`manager_sms_numbers`** (migration
+`20260725120000_manager_sms_numbers.sql`, service-role-only, RLS no policies) is
+the source of truth for the number's LIFECYCLE and the manager's MESSAGING
+REGISTRATION. Pure gates live in `src/lib/sms/number-registration-policy.ts`; the
+server state machine in `src/lib/sms/manager-number-provisioning.server.ts`.
+
+- **`provision_state`** ∈ `pending_registration | provisioning | active | failed
+  | released`. **`registration_state`** ∈ `pending | approved | rejected`.
+- **One number per manager, idempotent.** `provisionManagerNumber` short-circuits
+  on an existing active number — re-running never buys a second. A provider error
+  leaves a retryable `failed` (attempts++/`last_error`), never a half-created
+  record. The atomic `profiles.sms_from_number` claim + rollback-on-race
+  (releasing the just-bought number) is unchanged.
+- **Money guard.** Real Twilio purchases happen ONLY when
+  `SMS_PROVISIONING_ENABLED=1`. Off by default: a fleet parks in
+  `pending_registration` at zero cost. `provisionManagerNumber` /
+  `activatePendingManagerNumbers({limit})` are bounded + observable; the daily
+  `backfill-manager-work-numbers` cron drives the sweep. Cost shape: one number
+  per manager per month, and all numbers sit under ONE brand/campaign whose
+  segment ceiling is shared — throttle observably, never silently drop.
+- **Registration is PER MANAGER (ISV/reseller model), one code path.** A number
+  can be `active` yet unsendable until that manager's OWN registration is
+  approved (`managerCanSendFromOwnNumber` = active + approved;
+  `resolveActiveManagerSendNumber` → null otherwise, callers fall back). A single
+  shared registration is the degenerate case: every row's `registration_ref`
+  points at the shared record and `effectiveRegistrationState` reads
+  `SMS_SHARED_REGISTRATION_STATE` from env, so ONE flip approves everyone.
+  `setManagerRegistrationState` (admin `POST /api/admin/manager-sms-registration`)
+  detaches a manager to their own state (ref → null) unless an explicit `ref` is
+  passed.
+- **Signup** (`scheduleManagerMessagingReady`) always seeds a parked record via
+  `ensureManagerNumberRecord`. Release on deactivation is reversible
+  (`releaseManagerNumber` → `released`, history kept; `restoreManagerNumber`).
+
+## Per-manager SMS proxy relay (`src/lib/sms/manager-relay.server.ts`)
+
+One PropLane number carries BOTH legs of a resident conversation, wired into
+`/api/twilio/inbound`:
+
+- **Leg 1 (resident → manager):** stored in the PropLane thread AND forwarded as
+  an SMS to the manager's own verified cell, labelled with the sender's NAME (or
+  a masked `Texter ····1234` handle) — never the raw resident number.
+  Skipped when the Claw shared-line bridge is on (that path forwards itself).
+- **Leg 2 (manager → resident):** the manager texts the SAME PropLane number from
+  their cell. `detectManagerSelfReply` (From = manager's verified phone, To =
+  their work number — the To pins the manager, so it is cross-tenant safe) routes
+  it to their **active resident conversation**. DETERMINISTIC RULE: the
+  resident-role thread with the newest message in either direction. Delivered to
+  the resident FROM the PropLane number (manager cell never exposed), stored in
+  the same thread.
+
+## Consent + quiet hours are transport-level (never bypassed)
+
+`sendPropLaneSms` gates EVERY send (Claw and Twilio branches) on `isPhoneOptedOut`
++ quiet hours before dispatch — closing the old ungated Claw path that texted
+opted-out numbers (AI replies, manager tour alert) and got the campaign rejected.
+`sendClass` ∈ `control | transactional | automated`: `control` (STOP/HELP) and
+explicit `skipConsentCheck` bypass the opt-out check; quiet hours suppress ONLY
+`automated` (rent reminders, bulk notices). The **weekly rent reminder**
+(`src/lib/sms/weekly-rent-reminder.server.ts`, cron
+`/api/cron/weekly-rent-reminders`) sends `automated` from the manager's own
+number and is idempotent PER ISO WEEK — the `portal_outbound_mail_records` dedup
+row is CLAIMED (`upsert … ignoreDuplicates`) before the send, so a retry /
+redeploy / duplicate tick can never text a resident twice.
+
 ## Claw Messenger (production shared line, `+12053690702`)
 
 The live PropLane messaging system today is ONE shared agent line (Twilio
