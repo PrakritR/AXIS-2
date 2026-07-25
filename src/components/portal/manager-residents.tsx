@@ -60,6 +60,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   upsertApplicationRowToServer,
+  upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
@@ -972,15 +973,21 @@ export function ManagerResidents({
   async function sendResidentAccountEmail(res: ActiveResident) {
     setWelcomeEmailBusyForResident(res.id);
     try {
-      const response = await fetch("/api/portal/send-resident-welcome", {
+      const endpoint = res.manuallyAdded
+        ? "/api/portal/onboard-existing-resident"
+        : "/api/portal/send-resident-welcome";
+      const payload = res.manuallyAdded
+        ? { applicationId: res.axisId, sendWelcomeEmail: true }
+        : { to: res.email, residentName: res.name, axisId: res.axisId };
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ to: res.email, residentName: res.name, axisId: res.axisId }),
+        body: JSON.stringify(payload),
       });
-      const data = (await response.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
+      const data = (await response.json()) as { ok?: boolean; error?: string; mailtoHref?: string; welcomeEmailSent?: boolean };
       if (response.ok && data.ok) {
-        showToast("Account setup email sent.");
+        showToast(res.manuallyAdded ? "Portal setup email sent." : "Account setup email sent.");
         return;
       }
       if (typeof data.mailtoHref === "string") {
@@ -1225,6 +1232,11 @@ export function ManagerResidents({
       setArSaving(true);
       try {
         appendManagerApplicationRow(nextRow);
+        const persisted = await upsertApplicationRowToServerAwait(nextRow);
+        if (!persisted.ok) {
+          showToast(persisted.error ?? "Could not save resident to the server.");
+          return;
+        }
         recordApprovedApplicationCharges(nextRow, userId ?? null);
         syncLeasePipelineFromApplications(userId ?? null);
         // #region agent log
@@ -1234,11 +1246,11 @@ export function ManagerResidents({
           body: JSON.stringify({
             sessionId: "81cbea",
             location: "manager-residents.tsx:saveManualResident",
-            message: "manual resident saved locally",
-            data: { axisId, sendWelcome: arSendWelcome, hasSignedLeasePdf: Boolean(arSignedLeaseDataUrl.trim()) },
-            hypothesisId: "C",
+            message: "manual resident persisted before onboard",
+            data: { axisId, sendWelcome: arSendWelcome, serverOk: persisted.ok },
+            hypothesisId: "D",
             timestamp: Date.now(),
-            runId: "post-fix",
+            runId: "post-fix-v2",
           }),
         }).catch(() => {});
         // #endregion
@@ -1247,7 +1259,7 @@ export function ManagerResidents({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ applicationId: axisId, sendWelcomeEmail: arSendWelcome }),
+          body: JSON.stringify({ applicationId: axisId, sendWelcomeEmail: arSendWelcome, row: nextRow }),
         });
         const data = (await response.json()) as {
           ok?: boolean;

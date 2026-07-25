@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appendFileSync } from "node:fs";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding";
 import {
@@ -14,21 +15,62 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 
 function debugLog(message: string, data: Record<string, unknown>, hypothesisId: string) {
+  const payload = {
+    sessionId: "81cbea",
+    location: "onboard-existing-resident/route.ts",
+    message,
+    data,
+    hypothesisId,
+    timestamp: Date.now(),
+    runId: "post-fix-v2",
+  };
   // #region agent log
+  try {
+    appendFileSync("/Users/prakrit/firstmate/.cursor/debug-81cbea.log", `${JSON.stringify(payload)}\n`);
+  } catch {
+    /* ignore */
+  }
   fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-    body: JSON.stringify({
-      sessionId: "81cbea",
-      location: "onboard-existing-resident/route.ts",
-      message,
-      data,
-      hypothesisId,
-      timestamp: Date.now(),
-      runId: "post-fix",
-    }),
+    body: JSON.stringify(payload),
   }).catch(() => {});
   // #endregion
+}
+
+function normalizeManualRow(row: DemoApplicantRow, managerUserId: string): DemoApplicantRow {
+  const id = row.id.trim();
+  const email = row.email?.trim().toLowerCase() ?? "";
+  return {
+    ...row,
+    id,
+    email,
+    managerUserId: row.managerUserId ?? managerUserId,
+    manuallyAdded: true,
+    bucket: "approved",
+    stage: row.stage ?? "Active",
+  };
+}
+
+async function upsertManagerApplicationRecord(
+  svc: ReturnType<typeof createSupabaseServiceRoleClient>,
+  managerUserId: string,
+  row: DemoApplicantRow,
+): Promise<void> {
+  const normalized = normalizeManualRow(row, managerUserId);
+  const propertyId =
+    normalized.assignedPropertyId?.trim() || normalized.propertyId?.trim() || normalized.application?.propertyId?.trim() || null;
+  await svc.from("manager_application_records").upsert(
+    {
+      id: normalized.id,
+      manager_user_id: managerUserId,
+      resident_email: normalized.email ?? null,
+      property_id: propertyId,
+      row_data: normalized,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
 }
 
 function asUuidOrNull(value: unknown): string | null {
@@ -57,15 +99,19 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    let body: { applicationId?: unknown; sendWelcomeEmail?: unknown };
+    let body: { applicationId?: unknown; sendWelcomeEmail?: unknown; row?: unknown };
     try {
-      body = (await req.json()) as { applicationId?: unknown; sendWelcomeEmail?: unknown };
+      body = (await req.json()) as { applicationId?: unknown; sendWelcomeEmail?: unknown; row?: unknown };
     } catch {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
     const applicationId = typeof body.applicationId === "string" ? body.applicationId.trim() : "";
     const sendWelcomeEmail = body.sendWelcomeEmail !== false;
+    const clientRow =
+      body.row && typeof body.row === "object" && !Array.isArray(body.row)
+        ? (body.row as DemoApplicantRow)
+        : null;
     if (!applicationId) return NextResponse.json({ error: "applicationId is required." }, { status: 400 });
 
     const svc = createSupabaseServiceRoleClient();
@@ -85,14 +131,32 @@ export async function POST(req: Request) {
     const rec = (records ?? [])[0] as
       | { id: string; resident_email?: string | null; row_data?: unknown; manager_user_id?: string }
       | undefined;
-    if (!rec) return NextResponse.json({ error: "Resident record not found." }, { status: 404 });
 
-    const row = (rec.row_data && typeof rec.row_data === "object" ? rec.row_data : {}) as DemoApplicantRow;
+    if (!rec && clientRow?.id) {
+      await upsertManagerApplicationRecord(svc, user.id, clientRow);
+      debugLog("upserted application from client row", { applicationId }, "D");
+    }
+
+    const { data: recordsAfterUpsert } = !rec && clientRow?.id
+      ? await svc
+          .from("manager_application_records")
+          .select("id, resident_email, row_data, manager_user_id")
+          .in("id", [...new Set(ids)])
+          .eq("manager_user_id", user.id)
+          .limit(1)
+      : { data: records };
+
+    const resolvedRec = ((recordsAfterUpsert ?? [])[0] ?? rec) as
+      | { id: string; resident_email?: string | null; row_data?: unknown; manager_user_id?: string }
+      | undefined;
+    if (!resolvedRec) return NextResponse.json({ error: "Resident record not found." }, { status: 404 });
+
+    const row = (resolvedRec.row_data && typeof resolvedRec.row_data === "object" ? resolvedRec.row_data : {}) as DemoApplicantRow;
     if (!row.manuallyAdded) {
       return NextResponse.json({ error: "This route is only for manager-added existing residents." }, { status: 400 });
     }
 
-    const email = (row.email?.trim() || rec.resident_email?.trim() || "").toLowerCase();
+    const email = (row.email?.trim() || resolvedRec.resident_email?.trim() || "").toLowerCase();
     if (!email || !RESIDENT_WELCOME_EMAIL_RE.test(email)) {
       return NextResponse.json({ error: "A valid resident email is required on the record." }, { status: 400 });
     }
@@ -101,7 +165,7 @@ export async function POST(req: Request) {
     const residentName = row.name?.trim() || "Resident";
     const managerName = String(requestor?.full_name ?? "").trim() || "Property Manager";
     const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
-    const leaseId = `lease_app_${normalizeApplicationAxisId(rec.id)}`;
+    const leaseId = `lease_app_${normalizeApplicationAxisId(resolvedRec.id)}`;
     const manualPdf = manualResidentSignedLeasePdf(row);
 
     const leaseRow = normalizeLeasePipelineRow({
@@ -114,7 +178,7 @@ export async function POST(req: Request) {
       pdfVersion: 1,
       notes: "Existing resident — lease executed off-platform.",
       updatedAtIso: iso,
-      axisId: rec.id,
+      axisId: resolvedRec.id,
       propertyId: propertyId || undefined,
       managerUserId: user.id,
       managerUploadedPdf: manualPdf,
@@ -148,7 +212,7 @@ export async function POST(req: Request) {
         {
           to: email,
           residentName,
-          axisId: normalizeApplicationAxisId(rec.id),
+          axisId: normalizeApplicationAxisId(resolvedRec.id),
           propertyLabel: row.property,
         },
       );
@@ -165,7 +229,7 @@ export async function POST(req: Request) {
 
       const nextRow: DemoApplicantRow = {
         ...row,
-        id: rec.id,
+        id: resolvedRec.id,
         manualResidentDetails: {
           ...row.manualResidentDetails,
           onboardingWelcomeSentAt: iso,
@@ -179,13 +243,13 @@ export async function POST(req: Request) {
           resident_email: email,
           updated_at: iso,
         })
-        .eq("id", rec.id)
+        .eq("id", resolvedRec.id)
         .eq("manager_user_id", user.id);
     }
 
     return NextResponse.json({
       ok: true,
-      axisId: normalizeApplicationAxisId(rec.id),
+      axisId: normalizeApplicationAxisId(resolvedRec.id),
       leaseId,
       welcomeEmailSent,
       mailtoHref,
