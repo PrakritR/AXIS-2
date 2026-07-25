@@ -82,4 +82,13 @@ describe("POST /api/revenuecat/webhook", () => {
     const res = await POST(post({ event: { type: "EXPIRATION", app_user_id: "u1" } }, AUTH));
     expect(res.status).toBe(500);
   });
+
+  it("500s without firing the conversion metric when a grant write fails", async () => {
+    vi.mocked(applyRevenueCatWebhookEvent).mockRejectedValue(
+      new Error("Apple grant not recorded: db down"),
+    );
+    const res = await POST(post({ event: { type: "INITIAL_PURCHASE", app_user_id: "u1" } }, AUTH));
+    expect(res.status).toBe(500);
+    expect(track).not.toHaveBeenCalled();
+  });
 });

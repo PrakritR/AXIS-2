@@ -36,13 +36,21 @@ const TIER_BLURB: Record<"pro" | "business", string> = {
 
 type Props = {
   currentTier: ManagerSkuTier;
+  subLoaded: boolean;
   stripeManaged: boolean;
   appleManaged: boolean;
   isFree: boolean;
   onReload: () => void | Promise<void>;
 };
 
-export function ManagerPlanNative({ currentTier, stripeManaged, appleManaged, isFree, onReload }: Props) {
+export function ManagerPlanNative({
+  currentTier,
+  subLoaded,
+  stripeManaged,
+  appleManaged,
+  isFree,
+  onReload,
+}: Props) {
   const { isNative, platform } = useIsNativeApp();
   const isIos = isNative === true && platform === "ios";
   const { userId } = useManagerUserId();
@@ -55,7 +63,7 @@ export function ManagerPlanNative({ currentTier, stripeManaged, appleManaged, is
   const [activating, setActivating] = useState(false);
   const offeringsLoadedRef = useRef(false);
 
-  const canOffer = isIos && !stripeManaged && !appleManaged;
+  const canOffer = isIos && subLoaded && !stripeManaged && !appleManaged;
 
   useEffect(() => {
     if (!canOffer || !userId || offeringsLoadedRef.current) return;
@@ -130,6 +138,16 @@ export function ManagerPlanNative({ currentTier, stripeManaged, appleManaged, is
   }, [purchasingProductId, restoring, showToast, pollUntilPaid]);
 
   const busy = Boolean(purchasingProductId) || restoring || activating;
+
+  // Until the subscription payload lands we don't know whether this account is
+  // already paid — never show Subscribe buttons on that guess.
+  if (!subLoaded) {
+    return (
+      <div className="native-only mx-auto max-w-lg rounded-2xl border border-border surface-panel p-6 text-center">
+        <p className="text-sm text-muted">Loading your plan…</p>
+      </div>
+    );
+  }
 
   // Manage-only branches: already paid on one of the two stores.
   if (appleManaged) {

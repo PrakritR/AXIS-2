@@ -246,6 +246,44 @@ describe("applyRevenueCatWebhookEvent", () => {
     expect(decision.action).toBe("revoke");
     expect(updates.find((u) => u.value === "p1")?.patch).toMatchObject({ tier: "free", billing: "free" });
   });
+
+  it("throws (so the webhook 500s and RevenueCat retries) when a grant write fails", async () => {
+    fakeClient({ profile: { email: null } });
+
+    await expect(
+      applyRevenueCatWebhookEvent(
+        {
+          type: "INITIAL_PURCHASE",
+          app_user_id: "u1",
+          product_id: "com.axisseattlehousing.app.pro.monthly",
+          expiration_at_ms: Date.now() + 86400000,
+          original_transaction_id: OTX,
+        },
+        Date.now(),
+      ),
+    ).rejects.toThrow("Account email not found.");
+  });
+
+  it("throws on a grant event with no original transaction id", async () => {
+    fakeClient({
+      profile: { email: "m@x.com", manager_id: "MGR-1" },
+      rowsByUser: [{ id: "p1", tier: "free", billing: "free", stripe_subscription_id: null, apple_original_transaction_id: null, user_id: "u1" }],
+    });
+
+    await expect(
+      applyRevenueCatWebhookEvent(
+        {
+          type: "INITIAL_PURCHASE",
+          app_user_id: "u1",
+          product_id: "com.axisseattlehousing.app.pro.monthly",
+          expiration_at_ms: Date.now() + 86400000,
+          original_transaction_id: null,
+          transaction_id: null,
+        },
+        Date.now(),
+      ),
+    ).rejects.toThrow("Missing user id or Apple transaction id.");
+  });
 });
 
 describe("reconcileManagerPurchaseWithApple", () => {

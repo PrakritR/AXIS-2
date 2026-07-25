@@ -1097,6 +1097,7 @@ export function ManagerPlan({
   const nativeNotice = (
     <ManagerPlanNative
       currentTier={currentTier}
+      subLoaded={sub != null}
       stripeManaged={Boolean(sub?.stripeManaged)}
       appleManaged={Boolean(sub?.appleManaged)}
       isFree={Boolean(sub?.isFree ?? currentTier === "free")}

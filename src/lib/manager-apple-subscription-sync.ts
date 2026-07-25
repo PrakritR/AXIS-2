@@ -258,14 +258,19 @@ export async function applyRevenueCatWebhookEvent(
 ): Promise<{ decision: AppleEntitlementDecision }> {
   const decision = interpretRevenueCatWebhookEvent(event, nowMs);
   if (decision.action === "grant") {
-    await upsertAppleManagerPurchase({
+    const result = await upsertAppleManagerPurchase({
       userId: decision.appUserId,
       tier: decision.tier,
       originalTransactionId: decision.originalTransactionId ?? "",
       environment: decision.environment,
     });
+    if (!result.ok) throw new Error(`Apple grant not recorded: ${result.error}`);
   } else if (decision.action === "revoke") {
-    await downgradeAppleManagerPurchase(decision.appUserId, decision.originalTransactionId);
+    const result = await downgradeAppleManagerPurchase(
+      decision.appUserId,
+      decision.originalTransactionId,
+    );
+    if (!result.ok) throw new Error(`Apple revoke not recorded: ${result.error}`);
   }
   return { decision };
 }

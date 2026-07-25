@@ -20,6 +20,7 @@ export type RevenueCatWebhookEvent = {
   app_user_id?: string | null;
   original_app_user_id?: string | null;
   product_id?: string | null;
+  new_product_id?: string | null;
   environment?: string | null;
   expiration_at_ms?: number | null;
   purchased_at_ms?: number | null;
@@ -97,7 +98,13 @@ export function interpretRevenueCatWebhookEvent(
   }
   if (type === "INVOICE_ISSUANCE") return { action: "ignore", reason: "invoice issuance" };
 
-  const map = tierForAppleProductId(event.product_id);
+  // PRODUCT_CHANGE carries the OLD product in product_id; the tier being granted
+  // is new_product_id (an immediate upgrade must not re-grant the old tier).
+  const productId =
+    type === "PRODUCT_CHANGE"
+      ? String(event.new_product_id ?? "").trim() || event.product_id
+      : event.product_id;
+  const map = tierForAppleProductId(productId);
   if (!map) return { action: "ignore", reason: "product not a managed subscription" };
 
   const originalTransactionId = resolveOriginalTransactionId(event);

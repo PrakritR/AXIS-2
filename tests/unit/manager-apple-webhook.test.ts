@@ -41,6 +41,22 @@ describe("interpretRevenueCatWebhookEvent", () => {
     expect(d).toMatchObject({ action: "grant", tier: "business" });
   });
 
+  it("grants the NEW tier on a PRODUCT_CHANGE (new_product_id wins over product_id)", () => {
+    const d = interpretRevenueCatWebhookEvent(
+      ev({ type: "PRODUCT_CHANGE", product_id: PRO, new_product_id: BUSINESS }),
+      NOW,
+    );
+    expect(d).toMatchObject({ action: "grant", tier: "business" });
+  });
+
+  it("falls back to product_id on a PRODUCT_CHANGE without new_product_id", () => {
+    const d = interpretRevenueCatWebhookEvent(
+      ev({ type: "PRODUCT_CHANGE", product_id: PRO, new_product_id: null }),
+      NOW,
+    );
+    expect(d).toMatchObject({ action: "grant", tier: "pro" });
+  });
+
   it("keeps access on a RENEWAL", () => {
     expect(interpretRevenueCatWebhookEvent(ev({ type: "RENEWAL" }), NOW)).toMatchObject({ action: "grant" });
   });
