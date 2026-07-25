@@ -74,10 +74,12 @@ const SMS_PAYLOAD = {
   ],
 };
 
-vi.mock("@/lib/portal-inbox-storage", () => ({
+vi.mock("@/lib/portal-inbox-storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/portal-inbox-storage")>()),
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => ALL_THREADS,
+  syncPersistedInboxFromServer: () => Promise.resolve(ALL_THREADS),
   inboxThreadSortMs: (id: string, t?: string) => {
     const m = String(id ?? "").match(/(\d{10,})/);
     if (m) return parseInt(m[1]!, 10);
@@ -111,8 +113,8 @@ describe("unified conversation inbox (no folder tabs)", () => {
     // Trashed conversation is NOT in the default view.
     expect(screen.queryByText("Old Flyer")).toBeNull();
 
-    // Archive is reachable without a tab.
-    const toggle = document.querySelector('[data-attr="unified-inbox-archived-toggle"]') as HTMLButtonElement;
+    // Archive is reachable via the list segment control, not a folder tab bar.
+    const toggle = screen.getByRole("tab", { name: /archived/i });
     expect(toggle).toBeTruthy();
     fireEvent.click(toggle);
     expect(screen.getByText("Old Flyer")).toBeTruthy();
