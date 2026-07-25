@@ -24,8 +24,8 @@ function draftFromSettings(settings: ManagerManualPaymentSettings | null, applyT
   };
 }
 
-function methodStatus(connected: boolean): string {
-  return connected ? "Connected" : "Not set up";
+function methodAction(connected: boolean): string {
+  return connected ? "Connected" : "Link";
 }
 
 function HubRow({
@@ -47,17 +47,10 @@ function HubRow({
       className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-left transition hover:border-primary/30 hover:bg-accent/20"
     >
       <span className="text-sm font-semibold text-foreground">{label}</span>
-      <span className="flex items-center gap-2 text-sm text-muted">
-        <span
-          className={
-            connected
-              ? "text-[var(--status-confirmed-fg)]"
-              : undefined
-          }
-        >
-          {methodStatus(connected)}
-        </span>
-        <span aria-hidden>›</span>
+      <span
+        className={`text-sm font-medium ${connected ? "text-[var(--status-confirmed-fg)]" : "text-primary"}`}
+      >
+        {methodAction(connected)}
       </span>
     </button>
   );
@@ -204,10 +197,10 @@ export function ManagerPaymentSetupModal({
     pane === "hub"
       ? "Link payment"
       : pane === "stripe"
-        ? "Stripe"
+        ? "Stripe link"
         : pane === "zelle"
-          ? "Zelle"
-          : "Venmo";
+          ? "Zelle link"
+          : "Venmo link";
 
   const footer =
     pane === "hub" ? (
@@ -254,19 +247,19 @@ export function ManagerPaymentSetupModal({
         <div className="space-y-2">
           {loading ? <p className="text-sm text-muted">Loading…</p> : null}
           <HubRow
-            label="Stripe"
+            label="Stripe link"
             connected={stripeReady}
             onClick={() => setPane("stripe")}
             dataAttr="manager-payment-stripe-row"
           />
           <HubRow
-            label="Zelle"
+            label="Zelle link"
             connected={zelleConnected}
             onClick={() => setPane("zelle")}
             dataAttr="manager-payment-zelle-row"
           />
           <HubRow
-            label="Venmo"
+            label="Venmo link"
             connected={venmoConnected}
             onClick={() => setPane("venmo")}
             dataAttr="manager-payment-venmo-row"
