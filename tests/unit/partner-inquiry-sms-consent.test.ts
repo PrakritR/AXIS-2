@@ -106,13 +106,15 @@ describe("partner-inquiries route SMS consent persistence", () => {
     upsertCalls.length = 0;
   });
 
-  it("persists consent + timestamp and records opt-in when the box is checked", async () => {
-    const res = await postWith(makeRow({ smsConsent: true, smsConsentAt: "2026-07-25T00:00:00.000Z" }));
+  it("persists consent + a server-stamped timestamp and records opt-in when the box is checked", async () => {
+    const res = await postWith(makeRow({ smsConsent: true, smsConsentAt: "1999-01-01T00:00:00.000Z" }));
     expect(res.status).toBe(200);
 
     const persisted = lastPersistedInquiry();
     expect(persisted.smsConsent).toBe(true);
-    expect(persisted.smsConsentAt).toBe("2026-07-25T00:00:00.000Z");
+    expect(typeof persisted.smsConsentAt).toBe("string");
+    expect(persisted.smsConsentAt).not.toBe("1999-01-01T00:00:00.000Z");
+    expect(Number.isNaN(Date.parse(persisted.smsConsentAt as string))).toBe(false);
 
     expect(recordOptIn).toHaveBeenCalledTimes(1);
     const [, phone, , source] = recordOptIn.mock.calls[0] as [unknown, string, unknown, string];
@@ -128,6 +130,16 @@ describe("partner-inquiries route SMS consent persistence", () => {
     expect(persisted.smsConsent).toBe(false);
     expect(persisted.smsConsentAt).toBeUndefined();
 
+    expect(recordOptIn).not.toHaveBeenCalled();
+  });
+
+  it("strips a client-supplied smsConsentAt when consent is withheld", async () => {
+    const res = await postWith(makeRow({ smsConsent: false, smsConsentAt: "2026-07-25T00:00:00.000Z" }));
+    expect(res.status).toBe(200);
+
+    const persisted = lastPersistedInquiry();
+    expect(persisted.smsConsent).toBe(false);
+    expect(persisted.smsConsentAt).toBeUndefined();
     expect(recordOptIn).not.toHaveBeenCalled();
   });
 

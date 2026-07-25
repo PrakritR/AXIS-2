@@ -150,16 +150,12 @@ export async function POST(req: Request) {
     // tricked by a truthy non-boolean; stamp the decision time for provable
     // consent later. An absent/unchecked box persists as `false` (no SMS).
     const smsConsent = incoming.smsConsent === true;
-    const smsConsentAt = smsConsent
-      ? typeof incoming.smsConsentAt === "string" && incoming.smsConsentAt.trim()
-        ? incoming.smsConsentAt
-        : new Date().toISOString()
-      : undefined;
+    const smsConsentAt = smsConsent ? new Date().toISOString() : undefined;
     const row: Record<string, unknown> = {
       ...incoming,
       id,
       smsConsent,
-      ...(smsConsentAt ? { smsConsentAt } : {}),
+      smsConsentAt,
       status: typeof incoming.status === "string" && incoming.status.trim() ? incoming.status : "pending",
       createdAt:
         typeof incoming.createdAt === "string" && incoming.createdAt.trim()

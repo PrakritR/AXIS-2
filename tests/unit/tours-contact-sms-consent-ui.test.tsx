@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { SmsConsentCheckbox } from "@/app/(public)/rent/tours-contact/page";
+import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 
 afterEach(cleanup);
 
