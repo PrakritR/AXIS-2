@@ -7,6 +7,8 @@ import {
   type ResidentSmsLinkKind,
 } from "@/lib/claw-resident-links";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
+import { sendPushToUser } from "@/lib/push-notifications.server";
+import { inboxDeepLinkForRole } from "@/lib/platform/parity";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   resolveChannels,
@@ -488,6 +490,39 @@ export async function deliverPortalInboxMessage(
         unread: true,
         outbound: false,
       });
+    }
+
+    // Push notification, best-effort. Generic payload (sender name only) — these
+    // messages can carry sensitive lease/payment details. Mirrors the interactive
+    // send route so cron/scheduled/agent sends notify the same way.
+    try {
+      const missingIdEmails = recipients.filter((r) => !r.userId).map((r) => r.email);
+      const resolvedIds = new Map<string, string>();
+      if (missingIdEmails.length > 0) {
+        const { data: resolvedProfiles } = await db
+          .from("profiles")
+          .select("id, email")
+          .in("email", missingIdEmails);
+        for (const p of resolvedProfiles ?? []) {
+          const email = String(p.email ?? "").trim().toLowerCase();
+          if (email) resolvedIds.set(email, p.id as string);
+        }
+      }
+      // ponytail: unbounded Promise.all — fine for direct/scheduled sends; chunk
+      // it if a "broadcast to all residents" send ever fans out to a large portfolio.
+      await Promise.all(
+        recipients.map((r) => {
+          const uid = r.userId ?? resolvedIds.get(r.email);
+          if (!uid) return Promise.resolve();
+          return sendPushToUser(uid, {
+            title: `New message from ${fromName}`,
+            body: "You have a new message in your PropLane inbox.",
+            url: inboxDeepLinkForRole(r.role),
+          }).catch(() => {});
+        }),
+      );
+    } catch {
+      /* non-critical — no-ops when FCM is not configured */
     }
   }
 
