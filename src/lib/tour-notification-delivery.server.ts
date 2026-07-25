@@ -230,7 +230,7 @@ export async function notifyManagerTourRequest(
 }
 
 
-/** Text the tour guest via the resident SMS channel (Claw shared line). */
+/** Text the tour guest via the resident SMS channel (unified transport). */
 async function textTourGuest(args: { guestPhone: string | null; text: string }): Promise<void> {
   const phone = (args.guestPhone ?? "").trim();
   if (!phone) return;

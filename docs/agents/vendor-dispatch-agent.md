@@ -61,7 +61,8 @@ resident's per-work-order `entryPermission`/`entryNotes` from intake).
 indexes). Both channels share one session + one vendor inbox thread (`thread_type:
 "vendor_agent"`): inbound SMS (`/api/webhooks/twilio/sms` — Twilio signature over
 `TWILIO_WEBHOOK_URL`/derived origin, fail-closed on Vercel, per-phone rate limit, STOP
-unbinds the number + sets `profiles.sms_opt_out_at` without killing the in-app thread,
+unbinds the number + sets `profiles.sms_opt_out_at` AND writes the `sms_consent` ledger
+(unified opt-out — see `docs/agents/sms-system.md`) without killing the in-app thread,
 unknown numbers silently dropped, empty TwiML + `after()` turn) and in-app replies
 (`send-inbox-message` thread-append hook, owner-only, short-circuits normal fan-out).
 `runVendorAgentSessionTurn` (`src/lib/agent/vendor-agent.server.ts`) enforces a
@@ -79,7 +80,9 @@ turn as `vendor-agent-turn` grouped by session id.
 `normalizeE164` in `src/lib/phone-e164.ts`, re-exported from `src/lib/twilio.ts`),
 `preferred_language`,
 `sms_consent_at` (vendor-granted in settings; a manager can never consent for them),
-`sms_opt_out_at` (STOP) — profiles is canonical for the agent; the directory row keeps a
+`sms_opt_out_at` (STOP) — opt-out state is read via the unified `isPhoneOptedOut`
+(profiles + the `sms_consent` ledger, global supersede — see
+`docs/agents/sms-system.md`); the directory row keeps a
 display copy + pre-signup `preferredLanguage`/phone from the invite modal.
 
 **Deploy**: `npm run db:push` for `20260715120000` (vendor_dispatch), `20260715130000`
