@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentRegistry } from "@/lib/tools";
@@ -181,5 +181,21 @@ describe("personas are role-scoped", () => {
   it("manager persona allows lease config updates inside the Lease modal", () => {
     expect(SYSTEM_PROMPT).toContain("update_property_lease_config");
     expect(SYSTEM_PROMPT).toMatch(/Lease modal/i);
+  });
+});
+
+describe("assistant reliability — no generic dead-end errors", () => {
+  const banned = "The assistant ran into an error. Please try again.";
+
+  it("agent API routes and confirm gate never return the banned string", () => {
+    const agentDir = join(repoRoot, "src/app/api/agent");
+    const files = readdirSync(agentDir)
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => join(agentDir, f));
+    files.push(join(repoRoot, "src/lib/agent/pending-action-decision.ts"));
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toContain(banned);
+    }
   });
 });

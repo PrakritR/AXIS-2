@@ -9,6 +9,7 @@ import {
   HOUSING_SEARCH_FILTERS_SCHEMA,
   searchPublicHousing,
 } from "@/lib/tools/domains/public-housing-search";
+import { assistantTurnErrorResponse } from "@/lib/agent/assistant-turn-error";
 
 export const runtime = "nodejs";
 
@@ -132,6 +133,7 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error("[agent/housing-search] failed:", e);
-    return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    const { body, status } = assistantTurnErrorResponse(e);
+    return NextResponse.json(body, { status });
   }
 }
