@@ -25,7 +25,7 @@ for the checklist and registries that keep browser and app behavior aligned.
 
 | Flow | Web | iOS / Android app |
 | --- | --- | --- |
-| **Manager subscription** (Pro / Business) | Stripe Checkout — card or Apple Pay | Same — choose **Apple Pay** or card in embedded checkout |
+| **Manager subscription** (Pro / Business) | Stripe Checkout — card or Apple Pay | **Apple In-App Purchase** (StoreKit via RevenueCat) on iOS — never a web purchase link (App Store 3.1.1); see [`docs/agents/apple-iap.md`](agents/apple-iap.md) |
 | **Resident rent & fees** | Bank (ACH), card (**Apple Pay / Google Pay** or a typed card), or Link via Stripe | Bank (ACH) or card via Stripe — **no Link**, and the Apple Pay / Google Pay hint is hidden |
 
 Per-surface pay methods come from `residentPaymentMethodsForSurface()` (`src/lib/platform/resident-payments.ts`); the app drops Link. The card option advertises the wallets on the web only — Apple Pay inside the WebView depends on native entitlement, which is out of scope for the payments work. Apple Pay setup: [`docs/stripe-apple-pay-payments.md`](stripe-apple-pay-payments.md) (rent + application fees), [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md) (subscriptions).
@@ -401,6 +401,9 @@ This app already includes genuine native features — **push notifications** and
 - Provide a demo reviewer account (resident + manager) in App Store Connect.
 - Rent payments via Stripe are fine — they're real-world services, exempt from
   Apple's in-app-purchase requirement (which applies only to digital goods).
+  The manager SaaS subscription is NOT exempt: it was rejected under Guideline
+  3.1.1 and is bought in-app via StoreKit/RevenueCat on iOS — see
+  [`docs/agents/apple-iap.md`](agents/apple-iap.md).
 
 ---
 

@@ -7,7 +7,8 @@ The iOS app was rejected under **App Store Guideline 3.1.1**: the manager SaaS
 plan the app unlocks was not purchasable via In-App Purchase. The fix is a real
 StoreKit purchase path for the manager subscription, on **RevenueCat's Capacitor
 SDK**, wired into the SAME entitlement spine Stripe/admin/waiver/trial already
-share. Full background + captain decisions: `firstmate/data/ios-iap-plan/report.md`.
+share. Full background + captain decisions: `firstmate/data/ios-iap-plan/report.md`
+(a local planning artifact on the primary machine, not tracked in this repo).
 
 **Captain-decided parameters (do not re-litigate):** RevenueCat as client +
 receipt validation + webhook layer; **absorb** pricing (same price as web, Apple
@@ -54,7 +55,7 @@ the **pure** `interpretRevenueCatWebhookEvent` (`src/lib/manager-apple-webhook.t
 
 | Event | Action |
 | --- | --- |
-| INITIAL_PURCHASE / RENEWAL / PRODUCT_CHANGE / UNCANCELLATION / SUBSCRIPTION_EXTENDED | grant while coverage window (expiry or grace) is open |
+| INITIAL_PURCHASE / RENEWAL / PRODUCT_CHANGE / UNCANCELLATION / SUBSCRIPTION_EXTENDED | grant while coverage window (expiry or grace) is open — PRODUCT_CHANGE grants the `new_product_id` tier (`product_id` is the old one) |
 | CANCELLATION (auto-renew off) | keep access until the period actually ends |
 | BILLING_ISSUE (+ grace) | keep access while grace has not elapsed |
 | EXPIRATION | revoke |
@@ -101,7 +102,10 @@ is unchanged. It configures RevenueCat with `user.id`, fetches offerings
 (required by App Review). Server entitlement is granted by the webhook, so the UI
 polls `/api/manager/subscription` after a purchase/restore. Client wrapper:
 `src/lib/native/revenuecat-client.ts` (lazy-imports `@revenuecat/purchases-capacitor`,
-no-op off-iOS — same pattern as `push-client.ts`).
+no-op off-iOS — same pattern as `push-client.ts`). The native tier paywall
+(`portal-tier-paywall.tsx`) now links locked users to the in-app plan page
+(where the IAP surface lives) instead of showing a dead-end notice — still no
+price/subscribe copy or web purchase link on native.
 
 ## Environment variables (NO secrets committed)
 
@@ -115,8 +119,7 @@ Add to `.env` locally and Vercel (and GitHub Actions for the native build):
 
 All three unset ⇒ IAP is dormant (client is a no-op, reconciler skips, webhook
 returns 500 until configured); web/Stripe entitlement is completely unaffected.
-`.env.example` is permission-blocked in this worktree — add the three keys there
-too when unblocked.
+All three are documented in `.env.example` (Optional section).
 
 ## External setup still required (not code)
 

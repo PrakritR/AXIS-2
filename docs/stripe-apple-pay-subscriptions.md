@@ -1,6 +1,6 @@
 # Apple Pay for manager subscriptions
 
-Manager **Pro** and **Business** subscriptions use **Stripe Checkout** (embedded on pricing / plan pages). Apple Pay is enabled through Stripe’s **dynamic payment methods** — the same checkout flow serves web, iOS app WebView, and Safari.
+Manager **Pro** and **Business** subscriptions use **Stripe Checkout** (embedded on pricing / plan pages) **on the web**. Apple Pay is enabled through Stripe’s **dynamic payment methods**. Inside the iOS app, the manager subscription is bought via **Apple In-App Purchase**, not Stripe — see [`docs/agents/apple-iap.md`](agents/apple-iap.md); this document covers the web checkout only.
 
 ## Architecture
 
@@ -51,7 +51,7 @@ Typical production domains for Axis:
 | --- | --- |
 | `localhost` | Not available (use Stripe test card `4242…`) |
 | Safari on macOS/iOS (HTTPS) | Yes, when domain is registered |
-| Axis iOS app (Capacitor WebView) | Yes, same checkout after Vercel deploy + domain registration |
+| Axis iOS app (Capacitor WebView) | N/A — the app buys the manager plan via Apple IAP, not Stripe checkout ([`docs/agents/apple-iap.md`](agents/apple-iap.md)) |
 | Stripe test mode | Apple Pay test wallet in Safari |
 
 1. Open `/partner/pricing` or `/portal/plan` on **Safari** (signed in for portal upgrade).
@@ -60,14 +60,13 @@ Typical production domains for Axis:
 
 ## Web + native
 
-Subscription UI is shared (see `docs/web-and-native-parity.md`). Deploy to Vercel — the iOS/Android app picks up Apple Pay on checkout automatically; no App Store rebuild unless you change native shell code.
+The Stripe subscription checkout is a **web-only** surface: on iOS the plan page shows the StoreKit/RevenueCat purchase surface instead, and never a web purchase link (App Store 3.1.1 — [`docs/agents/apple-iap.md`](agents/apple-iap.md)). Deploy to Vercel to ship web checkout changes; no App Store rebuild unless you change native shell code.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
 | Only card fields, no Apple Pay | Enable Apple Pay in Dashboard; run domain setup script; use Safari/HTTPS |
-| Apple Pay on web but not app | Register the same domain the WebView loads (`www.axis-seattle-housing.com`) |
 | `payment_method_types` in code | Remove it — use `buildManagerSubscriptionCheckoutBase()` only |
 
 ## Related docs
