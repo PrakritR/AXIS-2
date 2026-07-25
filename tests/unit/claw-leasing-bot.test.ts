@@ -103,7 +103,7 @@ describe("claw leasing intent", () => {
     }
   });
 
-  it("keeps the shared-line transport on the Claw agent number while Claw is primary", () => {
+  it("keeps the shared-line transport on the Claw agent number when the Claw fallback is engaged", () => {
     // `managerContactSmsPhoneForPublicCta` still backs the PropLane SMS
     // transport (`proplane-sms-transport.server.ts`) and manager work-number
     // UI, so it keeps collapsing everything onto the shared line. Public
