@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
@@ -55,12 +55,14 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId,
   onUpdated,
   showToast,
+  sectionActions,
 }: {
   sub: ManagerListingSubmissionV1;
   saveTarget: QuestionsSaveTarget;
   managerUserId: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
+  sectionActions?: ReactNode;
 }) {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -117,6 +119,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
         }
         contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
       >
+        {sectionActions}
         {hasPreview ? (
           <div className="space-y-2">
             {RENTAL_APPLICATION_SECTIONS.map((section) => {

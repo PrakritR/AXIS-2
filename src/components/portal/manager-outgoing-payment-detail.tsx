@@ -24,6 +24,7 @@ import {
   updateManagerWorkOrder,
 } from "@/lib/manager-work-orders-storage";
 import { parseMoneyAmount } from "@/lib/parse-money";
+import { generateWorkOrderPaymentReference } from "@/lib/payment-reference";
 import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
@@ -71,6 +72,9 @@ export function ManagerOutgoingPaymentDetail({
   const [busy, setBusy] = useState(false);
 
   const canPayWithSelected = managerCanPayOutgoingRowWithMethod(row, paymentMethod);
+  const paymentReference = workOrder
+    ? workOrder.paymentReference?.trim() || generateWorkOrderPaymentReference(workOrder.id)
+    : null;
 
   const submitPay = async () => {
     if (!workOrder) {
@@ -152,8 +156,15 @@ export function ManagerOutgoingPaymentDetail({
         <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
           <p className="text-xs font-semibold">Pay with Zelle</p>
           <p className="mt-1 text-sm leading-relaxed">
-            Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Include the work order
-            title in the memo.
+            Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>.
+            {paymentReference ? (
+              <>
+                {" "}
+                Put <span className="font-mono font-medium">{paymentReference}</span> in the memo.
+              </>
+            ) : (
+              <> Include the work order title in the memo.</>
+            )}
           </p>
         </div>
       ) : null}
@@ -162,8 +173,15 @@ export function ManagerOutgoingPaymentDetail({
         <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
           <p className="text-xs font-semibold">Pay with Venmo</p>
           <p className="mt-1 text-sm leading-relaxed">
-            Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Include the property and
-            work order in the note.
+            Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>.
+            {paymentReference ? (
+              <>
+                {" "}
+                Put <span className="font-mono font-medium">{paymentReference}</span> in the note.
+              </>
+            ) : (
+              <> Include the property and work order in the note.</>
+            )}
           </p>
         </div>
       ) : null}

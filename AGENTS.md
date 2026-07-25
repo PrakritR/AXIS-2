@@ -454,6 +454,9 @@ an explicit captain decision.
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
 Git**. It is `production`; don't change it.
 
+See **`docs/agents/deployment-workflow.md`** for the branch ladder every agent
+must follow.
+
 ## Production push also ships iOS (TestFlight / Xcode)
 
 Every push to `production` must update **both** the live website **and** the
