@@ -32,8 +32,6 @@ export function Modal({
   children: ReactNode;
   /** Sticky footer below the scrollable body (action buttons, etc.). */
   footer?: ReactNode;
-  /** Tighter spacing/typography for compact modals (destructured above). */
-  dense?: boolean;
   /** Width / layout overrides merged onto the default glass panel shell. */
   panelClassName?: string;
   /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
