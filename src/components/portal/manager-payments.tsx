@@ -28,7 +28,6 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerPaymentSetupModal } from "@/components/portal/manager-payment-setup-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
@@ -213,14 +212,18 @@ export function ManagerPayments() {
       }
       if (connect === "done") {
         setBankLinkBanner(true);
+        showToast("Bank account linked. You're ready to receive resident payments.");
+      } else if (connect === "refresh") {
+        showToast("Setup link expired. Open Payment setup to try again.");
       }
-      // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
+      window.history.replaceState({}, "", `${portalBase}/payments`);
+      window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
       return;
     }
     if (payouts === "1") {
       window.location.replace(`${portalBase}/payments`);
     }
-  }, [portalBase]);
+  }, [portalBase, showToast]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -442,12 +445,6 @@ export function ManagerPayments() {
               Reminders
             </Button>
           ) : null}
-          <PortalStripeConnectPanel
-            basePath={portalBase}
-            variant="header"
-            onConnectDone={() => setBankLinkBanner(true)}
-            onOpenPaymentSetup={() => setPaymentSetupOpen(true)}
-          />
           <Button
             type="button"
             variant="outline"

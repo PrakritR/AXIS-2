@@ -465,7 +465,7 @@ export function ManagerPaymentSetupModal({
 
   return (
     <>
-      <Modal open={open} title="Link payment" onClose={onClose} assistantStrip={false}>
+      <Modal open={open} title="Payment setup" onClose={onClose} assistantStrip={false}>
         <div className="space-y-3">
           {loading ? <p className="text-sm text-muted">Loading…</p> : null}
           <HubRow
