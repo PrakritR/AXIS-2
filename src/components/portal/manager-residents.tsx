@@ -1232,9 +1232,15 @@ export function ManagerResidents({
       setArSaving(true);
       try {
         appendManagerApplicationRow(nextRow);
-        const persisted = await upsertApplicationRowToServerAwait(nextRow);
+        const persisted = await upsertApplicationRowToServerAwait(nextRow, {
+          existingResidentOnboarding: { sendWelcomeEmail: arSendWelcome },
+        });
         if (!persisted.ok) {
-          showToast(persisted.error ?? "Could not save resident to the server.");
+          if (persisted.mailtoHref) {
+            const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+            openMailtoHref(persisted.mailtoHref);
+          }
+          showToast(persisted.error ?? "Could not complete resident onboarding.");
           return;
         }
         recordApprovedApplicationCharges(nextRow, userId ?? null);
@@ -1246,41 +1252,24 @@ export function ManagerResidents({
           body: JSON.stringify({
             sessionId: "81cbea",
             location: "manager-residents.tsx:saveManualResident",
-            message: "manual resident persisted before onboard",
-            data: { axisId, sendWelcome: arSendWelcome, serverOk: persisted.ok },
-            hypothesisId: "D",
+            message: "single-request onboarding complete",
+            data: {
+              axisId,
+              welcomeEmailSent: persisted.welcomeEmailSent,
+              leaseId: persisted.leaseId,
+            },
+            hypothesisId: "E",
             timestamp: Date.now(),
-            runId: "post-fix-v2",
+            runId: "post-fix-v3",
           }),
         }).catch(() => {});
         // #endregion
 
-        const response = await fetch("/api/portal/onboard-existing-resident", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ applicationId: axisId, sendWelcomeEmail: arSendWelcome, row: nextRow }),
-        });
-        const data = (await response.json()) as {
-          ok?: boolean;
-          error?: string;
-          mailtoHref?: string;
-          welcomeEmailSent?: boolean;
-        };
-
-        if (!response.ok || !data.ok) {
-          if (typeof data.mailtoHref === "string") {
-            const { openMailtoHref } = await import("@/lib/resident-welcome-email");
-            openMailtoHref(data.mailtoHref);
-          }
-          showToast(data.error ?? "Resident added, but the portal invite could not be sent automatically.");
-        } else {
-          showToast(
-            data.welcomeEmailSent
-              ? `Resident added. Portal setup email sent to ${arEmail.trim()}.`
-              : `Resident added. PropLane ID: ${axisId}`,
-          );
-        }
+        showToast(
+          persisted.welcomeEmailSent
+            ? `Resident added. Portal setup email sent to ${arEmail.trim()}.`
+            : `Resident added. PropLane ID: ${axisId}`,
+        );
 
         await Promise.all([
           syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
