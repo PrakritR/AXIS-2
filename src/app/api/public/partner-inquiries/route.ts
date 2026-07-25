@@ -6,6 +6,7 @@ import {
   managerMayHostPropertyTour,
 } from "@/lib/public-tour-booking-guard";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { recordOptIn } from "@/lib/sms-consent";
 import { notifyManagerTourRequest, notifyTenantTourRequestReceived } from "@/lib/tour-notification-delivery.server";
 import { loadManagerAutomationSettings } from "@/lib/payment-automation-settings";
 import { proposeTourConfirmation } from "@/lib/tour-proposal.server";
@@ -145,9 +146,20 @@ export async function POST(req: Request) {
 
     const incoming = body.row as Record<string, unknown> & PartnerInquiryRow;
     const id = typeof incoming.id === "string" && incoming.id.trim() ? incoming.id.trim() : crypto.randomUUID();
+    // Coerce the opt-in to a strict boolean so the send-time gate can never be
+    // tricked by a truthy non-boolean; stamp the decision time for provable
+    // consent later. An absent/unchecked box persists as `false` (no SMS).
+    const smsConsent = incoming.smsConsent === true;
+    const smsConsentAt = smsConsent
+      ? typeof incoming.smsConsentAt === "string" && incoming.smsConsentAt.trim()
+        ? incoming.smsConsentAt
+        : new Date().toISOString()
+      : undefined;
     const row: Record<string, unknown> = {
       ...incoming,
       id,
+      smsConsent,
+      ...(smsConsentAt ? { smsConsentAt } : {}),
       status: typeof incoming.status === "string" && incoming.status.trim() ? incoming.status : "pending",
       createdAt:
         typeof incoming.createdAt === "string" && incoming.createdAt.trim()
@@ -255,6 +267,15 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json({ error: writeError.message }, { status: 500 });
+    }
+
+    // Record the explicit opt-in into the sms_consent ledger the outbound send
+    // path reads. Only when the prospect checked the box AND gave a phone — an
+    // unchecked box records nothing, so no marketing/notification SMS is sent.
+    // A later inbound STOP still supersedes this opt-in (opted_out_at wins).
+    const consentPhone = textValue(row.phone);
+    if (smsConsent && consentPhone) {
+      await recordOptIn(db, consentPhone, null, "tours-contact").catch(() => undefined);
     }
 
     if (textValue(row.kind) === "tour") {

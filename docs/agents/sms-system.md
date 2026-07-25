@@ -222,6 +222,24 @@ Bought numbers must join the Messaging Service
 releases the number. A2P compliance pages: `/sms-terms` + the SMS opt-in
 section on `/privacy`.
 
+**Web opt-in consent (carrier-required).** The public tours-contact page
+(`/rent/tours-contact`) is what Twilio's A2P reviewer inspects, so every public
+form there that collects a phone renders a carrier-compliant SMS consent
+checkbox (`SmsConsentCheckbox` in `src/app/(public)/rent/tours-contact/page.tsx`):
+unchecked by default, optional (submitting without it still works), not bundled
+with any other agreement, naming sender + message types + STOP/HELP and linking
+`/privacy` + `/tos`. The decision is persisted two ways: `smsConsent` +
+`smsConsentAt` on the `PartnerInquiry` record (provable per-lead), and a positive
+opt-in written to the `sms_consent` ledger via `recordOptIn(..., "tours-contact")`
+in the `partner-inquiries` / `property-lead-message` routes. The load-bearing
+send gate is in `textTourGuest` (`tour-notification-delivery.server.ts`): a
+prospect is texted ONLY when `smsConsent === true`. Absence of a prior STOP is
+NOT consent — `sendResidentOutboundSms`/`sendSms` only check `isPhoneOptedOut`,
+which fails open, so a positive opt-in is required before any tour SMS. A later
+inbound STOP still supersedes the recorded opt-in. Coverage:
+`tests/unit/tour-guest-sms-consent.test.ts`,
+`tests/unit/partner-inquiry-sms-consent.test.ts`.
+
 ## Claw Messenger (production shared line, `+12053690702`)
 
 The live PropLane messaging system today is ONE shared agent line (Twilio

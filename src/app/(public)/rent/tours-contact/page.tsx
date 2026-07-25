@@ -509,7 +509,7 @@ function TourFlow({
                 return next;
               })
             }
-            onSubmit={async ({ name, email, phone, notes }) => {
+            onSubmit={async ({ name, email, phone, notes, smsConsent }) => {
               if (bookingTour) return;
               const errs: Record<string, string> = {};
               if (!name.trim()) errs.name = "Name is required.";
@@ -543,6 +543,8 @@ function TourFlow({
                     name: name.trim(),
                     email: email.trim(),
                     phone: phone.trim(),
+                    smsConsent,
+                    smsConsentAt: smsConsent ? new Date().toISOString() : undefined,
                     kind: "tour",
                     managerUserId: manager.userId,
                     tourGroupId,
@@ -844,12 +846,13 @@ function Step3({
   fieldErrors: Record<string, string>;
   returnAfterAuth: string;
   onFieldChange: (key: string) => void;
-  onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void | Promise<void>;
+  onSubmit: (payload: { name: string; email: string; phone: string; notes: string; smsConsent: boolean }) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const signInHref = residentSignInHref(returnAfterAuth);
   const createAccountHref = residentCreateAccountHref(returnAfterAuth);
 
@@ -923,10 +926,12 @@ function Step3({
         <textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />
       </Field>
 
+      <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="tour-sms-consent" />
+
       <button
         type="button"
         disabled={submitting}
-        onClick={() => onSubmit({ name, email, phone, notes })}
+        onClick={() => onSubmit({ name, email, phone, notes, smsConsent })}
         className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
         data-attr="tour-book-submit"
@@ -966,6 +971,7 @@ function MessageFlow({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isOther = topic === "Other";
 
@@ -1001,6 +1007,8 @@ function MessageFlow({
           name: n,
           email: em,
           phone: phone.trim() || undefined,
+          smsConsent,
+          smsConsentAt: smsConsent ? new Date().toISOString() : undefined,
           topic: resolvedTopic,
           body: msg,
         }),
@@ -1014,6 +1022,7 @@ function MessageFlow({
       setEmail("");
       setPhone("");
       setMessage("");
+      setSmsConsent(false);
       setTopic("");
       setOtherTopicDetail("");
       onSuccess();
@@ -1092,6 +1101,7 @@ function MessageFlow({
           <Field label="Message *">
             <textarea rows={4} placeholder="Tell us more so we can help…" className={`${inputCls} resize-none`} value={message} onChange={(e) => setMessage(e.target.value)} />
           </Field>
+          <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="message-sms-consent" />
         </div>
       </div>
 
@@ -1106,6 +1116,56 @@ function MessageFlow({
         {submitting ? "Sending…" : "Send message"}
       </button>
     </div>
+  );
+}
+
+/**
+ * Carrier-compliant (A2P 10DLC / CTIA) SMS opt-in control. Rendered on every
+ * public form that collects a phone number and can lead to an outbound text.
+ * Invariants required for carrier review — do not change without re-checking
+ * the campaign requirements:
+ *  - unchecked by default (never pre-selected),
+ *  - optional: submitting without it must still succeed,
+ *  - not bundled with any other agreement,
+ *  - names the sender + message types + frequency/rate + STOP/HELP,
+ *  - links to the Privacy Policy and Terms of Service.
+ */
+export function SmsConsentCheckbox({
+  checked,
+  onChange,
+  inputId,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  inputId: string;
+}) {
+  return (
+    <label
+      htmlFor={inputId}
+      data-attr="sms-consent-checkbox"
+      className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-accent/20 px-4 py-3"
+    >
+      <input
+        id={inputId}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/30"
+      />
+      <span className="text-xs leading-relaxed text-muted">
+        I agree to receive text messages from PropLane about tour scheduling and my rental inquiry at the
+        number provided. Message frequency varies. Message and data rates may apply. Reply STOP to opt out,
+        HELP for help. See our{" "}
+        <Link href="/privacy" target="_blank" className="font-semibold text-primary hover:underline">
+          Privacy Policy
+        </Link>{" "}
+        and{" "}
+        <Link href="/tos" target="_blank" className="font-semibold text-primary hover:underline">
+          Terms of Service
+        </Link>
+        . Consent is optional and not required to book a tour or send a message.
+      </span>
+    </label>
   );
 }
 
