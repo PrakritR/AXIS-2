@@ -447,7 +447,10 @@ export function ManagerPaymentsLedgerPanel({
     () =>
       rows.map((row) => ({
         id: row.id,
-        charge: row.chargeTitle,
+        charge:
+          row.manualPaymentReportedAt && row.manualPaymentChannel
+            ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
+            : row.chargeTitle,
         property: row.propertyName,
         payee: row.residentName,
         dueDate: row.dueDate,

@@ -3258,6 +3258,7 @@ export function ManagerAddListingForm({
                   {(
                     [
                       ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim()],
+                      ["holdingDeposit", "Holding deposit", (sub.holdingDeposit ?? "$100").replace(/^\$/, "").trim()],
                       ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
                       ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
                       ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
@@ -3289,6 +3290,10 @@ export function ManagerAddListingForm({
                     </GridField>
                   ))}
                 </div>
+                <p className="mt-2 text-xs text-muted">
+                  Holding deposit secures the application and is credited toward the security deposit when the resident is
+                  approved. Default is $100 when left blank on new listings.
+                </p>
                 <div className="mt-4 space-y-3 rounded-xl border border-border bg-card p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application options</p>
                   <label className="flex cursor-pointer items-start gap-3">
