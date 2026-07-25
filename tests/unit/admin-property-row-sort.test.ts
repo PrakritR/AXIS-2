@@ -47,4 +47,22 @@ describe("admin property row display sort", () => {
     expect(second.map((r) => r.listingId)).toEqual(first.map((r) => r.listingId));
     expect(compareAdminPropertyRowsForDisplay(first[0]!, first[1]!)).toBeLessThan(0);
   });
+
+  it("is stable when buildingName arrives on a later sync", () => {
+    const meadow = row({ adminRefId: "mgr-meadow", listingId: "mgr-meadow", buildingName: "Meadow Brook Village" });
+    const paseoEarly = row({
+      adminRefId: "mgr-paseo",
+      listingId: "mgr-paseo",
+      buildingName: "",
+      address: "41932 Paseo Padre Pkwy",
+      submission: { v: 1, buildingName: "Paseo House" } as AdminPropertyRow["submission"],
+    });
+    const paseoLate = row({ adminRefId: "mgr-paseo", listingId: "mgr-paseo", buildingName: "Paseo House" });
+    const brooklyn = row({ adminRefId: "mgr-brooklyn", listingId: "mgr-brooklyn", buildingName: "5257 Brooklyn" });
+
+    const earlyOrder = sortAdminPropertyRowsForDisplay([meadow, paseoEarly, brooklyn]).map((r) => r.listingId);
+    const lateOrder = sortAdminPropertyRowsForDisplay([meadow, paseoLate, brooklyn]).map((r) => r.listingId);
+    expect(earlyOrder).toEqual(lateOrder);
+    expect(earlyOrder).toEqual(["mgr-brooklyn", "mgr-meadow", "mgr-paseo"]);
+  });
 });

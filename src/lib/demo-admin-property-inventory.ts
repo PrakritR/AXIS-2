@@ -178,9 +178,10 @@ export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adm
     return Number.isFinite(x) ? x : fallback;
   };
   const id = str(row.adminRefId);
+  const buildingName = str(row.buildingName) || str(row.submission?.buildingName);
   return {
     adminRefId: id || `adm-${Date.now()}`,
-    buildingName: str(row.buildingName),
+    buildingName,
     unitLabel: str(row.unitLabel),
     address: str(row.address),
     zip: str(row.zip),
@@ -247,7 +248,11 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
   const rentNum = parseMonthlyRent(prop.rentLabel ?? "") ?? 0;
   return normalizeAdminPropertyRow({
     adminRefId: listingId,
-    buildingName: prop.buildingName?.trim() || prop.title?.trim() || "",
+    buildingName:
+      prop.buildingName?.trim() ||
+      prop.listingSubmission?.buildingName?.trim() ||
+      prop.title?.trim() ||
+      "",
     unitLabel: prop.unitLabel,
     address: prop.address,
     zip: prop.zip,

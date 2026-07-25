@@ -1,5 +1,6 @@
 import type { MockProperty } from "@/data/types";
 import type { AdminPropertyRow, AdminPropertyBucketIndex } from "@/lib/demo-admin-property-inventory";
+import { normalizeAdminPropertyRow, sortAdminPropertyRowsForDisplay } from "@/lib/demo-admin-property-inventory";
 import type { ManagerPendingPropertyRow } from "@/lib/demo-property-pipeline";
 
 export type ManagerPropertyRecordStatus =
@@ -163,7 +164,31 @@ export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): Proper
     const side = (snapshot.sideByUser[uid] ??= { requestChange: [], unlisted: [], rejected: [], drafts: [] });
     side[key].push(adminRow);
   }
+  for (const uid of Object.keys(snapshot.extrasByUser)) {
+    snapshot.extrasByUser[uid] = sortMockPropertiesForDisplay(snapshot.extrasByUser[uid] ?? []);
+  }
+  for (const key of ["requestChange", "unlisted", "rejected", "drafts"] as const) {
+    snapshot.sideGlobal[key] = sortAdminPropertyRowsForDisplay(
+      snapshot.sideGlobal[key].map((row) => normalizeAdminPropertyRow(row)),
+    );
+  }
+  for (const side of Object.values(snapshot.sideByUser)) {
+    side.requestChange = sortAdminPropertyRowsForDisplay(side.requestChange.map((row) => normalizeAdminPropertyRow(row)));
+    side.unlisted = sortAdminPropertyRowsForDisplay(side.unlisted.map((row) => normalizeAdminPropertyRow(row)));
+    side.rejected = sortAdminPropertyRowsForDisplay(side.rejected.map((row) => normalizeAdminPropertyRow(row)));
+    side.drafts = sortAdminPropertyRowsForDisplay(side.drafts.map((row) => normalizeAdminPropertyRow(row)));
+  }
   return snapshot;
+}
+
+function sortMockPropertiesForDisplay(list: MockProperty[]): MockProperty[] {
+  return [...list].sort((a, b) => {
+    const label = (p: MockProperty) =>
+      (p.buildingName || p.listingSubmission?.buildingName || p.title || p.address || p.id).trim();
+    const byLabel = label(a).localeCompare(label(b), undefined, { sensitivity: "base", numeric: true });
+    if (byLabel !== 0) return byLabel;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 export function statusForBucket(bucket: AdminPropertyBucketIndex): ManagerPropertyRecordStatus {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -34,7 +34,6 @@ import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
   adminPropertyRentDisplayLabel,
-  adminPropertyRowDisplayLabel,
   compareAdminPropertyRowsForDisplay,
   deleteManagerLiveListing,
   deleteManagerPropertyDraft,
@@ -669,7 +668,6 @@ export function ManagerHousePropertiesPanel({
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-  const lastPropertyOrderSigRef = useRef<string | null>(null);
 
   const propCount = useMemo(() => {
     void tick;
@@ -720,34 +718,6 @@ export function ManagerHousePropertiesPanel({
     );
     return [...mapped].sort((a, b) => compareAdminPropertyRowsForDisplay(a.row, b.row));
   }, [tick, scopeUserId, activeStage]);
-
-  useEffect(() => {
-    const sig = rows
-      .map(({ row }) => `${adminPropertyRowDisplayLabel(row)}|${row.listingId ?? row.adminRefId}`)
-      .join(";;");
-    if (sig === lastPropertyOrderSigRef.current) return;
-    const previous = lastPropertyOrderSigRef.current;
-    lastPropertyOrderSigRef.current = sig;
-    //#region agent log
-    fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-      body: JSON.stringify({
-        sessionId: "81cbea",
-        runId: previous ? "post-fix" : "initial",
-        hypothesisId: "H2",
-        location: "manager-house-properties-panel.tsx:rows",
-        message: previous ? "property order changed" : "property order settled",
-        data: {
-          previous: previous ? previous.split(";;") : null,
-          current: sig.split(";;"),
-          tick,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    //#endregion
-  }, [rows, tick]);
 
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
