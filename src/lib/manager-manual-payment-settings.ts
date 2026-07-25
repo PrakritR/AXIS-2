@@ -67,16 +67,26 @@ export async function loadManagerManualPaymentSettings(
   managerUserId: string,
 ): Promise<ManagerManualPaymentSettings> {
   const mode = await resolveStorageMode(db);
+  // Each branch passes a single string literal to `.select()` so postgrest-js's
+  // type-level query parser resolves a concrete row shape. A ternary produces a
+  // union of select strings, which the parser rejects as a ParserError and
+  // collapses `data` to an error type (see PR #100 `check` failure).
+  if (mode === "column") {
+    const { data, error } = await db
+      .from("manager_automation_settings")
+      .select("manual_payments")
+      .eq("manager_user_id", managerUserId)
+      .maybeSingle();
+    if (error) throw error;
+    return normalizeManagerManualPaymentSettings(data?.manual_payments);
+  }
   const { data, error } = await db
     .from("manager_automation_settings")
-    .select(mode === "column" ? "manual_payments, row_data" : "row_data")
+    .select("row_data")
     .eq("manager_user_id", managerUserId)
     .maybeSingle();
   if (error) throw error;
-  const raw =
-    mode === "column"
-      ? data?.manual_payments
-      : (data?.row_data as Record<string, unknown> | null)?.manualPayments;
+  const raw = (data?.row_data as Record<string, unknown> | null)?.manualPayments;
   return normalizeManagerManualPaymentSettings(raw);
 }
 
