@@ -51,10 +51,17 @@ export function PortalTierPaywall({
             </Link>
           </div>
 
-          {/* Native (iOS): neutral, non-actionable — no upgrade/subscribe/price/link */}
-          <p className="native-only text-sm leading-relaxed text-muted">
-            This section isn&apos;t available on your current plan.
-          </p>
+          {/* Native (iOS): the manager plan is now purchasable in-app via StoreKit
+              (App Store 3.1.1), so route the locked user to the billing page where
+              the IAP purchase surface lives — no price/subscribe copy here. */}
+          <div className="native-only space-y-4">
+            <p className="text-sm leading-relaxed text-muted">
+              This section isn&apos;t included on your current plan.
+            </p>
+            <Link href={MANAGER_PLAN_PORTAL_URL} className={primaryCta}>
+              View plans
+            </Link>
+          </div>
 
           <p className="text-xs text-muted">
             {/* Web keeps the "Already upgraded?" framing; native shows only the link. */}

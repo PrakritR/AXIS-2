@@ -31,7 +31,7 @@ For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL`
 ### Profiles and manager purchases
 
 - `profiles`: one row per user (`id` = `auth.users.id`), `role`, optional `manager_id`, `application_approved` for residents.
-- `manager_purchases`: written when Stripe checkout completes; links `stripe_checkout_session_id`, `email`, `manager_id`, and later `user_id` when the manager finishes password setup.
+- `manager_purchases`: written when Stripe checkout completes; links `stripe_checkout_session_id`, `email`, `manager_id`, and later `user_id` when the manager finishes password setup. (Apple In-App Purchase on iOS writes the same table via the RevenueCat webhook — see `docs/agents/apple-iap.md`.)
 
 ### Google sign-in
 
