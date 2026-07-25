@@ -9,7 +9,11 @@ import {
   inferSharedSpaceKind,
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
-import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
+import {
+  LEASE_TERM_OPTIONS,
+  LISTING_LEASE_TERM_OPTION_SET,
+  SHORT_TERM_LEASE_TERM,
+} from "@/lib/rental-application/lease-terms";
 import { roomIsDailyPriced } from "@/lib/room-pricing";
 import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -233,7 +237,10 @@ export type ManagerListingSubmissionV1 = {
   /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
   shortTermMoveInFee?: string;
   applicationFee: string;
-  /** Refundable deposit securing the application; credited toward security deposit on approval. */
+  /**
+   * One-time holding deposit collected with the application (defaults to $100 when blank).
+   * Not a recurring charge — see `holding_deposit` household charge kind.
+   */
   holdingDeposit?: string;
   /** When true, residents may apply to additional properties or rooms beyond their first application. */
   allowMultiplePropertyApplications?: boolean;
@@ -345,8 +352,6 @@ export type ManagerListingSubmissionV1 = {
   leaseTemplateDocName?: string;
 };
 
-const LEASE_TERM_OPTION_SET = new Set<string>(LEASE_TERM_OPTIONS);
-
 /** Fee fields must be filled with a dollar amount; use 0 when there is no charge. */
 export function isListingFeeAmountFilled(raw: string): boolean {
   const t = String(raw ?? "")
@@ -360,20 +365,46 @@ export function isListingFeeAmountFilled(raw: string): boolean {
 }
 
 export function formatLeaseTermsBodyFromAllowed(terms: string[]): string {
-  const clean = terms.filter((t) => LEASE_TERM_OPTION_SET.has(t));
+  const clean = terms.filter((t) => LISTING_LEASE_TERM_OPTION_SET.has(t));
   if (clean.length === 0) return "";
   return `Available lease lengths: ${clean.join(", ")}.`;
 }
 
-export function resolveAllowedLeaseTerms(
-  sub: Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody"> | null | undefined,
+export function syncShortTermLeaseTermInAllowed(
+  terms: string[],
+  shortTermRentalsAllowed: boolean,
 ): string[] {
-  const fromArray = (sub?.allowedLeaseTerms ?? []).filter((t) => LEASE_TERM_OPTION_SET.has(t));
-  if (fromArray.length > 0) return fromArray;
-  const body = sub?.leaseTermsBody?.trim() ?? "";
-  if (!body) return [];
-  const found = LEASE_TERM_OPTIONS.filter((opt) => body.toLowerCase().includes(opt.toLowerCase()));
-  return [...found];
+  const without = terms.filter((t) => t !== SHORT_TERM_LEASE_TERM);
+  if (!shortTermRentalsAllowed) return without;
+  return [...without, SHORT_TERM_LEASE_TERM];
+}
+
+export function resolveAllowedLeaseTerms(
+  sub:
+    | Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody" | "shortTermRentalsAllowed">
+    | null
+    | undefined,
+): string[] {
+  const fromArray = (sub?.allowedLeaseTerms ?? []).filter((t) => LISTING_LEASE_TERM_OPTION_SET.has(t));
+  let terms: string[];
+  if (fromArray.length > 0) {
+    terms = fromArray;
+  } else {
+    const body = sub?.leaseTermsBody?.trim() ?? "";
+    if (!body) {
+      terms = [];
+    } else {
+      const found = LEASE_TERM_OPTIONS.filter((opt) => body.toLowerCase().includes(opt.toLowerCase()));
+      terms = [...found];
+      if (
+        sub?.shortTermRentalsAllowed &&
+        body.toLowerCase().includes(SHORT_TERM_LEASE_TERM.toLowerCase())
+      ) {
+        terms = [...terms, SHORT_TERM_LEASE_TERM];
+      }
+    }
+  }
+  return syncShortTermLeaseTermInAllowed(terms, Boolean(sub?.shortTermRentalsAllowed));
 }
 
 export type ManagerListingServiceOption = {
@@ -1087,6 +1118,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
     shortTermDeposit: typeof sub.shortTermDeposit === "string" ? sub.shortTermDeposit : "",
     shortTermMoveInFee: typeof sub.shortTermMoveInFee === "string" ? sub.shortTermMoveInFee : "",
+    holdingDeposit: typeof sub.holdingDeposit === "string" ? sub.holdingDeposit : "",
     monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
     allowedLeaseTerms,
     leaseTermsBody,

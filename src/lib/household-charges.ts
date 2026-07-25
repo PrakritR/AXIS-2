@@ -1409,7 +1409,7 @@ function findHoldingDepositCharge(
 }
 
 /**
- * Ensures a pending holding-deposit line exists when the listing requires one.
+ * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
  */
 export function ensurePendingHoldingDepositCharge(input: {
   residentEmail: string;
@@ -2197,6 +2197,15 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   if (!propertyId) return false;
   const beforeIds = new Set(readAll().map((charge) => charge.id));
   const charge = ensurePendingApplicationFeeCharge({
+    residentEmail,
+    residentName: row.name || row.application?.fullLegalName || "Applicant",
+    residentUserId: null,
+    propertyId,
+    applicationId: row.id,
+    managerUserId: managerUserId ?? row.managerUserId ?? null,
+    propertyIdAliases,
+  });
+  ensurePendingHoldingDepositCharge({
     residentEmail,
     residentName: row.name || row.application?.fullLegalName || "Applicant",
     residentUserId: null,
