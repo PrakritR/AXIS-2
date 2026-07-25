@@ -531,6 +531,10 @@ export type PartnerInquiry = {
   email: string;
   phone: string;
   notes: string;
+  /** Explicit A2P/CTIA SMS opt-in captured on the tours-contact form. */
+  smsConsent?: boolean;
+  /** ISO timestamp of the opt-in decision, for provable consent later. */
+  smsConsentAt?: string;
   kind?: "partner" | "tour";
   managerUserId?: string;
   tourGroupId?: string;
