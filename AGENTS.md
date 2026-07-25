@@ -453,7 +453,11 @@ Do not re-enable preview deploys or remove the Ignored Build Step without an
 explicit captain decision.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. It is `main`; don't change it.
+Environments → Production → Branch Tracking**. It must be **`main`**; do not
+point production at a `production` git branch (that branch is retired).
+
+See **`docs/agents/deployment-workflow.md`** for the branch ladder every agent
+must follow.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
