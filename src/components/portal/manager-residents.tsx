@@ -98,6 +98,7 @@ import {
   residentCanViewLeaseRow,
   sendLeaseBackToManager,
   sendLeaseToResident,
+  syncLeasePipelineFromApplications,
   syncLeasePipelineFromServer,
   downloadLeaseFromRow,
   printLeaseAsPdf,
@@ -339,6 +340,10 @@ export function ManagerResidents({
   const [arMoveInFee, setArMoveInFee] = useState("");
   const [arSecurityDeposit, setArSecurityDeposit] = useState("");
   const [arNotes, setArNotes] = useState("");
+  const [arSendWelcome, setArSendWelcome] = useState(true);
+  const [arSignedLeaseFileName, setArSignedLeaseFileName] = useState("");
+  const [arSignedLeaseDataUrl, setArSignedLeaseDataUrl] = useState("");
+  const [arSaving, setArSaving] = useState(false);
 
   // Edit resident
   const [editResidentOpen, setEditResidentOpen] = useState(false);
@@ -1175,51 +1180,113 @@ export function ManagerResidents({
   }, [userId]);
 
   function saveManualResident() {
-    if (!arName.trim()) { showToast("Enter the resident's name."); return; }
-    if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
-    const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
-    const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
-    const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
-    const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
-    const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
-    const propLabel = arPropertyId
-      ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
-      : "—";
-    const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
-    const nextRow: DemoApplicantRow = {
-      id: axisId,
-      name: arName.trim(),
-      email: arEmail.trim(),
-      property: propLabel,
-      stage: "Active",
-      bucket: "approved",
-      detail: "",
-      assignedPropertyId: arPropertyId || undefined,
-      assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
-      signedMonthlyRent: rent ?? undefined,
-      managerUserId: userId ?? undefined,
-      manuallyAdded: true,
-      manualResidentDetails: {
-        moveInDate: arMoveInDate || undefined,
-        moveOutDate: arMoveOutDate || undefined,
-        monthlyUtilities: utilities ?? undefined,
-        moveInFee: moveInFee ?? undefined,
-        securityDeposit: secDeposit ?? undefined,
-        roomNumber: selectedRoomLabel || undefined,
-        leaseTerm: arLeaseTerm || undefined,
-        notes: arNotes.trim() || undefined,
-      },
-    };
-    appendManagerApplicationRow(nextRow);
-    recordApprovedApplicationCharges(nextRow, userId ?? null);
-    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-    setChargeTab("pending");
-    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
-    setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
-    setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
-    setAddResidentOpen(false);
-    setHcTick((n) => n + 1);
-    showToast(`Resident added. PropLane ID: ${axisId}`);
+    void (async () => {
+      if (arSaving) return;
+      if (!arName.trim()) { showToast("Enter the resident's name."); return; }
+      if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
+      const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
+      const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
+      const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
+      const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
+      const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+      const propLabel = arPropertyId
+        ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
+        : "—";
+      const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
+      const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
+      const nextRow: DemoApplicantRow = {
+        id: axisId,
+        name: arName.trim(),
+        email: arEmail.trim(),
+        property: propLabel,
+        stage: "Active",
+        bucket: "approved",
+        detail: "",
+        assignedPropertyId: arPropertyId || undefined,
+        assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+        signedMonthlyRent: rent ?? undefined,
+        managerUserId: userId ?? undefined,
+        manuallyAdded: true,
+        manualResidentDetails: {
+          moveInDate: arMoveInDate || undefined,
+          moveOutDate: arMoveOutDate || undefined,
+          monthlyUtilities: utilities ?? undefined,
+          moveInFee: moveInFee ?? undefined,
+          securityDeposit: secDeposit ?? undefined,
+          roomNumber: selectedRoomLabel || undefined,
+          leaseTerm: arLeaseTerm || undefined,
+          notes: arNotes.trim() || undefined,
+          signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
+          signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
+          signedLeaseUploadedAt,
+          externallySignedLease: true,
+        },
+      };
+      setArSaving(true);
+      try {
+        appendManagerApplicationRow(nextRow);
+        recordApprovedApplicationCharges(nextRow, userId ?? null);
+        syncLeasePipelineFromApplications(userId ?? null);
+        // #region agent log
+        fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
+          body: JSON.stringify({
+            sessionId: "81cbea",
+            location: "manager-residents.tsx:saveManualResident",
+            message: "manual resident saved locally",
+            data: { axisId, sendWelcome: arSendWelcome, hasSignedLeasePdf: Boolean(arSignedLeaseDataUrl.trim()) },
+            hypothesisId: "C",
+            timestamp: Date.now(),
+            runId: "post-fix",
+          }),
+        }).catch(() => {});
+        // #endregion
+
+        const response = await fetch("/api/portal/onboard-existing-resident", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ applicationId: axisId, sendWelcomeEmail: arSendWelcome }),
+        });
+        const data = (await response.json()) as {
+          ok?: boolean;
+          error?: string;
+          mailtoHref?: string;
+          welcomeEmailSent?: boolean;
+        };
+
+        if (!response.ok || !data.ok) {
+          if (typeof data.mailtoHref === "string") {
+            const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+            openMailtoHref(data.mailtoHref);
+          }
+          showToast(data.error ?? "Resident added, but the portal invite could not be sent automatically.");
+        } else {
+          showToast(
+            data.welcomeEmailSent
+              ? `Resident added. Portal setup email sent to ${arEmail.trim()}.`
+              : `Resident added. PropLane ID: ${axisId}`,
+          );
+        }
+
+        await Promise.all([
+          syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
+          syncLeasePipelineFromServer(userId ?? null, { force: true }),
+          syncHouseholdChargesFromServer(true),
+        ]);
+        setChargeTab("pending");
+        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
+        setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
+        setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
+        setArSignedLeaseFileName(""); setArSignedLeaseDataUrl(""); setArSendWelcome(true);
+        setAddResidentOpen(false);
+        setHcTick((n) => n + 1);
+        setLeaseTick((n) => n + 1);
+      } finally {
+        setArSaving(false);
+      }
+    })();
   }
 
   function openEditResidentModal() {
@@ -2667,7 +2734,10 @@ export function ManagerResidents({
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-muted">Creates an active resident record with a PropLane ID. No application or lease is generated.</p>
+          <p className="text-xs text-muted">
+            Onboard an existing tenant: creates an active resident record, treats the lease as already signed,
+            sets up payments, and can email portal instructions (no application or screening).
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Full name *</span>
@@ -2771,6 +2841,46 @@ export function ManagerResidents({
               </label>
             ) : null}
             <label className="col-span-2 flex flex-col gap-1 text-sm">
+              <span className="font-medium text-muted">Signed lease (PDF, optional)</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                className="text-sm text-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.type !== "application/pdf") {
+                    showToast("Please choose a PDF file.");
+                    e.target.value = "";
+                    return;
+                  }
+                  if (file.size > 3.5 * 1024 * 1024) {
+                    showToast("PDF too large (max 3.5 MB).");
+                    e.target.value = "";
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setArSignedLeaseDataUrl(reader.result as string);
+                    setArSignedLeaseFileName(file.name);
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+              {arSignedLeaseFileName ? (
+                <span className="text-xs text-muted">Attached: {arSignedLeaseFileName}</span>
+              ) : null}
+            </label>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={arSendWelcome}
+                onChange={(e) => setArSendWelcome(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              <span>Email portal setup instructions to the resident</span>
+            </label>
+            <label className="col-span-2 flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Notes</span>
               <Textarea
                 className="min-h-[72px]"
@@ -2781,8 +2891,10 @@ export function ManagerResidents({
             </label>
           </div>
           <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>Cancel</Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
+              {arSaving ? "Adding…" : "Add resident"}
+            </Button>
           </div>
         </div>
       </Modal>
