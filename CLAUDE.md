@@ -21,7 +21,7 @@ Before finishing features or promoting to production, follow
 
 1. **Reviews** — security-review + bugbot (+ cache/rendering/perf for UI/routes)
 2. **In-depth feature test** — full happy path + edge cases every time (not `/demo` alone)
-3. **Promote** — ff-only `prakrit` → `main` push (`main` is the production branch)
+3. **Promote** — ff-only `main` → `production` push (`production` is the production branch; `main` is dev)
 4. **Confirm** — Vercel production deploy **and** GitHub **iOS TestFlight** workflow
 
 Run `npm run ship:preflight` before promote.

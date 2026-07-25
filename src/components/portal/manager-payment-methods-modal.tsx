@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -145,7 +145,28 @@ export function ManagerPaymentMethodsModal({
   const noProperties = propertyOptions.length === 0;
 
   return (
-    <Modal open={open} title="Set payment methods" onClose={handleClose}>
+    <Modal
+      open={open}
+      title="Set payment methods"
+      onClose={handleClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            onClick={() => void save()}
+            disabled={saving || !propertyId}
+            data-attr="manager-payment-methods-save"
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4 text-sm">
         <p className="text-muted">Choose which payment methods residents can select for this property.</p>
         <label className="flex flex-col gap-1 text-sm">
@@ -178,21 +199,6 @@ export function ManagerPaymentMethodsModal({
               <span className="text-sm font-medium text-foreground">{RESIDENT_ACCEPTED_PAYMENT_METHOD_LABELS[method]}</span>
             </label>
           ))}
-        </div>
-        <div className="flex flex-wrap justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            onClick={() => void save()}
-            disabled={saving || !propertyId}
-            data-attr="manager-payment-methods-save"
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
         </div>
       </div>
     </Modal>

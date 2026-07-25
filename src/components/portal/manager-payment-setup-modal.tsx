@@ -233,7 +233,7 @@ function ChannelPaymentSetupModal({
                     <Button
                       type="button"
                       variant="outline"
-                      className="shrink-0 rounded-full"
+                      className="shrink-0 rounded-full px-4 text-[13px]"
                       onClick={() =>
                         void navigator.clipboard?.writeText(filterFrom).then(() => showToast("Copied."))
                       }
@@ -258,7 +258,7 @@ function ChannelPaymentSetupModal({
                     <Button
                       type="button"
                       variant="outline"
-                      className="shrink-0 rounded-full"
+                      className="shrink-0 rounded-full px-4 text-[13px]"
                       data-attr={`manager-payment-${channel}-inbox-copy`}
                       onClick={() =>
                         void navigator.clipboard?.writeText(paymentInboxAddress).then(() => showToast("Copied."))

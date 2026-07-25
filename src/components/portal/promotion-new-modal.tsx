@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
 import { PromotionForm, type PromotionDraft } from "@/components/portal/promotion-form";
 import {
@@ -168,7 +168,10 @@ export function PromotionNewModal({
       assistantStorageScopeKey="New promotion"
       footer={
         kind === "flyer" ? (
-          <div className="flex flex-wrap gap-2">
+          <ModalFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
             <Button
               type="button"
               onClick={onGenerateFlyer}
@@ -177,12 +180,12 @@ export function PromotionNewModal({
             >
               {flyerBusy ? "Generating…" : "Generate flyer"}
             </Button>
+          </ModalFooter>
+        ) : (
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               disabled={textBusy}
@@ -191,10 +194,7 @@ export function PromotionNewModal({
             >
               {textBusy ? "Generating…" : "Generate promotion text"}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-          </div>
+          </ModalFooter>
         )
       }
     >

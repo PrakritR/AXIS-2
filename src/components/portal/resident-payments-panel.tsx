@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
 import { ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -1211,6 +1211,48 @@ export function ResidentPaymentsPanel({
             : "Confirm payment"
       }
       panelClassName="max-w-lg"
+      footer={
+        payConfirm ? (
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={checkingManualPayment}
+              onClick={() => {
+                setPayConfirm(null);
+                setManualCheckError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={checkingManualPayment}
+              data-attr={
+                isStripeResidentPayMethod(payConfirm.method)
+                  ? "resident-payments-confirm-stripe"
+                  : "resident-payments-check-payment"
+              }
+              onClick={() => {
+                if (isStripeResidentPayMethod(payConfirm.method)) {
+                  void confirmStripePayment();
+                } else {
+                  void confirmManualPayment();
+                }
+              }}
+            >
+              {checkingManualPayment
+                ? "Checking…"
+                : isStripeResidentPayMethod(payConfirm.method)
+                  ? "Continue to Stripe"
+                  : "Check payment"}
+            </Button>
+          </ModalFooter>
+        ) : undefined
+      }
     >
       {payConfirm ? (
         <div className="space-y-4">
@@ -1272,44 +1314,6 @@ export function ResidentPaymentsPanel({
               {manualCheckError ? <p className="text-sm text-red-600">{manualCheckError}</p> : null}
             </>
           )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              disabled={checkingManualPayment}
-              onClick={() => {
-                setPayConfirm(null);
-                setManualCheckError(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={checkingManualPayment}
-              data-attr={
-                isStripeResidentPayMethod(payConfirm.method)
-                  ? "resident-payments-confirm-stripe"
-                  : "resident-payments-check-payment"
-              }
-              onClick={() => {
-                if (isStripeResidentPayMethod(payConfirm.method)) {
-                  void confirmStripePayment();
-                } else {
-                  void confirmManualPayment();
-                }
-              }}
-            >
-              {checkingManualPayment
-                ? "Checking…"
-                : isStripeResidentPayMethod(payConfirm.method)
-                  ? "Continue to Stripe"
-                  : "Check payment"}
-            </Button>
-          </div>
         </div>
       ) : null}
     </Modal>

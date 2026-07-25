@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ManagerLeaseEditorModal } from "@/components/portal/manager-lease-editor-modal";
@@ -27,6 +27,7 @@ export function ManagerPropertyLeasePanel({
   propertyId,
   propertyLabel,
   demoMode = false,
+  sectionActions,
 }: {
   sub: ManagerListingSubmissionV1;
   saveTarget: LeaseSaveTarget;
@@ -37,6 +38,7 @@ export function ManagerPropertyLeasePanel({
   propertyId?: string | null;
   propertyLabel?: string | null;
   demoMode?: boolean;
+  sectionActions?: ReactNode;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -70,6 +72,7 @@ export function ManagerPropertyLeasePanel({
         }
         contentClassName="px-4 py-3"
       >
+        {sectionActions}
         {preview.unsupportedJurisdiction ? (
           <p className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm text-muted">
             {preview.plainText}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
@@ -363,6 +363,22 @@ export function PortalCalendar({
       open={copyModalOpen}
       title="Copy schedule between houses"
       onClose={() => setCopyModalOpen(false)}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setCopyModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            disabled={!copySourceId || !copyDestId}
+            onClick={executeCopy}
+          >
+            Copy schedule
+          </Button>
+        </ModalFooter>
+      }
     >
       <div className="space-y-5">
         <p className="text-sm text-muted">
@@ -443,21 +459,6 @@ export function PortalCalendar({
             {copyRange === "week" ? " - this week" : copyRange === "future" ? " - future dates" : " - all dates"}
           </div>
         ) : null}
-
-        <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setCopyModalOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={!copySourceId || !copyDestId}
-            onClick={executeCopy}
-          >
-            Copy schedule
-          </Button>
-        </div>
       </div>
     </Modal>
   ) : null;

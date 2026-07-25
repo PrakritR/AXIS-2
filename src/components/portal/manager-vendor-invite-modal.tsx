@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { vendorInviteSubject } from "@/lib/vendor-invite-email";
 
@@ -82,7 +82,31 @@ export function ManagerVendorInviteModal({
   const managerName = managerLabel?.trim() || "Your property manager";
 
   return (
-    <Modal open={open} title="Send vendor invite" onClose={onClose} panelClassName="max-w-md" dense>
+    <Modal
+      open={open}
+      title="Send vendor invite"
+      onClose={onClose}
+      panelClassName="max-w-md"
+      dense
+      footer={
+        busy || !vendor ? undefined : (
+          <ModalFooter>
+            <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full"
+              disabled={busy}
+              data-attr="vendor-invite-send"
+              onClick={() => void send()}
+            >
+              {busy ? "Sending…" : "Send invite email"}
+            </Button>
+          </ModalFooter>
+        )
+      }
+    >
       {vendor ? (
         <div className="space-y-4 text-sm">
           <p className="text-muted">
@@ -141,20 +165,6 @@ export function ManagerVendorInviteModal({
             <p className="mt-1 leading-relaxed">
               The message explains how to sign up for PropLane, view work orders, and message {managerName}.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              className="rounded-full"
-              disabled={busy}
-              data-attr="vendor-invite-send"
-              onClick={() => void send()}
-            >
-              {busy ? "Sending…" : "Send invite email"}
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onClose}>
-              Cancel
-            </Button>
           </div>
         </div>
       ) : null}

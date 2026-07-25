@@ -296,11 +296,6 @@ export function ManagerApplicationQuestionsEditorModal({
             );
           })}
         </div>
-        <div className="mt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Close
-          </Button>
-        </div>
       </Modal>
 
       <ApplicationQuestionEditModal

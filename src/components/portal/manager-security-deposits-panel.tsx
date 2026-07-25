@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {Input, Select} from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -160,12 +160,30 @@ export function ManagerSecurityDepositsPanel() {
         </div>
       )}
 
-      <Modal open={Boolean(disposeTarget)} onClose={() => setDisposeTarget(null)} title="Dispose security deposit">
+      <Modal
+        open={Boolean(disposeTarget)}
+        onClose={() => setDisposeTarget(null)}
+        title="Dispose security deposit"
+        description={
+          disposeTarget
+            ? `Held balance ${centsToUsd(disposeTarget.amountHeldCents)} for ${disposeTarget.residentEmail}`
+            : undefined
+        }
+        footer={
+          disposeTarget ? (
+            <ModalFooter>
+              <Button variant="outline" onClick={() => setDisposeTarget(null)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => void submitDispose()} data-attr="deposit-dispose-submit">
+                Record disposition
+              </Button>
+            </ModalFooter>
+          ) : undefined
+        }
+      >
         {disposeTarget ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted">
-              Held balance {centsToUsd(disposeTarget.amountHeldCents)} for {disposeTarget.residentEmail}
-            </p>
             <div>
               <label className="text-xs font-semibold text-muted">Disposition type</label>
               <Select
@@ -198,14 +216,6 @@ export function ManagerSecurityDepositsPanel() {
                 Refund {centsToUsd(previewSplit.refundCents)} · Withhold {centsToUsd(previewSplit.withholdCents)}
               </p>
             ) : null}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setDisposeTarget(null)}>
-                Cancel
-              </Button>
-              <Button onClick={() => void submitDispose()} data-attr="deposit-dispose-submit">
-                Record disposition
-              </Button>
-            </div>
           </div>
         ) : null}
       </Modal>

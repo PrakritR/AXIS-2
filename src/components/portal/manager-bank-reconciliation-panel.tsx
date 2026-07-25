@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {Input, Select} from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -338,7 +338,21 @@ export function ManagerBankReconciliationPanel() {
         </>
       )}
 
-      <Modal open={accountModal} onClose={() => setAccountModal(false)} title="Add bank account">
+      <Modal
+        open={accountModal}
+        onClose={() => setAccountModal(false)}
+        title="Add bank account"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setAccountModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void createAccount()}>
+              Save account
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-muted">Name</label>
@@ -367,16 +381,24 @@ export function ManagerBankReconciliationPanel() {
               placeholder="1234"
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setAccountModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void createAccount()}>Save account</Button>
-          </div>
         </div>
       </Modal>
 
-      <Modal open={statementModal} onClose={() => setStatementModal(false)} title="Add bank statement">
+      <Modal
+        open={statementModal}
+        onClose={() => setStatementModal(false)}
+        title="Add bank statement"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setStatementModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void createStatement()}>
+              Save statement
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-muted">Statement date</label>
@@ -444,12 +466,6 @@ export function ManagerBankReconciliationPanel() {
             >
               Add line
             </Button>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setStatementModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void createStatement()}>Save statement</Button>
           </div>
         </div>
       </Modal>
