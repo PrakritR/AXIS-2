@@ -522,8 +522,8 @@ function writeSubmissionToRecordPayloads(
   const normalized = normalizeManagerListingSubmissionV1(submission);
   const rowData = asObject(rec.row_data);
   const propertyData = asObject(rec.property_data);
-  let nextRow: Record<string, unknown> | null = rowData ? { ...rowData } : null;
-  let nextProp: Record<string, unknown> | null = propertyData ? { ...propertyData } : null;
+  const nextRow: Record<string, unknown> | null = rowData ? { ...rowData } : null;
+  const nextProp: Record<string, unknown> | null = propertyData ? { ...propertyData } : null;
   if (nextRow) {
     if (asObject(nextRow.submission) || "submission" in nextRow) {
       nextRow.submission = normalized;

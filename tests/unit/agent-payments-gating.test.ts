@@ -87,25 +87,29 @@ function makeFakeDb(charges: HouseholdCharge[]) {
     from(table: string) {
       return {
         select() {
-          return {
-            eq() {
-              return {
-                order() {
-                  return {
-                    range: async (from: number, to: number) => {
-                      if (table === "portal_household_charge_records") {
-                        const page = charges
-                          .slice(from, to + 1)
-                          .map((c) => ({ row_data: c }));
-                        return { data: page, error: null };
-                      }
-                      return { data: [], error: null };
-                    },
-                  };
-                },
-              };
+          // Chainable builder covering both read shapes the executor uses:
+          // charge pages (.eq().order().range()) and the person-thread lookup
+          // in deliverPortalMessageThreadSide (.eq()×4.order().limit()).
+          const builder = {
+            eq: () => builder,
+            order: () => builder,
+            limit: async () => {
+              if (table === "portal_inbox_thread_records") {
+                return { data: inboxThreads.map((r) => ({ ...r })), error: null };
+              }
+              return { data: [], error: null };
+            },
+            range: async (from: number, to: number) => {
+              if (table === "portal_household_charge_records") {
+                const page = charges
+                  .slice(from, to + 1)
+                  .map((c) => ({ row_data: c }));
+                return { data: page, error: null };
+              }
+              return { data: [], error: null };
             },
           };
+          return builder;
         },
         insert: async (row: AuditRow) => {
           if (table === "audit_log") {
@@ -117,7 +121,11 @@ function makeFakeDb(charges: HouseholdCharge[]) {
           return { error: null };
         },
         upsert: async (row: Record<string, unknown>) => {
-          if (table === "portal_inbox_thread_records") inboxThreads.push({ ...row });
+          if (table === "portal_inbox_thread_records") {
+            const existing = inboxThreads.find((r) => r.id === row.id);
+            if (existing) Object.assign(existing, row);
+            else inboxThreads.push({ ...row });
+          }
           return { error: null };
         },
         update(vals: Partial<AuditRow>) {

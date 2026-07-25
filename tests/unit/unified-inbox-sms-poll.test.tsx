@@ -9,7 +9,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, cleanup, waitFor } from "@testing-library/react";
 
-vi.mock("@/lib/portal-inbox-storage", () => ({
+vi.mock("@/lib/portal-inbox-storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/portal-inbox-storage")>()),
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => [],

@@ -36,7 +36,8 @@ const THREADS = [
   },
 ];
 
-vi.mock("@/lib/portal-inbox-storage", () => ({
+vi.mock("@/lib/portal-inbox-storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/portal-inbox-storage")>()),
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => THREADS,
