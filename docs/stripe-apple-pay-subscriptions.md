@@ -40,10 +40,11 @@ Check validation status:
 node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs --validate-only
 ```
 
-Typical production domains for Axis:
+Typical production domains:
 
-- `www.axis-seattle-housing.com`
-- `axis-seattle-housing.com` (if you serve checkout on apex)
+- `prop-lane.space` (canonical origin — also what the app WebView loads)
+- `www.prop-lane.space`
+- `www.axis-seattle-housing.com` / `axis-seattle-housing.com` (legacy hosts, still live)
 
 ## Testing
 
@@ -67,7 +68,7 @@ Subscription UI is shared (see `docs/web-and-native-parity.md`). Deploy to Verce
 | Symptom | Fix |
 | --- | --- |
 | Only card fields, no Apple Pay | Enable Apple Pay in Dashboard; run domain setup script; use Safari/HTTPS |
-| Apple Pay on web but not app | Register the same domain the WebView loads (`www.axis-seattle-housing.com`) |
+| Apple Pay on web but not app | Register the same domain the WebView loads (`prop-lane.space`) |
 | `payment_method_types` in code | Remove it — use `buildManagerSubscriptionCheckoutBase()` only |
 
 ## Related docs
