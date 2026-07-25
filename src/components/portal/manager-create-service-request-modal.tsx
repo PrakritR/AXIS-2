@@ -405,7 +405,7 @@ export function ManagerCreateServiceRequestModal({
       onClose={onClose}
       title="Add add-on service"
       footer={
-        <div className="flex justify-start gap-2">
+        <>
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -421,7 +421,7 @@ export function ManagerCreateServiceRequestModal({
           >
             {busy ? "Saving…" : "Add add-on service"}
           </Button>
-        </div>
+        </>
       }
     >
       <div className="space-y-4">

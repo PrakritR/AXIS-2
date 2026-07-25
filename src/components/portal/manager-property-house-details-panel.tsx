@@ -170,15 +170,18 @@ export function ManagerPropertyHouseDetailsPanel({
           className="mt-1"
         />
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="primary" className="rounded-full" onClick={save}>
-          Save house details
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
-          Cancel
-        </Button>
-      </div>
     </div>
+  );
+
+  const editFooter = (
+    <>
+      <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
+        Cancel
+      </Button>
+      <Button type="button" variant="primary" className="rounded-full" onClick={save}>
+        Save house details
+      </Button>
+    </>
   );
 
   return (
@@ -216,7 +219,7 @@ export function ManagerPropertyHouseDetailsPanel({
         </div>
       </PortalCollapsibleSection>
 
-      <Modal open={modalOpen} title="House details" onClose={closeModal} panelClassName="max-w-2xl" hideHeaderClose>
+      <Modal open={modalOpen} title="House details" onClose={closeModal} panelClassName="max-w-2xl" footer={editFooter}>
         {editForm}
       </Modal>
     </>

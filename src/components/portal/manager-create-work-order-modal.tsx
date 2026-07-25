@@ -469,7 +469,7 @@ export function ManagerCreateWorkOrderModal({
       title={mode === "request" ? "Add work order" : "Log completed work"}
       panelClassName="max-w-lg"
       footer={
-        <div className="flex justify-start gap-2">
+        <>
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -482,7 +482,7 @@ export function ManagerCreateWorkOrderModal({
           >
             {busy ? "Saving…" : mode === "request" ? "Create work order" : "Save work order"}
           </Button>
-        </div>
+        </>
       }
     >
       <div className="space-y-4">

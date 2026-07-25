@@ -251,7 +251,22 @@ export function ApplicationQuestionEditModal({
       onClose={onClose}
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
-      hideHeaderClose
+      footer={
+        <>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            data-attr="application-question-save"
+            onClick={save}
+          >
+            Save
+          </Button>
+        </>
+      }
     >
       <div className="space-y-3">
         <ApplicationQuestionFields
@@ -261,20 +276,6 @@ export function ApplicationQuestionEditModal({
           onOptionsTextChange={onOptionsTextChange}
           error={error}
         />
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          className="rounded-full"
-          data-attr="application-question-save"
-          onClick={save}
-        >
-          Save
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
       </div>
     </Modal>
   );

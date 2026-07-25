@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 
 /**
  * In-app delete confirmation — same Modal shell as account deletion / other
@@ -37,7 +37,7 @@ export function ConfirmDeleteModal({
         if (!busy) onClose();
       }}
       footer={
-        <div className="flex flex-wrap justify-end gap-2">
+        <ModalFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
@@ -50,7 +50,7 @@ export function ConfirmDeleteModal({
           >
             {busy ? "Deleting…" : confirmLabel}
           </Button>
-        </div>
+        </ModalFooter>
       }
     >
       <p className="text-sm text-foreground">{description}</p>

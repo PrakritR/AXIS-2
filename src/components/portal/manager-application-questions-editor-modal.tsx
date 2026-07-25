@@ -226,7 +226,7 @@ export function ManagerApplicationQuestionsEditorModal({
 
   return (
     <>
-      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl" hideHeaderClose>
+      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
         {isBulkSave ? (
           <p className="mb-4 text-sm text-muted">
             These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
@@ -295,11 +295,6 @@ export function ManagerApplicationQuestionsEditorModal({
               </PortalCollapsibleEditRow>
             );
           })}
-        </div>
-        <div className="mt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Close
-          </Button>
         </div>
       </Modal>
 

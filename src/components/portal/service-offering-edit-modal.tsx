@@ -149,24 +149,26 @@ export function ServiceOfferingEditModal({
       onClose={onClose}
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
+      footer={
+        <>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            data-attr="service-offering-save"
+            onClick={save}
+          >
+            Save
+          </Button>
+        </>
+      }
     >
       <div className="space-y-3">
         <ServiceOfferingFields row={draft} onPatch={patch} />
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          className="rounded-full"
-          data-attr="service-offering-save"
-          onClick={save}
-        >
-          Save
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
       </div>
     </Modal>
   );

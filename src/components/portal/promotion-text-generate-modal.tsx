@@ -230,7 +230,10 @@ export function PromotionTextGenerateModal({
       panelClassName="max-w-lg"
       dense
       footer={
-        <div className="flex flex-wrap gap-2">
+        <>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             type="button"
             disabled={busy}
@@ -239,10 +242,7 @@ export function PromotionTextGenerateModal({
           >
             {busy ? "Generating…" : "Generate promotion text"}
           </Button>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
+        </>
       }
     >
       <PromotionTextComposer

@@ -221,14 +221,9 @@ export function ShareLeadLinkModal({
 
   const actionFooter =
     properties.length > 0 ? (
-      <div className="flex justify-start gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Close
-        </Button>
-        <Button type="button" variant="primary" className="rounded-full" disabled={propertyIds.length === 0} onClick={openSendPreview}>
-          Preview & send
-        </Button>
-      </div>
+      <Button type="button" variant="primary" className="rounded-full" disabled={propertyIds.length === 0} onClick={openSendPreview}>
+        Preview & send
+      </Button>
     ) : undefined;
 
   return (
