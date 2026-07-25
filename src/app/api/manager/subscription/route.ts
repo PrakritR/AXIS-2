@@ -9,6 +9,7 @@ import {
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
+import { isAppleBilledManagerPurchase } from "@/lib/manager-apple-purchase";
 import { getStripe } from "@/lib/stripe";
 import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
 import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
@@ -51,12 +52,16 @@ export async function GET() {
       /* Stripe not configured or transient error — serve last known DB state */
     }
 
-    const { tier, billing, stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
+    const { tier, billing, stripeSubscriptionId, appleOriginalTransactionId } =
+      await getManagerPurchaseSku(user.id);
     const stripeManaged = Boolean(stripeSubscriptionId);
+    // Apple-billed grant → the plan is managed in the App Store: on native we
+    // don't re-offer IAP, on web we hide Stripe checkout (report §3.4).
+    const appleManaged = isAppleBilledManagerPurchase(billing, appleOriginalTransactionId);
     const base = subscriptionJson(tier, billing);
     const missingTier = tier == null || String(tier).trim() === "";
     /** Treat missing tier row as Free in the plan UI when there is no paid Stripe subscription. */
-    const isFree = base.isFree || (missingTier && !stripeManaged);
+    const isFree = base.isFree || (missingTier && !stripeManaged && !appleManaged);
 
     let cancelAtPeriodEnd = false;
     let currentPeriodEnd: number | null = null;
@@ -82,6 +87,7 @@ export async function GET() {
       ...base,
       isFree,
       stripeManaged,
+      appleManaged,
       cancelAtPeriodEnd,
       currentPeriodEnd,
       scheduledDowngrade,
