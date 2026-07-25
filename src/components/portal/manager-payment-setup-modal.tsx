@@ -203,13 +203,7 @@ export function ManagerPaymentSetupModal({
           : "Venmo link";
 
   const footer =
-    pane === "hub" ? (
-      <div className="flex justify-end">
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Close
-        </Button>
-      </div>
-    ) : pane === "stripe" ? (
+    pane === "hub" ? undefined : pane === "stripe" ? (
       <div className="flex justify-end">
         <Button
           type="button"
