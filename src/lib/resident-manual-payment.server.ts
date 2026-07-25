@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { track } from "@/lib/analytics/posthog";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { chargePaymentReference } from "@/lib/manual-payment-instructions";
 import { canPayHouseholdChargeWithManualChannel } from "@/lib/platform/resident-payments";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 
@@ -101,12 +102,23 @@ export async function reportResidentManualPayment(
   const channelLabel = channel === "venmo" ? "Venmo" : "Zelle";
   const senderEmail = userEmail || "resident@axis.local";
   for (const managerUserId of managerIds) {
+    const detailLines = updated.map((charge) => {
+      const ref = chargePaymentReference(charge);
+      const amount = charge.balanceLabel?.trim() || charge.amountLabel?.trim() || "";
+      return `• ${charge.title} — ${amount} (reference ${ref})`;
+    });
     await deliverPortalInboxMessage(db, {
       senderUserId: input.userId,
       senderEmail,
       fromName: "Resident payment",
       subject: `${channelLabel} payment reported`,
-      text: `A resident reported sending ${updated.length === 1 ? "a payment" : `${updated.length} payments`} via ${channelLabel}. Please verify and mark the charge${updated.length === 1 ? "" : "s"} paid when received.`,
+      text: [
+        `A resident reported sending ${updated.length === 1 ? "a payment" : `${updated.length} payments`} via ${channelLabel}.`,
+        "",
+        ...detailLines,
+        "",
+        "Open Payments to verify and mark paid, or forward the receipt email to your PropPlane payments inbox for automatic matching.",
+      ].join("\n"),
       toUserIds: [managerUserId],
       deliverToPortalInbox: true,
       deliverViaEmail: false,

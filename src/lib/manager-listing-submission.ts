@@ -241,6 +241,7 @@ export type ManagerListingSubmissionV1 = {
    * One-time holding deposit collected with the application (defaults to $100 when blank).
    * Not a recurring charge — see `holding_deposit` household charge kind.
    */
+  /** Refundable deposit securing the application; credited toward security deposit on approval. */
   holdingDeposit?: string;
   /** When true, residents may apply to additional properties or rooms beyond their first application. */
   allowMultiplePropertyApplications?: boolean;

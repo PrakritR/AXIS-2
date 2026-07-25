@@ -7,6 +7,14 @@ export type ManagerManualPaymentSettings = {
   zelleContact: string;
   venmoPaymentsEnabled: boolean;
   venmoContact: string;
+  /** Secret token for payments+<token>@ inbound receipt matching. */
+  paymentInboxToken?: string;
+  /** When false, receipt emails are ignored even if forwarded to the inbox. */
+  receiptAutoMarkEnabled?: boolean;
+};
+
+export type ManagerManualPaymentSettingsView = ManagerManualPaymentSettings & {
+  paymentInboxAddress?: string;
 };
 
 export const DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS: ManagerManualPaymentSettings = {
@@ -14,6 +22,7 @@ export const DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS: ManagerManualPaymentSettin
   zelleContact: "",
   venmoPaymentsEnabled: false,
   venmoContact: "",
+  receiptAutoMarkEnabled: true,
 };
 
 export const MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT = "axis:manager-manual-payment-settings";
@@ -24,19 +33,27 @@ export function normalizeManagerManualPaymentSettings(raw: unknown): ManagerManu
   const venmoContact = sanitizePaymentContactInput(String(row.venmoContact ?? "")).trim();
   const zellePaymentsEnabled = row.zellePaymentsEnabled === true && zelleContact.length > 0;
   const venmoPaymentsEnabled = row.venmoPaymentsEnabled === true && venmoContact.length > 0;
+  const paymentInboxTokenRaw = String(row.paymentInboxToken ?? "").trim();
+  const paymentInboxToken = /^[a-zA-Z0-9_-]{8,24}$/.test(paymentInboxTokenRaw) ? paymentInboxTokenRaw : undefined;
   return {
     zellePaymentsEnabled,
     zelleContact: zellePaymentsEnabled ? zelleContact : "",
     venmoPaymentsEnabled,
     venmoContact: venmoPaymentsEnabled ? venmoContact : "",
+    ...(paymentInboxToken ? { paymentInboxToken } : {}),
+    receiptAutoMarkEnabled: row.receiptAutoMarkEnabled === false ? false : true,
   };
 }
 
 /** Browser-safe projection — same shape; contacts only when enabled. */
 export function managerManualPaymentSettingsPublic(
   settings: ManagerManualPaymentSettings,
-): ManagerManualPaymentSettings {
-  return normalizeManagerManualPaymentSettings(settings);
+  extras?: Pick<ManagerManualPaymentSettingsView, "paymentInboxAddress">,
+): ManagerManualPaymentSettingsView {
+  return {
+    ...normalizeManagerManualPaymentSettings(settings),
+    ...(extras?.paymentInboxAddress ? { paymentInboxAddress: extras.paymentInboxAddress } : {}),
+  };
 }
 
 type StorageMode = "column" | "row_data";
@@ -67,26 +84,16 @@ export async function loadManagerManualPaymentSettings(
   managerUserId: string,
 ): Promise<ManagerManualPaymentSettings> {
   const mode = await resolveStorageMode(db);
-  // Each branch passes a single string literal to `.select()` so postgrest-js's
-  // type-level query parser resolves a concrete row shape. A ternary produces a
-  // union of select strings, which the parser rejects as a ParserError and
-  // collapses `data` to an error type (see PR #100 `check` failure).
-  if (mode === "column") {
-    const { data, error } = await db
-      .from("manager_automation_settings")
-      .select("manual_payments")
-      .eq("manager_user_id", managerUserId)
-      .maybeSingle();
-    if (error) throw error;
-    return normalizeManagerManualPaymentSettings(data?.manual_payments);
-  }
   const { data, error } = await db
     .from("manager_automation_settings")
-    .select("row_data")
+    .select(mode === "column" ? "manual_payments, row_data" : "row_data")
     .eq("manager_user_id", managerUserId)
     .maybeSingle();
   if (error) throw error;
-  const raw = (data?.row_data as Record<string, unknown> | null)?.manualPayments;
+  const raw =
+    mode === "column"
+      ? data?.manual_payments
+      : (data?.row_data as Record<string, unknown> | null)?.manualPayments;
   return normalizeManagerManualPaymentSettings(raw);
 }
 

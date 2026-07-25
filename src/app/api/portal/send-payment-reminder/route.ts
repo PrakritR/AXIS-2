@@ -3,6 +3,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { track } from "@/lib/analytics/posthog";
 import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
+import { buildManualPaymentInstructionLines, buildPaymentReminderBody } from "@/lib/manual-payment-instructions";
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -169,7 +170,15 @@ export async function POST(req: Request) {
       String(body.subject ?? "").trim() || `Payment reminder: ${chargeTitle}`;
     const messageBody =
       String(body.text ?? "").trim() ||
-      buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
+      buildPaymentReminderBody({
+        residentName,
+        chargeTitle,
+        balanceDue,
+        dueDate,
+        propertyLabel,
+        managerName,
+        manualPaymentLines: buildManualPaymentInstructionLines(ownedCharge),
+      });
 
     // Always write Axis inbox when we have any email key (real or sandbox).
     if (inboxEmail) {
@@ -282,41 +291,6 @@ export async function POST(req: Request) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
-}
-
-function buildReminderBody({
-  residentName,
-  chargeTitle,
-  balanceDue,
-  dueDate,
-  propertyLabel,
-  managerName,
-}: {
-  residentName: string;
-  chargeTitle: string;
-  balanceDue: string;
-  dueDate: string;
-  propertyLabel: string;
-  managerName: string;
-}): string {
-  const lines = [
-    `Hi ${residentName},`,
-    "",
-    `This is a friendly reminder that your ${chargeTitle} payment is outstanding.`,
-  ];
-  if (balanceDue) lines.push(`Amount due: ${balanceDue}`);
-  if (dueDate) lines.push(`Due date: ${dueDate}`);
-  if (propertyLabel) lines.push(`Property: ${propertyLabel}`);
-  lines.push(
-    "",
-    "Please log in to your PropLane resident portal to make your payment at your earliest convenience.",
-    "",
-    "If you have any questions, please don't hesitate to reach out.",
-    "",
-    managerName,
-    "PropLane Portal",
-  );
-  return lines.join("\n");
 }
 
 async function deliverToPortalInbox({
