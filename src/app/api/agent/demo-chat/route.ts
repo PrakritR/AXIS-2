@@ -4,7 +4,7 @@ import { runAgentTurn } from "@/lib/agent/loop";
 import { sanitizeChatMessages, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { buildDemoAgentContext } from "@/lib/demo/demo-agent-context";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
-import { assistantTurnErrorResponse } from "@/lib/agent/assistant-turn-error";
+import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 export const runtime = "nodejs";
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply: result.reply, toolTrace: result.toolTrace });
   } catch (e) {
     console.error("[agent/demo-chat] turn failed:", e);
-    const { body, status } = assistantTurnErrorResponse(e);
-    return NextResponse.json(body, { status });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

@@ -12,7 +12,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
 import {
-  assistantTurnErrorResponse,
+  formatAgentChatUserError,
   PENDING_ACTION_SAVE_FAILED_NOTE,
 } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error("[agent/vendor-chat] turn failed:", e);
-    const { body, status } = assistantTurnErrorResponse(e);
-    return NextResponse.json(body, { status });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

@@ -18,7 +18,7 @@ import {
   isPromotionAssistantContext,
 } from "@/lib/agent/assistant-turn-context";
 import {
-  assistantTurnErrorResponse,
+  formatAgentChatUserError,
   PENDING_ACTION_SAVE_FAILED_NOTE,
 } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
@@ -167,7 +167,7 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     console.error("[agent/chat] turn failed:", e);
-    const { body, status } = assistantTurnErrorResponse(e);
-    return NextResponse.json(body, { status });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

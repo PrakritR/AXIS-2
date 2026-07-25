@@ -4,7 +4,7 @@ import { GENERAL_SYSTEM_PROMPT } from "@/lib/agent/general-system-prompt";
 import { applyChatAttachments, sanitizeChatMessages } from "@/lib/agent/chat-handler";
 import { TIER_MODELS } from "@/lib/agent/model";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
-import { assistantTurnErrorResponse } from "@/lib/agent/assistant-turn-error";
+import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 export const runtime = "nodejs";
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply: reply || "I'm not sure how to answer that — try asking about PropLane's features, pricing, or the live demo." });
   } catch (e) {
     console.error("[agent/general-chat] failed:", e);
-    const { body, status } = assistantTurnErrorResponse(e);
-    return NextResponse.json(body, { status });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

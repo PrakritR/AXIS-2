@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 /**
- * Dead-end copy — do not return this to users. Use {@link userFacingAssistantError}.
+ * Dead-end copy — do not return this to users. Use {@link formatAgentChatUserError}.
  */
 export const GENERIC_ASSISTANT_ERROR_DEAD_END =
   "The assistant ran into an error. Please try again." as const;
@@ -24,8 +24,7 @@ function attachmentOrContextHint(message: string): boolean {
   );
 }
 
-/** Map an internal failure to a safe, actionable user message (no secrets / stack traces). */
-export function userFacingAssistantError(error: unknown): AssistantTurnFailure {
+function mapAssistantTurnFailure(error: unknown): AssistantTurnFailure {
   if (error instanceof Anthropic.APIError) {
     if (error.status === 429) {
       return {
@@ -93,11 +92,21 @@ export function userFacingAssistantError(error: unknown): AssistantTurnFailure {
   };
 }
 
+/** Map an internal failure to a safe, actionable user message (no secrets / stack traces). */
+export function formatAgentChatUserError(error: unknown): AssistantTurnFailure {
+  return mapAssistantTurnFailure(error);
+}
+
+/** @deprecated Use {@link formatAgentChatUserError}. */
+export function userFacingAssistantError(error: unknown): AssistantTurnFailure {
+  return formatAgentChatUserError(error);
+}
+
 export function assistantTurnErrorResponse(error: unknown): {
   body: { error: string };
   status: number;
 } {
-  const { message, httpStatus } = userFacingAssistantError(error);
+  const { message, httpStatus } = formatAgentChatUserError(error);
   return { body: { error: message }, status: httpStatus };
 }
 

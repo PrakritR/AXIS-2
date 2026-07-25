@@ -198,4 +198,15 @@ describe("assistant reliability — no generic dead-end errors", () => {
       expect(source, file).not.toContain(banned);
     }
   });
+
+  it("portal chat routes use formatAgentChatUserError in catch blocks", () => {
+    for (const file of [
+      "src/app/api/agent/chat/route.ts",
+      "src/app/api/agent/resident-chat/route.ts",
+      "src/app/api/agent/vendor-chat/route.ts",
+    ]) {
+      const source = read(file);
+      expect(source).toContain("formatAgentChatUserError");
+    }
+  });
 });
