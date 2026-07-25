@@ -110,10 +110,12 @@ async function vendorSmsState(db: Db, session: VendorAgentSessionRow): Promise<{
     .eq("id", session.vendor_user_id)
     .maybeSingle();
   let optedOut = optedOutFromTimestamps(data?.sms_consent_at, data?.sms_opt_out_at);
-  // Honor a STOP recorded on the OTHER store (the phone-keyed sms_consent
-  // ledger, e.g. via the manager work-line webhook) so opt-out is unified.
+  // The phone-keyed unified read (global supersede across the ledger and the
+  // profiles store) is AUTHORITATIVE whenever a number is known, so this gate
+  // always agrees with the send-time choke point — a STOP recorded on either
+  // store blocks, and a later cross-store START re-enables.
   const phone = String((data?.phone as string | null) ?? "").trim() || session.vendor_phone_e164 || null;
-  if (!optedOut && phone) {
+  if (phone) {
     try {
       optedOut = await isPhoneOptedOut(db, phone);
     } catch {
@@ -315,9 +317,10 @@ export async function ensureVendorAgentSession(
     rawPhone = ((data?.row_data as { phone?: string } | null)?.phone ?? "").trim() || null;
   }
   const phoneE164 = rawPhone ? normalizeE164(rawPhone) : null;
-  // Unified opt-out: also honor a STOP recorded on the phone-keyed ledger (e.g.
-  // via the manager work-line webhook), covering the directory-only number too.
-  if (!optedOut && phoneE164) {
+  // Unified opt-out: the phone-keyed global read (ledger + profile variants,
+  // global supersede) is AUTHORITATIVE when a number is known, covering the
+  // directory-only number and cross-store re-opt-ins alike.
+  if (phoneE164) {
     try {
       optedOut = await isPhoneOptedOut(db, phoneE164);
     } catch {
