@@ -23,6 +23,7 @@ import {
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
+import { listingHoldingDepositAmount } from "@/lib/household-charges";
 import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
@@ -1890,6 +1891,20 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               : "No application fee is required for this listing."}
           </div>
         )}
+        {(() => {
+          const holding = form.propertyId ? listingHoldingDepositAmount(form.propertyId) : { amount: 0, displayLabel: "—" };
+          if (!(holding.amount > 0)) return null;
+          return (
+            <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Holding deposit</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{holding.displayLabel}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Secures your application while it is reviewed. When you are approved, this amount is credited toward your
+                security deposit.
+              </p>
+            </div>
+          );
+        })()}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
             <p className="text-sm font-semibold text-foreground">Payment method</p>

@@ -161,6 +161,9 @@ export type DemoManagerPaymentLedgerRow = {
   notes: string;
   householdChargeId?: string;
   cancelledReminders?: Array<"7d" | "5d" | "3d" | "12h" | "overdue_daily">;
+  manualPaymentChannel?: "zelle" | "venmo";
+  manualPaymentReportedAt?: string;
+  paymentReference?: string;
 };
 
 export type DemoManagerOutgoingPaymentRow = {

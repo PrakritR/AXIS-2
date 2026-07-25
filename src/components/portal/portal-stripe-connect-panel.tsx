@@ -43,6 +43,7 @@ export function PortalStripeConnectPanel({
   dataAttrPrefix = "stripe-connect",
   onConnectDone,
   analyticsScope,
+  onOpenPaymentSetup,
 }: {
   basePath: string;
   variant?: "page" | "embedded" | "inline" | "header";
@@ -54,6 +55,8 @@ export function PortalStripeConnectPanel({
   dataAttrPrefix?: string;
   /** Called after Stripe redirects back with `?connect=done` (same-tab return). */
   onConnectDone?: () => void;
+  /** Opens the unified payment setup modal (Stripe + Zelle + Venmo). */
+  onOpenPaymentSetup?: () => void;
   /**
    * When "vendor", emit the `payout_setup_started` / `payout_setup_completed`
    * funnel events for vendor Connect onboarding. Omitted for the manager panel
@@ -252,6 +255,7 @@ export function PortalStripeConnectPanel({
 
     const needsFinish = Boolean(status?.connected);
     const label = needsFinish ? "Finish setup" : "Link bank";
+    const openSetup = onOpenPaymentSetup ?? (() => void startConnect());
 
     return (
       <Button
@@ -259,9 +263,9 @@ export function PortalStripeConnectPanel({
         variant={needsFinish ? "primary" : "outline"}
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         disabled={busy}
-        onClick={() => void startConnect()}
+        onClick={() => openSetup()}
         data-attr={`${dataAttrPrefix}-link`}
-        title={blockingError ?? (needsFinish ? "Finish bank account setup" : "Link bank account for payouts")}
+        title={blockingError ?? (needsFinish ? "Finish payment setup (bank, Zelle, Venmo)" : "Open payment setup")}
       >
         {busy ? "Opening…" : label}
       </Button>
