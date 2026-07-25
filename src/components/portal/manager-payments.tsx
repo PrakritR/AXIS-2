@@ -450,15 +450,6 @@ export function ManagerPayments() {
           />
           <Button
             type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => setPaymentSetupOpen(true)}
-            data-attr="payments-setup"
-          >
-            Payment setup
-          </Button>
-          <Button
-            type="button"
             variant="primary"
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
