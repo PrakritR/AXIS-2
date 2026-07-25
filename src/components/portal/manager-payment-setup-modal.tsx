@@ -184,7 +184,6 @@ function ChannelPaymentSetupModal({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 className="h-7 rounded-full px-3 text-xs"
                 disabled={gmailSyncBusy}
                 data-attr={`manager-payment-${channel}-gmail-sync`}
@@ -234,8 +233,7 @@ function ChannelPaymentSetupModal({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="shrink-0 rounded-full"
+                      className="shrink-0 rounded-full px-4 text-[13px]"
                       onClick={() =>
                         void navigator.clipboard?.writeText(filterFrom).then(() => showToast("Copied."))
                       }
@@ -260,8 +258,7 @@ function ChannelPaymentSetupModal({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="shrink-0 rounded-full"
+                      className="shrink-0 rounded-full px-4 text-[13px]"
                       data-attr={`manager-payment-${channel}-inbox-copy`}
                       onClick={() =>
                         void navigator.clipboard?.writeText(paymentInboxAddress).then(() => showToast("Copied."))
