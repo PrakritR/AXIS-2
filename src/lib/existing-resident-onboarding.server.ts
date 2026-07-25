@@ -1,4 +1,3 @@
-import { appendFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding";
@@ -9,30 +8,6 @@ import {
 } from "@/lib/resident-welcome.server";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { normalizeLeasePipelineRow } from "@/lib/lease-pipeline-storage";
-
-function debugLog(message: string, data: Record<string, unknown>, hypothesisId: string) {
-  const payload = {
-    sessionId: "81cbea",
-    location: "existing-resident-onboarding.server.ts",
-    message,
-    data,
-    hypothesisId,
-    timestamp: Date.now(),
-    runId: "post-fix-v3",
-  };
-  // #region agent log
-  try {
-    appendFileSync("/Users/prakrit/firstmate/.cursor/debug-81cbea.log", `${JSON.stringify(payload)}\n`);
-  } catch {
-    /* ignore */
-  }
-  fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-  // #endregion
-}
 
 function asUuidOrNull(value: unknown): string | null {
   const v = typeof value === "string" ? value.trim() : "";
@@ -86,8 +61,6 @@ export async function runExistingResidentOnboarding(
   const leaseId = `lease_app_${axisId}`;
   const manualPdf = manualResidentSignedLeasePdf(row);
 
-  debugLog("onboarding start", { axisId, sendWelcomeEmail, hasPdf: Boolean(manualPdf) }, "E");
-
   const leaseRow = normalizeLeasePipelineRow({
     id: leaseId,
     residentName,
@@ -118,10 +91,8 @@ export async function runExistingResidentOnboarding(
     .from("portal_lease_pipeline_records")
     .upsert(buildLeaseUpsert(leaseRow as unknown as Record<string, unknown>), { onConflict: "id" });
   if (leaseError) {
-    debugLog("lease upsert failed", { error: leaseError.message }, "B");
     return { ok: false, status: 500, error: leaseError.message };
   }
-  debugLog("lease upsert ok", { leaseId }, "B");
 
   let welcomeEmailSent = false;
   let nextRow = row;
@@ -133,7 +104,6 @@ export async function runExistingResidentOnboarding(
       propertyLabel: row.property,
     });
     if (!welcome.ok) {
-      debugLog("welcome failed", { status: welcome.status }, "A");
       return {
         ok: false,
         status: welcome.status,
@@ -143,7 +113,6 @@ export async function runExistingResidentOnboarding(
       };
     }
     welcomeEmailSent = !welcome.skipped;
-    debugLog("welcome ok", { skipped: welcome.skipped }, "A");
     nextRow = {
       ...row,
       manualResidentDetails: {

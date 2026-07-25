@@ -136,7 +136,7 @@ export function Modal({
           {footer ? (
             <div
               className={cn(
-                "shrink-0 border-t border-border",
+                "shrink-0 border-t border-border bg-card",
                 dense ? "mt-2 pt-2" : "mt-4 pt-4",
               )}
             >

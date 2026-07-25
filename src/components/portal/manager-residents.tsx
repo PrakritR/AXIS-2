@@ -1231,7 +1231,7 @@ export function ManagerResidents({
       };
       setArSaving(true);
       try {
-        appendManagerApplicationRow(nextRow);
+        appendManagerApplicationRow(nextRow, { skipServerMirror: true });
         const persisted = await upsertApplicationRowToServerAwait(nextRow, {
           existingResidentOnboarding: { sendWelcomeEmail: arSendWelcome },
         });
@@ -1245,25 +1245,6 @@ export function ManagerResidents({
         }
         recordApprovedApplicationCharges(nextRow, userId ?? null);
         syncLeasePipelineFromApplications(userId ?? null);
-        // #region agent log
-        fetch("http://127.0.0.1:7293/ingest/77aa960a-bec3-48b1-bf3d-3eb4c10cfddf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "81cbea" },
-          body: JSON.stringify({
-            sessionId: "81cbea",
-            location: "manager-residents.tsx:saveManualResident",
-            message: "single-request onboarding complete",
-            data: {
-              axisId,
-              welcomeEmailSent: persisted.welcomeEmailSent,
-              leaseId: persisted.leaseId,
-            },
-            hypothesisId: "E",
-            timestamp: Date.now(),
-            runId: "post-fix-v3",
-          }),
-        }).catch(() => {});
-        // #endregion
 
         showToast(
           persisted.welcomeEmailSent
@@ -2733,7 +2714,21 @@ export function ManagerResidents({
         </div>
       </Modal>
 
-      <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
+      <Modal
+        open={addResidentOpen}
+        title="Add resident"
+        onClose={() => setAddResidentOpen(false)}
+        footer={
+          <div className="flex justify-start gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
+              {arSaving ? "Adding…" : "Add resident"}
+            </Button>
+          </div>
+        }
+      >
         <div className="space-y-3">
           <p className="text-xs text-muted">
             Onboard an existing tenant: creates an active resident record, treats the lease as already signed,
@@ -2891,16 +2886,24 @@ export function ManagerResidents({
               />
             </label>
           </div>
-          <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>Cancel</Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
-              {arSaving ? "Adding…" : "Add resident"}
-            </Button>
-          </div>
         </div>
       </Modal>
 
-      <Modal open={editResidentOpen} title="Edit resident" onClose={() => setEditResidentOpen(false)}>
+      <Modal
+        open={editResidentOpen}
+        title="Edit resident"
+        onClose={() => setEditResidentOpen(false)}
+        footer={
+          <div className="flex justify-start gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
+              Save resident
+            </Button>
+          </div>
+        }
+      >
         <div className="space-y-3">
           <p className="text-xs text-muted">Changes here update the resident record and application simultaneously.</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -3029,14 +3032,6 @@ export function ManagerResidents({
                 placeholder="Any additional details about this resident…"
               />
             </label>
-          </div>
-          <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
-              Save resident
-            </Button>
           </div>
         </div>
       </Modal>
@@ -3180,6 +3175,16 @@ export function ManagerResidents({
           if (messageBusy) return;
           setMessageOpen(false);
         }}
+        footer={
+          <div className="flex justify-start gap-2">
+            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
+              {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
+            </Button>
+          </div>
+        }
       >
         <div className="space-y-3">
           <p className="text-sm text-muted">
@@ -3218,14 +3223,6 @@ export function ManagerResidents({
               />
             </label>
           ) : null}
-          <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
-              {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
-            </Button>
-          </div>
         </div>
       </Modal>
       </ManagerPortalPageShell>

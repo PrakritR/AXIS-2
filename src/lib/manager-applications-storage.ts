@@ -495,13 +495,16 @@ export function replaceManagerApplicationRowInCache(row: DemoApplicantRow): void
   emit();
 }
 
-export function appendManagerApplicationRow(row: DemoApplicantRow): void {
+export function appendManagerApplicationRow(
+  row: DemoApplicantRow,
+  opts?: { skipServerMirror?: boolean },
+): void {
   const normalizedRow = normalizeApplicationRow(row);
   const rows = readManagerApplicationRows();
   if (rows.some((r) => r.id === normalizedRow.id)) return;
   const next = [...rows, normalizedRow];
   writeManagerApplicationRows(next);
-  mirrorApplicationRowToServer(normalizedRow);
+  if (!opts?.skipServerMirror) mirrorApplicationRowToServer(normalizedRow);
 }
 
 /**
