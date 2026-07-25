@@ -24,7 +24,7 @@ async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPu
   const email = profile?.email?.trim().toLowerCase() ?? "";
 
   const select =
-    "id, tier, billing, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, promo_code, paid_at, user_id";
+    "id, tier, billing, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, promo_code, apple_original_transaction_id, paid_at, user_id";
   const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
     supabase.from("manager_purchases").select(select).eq("user_id", userId),
     email
@@ -46,6 +46,7 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   stripeSubscriptionId: string | null;
   stripeCheckoutSessionId: string | null;
   promoCode: string | null;
+  appleOriginalTransactionId: string | null;
   paidAt: string | null;
 }> => {
   const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId), userId);
@@ -57,6 +58,7 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
       stripeSubscriptionId: null,
       stripeCheckoutSessionId: null,
       promoCode: null,
+      appleOriginalTransactionId: null,
       paidAt: null,
     };
   }
@@ -78,6 +80,10 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
     promoCode:
       best.promo_code != null && String(best.promo_code).trim() !== ""
         ? String(best.promo_code).trim()
+        : null,
+    appleOriginalTransactionId:
+      best.apple_original_transaction_id != null && String(best.apple_original_transaction_id).trim() !== ""
+        ? String(best.apple_original_transaction_id).trim()
         : null,
     paidAt: best.paid_at != null ? String(best.paid_at) : null,
   };
@@ -130,7 +136,9 @@ const getManagerSubscriptionTierByManagerIdCached = cache(
       const supabase = createSupabaseServiceRoleClient();
       const { data } = await supabase
         .from("manager_purchases")
-        .select("user_id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, promo_code, paid_at")
+        .select(
+          "user_id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, promo_code, apple_original_transaction_id, paid_at",
+        )
         .eq("manager_id", normalized)
         .maybeSingle();
       if (!data) return null;
@@ -144,6 +152,7 @@ const getManagerSubscriptionTierByManagerIdCached = cache(
         stripeSubscriptionId: data.stripe_subscription_id ?? null,
         stripeCheckoutSessionId: data.stripe_checkout_session_id ?? null,
         promoCode: data.promo_code ?? null,
+        appleOriginalTransactionId: data.apple_original_transaction_id ?? null,
         paidAt: data.paid_at ?? null,
         hasPurchaseRow: true,
       });
@@ -163,8 +172,16 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
   billing: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  appleOriginalTransactionId: string | null;
 }> {
-  return getManagerPurchaseRowByUserId(userId);
+  const row = await getManagerPurchaseRowByUserId(userId);
+  return {
+    tier: row.tier,
+    billing: row.billing,
+    stripeCustomerId: row.stripeCustomerId,
+    stripeSubscriptionId: row.stripeSubscriptionId,
+    appleOriginalTransactionId: row.appleOriginalTransactionId,
+  };
 }
 
 /**

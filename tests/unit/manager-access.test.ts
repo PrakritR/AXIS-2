@@ -120,6 +120,28 @@ describe("manager-access", () => {
         hasPurchaseRow: true,
       }),
     ).toBe("paid");
+    // Apple IAP grant: paid via the App Store, no Stripe subscription, and an
+    // ancient paid_at must NOT lapse it (Apple expiry is webhook-driven).
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "pro",
+        billing: "apple",
+        appleOriginalTransactionId: "1000000123456789",
+        paidAt: "2000-01-01T00:00:00.000Z",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("paid");
+    // billing=apple with no transaction anchor is NOT an authorized grant → free.
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "pro",
+        billing: "apple",
+        appleOriginalTransactionId: null,
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("free");
     expect(
       resolveManagerSubscriptionTierFromPurchase({
         tier: null,

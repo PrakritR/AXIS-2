@@ -94,6 +94,7 @@ export const PLATFORM_CHANGE_CHECKLIST = [
   "Push notification: use assertInAppPushPath and add path to REGISTERED_PUSH_DEEP_LINKS",
   "File upload / camera: use useNativeCamera() (web falls back to file input)",
   "Native-only layout: use html[data-native] / portal-layout-classes.ts safe-area tokens",
+  "In-app purchase (iOS): manager subscription buys via StoreKit/RevenueCat in the native plan surface (manager-plan-native.tsx); web keeps Stripe checkout. Never present a web purchase link on native (App Store 3.1.1). RevenueCat webhook (/api/revenuecat/webhook) writes billing='apple' grants — see docs/agents/apple-iap.md",
   "Deploy: Vercel deploy updates web + app UI; run npm run test:unit (platform-parity)",
-  "Native shell change only (plugins, icons, permissions): npx cap sync + app store build",
+  "Native shell change only (plugins, icons, permissions incl. @revenuecat/purchases-capacitor): npx cap sync + app store build",
 ] as const;

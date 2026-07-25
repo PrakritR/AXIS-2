@@ -51,6 +51,39 @@ describe("manager-tier-sync waiver-grant protection", () => {
       expect(update).not.toHaveBeenCalled();
     });
 
+    it("never revokes an Apple IAP grant (billing=apple + original transaction id)", async () => {
+      // The #1 integration landmine: an Apple-billed paid tier has no Stripe
+      // subscription, so without this guard the sweep would downgrade a paying
+      // iOS customer on the very next entitlement read.
+      const { update } = fakeClient({
+        id: "purchase-1",
+        tier: "business",
+        billing: "apple",
+        stripe_subscription_id: null,
+        stripe_checkout_session_id: "apple_iap_1000000123456789",
+        promo_code: null,
+        apple_original_transaction_id: "1000000123456789",
+      });
+
+      await expect(revokeUnauthorizedManagerPaidTier("user-1")).resolves.toBe(false);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("still revokes a bare billing=apple row with NO transaction id (not an authorized grant)", async () => {
+      const { update } = fakeClient({
+        id: "purchase-1",
+        tier: "pro",
+        billing: "apple",
+        stripe_subscription_id: null,
+        stripe_checkout_session_id: "cs_test_normal",
+        promo_code: null,
+        apple_original_transaction_id: null,
+      });
+
+      await expect(revokeUnauthorizedManagerPaidTier("user-1")).resolves.toBe(true);
+      expect(update).toHaveBeenCalledWith({ tier: "free", billing: "free", stripe_subscription_id: null });
+    });
+
     it("revokes a self-assigned paid tier with no Stripe, admin, or waiver backing", async () => {
       const { update, updateEq, selectEq } = fakeClient({
         id: "purchase-1",
@@ -77,6 +110,21 @@ describe("manager-tier-sync waiver-grant protection", () => {
         paid_at: "2000-01-01T00:00:00.000Z", // long past — would be expired without the waiver guard
         stripe_subscription_id: null,
         promo_code: "FREE100",
+      });
+
+      await expect(applyExpiredManagerPurchaseDowngrade("user-1")).resolves.toBe(false);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("never date-expires an Apple IAP grant (expiry comes from App Store webhooks)", async () => {
+      const { update } = fakeClient({
+        id: "purchase-1",
+        tier: "pro",
+        billing: "apple",
+        paid_at: "2000-01-01T00:00:00.000Z", // ancient — would look expired under date-math
+        stripe_subscription_id: null,
+        promo_code: null,
+        apple_original_transaction_id: "1000000123456789",
       });
 
       await expect(applyExpiredManagerPurchaseDowngrade("user-1")).resolves.toBe(false);

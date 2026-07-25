@@ -74,18 +74,8 @@ const SMS_PAYLOAD = {
   ],
 };
 
-vi.mock("@/lib/portal-inbox-storage", () => ({
-  collapsePersonInboxThreads: (threads: unknown[]) => threads,
-  resolveCollapsedInboxThread: (id: string | null, collapsed: Array<{ id: string }>) => collapsed.find((t) => t.id === id) ?? null,
-  inboxThreadCounterpartyEmail: (t: { email?: string }) => t.email ?? "",
-  mergeInboxRowsWithLocalTrash: (rows: unknown[]) => rows,
-  countUnopenedPersistedInbox: () => 0,
-  beginInboxMutation: () => {},
-  endInboxMutation: () => {},
-  appendPersistedInboxThread: () => {},
-  seedDemoInbox: () => {},
-  RESIDENT_INBOX_STORAGE_KEY: "resident-inbox",
-  VENDOR_INBOX_STORAGE_KEY: "vendor-inbox",
+vi.mock("@/lib/portal-inbox-storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/portal-inbox-storage")>()),
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => ALL_THREADS,
@@ -132,9 +122,7 @@ describe("unified conversation inbox (no folder tabs)", () => {
     // Trashed conversation is NOT in the default view.
     expect(screen.queryByText("Old Flyer")).toBeNull();
 
-    // Archive is reachable from the list itself — a segment control inside the
-    // unified list, not a top-level folder tab.
-    const toggle = screen.getByRole("tab", { name: /Archived/ });
+    const toggle = screen.getByRole("tab", { name: /Archived/i });
     fireEvent.click(toggle);
     expect(screen.getByText("Old Flyer")).toBeTruthy();
     expect(screen.queryByText("Dana Ramirez")).toBeNull();

@@ -94,8 +94,9 @@ export default function PrivacyPolicyPage() {
             <p className="mt-2">
               When you provide your mobile number and opt in to text messages, we use it to send account and
               tenancy-related messages (for example, rent reminders, maintenance updates, and messages relayed between
-              you and your property manager or resident). Message frequency varies. Message and data rates may apply.
-              Reply STOP to unsubscribe at any time, or HELP for help.
+              you and your property manager or resident) or, if you opted in on a tour or contact form as a
+              prospective resident, messages about tour scheduling and your rental inquiry. Message frequency varies.
+              Message and data rates may apply. Reply STOP to unsubscribe at any time, or HELP for help.
             </p>
             <p className="mt-2 font-medium text-foreground">
               Mobile opt-in information and consent will not be shared with third parties or affiliates for marketing
