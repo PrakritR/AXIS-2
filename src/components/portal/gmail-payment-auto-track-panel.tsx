@@ -160,7 +160,6 @@ export function GmailPaymentTrackSteps({
             <Button
               type="button"
               variant="outline"
-              size="sm"
               className="h-7 rounded-full px-3 text-xs"
               disabled={gmailSyncBusy}
               data-attr={channel ? `manager-payment-${channel}-gmail-sync` : `${role}-payment-gmail-sync`}
