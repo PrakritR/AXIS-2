@@ -6,7 +6,7 @@ import {
   saveManagerManualPaymentSettings,
 } from "@/lib/manager-manual-payment-settings";
 import { ensureManagerPaymentInbox } from "@/lib/payment-receipt-email/payment-inbox";
-import { applyManagerManualPaymentsToListings } from "@/lib/manager-manual-payment-settings.server";
+import { applyManagerManualPaymentsToListings, syncManagerManualPaymentsToPendingCharges } from "@/lib/manager-manual-payment-settings.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -61,14 +61,18 @@ export async function PATCH(req: Request) {
     const inbox = await ensureManagerPaymentInbox(ctx.db, ctx.userId);
     const settings = { ...saved, paymentInboxToken: inbox.paymentInboxToken };
     let listingsUpdated = 0;
-    if (applyToAllListings === true) {
+    let chargesUpdated = 0;
+    const shouldSyncListings = applyToAllListings === true || body.syncListings === true;
+    if (shouldSyncListings) {
       listingsUpdated = await applyManagerManualPaymentsToListings(ctx.db, ctx.userId, settings);
     }
+    chargesUpdated = await syncManagerManualPaymentsToPendingCharges(ctx.db, ctx.userId, settings);
     return NextResponse.json({
       settings: managerManualPaymentSettingsPublic(settings, {
         paymentInboxAddress: inbox.paymentInboxAddress,
       }),
       listingsUpdated,
+      chargesUpdated,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

@@ -24,6 +24,7 @@ import {
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 import { paymentReminderRecipientLabel } from "@/lib/payment-reminder-ui";
+import { buildManualPaymentInstructionLines, buildPaymentReminderBody } from "@/lib/manual-payment-instructions";
 
 function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
@@ -295,24 +296,24 @@ export function ManagerPaymentsLedgerPanel({
     const residentName = row.residentName || "Resident";
     const chargeTitle = row.chargeTitle || "outstanding charge";
     const subject = `Payment reminder: ${chargeTitle}`;
-    const lines = [
-      `Hi ${residentName},`,
-      "",
-      `This is a friendly reminder that your ${chargeTitle} payment is outstanding.`,
-    ];
-    if (row.balanceDue) lines.push(`Amount due: ${row.balanceDue}`);
-    if (row.dueDate) lines.push(`Due date: ${row.dueDate}`);
-    if (row.propertyName) lines.push(`Property: ${row.propertyName}`);
-    lines.push(
-      "",
-      "Please log in to your PropLane resident portal to make your payment at your earliest convenience.",
-      "",
-      "If you have any questions, please don't hesitate to reach out.",
-      "",
-      "Your property manager",
-      "PropLane Portal",
-    );
-    setReminderPreview({ row, subject, body: lines.join("\n") });
+    const manualLines = buildManualPaymentInstructionLines({
+      id: row.householdChargeId ?? row.id,
+      paymentReference: row.paymentReference,
+      zelleContactSnapshot: row.zelleContactSnapshot,
+      venmoContactSnapshot: row.venmoContactSnapshot,
+      balanceLabel: row.balanceDue,
+      amountLabel: row.lineAmount,
+    });
+    const body = buildPaymentReminderBody({
+      residentName,
+      chargeTitle,
+      balanceDue: row.balanceDue,
+      dueDate: row.dueDate,
+      propertyLabel: row.propertyName,
+      managerName: "Your property manager",
+      manualPaymentLines: manualLines.length ? manualLines : undefined,
+    });
+    setReminderPreview({ row, subject, body });
   };
 
   const sendReminderForRow = async (

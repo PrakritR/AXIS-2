@@ -164,6 +164,8 @@ export type DemoManagerPaymentLedgerRow = {
   manualPaymentChannel?: "zelle" | "venmo";
   manualPaymentReportedAt?: string;
   paymentReference?: string;
+  zelleContactSnapshot?: string;
+  venmoContactSnapshot?: string;
 };
 
 export type DemoManagerOutgoingPaymentRow = {

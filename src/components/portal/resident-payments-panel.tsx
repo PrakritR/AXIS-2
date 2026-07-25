@@ -57,6 +57,7 @@ import {
   type ResidentManualPaymentChannel,
   type ResidentPayMethod,
 } from "@/lib/platform/resident-payments";
+import { chargePaymentReference } from "@/lib/manual-payment-instructions";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
 
@@ -1210,11 +1211,24 @@ export function ResidentPaymentsPanel({
                 {confirmCharges.length === 1 ? " stays" : "s stay"} pending until then.
               </p>
               {manualContactForCharges(confirmCharges, payConfirm.method) ? (
-                <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Send to</p>
-                  <p className="mt-1 font-mono font-semibold text-foreground">
-                    {manualContactForCharges(confirmCharges, payConfirm.method)}
-                  </p>
+                <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm space-y-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Send to</p>
+                    <p className="mt-1 font-mono font-semibold text-foreground">
+                      {manualContactForCharges(confirmCharges, payConfirm.method)}
+                    </p>
+                  </div>
+                  {confirmCharges[0] ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">Memo / note</p>
+                      <p className="mt-1 font-mono font-semibold text-primary">
+                        {chargePaymentReference(confirmCharges[0])}
+                      </p>
+                      <p className="mt-1 text-xs text-muted">
+                        Include this code so your payment is matched automatically.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <label className="flex cursor-pointer gap-3 rounded-2xl border border-border bg-card p-4">

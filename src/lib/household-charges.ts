@@ -2947,6 +2947,8 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     manualPaymentChannel: c.manualPaymentChannel,
     manualPaymentReportedAt: c.manualPaymentReportedAt,
     paymentReference: c.paymentReference ?? generatePaymentReference(c.id),
+    zelleContactSnapshot: c.zelleContactSnapshot,
+    venmoContactSnapshot: c.venmoContactSnapshot,
     notes:
       c.kind === "rent"
         ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1, c.dueDayMode)}.`

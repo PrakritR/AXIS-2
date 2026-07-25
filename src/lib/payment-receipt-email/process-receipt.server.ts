@@ -5,8 +5,9 @@ import { resolveInboundEmailBody } from "@/lib/inbound-email/inbound-email.serve
 import { upsertManagerCharges } from "@/lib/household-charges.server";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { loadManagerManualPaymentSettings } from "@/lib/manager-manual-payment-settings";
+import { chargePaymentReference } from "@/lib/manual-payment-instructions";
 import { parseMoneyAmount } from "@/lib/parse-money";
-import { generatePaymentReference } from "@/lib/payment-reference";
+import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 
 import { extractPaymentInboxToken, resolveManagerIdByPaymentInboxToken } from "./payment-inbox";
 import { parsePaymentReceiptEmail } from "./parse-receipt";
@@ -21,10 +22,6 @@ export type ProcessPaymentReceiptResult =
 function chargeAmountCents(charge: HouseholdCharge): number {
   const label = charge.balanceLabel?.trim() || charge.amountLabel?.trim() || "";
   return Math.round(parseMoneyAmount(label) * 100);
-}
-
-function chargePaymentReference(charge: HouseholdCharge): string {
-  return charge.paymentReference?.trim() || generatePaymentReference(charge.id);
 }
 
 async function receiptAlreadyProcessed(
@@ -125,6 +122,29 @@ export async function processInboundPaymentReceiptEmail(
   };
 
   await upsertManagerCharges(db, managerUserId, [merged]);
+
+  const residentEmail = charge.residentEmail?.trim().toLowerCase();
+  const residentUserId = charge.residentUserId?.trim() || null;
+  if (residentUserId || residentEmail) {
+    const channelLabel = receipt.channel === "venmo" ? "Venmo" : "Zelle";
+    await deliverPortalInboxMessage(db, {
+      senderUserId: managerUserId,
+      senderEmail: "payments@prop-lane.space",
+      fromName: "PropPlane Payments",
+      subject: `Payment received: ${charge.title}`,
+      text: [
+        `Your ${channelLabel} payment for "${charge.title}" was received and marked paid.`,
+        `Amount: ${charge.balanceLabel?.trim() || charge.amountLabel?.trim() || ""}`,
+        `Reference: ${chargePaymentReference(charge)}`,
+        "",
+        "Thank you!",
+      ].join("\n"),
+      toUserIds: residentUserId ? [residentUserId] : [],
+      deliverToPortalInbox: true,
+      deliverViaEmail: false,
+      deliverViaSms: false,
+    }).catch(() => undefined);
+  }
 
   return {
     outcome: "marked_paid",
