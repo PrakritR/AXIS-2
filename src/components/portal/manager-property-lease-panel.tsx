@@ -3,9 +3,23 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
-import { ManagerLeaseEditorModal } from "@/components/portal/manager-lease-editor-modal";
+import { PropertyLeaseFormModal } from "@/components/portal/property-lease-form-modal";
+import {
+  PropertyLeaseUploadModal,
+  buildUploadedLeaseTemplate,
+} from "@/components/portal/property-lease-upload-modal";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
+import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
+import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
+import { propertyLeaseSourceLabel } from "@/lib/property-lease-source";
+import {
+  propertyLeaseSourceFromTemplate,
+  propertyLeaseTypeLabel,
+  readPropertyLeaseTemplates,
+  removePropertyLeaseTemplate,
+  syncLegacyLeaseFieldsFromTemplates,
+  type PropertyLeaseTemplate,
+} from "@/lib/property-lease-templates";
 
 type LeaseSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -13,9 +27,24 @@ type LeaseSaveTarget =
   | { mode: "requestChange"; saveId: string }
   | null;
 
+function leaseDocumentSummary(template: PropertyLeaseTemplate): string {
+  const source = propertyLeaseSourceFromTemplate(template);
+  if (source === "custom_format") {
+    return template.leaseTemplateDocName?.trim()
+      ? `Your PDF · ${template.leaseTemplateDocName}`
+      : "Your PDF · not uploaded yet";
+  }
+  if (source === "custom_comments") {
+    const preview = template.customLeaseTerms?.trim();
+    if (!preview) return "Custom clauses · not added yet";
+    const short = preview.length > 72 ? `${preview.slice(0, 72)}…` : preview;
+    return `Custom clauses · ${short}`;
+  }
+  return propertyLeaseSourceLabel(source);
+}
+
 /**
- * Per-property lease editor — standard Axis lease or manager custom terms / PDF template.
- * Mirrors the listing wizard Lease step; edits persist on the listing submission.
+ * Per-property lease templates — agreement type plus PropLane default, custom clauses, or uploaded PDF.
  */
 export function ManagerPropertyLeasePanel({
   sub,
@@ -40,70 +69,159 @@ export function ManagerPropertyLeasePanel({
   demoMode?: boolean;
   sectionActions?: ReactNode;
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"add" | "edit">("add");
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [sectionExpanded, setSectionExpanded] = useState(false);
 
-  const preview = useMemo(
-    () => buildPropertyLeasePreview(sub, { hint: propertyHint, demo: demoMode }),
-    [sub, propertyHint, demoMode],
-  );
+  const templates = useMemo(() => readPropertyLeaseTemplates(sub), [sub]);
+
+  const persistTemplates = (nextTemplates: PropertyLeaseTemplate[]) => {
+    if (!saveTarget || !managerUserId) return false;
+    const next = syncLegacyLeaseFieldsFromTemplates(sub, nextTemplates);
+    return persistManagerListingSubmission(saveTarget, managerUserId, next);
+  };
+
+  const openAdd = () => {
+    setFormMode("add");
+    setEditingTemplateId(null);
+    setFormOpen(true);
+  };
+
+  const openEdit = (templateId: string) => {
+    setFormMode("edit");
+    setEditingTemplateId(templateId);
+    setFormOpen(true);
+  };
+
+  const handleRemove = (templateId: string) => {
+    if (templates.length <= 1) {
+      showToast("Keep at least one lease on this property.");
+      return;
+    }
+    if (!window.confirm("Remove this lease?")) return;
+    const next = removePropertyLeaseTemplate(templates, templateId);
+    if (!persistTemplates(next)) {
+      showToast("Could not remove lease.");
+      return;
+    }
+    onUpdated();
+    showToast("Lease removed.");
+  };
 
   if (!saveTarget || !managerUserId) return null;
+
+  const editingTemplate = templates.find((t) => t.id === editingTemplateId) ?? null;
 
   return (
     <>
       <PortalCollapsibleSection
         title="Lease"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
+        expanded={sectionExpanded}
+        onExpandedChange={setSectionExpanded}
         collapsible
         className="mt-4"
         toggleDataAttr="lease-section-toggle"
         headerActions={
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            data-attr="property-lease-edit"
-            onClick={() => setModalOpen(true)}
-          >
-            Edit
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="property-lease-upload"
+              onClick={() => setUploadOpen(true)}
+            >
+              Upload
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="property-lease-add"
+              onClick={openAdd}
+            >
+              Add lease
+            </Button>
+          </div>
         }
         contentClassName="px-4 py-3"
       >
         {sectionActions}
-        {preview.unsupportedJurisdiction ? (
-          <p className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm text-muted">
-            {preview.plainText}
-          </p>
-        ) : preview.html ? (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <iframe
-              title="Lease preview"
-              srcDoc={preview.html}
-              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              className="h-[min(48vh,400px)] w-full"
-            />
-          </div>
-        ) : (
-          <p className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm text-muted">
-            {preview.plainText}
-          </p>
-        )}
+        <div className="space-y-2">
+          {templates.map((template) => (
+            <div
+              key={template.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-3 py-2.5"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{template.label}</p>
+                <p className="text-xs text-muted">
+                  {propertyLeaseTypeLabel(template.kind)} · {leaseDocumentSummary(template)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 rounded-full px-3 text-xs"
+                  data-attr={`property-lease-edit-${template.id}`}
+                  onClick={() => openEdit(template.id)}
+                >
+                  Edit
+                </Button>
+                {templates.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={() => handleRemove(template.id)}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
       </PortalCollapsibleSection>
 
-      <ManagerLeaseEditorModal
-        open={modalOpen}
+      <PropertyLeaseUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        showToast={showToast}
+        onUploaded={({ label, dataUrl, fileName }) => {
+          const created = buildUploadedLeaseTemplate({ label, dataUrl, fileName });
+          const next = [...templates, created];
+          if (!persistTemplates(next)) {
+            showToast("Could not upload lease.");
+            return false;
+          }
+          onUpdated();
+          return true;
+        }}
+      />
+
+      <PropertyLeaseFormModal
+        open={formOpen}
+        mode={formMode}
         sub={sub}
-        saveTarget={saveTarget}
-        managerUserId={managerUserId}
-        propertyId={propertyId}
-        propertyLabel={propertyLabel}
+        template={editingTemplate}
+        templates={templates}
         propertyHint={propertyHint}
         demoMode={demoMode}
-        onClose={() => setModalOpen(false)}
-        onSaved={onUpdated}
+        onClose={() => {
+          setFormOpen(false);
+          setEditingTemplateId(null);
+        }}
+        onSave={(nextTemplates) => {
+          if (!persistTemplates(nextTemplates)) {
+            showToast("Could not save lease.");
+            return false;
+          }
+          onUpdated();
+          return true;
+        }}
         showToast={showToast}
       />
     </>

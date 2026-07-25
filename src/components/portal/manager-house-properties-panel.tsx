@@ -12,6 +12,8 @@ import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-pr
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
+import { ManagerPropertyTourPanel } from "@/components/portal/manager-property-tour-panel";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
@@ -79,11 +81,6 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import {
-  buildManagerApplyUrl,
-  buildManagerTourUrl,
-  copyTextToClipboard,
-} from "@/lib/manager-property-links";
 import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
 
 function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
@@ -268,6 +265,7 @@ function ManagerPropertyInlineDetails({
   const displaySub = portalSub?.sub ?? null;
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [draftEditorOpen, setDraftEditorOpen] = useState(false);
+  const [shareApplicationOpen, setShareApplicationOpen] = useState(false);
 
   const managerSubmission = useMemo(
     () => (row ? displaySub ?? submissionForAdminRow(row) : null),
@@ -302,6 +300,12 @@ function ManagerPropertyInlineDetails({
     onUpdated();
   };
 
+  const propertyShareLabel = row ? managerPropertyRowTitle(row, bucket) : "Property";
+  const sharePropertyOptions = useMemo(
+    () => (listingId ? [{ id: listingId, label: propertyShareLabel }] : []),
+    [listingId, propertyShareLabel],
+  );
+
   if (!row || !mock || !managerSubmission) return null;
 
   const actionBtnClass = "rounded-full";
@@ -316,67 +320,19 @@ function ManagerPropertyInlineDetails({
 
   const openFullListingEditor = () => setListingEditorOpen(true);
 
-  const copyApplyLink = () => {
-    if (!listingId) return;
-    void (async () => {
-      const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
-      const ok = await copyTextToClipboard(url);
-      showToast(ok ? "Apply link copied." : "Could not copy link.");
-    })();
-  };
-
-  const copyTourLink = () => {
-    if (!listingId) return;
-    void (async () => {
-      const url = buildManagerTourUrl(window.location.origin, listingId);
-      const ok = await copyTextToClipboard(url);
-      showToast(ok ? "Tour link copied." : "Could not copy link.");
-    })();
-  };
-
   const applicationHeaderExtra =
-    bucket === 2 && listingId ? (
-      <>
-        <Button
-          type="button"
-          variant="outline"
-          className={`${actionBtnClass} h-8 px-3 text-xs`}
-          data-attr="listing-send-to-prospect"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSendToProspect?.(listingId);
-          }}
-        >
-          Send to prospect
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className={`${actionBtnClass} h-8 px-3 text-xs`}
-          data-attr="listing-copy-apply-link"
-          onClick={(e) => {
-            e.stopPropagation();
-            copyApplyLink();
-          }}
-        >
-          Copy apply link
-        </Button>
-      </>
-    ) : null;
-
-  const promotionHeaderExtra =
     bucket === 2 && listingId ? (
       <Button
         type="button"
         variant="outline"
-        className="h-8 rounded-full px-3 text-xs"
-        data-attr="listing-copy-tour-link"
+        className={`${actionBtnClass} h-8 px-3 text-xs`}
+        data-attr="listing-send-application"
         onClick={(e) => {
           e.stopPropagation();
-          copyTourLink();
+          setShareApplicationOpen(true);
         }}
       >
-        Copy tour link
+        Send application
       </Button>
     ) : null;
 
@@ -384,6 +340,18 @@ function ManagerPropertyInlineDetails({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {bucket === 2 && listingId ? (
         <>
+          <Button
+            type="button"
+            variant="outline"
+            className={sectionHeaderBtn}
+            data-attr="listing-send-listing"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSendToProspect?.(listingId);
+            }}
+          >
+            Send listing
+          </Button>
           {canEditAction ? (
             <Button
               type="button"
@@ -627,6 +595,15 @@ function ManagerPropertyInlineDetails({
             propertyHint={leasePropertyHint}
             demoMode={isDemoModeActive()}
           />
+
+          {bucket === 2 && listingId ? (
+            <ManagerPropertyTourPanel
+              listingId={listingId}
+              managerUserId={managerUserId}
+              propertyLabel={propertyShareLabel}
+              showToast={showToast}
+            />
+          ) : null}
         </>
       ) : null}
 
@@ -635,7 +612,16 @@ function ManagerPropertyInlineDetails({
           listingId={listingId}
           showToast={showToast}
           onUpdated={onUpdated}
-          headerActionsExtra={promotionHeaderExtra}
+        />
+      ) : null}
+
+      {listingId ? (
+        <ShareLeadLinkModal
+          open={shareApplicationOpen}
+          onClose={() => setShareApplicationOpen(false)}
+          kind="apply"
+          properties={sharePropertyOptions}
+          preselectedPropertyId={listingId}
         />
       ) : null}
 

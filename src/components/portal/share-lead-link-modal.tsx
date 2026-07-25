@@ -151,7 +151,7 @@ export function ShareLeadLinkModal({
       return;
     }
     const ok = await copyTextToClipboard(linkUrl);
-    showToast(ok ? "Link copied." : "Could not copy link.");
+    showToast(ok ? (kind === "tour" ? "Tour link copied." : kind === "apply" ? "Application link copied." : "Link copied.") : "Could not copy link.");
   };
 
   const openSendPreview = () => {
@@ -217,7 +217,7 @@ export function ShareLeadLinkModal({
     }
   };
 
-  const title = kind === "listing" ? "Send listing" : kind === "apply" ? "Invite to apply" : "Share tour link";
+  const title = kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link";
 
   const actionFooter =
     properties.length > 0 ? (
@@ -347,20 +347,42 @@ export function ShareLeadLinkModal({
                 </div>
               ) : null}
 
-              {kind !== "listing" ? (
+              {kind === "tour" ? (
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Link preview</p>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public tour link</p>
                   <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
                     {linkUrl || "Select a property to generate a link."}
                   </div>
-                  <Button type="button" variant="outline" className="mt-2 rounded-full" disabled={!linkUrl} onClick={() => void handleCopy()}>
-                    Copy link
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2 rounded-full"
+                    disabled={!linkUrl}
+                    onClick={() => void handleCopy()}
+                  >
+                    Copy tour link
                   </Button>
-                  {kind === "apply" ? (
-                    <p className="mt-2 text-xs leading-relaxed text-muted">
-                      Applicants create a resident account first, then complete the application in their portal.
-                    </p>
-                  ) : null}
+                </div>
+              ) : null}
+
+              {kind === "apply" ? (
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public application link</p>
+                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                    {linkUrl || "Select a property to generate a link."}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2 rounded-full"
+                    disabled={!linkUrl}
+                    onClick={() => void handleCopy()}
+                  >
+                    Copy application link
+                  </Button>
+                  <p className="mt-2 text-xs leading-relaxed text-muted">
+                    Applicants create a resident account first, then complete the application in their portal.
+                  </p>
                 </div>
               ) : null}
 
@@ -417,14 +439,14 @@ export function ShareLeadLinkModal({
 
       <PortalNotificationPreviewModal
         open={sendPreviewOpen}
-        title={kind === "listing" ? "Send listing" : "Send invite"}
+        title={kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link"}
         onClose={() => setSendPreviewOpen(false)}
         recipient={prospectEmail.trim()}
         subject={leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined)}
         body={invitePreviewBody}
         intro="Review the email before sending."
         footerNote="Sent via PropLane when email delivery is configured."
-        confirmLabel={kind === "listing" ? "Send listing" : "Send invite"}
+        confirmLabel={kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link"}
         confirmBusy={sendBusy}
         confirmBusyLabel="Sending…"
         onConfirm={(skipMessage) => {

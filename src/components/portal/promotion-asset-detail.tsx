@@ -153,3 +153,58 @@ export function PromotionTextAssetDetail({
     />
   );
 }
+
+export function PromotionUploadHeaderActions({
+  asset,
+  onDelete,
+}: {
+  asset: PromotionAsset;
+  onDelete: (row: ManagerPromotionRow, entryId: string) => void;
+}) {
+  const entry = asset.uploadEntry;
+  if (!entry) return null;
+
+  return (
+    <>
+      <a
+        href={entry.fileUrl}
+        download={entry.fileName}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-semibold text-foreground transition hover:border-primary/30"
+        data-attr="promotion-upload-download"
+      >
+        Download
+      </a>
+      <button
+        type="button"
+        aria-label="Delete upload"
+        className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-accent hover:text-foreground"
+        data-attr="promotion-upload-delete"
+        onClick={() => onDelete(asset.row, entry.id)}
+      >
+        ×
+      </button>
+    </>
+  );
+}
+
+export function PromotionUploadAssetDetail({ asset }: { asset: PromotionAsset }) {
+  const entry = asset.uploadEntry;
+  if (!entry) return null;
+
+  if (entry.kind === "pdf") {
+    return (
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <iframe title={entry.fileName} src={entry.fileUrl} className="h-[min(48vh,420px)] w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card p-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={entry.fileUrl} alt={entry.fileName} className="mx-auto max-h-[min(48vh,420px)] w-full object-contain" />
+    </div>
+  );
+}

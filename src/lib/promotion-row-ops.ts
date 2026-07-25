@@ -21,11 +21,16 @@ import {
   type PromotionTextCopy,
   type PromotionTextEntry,
 } from "@/lib/promotion-text";
+import {
+  readPromotionUploadEntries,
+  type PromotionUploadEntry,
+} from "@/lib/promotion-upload";
 
 /** Align legacy single-flyer fields with the newest flyer entry. */
 export function syncPromotionRowLegacy(row: ManagerPromotionRow): ManagerPromotionRow {
   const flyerEntries = readFlyerEntries(row);
   const textEntries = readPromotionTextEntries(row);
+  const uploadEntries = readPromotionUploadEntries(row);
   const primary = flyerEntries[0] ?? null;
 
   if (!primary) {
@@ -33,9 +38,10 @@ export function syncPromotionRowLegacy(row: ManagerPromotionRow): ManagerPromoti
       ...row,
       flyerCopies: flyerEntries.length > 0 ? flyerEntries : undefined,
       textCopies: textEntries.length > 0 ? textEntries : undefined,
+      uploadCopies: uploadEntries.length > 0 ? uploadEntries : undefined,
       textCopy: primaryPromotionTextCopy(textEntries),
       copy: null,
-      status: textEntries.length > 0 ? row.status : row.status,
+      status: textEntries.length > 0 || uploadEntries.length > 0 ? row.status : row.status,
     };
   }
 
@@ -49,6 +55,7 @@ export function syncPromotionRowLegacy(row: ManagerPromotionRow): ManagerPromoti
     inputs: primary.inputs,
     flyerCopies: flyerEntries,
     textCopies: textEntries.length > 0 ? textEntries : undefined,
+    uploadCopies: uploadEntries.length > 0 ? uploadEntries : undefined,
     textCopy: primaryPromotionTextCopy(textEntries),
     status: "generated",
   };
@@ -85,7 +92,8 @@ export function removeFlyerEntryFromRow(
 ): ManagerPromotionRow | null {
   const entries = readFlyerEntries(row).filter((e) => e.id !== entryId);
   const texts = readPromotionTextEntries(row);
-  if (entries.length === 0 && texts.length === 0) return null;
+  const uploads = readPromotionUploadEntries(row);
+  if (entries.length === 0 && texts.length === 0 && uploads.length === 0) return null;
   return syncPromotionRowLegacy({ ...row, flyerCopies: entries });
 }
 
@@ -95,8 +103,25 @@ export function removeTextEntryFromRow(
 ): ManagerPromotionRow | null {
   const flyers = readFlyerEntries(row);
   const entries = readPromotionTextEntries(row).filter((e) => e.id !== entryId);
-  if (flyers.length === 0 && entries.length === 0) return null;
+  const uploads = readPromotionUploadEntries(row);
+  if (flyers.length === 0 && entries.length === 0 && uploads.length === 0) return null;
   return syncPromotionRowLegacy({ ...row, textCopies: entries });
+}
+
+export function removeUploadEntryFromRow(
+  row: ManagerPromotionRow,
+  entryId: string,
+): ManagerPromotionRow | null {
+  const flyers = readFlyerEntries(row);
+  const texts = readPromotionTextEntries(row);
+  const entries = readPromotionUploadEntries(row).filter((e) => e.id !== entryId);
+  if (flyers.length === 0 && texts.length === 0 && entries.length === 0) return null;
+  return syncPromotionRowLegacy({ ...row, uploadCopies: entries });
+}
+
+export function appendUploadEntryToRow(row: ManagerPromotionRow, entry: PromotionUploadEntry): ManagerPromotionRow {
+  const entries = [entry, ...readPromotionUploadEntries(row)];
+  return syncPromotionRowLegacy({ ...row, uploadCopies: entries, status: "generated" });
 }
 
 export function appendFlyerEntryToRow(row: ManagerPromotionRow, entry: FlyerEntry): ManagerPromotionRow {
