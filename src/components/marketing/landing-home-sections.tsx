@@ -7,7 +7,7 @@ import "./landing-proplane.css";
 
 const GET_STARTED = MANAGER_GET_STARTED_HREF;
 
-/** Dashboard+assistant demo, learn guides, ops banner, closing CTAs. */
+/** Dashboard+assistant demo, learn guides, ops banner, FAQ board, closing CTAs. */
 export function LandingHomeSections() {
   return (
     <>
@@ -19,6 +19,7 @@ export function LandingHomeSections() {
         <LearnSection />
       </div>
       <OpsSkySection />
+      <FaqSection />
       <section className="lp-end lp-end-cta-only" aria-label="Get started">
         <CtaPair
           primaryAttr="home-closing-get-started"
@@ -169,5 +170,64 @@ function TaskFloatRow({
       </div>
       <span className="lp-agent">{agent}</span>
     </div>
+  );
+}
+
+/** The questions a prospect actually asks before signing up. Every answer is
+ *  grounded in what the product ships — plans + trial (`manager-plan-tiers.ts`,
+ *  `manager-signup-trial.ts`), the approval-first assistant (`docs/ai-assistant.md`),
+ *  resident setup-link onboarding (`api/auth/resident-setup`), and the iOS shell
+ *  (`docs/mobile-app.md`). Keep it that way: an FAQ reads as a promise, so don't
+ *  add a claim the code can't back. */
+const FAQ_NOTES: { q: string; a: string }[] = [
+  {
+    q: "What is PropLane?",
+    a: "One place to run your rentals: list a unit, take applications, book tours, sign leases, collect rent, and handle repairs and messages. Managers, residents, and your repair vendors each get their own sign-in.",
+  },
+  {
+    q: "What does the AI actually do?",
+    a: "It reads your live numbers and answers questions, and it can draft things like a rent reminder or a message. It never sends a message, charges a card, or signs a lease on its own — it shows you exactly what it wrote, and those actions only go out once you approve.",
+  },
+  {
+    q: "Is there a free plan?",
+    a: "Yes. Free is $0 and needs no card. You get one property listing, applications and tour scheduling, and rent collection. Residents, leases, repairs, and the inbox come with a paid plan.",
+  },
+  {
+    q: "How much does it cost?",
+    a: "Free is $0. Pro is $20 a month (up to 2 properties, plus residents, leases, and the inbox). Business is $200 a month (up to 20 properties and priority support). Paying for a year saves about 20%.",
+  },
+  {
+    q: "Do I need a credit card to try it?",
+    a: "No. Paid plans start with a 14-day trial and no card — you only add payment if you decide to keep it.",
+  },
+  {
+    q: "How do my residents get in?",
+    a: "You don't hand out passwords. When someone applies, PropLane emails them a one-time link — tied to the same email they applied with — to set up their own account. Once you approve them, they can pay rent, sign leases, and message you.",
+  },
+  {
+    q: "Can I use it on my phone?",
+    a: "Yes. PropLane opens in any web browser on a computer, tablet, or phone — no download needed. There's also an iPhone app that shows the same PropLane, so everything works the same way.",
+  },
+];
+
+/** FAQ as a board of sticky notes (post-it look), before the closing CTA. */
+function FaqSection() {
+  return (
+    <section className="lp-faq" aria-labelledby="lp-faq-heading">
+      <div className="lp-w">
+        <h2 id="lp-faq-heading">Questions, answered</h2>
+        <p className="lp-lede">
+          The things people ask us before signing up — plain answers, no fine print.
+        </p>
+        <dl className="lp-faq-board">
+          {FAQ_NOTES.map((item) => (
+            <div className="lp-note" key={item.q}>
+              <dt className="lp-note-q">{item.q}</dt>
+              <dd className="lp-note-a">{item.a}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
   );
 }

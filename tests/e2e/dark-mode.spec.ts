@@ -51,15 +51,30 @@ async function assertMainContentNotLightThemed(page: Page, maxBright = 2) {
   expect(bright).toBeLessThanOrEqual(maxBright);
 }
 
-test.describe("Dark mode — public surfaces", () => {
+test.describe("Public marketing — light theme only", () => {
   test.beforeEach(async ({ page }) => {
-    await enableDarkMode(page);
+    await page.addInitScript(() => {
+      localStorage.setItem("axis:theme", "dark");
+    });
   });
 
-  test("marketing home uses dark theme without bright content panels", async ({ page }) => {
+  test("marketing home stays light even when dark is saved", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: /run and fill your properties/i })).toBeVisible();
-    await assertMainContentNotLightThemed(page, 0);
+    const theme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+    expect(theme).toBe("light");
+  });
+
+  test("partner page stays light", async ({ page }) => {
+    await page.goto("/partner");
+    const theme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+    expect(theme).toBe("light");
+  });
+});
+
+test.describe("Dark mode — auth surfaces", () => {
+  test.beforeEach(async ({ page }) => {
+    await enableDarkMode(page);
   });
 
   test("auth sign-in card respects dark theme", async ({ page }) => {
@@ -88,11 +103,6 @@ test.describe("Dark mode — public surfaces", () => {
     });
     expect(calloutStyle.backgroundColor).not.toMatch(/rgb\(248,\s*250,\s*252\)/);
 
-    await assertMainContentNotLightThemed(page, 0);
-  });
-
-  test("partner page respects dark theme", async ({ page }) => {
-    await page.goto("/partner");
     await assertMainContentNotLightThemed(page, 0);
   });
 });

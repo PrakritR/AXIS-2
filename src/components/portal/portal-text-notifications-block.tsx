@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import {
+  PortalSettingsFormBody,
+  PortalSettingsGroup,
+  PortalSettingsSection,
+} from "@/components/portal/portal-settings-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 type TextNotificationSettings = {
@@ -150,13 +154,12 @@ export function PortalTextNotificationsBlock({
   const smsConfigured = settings?.smsConfigured ?? false;
 
   return (
-    <PortalCollapsibleSection
+    <PortalSettingsSection
       title="Text notifications"
-      subtitle="Verify your mobile number to get maintenance and message updates by text."
-      surfaceMuted={false}
-      contentClassName="space-y-3 px-4 pb-5"
-      toggleDataAttr={`${dataAttrPrefix}-text-notifications-toggle`}
+      description="Verify your mobile number to get maintenance and message updates by text."
     >
+      <PortalSettingsGroup>
+        <PortalSettingsFormBody className="space-y-3">
       {settings === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : verified ? (
@@ -169,7 +172,7 @@ export function PortalTextNotificationsBlock({
           <Button
             type="button"
             variant="outline"
-            className="h-8 min-h-0 shrink-0 rounded-full px-3 text-xs"
+            className="h-8 min-h-0 shrink-0 px-3 text-xs"
             data-attr={`${dataAttrPrefix}-text-notifications-change`}
             onClick={() => {
               setPhoneInput("");
@@ -204,7 +207,7 @@ export function PortalTextNotificationsBlock({
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 min-h-0 shrink-0 rounded-full px-4 text-xs"
+                className="h-9 min-h-0 shrink-0 px-4 text-xs"
                 data-attr={`${dataAttrPrefix}-text-notifications-send-code`}
                 disabled={busy || !smsConfigured || !phoneInput.trim()}
                 onClick={() => void sendCode()}
@@ -236,7 +239,7 @@ export function PortalTextNotificationsBlock({
                 <Button
                   type="button"
                   variant="primary"
-                  className="h-9 min-h-0 shrink-0 rounded-full px-4 text-xs"
+                  className="h-9 min-h-0 shrink-0 px-4 text-xs"
                   data-attr={`${dataAttrPrefix}-text-notifications-verify`}
                   disabled={busy || codeInput.length !== 6}
                   onClick={() => void verifyCode()}
@@ -254,6 +257,8 @@ export function PortalTextNotificationsBlock({
           )}
         </div>
       )}
-    </PortalCollapsibleSection>
+        </PortalSettingsFormBody>
+      </PortalSettingsGroup>
+    </PortalSettingsSection>
   );
 }

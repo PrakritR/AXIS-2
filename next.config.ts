@@ -34,6 +34,10 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED: process.env.NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED ?? "true",
     NEXT_PUBLIC_DEMO_SUPABASE_URL: process.env.NEXT_PUBLIC_DEMO_SUPABASE_URL ?? "",
     NEXT_PUBLIC_DEMO_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_DEMO_SUPABASE_ANON_KEY ?? "",
+    // Primary Supabase project — explicit pass-through so Turbopack client bundles
+    // always inline these even when .env.local was added after a cached dev compile.
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   },
   // Lets the iOS/Android WebView load from your Mac's LAN IP during `npm run dev`.
   allowedDevOrigins: capacitorDevOrigins(),

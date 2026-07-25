@@ -261,44 +261,54 @@ export async function syncScheduleRecordsFromServer(opts?: { force?: boolean }):
   if (isDemoModeActive()) return true;
   const force = opts?.force === true;
   const lastSyncedAt = readScheduleSyncedAt();
-  if (!force && scheduleSyncPromise) return scheduleSyncPromise;
+  if (!force && scheduleSyncPromise) {
+    try {
+      return await scheduleSyncPromise;
+    } catch {
+      return false;
+    }
+  }
   if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < SCHEDULE_SYNC_TTL_MS) {
     return true;
   }
   try {
     scheduleSyncPromise = (async () => {
-      const res = await fetch("/api/portal-schedule-records", {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (!res.ok) return false;
-      const body = (await res.json()) as { rows?: unknown[] };
-      if (!Array.isArray(body.rows)) return false;
-      const standaloneInquiries: PartnerInquiry[] = [];
-      for (const raw of body.rows) {
-        if (!raw || typeof raw !== "object") continue;
-        const row = raw as { id?: unknown; payload?: unknown; recordType?: unknown };
-        if (typeof row.id !== "string") continue;
-        if (row.recordType === "partner_inquiry_request" && row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)) {
-          standaloneInquiries.push(row.payload as PartnerInquiry);
+      try {
+        const res = await fetch("/api/portal-schedule-records", {
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (!res.ok) return false;
+        const body = (await res.json()) as { rows?: unknown[] };
+        if (!Array.isArray(body.rows)) return false;
+        const standaloneInquiries: PartnerInquiry[] = [];
+        for (const raw of body.rows) {
+          if (!raw || typeof raw !== "object") continue;
+          const row = raw as { id?: unknown; payload?: unknown; recordType?: unknown };
+          if (typeof row.id !== "string") continue;
+          if (row.recordType === "partner_inquiry_request" && row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)) {
+            standaloneInquiries.push(row.payload as PartnerInquiry);
+          }
+          memoryStore.set(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
+          writeSessionJson(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
         }
-        memoryStore.set(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
-        writeSessionJson(row.id, Array.isArray(row.payload) || row.payload !== undefined ? row.payload : []);
-      }
-      if (standaloneInquiries.length > 0) {
-        const existing = readJson<PartnerInquiry[]>(INQ_KEY, []);
-        const byId = new Map(existing.map((row) => [row.id, row]));
-        for (const row of standaloneInquiries) {
-          if (typeof row.id === "string" && !byId.has(row.id)) byId.set(row.id, row);
+        if (standaloneInquiries.length > 0) {
+          const existing = readJson<PartnerInquiry[]>(INQ_KEY, []);
+          const byId = new Map(existing.map((row) => [row.id, row]));
+          for (const row of standaloneInquiries) {
+            if (typeof row.id === "string" && !byId.has(row.id)) byId.set(row.id, row);
+          }
+          const merged = [...byId.values()];
+          memoryStore.set(INQ_KEY, merged);
+          writeSessionJson(INQ_KEY, merged);
         }
-        const merged = [...byId.values()];
-        memoryStore.set(INQ_KEY, merged);
-        writeSessionJson(INQ_KEY, merged);
+        writeScheduleSyncedAt(Date.now());
+        emitAdminUi();
+        return true;
+      } catch {
+        return false;
       }
-      writeScheduleSyncedAt(Date.now());
-      emitAdminUi();
-      return true;
-    })();
+    })().catch(() => false);
     return await scheduleSyncPromise;
   } catch {
     return false;

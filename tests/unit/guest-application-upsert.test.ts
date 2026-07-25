@@ -82,6 +82,26 @@ describe("prepareGuestApplicationUpsert", () => {
     expect(result).toMatchObject({ ok: false, status: 403 });
   });
 
+  it("rejects a submit whose property resolves to no manager, ignoring a forged managerUserId", async () => {
+    resolveManager.mockResolvedValue({ data: null, error: null });
+    const result = await prepareGuestApplicationUpsert(makeDb() as never, {
+      row: baseRow({ propertyId: "prop-unknown", managerUserId: "victim-manager" }),
+      existing: null,
+    });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it("keeps the stored attribution on an edit instead of a forged managerUserId", async () => {
+    resolveManager.mockResolvedValue({ data: null, error: null });
+    const result = await prepareGuestApplicationUpsert(makeDb() as never, {
+      row: baseRow({ propertyId: "prop-unknown", managerUserId: "victim-manager" }),
+      existing: baseRow({ managerUserId: "mgr-1" }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.row.managerUserId).toBe("mgr-1");
+  });
+
   it("rejects edits to non-pending existing applications", async () => {
     const result = await prepareGuestApplicationUpsert(makeDb() as never, {
       row: baseRow(),

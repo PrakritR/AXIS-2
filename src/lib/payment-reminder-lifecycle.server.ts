@@ -74,7 +74,37 @@ async function projectFutureRemindersForCharge(
   );
 }
 
-/** Cancel future scheduled payment reminders when a charge is marked paid. */
+/** Clears per-charge reminder overrides for unpaid charges so a new schedule applies. */
+export async function clearReminderOverridesForUnpaidCharges(
+  db: SupabaseClient,
+  managerUserId: string,
+): Promise<number> {
+  const { data: chargeRows, error: chargeError } = await db
+    .from("portal_household_charge_records")
+    .select("id, row_data")
+    .eq("manager_user_id", managerUserId);
+  if (chargeError) throw chargeError;
+
+  const unpaidIds = (chargeRows ?? [])
+    .filter((row) => {
+      const charge = row.row_data as { status?: string } | null;
+      return charge?.status !== "paid";
+    })
+    .map((row) => String(row.id));
+
+  if (!unpaidIds.length) return 0;
+
+  const { data: deleted, error: deleteError } = await db
+    .from("scheduled_message_overrides")
+    .delete()
+    .eq("manager_user_id", managerUserId)
+    .in("charge_id", unpaidIds)
+    .select("id");
+
+  if (deleteError) throw deleteError;
+  return deleted?.length ?? 0;
+}
+
 export async function cancelFuturePaymentRemindersForCharge(
   db: SupabaseClient,
   managerUserId: string,

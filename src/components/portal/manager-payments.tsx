@@ -513,6 +513,7 @@ export function ManagerPayments() {
         onSaved={(next) => {
           setReminderSettings(next);
           void reloadSchedule();
+          setReminderSettingsOpen(false);
         }}
       />
       <ManagerAddPaymentModal

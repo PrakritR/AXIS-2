@@ -387,7 +387,7 @@ test.describe("Group applications end to end", () => {
     expect(organizerRow!.applyingAsGroup).toBe("yes");
     expect(organizerRow!.groupRole).toBe("first");
     expect(organizerRow!.groupSize).toBe("2");
-    expect(organizerRow!.groupId).toMatch(/^AXISGRP-[0-9A-HJKMNP-TV-Z]{8}$/);
+    expect(organizerRow!.groupId).toMatch(/^PROPLANE-[0-9A-HJKMNP-TV-Z]{8}$/);
     fs.writeFileSync(evidencePath(path.basename(GROUP_ID_FILE)), organizerRow!.groupId);
     writeDbEvidence("after organizer submit", rows);
   });

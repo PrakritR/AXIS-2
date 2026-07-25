@@ -15,8 +15,8 @@ export const MANAGER_VENDOR_PAY_METHOD_OPTIONS: {
   feeLabel: string;
 }[] = [
   { id: "ach", title: "Bank (ACH)", feeLabel: "Pay through PropLane · Stripe Connect" },
-  { id: "zelle", title: "Zelle", feeLabel: "No processing fee" },
-  { id: "venmo", title: "Venmo", feeLabel: "No processing fee" },
+  { id: "zelle", title: "Zelle", feeLabel: "No added fees" },
+  { id: "venmo", title: "Venmo", feeLabel: "No added fees" },
 ];
 
 export function managerVendorPayMethodLabel(method: ManagerVendorPayMethod): string {

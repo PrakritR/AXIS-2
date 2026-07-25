@@ -145,13 +145,20 @@ Framework invariants worth knowing before you touch `src/lib/tools/registry.ts`:
   `tests/unit/tools/confirm-gate-portal-scope.test.ts`.
 
 **One conversation loop, multiple surfaces.** The floating popup
-(`axis-assistant.tsx`) and the manager dashboard's right-dock
-(`dashboard-assistant-dock.tsx`, desktop `hidden lg:block` only — mobile keeps
-FAB/popup) both drive the SAME send/confirm transport,
+(`axis-assistant.tsx`) and the portal-wide right rail
+(`portal-assistant-rail.tsx`, desktop only — it hides below `lg`, so small
+screens always get the FAB/popup) both drive the SAME send/confirm transport,
 `useAssistantConversation(endpoint)`, and share the suggestion chips +
-preview/confirm card from `assistant-shared.tsx`. A dashboard-initiated approval
-is NOT a new send path: proposed writes surface as "AI drafts" chips in Needs
-attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
+preview/confirm card from `assistant-shared.tsx`. Which of the two renders is
+ONE cookie-backed preference in `src/lib/axis-assistant/dock-store.ts` (popup by
+default, SSR-seeded from the cookie by `assistant-dock-state.ts`); the
+in-assistant pin, the rail's unpin, and the manager Settings picker
+(`assistant-display-setting.tsx`) are all drivers of that same store. Add a new
+entry point by calling `dockAssistantToRail()` / `undockAssistantFromRail()` and
+reading `useAssistantDocked()` — never a second persistence layer, which would
+let two controls disagree about the same preference. A dashboard-initiated
+approval is NOT a new send path: proposed writes surface as "AI drafts" chips in
+Needs attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
 `useAgentPendingActions` off owner-scoped `GET /api/agent/pending-actions`), and
 Approve/Discard POST ONLY the action id to `/api/agent/chat` →
 `claimPendingAction` re-validates the stored input server-side. Never add a
@@ -404,21 +411,21 @@ deleted after the production branch was migrated to `main`; don't recreate it.
 Two branches, two roles:
 
 - **`main` — the live site.** Every push here triggers a **production deploy** to
-  the real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
+  Vercel (the only branch that deploys — see `vercel.json` `git.deploymentEnabled`).
+  Real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
   legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
   still recognized as production by `isProductionAxisHost`), and
   `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
   (see below). Outbound email/SMS and shareable links use the canonical origin
   (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
   this branch. Never commit straight to it.
-- **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
-  produces a **preview deploy**, and Vercel keeps a stable branch alias that
-  always points at the latest `prakrit` build —
-  `axis-2-git-prakrit-prakritramachandran-6082s-projects.vercel.app`. That URL is
-  the staging preview the ship gate asks you to verify. Feature branches also get
-  their own preview URLs.
+- **`prakrit` — integration branch.** Day-to-day work merges here. Pushes to
+  `prakrit` and feature branches do **not** trigger Vercel builds (previews are
+  disabled). Verify on localhost or the dev worktree before promoting to `main`.
+  **Never push feature branches (`claude`, `cursor-*`, etc.) expecting a deploy**
+  — only `main` builds.
 
-**Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
+**Promote `prakrit` → `main` to ship.** When `prakrit` is verified locally and
 you want it live:
 
 ```
@@ -434,10 +441,16 @@ Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
 point `main` at the previous known-good commit and push, or use Vercel's
 **Instant Rollback** in the dashboard.
 
-Deploying `prakrit` as a staging step is standard practice on Vercel: its
-preview/branch alias is your staging environment, and `main` is the gated
-promotion target. Don't add a separate Vercel project for staging — the branch
-model above already gives you prod + staging from one project.
+Only `main` deploys to Vercel. Enforcement is **three layers** (do not weaken):
+
+1. **Vercel project** `axis-2` → Settings → Git → **Ignored Build Step**:
+   `[ "$VERCEL_GIT_COMMIT_REF" != "main" ]` (skips every non-`main` push, even
+   old branches without current `vercel.json`).
+2. **`vercel.json`** `git.deploymentEnabled`: only `main` is `true`.
+3. **`vercel.json`** `ignoreCommand`: `scripts/vercel-should-build.sh` (same rule).
+
+Do not re-enable preview deploys or remove the Ignored Build Step without an
+explicit captain decision.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
 Git**. It is `main`; don't change it.
@@ -516,7 +529,7 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Reviews complete (security + bugbot + cache/rendering as applicable)
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
-[ ] prakrit verified on staging preview
+[ ] prakrit verified on localhost / dev worktree (no Vercel preview)
 [ ] ff-only merge prakrit → main + push
 [ ] Vercel production deploy healthy
 [ ] iOS TestFlight workflow green (or secrets gap reported)
@@ -729,13 +742,14 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Vendor portal (roles, bids, Connect payouts) | `docs/agents/vendor-portal.md` | Vendor reads scope by `vendor_user_id = auth.uid()`; writes go through service-role routes; an accepted bid's `amount_cents` is the immutable payout anchor. |
 | Financials (ledger, GL, deposits, AP, NSF) | `docs/agents/financials.md` | Every charge/payment write MUST call `syncLedgerChargeEntry`/`syncLedgerPaymentEntry` + GL posting next to the DB write — the ledger is write-through only, never read-time backfill. `security_deposit` books to liability, not income. |
 | Vendor invoicing (Phase 4) | `docs/agents/vendor-invoicing.md` | Invoice totals recomputed server-side from line items; vendor tools live in `vendorAgentRegistry`, never the manager registry. |
-| Resident payments (resident-paid processing, ACH clearing) | `docs/agents/resident-payments.md` | The resident pays the processing/service fee on every method (card/Link and ACH) so the manager's payout equals the subtotal; `processing` charges are ignored by late fees/reminders/re-pay. |
+| Resident payments (face-value pricing, ACH clearing) | `docs/agents/resident-payments.md` | Residents/applicants pay EXACTLY the subtotal on every method and the manager's payout equals it too — PropLane bears Stripe's fee via a destination charge with NO `application_fee_amount` (never a direct charge / `on_behalf_of`, which would bill the manager); `processing` charges are ignored by late fees/reminders/re-pay. |
 | Documents module | `docs/agents/documents-module.md` | `manager-documents` bucket is PRIVATE — bytes only via server-minted signed URLs after an ownership check. |
 | Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. The static snapshot ships EMPTY; a demo portfolio comes from the canonical `@test.axis.local` accounts via the mirror, never a fictional fixture in code. |
 | Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 | Manager account creation ("Get started") | `docs/agents/manager-account-creation.md` | `/auth/create-account` NEVER auto-redirects to a portal — a signed-in user still gets the full create form, and the partner-pricing OAuth callback returns there on every branch (free tier included, `account_ready=1` when provisioned) instead of resolving a portal path. Entering a portal is always an explicit click. The email/password form must send `fullName` + `phone`; `/api/auth/manager-register` 400s without them. |
+| Resident account creation (after applying) | `docs/agents/resident-onboarding.md` | Residents create accounts ONLY from a setup token (emailed / in-session handoff after applying) or an OAuth email match — `POST /api/auth/resident-register` stays disabled (403). Phone is required on `/auth/resident-setup`. The finish CTA's `setupHref` is minted at application upsert (email-independent). A mismatched Google email RELINKS the application, never rejects. The setup token never returns to the browser except the guest's own in-session handoff. |
 | Inbound email → inboxes (support + conversation replies) | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Support threads are receive-only — an in-app reply never emails the sender. Conversation emails carry a pair-HMAC `reply+…@RESEND_REPLY_DOMAIN` Reply-To; a verified emailed reply routes into both sides of the portal thread (message id `email_<email_id>` dedupes redelivery), anything unverified falls back to the admin inbox. Never widen the founder identity — attribute TO it. |
 
 ## Per-room rent basis: monthly (default) vs daily
@@ -918,10 +932,14 @@ portal, and identity while the household reads as one unit.
 
 **Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
 `destructive` variant) was deleted — `src/components/ui/button.tsx` is the only Button, and it now
-supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop;
-translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
-`h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
-never reintroduce a filled-red destructive variant.
+supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop
+(do not reintroduce one); translate an old `size="sm"` into `px-4 text-[13px]` at the call site —
+horizontal padding + text size only. Never add `h-9 min-h-0`: `min-h-0` defeats the Button's
+default `min-h-[44px]`, breaking the 44px touch-target minimum (`docs/design.md`) on buttons that
+ship in the Capacitor WebView. Explicit sub-44px heights (`h-9 min-h-0 …`, icon
+`h-10 w-10 min-h-0 px-0`) are reserved for deliberately compact desktop chrome (marketing navbar
+CTAs, inbox toolbar) — never portal action buttons. `danger` stays text-only red per
+`docs/design.md` — never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both

@@ -475,7 +475,7 @@ export async function renderPortalSection(
       if (!["current", "previous"].includes(residentsTab)) notFound();
       const ManagerResidents = await loadManagerResidents();
       return subscriptionGated(
-        <ManagerResidents tabId={residentsTab as "current" | "previous"} />,
+        <ManagerResidents tabId={residentsTab as "current" | "previous"} smsUiEnabled={isSmsCommUiEnabled()} />,
         kind,
         "residents",
         managerOwnerSubscriptionTier,

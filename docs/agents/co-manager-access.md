@@ -57,6 +57,34 @@ manager-vendors-storage, service-requests) stay dependency-free: panels pass
 the precomputed sets as OPTIONAL PARAMS (avoids the
 portal-data-store↔household-charges import cycle). Copy that pattern.
 
+**Every client visibility mirror is attribution-first, then property-scoped.**
+`moduleRowVisibleToPortalUser`, `applicationVisibleToPortalUser`, and
+`leaseVisibleToPortalUser` all return true immediately on
+`row.managerUserId === userId`, and only fall through to the owned/linked
+property sets otherwise. That ordering is load-bearing, not a shortcut: those
+sets come from a module-level cache React cannot see, so a row whose property
+has not hydrated yet (or an archived/unlisted own listing) is otherwise dropped
+from the manager's OWN list — that race is what hid a resident's freshly
+submitted application from its manager. It cannot widen a co-manager's scope,
+because a linked row is attributed to the OWNER and still takes the
+property-scoped path, so unlink/delete scoping stays intact. Do not "tighten"
+the check by removing the attribution branch. Panels that filter with these
+helpers must also depend on their portfolio tick
+(`MANAGER_PORTFOLIO_REFRESH_EVENTS`) so the list re-filters once that cache
+hydrates. Coverage: `tests/unit/manager-portfolio-access.test.ts`,
+`tests/unit/manager-applications-cold-cache.test.tsx`.
+
+**Attribution itself is server-derived.** `managerUserId` decides whose
+Applications tab a row lands in, so no `POST /api/manager-applications` branch
+takes it from the request body: applicant submits (guest and signed-in resident)
+resolve it from the listing record (`resolveManagerUserIdForProperty`, shared by
+`guest-application-upsert.ts` and `link-resident-on-application-submit.ts`) or
+from the already-stored value on an edit, and manager/admin writes take it from
+the ownership gate. A new applicant submit whose listing resolves to no manager
+is refused rather than stored unattributed. Coverage:
+`tests/unit/link-resident-on-application-submit.test.ts`,
+`tests/unit/guest-application-upsert.test.ts`.
+
 **Hard-won gotcha:** the account-links API selects BOTH
 `property_co_manager_permissions` and legacy `co_manager_permissions`; a 2026-06
 migration RENAMED the legacy column away, so every select errored and the panel

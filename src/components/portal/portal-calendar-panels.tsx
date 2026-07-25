@@ -308,7 +308,11 @@ export function PortalCalendarPanels({
     if (!storageKey) return;
     let cancelled = false;
     const load = async () => {
-      await syncScheduleRecordsFromServer();
+      try {
+        await syncScheduleRecordsFromServer();
+      } catch {
+        /* offline or dev server restart — calendar still renders */
+      }
       if (!cancelled) {
         setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
       }
@@ -324,7 +328,10 @@ export function PortalCalendarPanels({
   // tabs, and refresh once immediately when the tab becomes visible again.
   useEffect(() => {
     if (!storageKey) return;
-    const refresh = () => syncScheduleRecordsFromServer().then(() => setMeetingRefresh((n) => n + 1));
+    const refresh = () =>
+      syncScheduleRecordsFromServer()
+        .then(() => setMeetingRefresh((n) => n + 1))
+        .catch(() => undefined);
     const id = setInterval(() => {
       if (document.hidden) return;
       void refresh();
@@ -695,8 +702,8 @@ export function PortalCalendarPanels({
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</p>
-      <select
-        className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
+      <Select
+       
         value={String(visibleStartSlot)}
         onChange={(e) => {
           const nextStart = Number.parseInt(e.target.value, 10);
@@ -712,10 +719,10 @@ export function PortalCalendarPanels({
             {formatAvailabilitySlotLabel(slot)}
           </option>
         ))}
-      </select>
+      </Select>
       <span className="text-sm font-medium text-muted">to</span>
-      <select
-        className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
+      <Select
+       
         value={String(visibleEndSlotExclusive)}
         onChange={(e) => {
           const nextEnd = Number.parseInt(e.target.value, 10);
@@ -732,7 +739,7 @@ export function PortalCalendarPanels({
               {formatSlotEndLabel(slot)}
             </option>
           ))}
-      </select>
+      </Select>
     </div>
   );
 

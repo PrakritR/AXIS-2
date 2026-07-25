@@ -11,11 +11,10 @@ import {
 } from "@/components/portal/manager-communication-compose-modal";
 import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number-button";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PORTAL_HEADER_ACTION_BTN, PortalToolbarSortSelect } from "@/components/portal/portal-metrics";
 import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import {
   axisAdminFilterContact,
-  contactsForSelectedRoles,
   EMPTY_COMMUNICATION_THREAD_FILTERS,
   propertyOptionsFromFilterContacts,
   roleLabel,
@@ -23,6 +22,7 @@ import {
   type CommunicationThreadFilters,
 } from "@/lib/communication-thread-filters";
 import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
+import type { CommunicationListSort } from "@/lib/unified-inbox-merge";
 import {
   normalizeManagerSmsConversationsPayload,
   type ManagerSmsResidentConversation,
@@ -66,6 +66,7 @@ export function ManagerCommunication({
   const inboxRef = useRef<ManagerInboxHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);
   const [filters, setFilters] = useState<CommunicationThreadFilters>(EMPTY_COMMUNICATION_THREAD_FILTERS);
+  const [listSort, setListSort] = useState<CommunicationListSort>("recent");
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
@@ -79,21 +80,20 @@ export function ManagerCommunication({
 
   const propertyOptions = useMemo(() => propertyOptionsFromFilterContacts(filterContacts), [filterContacts]);
 
-  const personOptions = useMemo(() => {
-    const scoped = contactsForSelectedRoles(filterContacts, filters.roles);
-    return scoped
+  const residentOptions = useMemo(() => {
+    return filterContacts
+      .filter((c) => c.role === "resident")
       .map((c) => {
-        const status =
-          c.role === "resident" ? (c.tenancyStatus === "applicant" ? "Applicant" : "Resident") : null;
+        const status = c.tenancyStatus === "applicant" ? "Applicant" : "Resident";
         const house = c.propertyLabel?.trim();
-        const bits = [c.name, status, house || c.email].filter(Boolean);
+        const bits = [c.name, status, house].filter(Boolean);
         return {
           value: c.id,
           label: bits.join(" · "),
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [filterContacts, filters.roles]);
+  }, [filterContacts]);
 
   const loadSmsRecipients = useCallback(async () => {
     // SMS UI hidden until A2P clears — never fetch SMS recipients or expose them
@@ -167,14 +167,23 @@ export function ManagerCommunication({
       />
       <CheckboxMultiSelect
         variant="pill"
-        label="Which people"
-        emptyLabel="All people"
-        options={personOptions}
+        label="Resident"
+        emptyLabel="All residents"
+        options={residentOptions}
         selected={filters.contactIds}
         onChange={(contactIds) => setFilters((f) => ({ ...f, contactIds }))}
-        disabled={filters.roles.length === 0}
-        emptyMenuText={filters.roles.length === 0 ? "Pick a role first" : "No people in selected roles"}
-        dataAttr="communication-filter-person"
+        emptyMenuText="No residents yet"
+        dataAttr="communication-filter-resident"
+      />
+      <PortalToolbarSortSelect
+        label="Sort"
+        value={listSort}
+        onChange={setListSort}
+        ariaLabel="Sort conversations"
+        options={[
+          { value: "recent", label: "Most recent" },
+          { value: "resident", label: "Resident (A–Z)" },
+        ]}
       />
     </div>
   );
@@ -211,6 +220,7 @@ export function ManagerCommunication({
         commBase={commBase}
         threadFilters={filters}
         filterContacts={filterContacts}
+        listSort={listSort}
         smsUiEnabled={smsUiEnabled}
         inboxRef={inboxRef}
         smsRef={smsRef}

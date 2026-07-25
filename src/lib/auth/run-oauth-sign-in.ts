@@ -2,6 +2,7 @@ import { resolveAppleWebOAuthSignIn } from "@/lib/auth/apple-sign-in-config";
 import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
 import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
+import { googleSignInOAuthOptions } from "@/lib/auth/google-oauth-calendar";
 import { defaultOAuthNextPath, type OAuthSignInIntent } from "@/lib/auth/post-oauth-routing";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { openOAuthUrl } from "@/lib/native/open-url";
@@ -68,6 +69,7 @@ export async function runOAuthSignIn({
     options: {
       redirectTo,
       skipBrowserRedirect: true,
+      ...(provider === "google" ? googleSignInOAuthOptions(intent, resolvedNext) : {}),
     },
   });
 

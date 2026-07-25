@@ -7,8 +7,6 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_SELECT,
-  PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -74,6 +72,7 @@ import {
 } from "@/lib/portal-data-store";
 import { syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
+import { Input, Select } from "@/components/ui/input";
 
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -289,12 +288,10 @@ function AddPropertyToCoManager({
     <div className="flex flex-wrap items-end gap-2">
       <label className="min-w-[12rem] flex-1 text-xs font-semibold text-muted">
         Add property
-        <PortalToolbarSelectWrap className="mt-1 block w-full">
-          <select
+        <Select
             value={selectedPropertyId}
             disabled={disabled}
             onChange={(e) => onSelect(linkId, e.target.value)}
-            className={`h-10 w-full ${PORTAL_TOOLBAR_SELECT}`}
           >
             <option value="">Select property…</option>
             {unassigned.map((option) => (
@@ -302,9 +299,8 @@ function AddPropertyToCoManager({
                 {option.label}
               </option>
             ))}
-          </select>
-        </PortalToolbarSelectWrap>
-      </label>
+          </Select>
+        </label>
       <Button type="button" variant="outline" className="rounded-full text-xs" disabled={disabled || !selectedPropertyId} onClick={onAdd}>
         Add property
       </Button>
@@ -1800,13 +1796,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             >
               <label className="block text-xs font-semibold text-muted">
                 {AXIS_ID_LABEL}
-                <input
+                <Input
                   type="text"
                   value={axisInput}
                   onChange={(e) => setAxisInput(e.target.value)}
                   placeholder="e.g. PROPLANE-1A2B3C4D"
                   autoFocus
-                  className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
+                  className="mt-1 font-mono"
                 />
               </label>
               <p className="text-xs text-muted">
@@ -1936,7 +1932,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
               <label className="mt-4 block text-xs font-semibold text-muted">
                 New main manager
-                <select
+                <Select
                   value={transferCoManagerUserId ?? ""}
                   onChange={(e) => setTransferCoManagerUserId(e.target.value || null)}
                   className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
@@ -1946,7 +1942,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       {cm.linkedDisplayName ?? cm.linkedAxisId}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
 
               <div className="mt-4">

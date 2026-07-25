@@ -17,17 +17,22 @@ import { createPortal } from "react-dom";
 
 import { track } from "@/lib/analytics/track-client";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
+import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
+import {
+  AssistantDockToRailButton,
+} from "@/components/portal/assistant-layout-controls";
+import {
+  AssistantChatHistoryControls,
+  AssistantChatHistoryPanel,
+} from "@/components/portal/assistant-chat-history-panel";
 import {
   AssistantPendingActionCard,
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
-import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { useIsClient } from "@/hooks/use-is-client";
-import { useNativeChrome } from "@/hooks/use-is-native-app";
-import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
+import { useOptionalAssistantConversation } from "@/lib/axis-assistant/assistant-conversation-context";
+import { AssistantConversationProvider } from "@/lib/axis-assistant/assistant-conversation-context";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
@@ -36,7 +41,13 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
+import { dockAssistantToRail, useAssistantDocked } from "@/lib/axis-assistant/dock-store";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
+import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { useIsClient } from "@/hooks/use-is-client";
+import { useIsSmallPortalViewport, useNativeChrome } from "@/hooks/use-is-native-app";
+import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
 
@@ -59,22 +70,30 @@ function handleOpenAssistant() {
 }
 
 /**
- * Assistant FAB — floats above the bottom nav bar in the native app (clearing it
- * via the same measured `--portal-native-bottom-nav-inset` the bar itself uses),
- * bottom-right on web. Always rendered: the assistant is no longer a bar slot.
+ * Floating trigger when the popup is closed. On desktop, hidden while the
+ * assistant is docked to the right rail.
  */
 function AxisAssistantFixedTrigger() {
   const open = useAxisAssistantOpen();
+  const isSmall = useIsSmallPortalViewport();
+  const docked = useAssistantDocked();
+
   if (open) return null;
+  if (!isSmall && docked) return null;
 
   return (
     <button
       type="button"
-      onClick={handleOpenAssistant}
+      onClick={() => {
+        handleOpenAssistant();
+      }}
       aria-label="Open PropLane Assistant"
       aria-expanded={open}
       data-attr="axis-assistant-fab"
-      className="axis-assistant-fab group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:h-11 max-lg:w-11 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:h-11 [html[data-native]_&]:w-11"
+      className={cn(
+        "axis-assistant-fab group fixed z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 max-lg:h-11 max-lg:w-11 [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
+        "bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] lg:bottom-6 lg:right-6 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]",
+      )}
       style={{ background: "var(--btn-primary)" }}
     >
       <AxisAssistantSparkleIcon className="h-5 w-5 max-lg:h-[18px] max-lg:w-[18px] [html[data-native]_&]:h-[18px] [html[data-native]_&]:w-[18px]" />
@@ -93,6 +112,7 @@ const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { chil
 function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { managerName?: string | null; endpoint?: string }) {
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
+  const isSmall = useIsSmallPortalViewport();
   const open = useAxisAssistantOpen();
   const [panelReady, setPanelReady] = useState(false);
   // Single shared conversation loop (same send/confirm/deny transport the
@@ -100,15 +120,25 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const {
     input,
     setInput,
+    attachments,
+    setAttachments,
     messages,
     lastTools,
     pendingAction,
     loading,
     error,
+    setError,
     send,
     resolvePendingAction,
-    reset,
-  } = useAssistantConversation(endpoint);
+    threads,
+    activeThreadId,
+    historyOpen,
+    multiThread,
+    openHistory,
+    closeHistory,
+    selectThread,
+    startNewChat,
+  } = useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -167,6 +197,11 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     closeAxisAssistant();
   }, []);
 
+  const dockToRail = useCallback(() => {
+    dockAssistantToRail();
+    closeAxisAssistant();
+  }, []);
+
   // Scripted prompts (the /demo "Run demo" auto-play) submit through here.
   const sendRef = useRef<(prompt?: string) => void>(() => {});
   useEffect(() => {
@@ -177,7 +212,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   }, []);
 
   function resetConversation() {
-    reset();
+    startNewChat();
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -243,7 +278,16 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {hasConversation && (
+                {!isSmall ? (
+                  <AssistantDockToRailButton onClick={dockToRail} />
+                ) : null}
+                {multiThread ? (
+                  <AssistantChatHistoryControls
+                    onOpenHistory={openHistory}
+                    onNewChat={resetConversation}
+                    showNewChat
+                  />
+                ) : hasConversation ? (
                   <button
                     type="button"
                     onClick={resetConversation}
@@ -260,7 +304,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       />
                     </svg>
                   </button>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={closePanel}
@@ -276,6 +320,17 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
           </div>
 
           {hideEmptyChrome ? null : (
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {multiThread ? (
+                <AssistantChatHistoryPanel
+                  open={historyOpen}
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelect={selectThread}
+                  onNewChat={resetConversation}
+                  onClose={closeHistory}
+                />
+              ) : null}
             <div
               ref={scrollRef}
               className={cn(
@@ -301,7 +356,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       </h3>
                     </div>
                     <p className="max-w-[18rem] text-sm leading-relaxed text-muted">
-                      Rent, leases, reminders. Grounded in your live portfolio data.
+                      Rent, leases, applications, and reminders — grounded in your live portfolio data.
                     </p>
                   </div>
                   <AssistantSuggestionChips
@@ -345,6 +400,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 </div>
               )}
             </div>
+            </div>
           )}
 
           <form
@@ -361,51 +417,18 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 onResolve={(decision) => void resolvePendingAction(decision)}
               />
             ) : null}
-            <div className="relative rounded-2xl border border-border bg-auth-input-bg shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    void send();
-                  }
-                }}
-                rows={1}
-                placeholder="Ask about your portfolio…"
-                className="max-h-32 min-h-[2.75rem] w-full resize-none [field-sizing:content] rounded-2xl bg-transparent py-3 pl-4 pr-12 text-sm text-foreground outline-none placeholder:text-muted/70"
-              />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                aria-label="Send message"
-                className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full text-white outline-none transition-[filter,opacity,transform] duration-200 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ background: "var(--btn-primary)" }}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                  <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
+            <AssistantChatComposer
+              input={input}
+              setInput={setInput}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              onAttachmentError={(message) => setError(message)}
+              loading={loading}
+              inputRef={inputRef}
+              onSend={() => void send()}
+            />
           </form>
         </div>
-      </div>
-    ) : open ? (
-      <div className="axis-assistant-root fixed inset-0 z-[65]">
-        <button
-          type="button"
-          aria-label="Close PropLane Assistant"
-          className="axis-assistant-backdrop fixed inset-0"
-          onClick={closePanel}
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-busy="true"
-          aria-label="Opening PropLane Assistant"
-          className="axis-assistant-panel glass-card fixed z-[66] flex h-[min(38rem,calc(100dvh-7.5rem))] flex-col overflow-hidden border border-primary/15 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45),0_0_0_1px_rgba(47,107,255,0.08)] backdrop-blur-xl"
-        />
       </div>
     ) : null;
 
@@ -424,7 +447,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
  */
 export function AxisAssistant({
   managerName,
-  endpoint,
+  endpoint = "/api/agent/chat",
   children,
 }: {
   managerName?: string | null;
@@ -446,8 +469,12 @@ export function AxisAssistant({
 
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
-      <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-      <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+      <PortalAssistantConfigProvider endpoint={endpoint} managerName={managerName ?? null}>
+        <AssistantConversationProvider endpoint={endpoint}>
+          <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
+          <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
+        </AssistantConversationProvider>
+      </PortalAssistantConfigProvider>
     </AxisAssistantPresenceContext.Provider>
   );
 }

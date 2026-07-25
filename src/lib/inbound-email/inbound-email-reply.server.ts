@@ -32,6 +32,7 @@ import {
   scopeForRole,
   type PortalMessageThreadSide,
 } from "@/lib/portal-inbox-delivery";
+import { inboxDeepLinkForRole } from "@/lib/platform/parity";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -76,15 +77,6 @@ function displayWhen(receivedAt: string): string {
   const at = new Date(receivedAt);
   const date = Number.isNaN(at.getTime()) ? new Date() : at;
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-/** Deep-link a push tap into the token owner's own inbox (mirrors the send route). */
-function inboxDeepLinkForRole(role: string | null): string {
-  const normalized = String(role ?? "").trim().toLowerCase();
-  if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
-  if (normalized === "admin") return "/admin/communication/email/unopened";
-  if (normalized === "vendor") return "/vendor/communication/email/unopened";
-  return "/resident/communication/email/unopened";
 }
 
 /** The two thread sides one reply writes to, shared by ingest and backfill. */
@@ -151,7 +143,7 @@ export async function ingestInboundEmailReply(
   const rand = Math.random().toString(36).slice(2, 6);
 
   // Owner's inbox copy — where an in-portal reply from this person would land.
-  const appended = await deliverPortalMessageThreadSide(db, {
+  const ownerResult = await deliverPortalMessageThreadSide(db, {
     ...sides.owner,
     fallbackId: `msg_inbox_${ts}_${rand}`,
     fromName,
@@ -177,6 +169,7 @@ export async function ingestInboundEmailReply(
     outbound: true,
     messageId,
   });
+  const appended = ownerResult.action !== "skipped";
 
   if (appended) {
     // Best-effort push, same generic payload as the portal send route (message

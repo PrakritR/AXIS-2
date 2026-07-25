@@ -400,7 +400,30 @@ export function ManagerCreateServiceRequestModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Add add-on service">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add add-on service"
+      footer={
+        <div className="flex justify-start gap-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={submit}
+            disabled={
+              busy ||
+              !offerId ||
+              (isCustomOffer ? !customTitle.trim() : !selectedOffer)
+            }
+          >
+            {busy ? "Saving…" : "Add add-on service"}
+          </Button>
+        </div>
+      }
+    >
       <div className="space-y-4">
         <p className="text-sm text-muted">
           {lockedResident
@@ -639,24 +662,6 @@ export function ManagerCreateServiceRequestModal({
             disabled={busy}
           />
         </label>
-
-        <div className="flex justify-start gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={submit}
-            disabled={
-              busy ||
-              !offerId ||
-              (isCustomOffer ? !customTitle.trim() : !selectedOffer)
-            }
-          >
-            {busy ? "Saving…" : "Add add-on service"}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

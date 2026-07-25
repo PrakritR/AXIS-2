@@ -7,6 +7,7 @@ import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
+import { deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
 
 export const runtime = "nodejs";
 
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({ from, to: [inboxEmail], subject, text: messageBody, html }),
+          signal: AbortSignal.timeout(15_000),
         });
         emailSent = res.ok;
       } catch {
@@ -348,55 +350,37 @@ async function deliverToPortalInbox({
   });
   const preview = messageBody.slice(0, 100).replace(/\n/g, " ");
 
-  const managerThreadId = `payment_sent_${userId}_${ts}_${rand}`;
-  await db.from("portal_inbox_thread_records").upsert(
-    {
-      id: managerThreadId,
-      scope: "axis_portal_inbox_manager_v1",
-      owner_user_id: userId,
-      participant_email: null,
-      thread_type: "payment_reminder",
-      row_data: {
-        id: managerThreadId,
-        folder: "sent",
-        from: managerName,
-        email: residentLower,
-        subject,
-        preview,
-        body: messageBody,
-        time: when,
-        unread: false,
-        scope: "axis_portal_inbox_manager_v1",
-      },
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" },
-  );
+  await deliverPortalMessageThreadSide(db, {
+    scope: "axis_portal_inbox_manager_v1",
+    folder: "sent",
+    ownerUserId: userId,
+    participantEmail: null,
+    otherPartyEmail: residentLower,
+    fallbackId: `payment_sent_${userId}_${ts}_${rand}`,
+    fromName: managerName,
+    subject,
+    body: messageBody,
+    preview,
+    when,
+    unread: false,
+    outbound: true,
+  });
 
   if (residentLower !== senderLower) {
-    const residentThreadId = `payment_inbox_${ts}_${rand}`;
-    await db.from("portal_inbox_thread_records").upsert(
-      {
-        id: residentThreadId,
-        scope: "axis_portal_inbox_resident_v1",
-        owner_user_id: residentUserId || null,
-        participant_email: residentLower,
-        thread_type: "payment_reminder",
-        row_data: {
-          id: residentThreadId,
-          folder: "inbox",
-          from: managerName,
-          email: senderLower,
-          subject,
-          preview,
-          body: messageBody,
-          time: when,
-          unread: true,
-          scope: "axis_portal_inbox_resident_v1",
-        },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    );
+    await deliverPortalMessageThreadSide(db, {
+      scope: "axis_portal_inbox_resident_v1",
+      folder: "inbox",
+      ownerUserId: residentUserId || null,
+      participantEmail: residentLower,
+      otherPartyEmail: senderLower,
+      fallbackId: `payment_inbox_${ts}_${rand}`,
+      fromName: managerName,
+      subject,
+      body: messageBody,
+      preview,
+      when,
+      unread: true,
+      outbound: false,
+    });
   }
 }

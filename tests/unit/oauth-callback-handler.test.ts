@@ -7,7 +7,7 @@ const exchangeCodeForSession = vi.fn(async () => {
   capturedSetAll?.([
     { name: "sb-access-token", value: "token-value", options: { httpOnly: true, path: "/" } },
   ]);
-  return { error: null };
+  return { data: { session: { provider_token: null, provider_refresh_token: null } }, error: null };
 });
 
 const getUser = vi.fn(async () => ({ data: { user: { id: "user-1", email: "a@example.com" } } }));
@@ -38,6 +38,16 @@ vi.mock("@/lib/auth/resolve-oauth-portal-access", () => ({
 
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(() => ({})),
+}));
+
+vi.mock("@/lib/google-calendar/link-from-auth.server", () => ({
+  maybeLinkGoogleCalendarFromOAuthSession: vi.fn(async () => ({ linked: false, reason: "test" })),
+  shouldRedirectToGoogleCalendarConnect: vi.fn(() => false),
+  signedInWithGoogle: vi.fn(() => false),
+}));
+
+vi.mock("@/lib/google-calendar/debug-log.server", () => ({
+  debugGoogleCalendarLog: vi.fn(),
 }));
 
 describe("handleOAuthCallback", () => {

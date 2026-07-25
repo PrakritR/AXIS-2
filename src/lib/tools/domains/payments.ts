@@ -10,6 +10,7 @@ import {
   buildRentReminderPreview,
   type RentReminderPreview,
 } from "./payments-logic";
+import { deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
 
 /** Server-side read of the landlord's charges, scoped by manager_user_id. */
 async function loadManagerCharges(ctx: AgentContext): Promise<HouseholdCharge[]> {
@@ -149,30 +150,34 @@ async function sendReminderForCharge(
   //    keeps same-day retries from accumulating duplicate "sent" threads.
   let inboxRecorded = false;
   if (delivery === "emailed" || delivery === "portal_only") {
-    const threadId = `payment_sent_${ctx.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const { error: inboxError } = await ctx.db.from("portal_inbox_thread_records").upsert(
-      {
-        id: threadId,
+    const ts = Date.now();
+    const rand = Math.random().toString(36).slice(2, 6);
+    const when = new Date().toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    try {
+      await deliverPortalMessageThreadSide(ctx.db, {
         scope: "axis_portal_inbox_manager_v1",
-        owner_user_id: ctx.userId,
-        participant_email: null,
-        thread_type: "payment_reminder",
-        row_data: {
-          id: threadId,
-          folder: "sent",
-          from: "Axis Assistant",
-          email: preview.residentEmail,
-          subject,
-          preview: body.slice(0, 100).replace(/\n/g, " "),
-          body,
-          unread: false,
-          scope: "axis_portal_inbox_manager_v1",
-        },
-        updated_at: nowIso,
-      },
-      { onConflict: "id" },
-    );
-    inboxRecorded = !inboxError;
+        folder: "sent",
+        ownerUserId: ctx.userId,
+        participantEmail: null,
+        otherPartyEmail: preview.residentEmail,
+        fallbackId: `payment_sent_${ctx.userId}_${ts}_${rand}`,
+        fromName: "Axis Assistant",
+        subject,
+        body,
+        preview: body.slice(0, 100).replace(/\n/g, " "),
+        when,
+        unread: false,
+        outbound: true,
+      });
+      inboxRecorded = true;
+    } catch {
+      inboxRecorded = false;
+    }
   }
 
   // Stamp the realized delivery outcome. On a hard email failure, clear the

@@ -26,6 +26,19 @@ function roomNameSortKey(name: string): number {
   return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER;
 }
 
+/** Property-wide room media browser: numeric room name first, then floor label. */
+export function compareListingRoomMediaEntries(
+  a: { room: { name: string }; floorLabel: string },
+  b: { room: { name: string }; floorLabel: string },
+): number {
+  const na = roomNameSortKey(a.room.name.trim());
+  const nb = roomNameSortKey(b.room.name.trim());
+  if (na !== nb) return na - nb;
+  const byFloor = compareFloorLabels(a.floorLabel, b.floorLabel);
+  if (byFloor !== 0) return byFloor;
+  return a.room.name.localeCompare(b.room.name, undefined, { numeric: true, sensitivity: "base" });
+}
+
 export function compareRoomsByFloorThenName(
   a: { floor: string; name: string },
   b: { floor: string; name: string },

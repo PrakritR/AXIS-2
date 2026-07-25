@@ -1,16 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { PromotionAiDraftPhotoPicker } from "@/components/portal/promotion-ai-draft-card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PromotionAiDraftCard } from "@/components/portal/promotion-ai-draft-card";
-import { generateFlyerCopy } from "@/lib/manager-promotions-storage";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
 import { fileToFlyerImage } from "@/lib/promotion-image-upload";
 import { enrichPromotionDraftFromListing } from "@/lib/promotion-listing-context";
 import {
   FLYER_IMAGE_LIMIT,
-  applyFlyerCopyToDraftFields,
   PROMOTION_TEMPLATE_DEFAULT,
   PROMOTION_TEMPLATE_OPTIONS,
   PROMOTION_THEME_OPTIONS,
@@ -268,37 +266,9 @@ export function PromotionForm({
 }) {
   const { showToast } = useAppUi();
   const [readingPhotos, setReadingPhotos] = useState(false);
-  const [drafting, setDrafting] = useState(false);
   const isCustom = draft.propertyKey === CUSTOM_PROPERTY_KEY;
   const selectedTemplate =
     PROMOTION_TEMPLATE_OPTIONS.find((t) => t.id === draft.template) ?? PROMOTION_TEMPLATE_OPTIONS[0]!;
-
-  async function draftWithAi() {
-    const label = draft.propertyLabel.trim();
-    if (!label && !draft.headline.trim() && isCustom) {
-      showToast("Add a property/listing or a headline first.");
-      return;
-    }
-    const propertyId = draft.propertyKey === CUSTOM_PROPERTY_KEY ? null : draft.propertyKey;
-    setDrafting(true);
-    try {
-      const inputs = draftInputs(draft);
-      const { copy, source } = await generateFlyerCopy(inputs, label, {
-        propertyId,
-        extraInstructions: draft.aiPrompt,
-      });
-      if (source === "forbidden") {
-        showToast("You can only create flyers for your own properties.");
-        return;
-      }
-      setDraft((d) => applyFlyerCopyToDraftFields(d, copy));
-      showToast(source === "ai" ? "Draft fields filled with AI copy." : "Draft fields filled (offline copy).");
-    } catch {
-      showToast("Could not draft flyer copy. Try again.");
-    } finally {
-      setDrafting(false);
-    }
-  }
 
   async function onPhotoFiles(list: FileList | null) {
     if (!list || list.length === 0) return;
@@ -325,18 +295,12 @@ export function PromotionForm({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="sm:col-span-2">
-        <PromotionAiDraftCard
-          prompt={draft.aiPrompt}
-          onPromptChange={(value) => setDraft((d) => ({ ...d, aiPrompt: value }))}
-          promptId="promotion-flyer-ai-prompt"
-          promptPlaceholder="Describe highlights, tone, or anything to emphasize…"
+      <div className="sm:col-span-2 rounded-xl border border-border bg-card p-3">
+        <PromotionAiDraftPhotoPicker
           images={draft.images}
           readingPhotos={readingPhotos}
           onPhotoFiles={(files) => void onPhotoFiles(files)}
           onRemovePhoto={(i) => setDraft((d) => ({ ...d, images: d.images.filter((_, j) => j !== i) }))}
-          onDraft={() => void draftWithAi()}
-          drafting={drafting}
         />
       </div>
       {hidePropertyPicker ? null : (

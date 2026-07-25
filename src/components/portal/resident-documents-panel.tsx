@@ -264,7 +264,7 @@ function RentReceiptsTab() {
               From
               <input
                 type="date"
-                className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+               
                 value={range.from}
                 onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
               />
@@ -273,7 +273,7 @@ function RentReceiptsTab() {
               To
               <input
                 type="date"
-                className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+               
                 value={range.to}
                 onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
               />

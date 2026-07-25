@@ -1,7 +1,7 @@
 import type { ManagerAutomationSettings } from "./payment-automation-settings";
 import { formatStandardReminderSchedule } from "./payment-automation-settings";
 
-export type ReminderPresetId = "standard" | "gentle" | "minimal" | "custom";
+export type ReminderPresetId = "basics" | "standard" | "gentle" | "minimal" | "custom";
 
 export type ReminderPreset = {
   id: Exclude<ReminderPresetId, "custom">;
@@ -16,10 +16,22 @@ export type ReminderPreset = {
 
 export const PAYMENT_REMINDER_PRESETS: ReminderPreset[] = [
   {
+    id: "basics",
+    label: "Basics",
+    description: "1 week, 2 days, and 1 day before due, then every day late until paid.",
+    recommended: true,
+    settings: {
+      preDueReminderDays: [7, 2, 1],
+      sameDayReminderEnabled: false,
+      overdueDailyEnabled: true,
+      overdueDailyStartDays: 1,
+      postDueReminderDays: [],
+    },
+  },
+  {
     id: "standard",
     label: "Standard",
     description: "3, 2, and 1 days before, on the due date, then daily until paid.",
-    recommended: true,
     settings: {
       preDueReminderDays: [3, 2, 1],
       sameDayReminderEnabled: true,
@@ -115,4 +127,68 @@ export function formatFriendlyReminderSchedule(settings: ManagerAutomationSettin
     if (match) return match.label;
   }
   return formatStandardReminderSchedule(settings);
+}
+
+/** Parse comma- or space-separated day counts for custom reminder schedules. */
+export function parsePreDueReminderDaysInput(raw: string): number[] {
+  const days = raw
+    .split(/[,\s]+/)
+    .map((part) => Math.round(Number(part.trim())))
+    .filter((day) => Number.isFinite(day) && day >= 1 && day <= 60);
+  return [...new Set(days)].sort((a, b) => b - a);
+}
+
+export function formatPreDueReminderDaysInput(days: number[]): string {
+  return [...days].sort((a, b) => b - a).join(", ");
+}
+
+export const REMINDER_BEFORE_DUE_DAY_OPTIONS = [30, 21, 14, 7, 3, 2, 1] as const;
+
+export type ReminderScheduleToken = `before:${number}` | "due_date" | "every_day_late";
+
+export function reminderScheduleTokensFromSettings(
+  settings: Pick<
+    ManagerAutomationSettings,
+    "preDueReminderDays" | "sameDayReminderEnabled" | "overdueDailyEnabled"
+  >,
+): ReminderScheduleToken[] {
+  const tokens: ReminderScheduleToken[] = settings.preDueReminderDays.map(
+    (day) => `before:${day}` as ReminderScheduleToken,
+  );
+  if (settings.sameDayReminderEnabled) tokens.push("due_date");
+  if (settings.overdueDailyEnabled) tokens.push("every_day_late");
+  return tokens;
+}
+
+export function settingsPatchFromReminderScheduleTokens(
+  selected: ReminderScheduleToken[],
+): Pick<
+  ManagerAutomationSettings,
+  "preDueReminderDays" | "sameDayReminderEnabled" | "overdueDailyEnabled" | "overdueDailyStartDays" | "postDueReminderDays"
+> {
+  const preDueReminderDays = [
+    ...new Set(
+      selected
+        .filter((token): token is `before:${number}` => token.startsWith("before:"))
+        .map((token) => Math.round(Number(token.slice("before:".length))))
+        .filter((day) => Number.isFinite(day) && day >= 1 && day <= 60),
+    ),
+  ].sort((a, b) => b - a);
+
+  const overdueDailyEnabled = selected.includes("every_day_late");
+
+  return {
+    preDueReminderDays,
+    sameDayReminderEnabled: selected.includes("due_date"),
+    overdueDailyEnabled,
+    overdueDailyStartDays: 1,
+    postDueReminderDays: overdueDailyEnabled ? [] : [],
+  };
+}
+
+export function labelForReminderScheduleToken(token: ReminderScheduleToken): string {
+  if (token === "due_date") return "Due date";
+  if (token === "every_day_late") return "Every day late";
+  const days = Number(token.slice("before:".length));
+  return `${days} day${days === 1 ? "" : "s"} before due`;
 }

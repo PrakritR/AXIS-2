@@ -23,6 +23,7 @@ import {
 } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
+import { paymentReminderRecipientLabel } from "@/lib/payment-reminder-ui";
 
 function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
@@ -326,6 +327,7 @@ export function ManagerPaymentsLedgerPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: AbortSignal.timeout(45_000),
         body: JSON.stringify({
           chargeId,
           viaEmail: channels?.viaEmail !== false,
@@ -352,8 +354,9 @@ export function ManagerPaymentsLedgerPanel({
         emailSent: data.emailSent,
         smsSent: data.smsSent,
       };
-    } catch {
-      return { ok: false, error: "Network error." };
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      return { ok: false, error: timedOut ? "Reminder request timed out." : "Network error." };
     }
   };
 
@@ -366,21 +369,33 @@ export function ManagerPaymentsLedgerPanel({
     setSendingReminderId("bulk");
     let ok = 0;
     let skipped = 0;
+    let failed = 0;
     let lastError = "";
-    for (const row of targets) {
-      const result = await sendReminderForRow(row, { viaEmail: true, viaSms: true });
-      if (result.chargePaid) continue;
-      if (result.ok) {
-        ok += 1;
-        if (result.skipped) skipped += 1;
-      } else if (result.error) {
-        lastError = result.error;
+    try {
+      for (const row of targets) {
+        // Bulk sends inbox + email only — SMS requires per-charge preview and channel pick.
+        const result = await sendReminderForRow(row, { viaEmail: true, viaSms: false });
+        if (result.chargePaid) continue;
+        if (result.ok) {
+          ok += 1;
+          if (result.skipped) skipped += 1;
+        } else {
+          failed += 1;
+          if (result.error) lastError = result.error;
+        }
       }
+    } finally {
+      setSendingReminderId(null);
     }
-    setSendingReminderId(null);
     setSelectedIds(new Set());
     if (ok === 0) {
       showToast(lastError || "Could not send reminder. Please try again.");
+      return;
+    }
+    if (failed > 0) {
+      showToast(
+        `Sent ${ok} reminder${ok === 1 ? "" : "s"}; ${failed} could not be sent${lastError ? `: ${lastError}` : "."}`,
+      );
       return;
     }
     if (skipped === ok) {
@@ -526,7 +541,7 @@ export function ManagerPaymentsLedgerPanel({
           </Button>
           {row.householdChargeId ? (
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
-              View reminders
+              Edit reminder
             </Button>
           ) : null}
         </>
@@ -565,11 +580,7 @@ export function ManagerPaymentsLedgerPanel({
         open
         title="Send payment reminder"
         onClose={() => setReminderPreview(null)}
-        recipient={
-          reminderPreview.row.residentEmail?.trim() ||
-          reminderPreview.row.residentName ||
-          "Resident"
-        }
+        recipient={paymentReminderRecipientLabel(reminderPreview.row)}
         subject={reminderPreview.subject}
         body={reminderPreview.body}
         showSkipMessage={false}
@@ -577,9 +588,9 @@ export function ManagerPaymentsLedgerPanel({
         emailAvailable={Boolean(reminderPreview.row.residentEmail?.includes("@"))}
         smsAvailable
         defaultViaEmail={Boolean(reminderPreview.row.residentEmail?.includes("@"))}
-        defaultViaSms
+        defaultViaSms={false}
         confirmLabel="Send reminder"
-        confirmBusy={!!sendingReminderId}
+        confirmBusy={sendingReminderId === reminderPreview.row.id}
         confirmBusyLabel="Sending…"
         onConfirm={(skipMessage, channels, draft) => void doSendReminder(skipMessage, channels, draft)}
       />
@@ -595,12 +606,8 @@ export function ManagerPaymentsLedgerPanel({
         scheduleSummary={reminderScheduleSummary}
         onMessageSaved={() => onScheduleChanged?.()}
         onToggleCancel={async (message, cancelled) => {
-          try {
-            await patchScheduledMessage(message.id, { cancelled });
-            onScheduleChanged?.();
-          } catch {
-            showToast("Could not update reminder.");
-          }
+          await patchScheduledMessage(message.id, { cancelled });
+          onScheduleChanged?.();
         }}
         onOpenSettings={onOpenReminderSettings}
       />
@@ -628,7 +635,7 @@ export function ManagerPaymentsLedgerPanel({
               data-attr="payments-send-reminder"
               title={
                 remindableSelectedRows.length === 0
-                  ? "Selected payments have no resident email on file."
+                  ? "Select at least one unpaid charge."
                   : undefined
               }
               onClick={() => {

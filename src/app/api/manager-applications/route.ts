@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upsert";
+import { buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
@@ -9,6 +10,7 @@ import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
+import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -501,6 +503,7 @@ export async function POST(req: Request) {
       id?: string;
       row?: DemoApplicantRow;
       rows?: DemoApplicantRow[];
+      existingResidentOnboarding?: { sendWelcomeEmail?: boolean };
     };
     const db = createSupabaseServiceRoleClient();
     const user = await sessionUser();
@@ -669,7 +672,16 @@ export async function POST(req: Request) {
       if (row.bucket === "pending" && row.application?.consentCredit) {
         void tryAutoOrderScreening(db, row);
       }
-      return NextResponse.json({ ok: true, setupTokenIssued: true });
+      // Return the setup handoff built from the token just minted on the row, so
+      // the guest finish screen can offer "Create your resident account" without
+      // depending on the follow-up email route succeeding.
+      return NextResponse.json({
+        ok: true,
+        setupTokenIssued: true,
+        setupToken: guest.setupToken,
+        setupHref: buildResidentSetupHref(guest.setupToken, row.id),
+        axisId: row.id,
+      });
     }
     const { role, email } = await resolvePortalRole(db, user);
     if (role === "resident") {
@@ -697,7 +709,7 @@ export async function POST(req: Request) {
         assignedPropertyId: existing?.assignedPropertyId ?? row.assignedPropertyId,
         assignedRoomChoice: existing?.assignedRoomChoice ?? row.assignedRoomChoice,
         signedMonthlyRent: existing?.signedMonthlyRent ?? row.signedMonthlyRent,
-        managerUserId: existing?.managerUserId ?? row.managerUserId,
+        managerUserId: existing?.managerUserId ?? null,
         backgroundCheckStatus: existing?.backgroundCheckStatus ?? row.backgroundCheckStatus,
         screening: existing?.screening ?? row.screening,
         manuallyAdded: existing?.manuallyAdded ?? row.manuallyAdded,
@@ -715,11 +727,16 @@ export async function POST(req: Request) {
               }
             : row.application,
       };
-      row = await linkResidentOnApplicationSubmit(db, {
+      const linked = await linkResidentOnApplicationSubmit(db, {
         userId: user.id,
         row,
         isNewSubmit: !existing,
+        existingManagerUserId: existing?.managerUserId ?? null,
       });
+      if (!linked.ok) {
+        return NextResponse.json({ error: linked.error }, { status: linked.status });
+      }
+      row = linked.row;
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;
@@ -750,6 +767,40 @@ export async function POST(req: Request) {
     if (row.bucket === "pending" && row.application?.consentCredit) {
       void tryAutoOrderScreening(db, row);
     }
+
+    if (row.manuallyAdded && body.existingResidentOnboarding) {
+      const { data: profile } = await db.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+      const onboarding = await runExistingResidentOnboarding(
+        db,
+        {
+          userId: user.id,
+          email: user.email ?? null,
+          managerName: String(profile?.full_name ?? ""),
+        },
+        row,
+        { sendWelcomeEmail: body.existingResidentOnboarding.sendWelcomeEmail !== false },
+      );
+      if (!onboarding.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: onboarding.error,
+            mailtoHref: onboarding.mailtoHref,
+            leaseId: onboarding.leaseId,
+          },
+          { status: onboarding.status },
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        existingResidentOnboarding: {
+          leaseId: onboarding.leaseId,
+          welcomeEmailSent: onboarding.welcomeEmailSent,
+          axisId: onboarding.axisId,
+        },
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save application.";

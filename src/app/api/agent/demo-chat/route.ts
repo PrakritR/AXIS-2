@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { agentRegistry } from "@/lib/tools";
 import { runAgentTurn } from "@/lib/agent/loop";
-import { sanitizeChatMessages } from "@/lib/agent/chat-handler";
+import { sanitizeChatMessages, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { buildDemoAgentContext } from "@/lib/demo/demo-agent-context";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 
@@ -51,10 +51,14 @@ export async function POST(req: Request) {
     });
   }
 
-  const messages = sanitizeChatMessages(body.messages, { maxMessages: 16, maxChars: 4000 });
+  let messages = sanitizeChatMessages(body.messages, { maxMessages: 16, maxChars: 4000 });
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
   }
+
+  const attached = applyChatAttachments(messages, body);
+  if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
+  messages = attached.messages;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(

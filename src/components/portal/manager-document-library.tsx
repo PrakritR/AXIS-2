@@ -4,12 +4,12 @@ import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useM
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
-  PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
@@ -90,9 +90,6 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
-const DOCUMENT_LIBRARY_FILTER_SELECT =
-  "col-start-1 row-start-1 h-8 w-full min-w-0 max-w-full appearance-none truncate rounded-full border border-border bg-card px-2.5 pr-7 text-xs text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:border-primary focus:ring-2 focus:ring-ring";
-
 /** Toolbar select that shrinks to the current option label (not a fixed width). */
 function DocumentLibraryFilterSelect({
   "aria-label": ariaLabel,
@@ -105,33 +102,16 @@ function DocumentLibraryFilterSelect({
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) {
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? options[0]?.label ?? "";
-
   return (
-    <div className="w-fit max-w-full shrink-0">
-      <PortalToolbarSelectWrap className="w-fit max-w-full">
-        <div className="grid w-fit max-w-full [&>select]:col-start-1 [&>select]:row-start-1">
-          <span
-            aria-hidden
-            className="invisible col-start-1 row-start-1 max-w-full truncate whitespace-nowrap px-2.5 pr-7 text-xs"
-          >
-            {selectedLabel}
-          </span>
-          <select
-            className={DOCUMENT_LIBRARY_FILTER_SELECT}
-            aria-label={ariaLabel}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          >
-            {options.map((o) => (
-              <option key={o.value || "__all__"} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </PortalToolbarSelectWrap>
-    </div>
+    <FieldSingleSelect
+      hideLabel
+      label={ariaLabel}
+      variant="pill"
+      wrapperClassName="w-fit max-w-full shrink-0"
+      value={value}
+      options={options}
+      onChange={onChange}
+    />
   );
 }
 

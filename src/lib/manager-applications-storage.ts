@@ -288,7 +288,16 @@ export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
 /** Await server persistence before showing post-submit UI or create-account links. */
 export async function upsertApplicationRowToServerAwait(
   row: DemoApplicantRow,
-): Promise<{ ok: boolean; error?: string }> {
+  opts?: { existingResidentOnboarding?: { sendWelcomeEmail?: boolean } },
+): Promise<{
+  ok: boolean;
+  error?: string;
+  setupHref?: string;
+  setupToken?: string;
+  welcomeEmailSent?: boolean;
+  leaseId?: string;
+  mailtoHref?: string;
+}> {
   if (typeof window === "undefined") return { ok: false, error: "Not in browser." };
   if (isDemoModeActive()) return { ok: true };
   try {
@@ -296,11 +305,47 @@ export async function upsertApplicationRowToServerAwait(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ action: "upsert", row }),
+      body: JSON.stringify({
+        action: "upsert",
+        row,
+        ...(opts?.existingResidentOnboarding ? { existingResidentOnboarding: opts.existingResidentOnboarding } : {}),
+      }),
     });
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    if (!res.ok) return { ok: false, error: body?.error ?? "Could not save application." };
-    return { ok: true };
+    const body = (await res.json().catch(() => null)) as {
+      error?: string;
+      setupHref?: string;
+      setupToken?: string;
+      mailtoHref?: string;
+      existingResidentOnboarding?: {
+        welcomeEmailSent?: boolean;
+        leaseId?: string;
+        axisId?: string;
+      };
+    } | null;
+    if (!res.ok) {
+      const errBody = body as { leaseId?: string; mailtoHref?: string } | null;
+      return {
+        ok: false,
+        error: body?.error ?? "Could not save application.",
+        mailtoHref: errBody?.mailtoHref,
+        leaseId: errBody?.leaseId,
+      };
+    }
+    // Guest submits return a server-authoritative setup handoff (token minted on
+    // the row); the wizard uses it so the finish CTA never hinges on the email route.
+    const setupHref =
+      typeof body?.setupHref === "string" && body.setupHref.startsWith("/auth/resident-setup")
+        ? body.setupHref
+        : undefined;
+    const setupToken = typeof body?.setupToken === "string" && body.setupToken ? body.setupToken : undefined;
+    const onboarding = body?.existingResidentOnboarding;
+    return {
+      ok: true,
+      setupHref,
+      setupToken,
+      welcomeEmailSent: onboarding?.welcomeEmailSent,
+      leaseId: onboarding?.leaseId,
+    };
   } catch {
     return { ok: false, error: "Could not save application." };
   }
@@ -450,13 +495,16 @@ export function replaceManagerApplicationRowInCache(row: DemoApplicantRow): void
   emit();
 }
 
-export function appendManagerApplicationRow(row: DemoApplicantRow): void {
+export function appendManagerApplicationRow(
+  row: DemoApplicantRow,
+  opts?: { skipServerMirror?: boolean },
+): void {
   const normalizedRow = normalizeApplicationRow(row);
   const rows = readManagerApplicationRows();
   if (rows.some((r) => r.id === normalizedRow.id)) return;
   const next = [...rows, normalizedRow];
   writeManagerApplicationRows(next);
-  mirrorApplicationRowToServer(normalizedRow);
+  if (!opts?.skipServerMirror) mirrorApplicationRowToServer(normalizedRow);
 }
 
 /**

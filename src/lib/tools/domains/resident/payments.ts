@@ -176,13 +176,16 @@ export const startRentPaymentTool = defineWriteTool({
       confirmedInput: { chargeIds: resolved.loaded.map((row) => row.id) },
       kind: "start_rent_payment",
       title: "Pay charges online",
-      summary: `Pay ${centsLabel(totalCents)} for ${resolved.loaded.length} charge${resolved.loaded.length === 1 ? "" : "s"} — this opens a secure Stripe checkout (plus processing fees shown there).`,
+      summary: `Pay ${centsLabel(totalCents)} for ${resolved.loaded.length} charge${resolved.loaded.length === 1 ? "" : "s"} — this opens a secure Stripe checkout for exactly that amount, with no added fees.`,
       fields: [
         ...resolved.loaded.map((row) => ({
           label: row.charge.title || row.id,
           value: row.charge.balanceLabel || row.charge.amountLabel || "—",
         })),
-        { label: "Total (before fees)", value: centsLabel(totalCents) },
+        // Face value: PropLane covers payment processing, so the amount Stripe
+        // collects is the sum of the charge balances above.
+        { label: "Added fees", value: centsLabel(0) },
+        { label: "Total due", value: centsLabel(totalCents) },
         { label: "Payment", value: "Opens secure Stripe checkout" },
       ],
       confirmLabel: "Open checkout",
@@ -215,6 +218,6 @@ export const startRentPaymentTool = defineWriteTool({
       throw new Error("Checkout session was created without a hosted payment link.");
     }
 
-    return { reply: `Your secure Stripe checkout is ready — ${centsLabel(result.totalCents)} total (including fees) for ${result.chargeIds.length} charge${result.chargeIds.length === 1 ? "" : "s"}. Open the link to pay.`, checkoutUrl: result.url, resultSummary: { chargeCount: result.chargeIds.length, totalCents: result.totalCents } };
+    return { reply: `Your secure Stripe checkout is ready — ${centsLabel(result.totalCents)} total, with no added fees, for ${result.chargeIds.length} charge${result.chargeIds.length === 1 ? "" : "s"}. Open the link to pay.`, checkoutUrl: result.url, resultSummary: { chargeCount: result.chargeIds.length, totalCents: result.totalCents } };
   },
 });

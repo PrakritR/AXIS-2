@@ -1,8 +1,8 @@
 "use client";
 
-import { PromotionAiBetaBadge } from "@/components/portal/promotion-ai-draft-card";
 import { Textarea } from "@/components/ui/input";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { PROPERTY_LEASE_SOURCE_OPTIONS } from "@/lib/property-lease-source";
 
 export const LEASE_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -72,7 +72,7 @@ function leaseTemplateUploadClass(hasError: boolean): string {
   }`;
 }
 
-/** Shared lease configuration UI — Axis standard checkbox, AI BETA / PDF custom options. */
+/** Shared lease configuration UI — PropLane standard, custom clauses, or PDF upload. */
 export function LeaseConfigForm({
   draft,
   onDraftChange,
@@ -88,6 +88,8 @@ export function LeaseConfigForm({
   const leaseKind = leaseKindFromDraft(draft);
   const standardToggleAttr = `${dataAttrPrefix}-lease-standard-toggle`;
   const templateUploadAttr = `${dataAttrPrefix}-lease-template-upload`;
+  const customComments = PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === "custom_comments")!;
+  const customFormat = PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === "custom_format")!;
 
   return (
     <div className="space-y-6">
@@ -114,6 +116,7 @@ export function LeaseConfigForm({
 
       {leaseMode === "custom" ? (
         <div className="space-y-4">
+          <p className="text-sm text-muted">Choose how to customize the lease document.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <button
               type="button"
@@ -121,17 +124,12 @@ export function LeaseConfigForm({
               onClick={() => onDraftChange({ leaseCustomKind: "terms" })}
               className={`rounded-2xl border p-4 text-left transition ${
                 leaseKind === "terms"
-                  ? "border-primary/40 bg-primary/10 ring-1 ring-primary/25"
-                  : "border-primary/30 bg-primary/5 hover:border-primary/40"
+                  ? "border-primary bg-primary/10 ring-1 ring-primary/25"
+                  : "border-border bg-card hover:border-primary/30"
               }`}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-foreground">AI BETA generation</p>
-                <PromotionAiBetaBadge />
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-muted">
-                Describe custom clauses or addendum terms. PropLane merges them into the generated lease.
-              </p>
+              <p className="text-sm font-semibold text-foreground">{customComments.label}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">{customComments.detail}</p>
             </button>
 
             <button
@@ -144,16 +142,14 @@ export function LeaseConfigForm({
                   : "border-border bg-card hover:border-primary/30"
               }`}
             >
-              <p className="text-sm font-semibold text-foreground">Upload a lease template (PDF)</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">
-                Your document becomes the lease text. PropLane adds a placement summary and e-signatures.
-              </p>
+              <p className="text-sm font-semibold text-foreground">{customFormat.label}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">{customFormat.detail}</p>
             </button>
           </div>
 
           {leaseKind === "terms" ? (
             <div
-              className="rounded-xl border border-primary/30 bg-primary/5 p-3 sm:p-4"
+              className="rounded-xl border border-border bg-card p-3 sm:p-4"
               data-wizard-field={variant === "wizard" ? "customLeaseTerms" : undefined}
             >
               {variant === "wizard" ? (
@@ -162,8 +158,7 @@ export function LeaseConfigForm({
                 </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted">
-                  One clause per paragraph. These appear in the generated lease as “Additional Provisions from Property
-                  Manager”.
+                  One clause per paragraph. Need help wording these? Use PropPlane Assistant below.
                 </p>
               )}
               <Textarea

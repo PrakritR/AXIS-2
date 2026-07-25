@@ -14,19 +14,18 @@ import {
 } from "@/lib/portals/resident-sections";
 
 const CASES = [
-  // pro/manager, resident, and vendor pin Settings (profile) at the bottom of the
-  // sidebar; Feedback is embedded in Settings for those portals. Admin exposes
-  // Feedback as its own sidebar item under Operations.
+  // Settings (profile) lives in the account menu, not the desktop sidebar.
+  // Admin exposes Feedback as its own sidebar item under Operations.
   {
     kind: "pro" as const,
     sections: proPortal.sections.map((s) => s.section),
-    sidebarShowsProfile: true,
+    sidebarShowsProfile: false,
     sidebarShowsFeedback: false,
   },
   {
     kind: "admin" as const,
     sections: adminPortal.sections.map((s) => s.section),
-    sidebarShowsProfile: true,
+    sidebarShowsProfile: false,
     sidebarShowsFeedback: true,
   },
   {
@@ -38,13 +37,13 @@ const CASES = [
         ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
       ]),
     ],
-    sidebarShowsProfile: true,
+    sidebarShowsProfile: false,
     sidebarShowsFeedback: false,
   },
   {
     kind: "vendor" as const,
     sections: vendorPortal.sections.map((s) => s.section),
-    sidebarShowsProfile: true,
+    sidebarShowsProfile: false,
     sidebarShowsFeedback: false,
   },
 ];
@@ -118,16 +117,14 @@ describe("groupNavItems", () => {
     expect(last?.items.some((i) => i.section === "mystery")).toBe(true);
   });
 
-  it("pins Application at the top and Settings at the bottom during application phase", () => {
+  it("shows only Application in the sidebar during application phase (Settings in account menu)", () => {
     const items = [
       { section: "applications", label: "Application", href: "/resident/applications" },
       { section: "profile", label: "Settings", href: "/resident/profile" },
     ];
     const result = groupNavItems("resident", items);
-    expect(result.map((g) => g.id)).toEqual(["home", "account"]);
+    expect(result.map((g) => g.id)).toEqual(["home"]);
     expect(result[0]?.items.map((i) => i.section)).toEqual(["applications"]);
-    expect(result[1]?.items.map((i) => i.section)).toEqual(["profile"]);
-    expect(result[0]?.items[0]?.href).toBe("/resident/applications");
-    expect(result[1]?.items[0]?.href).toBe("/resident/profile");
+    expect(result.flatMap((g) => g.items).map((i) => i.section)).not.toContain("profile");
   });
 });

@@ -25,7 +25,7 @@ import {
 import { deleteSubmissionMediaObjects } from "@/lib/listing-media-storage";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
+import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser, safePropertyOptionLabel } from "@/lib/manager-portfolio-access";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { monthlyRentListingLabel } from "@/lib/rental-application/listing-fees-display";
@@ -178,9 +178,10 @@ export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adm
     return Number.isFinite(x) ? x : fallback;
   };
   const id = str(row.adminRefId);
+  const buildingName = str(row.buildingName) || str(row.submission?.buildingName);
   return {
     adminRefId: id || `adm-${Date.now()}`,
-    buildingName: str(row.buildingName),
+    buildingName,
     unitLabel: str(row.unitLabel),
     address: str(row.address),
     zip: str(row.zip),
@@ -247,7 +248,11 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
   const rentNum = parseMonthlyRent(prop.rentLabel ?? "") ?? 0;
   return normalizeAdminPropertyRow({
     adminRefId: listingId,
-    buildingName: prop.buildingName,
+    buildingName:
+      prop.buildingName?.trim() ||
+      prop.listingSubmission?.buildingName?.trim() ||
+      prop.title?.trim() ||
+      "",
     unitLabel: prop.unitLabel,
     address: prop.address,
     zip: prop.zip,
@@ -269,6 +274,33 @@ export function adminPropertyRentDisplayLabel(row: AdminPropertyRow): string {
   return row.rentRangeLabel || `$${row.monthlyRent}/mo`;
 }
 
+/** Stable display label for sorting manager property tables (matches picker labels). */
+export function adminPropertyRowDisplayLabel(row: AdminPropertyRow): string {
+  const id = (row.listingId ?? row.adminRefId).trim() || row.adminRefId;
+  return safePropertyOptionLabel(
+    [row.buildingName, row.unitLabel, row.submission?.buildingName, row.address],
+    id,
+  );
+}
+
+/** Deterministic manager-portal property order (name, then address, then id). */
+export function compareAdminPropertyRowsForDisplay(a: AdminPropertyRow, b: AdminPropertyRow): number {
+  const byLabel = adminPropertyRowDisplayLabel(a).localeCompare(adminPropertyRowDisplayLabel(b), undefined, {
+    sensitivity: "base",
+    numeric: true,
+  });
+  if (byLabel !== 0) return byLabel;
+  const byAddress = a.address.localeCompare(b.address, undefined, { sensitivity: "base", numeric: true });
+  if (byAddress !== 0) return byAddress;
+  const idA = (a.listingId ?? a.adminRefId).trim();
+  const idB = (b.listingId ?? b.adminRefId).trim();
+  return idA.localeCompare(idB);
+}
+
+export function sortAdminPropertyRowsForDisplay(rows: AdminPropertyRow[]): AdminPropertyRow[] {
+  return [...rows].sort(compareAdminPropertyRowsForDisplay);
+}
+
 function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
   const seen = new Set<string>();
   const out: AdminPropertyRow[] = [];
@@ -278,7 +310,7 @@ function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
     seen.add(key);
     out.push(row);
   }
-  return out;
+  return sortAdminPropertyRowsForDisplay(out);
 }
 
 function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, userId: string): AdminPropertyRow[] {

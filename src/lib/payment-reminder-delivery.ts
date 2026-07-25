@@ -7,6 +7,7 @@ import {
   resolveChannels,
   type NotificationCategory,
 } from "@/lib/notification-preferences";
+import { deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -69,62 +70,45 @@ export async function deliverPaymentReminder(input: {
   const rand = crypto.randomUUID().slice(0, 8);
   const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const preview = text.slice(0, 100).replace(/\n/g, " ");
+  const managerEmail = from.match(/<([^>]+)>/)?.[1] ?? from;
 
   try {
-    const residentThreadId = `payment_auto_reminder_inbox_${ts}_${rand}`;
-    await db.from("portal_inbox_thread_records").upsert(
-      {
-        id: residentThreadId,
-        scope: "axis_portal_inbox_resident_v1",
-        owner_user_id: null,
-        participant_email: residentLower,
-        thread_type: "payment_reminder",
-        row_data: {
-          id: residentThreadId,
-          folder: "inbox",
-          from: managerName,
-          email: from.match(/<([^>]+)>/)?.[1] ?? from,
-          subject,
-          preview,
-          body: text,
-          time: when,
-          unread: true,
-          scope: "axis_portal_inbox_resident_v1",
-        },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    );
+    await deliverPortalMessageThreadSide(db, {
+      scope: "axis_portal_inbox_resident_v1",
+      folder: "inbox",
+      ownerUserId: residentUserId,
+      participantEmail: residentLower,
+      otherPartyEmail: managerEmail.trim().toLowerCase(),
+      fallbackId: `payment_auto_reminder_inbox_${ts}_${rand}`,
+      fromName: managerName,
+      subject,
+      body: text,
+      preview,
+      when,
+      unread: true,
+      outbound: false,
+    });
   } catch {
     /* non-critical */
   }
 
   try {
     if (managerId) {
-      const managerThreadId = `payment_auto_reminder_sent_${ts}_${rand}`;
-      await db.from("portal_inbox_thread_records").upsert(
-        {
-          id: managerThreadId,
-          scope: "axis_portal_inbox_manager_v1",
-          owner_user_id: managerId,
-          participant_email: null,
-          thread_type: "payment_reminder",
-          row_data: {
-            id: managerThreadId,
-            folder: "sent",
-            from: managerName,
-            email: residentLower,
-            subject,
-            preview,
-            body: text,
-            time: when,
-            unread: false,
-            scope: "axis_portal_inbox_manager_v1",
-          },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      );
+      await deliverPortalMessageThreadSide(db, {
+        scope: "axis_portal_inbox_manager_v1",
+        folder: "sent",
+        ownerUserId: managerId,
+        participantEmail: null,
+        otherPartyEmail: residentLower,
+        fallbackId: `payment_auto_reminder_sent_${ts}_${rand}`,
+        fromName: managerName,
+        subject,
+        body: text,
+        preview,
+        when,
+        unread: false,
+        outbound: true,
+      });
     }
   } catch {
     /* non-critical */

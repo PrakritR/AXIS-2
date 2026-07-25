@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import {
+  PortalSettingsFormBody,
+  PortalSettingsGroup,
+  PortalSettingsSection,
+  PortalSettingsSections,
+} from "@/components/portal/portal-settings-ui";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
@@ -963,24 +969,20 @@ export function VendorSettingsPanel() {
   }
 
   return (
-    <ManagerPortalPageShell title="Settings">
-      <div className="space-y-6">
+    <ManagerPortalPageShell title="Settings" subtitle="Manage your business profile, capabilities, and account preferences.">
+      <PortalSettingsSections>
         {unlinked ? (
-          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending" data-attr="vendor-settings-unlinked-banner">
+          <p className="rounded-lg border px-4 py-3 text-sm portal-banner-pending" data-attr="vendor-settings-unlinked-banner">
             Waiting on a property manager to connect with you. You&apos;ll be able to save your profile once linked.
           </p>
         ) : null}
 
-        <PortalCollapsibleSection
-          title="Business profile"
-          subtitle="Shown to the manager(s) you work with."
-          surfaceMuted={false}
-          contentClassName="px-4 pb-5"
-          toggleDataAttr="vendor-settings-profile-toggle"
-        >
+        <PortalSettingsSection title="Business profile" description="Shown to the property managers you work with.">
+          <PortalSettingsGroup>
           {profileLoading ? (
-            <p className="text-sm text-muted">Loading…</p>
+            <p className="px-4 py-4 text-sm text-muted">Loading…</p>
           ) : (
+            <PortalSettingsFormBody>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
                 Business name
@@ -1032,11 +1034,13 @@ export function VendorSettingsPanel() {
                 </span>
               </label>
             </div>
+            </PortalSettingsFormBody>
           )}
 
-          <div className="mt-5">
+          <div className="border-t border-border px-4 py-4">
             <Button
               variant="primary"
+              className="px-4 text-[13px]"
               onClick={() => void saveProfile()}
               disabled={profileSaving || profileLoading || unlinked}
               data-attr="vendor-settings-profile-save"
@@ -1044,19 +1048,19 @@ export function VendorSettingsPanel() {
               {profileSaving ? "Saving…" : "Save"}
             </Button>
           </div>
-        </PortalCollapsibleSection>
+          </PortalSettingsGroup>
+        </PortalSettingsSection>
 
-        <PortalCollapsibleSection
+        <PortalSettingsSection
           title="Work capabilities"
-          subtitle="Select every type of work you can do. Managers' auto-match uses this to suggest you for the right work orders."
-          surfaceMuted={false}
-          contentClassName="px-4 pb-5"
-          toggleDataAttr="vendor-settings-capabilities-toggle"
+          description="Managers use this to match you with the right work orders."
         >
+          <PortalSettingsGroup>
           {profileLoading ? (
-            <p className="text-sm text-muted">Loading…</p>
+            <p className="px-4 py-4 text-sm text-muted">Loading…</p>
           ) : (
-            <div className="grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+            <PortalSettingsFormBody>
+            <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
               {VENDOR_TRADE_OPTIONS.map((option) => {
                 const on = trades.includes(option);
                 return (
@@ -1073,11 +1077,13 @@ export function VendorSettingsPanel() {
                 );
               })}
             </div>
+            </PortalSettingsFormBody>
           )}
 
-          <div className="mt-5">
+          <div className="border-t border-border px-4 py-4">
             <Button
               variant="primary"
+              className="px-4 text-[13px]"
               onClick={() => void saveCapabilities()}
               disabled={capabilitiesSaving || profileLoading || unlinked}
               data-attr="vendor-settings-capabilities-save"
@@ -1085,14 +1091,15 @@ export function VendorSettingsPanel() {
               {capabilitiesSaving ? "Saving…" : "Save capabilities"}
             </Button>
           </div>
-        </PortalCollapsibleSection>
+          </PortalSettingsGroup>
+        </PortalSettingsSection>
 
         <PortalTextNotificationsBlock dataAttrPrefix="vendor" demo={demo} />
 
         <PortalBugFeedbackPanel reporterRole="vendor" embedded />
 
         <PortalSettingsExtras currentKind="vendor" />
-      </div>
+      </PortalSettingsSections>
     </ManagerPortalPageShell>
   );
 }

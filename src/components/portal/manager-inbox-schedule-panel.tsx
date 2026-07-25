@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPortalFilterRow, MANAGER_TABLE_TH, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "@/components/portal/portal-metrics";
+import { ManagerPortalFilterRow, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -288,22 +289,14 @@ export function ManagerInboxSchedulePanel({
   return (
     <div className="space-y-4">
       <ManagerPortalFilterRow>
-        <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
-          <span className="sr-only">Show messages scheduled within</span>
-          <PortalToolbarSelectWrap>
-            <select
-              className={`${PORTAL_TOOLBAR_SELECT} h-9 text-xs font-semibold`}
-              value={horizonId}
-              onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
-            >
-              {INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </PortalToolbarSelectWrap>
-        </label>
+        <FieldSingleSelect
+          hideLabel
+          label="Show messages scheduled within"
+          variant="pill"
+          value={horizonId}
+          options={INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => ({ value: opt.id, label: opt.label }))}
+          onChange={(next) => setHorizonId(next as InboxScheduleHorizonId)}
+        />
         {selectedIds.size > 0 ? (
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             <Button

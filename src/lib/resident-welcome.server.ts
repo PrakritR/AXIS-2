@@ -15,7 +15,14 @@ import {
   buildResidentWelcomeMailtoHref,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import {
+  EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
+  buildExistingResidentWelcomeEmailBody,
+  buildExistingResidentWelcomeEmailHtml,
+  buildExistingResidentWelcomeMailtoHref,
+} from "@/lib/existing-resident-welcome-email";
 import { sendSms } from "@/lib/twilio";
+import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
 
 // Domain is matched as dot-separated labels (no char class overlaps the "." delimiter)
 // so there is exactly one way to parse a match — avoids polynomial backtracking on
@@ -108,7 +115,18 @@ export async function deliverResidentWelcome(
   const senderEmail = normalizeEmail(actor.email);
   const skipExternalEmail = to.endsWith("@axis.local") || (Boolean(senderEmail) && to === senderEmail);
 
-  const signupUrl = residentAccountCreationUrl("", axisId);
+  // Mint (or refresh) a setup token on the application so the approval email links
+  // to a working /auth/resident-setup?token=&axis_id= handoff — the same machinery
+  // the guest apply flow uses. Scoped to the sending manager so one manager cannot
+  // rotate another's applicant token. A missing token (application not found under
+  // this manager) falls back to the token-less URL, which the setup page rejects
+  // gracefully with "apply first".
+  const ensured = await ensureResidentSetupTokenForApplication(db, axisId, {
+    managerUserId: actor.userId,
+  });
+  const setupToken = ensured.ok ? ensured.token : undefined;
+
+  const signupUrl = residentAccountCreationUrl("", axisId, setupToken);
   const text = buildResidentWelcomeEmailBody({
     residentName: residentName || undefined,
     axisId,
@@ -124,6 +142,7 @@ export async function deliverResidentWelcome(
     residentName: residentName || undefined,
     axisId,
     origin: "",
+    setupToken,
   });
 
   let payloadId: string | null = null;
@@ -242,6 +261,167 @@ export async function deliverResidentWelcome(
       if (residentPhone) {
         const senderName = String(managerProfile?.full_name ?? actor.email ?? "Your property manager").trim() || "Your property manager";
         const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your Axis resident portal is ready. Your Axis ID: ${axisId}. — ${senderName}`;
+        await sendSms(residentPhone, smsBody, smsFromNumber);
+      }
+    }
+  } catch { /* non-critical */ }
+
+  return { ok: true, id: payloadId, skipped: skipExternalEmail };
+}
+
+/** Portal onboarding email for manager-added existing residents (not applicants). */
+export async function deliverExistingResidentWelcome(
+  db: SupabaseClient,
+  actor: ResidentWelcomeActor,
+  input: { to: string; residentName?: string; axisId: string; propertyLabel?: string },
+): Promise<DeliverResidentWelcomeResult> {
+  const to = normalizeEmail(input.to);
+  const residentName = input.residentName?.trim() ?? "";
+  const axisId = input.axisId.trim();
+  const propertyLabel = input.propertyLabel?.trim() ?? "";
+
+  const senderEmail = normalizeEmail(actor.email);
+  const skipExternalEmail = to.endsWith("@axis.local") || (Boolean(senderEmail) && to === senderEmail);
+
+  const ensured = await ensureResidentSetupTokenForApplication(db, axisId, {
+    managerUserId: actor.userId,
+  });
+  const setupToken = ensured.ok ? ensured.token : undefined;
+
+  const signupUrl = residentAccountCreationUrl("", axisId, setupToken);
+  const text = buildExistingResidentWelcomeEmailBody({
+    residentName: residentName || undefined,
+    axisId,
+    signupUrl,
+    propertyLabel: propertyLabel || undefined,
+  });
+  const html = buildExistingResidentWelcomeEmailHtml({
+    residentName: residentName || undefined,
+    axisId,
+    signupUrl,
+    propertyLabel: propertyLabel || undefined,
+  });
+  const mailtoHref = buildExistingResidentWelcomeMailtoHref({
+    residentEmail: to,
+    residentName: residentName || undefined,
+    axisId,
+    origin: "",
+    setupToken,
+    propertyLabel: propertyLabel || undefined,
+  });
+
+  let payloadId: string | null = null;
+  if (!skipExternalEmail) {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    if (!apiKey) {
+      return {
+        ok: false,
+        status: 503,
+        error: "Email delivery is not configured (set RESEND_API_KEY).",
+        mailtoHref,
+      };
+    }
+
+    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject: EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
+        text,
+        html,
+      }),
+    });
+
+    const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string; name?: string };
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: 502,
+        error: payload.message ?? res.statusText ?? "Resend request failed.",
+        mailtoHref,
+      };
+    }
+    payloadId = payload.id ?? null;
+  }
+
+  try {
+    const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const ts = Date.now();
+    const rand = Math.random().toString(36).slice(2, 6);
+    const senderName = actor.email ?? "Axis";
+    const senderLower = senderEmail || "manager@example.com";
+    const preview = text.slice(0, 100).replace(/\n/g, " ");
+
+    const managerThreadId = `welcome_existing_${actor.userId}_${ts}_${rand}`;
+    await db.from("portal_inbox_thread_records").upsert(
+      {
+        id: managerThreadId,
+        scope: "axis_portal_inbox_manager_v1",
+        owner_user_id: actor.userId,
+        participant_email: null,
+        thread_type: "portal_message",
+        row_data: {
+          id: managerThreadId,
+          folder: "sent",
+          from: senderName,
+          email: to,
+          subject: EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
+          preview,
+          body: text,
+          time: when,
+          unread: false,
+          scope: "axis_portal_inbox_manager_v1",
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+
+    if (!skipExternalEmail && to !== senderLower) {
+      const residentThreadId = `welcome_existing_inbox_${ts}_${rand}`;
+      await db.from("portal_inbox_thread_records").upsert(
+        {
+          id: residentThreadId,
+          scope: "axis_portal_inbox_resident_v1",
+          owner_user_id: null,
+          participant_email: to,
+          thread_type: "portal_message",
+          row_data: {
+            id: residentThreadId,
+            folder: "inbox",
+            from: senderName,
+            email: senderLower,
+            subject: EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
+            preview,
+            body: text,
+            time: when,
+            unread: true,
+            scope: "axis_portal_inbox_resident_v1",
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
+    }
+  } catch {
+    /* non-critical */
+  }
+
+  try {
+    const { data: managerProfile } = await db.from("profiles").select("sms_from_number, full_name").eq("id", actor.userId).maybeSingle();
+    const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
+    if (smsFromNumber && !skipExternalEmail) {
+      const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", to).maybeSingle();
+      const residentPhone = String(residentProfile?.phone ?? "").trim();
+      if (residentPhone) {
+        const senderName = String(managerProfile?.full_name ?? actor.email ?? "Your property manager").trim() || "Your property manager";
+        const smsBody = `Your PropLane resident portal is ready${residentName ? `, ${residentName}` : ""}. Pay rent and manage your home online. PropLane ID: ${axisId}. — ${senderName}`;
         await sendSms(residentPhone, smsBody, smsFromNumber);
       }
     }

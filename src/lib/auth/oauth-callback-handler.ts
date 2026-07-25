@@ -1,7 +1,11 @@
 import { resolveRequestOrigin } from "@/lib/app-url";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
-import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
+import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthNextPathFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
+import { maybeLinkGoogleCalendarFromOAuthSession, shouldRedirectToGoogleCalendarConnect, signedInWithGoogle } from "@/lib/google-calendar/link-from-auth.server";
+import { buildGoogleCalendarConnectPath } from "@/lib/google-calendar/link-after-manager-provision.server";
+import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
+import { isGoogleCalendarOAuthConfigured, warmGoogleCalendarOAuthConfig } from "@/lib/google-calendar/settings";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
@@ -87,7 +91,7 @@ export async function handleOAuthCallback(
     },
   });
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     console.error("OAuth callback exchange failed:", error.message);
     return authFailureRedirect(
@@ -97,21 +101,54 @@ export async function handleOAuthCallback(
   }
 
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = sessionData.session?.user ?? (await supabase.auth.getUser()).data.user ?? null;
     if (user) {
       const service = createSupabaseServiceRoleClient();
+      const oauthIntent = readOAuthIntentFromRequest(request);
+      const oauthNextPath = readOAuthNextPathFromRequest(request) ?? safePath;
+      let linkResult = { linked: false, reason: "no_session" };
+      if (sessionData.session) {
+        await warmGoogleCalendarOAuthConfig();
+        debugGoogleCalendarLog("oauth-callback-handler.ts", "oauth exchange session", {
+          managerSuffix: user.id.slice(-6),
+          hasRefresh: Boolean(sessionData.session.provider_refresh_token),
+          hasAccess: Boolean(sessionData.session.provider_token),
+          intent: oauthIntent,
+          nextPath: oauthNextPath,
+        });
+        linkResult = await maybeLinkGoogleCalendarFromOAuthSession(service, user, sessionData.session, {
+          intent: oauthIntent,
+          nextPath: oauthNextPath,
+        });
+      }
       // Link any prior email/password account to this OAuth identity, then resolve the
       // destination ONCE. No auto free-manager provisioning — unknown users pick a role.
       await reconcileAuthAccountsByEmail(service, user);
       const resolvedPath = options?.resolveRedirect
         ? await options.resolveRedirect(service, user, safePath)
         : await resolveOAuthPortalRedirect(service, user, safePath, {
-            intent: readOAuthIntentFromRequest(request),
+            intent: oauthIntent,
             surface: readOAuthSurfaceFromRequest(request),
           });
-      if (resolvedPath !== safePath) {
+      debugGoogleCalendarLog("oauth-callback-handler.ts", "oauth callback resolved", {
+        managerSuffix: user.id.slice(-6),
+        linkReason: linkResult.reason,
+        linked: linkResult.linked,
+        resolvedPath,
+      });
+      const calendarOAuthConfigured = isGoogleCalendarOAuthConfigured();
+      if (
+        shouldRedirectToGoogleCalendarConnect({
+          linkResult,
+          resolvedPath,
+          intent: oauthIntent,
+          nextPath: oauthNextPath,
+          googleAuthUser: signedInWithGoogle(user),
+          calendarOAuthConfigured,
+        })
+      ) {
+        applyRedirect(new URL(buildGoogleCalendarConnectPath(requestOrigin), requestOrigin));
+      } else if (resolvedPath !== safePath) {
         applyRedirect(new URL(resolvedPath, requestOrigin));
       }
     }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
+import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -18,6 +19,11 @@ import {
   parseMoneyAmount,
   readHouseholdCharges,
 } from "@/lib/household-charges";
+import {
+  CLIENT_SCHEDULED_MESSAGE_OVERRIDES_EVENT,
+  applyClientPatchesToMessages,
+  mergeClientScheduledMessagePatch,
+} from "@/lib/client-scheduled-message-overrides";
 import { readPortalApiError } from "@/lib/portal-api-error";
 import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import {
@@ -25,8 +31,13 @@ import {
   buildReminderPreviewLines,
   detectReminderPreset,
   formatFriendlyReminderSchedule,
+  labelForReminderScheduleToken,
+  reminderScheduleTokensFromSettings,
+  settingsPatchFromReminderScheduleTokens,
+  REMINDER_BEFORE_DUE_DAY_OPTIONS,
   PAYMENT_REMINDER_PRESETS,
   type ReminderPresetId,
+  type ReminderScheduleToken,
 } from "@/lib/payment-reminder-presets";
 import {
   filterScheduledPaymentMessagesForUnpaidCharges,
@@ -40,16 +51,12 @@ import {
 
 export { formatFriendlyReminderSchedule };
 
-/** Short ledger label for per-charge automated reminders. */
+/** Ledger link label — opens per-charge reminder editor. */
 export function summarizeChargeReminders(messages: ScheduledPaymentMessage[]): string {
   if (!messages.length) return "";
   const active = messages.filter((message) => message.status !== "cancelled");
-  if (!active.length) return "Reminders paused";
-  if (active.length === 1) {
-    const next = active[0]!;
-    return `Next: ${scheduledReminderShortLabel(next.kind, next.daysBeforeDue)}`;
-  }
-  return `${active.length} reminders scheduled`;
+  if (!active.length) return "Edit reminder (paused)";
+  return "Edit reminder";
 }
 
 function mergeLocalChargeReminders(
@@ -232,11 +239,42 @@ export function ChargeRemindersModal({
   onOpenSettings?: () => void;
   onAddSetDate?: (isoDate: string) => void | Promise<void>;
 }) {
+  const { showToast } = useAppUi();
   const [editingMessage, setEditingMessage] = useState<ScheduledPaymentMessage | null>(null);
-  const manageable = messages.filter((m) => m.status === "scheduled" || m.status === "cancelled");
+  const manageableFromProps = useMemo(
+    () => messages.filter((m) => m.status === "scheduled" || m.status === "cancelled"),
+    [messages],
+  );
+  const [manageable, setManageable] = useState(manageableFromProps);
+
+  useEffect(() => {
+    setManageable(manageableFromProps);
+  }, [manageableFromProps]);
+
+  const toggleCancelled = async (message: ScheduledPaymentMessage, cancelled: boolean) => {
+    setManageable((prev) =>
+      prev.map((row) =>
+        row.id === message.id ? { ...row, status: cancelled ? "cancelled" : "scheduled" } : row,
+      ),
+    );
+    try {
+      await onToggleCancel(message, cancelled);
+      onMessageSaved?.();
+    } catch {
+      setManageable(manageableFromProps);
+      showToast("Could not update reminder.");
+    }
+  };
 
   return (
-    <Modal open={open} onClose={onClose} title="Payment reminders" dense panelClassName="max-w-lg p-3 sm:p-4">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Edit reminder"
+      dense
+      assistantContext={`Edit reminder for ${chargeTitle}`}
+      panelClassName="max-w-lg p-3 sm:p-4"
+    >
       {editingMessage ? (
         <ScheduledMessageEditForm
           key={editingMessage.id}
@@ -254,32 +292,30 @@ export function ChargeRemindersModal({
           <p className="mt-0.5 text-xs text-muted">
             {residentName} · due {dueDate}
           </p>
-        </div>
-        <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
-          <p className="text-xs font-semibold text-foreground">Default schedule</p>
-          <p className="mt-1 text-sm text-foreground">{scheduleSummary ?? "Standard"}</p>
-          <p className="mt-1.5 text-xs text-muted">
-            Turn individual sends off below without changing your default. Reminders stop when this charge is marked paid.
+          <p className="mt-2 text-xs text-muted">
+            Changes here apply only to this payment. Default timing: {scheduleSummary ?? "Standard"}.
           </p>
         </div>
         {manageable.length === 0 ? (
           <p className="text-sm text-muted">No upcoming reminders for this charge.</p>
         ) : (
-          <ul className="space-y-2">
+          <div>
+            <p className="text-xs font-semibold text-muted">Scheduled messages</p>
+            <ul className="mt-2 space-y-2">
             {manageable.map((m) => {
               const cancelled = m.status === "cancelled";
               const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
               return (
                 <li
                   key={m.id}
-                  className={`rounded-xl border px-3 py-2.5 ${
-                    cancelled ? "border-border bg-accent/15" : "border-border bg-card"
+                  className={`rounded-xl border border-border bg-card px-3 py-2.5 text-foreground shadow-sm ${
+                    cancelled ? "opacity-80" : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <button
                       type="button"
-                      className={`min-w-0 flex-1 text-left ${cancelled ? "line-through opacity-70" : ""}`}
+                      className={`min-w-0 flex-1 text-left ${cancelled ? "line-through" : ""}`}
                       onClick={() => setEditingMessage(m)}
                     >
                       <div className="flex flex-wrap items-center gap-2">
@@ -287,20 +323,24 @@ export function ChargeRemindersModal({
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                             cancelled
-                              ? "bg-accent/40 text-muted"
-                              : "bg-primary/10 text-primary"
+                              ? "bg-muted/30 text-muted"
+                              : "bg-primary/15 text-primary"
                           }`}
                         >
                           {cancelled ? "Off" : "Scheduled"}
                         </span>
                       </div>
                       <span className="mt-1 block text-xs text-muted">Sends {formatSendDate(m.sendAt)}</span>
+                      <span className="mt-0.5 block text-[11px] font-medium text-primary">Tap to edit message or timing</span>
                     </button>
                     <Button
                       type="button"
                       variant="outline"
                       className="h-8 shrink-0 rounded-full px-3 text-xs"
-                      onClick={() => void onToggleCancel(m, !cancelled)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleCancelled(m, !cancelled);
+                      }}
                     >
                       {cancelled ? "Turn on" : "Turn off"}
                     </Button>
@@ -308,12 +348,20 @@ export function ChargeRemindersModal({
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </div>
         )}
         {onOpenSettings ? (
-          <Button type="button" variant="outline" className="h-9 w-full rounded-full text-sm" onClick={onOpenSettings}>
+          <button
+            type="button"
+            className="w-full text-center text-xs font-semibold text-primary hover:underline"
+            onClick={() => {
+              onClose();
+              onOpenSettings();
+            }}
+          >
             Change default schedule for all payments
-          </Button>
+          </button>
         ) : null}
       </div>
       )}
@@ -336,7 +384,14 @@ export function ScheduledMessageEditForm({
   const [subject, setSubject] = useState(message.subject);
   const [body, setBody] = useState(message.body);
   const [sendAtLocal, setSendAtLocal] = useState(toLocalInputValue(message.sendAt));
+  const [applyToFuture, setApplyToFuture] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const templateKeyForKind = (kind: ScheduledPaymentMessage["kind"]) => {
+    if (kind === "late_fee") return "lateFee" as const;
+    if (kind === "pre_due" || kind === "same_day" || kind === "set_date") return "preDue" as const;
+    return "overdue" as const;
+  };
 
   const save = async () => {
     const sendAt = new Date(sendAtLocal);
@@ -360,6 +415,24 @@ export function ScheduledMessageEditForm({
       if (!res.ok) {
         throw new Error(await readPortalApiError(res, "Could not save."));
       }
+      mergeClientScheduledMessagePatch(message.id, {
+        customSubject: subject,
+        customBody: body,
+        customSendAt: sendAt.toISOString(),
+      });
+      if (applyToFuture) {
+        const templateKey = templateKeyForKind(message.kind);
+        await fetch("/api/portal/automation-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            templates: {
+              [templateKey]: { subject, body },
+            },
+          }),
+        });
+      }
       showToast("Scheduled message updated.");
       onSaved();
       onClose();
@@ -381,6 +454,7 @@ export function ScheduledMessageEditForm({
         body: JSON.stringify({ cancelled }),
       });
       if (!res.ok) throw new Error(await readPortalApiError(res, "Could not update."));
+      mergeClientScheduledMessagePatch(message.id, { cancelled });
       showToast(cancelled ? "Send cancelled." : "Send restored.");
       onSaved();
       onClose();
@@ -414,6 +488,15 @@ export function ScheduledMessageEditForm({
           <label className="text-xs font-semibold text-muted">Message</label>
           <Textarea className="mt-1 min-h-[160px]" value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
         </div>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={applyToFuture}
+            onChange={(e) => setApplyToFuture(e.target.checked)}
+            disabled={busy}
+          />
+          Apply to future payments
+        </label>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
             Save
@@ -477,100 +560,343 @@ const SCHEDULE_SETTINGS_COPY: Record<
   },
 };
 
-const REMINDER_DAY_PILL =
-  "inline-flex shrink-0 items-center rounded-full min-h-8 px-3 py-1 text-xs font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50";
-const REMINDER_DAY_PILL_ACTIVE = "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]";
-const REMINDER_DAY_PILL_INACTIVE =
-  "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card [html[data-theme=dark]_&]:portal-outline-control";
+function normalizeAutomationPayload(
+  settings: ManagerAutomationSettings,
+  visibilityDaysRaw?: string,
+): ManagerAutomationSettings {
+  const visibilityDays =
+    visibilityDaysRaw !== undefined
+      ? Math.max(0, Math.min(30, Math.round(Number(visibilityDaysRaw)) || settings.scheduleVisibilityDays))
+      : settings.scheduleVisibilityDays;
+  return { ...settings, scheduleVisibilityDays: visibilityDays };
+}
+
+export type PaymentAutomationSettingsHandle = {
+  saveIfDirty: () => Promise<boolean>;
+};
+
+const PORTAL_FIELD_LABEL_CLASS = "text-xs font-semibold text-muted";
+
+const REMINDER_PRESET_OPTIONS = [
+  ...PAYMENT_REMINDER_PRESETS.map((preset) => ({
+    value: preset.id,
+    label: `${preset.label}${preset.recommended ? " (recommended)" : ""}`,
+  })),
+  { value: "custom", label: "Custom" },
+] as const;
+
+function sortReminderScheduleTokens(tokens: ReminderScheduleToken[]): ReminderScheduleToken[] {
+  const before = tokens
+    .filter((t): t is `before:${number}` => t.startsWith("before:"))
+    .sort((a, b) => Number(b.slice("before:".length)) - Number(a.slice("before:".length)));
+  const ordered: ReminderScheduleToken[] = [...before];
+  if (tokens.includes("due_date")) ordered.push("due_date");
+  if (tokens.includes("every_day_late")) ordered.push("every_day_late");
+  return ordered;
+}
+
+function ReminderScheduleChipRow({
+  tokens,
+  busy,
+  onChange,
+}: {
+  tokens: ReminderScheduleToken[];
+  busy: boolean;
+  onChange: (next: ReminderScheduleToken[]) => void;
+}) {
+  const sorted = sortReminderScheduleTokens(tokens);
+  if (!sorted.length) return null;
+  return (
+    <ul className="flex flex-wrap gap-1.5" aria-label="Selected reminders">
+      {sorted.map((token) => (
+        <li key={token}>
+          <button
+            type="button"
+            disabled={busy}
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-primary/15 disabled:opacity-50"
+            onClick={() => onChange(tokens.filter((t) => t !== token))}
+            aria-label={`Remove ${labelForReminderScheduleToken(token)}`}
+          >
+            <span className="truncate">{labelForReminderScheduleToken(token)}</span>
+            <span className="text-muted" aria-hidden>
+              ×
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReminderPresetDropdown({
+  activePreset,
+  busy,
+  onSelect,
+}: {
+  activePreset: ReminderPresetId;
+  busy: boolean;
+  onSelect: (presetId: ReminderPresetId) => void;
+}) {
+  return (
+    <FieldSingleSelect
+      label="Start from template"
+      labelClassName={PORTAL_FIELD_LABEL_CLASS}
+      options={[...REMINDER_PRESET_OPTIONS]}
+      value={activePreset}
+      disabled={busy}
+      dataAttr="payment-reminder-schedule-preset"
+      onChange={(next) => onSelect(next as ReminderPresetId)}
+    />
+  );
+}
+
+function UnifiedReminderScheduleSelect({
+  draft,
+  busy,
+  onChange,
+}: {
+  draft: ManagerAutomationSettings;
+  busy: boolean;
+  onChange: (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => void;
+}) {
+  const [customDayInput, setCustomDayInput] = useState("");
+
+  const beforeDueOptions = useMemo(() => {
+    const known = new Set<number>(REMINDER_BEFORE_DUE_DAY_OPTIONS);
+    const extras = draft.preDueReminderDays.filter((day) => !known.has(day));
+    const days = [...extras, ...REMINDER_BEFORE_DUE_DAY_OPTIONS].sort((a, b) => b - a);
+    return days.map((day) => ({
+      value: `before:${day}` satisfies ReminderScheduleToken,
+      label: labelForReminderScheduleToken(`before:${day}`),
+    }));
+  }, [draft.preDueReminderDays]);
+
+  const selected = reminderScheduleTokensFromSettings(draft);
+  const hasSelection = selected.length > 0;
+
+  const commitSchedule = (tokens: ReminderScheduleToken[]) => {
+    onChange(settingsPatchFromReminderScheduleTokens(tokens));
+  };
+
+  const addCustomDay = () => {
+    const day = Math.round(Number(customDayInput.trim()));
+    if (!Number.isFinite(day) || day < 1 || day > 60) return;
+    const token = `before:${day}` as ReminderScheduleToken;
+    const nextTokens = selected.includes(token) ? selected : [...selected, token];
+    const patch = settingsPatchFromReminderScheduleTokens(nextTokens);
+    patch.preDueReminderDays = [...new Set([...patch.preDueReminderDays, day])].sort((a, b) => b - a);
+    onChange(patch);
+    setCustomDayInput("");
+  };
+
+  return (
+    <div className="space-y-2">
+      {hasSelection ? (
+        <>
+          <p className={PORTAL_FIELD_LABEL_CLASS}>Reminders</p>
+          <ReminderScheduleChipRow
+            tokens={selected}
+            busy={busy}
+            onChange={(next) => commitSchedule(next)}
+          />
+        </>
+      ) : null}
+      <CheckboxMultiSelect
+        label="Reminders"
+        labelClassName={PORTAL_FIELD_LABEL_CLASS}
+        hideLabel={hasSelection}
+        selectionTriggerLabel={hasSelection ? "Add or remove…" : undefined}
+        groups={[
+          { label: "Before due", options: beforeDueOptions },
+          {
+            label: "Due & after",
+            options: [
+              { value: "due_date", label: "Due date" },
+              { value: "every_day_late", label: "Every day late" },
+            ],
+          },
+        ]}
+        selected={selected}
+        onChange={(next) => commitSchedule(next as ReminderScheduleToken[])}
+        disabled={busy}
+        emptyLabel="Choose reminders…"
+        dataAttr="payment-reminder-schedule"
+      menuFooter={
+        <div className="px-3 py-2">
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">Custom day</p>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              className="h-9 min-h-0 flex-1"
+              placeholder="Days before due"
+              value={customDayInput}
+              disabled={busy}
+              data-attr="payment-reminder-custom-day"
+              onChange={(e) => setCustomDayInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomDay();
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 rounded-full px-3 text-xs"
+              disabled={busy || !customDayInput.trim()}
+              onClick={addCustomDay}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
+      }
+    />
+    </div>
+  );
+}
+
+export type PaymentReminderSaveScope = "future_only" | "future_and_existing";
 
 function PaymentAutomationSettingsForm({
   initialSettings,
   onSaved,
+  onAfterSave,
   variant = "payments",
   layout = "card",
+  autoSaveOnClose = false,
+  formRef,
 }: {
   initialSettings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
+  /** Called after a successful save (e.g. close modal). */
+  onAfterSave?: () => void;
   variant?: ScheduleSettingsVariant;
   layout?: "card" | "modal";
+  autoSaveOnClose?: boolean;
+  formRef?: React.Ref<PaymentAutomationSettingsHandle>;
 }) {
   const { showToast } = useAppUi();
   const copy = SCHEDULE_SETTINGS_COPY[variant];
   const [draft, setDraft] = useState(initialSettings);
-  const [customDay, setCustomDay] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState<ReminderPresetId>(() => detectReminderPreset(initialSettings));
   const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
+  const [applyToExisting, setApplyToExisting] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const parseVisibilityDays = (raw: string) =>
-    Math.max(0, Math.min(30, Math.round(Number(raw)) || initialSettings.scheduleVisibilityDays));
+  useEffect(() => {
+    setDraft(initialSettings);
+    setSelectedPreset(detectReminderPreset(initialSettings));
+    setVisibilityDaysInput(String(initialSettings.scheduleVisibilityDays));
+  }, [initialSettings]);
 
-  const save = async () => {
+  const savedBaseline = useMemo(() => normalizeAutomationPayload(initialSettings), [initialSettings]);
+  const currentPayload = useMemo(
+    () => normalizeAutomationPayload(draft, visibilityDaysInput),
+    [draft, visibilityDaysInput],
+  );
+  const isDirty = useMemo(
+    () => JSON.stringify(currentPayload) !== JSON.stringify(savedBaseline),
+    [currentPayload, savedBaseline],
+  );
+
+  const previewLines = useMemo(() => buildReminderPreviewLines(draft), [draft]);
+  const scheduleHasReminders = previewLines.length > 0 && previewLines[0] !== "No automatic reminders";
+  const saveEnabled =
+    !busy &&
+    scheduleHasReminders &&
+    (isDirty || (variant === "payments" && applyToExisting));
+
+  const save = useCallback(async (options?: { silent?: boolean }) => {
+    if (!scheduleHasReminders) {
+      showToast("Choose at least one reminder before saving.");
+      return false;
+    }
     setBusy(true);
     try {
-      const payload = {
-        ...draft,
-        scheduleVisibilityDays: parseVisibilityDays(visibilityDaysInput),
-      };
+      const payload = currentPayload;
       const res = await fetch("/api/portal/automation-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          ...(variant === "payments"
+            ? { applyReminderScope: applyToExisting ? "future_and_existing" : "future_only" }
+            : {}),
+        }),
       });
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload.error ?? "Could not save settings.");
+        const errBody = (await res.json()) as { error?: string };
+        throw new Error(errBody.error ?? "Could not save settings.");
       }
-      const body = (await res.json()) as { settings: ManagerAutomationSettings };
+      const body = (await res.json()) as { settings: ManagerAutomationSettings; clearedOverrides?: number };
       setDraft(body.settings);
+      setSelectedPreset(detectReminderPreset(body.settings));
       setVisibilityDaysInput(String(body.settings.scheduleVisibilityDays));
       onSaved(body.settings);
+      onAfterSave?.();
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(PAYMENT_AUTOMATION_SETTINGS_EVENT));
       }
-      showToast(copy.savedToast);
+      if (!options?.silent) {
+        if (variant === "payments" && applyToExisting && (body.clearedOverrides ?? 0) > 0) {
+          showToast("Reminder schedule saved for future and existing unpaid payments.");
+        } else {
+          showToast(copy.savedToast);
+        }
+      }
+      if (variant === "payments") {
+        setApplyToExisting(false);
+      }
+      return true;
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not save settings.");
+      return false;
     } finally {
       setBusy(false);
     }
-  };
+  }, [copy.savedToast, currentPayload, onAfterSave, onSaved, applyToExisting, scheduleHasReminders, showToast, variant]);
 
-  const toggleDay = (day: number) => {
+  const saveIfDirty = useCallback(async (): Promise<boolean> => {
+    if (!isDirty) return true;
+    return save({ silent: true });
+  }, [isDirty, save, autoSaveOnClose]);
+
+  useImperativeHandle(formRef, () => ({ saveIfDirty }), [saveIfDirty]);
+
+  const saveVisible = !autoSaveOnClose;
+
+  const applySchedulePatch = (patch: ReturnType<typeof settingsPatchFromReminderScheduleTokens>) => {
     setDraft((prev) => {
-      const has = prev.preDueReminderDays.includes(day);
-      const nextDays = has ? prev.preDueReminderDays.filter((d) => d !== day) : [...prev.preDueReminderDays, day].sort((a, b) => b - a);
-      return { ...prev, preDueReminderDays: nextDays };
+      const next = { ...prev, ...patch };
+      setSelectedPreset(detectReminderPreset(next));
+      return next;
     });
   };
 
-  const addCustomDay = () => {
-    const n = Math.round(Number(customDay));
-    // A custom offset is "N days before due"; 0 would collide with the "Due
-    // date" toggle and is dropped by the projection, so require >= 1.
-    if (!customDay.trim() || !Number.isFinite(n) || n < 1 || n > 60) return;
-    setDraft((prev) => ({
-      ...prev,
-      preDueReminderDays: [...new Set([...prev.preDueReminderDays, n])].sort((a, b) => b - a),
-    }));
-    setCustomDay("");
-  };
-
   const compact = layout === "modal" && variant === "payments";
-  const activePreset = detectReminderPreset(draft);
-  const previewLines = buildReminderPreviewLines(draft);
 
   const selectPreset = (presetId: ReminderPresetId) => {
-    if (presetId === "custom") return;
+    if (presetId === "custom") {
+      setSelectedPreset("custom");
+      return;
+    }
     setDraft((prev) => applyReminderPreset(prev, presetId));
+    setSelectedPreset(presetId);
   };
 
-  const presetCardClass = (selected: boolean) =>
-    `rounded-xl border px-3 py-2.5 text-left transition-colors ${
-      selected
-        ? "border-primary bg-primary/5 shadow-[var(--shadow-sm)]"
-        : "border-border bg-card hover:border-primary/30"
-    }`;
+  const activePreset = selectedPreset;
+
+  const paymentsScheduleBlock = (
+    <div className="space-y-3">
+      <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
+      <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={applySchedulePatch} />
+    </div>
+  );
 
   return (
     <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-4"}>
@@ -579,254 +905,40 @@ function PaymentAutomationSettingsForm({
           <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
           {copy.description ? <p className="mt-1 text-xs text-muted">{copy.description}</p> : null}
         </div>
-      ) : compact ? (
-        <p className="text-sm text-muted">
-          Choose how residents are reminded about unpaid charges. You can still turn off individual sends per payment.
-        </p>
       ) : null}
 
       {compact ? (
-        <>
-          <div>
-            <p className="text-xs font-semibold text-muted">Reminder schedule</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {PAYMENT_REMINDER_PRESETS.map((preset) => {
-                const selected = activePreset === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={presetCardClass(selected)}
-                    onClick={() => selectPreset(preset.id)}
-                    disabled={busy}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{preset.label}</span>
-                      {preset.recommended ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                          Recommended
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs leading-relaxed text-muted">{preset.description}</p>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                className={presetCardClass(activePreset === "custom")}
-                onClick={() => setDraft((prev) => prev)}
-                disabled={busy}
-              >
-                <span className="text-sm font-semibold text-foreground">Custom</span>
-                <p className="mt-1 text-xs leading-relaxed text-muted">Pick your own days and follow-up rules below.</p>
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5">
-            <p className="text-xs font-semibold text-foreground">What residents will receive</p>
-            <ul className="mt-2 space-y-1">
-              {previewLines.map((line) => (
-                <li key={line} className="flex items-center gap-2 text-xs text-muted">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {activePreset === "custom" ? (
-            <div className="space-y-3 rounded-xl border border-border bg-accent/15 p-3">
-              <p className="text-xs font-semibold text-foreground">Customize timing</p>
-              <div>
-                <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {[7, 5, 3, 2, 1, ...draft.preDueReminderDays]
-                    .filter((d, i, arr) => arr.indexOf(d) === i)
-                    .sort((a, b) => b - a)
-                    .map((day) => {
-                      const active = draft.preDueReminderDays.includes(day);
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          className={`${REMINDER_DAY_PILL} ${active ? REMINDER_DAY_PILL_ACTIVE : REMINDER_DAY_PILL_INACTIVE}`}
-                          onClick={() => toggleDay(day)}
-                          disabled={busy}
-                        >
-                          {day} day{day === 1 ? "" : "s"} before
-                        </button>
-                      );
-                    })}
-                  <div className="flex flex-wrap items-center gap-1">
-                    <Input
-                      className="h-8 w-16 text-xs"
-                      inputMode="numeric"
-                      placeholder="Day"
-                      value={customDay}
-                      onChange={(e) => setCustomDay(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addCustomDay();
-                        }
-                      }}
-                      disabled={busy}
-                    />
-                    <button
-                      type="button"
-                      className={`${REMINDER_DAY_PILL} ${REMINDER_DAY_PILL_INACTIVE} px-2`}
-                      onClick={addCustomDay}
-                      disabled={busy}
-                    >
-                      Add day
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.sameDayReminderEnabled}
-                    onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })}
-                    disabled={busy}
-                  />
-                  {copy.sameDayLabel}
-                </label>
-                <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.overdueDailyEnabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      setDraft((prev) => ({
-                        ...prev,
-                        overdueDailyEnabled: enabled,
-                        ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
-                        postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
-                      }));
-                    }}
-                    disabled={busy}
-                  />
-                  Every day late
-                </label>
-              </div>
-            </div>
-          ) : null}
-        </>
+        paymentsScheduleBlock
       ) : (
         <>
-      <div>
-        <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {[3, 2, 1, ...draft.preDueReminderDays]
-            .filter((d, i, arr) => arr.indexOf(d) === i)
-            .sort((a, b) => b - a)
-            .map((day) => {
-              const active = draft.preDueReminderDays.includes(day);
-              return (
-              <button
-                key={day}
-                type="button"
-                className={`${REMINDER_DAY_PILL} ${active ? REMINDER_DAY_PILL_ACTIVE : REMINDER_DAY_PILL_INACTIVE}`}
-                onClick={() => toggleDay(day)}
-                disabled={busy}
-              >
-                {day} day{day === 1 ? "" : "s"} before
-              </button>
-              );
-            })}
-          <div className="flex flex-wrap items-center gap-1">
-            <Input
-              className="h-8 w-16 text-xs"
-              inputMode="numeric"
-              placeholder="Day"
-              value={customDay}
-              onChange={(e) => setCustomDay(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addCustomDay();
-                }
-              }}
-              disabled={busy}
-            />
-            <button
-              type="button"
-              className={`${REMINDER_DAY_PILL} ${REMINDER_DAY_PILL_INACTIVE} px-2`}
-              onClick={addCustomDay}
-              disabled={busy}
-            >
-              Add day
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className={compact ? "flex flex-wrap gap-2" : "grid gap-3 sm:grid-cols-2"}>
-        <label
-          className={`flex items-center gap-2 text-sm ${compact ? "rounded-full border border-border bg-card px-3 py-2" : ""}`}
-        >
-          <input type="checkbox" checked={draft.sameDayReminderEnabled} onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })} disabled={busy} />
-          {copy.sameDayLabel}
-        </label>
-        {compact ? (
-          <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.overdueDailyEnabled}
-              onChange={(e) => {
-                const enabled = e.target.checked;
-                setDraft((prev) => ({
-                  ...prev,
-                  overdueDailyEnabled: enabled,
-                  ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
-                  postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
-                }));
-              }}
-              disabled={busy}
-            />
-            Every day late
-          </label>
-        ) : null}
-        {!compact ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={draft.overdueDailyEnabled} onChange={(e) => setDraft({ ...draft, overdueDailyEnabled: e.target.checked })} disabled={busy} />
-          {copy.followUpLabel}
-        </label>
-        ) : null}
-        {!compact ? (
+          <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
+          <UnifiedReminderScheduleSelect draft={draft} busy={busy} onChange={applySchedulePatch} />
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
             Late fee notices
           </label>
-        ) : null}
-      </div>
 
-      {!compact && draft.overdueDailyEnabled ? (
-        <label className="block text-xs font-semibold text-muted">
-          Start daily overdue reminders after
-          <div className="mt-1 flex items-center gap-2">
-            <Input
-              className="h-8 w-16 text-xs"
-              inputMode="numeric"
-              value={String(draft.overdueDailyStartDays)}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  overdueDailyStartDays: Math.max(1, Math.min(30, Math.round(Number(e.target.value)) || 1)),
-                })
-              }
-              disabled={busy}
-            />
-            <span className="text-sm font-normal text-foreground">day(s) past due</span>
-          </div>
-        </label>
-      ) : null}
-
-      </>
+          {draft.overdueDailyEnabled ? (
+            <label className="block text-xs font-semibold text-muted">
+              Start daily overdue reminders after
+              <div className="mt-1 flex items-center gap-2">
+                <Input
+                  className="h-8 w-16 text-xs"
+                  inputMode="numeric"
+                  value={String(draft.overdueDailyStartDays)}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      overdueDailyStartDays: Math.max(1, Math.min(30, Math.round(Number(e.target.value)) || 1)),
+                    })
+                  }
+                  disabled={busy}
+                />
+                <span className="text-sm font-normal text-foreground">day(s) past due</span>
+              </div>
+            </label>
+          ) : null}
+        </>
       )}
 
       {variant === "inbox" ? (
@@ -901,9 +1013,30 @@ function PaymentAutomationSettingsForm({
       </div>
       ) : null}
 
-      <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
-        {copy.saveLabel}
-      </Button>
+      {saveVisible ? (
+        <>
+          {compact && variant === "payments" ? (
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={applyToExisting}
+                onChange={(e) => setApplyToExisting(e.target.checked)}
+                disabled={busy}
+              />
+              Apply to existing unpaid payments
+            </label>
+          ) : null}
+          <Button
+            type="button"
+            variant="primary"
+            className={`rounded-full ${compact && variant === "payments" ? "w-full" : ""}`}
+            onClick={() => void save()}
+            disabled={!saveEnabled}
+          >
+            {copy.saveLabel}
+          </Button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -911,21 +1044,30 @@ function PaymentAutomationSettingsForm({
 export function PaymentAutomationSettingsPanel({
   settings,
   onSaved,
+  onAfterSave,
   variant = "payments",
   layout = "card",
+  autoSaveOnClose = false,
+  formRef,
 }: {
   settings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
+  onAfterSave?: () => void;
   variant?: ScheduleSettingsVariant;
   layout?: "card" | "modal";
+  autoSaveOnClose?: boolean;
+  formRef?: React.Ref<PaymentAutomationSettingsHandle>;
 }) {
   return (
     <PaymentAutomationSettingsForm
       key={`${variant}:${layout}:${JSON.stringify(settings)}`}
       initialSettings={settings}
       onSaved={onSaved}
+      onAfterSave={onAfterSave}
       variant={variant}
       layout={layout}
+      autoSaveOnClose={autoSaveOnClose}
+      formRef={formRef}
     />
   );
 }
@@ -949,8 +1091,13 @@ export async function patchScheduledMessage(
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
+    if (isDemoModeActive() && patch.cancelled !== undefined) {
+      mergeClientScheduledMessagePatch(messageId, patch);
+      return;
+    }
     throw new Error(await readPortalApiError(res, "Could not update reminder."));
   }
+  mergeClientScheduledMessagePatch(messageId, patch);
 }
 
 /** Cancel upcoming auto reminders when a charge is marked paid (demo + immediate UI). */
@@ -995,18 +1142,21 @@ export function ReminderSettingsModal({
   if (!settings) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Payment reminders"} dense={variant === "payments"} panelClassName={variant === "payments" ? "max-w-lg p-3 sm:p-4" : undefined}>
-      {settings ? (
-        <PaymentAutomationSettingsPanel
-          settings={settings}
-          variant={variant}
-          layout={variant === "payments" ? "modal" : "card"}
-          onSaved={(next) => {
-            onSaved(next);
-            onClose();
-          }}
-        />
-      ) : null}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={variant === "inbox" ? "Schedule settings" : "Payment reminders"}
+      dense={variant === "payments"}
+      assistantContext={variant === "payments" ? "Payment reminders modal" : undefined}
+      panelClassName={variant === "payments" ? "max-w-md p-3 sm:p-4" : undefined}
+    >
+      <PaymentAutomationSettingsPanel
+        settings={settings}
+        variant={variant}
+        layout={variant === "payments" ? "modal" : "card"}
+        onSaved={onSaved}
+        onAfterSave={onClose}
+      />
     </Modal>
   );
 }
@@ -1050,11 +1200,14 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
   useEffect(() => {
     const onChargesChanged = () => setChargeRevision((n) => n + 1);
     const onSettingsChanged = () => setSettingsRevision((n) => n + 1);
+    const onClientOverrides = () => setSettingsRevision((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, onChargesChanged);
     window.addEventListener(PAYMENT_AUTOMATION_SETTINGS_EVENT, onSettingsChanged);
+    window.addEventListener(CLIENT_SCHEDULED_MESSAGE_OVERRIDES_EVENT, onClientOverrides);
     return () => {
       window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, onChargesChanged);
       window.removeEventListener(PAYMENT_AUTOMATION_SETTINGS_EVENT, onSettingsChanged);
+      window.removeEventListener(CLIENT_SCHEDULED_MESSAGE_OVERRIDES_EVENT, onClientOverrides);
     };
   }, []);
 
@@ -1069,7 +1222,7 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
     if (applyVisibilityFilter && settings) {
       list = filterScheduledPaymentMessagesForVisibility(list, settings);
     }
-    return list;
+    return applyClientPatchesToMessages(list);
   }, [rawMessages, chargeRevision, settingsRevision, settings, applyVisibilityFilter]);
 
   return { settings, messages, loading, reload, setSettings };

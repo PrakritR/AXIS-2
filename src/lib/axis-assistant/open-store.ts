@@ -18,6 +18,7 @@ export function subscribeAxisAssistantOpen(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/** Opens the floating popup assistant (default on every viewport). */
 export function openAxisAssistant(): void {
   setAxisAssistantOpen(true);
 }

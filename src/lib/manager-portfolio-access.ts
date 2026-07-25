@@ -6,7 +6,6 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { MockProperty } from "@/data/types";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
-  PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
   readAllPendingManagerProperties,
   readExtraListingsForUser,
@@ -15,6 +14,11 @@ import {
   syncPropertyPipelineFromServer,
   buildMockPropertyFromDraft,
 } from "@/lib/demo-property-pipeline";
+// Import the event name from the cycle-free leaf module, NOT from
+// demo-property-pipeline: this module reads it at eval time (in
+// MANAGER_PORTFOLIO_REFRESH_EVENTS below), and the property-pipeline import
+// cycle would otherwise hit its TDZ. See property-pipeline-events.ts.
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships, syncProRelationshipsFromServer } from "@/lib/pro-relationships";
 import { readCachedAccountLinkInvites } from "@/lib/portal-data-store";
@@ -250,16 +254,30 @@ export function applicationVisibleToPortalUser(
   module?: CoManagerPermissionId,
 ): boolean {
   if (!userId) return false;
+  // A row attributed to THIS manager is always theirs — even when its property
+  // is missing from the local owned/linked cache (property just created and the
+  // pipeline cache not hydrated yet on first paint, or an archived/unlisted own
+  // listing). The server GET already scoped this list by manager_user_id, so
+  // trusting the attribution here only ever un-hides the manager's OWN rows; it
+  // can never surface another manager's, because a co-manager's linked rows are
+  // attributed to the OWNER (managerUserId !== this userId) and fall through to
+  // the property-scoped check below. Without this, a resident's freshly
+  // submitted application — correctly stored and returned — vanished from the
+  // manager's Applications tab whenever the property cache lost the hydration
+  // race. This mirrors the same fix already in `moduleRowVisibleToPortalUser`.
+  if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (pid) {
-    // Property-scoped rows must still belong to the live portfolio (owned or
-    // currently linked). Otherwise residents/housing stick after unlink/delete.
+    // Foreign (co-manager linked) rows must still belong to the live portfolio,
+    // so unlink/delete scope changes stick (the row is attributed to the owner,
+    // never this co-manager). Otherwise residents/housing would stick after an
+    // unlink.
     if (ownedPropertyIdsForUser(userId).has(pid)) return true;
     const linked = module ? collectLinkedPropertyIdsForModule(userId, module) : collectLinkedPropertyIds(userId);
     return linked.has(pid);
   }
-  // Manual / unplaced rows are only visible to the attributed manager.
-  return Boolean(row.managerUserId && row.managerUserId === userId);
+  // An unscoped row (no attribution, no property) stays hidden.
+  return false;
 }
 
 /** Minimal lease shape for portfolio visibility checks (avoids circular imports). */
@@ -272,12 +290,21 @@ export type LeaseVisibilityRow = {
 /** Whether a lease row should appear for this portal user (direct owner or linked property). */
 export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string | null): boolean {
   if (!userId) return false;
+  // Same attribution-first rule as `applicationVisibleToPortalUser` /
+  // `moduleRowVisibleToPortalUser`: a lease attributed to THIS manager is
+  // theirs even when the property cache has not hydrated yet. This gates lease
+  // WRITES via `leaseAccessibleToManager`, so a cold cache otherwise fails the
+  // manager's own lease actions outright.
+  if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   if (pid) {
     if (ownedPropertyIdsForUser(userId).has(pid)) return true;
     return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
   }
-  return Boolean(row.managerUserId && row.managerUserId === userId);
+  // An unscoped row (no attribution, no property) stays hidden. Attribution is
+  // already handled by the attribution-first check above, so there is nothing
+  // left to fall back to here.
+  return false;
 }
 
 export type ManagerPropertyFilterOption = { id: string; label: string };

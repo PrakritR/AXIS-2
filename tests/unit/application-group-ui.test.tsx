@@ -23,7 +23,7 @@ function dumpHtml(name: string, html: string) {
   fs.writeFileSync(path.join(HTML_DIR, `${name}.body.html`), html, "utf8");
 }
 
-const GROUP_ID = "AXISGRP-7KQ2MW9D";
+const GROUP_ID = "PROPLANE-7KQ2MW9D";
 
 function application(over: Partial<RentalWizardFormState>): RentalWizardFormState {
   return {
@@ -159,9 +159,9 @@ describe("group application — applicant Group ID hand-off", () => {
     dumpHtml("callout-rejected", container.innerHTML);
   });
 
-  it("mints ids in the AXISGRP- format the wizard validates", () => {
+  it("mints ids in the PROPLANE- format the wizard validates", () => {
     const id = makeApplicationGroupId();
-    expect(id.startsWith("AXISGRP-")).toBe(true);
+    expect(id.startsWith("PROPLANE-")).toBe(true);
     expect(id.length).toBeGreaterThanOrEqual(12);
   });
 });
@@ -203,7 +203,7 @@ describe("group application — manager reconciliation", () => {
         stage: "Submitted",
         bucket: "pending",
         detail: "Submitted Jul 19, 2026",
-        application: application({ groupRole: "joining", groupSize: "", groupId: "AXISGRP-ORPHAN01" }),
+        application: application({ groupRole: "joining", groupSize: "", groupId: "PROPLANE-ORPHAN01" }),
       },
       {
         id: "AXIS-2002",
@@ -213,7 +213,7 @@ describe("group application — manager reconciliation", () => {
         stage: "Submitted",
         bucket: "pending",
         detail: "Submitted Jul 19, 2026",
-        application: application({ groupRole: "joining", groupSize: "", groupId: "AXISGRP-ORPHAN01" }),
+        application: application({ groupRole: "joining", groupSize: "", groupId: "PROPLANE-ORPHAN01" }),
       },
       ...["Ada Vance", "Bo Whitaker", "Cleo Park"].map((name, i) => ({
         id: `AXIS-30${i}`,
@@ -226,7 +226,7 @@ describe("group application — manager reconciliation", () => {
         application: application({
           groupRole: i === 0 ? ("first" as const) : ("joining" as const),
           groupSize: i === 0 ? "2" : "",
-          groupId: "AXISGRP-OVER0001",
+          groupId: "PROPLANE-OVER0001",
         }),
       })),
     ];

@@ -10,14 +10,17 @@ production without following it (unless the user explicitly waives a named step)
 
 ## When pushing / promoting to production
 
-1. Promote only via fast-forward: `prakrit` → `main` → `git push origin main`
+1. **Only `git push origin main` triggers Vercel production.** Pushes to `prakrit`,
+   `claude`, `cursor-*`, or any other branch must not expect a deploy (Vercel skips
+   them via Ignored Build Step + `vercel.json`). Verify on localhost first.
+2. Promote only via fast-forward: `prakrit` → `main` → `git push origin main`
    (`main` is the production branch; there is no `production` branch).
-2. That push must update **web (Vercel)** and **iOS (TestFlight)**:
+3. That push must update **web (Vercel)** and **iOS (TestFlight)**:
    - Workflow: `.github/workflows/ios-testflight.yml` (runs on `push` to `main`).
    - After push, watch the **iOS TestFlight** GitHub Action until success (or report
      missing `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` secrets).
-3. Run `npm run ship:preflight` before promote when the script is available.
-4. Never treat “Vercel production is live” as done without confirming TestFlight
+4. Run `npm run ship:preflight` before promote when the script is available.
+5. Never treat “Vercel production is live” as done without confirming TestFlight
    (or documenting why the job skipped).
 
 Details: `AGENTS.md` (Branching & deployment), `docs/ship-gate.md`.

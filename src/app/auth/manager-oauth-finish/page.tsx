@@ -43,19 +43,29 @@ function ManagerOauthFinishContent() {
         // Completion is idempotent server-side; retry once so a transient network blip
         // right after payment doesn't strand the user on an error screen.
         let res: Response | null = null;
-        let body: { error?: string; managerId?: string } = {};
+        let body: {
+          error?: string;
+          managerId?: string;
+          calendarConnected?: boolean;
+          calendarConnectPath?: string | null;
+        } = {};
         for (let attempt = 0; attempt < 2; attempt++) {
           res = await fetch("/api/auth/manager-signup-oauth", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sessionId }),
           });
-          body = (await res.json()) as { error?: string; managerId?: string };
+          body = (await res.json()) as typeof body;
           if (res.ok) break;
           await new Promise((resolve) => window.setTimeout(resolve, 1500));
         }
         if (!res?.ok) {
           setErrorText(body.error ?? "Could not finish account setup.");
+          return;
+        }
+
+        if (body.calendarConnectPath?.startsWith("/")) {
+          window.location.replace(body.calendarConnectPath);
           return;
         }
 

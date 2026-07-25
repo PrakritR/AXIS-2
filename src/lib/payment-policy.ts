@@ -21,47 +21,37 @@ export const MANAGER_PAYMENT_PRESETS = [
 
 export type ManagerPaymentPresetId = (typeof MANAGER_PAYMENT_PRESETS)[number]["id"];
 
-/** @deprecated ACH processing percent for legacy display — prefer residentProcessingFeeCents. */
-export const AXIS_ACH_FEE_PERCENT = 0.8;
+/** @deprecated Residents pay no ACH percentage — PropLane absorbs processing. Always 0. */
+export const AXIS_ACH_FEE_PERCENT = 0;
 
 export type ResidentAxisPaymentMethod = "ach" | "card" | "link";
 
-// Stripe's real per-method processing cost, always passed through to the
-// resident as a visible service-fee line so the manager receives the charge
-// amount in full on EVERY method. ACH is 0.8% capped at $5 (a cap, so it is
-// computed by achProcessingFeeCents rather than a flat bps+fixed); card/Link
-// are 2.9% + $0.30.
-const RESIDENT_PROCESSING_FEE_BPS: Record<Exclude<ResidentAxisPaymentMethod, "ach">, number> = {
-  card: 290,
-  link: 290,
-};
-
-const RESIDENT_PROCESSING_FEE_FIXED_CENTS: Record<Exclude<ResidentAxisPaymentMethod, "ach">, number> = {
-  card: 30,
-  link: 30,
-};
-
 /**
- * Stripe's actual ACH processing cost: 0.8% of the subtotal, capped at $5.00.
- * The resident pays this as a service fee (like card processing) so the manager
- * is kept whole; it is also the Connect application_fee_amount that recovers the
- * pass-through from the checkout total. Never charge more than Stripe's real cost.
+ * PropLane absorbs Stripe's processing cost on resident/applicant payments, so
+ * bank/ACH adds nothing to what the payer owes. Always 0 — kept as a named
+ * function because checkout, disclosure copy, and reporting all read it for
+ * intent, and one place returning 0 is what makes "face value" unforgeable.
  */
 export function achProcessingFeeCents(subtotalCents: number): number {
-  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
-  return Math.min(Math.round((subtotalCents * 80) / 10_000), 500);
+  void subtotalCents;
+  return 0;
 }
 
-/** @deprecated Renamed to achProcessingFeeCents — no longer recouped from the manager. */
+/** @deprecated Renamed to achProcessingFeeCents — residents are never charged it. */
 export const achPlatformRecoupCents = achProcessingFeeCents;
 
-/** Processing pass-through charged to the resident (before Axis tier fee). */
+/**
+ * Fee added on top of the subtotal at checkout. **Always 0**: the resident (and
+ * the rental applicant) pays exactly face value on every method — bank/ACH,
+ * card, and Link. Stripe's real processing cost is borne by PropLane's own
+ * platform balance, because every resident charge is a Connect DESTINATION
+ * charge created on the platform account (PropLane is merchant of record) with
+ * `application_fee_amount` omitted, so Stripe deducts its fee from PropLane
+ * while the full subtotal transfers to the manager.
+ */
 export function residentProcessingFeeCents(subtotalCents: number, method: ResidentAxisPaymentMethod): number {
-  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
-  if (method === "ach") return achProcessingFeeCents(subtotalCents);
-  const bps = RESIDENT_PROCESSING_FEE_BPS[method];
-  const fixed = RESIDENT_PROCESSING_FEE_FIXED_CENTS[method];
-  return Math.floor((subtotalCents * bps) / 10_000) + fixed;
+  void method;
+  return achProcessingFeeCents(subtotalCents);
 }
 
 export function residentAxisPlatformFeeCents(subtotalCents: number, managerTier?: string | null): number {
@@ -69,10 +59,13 @@ export function residentAxisPlatformFeeCents(subtotalCents: number, managerTier?
 }
 
 /**
- * Total application fee retained by Axis on Connect destination charges. This
- * equals exactly what the resident pays on top of the subtotal (processing +
- * tier fee) for the chosen method, so the manager's Connect payout is always the
- * full subtotal regardless of method.
+ * `application_fee_amount` set on the Connect destination charge. It is exactly
+ * what the payer was charged ON TOP of the subtotal, so the manager's payout is
+ * always the full subtotal. Both components are 0 today (residents pay face
+ * value, and the platform take rate is 0 bps on every tier), which is precisely
+ * how PropLane ends up bearing Stripe's fee: with no application fee, the whole
+ * subtotal transfers out of the platform balance that Stripe already debited.
+ * Never set this above what the payer actually paid on top.
  */
 export function residentConnectApplicationFeeCents(
   subtotalCents: number,
@@ -83,18 +76,19 @@ export function residentConnectApplicationFeeCents(
 }
 
 /**
- * Fee the MANAGER absorbs out of a resident payment. Residents cover the
- * processing/service fee on every method (card AND ACH), so the manager is kept
- * whole and this is always 0 — kept as a named function so reporting reads intent.
+ * Fee the MANAGER absorbs out of a resident payment. PropLane absorbs Stripe's
+ * processing cost and takes no platform fee, so the manager receives the full
+ * subtotal and this is always 0 — kept as a named function so reporting reads
+ * intent.
  */
 export function managerAbsorbedPaymentFeeCents(): number {
   return 0;
 }
 
+/** Per-method fee disclosure. Every method is free to the payer — PropLane covers processing. */
 export function residentProcessingFeeDisplayLabel(method: ResidentAxisPaymentMethod): string {
-  if (method === "ach") return "0.8% bank processing (max $5.00)";
-  if (method === "link") return "2.9% + $0.30 Link processing";
-  return "2.9% + $0.30 card processing";
+  void method;
+  return "No added fees";
 }
 
 export function residentPaymentMethodLabel(method: ResidentAxisPaymentMethod): string {
@@ -141,7 +135,7 @@ export function axisPaymentsEnabledOnListing(sub: Pick<ManagerListingSubmissionV
 }
 
 export function axisAchFeeDisplayLabel(): string {
-  return "0.8% bank processing (max $5.00)";
+  return "No added fees";
 }
 
 export function residentPaymentMethodsSummary(
@@ -155,7 +149,7 @@ export function residentPaymentMethodsSummary(
   if (sub.zellePaymentsEnabled && sub.zelleContact?.trim()) methods.push(`Zelle (${sub.zelleContact.trim()})`);
   if (sub.venmoPaymentsEnabled && sub.venmoContact?.trim()) methods.push(`Venmo (${sub.venmoContact.trim()})`);
   if (axisPaymentsEnabledOnListing(sub)) {
-    methods.push("PropLane payments — bank (ACH), card, or Link at standard processing fees");
+    methods.push("PropLane payments — bank (ACH), card, or Link with no added fees");
   }
   if (methods.length === 0) methods.push("Zelle, Venmo, ACH, or cash — your manager marks payments received.");
   return methods;

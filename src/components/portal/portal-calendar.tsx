@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal } from "@/components/ui/modal";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "./portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -33,10 +35,10 @@ import { buildManagerPropertyFilterOptions, MANAGER_PORTFOLIO_REFRESH_EVENTS } f
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
+import { GoogleCalendarConnectDialog } from "@/components/portal/google-calendar-connect-dialog";
+import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
 
 type CopyRange = "week" | "future" | "all";
-
-const selectClassName = `${PORTAL_TOOLBAR_SELECT} min-w-[12rem] max-w-full [html[data-theme=dark]_&]:border-white/32 [html[data-theme=dark]_&]:bg-white/10`;
 
 function ManagerCalendarPropertyFilter({
   properties,
@@ -49,26 +51,19 @@ function ManagerCalendarPropertyFilter({
 }) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-      <div className="min-w-0 sm:shrink-0">
-        <label htmlFor="portal-calendar-property" className="sr-only">
-          Property
-        </label>
-        <PortalToolbarSelectWrap>
-          <select
-            id="portal-calendar-property"
-            className={selectClassName}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          >
-            <option value="">Select a house</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </PortalToolbarSelectWrap>
-      </div>
+      <FieldSingleSelect
+        hideLabel
+        label="Property"
+        variant="pill"
+        className="min-w-[12rem] max-w-full"
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: "", label: "Select a house" },
+          ...properties.map((p) => ({ value: p.id, label: p.name })),
+        ]}
+        dataAttr="portal-calendar-property"
+      />
     </div>
   );
 }
@@ -98,6 +93,8 @@ export function PortalCalendar({
   const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
   const [coManagerPeers, setCoManagerPeers] = useState<CoManagerCalendarPeerDto[]>([]);
   const [shareAvailability, setShareAvailability] = useState(false);
+  const [googleExternalMeetings, setGoogleExternalMeetings] = useState<DemoMeeting[]>([]);
+  const [googleCalendarTick, setGoogleCalendarTick] = useState(0);
 
   useEffect(() => {
     if (portal !== "manager") return;
@@ -111,6 +108,46 @@ export function PortalCalendar({
       }
     };
   }, [portal]);
+
+  useEffect(() => {
+    if (portal !== "manager" || !authReady || !userId) return;
+    let cancelled = false;
+    const weekStart = startOfWeekMonday(new Date());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 14);
+    void fetch(
+      `/api/portal/google-calendar/events?timeMin=${encodeURIComponent(weekStart.toISOString())}&timeMax=${encodeURIComponent(weekEnd.toISOString())}`,
+      { credentials: "include" },
+    )
+      .then(async (res) => {
+        const data = (await res.json()) as {
+          meetings?: DemoMeeting[];
+          warning?: string;
+          hint?: string;
+        };
+        if (!res.ok) return { meetings: [] as DemoMeeting[], warning: undefined as string | undefined };
+        return data;
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setGoogleExternalMeetings(Array.isArray(data.meetings) ? data.meetings : []);
+          if (data.warning === "calendar_api_disabled") {
+            showToast(
+              data.hint ??
+                "Enable the Google Calendar API in Google Cloud Console, then refresh this page.",
+            );
+          } else if (data.warning === "calendar_oauth_not_configured" || data.warning === "calendar_not_connected") {
+            showToast(data.hint ?? "Google Calendar sync is not ready yet.");
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleExternalMeetings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [portal, authReady, userId, calendarRefreshSignal, googleCalendarTick, showToast]);
 
   useEffect(() => {
     if (portal !== "manager" || !authReady || !userId) return;
@@ -334,8 +371,7 @@ export function PortalCalendar({
 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Copy from</label>
-          <select
-            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          <Select
             value={copySourceId}
             onChange={(e) => {
               setCopySourceId(e.target.value);
@@ -346,13 +382,12 @@ export function PortalCalendar({
             {managerProperties.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Copy to</label>
-          <select
-            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          <Select
             value={copyDestId}
             onChange={(e) => setCopyDestId(e.target.value)}
           >
@@ -362,7 +397,7 @@ export function PortalCalendar({
               .map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -433,6 +468,9 @@ export function PortalCalendar({
         title={pageTitle}
         titleAside={
           <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+            {portal === "manager" ? (
+              <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
+            ) : null}
             {portal === "manager" && managerProperties.length > 1 ? (
               <Button
                 type="button"
@@ -467,7 +505,7 @@ export function PortalCalendar({
                 onChange={setCalendarPropertyId}
               />
               {showCoManagerCoordination ? (
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
                   <input
                     type="checkbox"
                     className="mt-0.5 accent-primary"
@@ -516,6 +554,7 @@ export function PortalCalendar({
                 : undefined
             }
             coManagerAvailabilityOverlays={showCoManagerCoordination ? coManagerAvailabilityOverlays : undefined}
+            externalMeetings={portal === "manager" ? googleExternalMeetings : undefined}
             otherProperties={
               portal === "manager" && activeCalendarPropertyId
                 ? managerProperties.filter((p) => p.id !== activeCalendarPropertyId)

@@ -5,10 +5,11 @@ ACH bank transfers are **only** for resident rent/utility payments. Rental **app
 ## Architecture
 
 ```
-Resident pays rent + processing/service fee (ACH: 0.8% capped at $5)
+Resident pays rent at face value (no processing/service fee — any method)
     → Stripe Checkout (us_bank_account)
-    → Resident's fee add-on retained by Axis via application_fee_amount
+    → Connect DESTINATION charge on the platform account, no application_fee_amount
     → Full charge subtotal transferred to manager Connect account (acct_…)
+    → PropLane's platform balance bears Stripe's processing cost
     → Manager receives payout to their linked bank
 ```
 

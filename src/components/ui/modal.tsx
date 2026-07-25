@@ -1,13 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { MODAL_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
+import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
+import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
 import { cn } from "@/lib/utils";
 
 export { MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_PANEL_CLASS, MODAL_WARNING_BOX_CLASS, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal-styles";
@@ -21,6 +23,8 @@ export function Modal({
   panelClassName,
   stackClassName,
   dense = false,
+  assistantStrip = true,
+  assistantContext,
 }: {
   open: boolean;
   title: ReactNode;
@@ -32,8 +36,12 @@ export function Modal({
   panelClassName?: string;
   /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
   stackClassName?: string;
-  /** Tighter header/body spacing for compact forms. */
+  /** Tighter padding for compact dialogs. */
   dense?: boolean;
+  /** When true (default in portal), show a compact PropLane Assistant strip. */
+  assistantStrip?: boolean;
+  /** Passed to the assistant as modal context (defaults to stringified title). */
+  assistantContext?: string;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -54,6 +62,22 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const portalAssistant = usePortalAssistantConfig();
+  const showAssistantStrip = assistantStrip && portalAssistant != null;
+  const assistantHint =
+    assistantContext?.trim() ||
+    (typeof title === "string" ? title.trim() : "") ||
+    "Portal modal";
+
+  const [assistantConversationInstance, setAssistantConversationInstance] = useState(0);
+  const wasOpenRef = useRef(false);
+  useLayoutEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setAssistantConversationInstance((n) => n + 1);
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
   if (!open || !isClient) return null;
 
   return createPortal(
@@ -64,7 +88,7 @@ export function Modal({
         className="modal-overlay fixed inset-0"
         onClick={onClose}
       />
-      <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
+      <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]">
         <div
           ref={panelRef}
           className={cn(MODAL_PANEL_CLASS, "min-h-0", panelClassName)}
@@ -97,10 +121,13 @@ export function Modal({
           </div>
           <div
             className={cn(
-              "min-h-0 flex-1 overscroll-contain",
-              // With a sticky footer, keep the shell fixed and let children scroll
-              // internally (e.g. message body only) so the popup fits one screen.
-              footer ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+              // The body is the modal's one scroll container. Children may still
+              // pin an inner region (`min-h-0 flex-1 overflow-y-auto`) so only e.g.
+              // a message body scrolls, but plain content must never be clipped —
+              // `overflow-hidden` here made every below-the-fold field unreachable
+              // on phones.
+              "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+              footer && "flex flex-col",
               dense ? "pt-2" : "pt-4",
             )}
           >
@@ -109,12 +136,19 @@ export function Modal({
           {footer ? (
             <div
               className={cn(
-                "shrink-0 border-t border-border",
+                "shrink-0 border-t border-border bg-card",
                 dense ? "mt-2 pt-2" : "mt-4 pt-4",
               )}
             >
               {footer}
             </div>
+          ) : null}
+          {showAssistantStrip && assistantConversationInstance > 0 ? (
+            <ModalAssistantStrip
+              contextHint={assistantHint}
+              storageScopeKey={assistantHint}
+              conversationInstance={assistantConversationInstance}
+            />
           ) : null}
         </div>
       </div>

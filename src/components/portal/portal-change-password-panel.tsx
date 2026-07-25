@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import {
+  PortalSettingsFormBody,
+  PortalSettingsGroup,
+  PortalSettingsSection,
+} from "@/components/portal/portal-settings-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { passwordResetCallbackUrl, resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -91,16 +95,14 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
   };
 
   return (
-    <PortalCollapsibleSection
-      title="Change password"
-      surfaceMuted={false}
-      contentClassName="px-4 pb-5"
-      toggleDataAttr="portal-change-password-toggle"
-      headerActions={
+    <PortalSettingsSection
+      title="Login & security"
+      description="Update your password or request a reset link."
+      action={
         <Button
           type="button"
-          variant="outline"
-          className="h-8 rounded-full px-3 text-xs"
+          variant="primary"
+          className="px-4 text-[13px]"
           disabled={passwordBusy || resetBusy}
           onClick={() => void changePassword()}
         >
@@ -108,56 +110,60 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
         </Button>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2 sm:col-span-2">
-          <label className="text-xs font-semibold text-muted" htmlFor="portal-old-password">
-            Current password
-          </label>
-          <PasswordInput
-            id="portal-old-password"
-            value={oldPassword}
-            onChange={(e) => setOldPassword(e.target.value)}
-            autoComplete="current-password"
-            disabled={passwordBusy || resetBusy}
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted" htmlFor="portal-new-password">
-            New password
-          </label>
-          <PasswordInput
-            id="portal-new-password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            autoComplete="new-password"
-            disabled={passwordBusy || resetBusy}
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted" htmlFor="portal-confirm-password">
-            Confirm new password
-          </label>
-          <PasswordInput
-            id="portal-confirm-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            autoComplete="new-password"
-            disabled={passwordBusy || resetBusy}
-          />
-        </div>
-      </div>
+      <PortalSettingsGroup>
+        <PortalSettingsFormBody>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="portal-old-password">
+                Current password
+              </label>
+              <PasswordInput
+                id="portal-old-password"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                autoComplete="current-password"
+                disabled={passwordBusy || resetBusy}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="portal-new-password">
+                New password
+              </label>
+              <PasswordInput
+                id="portal-new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                disabled={passwordBusy || resetBusy}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="portal-confirm-password">
+                Confirm new password
+              </label>
+              <PasswordInput
+                id="portal-confirm-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                disabled={passwordBusy || resetBusy}
+              />
+            </div>
+          </div>
 
-      <p className="mt-4 text-xs leading-relaxed text-muted">
-        Forgot your current password?{" "}
-        <button
-          type="button"
-          className="font-semibold text-foreground underline underline-offset-2 transition hover:opacity-80 disabled:opacity-60"
-          disabled={resetBusy || passwordBusy || !email}
-          onClick={() => void sendResetLink()}
-        >
-          {resetBusy ? "Sending…" : "Send a reset link to your email"}
-        </button>
-      </p>
-    </PortalCollapsibleSection>
+          <p className="text-sm leading-relaxed text-muted">
+            Forgot your current password?{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline underline-offset-2 transition hover:opacity-80 disabled:opacity-60"
+              disabled={resetBusy || passwordBusy || !email}
+              onClick={() => void sendResetLink()}
+            >
+              {resetBusy ? "Sending…" : "Send a reset link to your email"}
+            </button>
+          </p>
+        </PortalSettingsFormBody>
+      </PortalSettingsGroup>
+    </PortalSettingsSection>
   );
 }

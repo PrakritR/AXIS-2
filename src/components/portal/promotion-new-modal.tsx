@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/input";
 import { PromotionForm, type PromotionDraft } from "@/components/portal/promotion-form";
 import {
   PromotionTextComposer,
+  type PromotionTextComposerHandle,
   type PromotionTextGenerateOptions,
 } from "@/components/portal/promotion-text-generate-modal";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
@@ -108,6 +109,7 @@ export function PromotionNewModal({
   const flyerBaseRef = useRef<PromotionDraft>(draft);
   const flyerBasePropertyRef = useRef<string>(draft.propertyKey);
   const textDirtyRef = useRef(false);
+  const textComposerRef = useRef<PromotionTextComposerHandle>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -177,6 +179,14 @@ export function PromotionNewModal({
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={textBusy}
+              data-attr="promotion-text-generate-submit"
+              onClick={() => textComposerRef.current?.generate()}
+            >
+              {textBusy ? "Generating…" : "Generate promotion text"}
+            </Button>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
@@ -184,8 +194,9 @@ export function PromotionNewModal({
         )
       }
     >
-      {/* Footer variant fixes the shell and expects the child to scroll. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+      {/* The Modal body is the one scroll container — no nested scroller here,
+          which trapped touch scrolling in the native WebView. */}
+      <div className="pr-1">
         <div className="mb-3">
           <label className="text-xs font-semibold text-muted" htmlFor="promotion-new-kind">
             Promotion type
@@ -217,6 +228,7 @@ export function PromotionNewModal({
           />
         ) : (
           <PromotionTextComposer
+            ref={textComposerRef}
             onGenerate={onGenerateText}
             busy={textBusy}
             initialFormat={textInitialFormat}

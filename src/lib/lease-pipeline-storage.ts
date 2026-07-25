@@ -20,6 +20,7 @@ import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/da
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { applicationVisibleToPortalUser, leaseVisibleToPortalUser } from "@/lib/manager-portfolio-access";
+import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 const LEASE_PIPELINE_SESSION_KEY_PREFIX = "axis:lease-pipeline:v2";
@@ -199,6 +200,8 @@ export type LeasePipelineRow = {
   versionNumber?: number;
   /** Set when manager deletes the saved document — suppresses application draft preview until regenerate/upload. */
   leaseDocumentRemovedAt?: string | null;
+  /** Off-platform lease — both parties treated as signed; no e-sign workflow. */
+  externallySignedLease?: boolean;
   /**
    * Renewal terms awaiting signatures. Set by the renew flow; consumed (and
    * cleared) after BOTH parties sign, when the terms are applied to the
@@ -350,6 +353,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
     versionNumber,
     leaseDocumentRemovedAt: typeof r.leaseDocumentRemovedAt === "string" ? r.leaseDocumentRemovedAt : null,
+    externallySignedLease: r.externallySignedLease === true,
   };
 }
 
@@ -697,6 +701,78 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
     });
     const idx = findLeaseRowIndexForApprovedApp(next, app);
     const iso = new Date().toISOString();
+
+    if (app.manuallyAdded) {
+      const existing = idx !== -1 ? next[idx]! : null;
+      const manualPdf = manualResidentSignedLeasePdf(app);
+      const residentName = String(app.name ?? "").trim() || "Resident";
+      const residentSignature =
+        existing?.residentSignature ??
+        ({ role: "resident", name: residentName, signedAtIso: iso } satisfies LeaseSignature);
+      const managerSignature =
+        existing?.managerSignature ??
+        ({ role: "manager", name: "Property Manager", signedAtIso: iso } satisfies LeaseSignature);
+      const uploadedPdf = existing?.managerUploadedPdf ?? manualPdf ?? null;
+      const needsSignedLease =
+        !existing || !hasBothLeaseSignatures(existing) || existing.externallySignedLease !== true;
+      const needsPdf = Boolean(manualPdf && !existing?.managerUploadedPdf);
+
+      if (!needsSignedLease && !needsPdf && existing) {
+        const merged = normalizeLeasePipelineRow({
+          ...existing,
+          residentName,
+          residentEmail: email,
+          unit,
+          axisId: app.id,
+          propertyId: propertyId || undefined,
+          managerUserId: effectiveManagerUserId,
+          roomChoice: roomChoice || null,
+          signedRentLabel: signedRentLabelForRow(app),
+        });
+        if (JSON.stringify(merged) !== JSON.stringify(existing)) {
+          next[idx] = merged;
+          changed = true;
+        }
+        continue;
+      }
+
+      const seeded = normalizeLeasePipelineRow({
+        id: existing?.id ?? `lease_app_${app.id}`,
+        residentName,
+        residentEmail: email,
+        unit,
+        updated: formatUpdatedLabel(iso),
+        bucket: "signed",
+        pdfVersion: existing?.pdfVersion ?? 1,
+        notes: existing?.notes?.trim() || "Existing resident — lease executed off-platform.",
+        updatedAtIso: iso,
+        axisId: app.id,
+        propertyId: propertyId || undefined,
+        managerUserId: effectiveManagerUserId,
+        residentUserId: existing?.residentUserId ?? null,
+        roomChoice: roomChoice || null,
+        signedRentLabel: signedRentLabelForRow(app),
+        application: effectiveApplicationForRow(app),
+        generatedHtml: existing?.generatedHtml ?? null,
+        generatedAtIso: existing?.generatedAtIso ?? null,
+        managerUploadedPdf: uploadedPdf,
+        thread: existing?.thread ?? [],
+        managerSignature,
+        residentSignature,
+        signatureName: residentSignature.name ?? residentName,
+        signedAtIso: residentSignature.signedAtIso ?? iso,
+        sentToResidentAt: existing?.sentToResidentAt ?? iso,
+        fullySignedAt: existing?.fullySignedAt ?? iso,
+        residentSignedAt: existing?.residentSignedAt ?? residentSignature.signedAtIso ?? iso,
+        managerSignedAt: existing?.managerSignedAt ?? managerSignature.signedAtIso ?? iso,
+        externallySignedLease: true,
+      });
+      if (idx === -1) next.push(seeded);
+      else next[idx] = seeded;
+      changed = true;
+      continue;
+    }
+
     const seeded = normalizeLeasePipelineRow({
       id: idx === -1 ? `lease_app_${app.id}` : next[idx]!.id,
       residentName: String(app.name ?? "").trim() || "Applicant",

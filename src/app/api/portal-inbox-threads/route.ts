@@ -3,17 +3,19 @@ import { buildPortalInboxThreadUpsert } from "@/lib/portal-inbox-thread-upsert";
 import {
   ADMIN_INBOX_SCOPE,
   applyPortalInboxThreadScope,
+  MANAGER_INBOX_SCOPE,
   resolveInboxScopeUser,
 } from "@/lib/portal-inbox-thread-scope";
+import { collapsePersonInboxThreads, type PersistedInboxThread } from "@/lib/portal-inbox-storage";
 
 export const runtime = "nodejs";
 
-function normalizeInboxRow(row: Record<string, unknown>) {
+function normalizeInboxRow(row: Record<string, unknown>): PersistedInboxThread {
   return {
     ...row,
     id: String(row.id ?? "").trim(),
     email: String(row.email ?? row.participantEmail ?? row.participant_email ?? "").trim().toLowerCase(),
-  };
+  } as PersistedInboxThread;
 }
 
 export async function GET(request: Request) {
@@ -47,7 +49,12 @@ export async function GET(request: Request) {
       return normalizeInboxRow(row);
     });
 
-    return NextResponse.json({ rows });
+    const collapsed =
+      scopeParam === MANAGER_INBOX_SCOPE
+        ? collapsePersonInboxThreads(rows, { mergeFolders: true })
+        : rows;
+
+    return NextResponse.json({ rows: collapsed });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load records.";
     return NextResponse.json({ error: message }, { status: 500 });

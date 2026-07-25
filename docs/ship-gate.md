@@ -6,7 +6,9 @@ substantial feature. Agents must follow it (see `AGENTS.md` and
 
 ## Why
 
-- **Web** deploys from Vercel on every push to `main` (the production branch).
+- **Web** deploys from Vercel on every push to `main` only (the production branch).
+  Non-`main` pushes are skipped via the Vercel project Ignored Build Step plus
+  `vercel.json` (`git.deploymentEnabled` + `scripts/vercel-should-build.sh`).
 - **iOS** uploads to TestFlight from GitHub Actions on the same push
   (`.github/workflows/ios-testflight.yml`), keeping the Capacitor shell aligned
   with the repo while the WebView loads the live site.
@@ -43,7 +45,7 @@ Copy into the PR or chat handoff:
 
 ```text
 Feature under test: <name>
-Happy path: [ ] exercised on localhost/staging as <role>
+Happy path: [ ] exercised on localhost as <role>
 Edge cases:
   [ ] empty / invalid input
   [ ] unauthorized / wrong role

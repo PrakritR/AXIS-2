@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { GENERAL_SYSTEM_PROMPT } from "@/lib/agent/general-system-prompt";
+import { applyChatAttachments, sanitizeChatMessages } from "@/lib/agent/chat-handler";
 import { TIER_MODELS } from "@/lib/agent/model";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
-
-type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /**
  * PUBLIC, UNAUTHENTICATED general-purpose website assistant.
@@ -39,21 +38,14 @@ export async function POST(req: Request) {
     body = {};
   }
 
-  const rawMessages = Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : [];
-  const messages: Anthropic.MessageParam[] = rawMessages
-    .filter(
-      (m) =>
-        m &&
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.trim().length > 0,
-    )
-    .slice(-16)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }));
-
+  let messages = sanitizeChatMessages(body.messages, { maxMessages: 16, maxChars: 4000 });
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
   }
+
+  const attached = applyChatAttachments(messages, body);
+  if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
+  messages = attached.messages;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(

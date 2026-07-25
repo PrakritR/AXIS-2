@@ -34,6 +34,7 @@ import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
   adminPropertyRentDisplayLabel,
+  compareAdminPropertyRowsForDisplay,
   deleteManagerLiveListing,
   deleteManagerPropertyDraft,
   deleteUnlistedManagerProperty,
@@ -705,7 +706,7 @@ export function ManagerHousePropertiesPanel({
     const stage = MANAGER_STAGES.find((item) => item.key === activeStage);
     if (!stage) return [];
     const linkedIds = collectLinkedPropertyIds(scopeUserId);
-    return stage.buckets.flatMap((bucket) =>
+    const mapped = stage.buckets.flatMap((bucket) =>
       readAdminPropertyRows(bucket, scopeUserId).map((row) => {
         const pid = row.listingId?.trim() || row.adminRefId.trim();
         return {
@@ -715,6 +716,7 @@ export function ManagerHousePropertiesPanel({
         };
       }),
     );
+    return [...mapped].sort((a, b) => compareAdminPropertyRowsForDisplay(a.row, b.row));
   }, [tick, scopeUserId, activeStage]);
 
   if (!authReady) {

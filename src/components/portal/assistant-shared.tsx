@@ -43,8 +43,8 @@ export const ASSISTANT_SUGGESTIONS: AssistantSuggestion[] = [
     ),
   },
   {
-    label: "Leases to sign",
-    prompt: "How many leases are awaiting signature?",
+    label: "Lease pipeline",
+    prompt: "Summarize my lease pipeline — manager review, resident signature pending, manager signature pending, and signed.",
     toneClass: "text-primary",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -59,13 +59,30 @@ export const ASSISTANT_SUGGESTIONS: AssistantSuggestion[] = [
     ),
   },
   {
-    label: "Overdue balance",
-    prompt: "What's the total overdue balance across my portfolio?",
+    label: "Applications",
+    prompt: "How many rental applications are pending review, and who are the applicants?",
     toneClass: "text-[var(--status-pending-fg)]",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
           d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 12h.01M3 10h18"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    label: "New listing",
+    prompt:
+      "I want to create a new rental listing. Walk me through what you need — address, beds and baths, rent, amenities, and photos — then save a draft I can review in Properties.",
+    toneClass: "text-primary",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01"
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"

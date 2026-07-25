@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
@@ -12,9 +13,14 @@ import {
 } from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
-import { Button } from "@/components/ui/button";
+import {
+  PortalSettingsFormBody,
+  PortalSettingsGroup,
+  PortalSettingsProfileHeader,
+  PortalSettingsSection,
+  PortalSettingsSections,
+} from "@/components/portal/portal-settings-ui";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -30,9 +36,6 @@ export function ResidentProfilePanel() {
 
   useEffect(() => {
     if (!session.userId) return;
-    // Demo sandbox: populate from the browser-local demo stores only — the
-    // Supabase session belongs to whoever is signed in (if anyone), and the
-    // backfill POST below must never run against a real profile.
     if (isDemoModeActive()) {
       const demoUserId = session.userId;
       const demoEmail = session.email ?? "";
@@ -94,9 +97,7 @@ export function ResidentProfilePanel() {
           ? normalizeApplicationAxisId(matchingApplication.id)
           : "";
         const storedManagerAxis = normalizeApplicationAxisId(String(profile?.manager_id ?? ""));
-        const needsAxisBackfill = Boolean(
-          appCanonical && storedManagerAxis !== appCanonical,
-        );
+        const needsAxisBackfill = Boolean(appCanonical && storedManagerAxis !== appCanonical);
 
         const needsProfileBackfill =
           !profile ||
@@ -137,11 +138,6 @@ export function ResidentProfilePanel() {
       return;
     }
     try {
-      // Security: `profiles` is not writable by `authenticated` — a self-service
-      // UPDATE grant is indistinguishable from a self-service `role = 'admin'`
-      // grant (20260722123000_lock_role_grant_surface.sql). Saves go through
-      // PATCH /api/profile, which authorizes the session server-side and pins
-      // the write to that user's own row.
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -166,50 +162,44 @@ export function ResidentProfilePanel() {
   };
 
   return (
-    <ManagerPortalPageShell
-      title="Settings"
-      titleAside={
-        <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => void saveProfile()}>
-          Save
-        </Button>
-      }
-    >
-      <div className="space-y-4">
-        <PortalCollapsibleSection
-          title="Profile"
-          surfaceMuted={false}
-          contentClassName="px-4 pb-4"
-          toggleDataAttr="resident-profile-toggle"
+    <ManagerPortalPageShell title="Settings" subtitle="Manage your account settings and preferences.">
+      <PortalSettingsSections>
+        <PortalSettingsProfileHeader name={name} email={email} />
+
+        <PortalSettingsSection
+          title="Personal information"
+          description="Your name and contact details."
+          action={
+            <Button type="button" variant="primary" className="px-4 text-[13px]" onClick={() => void saveProfile()}>
+              Save
+            </Button>
+          }
         >
-          <div className="grid gap-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Full name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Email</label>
-            <Input value={email} readOnly className="bg-accent/30" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Phone</label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">PropLane ID</label>
-            <Input value={axisId} readOnly className="bg-accent/30 font-mono text-sm" />
-          </div>
-          {/*
-            No Emergency contact fields: `emergency_contact_name` /
-            `emergency_contact_phone` do not exist on `profiles`, so the inputs
-            accepted text, reported "Profile saved." and silently discarded it.
-            A form that lies about saving is worse than not offering the field.
-            Re-adding it is a tracked follow-up, pending those columns.
-          */}
-          </div>
-        </PortalCollapsibleSection>
+          <PortalSettingsGroup>
+            <PortalSettingsFormBody>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Full name</label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Email</label>
+                  <Input value={email} readOnly className="bg-muted/40" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Phone</label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">PropLane ID</label>
+                  <Input value={axisId} readOnly className="bg-muted/40 font-mono text-sm" />
+                </div>
+              </div>
+            </PortalSettingsFormBody>
+          </PortalSettingsGroup>
+        </PortalSettingsSection>
 
         <NotificationsToggle />
-
         <PortalChangePasswordPanel accountEmail={email} />
 
         <div className="hidden md:block">
@@ -217,7 +207,7 @@ export function ResidentProfilePanel() {
         </div>
 
         <PortalSettingsExtras currentKind="resident" />
-      </div>
+      </PortalSettingsSections>
     </ManagerPortalPageShell>
   );
 }

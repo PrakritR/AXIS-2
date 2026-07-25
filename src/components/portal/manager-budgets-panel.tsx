@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {Input, Select} from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -131,8 +131,8 @@ export function ManagerBudgetsPanel() {
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-muted">Category</label>
-            <select
-              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            <Select
+             
               value={draft.categoryCode}
               onChange={(e) => setDraft((d) => ({ ...d, categoryCode: e.target.value }))}
             >
@@ -141,7 +141,7 @@ export function ManagerBudgetsPanel() {
                   {cat.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="text-xs font-semibold text-muted">Annual budget (split evenly across 12 months)</label>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Select } from "@/components/ui/input";
-import { PromotionAiDraftCard } from "@/components/portal/promotion-ai-draft-card";
+import { Select, Textarea } from "@/components/ui/input";
+import { PromotionAiDraftPhotoPicker } from "@/components/portal/promotion-ai-draft-card";
 import { PromotionPropertyPicker } from "@/components/portal/promotion-form";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
@@ -29,41 +29,45 @@ export type PromotionTextGenerateOptions = {
   images: string[];
 };
 
+export type PromotionTextComposerHandle = {
+  generate: () => void;
+};
+
 /**
  * The Channel / Tone / notes body of the promotion-text generator, without a
  * Modal shell. Extracted so it can live standalone (below) OR inline inside the
  * unified "New promotion" modal, where the type dropdown swaps between the flyer
  * form and this composer. Reports "dirty" so the parent can warn before a type
  * switch discards typed content.
- *
- * Pass `propertyKey` + `onSelectProperty` to surface the property picker — the
- * create surface needs it so a text promotion is attached to a real property
- * instead of silently saving as "Untitled promotion" with no property. The
- * standalone edit modal omits them: the asset's property is already fixed.
  */
-export function PromotionTextComposer({
-  onGenerate,
-  busy,
-  initialFormat,
-  initialTone,
-  initialImages,
-  onDirtyChange,
-  submitDataAttr = "promotion-text-generate-submit",
-  propertyKey,
-  listings,
-  onSelectProperty,
-}: {
-  onGenerate: (opts: PromotionTextGenerateOptions) => void;
-  busy?: boolean;
-  initialFormat?: PromotionTextFormat;
-  initialTone?: string;
-  initialImages?: string[];
-  onDirtyChange?: (dirty: boolean) => void;
-  submitDataAttr?: string;
-  propertyKey?: string;
-  listings?: ManagerPromotionPropertyOption[];
-  onSelectProperty?: (key: string) => void;
-}) {
+export const PromotionTextComposer = forwardRef(function PromotionTextComposer(
+  {
+    onGenerate,
+    busy,
+    initialFormat,
+    initialTone,
+    initialImages,
+    onDirtyChange,
+    submitDataAttr = "promotion-text-generate-submit",
+    propertyKey,
+    listings,
+    onSelectProperty,
+    showGenerateButton = false,
+  }: {
+    onGenerate: (opts: PromotionTextGenerateOptions) => void;
+    busy?: boolean;
+    initialFormat?: PromotionTextFormat;
+    initialTone?: string;
+    initialImages?: string[];
+    onDirtyChange?: (dirty: boolean) => void;
+    submitDataAttr?: string;
+    propertyKey?: string;
+    listings?: ManagerPromotionPropertyOption[];
+    onSelectProperty?: (key: string) => void;
+    showGenerateButton?: boolean;
+  },
+  ref: React.Ref<PromotionTextComposerHandle>,
+) {
   const { showToast } = useAppUi();
   const baseFormat = initialFormat ?? PROMOTION_TEXT_FORMAT_DEFAULT;
   const baseTone = initialTone?.trim() || PROMOTION_TONE_OPTIONS[0]!;
@@ -73,8 +77,6 @@ export function PromotionTextComposer({
   const [images, setImages] = useState<string[]>((initialImages ?? []).slice(0, FLYER_IMAGE_LIMIT));
   const [readingPhotos, setReadingPhotos] = useState(false);
 
-  // Re-seed when the initial values change (e.g. the standalone modal reopens for
-  // a different asset). Mounting fresh inside the unified modal covers that case.
   useEffect(() => {
     setFormat(baseFormat);
     setTone(baseTone);
@@ -91,6 +93,12 @@ export function PromotionTextComposer({
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+
+  const generate = () => {
+    onGenerate({ format, tone, extraInstructions, images });
+  };
+
+  useImperativeHandle(ref, () => ({ generate }), [format, tone, extraInstructions, images, onGenerate]);
 
   async function onPhotoFiles(list: FileList | null) {
     if (!list || list.length === 0) return;
@@ -163,22 +171,37 @@ export function PromotionTextComposer({
           ))}
         </Select>
       </div>
-      <PromotionAiDraftCard
-        prompt={extraInstructions}
-        onPromptChange={setExtraInstructions}
-        promptId="promotion-text-notes"
-        promptPlaceholder="Mention the rooftop deck, highlight pet-friendly policy, keep it under 200 words…"
-        images={images}
-        readingPhotos={readingPhotos}
-        onPhotoFiles={(files) => void onPhotoFiles(files)}
-        onRemovePhoto={(i) => setImages((cur) => cur.filter((_, j) => j !== i))}
-        onDraft={() => onGenerate({ format, tone, extraInstructions, images })}
-        drafting={busy}
-        draftDataAttr={submitDataAttr}
-      />
+      <div>
+        <label className="text-xs font-semibold text-muted" htmlFor="promotion-text-notes">
+          Notes <span className="font-normal">(optional)</span>
+        </label>
+        <Textarea
+          id="promotion-text-notes"
+          className="mt-1"
+          rows={3}
+          value={extraInstructions}
+          onChange={(e) => setExtraInstructions(e.target.value)}
+          placeholder="Mention the rooftop deck, highlight pet-friendly policy, keep it under 200 words…"
+        />
+      </div>
+      <div className="rounded-xl border border-border bg-card p-3">
+        <PromotionAiDraftPhotoPicker
+          images={images}
+          readingPhotos={readingPhotos}
+          onPhotoFiles={(files) => void onPhotoFiles(files)}
+          onRemovePhoto={(i) => setImages((cur) => cur.filter((_, j) => j !== i))}
+        />
+      </div>
+      {showGenerateButton ? (
+        <div className="flex justify-end">
+          <Button type="button" disabled={busy} data-attr={submitDataAttr} onClick={generate}>
+            {busy ? "Generating…" : "Generate promotion text"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
-}
+});
 
 export function PromotionTextGenerateModal({
   open,
@@ -197,6 +220,8 @@ export function PromotionTextGenerateModal({
   initialTone?: string;
   initialImages?: string[];
 }) {
+  const textComposerRef = useRef<PromotionTextComposerHandle>(null);
+
   return (
     <Modal
       open={open}
@@ -205,12 +230,23 @@ export function PromotionTextGenerateModal({
       panelClassName="max-w-lg"
       dense
       footer={
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            disabled={busy}
+            data-attr="promotion-text-generate-submit"
+            onClick={() => textComposerRef.current?.generate()}
+          >
+            {busy ? "Generating…" : "Generate promotion text"}
+          </Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
       }
     >
       <PromotionTextComposer
+        ref={textComposerRef}
         onGenerate={onGenerate}
         busy={busy}
         initialFormat={initialFormat}

@@ -5,9 +5,16 @@ import {
   normalizePromotionTemplate,
   PROMOTION_TEMPLATE_OPTIONS,
   PROMOTION_TONE_OPTIONS,
+  readFlyerEntries,
   type ManagerPromotionRow,
   type PromotionTemplate,
 } from "@/lib/promotion-flyer";
+import { generateFlyerCopyForManager } from "@/lib/promotion-generate-flyer.server";
+import {
+  appendFlyerEntryToRow,
+  buildFlyerEntryFromDraft,
+  updateFlyerEntryOnRow,
+} from "@/lib/promotion-row-ops";
 import { writeAuditLog, updateAuditResult, auditDayBucket } from "../audit";
 
 const TEMPLATE_IDS = PROMOTION_TEMPLATE_OPTIONS.map((t) => t.id) as [PromotionTemplate, ...PromotionTemplate[]];
@@ -130,10 +137,71 @@ export const listPromotionsTool = defineTool({
   },
 });
 
+/** Apply AI flyer copy to a promotion row and persist it. */
+async function persistGeneratedFlyer(
+  ctx: AgentContext,
+  promotionId: string,
+  current: ManagerPromotionRow,
+  extraInstructions: string,
+): Promise<{ merged: ManagerPromotionRow; source: string }> {
+  const inputs = current.inputs ?? {
+    headline: current.title,
+    sellingPoints: "",
+    price: "",
+    promo: "",
+    cta: "",
+    contact: "",
+    tone: PROMOTION_TONE_OPTIONS[0]!,
+    customDetails: "",
+    images: [],
+  };
+  const propertyLabel = current.propertyLabel?.trim() || inputs.headline || current.title;
+  const { copy, source } = await generateFlyerCopyForManager(
+    ctx,
+    inputs,
+    propertyLabel,
+    extraInstructions,
+  );
+
+  const nowIso = new Date().toISOString();
+  const existing = readFlyerEntries(current);
+  let merged: ManagerPromotionRow;
+  if (existing.length > 0) {
+    merged = updateFlyerEntryOnRow(current, existing[0]!.id, {
+      copy,
+      inputs,
+      title: current.title,
+      theme: current.theme,
+      flyerSize: current.flyerSize,
+      template: normalizePromotionTemplate(current.template),
+    });
+  } else {
+    const entry = buildFlyerEntryFromDraft({
+      title: current.title,
+      copy,
+      inputs,
+      theme: current.theme,
+      flyerSize: current.flyerSize,
+      template: normalizePromotionTemplate(current.template),
+      now: nowIso,
+    });
+    merged = appendFlyerEntryToRow(current, entry);
+  }
+  merged = { ...merged, status: "generated", updatedAt: nowIso };
+
+  const { error } = await ctx.db
+    .from("manager_promotion_records")
+    .update({ row_data: merged, updated_at: nowIso })
+    .eq("id", promotionId)
+    .eq("manager_user_id", ctx.landlordId);
+  if (error) throw new Error(error.message);
+  return { merged, source };
+}
+
 export const createPromotionTool = defineWriteTool({
   name: "create_promotion",
   description:
-    "Create a draft marketing promotion for the landlord. Optionally attach one of their properties (propertyId from list_properties/find_records) and seed notes for the flyer copy. The flyer and social text themselves are generated later on the Promotions page — this only creates the draft.",
+    "Create a marketing promotion and generate its printable flyer copy for the landlord. Optionally attach a property (propertyId from list_properties/find_records) and notes or style hints (e.g. from an uploaded reference). The flyer appears under Promotions → Image after confirm.",
   inputSchema: z
     .object({
       title: z.string().min(1).describe("Short promotion title, e.g. 'Spring move-in special'."),
@@ -168,9 +236,9 @@ export const createPromotionTool = defineWriteTool({
     return {
       kind: "create_promotion",
       title: "Create promotion",
-      summary: `Create the draft promotion "${input.title.trim()}"${propertyLabel ? ` for ${propertyLabel}` : ""}. Flyer and social copy are generated on the Promotions page afterwards.`,
+      summary: `Create "${input.title.trim()}"${propertyLabel ? ` for ${propertyLabel}` : ""} and generate its flyer for the Promotions page.`,
       fields: lines,
-      confirmLabel: "Create draft",
+      confirmLabel: "Create & generate flyer",
     };
   },
   handler: async (ctx, input) => {
@@ -232,7 +300,85 @@ export const createPromotionTool = defineWriteTool({
       throw new Error(error.message);
     }
     await updateAuditResult(ctx, dedupeKey, { created: true, promotionId: row.id });
-    return { reply: `Created the draft promotion "${title}"${propertyLabel ? ` for ${propertyLabel}` : ""} — open the Promotions page to generate the flyer and social copy.`, resultSummary: { promotionId: row.id } };
+    const notes = input.notes?.trim() ?? "";
+    try {
+      const { merged, source } = await persistGeneratedFlyer(ctx, row.id, row, notes);
+      await updateAuditResult(ctx, dedupeKey, { created: true, promotionId: row.id, flyerGenerated: true, source });
+      return {
+        reply: `Created the promotion "${merged.title}"${propertyLabel ? ` for ${propertyLabel}` : ""} and generated its flyer${source === "fallback" ? " (offline copy)" : ""}. Open Promotions → Image to preview or download.`,
+        resultSummary: { promotionId: row.id },
+      };
+    } catch (genErr) {
+      return {
+        reply: `Created the draft promotion "${title}"${propertyLabel ? ` for ${propertyLabel}` : ""}, but flyer generation failed: ${genErr instanceof Error ? genErr.message : "unknown error"}. Try generate_promotion_flyer from the assistant.`,
+        resultSummary: { promotionId: row.id },
+      };
+    }
+  },
+});
+
+export const generatePromotionFlyerTool = defineWriteTool({
+  name: "generate_promotion_flyer",
+  description:
+    "Generate printable flyer copy for an existing promotion (promotionId from list_promotions or create_promotion) and mark it generated so it appears under Promotions → Image. Use when the manager uploads a reference image/PDF in chat and wants a similar flyer, or after create_promotion. Pass extraInstructions to capture style notes from the conversation.",
+  inputSchema: z
+    .object({
+      promotionId: z.string().min(1).describe("Promotion id to generate a flyer for."),
+      extraInstructions: z
+        .string()
+        .optional()
+        .describe("Optional style or layout notes from the manager (e.g. match an uploaded reference)."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const current = await loadOwnedPromotion(ctx, input.promotionId.trim());
+    if (!current) throw new Error(UNOWNED_PROMOTION_ERROR);
+    const lines = [
+      { label: "Promotion", value: current.title || current.id },
+      { label: "Property", value: current.propertyLabel || "Custom" },
+      { label: "Template", value: templateLabel(normalizePromotionTemplate(current.template)) },
+    ];
+    if (input.extraInstructions?.trim()) {
+      lines.push({ label: "Style notes", value: input.extraInstructions.trim() });
+    }
+    return {
+      kind: "generate_promotion_flyer",
+      title: "Generate flyer",
+      summary: `Generate AI flyer copy for "${current.title || current.id}" and save it to the Promotions page.`,
+      fields: lines,
+      confirmLabel: "Generate flyer",
+    };
+  },
+  handler: async (ctx, input) => {
+    const promotionId = input.promotionId.trim();
+    const current = await loadOwnedPromotion(ctx, promotionId);
+    if (!current) throw new Error(UNOWNED_PROMOTION_ERROR);
+
+    const dedupeKey = `generate_promotion_flyer:${ctx.landlordId}:${promotionId}:${hashText(input.extraInstructions ?? "")}:${auditDayBucket()}`;
+    const audit = await writeAuditLog(ctx, {
+      action: "generate_promotion_flyer",
+      toolName: "generate_promotion_flyer",
+      inputSummary: { promotionId },
+      dedupeKey,
+    });
+    if (!audit.recorded) {
+      if (audit.duplicate) {
+        return { reply: "This flyer was already generated today with the same notes — open Promotions to view it." };
+      }
+      throw new Error("Could not record the action; the flyer was not generated.");
+    }
+
+    const { merged, source } = await persistGeneratedFlyer(
+      ctx,
+      promotionId,
+      current,
+      input.extraInstructions?.trim() ?? "",
+    );
+    await updateAuditResult(ctx, dedupeKey, { generated: true, promotionId, source });
+    return {
+      reply: `Generated the flyer for "${merged.title}"${source === "fallback" ? " (offline copy)" : ""}. Open Promotions → Image to preview, download, or print.`,
+      resultSummary: { promotionId },
+    };
   },
 });
 

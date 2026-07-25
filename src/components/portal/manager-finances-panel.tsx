@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { TabNav, useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -94,8 +94,7 @@ function filterFinanceReport(report: ReportResult, tabId: string, rowFilters: Ro
   };
 }
 
-const FILTER_SELECT_CLASS =
-  "h-10 min-w-[10rem] rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]";
+const FILTER_SELECT_CLASS = "w-full min-w-0";
 
 function cellAlign(col: ReportColumn) {
   return col.align === "right" ? "text-right tabular-nums" : "text-left";
@@ -158,15 +157,14 @@ function FinancesDataTable({
 
   const renderCellValue = (col: ReportColumn, row: ReportRow) =>
     col.key === "taxStatus" && onTaxStatusChange && row.id ? (
-      <select
-        className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+      <Select
         data-attr="expense-tax-status-inline"
         value={row.taxDeductible === false ? "non_deductible" : "deductible"}
         onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
       >
         <option value="deductible">Deductible</option>
         <option value="non_deductible">Non-deductible</option>
-      </select>
+      </Select>
     ) : (
       formatCellValue(col, row[col.key])
     );
@@ -289,7 +287,7 @@ function FinancesRowFilters({
     <div className={rowFilterGrid}>
       <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
         Resident
-        <select
+        <Select
           className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
           value={rowFilters.resident}
           onChange={(e) => onChange({ resident: e.target.value })}
@@ -300,11 +298,11 @@ function FinancesRowFilters({
               {value}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
         Type
-        <select
+        <Select
           className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
           value={rowFilters.type}
           onChange={(e) => onChange({ type: e.target.value })}
@@ -315,14 +313,14 @@ function FinancesRowFilters({
               {value}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </div>
   ) : (
     <div className={rowFilterGrid}>
       <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
         Category
-        <select
+        <Select
           className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
           value={rowFilters.category}
           onChange={(e) => onChange({ category: e.target.value })}
@@ -333,11 +331,11 @@ function FinancesRowFilters({
               {value}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
         Vendor
-        <select
+        <Select
           className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
           value={rowFilters.vendor}
           onChange={(e) => onChange({ vendor: e.target.value })}
@@ -348,7 +346,7 @@ function FinancesRowFilters({
               {value}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </div>
   );
@@ -797,8 +795,7 @@ export function ManagerFinancesPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Property
-            <select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+            <Select
               value={expenseDraft.propertyId}
               onChange={(e) => setExpenseDraft({ ...expenseDraft, propertyId: e.target.value })}
             >
@@ -808,12 +805,11 @@ export function ManagerFinancesPanel({
                   {p.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Category
-            <select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+            <Select
               value={expenseDraft.categoryCode}
               onChange={(e) =>
                 setExpenseDraft((d) => ({
@@ -828,12 +824,11 @@ export function ManagerFinancesPanel({
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Tax status (suggested from category)
-            <select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+            <Select
               data-attr="expense-tax-status-select"
               value={expenseDraft.taxDeductible ? "deductible" : "non_deductible"}
               onChange={(e) =>
@@ -846,7 +841,7 @@ export function ManagerFinancesPanel({
             >
               <option value="deductible">Deductible</option>
               <option value="non_deductible">Non-deductible</option>
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Amount (USD)
@@ -862,8 +857,7 @@ export function ManagerFinancesPanel({
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Vendor (optional, for 1099)
-            <select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+            <Select
               value={expenseDraft.vendorId}
               onChange={(e) => setExpenseDraft({ ...expenseDraft, vendorId: e.target.value })}
             >
@@ -874,7 +868,7 @@ export function ManagerFinancesPanel({
                   {v.trade ? ` · ${v.trade}` : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Description / memo
@@ -895,8 +889,7 @@ export function ManagerFinancesPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Property
-            <select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+            <Select
               value={incomeDraft.propertyId}
               onChange={(e) => setIncomeDraft({ ...incomeDraft, propertyId: e.target.value })}
             >
@@ -906,12 +899,11 @@ export function ManagerFinancesPanel({
                   {p.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Type
-            <select
-              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+            <Select
               value={incomeDraft.categoryCode}
               onChange={(e) => setIncomeDraft({ ...incomeDraft, categoryCode: e.target.value })}
             >
@@ -920,7 +912,7 @@ export function ManagerFinancesPanel({
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Amount (USD)

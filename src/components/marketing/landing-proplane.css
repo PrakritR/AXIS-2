@@ -1213,6 +1213,135 @@
   margin-top: 22px;
 }
 
+/* ── FAQ post-it board (before the closing CTA) ─────────────────────────
+   Sticky notes on a board: a small STATIC per-note tilt, a soft realistic drop
+   shadow, and a straighten + lift on hover. Note colors are brand washes over
+   the card token, so the board stays cobalt in light / purple in dark like the
+   rest of the flow — never off-brand office-yellow. Only transform/opacity is
+   animated, and the tilt is frozen under prefers-reduced-motion (see the block
+   near the bottom of this file). */
+.lp-faq {
+  padding: 64px 0 8px;
+  text-align: center;
+  min-width: 0;
+}
+
+.lp-faq h2 {
+  margin: 0;
+  padding: 4px 12px;
+  font-size: clamp(1.55rem, 3vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--lp-ink);
+  overflow-wrap: break-word;
+}
+
+.lp-faq .lp-lede {
+  margin: 12px auto 0;
+  max-width: 46ch;
+  padding-inline: 8px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--lp-muted);
+}
+
+.lp-faq-board {
+  margin: 44px auto 0;
+  width: min(940px, 100%);
+  display: grid;
+  /* min(240px, 100%) so a single column can never exceed a very narrow phone. */
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 26px 20px;
+  min-width: 0;
+  text-align: left;
+}
+
+.lp-note {
+  --rot: 0deg;
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 22px 20px 24px;
+  min-height: 188px;
+  border-radius: 5px;
+  background: var(--lp-card);
+  border: 1px solid var(--lp-line);
+  box-shadow: var(--lp-shadow);
+  transform: rotate(var(--rot));
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+/* Pinned-tape strip — sells the sticky-note look with a soft brand tint. */
+.lp-note::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 56px;
+  height: 15px;
+  transform: translateX(-50%) rotate(calc(var(--rot) * -1.6));
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--lp-blue) 20%, transparent);
+  box-shadow: 0 1px 3px rgba(8, 9, 11, 0.1);
+}
+
+.lp-note:hover {
+  transform: rotate(0deg) translateY(-4px);
+  box-shadow: var(--lp-shadow-lg);
+}
+
+/* Varied tilt (static, not animated) — five values so 7 notes read as scattered. */
+.lp-note:nth-child(5n + 1) {
+  --rot: -1.6deg;
+}
+.lp-note:nth-child(5n + 2) {
+  --rot: 1.3deg;
+}
+.lp-note:nth-child(5n + 3) {
+  --rot: -0.7deg;
+}
+.lp-note:nth-child(5n + 4) {
+  --rot: 1.8deg;
+}
+.lp-note:nth-child(5n + 5) {
+  --rot: -1.2deg;
+}
+
+/* Brand-wash variety over the card token (blue in light, purple in dark). */
+.lp-note:nth-child(3n + 1) {
+  background: color-mix(in srgb, var(--lp-blue) 7%, var(--lp-card));
+}
+.lp-note:nth-child(3n + 3) {
+  background: color-mix(in srgb, var(--lp-blue) 13%, var(--lp-card));
+}
+
+.lp-note-q {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--lp-ink);
+  overflow-wrap: break-word;
+}
+
+.lp-note-a {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--lp-ink) 74%, var(--lp-surface));
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 700px) {
+  .lp-faq {
+    padding-top: 76px;
+  }
+}
+
 .lp-stage-pad {
   padding-bottom: 40px;
 }
@@ -1484,6 +1613,14 @@
 @media (prefers-reduced-motion: reduce) {
   .lp-caret {
     animation: none;
+  }
+  /* Freeze the sticky-note tilt: no transition, and hover keeps the resting
+     angle so nothing straightens or lifts. Shadow may still change (not motion). */
+  .lp-note {
+    transition: none;
+  }
+  .lp-note:hover {
+    transform: rotate(var(--rot));
   }
 }
 

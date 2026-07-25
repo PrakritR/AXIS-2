@@ -86,6 +86,14 @@ export type DemoApplicantRow = {
     roomNumber?: string;
     leaseTerm?: string;
     notes?: string;
+    /** ISO timestamp when the existing-resident portal welcome email was sent. */
+    onboardingWelcomeSentAt?: string;
+    /** Signed lease PDF uploaded by manager for off-platform leases. */
+    signedLeaseFileName?: string;
+    signedLeaseDataUrl?: string;
+    signedLeaseUploadedAt?: string;
+    /** Lease treated as executed off-platform; skips e-sign workflow. */
+    externallySignedLease?: true;
   };
 };
 
@@ -171,7 +179,11 @@ export type DemoManagerOutgoingPaymentRow = {
   workOrderId?: string;
   /** When true the row came from a logged expense (not a pending vendor payout). */
   fromExpense?: boolean;
-  /** When true the row is an estimated Axis platform / processing fee on a resident payment. */
+  /**
+   * @deprecated Never set on a resident payment: PropLane absorbs Stripe's
+   * processing cost and takes no platform fee, so the manager has no payment
+   * cost row to report (see `manager-outgoing-payments.ts`).
+   */
   fromAxisFee?: boolean;
   vendorId?: string;
   amountCents?: number;

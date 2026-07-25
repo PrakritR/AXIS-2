@@ -6,6 +6,10 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import {
+  PortalSettingsGroup,
+  PortalSettingsSection,
+} from "@/components/portal/portal-settings-ui";
 import { PortalFeedbackSubmitModal } from "@/components/portal/portal-feedback-submit-modal";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -242,15 +246,11 @@ export function PortalBugFeedbackPanel({
   return (
     <>
       {embedded ? (
-        <PortalCollapsibleSection
-          title="Feedback"
-          surfaceMuted={false}
-          headerActions={addFeedbackButton}
-          contentClassName="px-4 pb-4"
-          toggleDataAttr="portal-feedback-section-toggle"
-        >
-          {body}
-        </PortalCollapsibleSection>
+        <PortalSettingsSection title="Feedback" description="Report issues or share product feedback." action={addFeedbackButton}>
+          <PortalSettingsGroup>
+            <div className="px-4 py-4">{body}</div>
+          </PortalSettingsGroup>
+        </PortalSettingsSection>
       ) : (
         <ManagerPortalPageShell title="Feedback" titleAside={addFeedbackButton}>
           {body}

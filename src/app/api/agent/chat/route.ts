@@ -4,14 +4,14 @@ import { agentRegistry, MANAGER_INLINE_WRITE_TOOLS } from "@/lib/tools";
 import { runAgentTurn } from "@/lib/agent/loop";
 import type { ActionPreview } from "@/lib/tools/registry";
 import { SYSTEM_PROMPT } from "@/lib/agent/system-prompt";
-import { sanitizeChatMessages, lastUserText } from "@/lib/agent/chat-handler";
-import { parseChatImages, buildImageUserMessage } from "@/lib/agent/images";
+import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
+import { enrichMessagesWithUploadedListingPhotos } from "@/lib/listing-draft-agent.server";
 
 export const runtime = "nodejs";
 
@@ -55,20 +55,24 @@ export async function POST(req: Request) {
   });
   if (decision) return decision;
 
-  const messages = sanitizeChatMessages(body.messages);
+  let messages = sanitizeChatMessages(body.messages);
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
   }
 
-  // Optional image attachments apply to the LAST user message only; history
-  // stays text-only so tool_use/image blocks never cross a turn boundary.
-  const images = parseChatImages(body.images);
-  if (!images.ok) return NextResponse.json({ error: images.error }, { status: 400 });
-  if (images.blocks.length > 0) {
-    messages[messages.length - 1] = buildImageUserMessage(
-      String(messages[messages.length - 1]!.content ?? ""),
-      images.blocks,
-    );
+  const attached = applyChatAttachments(messages, body);
+  if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
+  messages = attached.messages;
+  if (attached.imageCount > 0) {
+    try {
+      messages = await enrichMessagesWithUploadedListingPhotos(ctx.db, ctx.landlordId, messages);
+    } catch (e) {
+      console.error("[agent/chat] listing photo upload failed:", e);
+      return NextResponse.json(
+        { error: "We could not save your photos. Try again or use smaller images." },
+        { status: 500 },
+      );
+    }
   }
 
   const sessionId = await ensureAgentSession(ctx, "manager", body.sessionId as string | undefined);
@@ -97,7 +101,8 @@ export async function POST(req: Request) {
       tools: result.toolTrace.length,
       model: result.model,
       tier: result.tier,
-      images: images.blocks.length,
+      images: attached.imageCount,
+      documents: attached.documentCount,
     });
 
     // A proposal is persisted server-side; the client only ever receives the

@@ -378,8 +378,8 @@ function DemoDashboardShell({
       <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex gap-2.5">
           <KpiTile label="Rooms vacant" value={1} sub="listed & available" accent />
-          <KpiTile label="Leases to sign" value={1} sub="1 need your signature" accent />
           <KpiTile label="Applicants to review" value={2} sub="pending review" />
+          <KpiTile label="Leases to sign" value={1} sub="1 need your signature" accent />
           <KpiTile
             label="Overdue balance"
             value="$1,240"
