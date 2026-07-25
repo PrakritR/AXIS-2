@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
@@ -23,6 +24,7 @@ import {
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
+import { listingHoldingDepositAmount } from "@/lib/household-charges";
 import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
@@ -148,6 +150,10 @@ export type WizardStepsProps = {
     amount: number;
     waived?: boolean;
   };
+  applicationFeeCheckBusy?: boolean;
+  applicationFeeCheckError?: string | null;
+  applicationFeePaymentVerified?: boolean;
+  onCheckApplicationFeePayment?: () => void;
   /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
   occupancySyncEpoch: number;
   showAvailabilityWarnings: boolean;
@@ -276,7 +282,7 @@ function CustomQuestionField({
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings, applicationFeeCheckBusy, applicationFeeCheckError, applicationFeePaymentVerified, onCheckApplicationFeePayment } = p;
 
   const listingSub = (() => {
     const prop = getPropertyById(form.propertyId);
@@ -1890,6 +1896,20 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               : "No application fee is required for this listing."}
           </div>
         )}
+        {(() => {
+          const holding = form.propertyId ? listingHoldingDepositAmount(form.propertyId) : { amount: 0, displayLabel: "—" };
+          if (!(holding.amount > 0)) return null;
+          return (
+            <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Holding deposit</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{holding.displayLabel}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Secures your application while it is reviewed. When you are approved, this amount is credited toward your
+                security deposit.
+              </p>
+            </div>
+          );
+        })()}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
             <p className="text-sm font-semibold text-foreground">Payment method</p>
@@ -1981,7 +2001,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               {sub!.zelleContact!.trim()}
             </p>
             <p className="mt-2 leading-relaxed">
-              When you submit, we&apos;ll ask you to confirm that you already sent the Zelle payment.
+              Send the fee, then tap <span className="font-semibold">Check payment</span> below before you submit.
             </p>
           </div>
         ) : null}
@@ -1992,7 +2012,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               {sub!.venmoContact!.trim()}
             </p>
             <p className="mt-2 leading-relaxed">
-              When you submit, we&apos;ll ask you to confirm that you already sent the Venmo payment.
+              Send the fee, then tap <span className="font-semibold">Check payment</span> below before you submit.
             </p>
           </div>
         ) : null}
@@ -2001,41 +2021,32 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <p className="font-semibold">Payment instructions</p>
             <p className="mt-2 whitespace-pre-wrap leading-relaxed">{sub!.applicationFeeOtherInstructions!.trim()}</p>
             <p className="mt-2 leading-relaxed">
-              When you submit, we&apos;ll ask you to confirm that you followed these instructions.
+              Follow the instructions above, then tap <span className="font-semibold">Check payment</span> before you submit.
             </p>
           </div>
         ) : null}
         {applicationFeeGate.needsFee && !isAchApplicationFeeChannel(payChannel) ? (
-          <label
-            data-wizard-field="applicationFeeZelleSentConfirmed"
-            className={`flex cursor-pointer gap-3 rounded-2xl border p-4 ${errors.applicationFeeZelleSentConfirmed ? "border-red-300 bg-red-50/50 ring-2 ring-red-100" : "border-border bg-card"}`}
-          >
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 shrink-0 rounded border-border"
-              checked={form.applicationFeeZelleSentConfirmed}
-              onChange={(e) => patch({ applicationFeeZelleSentConfirmed: e.target.checked })}
-            />
-            <span className="text-sm leading-relaxed text-foreground">
-              {payChannel === "other" ? (
-                <>
-                  I confirm I followed the manager&apos;s instructions and sent the application fee.
-                </>
-              ) : (
-                <>
-                  I confirm I already sent the application fee by{" "}
-                  <span className="font-semibold">{payChannel === "venmo" ? "Venmo" : "Zelle"}</span>
-                  {payChannel === "venmo" && sub?.venmoContact?.trim() ? (
-                    <> to <span className="font-mono font-semibold">{sub.venmoContact.trim()}</span></>
-                  ) : null}
-                  {payChannel === "zelle" && sub?.zelleContact?.trim() ? (
-                    <> to <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span></>
-                  ) : null}
-                  .
-                </>
-              )}
-            </span>
-          </label>
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            {applicationFeePaymentVerified ? (
+              <p className="text-sm font-medium text-[var(--status-confirmed-fg)]">Payment verified.</p>
+            ) : applicationFeeCheckError ? (
+              <p className="text-sm text-red-600">{applicationFeeCheckError}</p>
+            ) : (
+              <p className="text-sm text-muted">
+                After you send payment, check that we received it before submitting your application.
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full rounded-full sm:w-auto"
+              disabled={applicationFeeCheckBusy || applicationFeeGate.paid}
+              data-attr="application-fee-check-payment"
+              onClick={() => onCheckApplicationFeePayment?.()}
+            >
+              {applicationFeeCheckBusy ? "Checking…" : applicationFeeGate.paid ? "Payment received" : "Check payment"}
+            </Button>
+          </div>
         ) : null}
         <FieldError msg={errors.applicationFeeZelleSentConfirmed} />
       </div>

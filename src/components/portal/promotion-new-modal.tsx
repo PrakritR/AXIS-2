@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
 import { PromotionForm, type PromotionDraft } from "@/components/portal/promotion-form";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/portal/promotion-text-generate-modal";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
 import type { PromotionAssetKind } from "@/lib/promotion-assets";
+import { buildPromotionNewModalAssistantContext } from "@/lib/promotion-assistant-context";
 import type { PromotionTextFormat } from "@/lib/promotion-text";
 
 const PROMOTION_KIND_OPTIONS: { id: PromotionAssetKind; label: string; description: string }[] = [
@@ -155,6 +156,7 @@ export function PromotionNewModal({
   }
 
   const selected = PROMOTION_KIND_OPTIONS.find((o) => o.id === kind);
+  const assistantContext = buildPromotionNewModalAssistantContext(draft, kind);
 
   return (
     <Modal
@@ -162,9 +164,14 @@ export function PromotionNewModal({
       title="New promotion"
       onClose={onClose}
       panelClassName="max-w-2xl"
+      assistantContext={assistantContext}
+      assistantStorageScopeKey="New promotion"
       footer={
         kind === "flyer" ? (
-          <div className="flex flex-wrap gap-2">
+          <ModalFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
             <Button
               type="button"
               onClick={onGenerateFlyer}
@@ -173,12 +180,12 @@ export function PromotionNewModal({
             >
               {flyerBusy ? "Generating…" : "Generate flyer"}
             </Button>
+          </ModalFooter>
+        ) : (
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               disabled={textBusy}
@@ -187,10 +194,7 @@ export function PromotionNewModal({
             >
               {textBusy ? "Generating…" : "Generate promotion text"}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-          </div>
+          </ModalFooter>
         )
       }
     >

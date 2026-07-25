@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -469,7 +469,7 @@ export function ManagerCreateWorkOrderModal({
       title={mode === "request" ? "Add work order" : "Log completed work"}
       panelClassName="max-w-lg"
       footer={
-        <div className="flex justify-start gap-2">
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -482,7 +482,7 @@ export function ManagerCreateWorkOrderModal({
           >
             {busy ? "Saving…" : mode === "request" ? "Create work order" : "Save work order"}
           </Button>
-        </div>
+        </ModalFooter>
       }
     >
       <div className="space-y-4">

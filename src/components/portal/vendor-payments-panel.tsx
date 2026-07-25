@@ -16,6 +16,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import { VendorPaymentMethodsModal } from "@/components/portal/vendor-payment-methods-modal";
+import { GmailPaymentAutoTrackPanel } from "@/components/portal/gmail-payment-auto-track-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts";
@@ -30,6 +31,7 @@ import { safeFormatDateTime } from "@/lib/pacific-time";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
 import { VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS } from "@/lib/vendor-payment-methods";
 import { managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
+import { workOrderPaymentReference } from "@/lib/manual-payment-instructions";
 
 type VendorPaymentBucket = "pending" | "paid";
 
@@ -146,9 +148,18 @@ function VendorPaymentExpandedDetail({
   bucket: VendorPaymentBucket;
 }) {
   const paidChannel = workOrder.vendorPaymentChannel;
+  const paymentRef = workOrderPaymentReference(workOrder);
 
   return (
     <div className={PORTAL_MOBILE_DETAIL_EXPAND}>
+      {workOrder.paidViaGmailMessageId && bucket === "paid" ? (
+        <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
+          <p className="text-xs font-semibold">Payment confirmed automatically</p>
+          <p className="mt-1 text-sm leading-relaxed">
+            Your incoming Zelle or Venmo payment was matched and marked paid.
+          </p>
+        </div>
+      ) : null}
       {paidChannel && bucket === "paid" ? (
         <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
           <p className="text-xs font-semibold">Paid via {managerVendorPayMethodLabel(paidChannel)}</p>
@@ -175,8 +186,8 @@ function VendorPaymentExpandedDetail({
           <p className="text-xs font-semibold">{VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS.zelle}</p>
           <p className="mt-1 text-sm leading-relaxed">
             Your manager can send to{" "}
-            <span className="font-mono font-medium">{vendorProfile.zelleContact.trim()}</span>. Include the work order
-            title in the memo.
+            <span className="font-mono font-medium">{vendorProfile.zelleContact.trim()}</span>. Include code{" "}
+            <span className="font-mono font-medium">{paymentRef}</span> in the memo.
           </p>
         </div>
       ) : null}
@@ -186,8 +197,8 @@ function VendorPaymentExpandedDetail({
           <p className="text-xs font-semibold">{VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS.venmo}</p>
           <p className="mt-1 text-sm leading-relaxed">
             Your manager can send to{" "}
-            <span className="font-mono font-medium">{vendorProfile.venmoContact.trim()}</span>. Include the property and
-            work order in the note.
+            <span className="font-mono font-medium">{vendorProfile.venmoContact.trim()}</span>. Include code{" "}
+            <span className="font-mono font-medium">{paymentRef}</span> in the note.
           </p>
         </div>
       ) : null}
@@ -273,11 +284,25 @@ export function VendorPaymentsPanel() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const connect = new URLSearchParams(window.location.search).get("connect");
+    const params = new URLSearchParams(window.location.search);
+    const connect = params.get("connect");
+    const gmailPay = params.get("gmail-pay");
     if (connect === "done") {
       showToast("Bank account linked.");
     } else if (connect === "refresh") {
       showToast("Setup link expired. Open Payment methods and try again.");
+    } else if (gmailPay === "connected") {
+      showToast("Gmail linked for payment tracking.");
+    } else if (gmailPay === "error") {
+      const reason = params.get("reason");
+      showToast(reason ? decodeURIComponent(reason) : "Gmail connect failed.");
+    }
+    if (connect || gmailPay) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connect");
+      url.searchParams.delete("gmail-pay");
+      url.searchParams.delete("reason");
+      window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, [showToast]);
 
@@ -476,7 +501,17 @@ export function VendorPaymentsPanel() {
         >
           Waiting on a property manager to connect with you. Completed work will appear here once you&apos;re linked.
         </p>
-      ) : null}
+      ) : (
+        <div className="mb-4">
+          <GmailPaymentAutoTrackPanel
+            role="vendor"
+            demo={demo}
+            autoMarkEnabled
+            onAutoMarkChange={() => undefined}
+            showToast={showToast}
+          />
+        </div>
+      )}
 
       {showSelection && selectedIds.size > 0 ? (
         <div className="mb-3">

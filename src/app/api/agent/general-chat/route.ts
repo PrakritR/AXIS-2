@@ -4,6 +4,8 @@ import { GENERAL_SYSTEM_PROMPT } from "@/lib/agent/general-system-prompt";
 import { applyChatAttachments, sanitizeChatMessages } from "@/lib/agent/chat-handler";
 import { TIER_MODELS } from "@/lib/agent/model";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
+import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
+import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 export const runtime = "nodejs";
 
@@ -56,8 +58,9 @@ export async function POST(req: Request) {
 
   try {
     const client = new Anthropic();
+    const model = messagesNeedVisionModel(messages) ? visionPinnedModel().model : TIER_MODELS.simple;
     const response = await client.messages.create({
-      model: TIER_MODELS.simple,
+      model,
       max_tokens: 1024,
       system: GENERAL_SYSTEM_PROMPT,
       messages,
@@ -70,6 +73,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply: reply || "I'm not sure how to answer that — try asking about PropLane's features, pricing, or the live demo." });
   } catch (e) {
     console.error("[agent/general-chat] failed:", e);
-    return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

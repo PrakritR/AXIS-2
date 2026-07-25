@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   FormalDocumentScopeBar,
@@ -44,7 +44,29 @@ export function ReportGenerateModal({
   loading?: boolean;
 }) {
   return (
-    <Modal open={open} title={`Generate ${tabLabel.toLowerCase()}`} onClose={onClose} panelClassName="max-w-lg">
+    <Modal
+      open={open}
+      title={`Generate ${tabLabel.toLowerCase()}`}
+      onClose={onClose}
+      panelClassName="max-w-lg"
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_HEADER_ACTION_BTN}
+            onClick={onGenerate}
+            disabled={loading}
+            data-attr="documents-generate-report-submit"
+          >
+            {loading ? "Generating…" : "Generate report"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-5">
         <p className="text-sm text-muted">Choose scope and dates, then generate the report.</p>
 
@@ -73,21 +95,6 @@ export function ReportGenerateModal({
           loading={loading}
         />
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className={PORTAL_HEADER_ACTION_BTN}
-            onClick={onGenerate}
-            disabled={loading}
-            data-attr="documents-generate-report-submit"
-          >
-            {loading ? "Generating…" : "Generate report"}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

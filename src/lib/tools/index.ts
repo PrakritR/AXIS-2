@@ -65,6 +65,7 @@ import {
   getPropertyDetailsTool,
   createPropertyTool,
   updatePropertyTool,
+  updatePropertyLeaseConfigTool,
   copyListingPhotosTool,
   sharePropertyLinkTool,
 } from "./domains/properties";
@@ -187,6 +188,7 @@ export const agentRegistry = buildRegistry([
   createListingDraftTool,
   updateListingDraftTool,
   updatePropertyTool,
+  updatePropertyLeaseConfigTool,
   copyListingPhotosTool,
   sharePropertyLinkTool,
   setResidentApprovalTool,

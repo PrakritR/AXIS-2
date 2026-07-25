@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Mouse
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -1465,7 +1465,30 @@ export function PortalCalendarPanels({
           })()}
         </Card>
 
-        <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
+        <Modal
+          open={blockModalOpen}
+          title="Create recurring availability block"
+          onClose={() => {
+            setBlockModalOpen(false);
+            setDragSelection(null);
+          }}
+          footer={
+            <ModalFooter>
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                onClick={applyRecurringBlock}
+                disabled={blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot}
+              >
+                Create block
+              </Button>
+            </ModalFooter>
+          }
+        >
           <div className="space-y-5">
             <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">{blockSummary}</div>
 
@@ -1559,20 +1582,6 @@ export function PortalCalendarPanels({
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                className="rounded-full"
-                onClick={applyRecurringBlock}
-                disabled={blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot}
-              >
-                Create block
-              </Button>
-            </div>
           </div>
         </Modal>
 
@@ -1581,6 +1590,25 @@ export function PortalCalendarPanels({
             open={updateToHousesOpen}
             title="Update week schedule to other houses"
             onClose={() => setUpdateToHousesOpen(false)}
+            footer={
+              <ModalFooter>
+                <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-full"
+                  disabled={selectedHouseIds.size === 0}
+                  onClick={() => {
+                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs);
+                    setUpdateToHousesOpen(false);
+                  }}
+                >
+                  Update {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
+                </Button>
+              </ModalFooter>
+            }
           >
             <div className="space-y-5">
               <p className="text-sm text-muted">
@@ -1612,23 +1640,6 @@ export function PortalCalendarPanels({
                     <span className="text-sm font-medium text-foreground">{p.name}</span>
                   </label>
                 ))}
-              </div>
-              <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-                <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="rounded-full"
-                  disabled={selectedHouseIds.size === 0}
-                  onClick={() => {
-                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs);
-                    setUpdateToHousesOpen(false);
-                  }}
-                >
-                  Update {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
-                </Button>
               </div>
             </div>
           </Modal>
@@ -1914,7 +1925,30 @@ export function PortalCalendarPanels({
         {availabilityCard}
       </div>
 
-      <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
+      <Modal
+        open={blockModalOpen}
+        title="Create recurring availability block"
+        onClose={() => {
+          setBlockModalOpen(false);
+          setDragSelection(null);
+        }}
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              onClick={applyRecurringBlock}
+              disabled={blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot}
+            >
+              Create block
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="space-y-5">
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">{blockSummary}</div>
 
@@ -2006,14 +2040,6 @@ export function PortalCalendarPanels({
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={applyRecurringBlock} disabled={blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot}>
-              Create block
-            </Button>
-          </div>
         </div>
       </Modal>
       {selectedBlockModal}

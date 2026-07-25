@@ -1,5 +1,7 @@
 import { isWaiverGrantedManagerPurchase, normalizeManagerSkuTier } from "@/lib/manager-access";
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
+import { isAppleBilledManagerPurchase } from "@/lib/manager-apple-purchase";
+import { reconcileManagerPurchaseWithApple } from "@/lib/manager-apple-subscription-sync";
 import { isManagerPurchasePeriodExpired, isSignupTrialManagerPurchase, resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
 import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -12,7 +14,7 @@ export async function revokeUnauthorizedManagerPaidTier(userId: string): Promise
   const supabase = createSupabaseServiceRoleClient();
   const { data } = await supabase
     .from("manager_purchases")
-    .select("id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, promo_code")
+    .select("id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, promo_code, apple_original_transaction_id")
     .eq("user_id", uid)
     .maybeSingle();
 
@@ -29,6 +31,11 @@ export async function revokeUnauthorizedManagerPaidTier(userId: string): Promise
   // Payment-waiver / coupon grants (FREE100, onboard 100%-off) are authorized
   // paid access without a Stripe subscription — never revoke them.
   if (isWaiverGrantedManagerPurchase(data.promo_code)) return false;
+  // Apple IAP is an authorized paid grant with no Stripe subscription. It is
+  // reconciled/expired by App Store webhooks, so it must NEVER be swept here —
+  // otherwise the next page load silently downgrades a paying iOS customer
+  // (the #1 integration landmine; see docs/agents/apple-iap.md).
+  if (isAppleBilledManagerPurchase(billing, data.apple_original_transaction_id)) return false;
 
   const { error } = await supabase
     .from("manager_purchases")
@@ -46,7 +53,7 @@ export async function applyExpiredManagerPurchaseDowngrade(userId: string): Prom
   const supabase = createSupabaseServiceRoleClient();
   const { data } = await supabase
     .from("manager_purchases")
-    .select("id, tier, billing, paid_at, stripe_subscription_id, promo_code")
+    .select("id, tier, billing, paid_at, stripe_subscription_id, promo_code, apple_original_transaction_id")
     .eq("user_id", uid)
     .maybeSingle();
 
@@ -55,6 +62,10 @@ export async function applyExpiredManagerPurchaseDowngrade(userId: string): Prom
   // Coupon / payment-waiver grants are comp access, not a billing period that
   // lapses — leave them in place.
   if (isWaiverGrantedManagerPurchase(data.promo_code)) return false;
+  // Apple IAP expiry is driven by App Store webhooks, not `paid_at` date-math —
+  // the `billing='apple'` marker carries no cadence, so running it through the
+  // period-expiry check would wrongly downgrade an active Apple subscriber.
+  if (isAppleBilledManagerPurchase(data.billing, data.apple_original_transaction_id)) return false;
 
   const tier = normalizeManagerSkuTier(data.tier);
   if (!tier || tier === "free") return false;
@@ -77,6 +88,12 @@ export async function syncManagerPurchaseTierState(userId: string): Promise<void
     await reconcileManagerPurchaseWithStripe(uid);
   } catch {
     /* Stripe not configured or transient error */
+  }
+
+  try {
+    await reconcileManagerPurchaseWithApple(uid);
+  } catch {
+    /* RevenueCat not configured or transient error — keep last known DB state */
   }
 
   await revokeUnauthorizedManagerPaidTier(uid);

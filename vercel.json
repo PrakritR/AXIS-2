@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/backfill-manager-work-numbers",
       "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-rent-reminders",
+      "schedule": "45 16 * * *"
     }
   ]
 }

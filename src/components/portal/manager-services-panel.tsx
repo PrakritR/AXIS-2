@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import {Input, Select} from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
@@ -219,6 +219,16 @@ export function ManagerServicesPanel() {
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setModalOpen(false)}
         panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={handleSave}>
+              {editingOffer ? "Save changes" : "Add request"}
+            </Button>
+          </ModalFooter>
+        }
       >
         <div className="grid gap-3">
           <div>
@@ -260,14 +270,6 @@ export function ManagerServicesPanel() {
               className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200"
             />
           </div>
-        </div>
-        <div className="mt-5 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setModalOpen(false)}>
-            Cancel
-          </Button>
-          <Button type="button" className="rounded-full" onClick={handleSave}>
-            {editingOffer ? "Save changes" : "Add request"}
-          </Button>
         </div>
       </Modal>
     </>

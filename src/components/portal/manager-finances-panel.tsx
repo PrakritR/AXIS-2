@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { TabNav, useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -791,7 +791,21 @@ export function ManagerFinancesPanel({
       </div>
       )}
 
-      <Modal open={expenseModal} onClose={() => setExpenseModal(false)} title="Add expense">
+      <Modal
+        open={expenseModal}
+        onClose={() => setExpenseModal(false)}
+        title="Add expense"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setExpenseModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void saveExpense()}>
+              Save expense
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Property
@@ -875,17 +889,23 @@ export function ManagerFinancesPanel({
             <Input value={expenseDraft.memo} onChange={(e) => setExpenseDraft({ ...expenseDraft, memo: e.target.value })} />
           </label>
         </div>
-        <div className="mt-6 flex justify-start gap-2">
-          <Button variant="outline" onClick={() => setExpenseModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => void saveExpense()}>
-            Save expense
-          </Button>
-        </div>
       </Modal>
 
-      <Modal open={incomeModal} onClose={() => setIncomeModal(false)} title="Add income">
+      <Modal
+        open={incomeModal}
+        onClose={() => setIncomeModal(false)}
+        title="Add income"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setIncomeModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void saveIncome()}>
+              Save income
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
             Property
@@ -943,14 +963,6 @@ export function ManagerFinancesPanel({
               placeholder="e.g. Utilities reimbursement"
             />
           </label>
-        </div>
-        <div className="mt-6 flex justify-start gap-2">
-          <Button variant="outline" onClick={() => setIncomeModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => void saveIncome()}>
-            Save income
-          </Button>
         </div>
       </Modal>
     </ManagerPortalPageShell>

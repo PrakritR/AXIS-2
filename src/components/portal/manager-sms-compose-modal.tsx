@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components/ui/checkbox-multi-select";
 import { RecipientChipsInput } from "@/components/ui/recipient-chips-input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -204,7 +204,32 @@ export function ManagerSmsComposeModal({
   }
 
   return (
-    <Modal open={open} title="New message" onClose={onClose}>
+    <Modal
+      open={open}
+      title="New message"
+      onClose={onClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            disabled={sending || !body.trim()}
+            data-attr="manager-sms-compose-send"
+            onClick={() => void send()}
+          >
+            {sending
+              ? "Sending…"
+              : selectedPeople.length + (otherSelected ? otherTokens.length : 0) > 1
+                ? `Send SMS (${selectedPeople.length + (otherSelected ? otherTokens.length : 0)})`
+                : "Send SMS"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-3">
         {withPhone.length === 0 && !otherSelected ? (
           <p className="text-sm text-muted">
@@ -281,25 +306,6 @@ export function ManagerSmsComposeModal({
             data-attr="manager-sms-compose-body"
           />
           <span className="mt-1 block text-xs text-muted">{body.trim().length}/1600</span>
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={sending || !body.trim()}
-            data-attr="manager-sms-compose-send"
-            onClick={() => void send()}
-          >
-            {sending
-              ? "Sending…"
-              : selectedPeople.length + (otherSelected ? otherTokens.length : 0) > 1
-                ? `Send SMS (${selectedPeople.length + (otherSelected ? otherTokens.length : 0)})`
-                : "Send SMS"}
-          </Button>
         </div>
       </div>
     </Modal>

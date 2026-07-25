@@ -375,9 +375,6 @@ export function CheckrScreeningModal({
           data-portal-detail-actions=""
           className="flex flex-wrap items-center justify-end gap-3 border-t border-border py-6 sm:gap-4"
         >
-          <Button type="button" variant="outline" onClick={onClose}>
-            Close
-          </Button>
           {screeningAllowed && configured && row.application?.consentCredit ? (
             <Button
               type="button"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { notifyManagerPropertyLeadMessage } from "@/lib/property-lead-notification.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
+import { recordOptIn } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
       name?: string;
       email?: string;
       phone?: string;
+      smsConsent?: unknown;
       topic?: string;
       body?: string;
     };
@@ -52,6 +54,7 @@ export async function POST(req: Request) {
     const name = textField(body.name).slice(0, 200);
     const email = textField(body.email).toLowerCase().slice(0, 320);
     const phone = textField(body.phone).slice(0, 40);
+    const smsConsent = body.smsConsent === true;
     const topic = textField(body.topic).slice(0, 200);
     const message = textField(body.body).slice(0, 4000);
 
@@ -63,6 +66,15 @@ export async function POST(req: Request) {
     const { managerUserId, propertyTitle } = await resolveManagerForProperty(propertyId);
     if (!managerUserId) {
       return NextResponse.json({ error: "Property not found or manager unavailable." }, { status: 404 });
+    }
+
+    // Record the explicit opt-in when the prospect checked the box and gave a
+    // phone. This lead flow only emails the manager today (no automated SMS to
+    // the prospect), but capturing consent keeps a manager reply-by-text lawful
+    // and provable. An unchecked box records nothing. A later STOP supersedes.
+    if (smsConsent && phone) {
+      const db = createSupabaseServiceRoleClient();
+      await recordOptIn(db, phone, null, "tours-contact-message").catch(() => undefined);
     }
 
     await notifyManagerPropertyLeadMessage({

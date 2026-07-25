@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   PORTAL_DATA_TABLE,
@@ -148,7 +148,23 @@ export function ManagerDocumentTemplatesPanel() {
         </div>
       )}
 
-      <Modal open={Boolean(renderTarget)} onClose={() => setRenderTarget(null)} title={renderTarget?.name ?? "Generate PDF"}>
+      <Modal
+        open={Boolean(renderTarget)}
+        onClose={() => setRenderTarget(null)}
+        title={renderTarget?.name ?? "Generate PDF"}
+        footer={
+          renderTarget ? (
+            <ModalFooter>
+              <Button variant="outline" onClick={() => setRenderTarget(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => void downloadPdf()} disabled={busy} data-attr="document-template-download">
+                {busy ? "Generating…" : "Download PDF"}
+              </Button>
+            </ModalFooter>
+          ) : undefined
+        }
+      >
         {renderTarget ? (
           <div className="space-y-3">
             {renderTarget.mergeFields.length === 0 ? (
@@ -156,14 +172,6 @@ export function ManagerDocumentTemplatesPanel() {
             ) : (
               renderTarget.mergeFields.map(renderFieldInput)
             )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setRenderTarget(null)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button onClick={() => void downloadPdf()} disabled={busy} data-attr="document-template-download">
-                {busy ? "Generating…" : "Download PDF"}
-              </Button>
-            </div>
           </div>
         ) : null}
       </Modal>

@@ -17,6 +17,7 @@ import { submitBugFeedbackReport } from "@/lib/portal-bug-feedback";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
+import { ManagerPlanNative } from "@/components/portal/manager-plan-native";
 import {
   MANAGER_PLAN_PORTAL_PATH,
   MANAGER_PLAN_PORTAL_SECTION_ID,
@@ -30,6 +31,7 @@ type SubPayload = {
   isFree: boolean;
   isLegacyUnlimited: boolean;
   stripeManaged?: boolean;
+  appleManaged?: boolean;
   cancelAtPeriodEnd?: boolean;
   currentPeriodEnd?: number | null;
   scheduledDowngrade?: { tier: string; billing: string } | null;
@@ -1088,17 +1090,19 @@ export function ManagerPlan({
       </Modal>
   );
 
-  // App Store Guideline 2.1(b)/3.1.1: the iOS app must not present subscription
-  // purchasing. The entire plan UI (cards, prices, upgrade, Stripe checkout) is
-  // hidden on native via `.native-hide` (flash-free — data-native is set in
-  // <head>), replaced by a neutral, non-actionable notice. Web is unchanged.
+  // App Store Guideline 3.1.1: the manager subscription must be purchasable via
+  // In-App Purchase inside the iOS app. The web plan UI (cards, prices, Stripe
+  // checkout) stays hidden on native via `.native-hide`; in its place we render
+  // the StoreKit/RevenueCat purchase surface (`.native-only`). Web is unchanged.
   const nativeNotice = (
-    <div className="native-only mx-auto max-w-lg rounded-2xl border border-border surface-panel p-6 text-center">
-      <p className="text-lg font-semibold text-foreground">Your plan</p>
-      <p className="mt-2 text-sm leading-relaxed text-muted">
-        Your subscription is managed outside the app. Any changes to your plan are handled on the web.
-      </p>
-    </div>
+    <ManagerPlanNative
+      currentTier={currentTier}
+      subLoaded={sub != null}
+      stripeManaged={Boolean(sub?.stripeManaged)}
+      appleManaged={Boolean(sub?.appleManaged)}
+      isFree={Boolean(sub?.isFree ?? currentTier === "free")}
+      onReload={load}
+    />
   );
 
   if (embedded) {
