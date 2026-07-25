@@ -56,9 +56,14 @@ honors both** — a STOP recorded on either path blocks every outbound rail:
 
 The vendor agent's own gates (`vendor-agent.server.ts`) also consult
 `isPhoneOptedOut` for the vendor's phone, so a ledger STOP blocks the vendor
-agent as well. `sms_consent_at` (a later opt-in) supersedes an older
-`sms_opt_out_at`, mirroring the ledger's opt-in-wins rule. Both stores fail OPEN
-on infra error (a DB blip never drops all messaging). Coverage:
+agent as well. Opt-in supersede is computed GLOBALLY across both stores: the
+latest opt-in anywhere (`opted_in_at` or `sms_consent_at`) beats an older
+opt-out anywhere, so a STOP on one line followed by a START on the other
+re-enables the number instead of dead-ending. The vendor webhook's START also
+clears `profiles.sms_opt_out_at` across all stored phone formats
+(`profilePhoneVariants`, the one shared variant set both webhooks use). Both
+stores fail OPEN on infra error (a DB blip never drops all messaging; a
+profiles-side error falls back to the ledger alone). Coverage:
 `tests/unit/sms-opt-out-unified.test.ts`,
 `tests/unit/sms-transport-authoritative.test.ts`.
 

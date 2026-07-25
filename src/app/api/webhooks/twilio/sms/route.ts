@@ -11,7 +11,7 @@ import twilio from "twilio";
 import { findVendorAgentSessionByPhone, runVendorAgentSessionTurn } from "@/lib/agent/vendor-agent.server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { rateLimit } from "@/lib/rate-limit";
-import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
+import { profilePhoneVariants, recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164 } from "@/lib/twilio";
 
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
   if (START_WORDS.has(keyword)) {
     // Clear the ledger opt-out too, so re-opt-in is honored on every rail.
     await recordOptIn(db, from);
-    const { data: profs } = await db.from("profiles").select("id").eq("phone", from);
+    const { data: profs } = await db.from("profiles").select("id").in("phone", profilePhoneVariants(from));
     const ids = ((profs ?? []) as { id: string }[]).map((p) => p.id);
     if (ids.length > 0) {
       await db.from("profiles").update({ sms_opt_out_at: null }).in("id", ids);

@@ -57,6 +57,18 @@ export async function ensureManagerSmsNumber(
       if (!isPlaceholderManagerWorkNumber(current)) {
         return { ok: true, number: current };
       }
+    }
+
+    // MONEY GUARD: buying a Twilio number costs real money and must not happen
+    // until firstmate flips `SMS_PROVISIONING_ENABLED` on (alongside A2P
+    // campaign registration). Twilio being the primary transport does NOT
+    // authorize spend. Off by default, so every purchase path stays dark until
+    // that flip.
+    if (!isSmsProvisioningEnabled()) {
+      return { ok: false, error: "provisioning_disabled" };
+    }
+
+    if (current) {
       // Clear placeholder stamp so the purchase path can claim the slot.
       await db
         .from("profiles")
@@ -72,14 +84,6 @@ export async function ensureManagerSmsNumber(
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   if (!accountSid || !authToken) {
     return { ok: false, error: "SMS is not configured (missing Twilio credentials)." };
-  }
-
-  // MONEY GUARD: buying a Twilio number costs real money and must not happen
-  // until firstmate flips `SMS_PROVISIONING_ENABLED` on (alongside A2P campaign
-  // registration). Twilio being the primary transport does NOT authorize spend.
-  // Off by default, so every purchase path stays dark until that flip.
-  if (!isSmsProvisioningEnabled()) {
-    return { ok: false, error: "provisioning_disabled" };
   }
 
   const areaCodeDigits = opts?.areaCode?.replace(/\D/g, "").slice(0, 3);

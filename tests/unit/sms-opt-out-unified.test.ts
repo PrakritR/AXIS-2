@@ -10,7 +10,7 @@ type ConsentRow = { phone: string; opted_in_at?: string | null; opted_out_at?: s
 type ProfileRow = { phone: string; sms_opt_out_at?: string | null; sms_consent_at?: string | null };
 
 // Minimal Supabase-shaped stub for the two tables `isPhoneOptedOut` reads.
-function makeDb(opts: { consent?: ConsentRow[]; profiles?: ProfileRow[] }) {
+function makeDb(opts: { consent?: ConsentRow[]; profiles?: ProfileRow[]; profilesThrows?: boolean }) {
   const consent = opts.consent ?? [];
   const profiles = opts.profiles ?? [];
   return {
@@ -28,6 +28,15 @@ function makeDb(opts: { consent?: ConsentRow[]; profiles?: ProfileRow[] }) {
         return chain;
       }
       if (table === "profiles") {
+        if (opts.profilesThrows) {
+          const chain: Record<string, unknown> = {
+            select: () => chain,
+            in: () => {
+              throw new Error("profiles store unavailable");
+            },
+          };
+          return chain;
+        }
         let phoneVariants: string[] = [];
         const chain: Record<string, unknown> = {
           select: () => chain,
@@ -97,5 +106,40 @@ describe("isPhoneOptedOut — unified across both stores", () => {
   it("blocks when the profiles opt-out is newer than the consent", async () => {
     const db = makeDb({ profiles: [{ phone: "5551234567", sms_opt_out_at: LATER, sms_consent_at: EARLIER }] });
     expect(await isPhoneOptedOut(db, "+15551234567")).toBe(true);
+  });
+});
+
+describe("cross-store re-opt-in — a later START on one store supersedes a STOP on the other", () => {
+  it("re-enables after STOP on profiles then START recorded on the ledger", async () => {
+    // Vendor STOPped (profiles.sms_opt_out_at set), then texted START to a
+    // manager work line, which records only a ledger opt-in.
+    const db = makeDb({
+      consent: [{ phone: "5551234567", opted_in_at: LATER }],
+      profiles: [{ phone: "(555) 123-4567", sms_opt_out_at: EARLIER }],
+    });
+    expect(await isPhoneOptedOut(db, "+15551234567")).toBe(false);
+  });
+
+  it("re-enables after STOP on the ledger then consent recorded on profiles", async () => {
+    const db = makeDb({
+      consent: [{ phone: "5551234567", opted_out_at: EARLIER }],
+      profiles: [{ phone: "5551234567", sms_consent_at: LATER }],
+    });
+    expect(await isPhoneOptedOut(db, "+15551234567")).toBe(false);
+  });
+
+  it("still blocks when the cross-store STOP is newer than the opt-in", async () => {
+    const db = makeDb({
+      consent: [{ phone: "5551234567", opted_in_at: EARLIER }],
+      profiles: [{ phone: "5551234567", sms_opt_out_at: LATER }],
+    });
+    expect(await isPhoneOptedOut(db, "+15551234567")).toBe(true);
+  });
+
+  it("stays ledger-authoritative when the profiles query throws", async () => {
+    const blocked = makeDb({ consent: [{ phone: "5551234567", opted_out_at: NOW }], profilesThrows: true });
+    expect(await isPhoneOptedOut(blocked, "+15551234567")).toBe(true);
+    const clean = makeDb({ consent: [], profilesThrows: true });
+    expect(await isPhoneOptedOut(clean, "+15551234567")).toBe(false);
   });
 });

@@ -15,7 +15,7 @@ import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { buildVendorAgentContext } from "@/lib/tools/context";
 import { vendorWorkOrderAgentRegistry } from "@/lib/tools";
 import { ESCALATE_TOOL_NAME } from "@/lib/tools/domains/vendor-work-order";
-import { isPhoneOptedOut } from "@/lib/sms-consent";
+import { isPhoneOptedOut, optedOutFromTimestamps } from "@/lib/sms-consent";
 import { normalizeE164, sendSms } from "@/lib/twilio";
 
 type Db = SupabaseClient;
@@ -109,10 +109,10 @@ async function vendorSmsState(db: Db, session: VendorAgentSessionRow): Promise<{
     .select("phone, sms_opt_out_at, sms_consent_at")
     .eq("id", session.vendor_user_id)
     .maybeSingle();
-  let optedOut = Boolean(data?.sms_opt_out_at);
+  let optedOut = optedOutFromTimestamps(data?.sms_consent_at, data?.sms_opt_out_at);
   // Honor a STOP recorded on the OTHER store (the phone-keyed sms_consent
   // ledger, e.g. via the manager work-line webhook) so opt-out is unified.
-  const phone = (data?.phone as string | null) ?? session.vendor_phone_e164 ?? null;
+  const phone = String((data?.phone as string | null) ?? "").trim() || session.vendor_phone_e164 || null;
   if (!optedOut && phone) {
     try {
       optedOut = await isPhoneOptedOut(db, phone);
@@ -302,8 +302,8 @@ export async function ensureVendorAgentSession(
       .select("phone, sms_opt_out_at, sms_consent_at")
       .eq("id", args.vendorUserId)
       .maybeSingle();
-    rawPhone = (data?.phone as string | null) ?? null;
-    optedOut = Boolean(data?.sms_opt_out_at);
+    rawPhone = String((data?.phone as string | null) ?? "").trim() || null;
+    optedOut = optedOutFromTimestamps(data?.sms_consent_at, data?.sms_opt_out_at);
     consentOk = Boolean(data?.sms_consent_at);
   }
   if (!rawPhone) {

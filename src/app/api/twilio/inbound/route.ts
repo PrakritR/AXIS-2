@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import twilio from "twilio";
 import { handleClawLeasingInbound } from "@/lib/claw-leasing-bot.server";
 import { rateLimit } from "@/lib/rate-limit";
-import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
+import { profilePhoneVariants, recordOptIn, recordOptOut } from "@/lib/sms-consent";
 import { twilioMediaUrls } from "@/lib/sms-media.server";
 import { inboundLogIdentityFields } from "@/lib/manager-sms-messages.server";
 import { relayInboundSms } from "@/lib/sms-relay.server";
@@ -21,26 +21,6 @@ export const maxDuration = 60;
 const SMS_STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const SMS_START_KEYWORDS = new Set(["START", "YES", "UNSTOP"]);
 const SMS_HELP_KEYWORDS = new Set(["HELP", "INFO"]);
-
-function digitsOf(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
-  return digits;
-}
-
-/** Common storage formats for one US number, for direct-column matching. */
-function phoneVariants(raw: string): string[] {
-  const d = digitsOf(raw);
-  if (d.length !== 10) return [raw.trim()].filter(Boolean);
-  return [
-    `+1${d}`,
-    d,
-    `1${d}`,
-    `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`,
-    `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`,
-    raw.trim(),
-  ].filter(Boolean);
-}
 
 /** Empty TwiML — replies are sent asynchronously via the Messaging API. */
 function twimlOk(reply?: string): NextResponse {
@@ -148,7 +128,7 @@ export async function POST(req: Request) {
   const { data: managerRows } = await db
     .from("profiles")
     .select("id")
-    .in("sms_from_number", phoneVariants(toPhone))
+    .in("sms_from_number", profilePhoneVariants(toPhone))
     .limit(1);
   const managerId = String((managerRows ?? [])[0]?.id ?? "").trim();
   if (!managerId) {
