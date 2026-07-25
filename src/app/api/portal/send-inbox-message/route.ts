@@ -8,6 +8,7 @@ import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notif
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
+import { inboxDeepLinkForRole } from "@/lib/platform/parity";
 import { appendInboxThreadReply, deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -48,15 +49,6 @@ function scopeForRole(role: string | null | undefined): string {
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
   if (normalized === "vendor") return VENDOR_INBOX_SCOPE;
   return RESIDENT_INBOX_SCOPE;
-}
-
-/** Deep-link a push notification tap into the recipient's own inbox. */
-function inboxDeepLinkForRole(role: string | null | undefined): string {
-  const normalized = String(role ?? "").trim().toLowerCase();
-  if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
-  if (normalized === "admin") return "/admin/communication/email/unopened";
-  if (normalized === "vendor") return "/vendor/communication/email/unopened";
-  return "/resident/communication/email/unopened";
 }
 
 type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" };
