@@ -16,8 +16,12 @@ import {
   isClawSharedLineBridgeEnabled,
   managerContactSmsPhoneForPublicCta,
 } from "@/lib/claw-leasing-links";
+import { isPhoneOptedOut } from "@/lib/sms-consent";
+import { quietHoursBlocks, type SmsSendClass } from "@/lib/sms/number-registration-policy";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { normalizeE164, sendSms } from "@/lib/twilio";
+
+export type { SmsSendClass };
 
 export type PropLaneSmsResult = {
   ok: boolean;
@@ -25,6 +29,35 @@ export type PropLaneSmsResult = {
   sid?: string;
   error?: string;
 };
+
+/**
+ * Transport-level consent + quiet-hours gate. Applied to EVERY send regardless
+ * of channel (Claw shared line or Twilio work number) so the opt-out ledger can
+ * never be bypassed — the ungated Claw path is exactly what got the A2P campaign
+ * rejected. `control` messages (STOP/HELP auto-replies) and explicit
+ * `skipConsentCheck` (phone-verification OTP) bypass the opt-out check; quiet
+ * hours only suppress `automated` traffic (rent reminders, bulk notices).
+ * Fails OPEN on infra error so a transient DB blip can't drop all messaging.
+ */
+async function transportGateBlocks(args: {
+  to: string;
+  sendClass: SmsSendClass;
+  skipConsentCheck?: boolean;
+}): Promise<PropLaneSmsResult | null> {
+  if (quietHoursBlocks(args.sendClass, new Date())) {
+    return { ok: false, error: "quiet_hours" };
+  }
+  if (args.sendClass === "control" || args.skipConsentCheck) return null;
+  try {
+    const db = createSupabaseServiceRoleClient();
+    if (await isPhoneOptedOut(db, args.to)) {
+      return { ok: false, error: "recipient_opted_out" };
+    }
+  } catch {
+    /* fail open */
+  }
+  return null;
+}
 
 function normalizeTo(raw: string): string | null {
   return normalizeE164Us(raw) ?? normalizeE164(raw);
@@ -77,6 +110,10 @@ export async function sendPropLaneSms(args: {
   to: string;
   text: string;
   fromNumber?: string | null;
+  /** Traffic class for the consent + quiet-hours gate (default transactional). */
+  sendClass?: SmsSendClass;
+  /** Bypass the opt-out check (compliance/verification only). */
+  skipConsentCheck?: boolean;
   /**
    * When set, logs outbound SMS for the Communication → SMS → Sent tab.
    * Pass `null` to skip (e.g. manager carbon-copy mirrors).
@@ -93,6 +130,14 @@ export async function sendPropLaneSms(args: {
   if (!text) return { ok: false, error: "empty_body" };
   const to = normalizeTo(args.to);
   if (!to) return { ok: false, error: "invalid_to" };
+
+  // Consent + quiet-hours gate — every channel, never bypassed.
+  const blocked = await transportGateBlocks({
+    to,
+    sendClass: args.sendClass ?? "transactional",
+    skipConsentCheck: args.skipConsentCheck,
+  });
+  if (blocked) return blocked;
 
   // Claw-primary: one agent line runs the entire messaging system.
   if (isClawTransportEnabled()) {
@@ -119,7 +164,9 @@ export async function sendPropLaneSms(args: {
   // Future Twilio path (Claw disabled).
   const from = managerContactSmsPhoneForPublicCta(args.fromNumber);
   if (from) {
-    const twilio = await sendSms(to, text, from);
+    // Consent already enforced by the transport gate above — don't re-gate (it
+    // would wrongly block control/skipConsentCheck sends the gate cleared).
+    const twilio = await sendSms(to, text, from, { skipOptOutCheck: true });
     if (twilio.sent) {
       await logOutboundIfNeeded({
         log: args.log,
@@ -148,6 +195,8 @@ export async function sendFromManagerWorkNumber(args: {
   fromNumber?: string | null;
   residentUserId?: string | null;
   source?: "work_number" | "relay" | "automated";
+  /** Traffic class for the consent + quiet-hours gate (default transactional). */
+  sendClass?: SmsSendClass;
   /** The recipient's capacity, so outbound threads under the same
    * conversation identity as their inbound (resident vs prospect). */
   counterpartyRole?: import("@/lib/sms-conversation-identity").SmsCounterpartyRole;
@@ -165,13 +214,23 @@ export async function sendFromManagerWorkNumber(args: {
     if (!from) {
       try {
         const db = createSupabaseServiceRoleClient();
-        const { data } = await db
-          .from("profiles")
-          .select("sms_from_number")
-          .eq("id", managerUserId)
-          .maybeSingle();
-        const raw = String(data?.sms_from_number ?? "").trim();
-        from = managerContactSmsPhoneForPublicCta(raw);
+        // Prefer the manager's OWN registration-approved number (ISV model): a
+        // number can exist but stay unable to send until that manager's own
+        // registration clears, in which case this returns null and we fall back.
+        const { resolveActiveManagerSendNumber } = await import(
+          "@/lib/sms/manager-number-provisioning.server"
+        );
+        const active = await resolveActiveManagerSendNumber(db, managerUserId);
+        from = managerContactSmsPhoneForPublicCta(active);
+        if (!from) {
+          const { data } = await db
+            .from("profiles")
+            .select("sms_from_number")
+            .eq("id", managerUserId)
+            .maybeSingle();
+          const raw = String(data?.sms_from_number ?? "").trim();
+          from = managerContactSmsPhoneForPublicCta(raw);
+        }
         if (!from) {
           const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
           const provisioned = await ensureManagerSmsNumber(db, managerUserId);
@@ -187,6 +246,7 @@ export async function sendFromManagerWorkNumber(args: {
     to: args.to,
     text: args.text,
     fromNumber: from,
+    sendClass: args.sendClass,
     log: args.skipLog
       ? null
       : {
@@ -210,6 +270,14 @@ export function scheduleManagerMessagingReady(managerUserId: string): void {
   const run = async () => {
     try {
       const db = createSupabaseServiceRoleClient();
+      // Every manager gets a provisioning record at signup — parked in
+      // `pending_registration` (no purchase, no cost) until an operator enables
+      // provisioning and the manager's registration is approved.
+      const { ensureManagerNumberRecord, provisionManagerNumber } = await import(
+        "@/lib/sms/manager-number-provisioning.server"
+      );
+      await ensureManagerNumberRecord(db, uid);
+
       if (isClawSharedLineBridgeEnabled() || isClawTransportEnabled()) {
         const agent = clawLeasingAgentPhoneE164();
         await db
@@ -218,8 +286,8 @@ export function scheduleManagerMessagingReady(managerUserId: string): void {
           .eq("id", uid);
         return;
       }
-      const { ensureManagerSmsNumber } = await import("@/lib/twilio-provisioning");
-      await ensureManagerSmsNumber(db, uid);
+      // Money-guarded: only actually buys when SMS_PROVISIONING_ENABLED=1.
+      await provisionManagerNumber(db, uid);
     } catch (e) {
       console.error("scheduleManagerMessagingReady failed", uid, e);
     }
