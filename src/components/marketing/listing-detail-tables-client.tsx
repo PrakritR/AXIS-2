@@ -982,28 +982,53 @@ export function LeaseBasicsTableInteractive({
   );
 }
 
+function bundlePromoIsShortBadge(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return t.length <= 36 && t.split(/\s+/).length <= 5;
+}
+
+function BundlePromoLine({ promo }: { promo: string }) {
+  const text = promo.trim();
+  if (!text) return null;
+  if (bundlePromoIsShortBadge(text)) {
+    return (
+      <div className="mt-2">
+        <AvailabilityPill text={text} />
+      </div>
+    );
+  }
+  return <p className="mt-2 text-sm leading-relaxed text-muted">{text}</p>;
+}
+
 function BundleRoomPreview({ row }: { row: BundleCard }) {
   const roomLines = row.roomLines ?? [];
   if (roomLines.length === 0) {
-    return <p className="mt-2 text-sm leading-relaxed text-muted">{row.roomsLine}</p>;
+    if (!row.roomsLine.trim()) return null;
+    return <p className="mt-3 text-xs leading-relaxed text-muted">{row.roomsLine}</p>;
   }
   const preview = roomLines.slice(0, 4);
   const remaining = roomLines.length - preview.length;
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {preview.map((line) => (
-        <span
-          key={line}
-          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground"
-        >
-          <span className="truncate">{line}</span>
-        </span>
-      ))}
-      {remaining > 0 ? (
-        <span className="inline-flex items-center rounded-full bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
-          +{remaining} more
-        </span>
+    <div className="mt-3">
+      {row.roomsLine.trim() ? (
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Included rooms</p>
       ) : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {preview.map((line) => (
+          <span
+            key={line}
+            className="inline-flex max-w-full items-center rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground"
+          >
+            <span className="truncate">{line}</span>
+          </span>
+        ))}
+        {remaining > 0 ? (
+          <span className="inline-flex items-center rounded-lg bg-accent/30 px-2.5 py-1 text-xs font-semibold text-muted">
+            +{remaining} more
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1031,13 +1056,13 @@ export function BundleTableInteractive({
           >
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
             <div className="relative pl-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
-                  <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{c.label}</p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-snug text-muted">{c.roomsLine}</p>
-                </div>
-                {c.promo ? <AvailabilityPill text={c.promo} /> : null}
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
+                <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{c.label}</p>
+                {c.promo ? <BundlePromoLine promo={c.promo} /> : null}
+                {c.roomLines?.length ? null : c.roomsLine.trim() ? (
+                  <p className="mt-2 text-xs leading-snug text-muted">{c.roomsLine}</p>
+                ) : null}
               </div>
               <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
@@ -1048,7 +1073,7 @@ export function BundleTableInteractive({
               </div>
               {c.summaryItems && c.summaryItems.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {c.summaryItems.slice(0, 3).map((item) => (
+                  {c.summaryItems.slice(0, 4).map((item) => (
                     <span
                       key={`${c.id}-${item.label}`}
                       className="inline-flex items-center rounded-full border border-border bg-accent/35 px-2.5 py-1 text-[10px] font-semibold text-foreground"
