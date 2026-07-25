@@ -73,6 +73,10 @@ beforeEach(() => {
   SESSION_USER_ID = null;
   uploadFails = () => false;
   calls = [];
+  // Publishing rooms without photos asks for confirmation, and jsdom's
+  // `confirm` is unimplemented (returns undefined), which would silently
+  // abort the submit before it ever reaches the upload path under test.
+  vi.stubGlobal("confirm", () => true);
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: unknown, init?: { body?: string }) => {
