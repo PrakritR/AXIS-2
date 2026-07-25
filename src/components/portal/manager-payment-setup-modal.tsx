@@ -8,14 +8,15 @@ import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-cli
 import {
   DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS,
   MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT,
-  type ManagerManualPaymentSettings,
+  type ManagerManualPaymentSettingsView,
 } from "@/lib/manager-manual-payment-settings";
 
 const ZELLE_URL = "https://www.zellepay.com/";
 const VENMO_URL = "https://account.venmo.com/";
+const DEMO_INBOX = "payments+demo-token@prop-lane.space";
 
-function draftFromSettings(settings: ManagerManualPaymentSettings | null): ManagerManualPaymentSettings {
-  return settings ?? DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS;
+function draftFromSettings(settings: ManagerManualPaymentSettingsView | null): ManagerManualPaymentSettingsView {
+  return settings ?? { ...DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS, paymentInboxAddress: DEMO_INBOX };
 }
 
 function HubRow({
@@ -62,12 +63,11 @@ export function ManagerPaymentSetupModal({
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
-  const [draft, setDraft] = useState<ManagerManualPaymentSettings>(() =>
-    draftFromSettings(null),
-  );
+  const [draft, setDraft] = useState<ManagerManualPaymentSettingsView>(() => draftFromSettings(null));
   const [loading, setLoading] = useState(false);
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeReady, setStripeReady] = useState(false);
+  const [savingReceiptLink, setSavingReceiptLink] = useState(false);
 
   const loadStripeStatus = useCallback(async () => {
     if (demo) {
@@ -91,29 +91,35 @@ export function ManagerPaymentSetupModal({
     }
   }, [demo]);
 
-  useEffect(() => {
-    if (!open) return;
-    void loadStripeStatus();
+  const loadSettings = useCallback(async () => {
     if (demo) {
-      setDraft(draftFromSettings(DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS));
+      setDraft(draftFromSettings({ ...DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS, paymentInboxAddress: DEMO_INBOX }));
       return;
     }
     setLoading(true);
-    void fetch("/api/portal/manager-manual-payment-settings", { credentials: "include" })
-      .then(async (res) => {
-        const data = (await res.json().catch(() => ({}))) as {
-          settings?: ManagerManualPaymentSettings;
-          error?: string;
-        };
-        if (!res.ok) {
-          showToast(data.error ?? "Could not load payment setup.");
-          return;
-        }
-        setDraft(draftFromSettings(data.settings ?? null));
-      })
-      .catch(() => showToast("Could not load payment setup."))
-      .finally(() => setLoading(false));
-  }, [open, demo, showToast, loadStripeStatus]);
+    try {
+      const res = await fetch("/api/portal/manager-manual-payment-settings", { credentials: "include" });
+      const data = (await res.json().catch(() => ({}))) as {
+        settings?: ManagerManualPaymentSettingsView;
+        error?: string;
+      };
+      if (!res.ok) {
+        showToast(data.error ?? "Could not load payment setup.");
+        return;
+      }
+      setDraft(draftFromSettings(data.settings ?? null));
+    } catch {
+      showToast("Could not load payment setup.");
+    } finally {
+      setLoading(false);
+    }
+  }, [demo, showToast]);
+
+  useEffect(() => {
+    if (!open) return;
+    void loadStripeStatus();
+    void loadSettings();
+  }, [open, loadStripeStatus, loadSettings]);
 
   useEffect(() => {
     if (!open) return;
@@ -129,6 +135,36 @@ export function ManagerPaymentSetupModal({
     }
   }
 
+  async function enableReceiptLinking() {
+    if (demo || savingReceiptLink) return;
+    if (draft.receiptAutoMarkEnabled !== false && draft.paymentInboxAddress) return;
+    setSavingReceiptLink(true);
+    try {
+      const res = await fetch("/api/portal/manager-manual-payment-settings", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiptAutoMarkEnabled: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        settings?: ManagerManualPaymentSettingsView;
+        error?: string;
+      };
+      if (!res.ok) {
+        showToast(data.error ?? "Could not enable receipt linking.");
+        return;
+      }
+      if (data.settings) {
+        setDraft(draftFromSettings(data.settings));
+        window.dispatchEvent(new CustomEvent(MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT));
+      }
+    } catch {
+      showToast("Could not enable receipt linking.");
+    } finally {
+      setSavingReceiptLink(false);
+    }
+  }
+
   async function linkStripe() {
     setStripeBusy(true);
     try {
@@ -140,19 +176,53 @@ export function ManagerPaymentSetupModal({
 
   function linkZelle() {
     openExternal(ZELLE_URL);
+    void enableReceiptLinking();
   }
 
   function linkVenmo() {
     openExternal(VENMO_URL);
+    void enableReceiptLinking();
   }
 
-  const zelleConnected = draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0;
-  const venmoConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
+  function copyInboxAddress() {
+    const address = draft.paymentInboxAddress?.trim();
+    if (!address) return;
+    void navigator.clipboard?.writeText(address).then(() => {
+      showToast("Forwarding address copied.");
+    });
+  }
+
+  const receiptLinkingActive =
+    draft.receiptAutoMarkEnabled !== false && Boolean(draft.paymentInboxAddress?.trim());
+  const zelleConnected = receiptLinkingActive;
+  const venmoConnected = receiptLinkingActive;
 
   return (
     <Modal open={open} title="Link payment" onClose={onClose}>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {loading ? <p className="text-sm text-muted">Loading…</p> : null}
+        {draft.paymentInboxAddress ? (
+          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">Receipt forwarding</p>
+            <p className="mt-1 text-sm text-foreground">
+              Forward Zelle and Venmo payment emails here. We match the <span className="font-mono">PL-</span>{" "}
+              code and amount, then mark the charge paid.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="break-all rounded-md bg-card px-2 py-1 text-xs text-foreground">
+                {draft.paymentInboxAddress}
+              </code>
+              <button
+                type="button"
+                onClick={copyInboxAddress}
+                data-attr="manager-payment-inbox-copy"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        ) : null}
         <HubRow
           label="Stripe link"
           connected={stripeReady}
@@ -165,12 +235,14 @@ export function ManagerPaymentSetupModal({
           connected={zelleConnected}
           onLink={linkZelle}
           dataAttr="manager-payment-zelle-link"
+          busy={savingReceiptLink}
         />
         <HubRow
           label="Venmo link"
           connected={venmoConnected}
           onLink={linkVenmo}
           dataAttr="manager-payment-venmo-link"
+          busy={savingReceiptLink}
         />
       </div>
     </Modal>

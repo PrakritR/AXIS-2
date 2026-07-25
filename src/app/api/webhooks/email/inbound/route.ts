@@ -21,6 +21,9 @@ import {
   ingestInboundEmail,
   parseInboundEmailWebhook,
 } from "@/lib/inbound-email/inbound-email.server";
+import { isPaymentInboxEmail } from "@/lib/payment-receipt-email/payment-inbox";
+import { processInboundPaymentReceiptEmail } from "@/lib/payment-receipt-email/process-receipt.server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { verifyResendWebhookSignature } from "@/lib/inbound-email/verify-signature";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -82,6 +85,30 @@ export async function POST(req: Request) {
   if (!rateLimit(`email-inbound:${parsed.fromEmail}`, 120, 60_000).ok) {
     console.warn("inbound-email rate-limited", parsed.fromEmail, parsed.emailId);
     return ok({ rateLimited: true });
+  }
+
+  if (isPaymentInboxEmail(parsed.toEmails)) {
+    const processReceipt = () =>
+      processInboundPaymentReceiptEmail(parsed, createSupabaseServiceRoleClient())
+        .then((result) => {
+          if (result.outcome === "marked_paid") {
+            console.info(
+              "payment-receipt marked paid",
+              result.emailId,
+              result.chargeId,
+              result.channel,
+            );
+          } else if (result.outcome === "no_match" || result.outcome === "ambiguous") {
+            console.warn("payment-receipt unmatched", result);
+          }
+        })
+        .catch((e) => console.warn("payment-receipt processing errored", parsed.emailId, e));
+    try {
+      after(processReceipt);
+    } catch {
+      void processReceipt();
+    }
+    return ok({ paymentInbox: true });
   }
 
   let created: boolean;

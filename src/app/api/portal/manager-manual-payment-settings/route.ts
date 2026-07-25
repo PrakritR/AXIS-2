@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
 import {
-  loadManagerManualPaymentSettings,
   managerManualPaymentSettingsPublic,
   normalizeManagerManualPaymentSettings,
   saveManagerManualPaymentSettings,
 } from "@/lib/manager-manual-payment-settings";
+import { ensureManagerPaymentInbox } from "@/lib/payment-receipt-email/payment-inbox";
 import { applyManagerManualPaymentsToListings } from "@/lib/manager-manual-payment-settings.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -35,8 +35,12 @@ export async function GET() {
   try {
     const ctx = await requireManager();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const settings = await loadManagerManualPaymentSettings(ctx.db, ctx.userId);
-    return NextResponse.json({ settings: managerManualPaymentSettingsPublic(settings) });
+    const inbox = await ensureManagerPaymentInbox(ctx.db, ctx.userId);
+    return NextResponse.json({
+      settings: managerManualPaymentSettingsPublic(inbox, {
+        paymentInboxAddress: inbox.paymentInboxAddress,
+      }),
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -49,17 +53,21 @@ export async function PATCH(req: Request) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const body = (await req.json()) as Record<string, unknown>;
     const { applyToAllListings, ...rest } = body;
-    const settings = await saveManagerManualPaymentSettings(
+    const saved = await saveManagerManualPaymentSettings(
       ctx.db,
       ctx.userId,
       normalizeManagerManualPaymentSettings(rest),
     );
+    const inbox = await ensureManagerPaymentInbox(ctx.db, ctx.userId);
+    const settings = { ...saved, paymentInboxToken: inbox.paymentInboxToken };
     let listingsUpdated = 0;
     if (applyToAllListings === true) {
       listingsUpdated = await applyManagerManualPaymentsToListings(ctx.db, ctx.userId, settings);
     }
     return NextResponse.json({
-      settings: managerManualPaymentSettingsPublic(settings),
+      settings: managerManualPaymentSettingsPublic(settings, {
+        paymentInboxAddress: inbox.paymentInboxAddress,
+      }),
       listingsUpdated,
     });
   } catch (e) {

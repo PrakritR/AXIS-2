@@ -6,8 +6,11 @@ import {
 } from "@/lib/manager-manual-payment-settings";
 
 describe("manager manual payment settings", () => {
-  it("defaults to all methods off", () => {
-    expect(normalizeManagerManualPaymentSettings(null)).toEqual(DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS);
+  it("defaults to all methods off with receipt linking on", () => {
+    expect(normalizeManagerManualPaymentSettings(null)).toEqual({
+      ...DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS,
+      receiptAutoMarkEnabled: true,
+    });
   });
 
   it("requires a contact when a method is enabled", () => {
@@ -23,6 +26,7 @@ describe("manager manual payment settings", () => {
       zelleContact: "",
       venmoPaymentsEnabled: true,
       venmoContact: "@payme",
+      receiptAutoMarkEnabled: true,
     });
   });
 
@@ -39,6 +43,7 @@ describe("manager manual payment settings", () => {
       zelleContact: "name@email.com",
       venmoPaymentsEnabled: false,
       venmoContact: "",
+      receiptAutoMarkEnabled: true,
     });
   });
 });

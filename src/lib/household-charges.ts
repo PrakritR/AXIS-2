@@ -110,6 +110,8 @@ export type HouseholdCharge = {
   manualPaymentReportedAt?: string;
   /** Short memo code residents include in Zelle/Venmo payments for manager matching. */
   paymentReference?: string;
+  /** Resend inbound email id when a receipt auto-marked this charge paid. */
+  paidViaEmailReceiptId?: string;
   /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
   axisPaymentsEnabledSnapshot?: boolean;
   /** Payment methods the property currently accepts, refreshed from the listing on each server sync. */
