@@ -406,63 +406,62 @@ that prefer it, so editing only the SVG leaves the old mark visible.
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
-**Production Branch is `main`**. There is **no `production` branch** — it was
-deleted after the production branch was migrated to `main`; don't recreate it.
+**Production Branch is `production`** (flipped from `main` on Jul 25, 2026).
 Two branches, two roles:
 
-- **`main` — the live site.** Every push here triggers a **production deploy** to
-  Vercel (the only branch that deploys — see `vercel.json` `git.deploymentEnabled`).
-  Real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
-  legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
-  still recognized as production by `isProductionAxisHost`), and
-  `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
-  (see below). Outbound email/SMS and shareable links use the canonical origin
-  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
-  this branch. Never commit straight to it.
-- **`prakrit` — integration branch.** Day-to-day work merges here. Pushes to
-  `prakrit` and feature branches do **not** trigger Vercel builds (previews are
-  disabled). Verify on localhost or the dev worktree before promoting to `main`.
-  **Never push feature branches (`claude`, `cursor-*`, etc.) expecting a deploy**
-  — only `main` builds.
+- **`production` — the live site.** Every push here triggers a **production
+  deploy** to the real domains: the canonical `prop-lane.space` /
+  `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
+  `www.axis-seattle-housing.com` (still live, still recognized as production by
+  `isProductionAxisHost`), and `axis-2.vercel.app`. A push to `production`
+  **also** ships an iOS TestFlight build (see below). Outbound email/SMS and
+  shareable links use the canonical origin (`PRODUCTION_APP_ORIGIN` in
+  `src/lib/app-url.ts`). Only ship-ready code reaches this branch. Never commit
+  straight to it.
+- **`main` — dev/integration.** Day-to-day work merges here. Pushes to `main`
+  build **Preview** deployments — the staging surface for ship-gate
+  verification. Feature branches do not build. **`prakrit` is retired** — do
+  not merge new work into it.
 
-**Promote `prakrit` → `main` to ship.** When `prakrit` is verified locally and
-you want it live:
+**Promote `main` → `production` to ship.** When `main` is verified on its
+preview and you want it live:
 
 ```
-git checkout main
+git checkout production
 git pull
-git merge --ff-only prakrit   # main should stay a fast-forward of prakrit
-git push origin main          # Vercel auto-deploys web + triggers iOS TestFlight
-git checkout prakrit
+git merge --ff-only main      # production should stay a fast-forward of main
+git push origin production    # Vercel auto-deploys web + triggers iOS TestFlight
+git checkout main
 ```
 
-Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
-`main`); this keeps history linear and makes rollbacks obvious. To roll back,
-point `main` at the previous known-good commit and push, or use Vercel's
-**Instant Rollback** in the dashboard.
+Keep `production` a strict fast-forward of `main` (never commit unique work to
+`production`); this keeps history linear and makes rollbacks obvious. To roll
+back, point `production` at the previous known-good commit and push, or use
+Vercel's **Instant Rollback** in the dashboard.
 
-Only `main` deploys to Vercel. Enforcement is **three layers** (do not weaken):
+Only `main` (previews) and `production` (production) deploy. Enforcement is
+**three layers** (do not weaken):
 
 1. **Vercel project** `axis-2` → Settings → Git → **Ignored Build Step**:
-   `[ "$VERCEL_GIT_COMMIT_REF" != "main" ]` (skips every non-`main` push, even
-   old branches without current `vercel.json`).
-2. **`vercel.json`** `git.deploymentEnabled`: only `main` is `true`.
+   `[ "$VERCEL_GIT_COMMIT_REF" != "main" ] && [ "$VERCEL_GIT_COMMIT_REF" != "production" ]`
+   (skips every other push, even old branches without current `vercel.json`).
+2. **`vercel.json`** `git.deploymentEnabled`: only `main` and `production` are `true`.
 3. **`vercel.json`** `ignoreCommand`: `scripts/vercel-should-build.sh` (same rule).
 
-Do not re-enable preview deploys or remove the Ignored Build Step without an
-explicit captain decision.
+Do not widen the deployable-branch set or remove the Ignored Build Step without
+an explicit captain decision.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. It is `main`; don't change it.
+Git**. It is `production`; don't change it.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
-Every push to `main` must update **both** the live website **and** the mobile app
-pipeline:
+Every push to `production` must update **both** the live website **and** the
+mobile app pipeline:
 
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
-   runs on `push` to `main`: `npx cap sync ios` with
+   runs on `push` to `production`: `npx cap sync ios` with
    `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
    `bundle exec fastlane beta` uploads a new build to **TestFlight**. The
    workflow also exposes `workflow_dispatch` for an on-demand build.
@@ -471,7 +470,7 @@ Agents promoting to production **must**:
 
 - Confirm ASC secrets exist (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`) so the
   macOS job does not self-skip.
-- After `git push origin main`, watch the **iOS TestFlight** workflow until green
+- After `git push origin production`, watch the **iOS TestFlight** workflow until green
   (or report the failure). Do not treat “web deployed” as done.
 - If native shell files changed (`ios/`, `capacitor.config.ts`, plugins,
   permissions), call out that TestFlight + App Store review may be required
@@ -487,8 +486,8 @@ Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).
 
 # Mandatory ship / change gate (agents)
 
-Before marking feature work done, and **always** before promoting `prakrit` →
-`main`, agents must complete this gate. Skipping is not allowed unless the user
+Before marking feature work done, and **always** before promoting `main` →
+`production`, agents must complete this gate. Skipping is not allowed unless the user
 explicitly waives a named step.
 
 ## 1. Reviews (run in parallel when possible)
@@ -529,8 +528,8 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Reviews complete (security + bugbot + cache/rendering as applicable)
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
-[ ] prakrit verified on localhost / dev worktree (no Vercel preview)
-[ ] ff-only merge prakrit → main + push
+[ ] main verified on its Vercel preview (or localhost / dev worktree)
+[ ] ff-only merge main → production + push
 [ ] Vercel production deploy healthy
 [ ] iOS TestFlight workflow green (or secrets gap reported)
 ```
