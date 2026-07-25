@@ -82,9 +82,13 @@ Sign-in Google OAuth (above) is separate from **Calendar sync**. Each manager co
 2. Enable the **Google Calendar API** for the same project: APIs & Services → Library → search “Google Calendar API” → **Enable**. (Without this, connect succeeds but event sync fails.)
 3. Add **Authorized redirect URIs** (use the port you open in the browser — each port needs its own URI unless `GOOGLE_CALENDAR_REDIRECT_ORIGIN` is set):
    - `http://localhost:3010/api/portal/google-calendar/callback` (Cursor 1)
+   - `http://localhost:3010/api/portal/gmail-payments/callback` (Gmail payment tracking — same port as calendar when using redirect override)
    - `http://localhost:3009/api/portal/google-calendar/callback` (prakrit integration)
+   - `http://localhost:3009/api/portal/gmail-payments/callback`
    - `http://localhost:3011/api/portal/google-calendar/callback` (Cursor 2)
+   - `http://localhost:3011/api/portal/gmail-payments/callback`
    - Production: `{NEXT_PUBLIC_APP_URL}/api/portal/google-calendar/callback` (read from Vercel / `.env.local` — do not hardcode a marketing domain)
+   - Production: `{NEXT_PUBLIC_APP_URL}/api/portal/gmail-payments/callback`
 4. Set `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET` in `.env.local` / Vercel.
    Use the **same** Google OAuth client ID and secret as Supabase **Authentication → Providers → Google** so sign-in tokens work for calendar sync.
 5. Apply migration `20260723220000_google_calendar_integration.sql` on Supabase.

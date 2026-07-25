@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePaymentReceiptEmail } from "@/lib/payment-receipt-email/parse-receipt";
+import { parsePaymentReceiptEmail, parseWorkOrderPaymentReceiptEmail } from "@/lib/payment-receipt-email/parse-receipt";
 import {
   extractPaymentInboxToken,
   paymentInboxAddress,
@@ -33,6 +33,7 @@ describe("parsePaymentReceiptEmail", () => {
       channel: "venmo",
       amountCents: 15000,
       paymentReference: "PL-ABC123",
+      referenceKind: "resident_charge",
     });
   });
 
@@ -46,6 +47,7 @@ describe("parsePaymentReceiptEmail", () => {
       channel: "zelle",
       amountCents: 7550,
       paymentReference: "PL-Z9X8Y7",
+      referenceKind: "resident_charge",
     });
   });
 
@@ -64,6 +66,32 @@ describe("parsePaymentReceiptEmail", () => {
       parsePaymentReceiptEmail({
         fromEmail: "spam@evil.com",
         subject: "You paid $50.00",
+        body: "PL-ABC123",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("parseWorkOrderPaymentReceiptEmail", () => {
+  it("parses a Venmo payout with WO- reference", () => {
+    const parsed = parseWorkOrderPaymentReceiptEmail({
+      fromEmail: "notify@venmo.com",
+      subject: "You received $250.00",
+      body: "Note: WO-ABC123",
+    });
+    expect(parsed).toEqual({
+      channel: "venmo",
+      amountCents: 25000,
+      paymentReference: "WO-ABC123",
+      referenceKind: "work_order",
+    });
+  });
+
+  it("rejects PL- codes for work-order parser", () => {
+    expect(
+      parseWorkOrderPaymentReceiptEmail({
+        fromEmail: "notify@venmo.com",
+        subject: "You received $50.00",
         body: "PL-ABC123",
       }),
     ).toBeNull();

@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 
-import { gmailPaymentsPublicStatus, loadGmailPaymentsConnection, clearGmailPaymentsConnection } from "@/lib/gmail-payments/settings";
-import { requireManager } from "@/lib/gmail-payments/require-manager.server";
+import {
+  clearGmailPaymentsConnection,
+  gmailPaymentsPublicStatus,
+  loadGmailPaymentsConnection,
+} from "@/lib/gmail-payments/settings";
+import { requireVendor } from "@/lib/gmail-payments/require-vendor.server";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const ctx = await requireManager();
+    const ctx = await requireVendor();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const connection = await loadGmailPaymentsConnection(ctx.db, ctx.userId, "manager");
+    const connection = await loadGmailPaymentsConnection(ctx.db, ctx.userId, "vendor");
     return NextResponse.json({ status: gmailPaymentsPublicStatus(connection) });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
@@ -19,9 +23,9 @@ export async function GET() {
 
 export async function DELETE() {
   try {
-    const ctx = await requireManager();
+    const ctx = await requireVendor();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    await clearGmailPaymentsConnection(ctx.db, ctx.userId, "manager");
+    await clearGmailPaymentsConnection(ctx.db, ctx.userId, "vendor");
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

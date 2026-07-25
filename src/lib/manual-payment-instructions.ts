@@ -1,8 +1,44 @@
 import type { HouseholdCharge } from "@/lib/household-charges";
-import { generatePaymentReference } from "@/lib/payment-reference";
+import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { generatePaymentReference, generateWorkOrderPaymentReference } from "@/lib/payment-reference";
 
 export function chargePaymentReference(charge: Pick<HouseholdCharge, "id" | "paymentReference">): string {
   return charge.paymentReference?.trim() || generatePaymentReference(charge.id);
+}
+
+export function workOrderPaymentReference(workOrder: Pick<DemoManagerWorkOrderRow, "id" | "paymentReference">): string {
+  return workOrder.paymentReference?.trim() || generateWorkOrderPaymentReference(workOrder.id);
+}
+
+/** Payment lines for vendor work-order payouts (Zelle/Venmo + WO- reference). */
+export function buildWorkOrderPayoutInstructionLines(
+  workOrder: Pick<DemoManagerWorkOrderRow, "id" | "paymentReference" | "cost" | "vendorCostCents" | "materialsCostCents"> & {
+    zelleContactSnapshot?: string;
+    venmoContactSnapshot?: string;
+  },
+  amountLabel: string,
+): string[] {
+  const ref = workOrderPaymentReference(workOrder);
+  const lines: string[] = [];
+  const zelle = workOrder.zelleContactSnapshot?.trim();
+  const venmo = workOrder.venmoContactSnapshot?.trim();
+
+  if (zelle || venmo) {
+    lines.push("", "Pay with:");
+    if (zelle) {
+      lines.push(`• Zelle: send ${amountLabel ? `${amountLabel} to ` : "to "}${zelle}`);
+      lines.push(`  Memo: ${ref}`);
+    }
+    if (venmo) {
+      lines.push(`• Venmo: send ${amountLabel ? `${amountLabel} to ` : "to "}${venmo}`);
+      lines.push(`  Note: ${ref}`);
+    }
+    lines.push("", "Include the reference code so the vendor can match this payment automatically.");
+  } else if (ref) {
+    lines.push("", `Payment reference: ${ref}`);
+  }
+
+  return lines;
 }
 
 /** Payment lines for reminders and resident-facing copy (Zelle/Venmo + PL- reference). */

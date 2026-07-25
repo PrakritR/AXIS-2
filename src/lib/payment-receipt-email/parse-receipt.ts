@@ -4,17 +4,19 @@ export type ParsedPaymentReceipt = {
   channel: PaymentReceiptChannel;
   amountCents: number;
   paymentReference: string;
+  referenceKind: "resident_charge" | "work_order";
 };
 
 const PL_REFERENCE = /\b(PL-[A-Z0-9]{6})\b/;
+const WO_REFERENCE = /\b(WO-[A-Z0-9]{6})\b/;
 const AMOUNT_PATTERNS = [
   /\$\s*([\d,]+(?:\.\d{2})?)/,
   /(?:USD\s*)?([\d,]+\.\d{2})\s*(?:USD)?/i,
   /amount[:\s]+\$?\s*([\d,]+(?:\.\d{2})?)/i,
 ];
 
-const VENMO_SENDER_SUFFIXES = ["@venmo.com", "@mail.venmo.com", "@e.venmo.com"];
-const ZELLE_SENDER_SUFFIXES = ["@zellepay.com", "@notify.zellepay.com"];
+export const VENMO_SENDER_SUFFIXES = ["@venmo.com", "@mail.venmo.com", "@e.venmo.com"];
+export const ZELLE_SENDER_SUFFIXES = ["@zellepay.com", "@notify.zellepay.com"];
 
 function parseAmountCents(text: string): number | null {
   for (const pattern of AMOUNT_PATTERNS) {
@@ -60,19 +62,15 @@ function senderLooksLikeReceipt(fromEmail: string, channel: PaymentReceiptChanne
   );
 }
 
-/**
- * Parse a Venmo or Zelle payment receipt email for PL- reference + amount.
- * Returns null when the message does not look like a trusted receipt.
- */
-export function parsePaymentReceiptEmail(opts: {
-  fromEmail: string;
-  subject: string;
-  body: string;
-}): ParsedPaymentReceipt | null {
+function parseWithReference(
+  opts: { fromEmail: string; subject: string; body: string },
+  pattern: RegExp,
+  referenceKind: ParsedPaymentReceipt["referenceKind"],
+): ParsedPaymentReceipt | null {
   const subject = opts.subject.trim();
   const body = opts.body.trim();
   const combined = `${subject}\n${body}`;
-  const refMatch = PL_REFERENCE.exec(combined);
+  const refMatch = pattern.exec(combined);
   if (!refMatch?.[1]) return null;
 
   const amountCents = parseAmountCents(combined);
@@ -86,5 +84,33 @@ export function parsePaymentReceiptEmail(opts: {
     channel,
     amountCents,
     paymentReference: refMatch[1],
+    referenceKind,
   };
+}
+
+/** Parse resident charge receipt (PL- reference). */
+export function parsePaymentReceiptEmail(opts: {
+  fromEmail: string;
+  subject: string;
+  body: string;
+}): ParsedPaymentReceipt | null {
+  return parseWithReference(opts, PL_REFERENCE, "resident_charge");
+}
+
+/** Parse vendor work-order payout receipt (WO- reference). */
+export function parseWorkOrderPaymentReceiptEmail(opts: {
+  fromEmail: string;
+  subject: string;
+  body: string;
+}): ParsedPaymentReceipt | null {
+  return parseWithReference(opts, WO_REFERENCE, "work_order");
+}
+
+/** Parse either PL- or WO- payment receipt. */
+export function parseAnyPaymentReceiptEmail(opts: {
+  fromEmail: string;
+  subject: string;
+  body: string;
+}): ParsedPaymentReceipt | null {
+  return parsePaymentReceiptEmail(opts) ?? parseWorkOrderPaymentReceiptEmail(opts);
 }

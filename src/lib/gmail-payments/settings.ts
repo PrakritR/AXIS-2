@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isGoogleCalendarOAuthConfigured } from "@/lib/google-calendar/settings";
 
+import { gmailPaymentsStorageKey, type GmailPaymentTrackRole } from "./portal-role";
+
 export type GmailPaymentsConnection = {
   connected: boolean;
   email: string | null;
@@ -50,41 +52,58 @@ function rowDataRecord(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
 }
 
+function readConnectionFromRowData(
+  rowData: Record<string, unknown>,
+  role: GmailPaymentTrackRole,
+): GmailPaymentsConnection {
+  const key = gmailPaymentsStorageKey(role);
+  const nested = rowData[key];
+  if (nested) return normalizeGmailPaymentsConnection(nested);
+  // Legacy flat gmailPayments = manager connection
+  if (role === "manager" && rowData.gmailPayments) {
+    return normalizeGmailPaymentsConnection(rowData.gmailPayments);
+  }
+  return { ...DEFAULT_GMAIL_PAYMENTS_CONNECTION };
+}
+
 export async function loadGmailPaymentsConnection(
   db: SupabaseClient,
-  managerUserId: string,
+  userId: string,
+  role: GmailPaymentTrackRole,
 ): Promise<GmailPaymentsConnection> {
   const { data, error } = await db
     .from("manager_automation_settings")
     .select("row_data")
-    .eq("manager_user_id", managerUserId)
+    .eq("manager_user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  const raw = (data?.row_data as Record<string, unknown> | null)?.gmailPayments;
-  return normalizeGmailPaymentsConnection(raw);
+  return readConnectionFromRowData(rowDataRecord(data?.row_data), role);
 }
 
 export async function saveGmailPaymentsConnection(
   db: SupabaseClient,
-  managerUserId: string,
+  userId: string,
+  role: GmailPaymentTrackRole,
   patch: Partial<GmailPaymentsConnection>,
 ): Promise<GmailPaymentsConnection> {
-  const current = await loadGmailPaymentsConnection(db, managerUserId);
+  const current = await loadGmailPaymentsConnection(db, userId, role);
   const next = normalizeGmailPaymentsConnection({ ...current, ...patch });
   const { data: existing, error: readError } = await db
     .from("manager_automation_settings")
     .select("row_data")
-    .eq("manager_user_id", managerUserId)
+    .eq("manager_user_id", userId)
     .maybeSingle();
   if (readError) throw readError;
 
-  const row_data = {
-    ...rowDataRecord(existing?.row_data),
-    gmailPayments: next,
-  };
+  const row_data = rowDataRecord(existing?.row_data);
+  row_data[gmailPaymentsStorageKey(role)] = next;
+  if (role === "manager") {
+    row_data.gmailPayments = next;
+  }
+
   const { error } = await db.from("manager_automation_settings").upsert(
     {
-      manager_user_id: managerUserId,
+      manager_user_id: userId,
       row_data,
       updated_at: new Date().toISOString(),
     },
@@ -96,9 +115,10 @@ export async function saveGmailPaymentsConnection(
 
 export async function clearGmailPaymentsConnection(
   db: SupabaseClient,
-  managerUserId: string,
+  userId: string,
+  role: GmailPaymentTrackRole,
 ): Promise<void> {
-  await saveGmailPaymentsConnection(db, managerUserId, {
+  await saveGmailPaymentsConnection(db, userId, role, {
     ...DEFAULT_GMAIL_PAYMENTS_CONNECTION,
     connected: false,
   });

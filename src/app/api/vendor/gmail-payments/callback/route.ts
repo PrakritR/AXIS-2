@@ -15,21 +15,21 @@ export async function GET(req: Request) {
 
   if (oauthError) {
     const reason = encodeURIComponent(oauthErrorDescription ?? oauthError);
-    return NextResponse.redirect(`${callbackOrigin}/portal/payments?gmail-pay=error&reason=${reason}`);
+    return NextResponse.redirect(`${callbackOrigin}/vendor/payments?gmail-pay=error&reason=${reason}`);
   }
 
   if (!code || !state) {
     const reason = encodeURIComponent("Google did not return an authorization code. Try Connect again.");
-    return NextResponse.redirect(`${callbackOrigin}/portal/payments?gmail-pay=error&reason=${reason}`);
+    return NextResponse.redirect(`${callbackOrigin}/vendor/payments?gmail-pay=error&reason=${reason}`);
   }
 
   const oauthState = verifyGmailPaymentsOAuthState(state);
   if (!oauthState) {
     const reason = encodeURIComponent("Gmail connect session expired. Click Connect again.");
-    return NextResponse.redirect(`${callbackOrigin}/portal/payments?gmail-pay=error&reason=${reason}`);
+    return NextResponse.redirect(`${callbackOrigin}/vendor/payments?gmail-pay=error&reason=${reason}`);
   }
 
-  const returnTo = `${oauthState.returnOrigin}/portal/payments`;
+  const returnTo = `${oauthState.returnOrigin}/vendor/payments`;
 
   try {
     const db = createSupabaseServiceRoleClient();

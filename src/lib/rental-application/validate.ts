@@ -402,8 +402,8 @@ export function validateStandardWizardStep(
       if (!isAchApplicationFeeChannel(payChannel) && !f.applicationFeeZelleSentConfirmed) {
         e.applicationFeeZelleSentConfirmed =
           payChannel === "other"
-            ? "Confirm you followed the manager's payment instructions."
-            : `Confirm you sent the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`;
+            ? "Check payment before submitting your application."
+            : `Tap Check payment after sending the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`;
       }
     }
     return e;

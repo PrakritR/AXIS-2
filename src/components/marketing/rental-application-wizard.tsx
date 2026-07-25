@@ -202,6 +202,8 @@ function RentalApplicationWizardInner({
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
+  const [applicationFeeCheckBusy, setApplicationFeeCheckBusy] = useState(false);
+  const [applicationFeeCheckError, setApplicationFeeCheckError] = useState<string | null>(null);
   const router = useRouter();
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
@@ -575,6 +577,70 @@ function RentalApplicationWizardInner({
     };
   }, [form.propertyId, form.email, feeStepUserId, chargeTick]);
 
+  const applicationFeePaymentVerified =
+    applicationFeeGate.paid || form.applicationFeeZelleSentConfirmed;
+
+  const handleCheckApplicationFeePayment = useCallback(async () => {
+    const pid = form.propertyId.trim();
+    const emailTrim = form.email.trim();
+    const prop = pid ? getPropertyById(pid) : undefined;
+    const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
+    if (!pid || !emailTrim.includes("@")) {
+      setApplicationFeeCheckError("Enter your email and property before checking payment.");
+      return;
+    }
+    if (isAchApplicationFeeChannel(payChannel)) return;
+
+    setApplicationFeeCheckBusy(true);
+    setApplicationFeeCheckError(null);
+    try {
+      ensurePendingApplicationFeeCharge({
+        residentEmail: form.email,
+        residentName: form.fullLegalName,
+        residentUserId: feeStepUserId,
+        propertyId: pid,
+      });
+
+      const res = await fetch("/api/public/application-fee-check-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId: pid,
+          residentEmail: emailTrim,
+          channel: payChannel,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        paid?: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setApplicationFeeCheckError(typeof data.error === "string" ? data.error : "Could not check payment.");
+        return;
+      }
+      if (!data.paid) {
+        setApplicationFeeCheckError(
+          typeof data.message === "string" ? data.message : "Payment not paid. Please send payment.",
+        );
+        setForm((f) => ({ ...f, applicationFeeZelleSentConfirmed: false }));
+        setErrors((e) => ({ ...e, applicationFeeZelleSentConfirmed: "" }));
+        return;
+      }
+      setForm((f) => ({ ...f, applicationFeeZelleSentConfirmed: true }));
+      setErrors((e) => ({ ...e, applicationFeeZelleSentConfirmed: "" }));
+      setChargeTick((n) => n + 1);
+      showToast("Payment verified.");
+    } finally {
+      setApplicationFeeCheckBusy(false);
+    }
+  }, [feeStepUserId, form.applicationFeePayChannel, form.email, form.fullLegalName, form.propertyId, showToast]);
+
+  useEffect(() => {
+    setApplicationFeeCheckError(null);
+  }, [form.applicationFeePayChannel]);
+
   const finalizeApplicationSubmit = useCallback(
     async (residentUserId: string | null) => {
       if (submitting) return;
@@ -735,9 +801,12 @@ function RentalApplicationWizardInner({
       return checkoutBusy ? "Opening secure checkout…" : applicationFeeGate.paid ? "Submit application" : "Pay application fee";
     }
     if (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other") {
-      return "Submit application";
+      if (!applicationFeePaymentVerified) {
+        return applicationFeeCheckBusy ? "Checking payment…" : "Check payment first";
+      }
+      return submitting ? "Submitting…" : "Submit application";
     }
-    return "Submit application";
+    return submitting ? "Submitting…" : "Submit application";
   }, [
     step,
     form,
@@ -746,6 +815,9 @@ function RentalApplicationWizardInner({
     form.applicationFeePayChannel,
     checkoutBusy,
     applicationFeeGate.paid,
+    applicationFeeGate.needsFee,
+    applicationFeePaymentVerified,
+    applicationFeeCheckBusy,
     submitting,
   ]);
 
@@ -922,21 +994,60 @@ function RentalApplicationWizardInner({
         }
 
         if (needsFee && (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other")) {
-          const e = validateRentalWizardStep(12, form);
-          if (countValidationErrors(e) > 0) {
-            setErrors(e);
-            showToast("Please confirm your application fee payment before submitting.");
-            queueMicrotask(() =>
-              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], e),
-            );
-            return;
-          }
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
             residentName: form.fullLegalName,
             residentUserId,
             propertyId: pid,
           });
+
+          const checkRes = await fetch("/api/public/application-fee-check-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              propertyId: pid,
+              residentEmail: emailTrim,
+              channel: payChannel,
+            }),
+          });
+          const checkData = (await checkRes.json().catch(() => ({}))) as {
+            paid?: boolean;
+            message?: string;
+            error?: string;
+          };
+          if (!checkRes.ok) {
+            const msg = typeof checkData.error === "string" ? checkData.error : "Could not verify payment.";
+            setApplicationFeeCheckError(msg);
+            showToast(msg);
+            return;
+          }
+          if (!checkData.paid) {
+            const msg =
+              typeof checkData.message === "string"
+                ? checkData.message
+                : "Payment not paid. Please send payment.";
+            setForm((f) => ({ ...f, applicationFeeZelleSentConfirmed: false }));
+            setApplicationFeeCheckError(msg);
+            setErrors((e) => ({
+              ...e,
+              applicationFeeZelleSentConfirmed:
+                payChannel === "other"
+                  ? "Check payment before submitting your application."
+                  : `Tap Check payment after sending the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`,
+            }));
+            showToast(msg);
+            queueMicrotask(() =>
+              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], {
+                applicationFeeZelleSentConfirmed: msg,
+              }),
+            );
+            return;
+          }
+
+          setForm((f) => ({ ...f, applicationFeeZelleSentConfirmed: true }));
+          setApplicationFeeCheckError(null);
+          setErrors((e) => ({ ...e, applicationFeeZelleSentConfirmed: "" }));
+          setChargeTick((n) => n + 1);
           finalizeApplicationSubmit(residentUserId);
           return;
         }
@@ -1149,6 +1260,12 @@ function RentalApplicationWizardInner({
                 emailLocked={mode === "portal" && Boolean(sessionEmail?.includes("@"))}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
+                applicationFeeCheckBusy={applicationFeeCheckBusy}
+                applicationFeeCheckError={applicationFeeCheckError}
+                applicationFeePaymentVerified={applicationFeePaymentVerified}
+                onCheckApplicationFeePayment={() => {
+                  void handleCheckApplicationFeePayment();
+                }}
                 occupancySyncEpoch={occupancySyncEpoch}
                 showAvailabilityWarnings={showAvailabilityWarnings}
                 setPhone={setPhone}

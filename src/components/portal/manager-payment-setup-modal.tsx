@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,11 @@ import {
   MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT,
   type ManagerManualPaymentSettingsView,
 } from "@/lib/manager-manual-payment-settings";
+import { useGmailPaymentTrack } from "@/components/portal/gmail-payment-auto-track-panel";
 
-const ZELLE_URL = "https://www.zellepay.com/";
-const VENMO_URL = "https://account.venmo.com/";
 const DEMO_INBOX = "payments+demo-token@prop-lane.space";
+
+type PaymentChannel = "zelle" | "venmo";
 
 function draftFromSettings(settings: ManagerManualPaymentSettingsView | null): ManagerManualPaymentSettingsView {
   return settings ?? { ...DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS, paymentInboxAddress: DEMO_INBOX };
@@ -27,18 +28,27 @@ function HubRow({
   onLink,
   dataAttr,
   busy,
+  linkLabel = "Link",
 }: {
   label: string;
   connected: boolean;
   onLink: () => void;
   dataAttr: string;
   busy?: boolean;
+  linkLabel?: string;
 }) {
   return (
     <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
       <span className="text-sm font-semibold text-foreground">{label}</span>
       {connected ? (
-        <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">Connected</span>
+        <button
+          type="button"
+          onClick={onLink}
+          data-attr={dataAttr}
+          className="text-sm font-medium text-[var(--status-confirmed-fg)] hover:underline"
+        >
+          Connected · Manage
+        </button>
       ) : (
         <button
           type="button"
@@ -47,76 +57,242 @@ function HubRow({
           data-attr={dataAttr}
           className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
         >
-          {busy ? "Opening…" : "Link"}
+          {busy ? "Opening…" : linkLabel}
         </button>
       )}
     </div>
   );
 }
 
-function ManualChannelSetup({
-  label,
-  placeholder,
-  value,
-  connected,
+function ChannelPaymentSetupModal({
+  channel,
+  open,
+  onClose,
+  draft,
+  setDraft,
   saving,
-  onChange,
-  onSave,
-  onOpenProvider,
-  linkDataAttr,
-  saveDataAttr,
+  onSaveContact,
+  paymentInboxAddress,
+  autoMarkEnabled,
+  onAutoMarkChange,
+  gmailStatus,
+  gmailBusy,
+  gmailSyncBusy,
+  onLinkGmail,
+  onSyncGmail,
+  showToast,
 }: {
-  label: string;
-  placeholder: string;
-  value: string;
-  connected: boolean;
+  channel: PaymentChannel;
+  open: boolean;
+  onClose: () => void;
+  draft: ManagerManualPaymentSettingsView;
+  setDraft: Dispatch<SetStateAction<ManagerManualPaymentSettingsView>>;
   saving: boolean;
-  onChange: (value: string) => void;
-  onSave: () => void;
-  onOpenProvider: () => void;
-  linkDataAttr: string;
-  saveDataAttr: string;
+  onSaveContact: () => void;
+  paymentInboxAddress?: string;
+  autoMarkEnabled: boolean;
+  onAutoMarkChange: (enabled: boolean) => void | Promise<void>;
+  gmailStatus: ReturnType<typeof useGmailPaymentTrack>["gmailStatus"];
+  gmailBusy: boolean;
+  gmailSyncBusy: boolean;
+  onLinkGmail: () => void;
+  onSyncGmail: () => void;
+  showToast: (message: string) => void;
 }) {
+  const label = channel === "zelle" ? "Zelle" : "Venmo";
+  const placeholder = channel === "zelle" ? "email or phone" : "@username or phone";
+  const filterFrom = channel === "zelle" ? "zellepay.com" : "venmo.com";
+  const contact = channel === "zelle" ? draft.zelleContact : draft.venmoContact;
+  const contactConnected =
+    channel === "zelle"
+      ? draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0
+      : draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
+
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3.5 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-foreground">{label}</span>
-        {connected ? (
-          <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">Connected</span>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpenProvider}
-            data-attr={linkDataAttr}
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            Open {label}
-          </button>
-        )}
+    <Modal open={open} title={`Link ${label}`} onClose={onClose} dense assistantStrip={false}>
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Five quick steps so residents can pay you with {label} and we auto-match receipts.
+        </p>
+
+        <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Step 1 — Save your {label} contact</p>
+          <p className="text-xs text-muted">Residents will see this on their payment screen.</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={contact}
+              onChange={(e) =>
+                setDraft((prev) =>
+                  channel === "zelle" ? { ...prev, zelleContact: e.target.value } : { ...prev, venmoContact: e.target.value },
+                )
+              }
+              placeholder={placeholder}
+              className="flex-1"
+              data-attr={`manager-payment-${channel}-save-input`}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              disabled={saving || !contact.trim()}
+              data-attr={`manager-payment-${channel}-save`}
+              onClick={onSaveContact}
+            >
+              {saving ? "Saving…" : contactConnected ? "Update" : "Save"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Step 2 — Turn on {label} email notifications</p>
+          <p className="text-xs text-muted">
+            {channel === "zelle" ? (
+              <>
+                In your bank&apos;s Zelle settings, enable email alerts for money received. In the Zelle app, open
+                Settings → Notifications and turn on payment emails.
+              </>
+            ) : (
+              <>
+                In the Venmo app, open Settings → Notifications and enable emails for payments you receive.
+              </>
+            )}
+          </p>
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Step 3 — Link Gmail</p>
+          <p className="text-xs text-muted">
+            We read {label} notification emails and match the <span className="font-mono">PL-</span> code and amount.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {gmailStatus?.connected ? (
+              <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">
+                {gmailStatus.email ?? "Connected"}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onLinkGmail}
+                disabled={gmailBusy || gmailStatus?.configured === false}
+                data-attr={`manager-payment-${channel}-gmail-link`}
+                className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+              >
+                {gmailBusy ? "Opening…" : "Link Gmail"}
+              </button>
+            )}
+            {gmailStatus?.connected ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 rounded-full px-3 text-xs"
+                disabled={gmailSyncBusy}
+                data-attr={`manager-payment-${channel}-gmail-sync`}
+                onClick={onSyncGmail}
+              >
+                {gmailSyncBusy ? "Syncing…" : "Sync now"}
+              </Button>
+            ) : null}
+          </div>
+          {gmailStatus?.configured === false ? (
+            <p className="text-xs text-muted">Google sign-in is not configured on this server.</p>
+          ) : null}
+        </div>
+
+        {paymentInboxAddress ? (
+          <div className="space-y-3 rounded-xl border border-border bg-card px-4 py-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Step 4 — Gmail filter (optional)</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted">
+                Skip this if Step 3 (Link Gmail) is connected. Otherwise set up a filter to forward {label} emails to
+                PropLane.
+              </p>
+            </div>
+            <ol className="space-y-3 text-sm leading-relaxed text-foreground">
+              <li className="flex gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-foreground">
+                  1
+                </span>
+                <span className="pt-0.5">
+                  In Gmail, open <span className="font-medium">Settings</span> →{" "}
+                  <span className="font-medium">Filters and Blocked Addresses</span> →{" "}
+                  <span className="font-medium">Create a new filter</span>.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-foreground">
+                  2
+                </span>
+                <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                  <p>
+                    Set <span className="font-medium">From</span> to:
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <code className="block w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-semibold text-foreground">
+                      {filterFrom}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 rounded-full"
+                      onClick={() =>
+                        void navigator.clipboard?.writeText(filterFrom).then(() => showToast("Copied."))
+                      }
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-foreground">
+                  3
+                </span>
+                <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                  <p>
+                    Choose <span className="font-medium">Forward it to</span> and use this address:
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <code className="block w-full break-all rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-semibold text-foreground">
+                      {paymentInboxAddress}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 rounded-full"
+                      data-attr={`manager-payment-${channel}-inbox-copy`}
+                      onClick={() =>
+                        void navigator.clipboard?.writeText(paymentInboxAddress).then(() => showToast("Copied."))
+                      }
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              </li>
+            </ol>
+          </div>
+        ) : null}
+
+        <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Step 5 — Auto-mark charges paid</p>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={autoMarkEnabled}
+              onChange={(e) => void onAutoMarkChange(e.target.checked)}
+              data-attr={`manager-payment-${channel}-auto-mark`}
+            />
+            <span className="text-xs leading-relaxed text-muted">
+              When a {label} receipt matches a charge, mark it paid automatically.
+            </span>
+          </label>
+        </div>
       </div>
-      <p className="text-xs leading-relaxed text-muted">
-        Residents pay you here. Save your {label} contact so charges show the right pay-to info.
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1"
-          data-attr={`${saveDataAttr}-input`}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="shrink-0 rounded-full"
-          disabled={saving || !value.trim()}
-          data-attr={saveDataAttr}
-          onClick={onSave}
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -135,17 +311,14 @@ export function ManagerPaymentSetupModal({
   const [loading, setLoading] = useState(false);
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeReady, setStripeReady] = useState(false);
-  const [savingChannel, setSavingChannel] = useState<"zelle" | "venmo" | null>(null);
-  const [gmailStatus, setGmailStatus] = useState<{
-    connected: boolean;
-    email: string | null;
-    configured: boolean;
-    lastSyncAt: string | null;
-    lastSyncMarkedPaid: number | null;
-  } | null>(null);
-  const [gmailBusy, setGmailBusy] = useState(false);
-  const [gmailSyncBusy, setGmailSyncBusy] = useState(false);
-  const [showGmailFilterHelp, setShowGmailFilterHelp] = useState(false);
+  const [savingChannel, setSavingChannel] = useState<PaymentChannel | null>(null);
+  const [activeChannel, setActiveChannel] = useState<PaymentChannel | null>(null);
+
+  const { gmailStatus, gmailBusy, gmailSyncBusy, linkGmail, syncGmail } = useGmailPaymentTrack({
+    role: "manager",
+    demo,
+    showToast,
+  });
 
   const loadStripeStatus = useCallback(async () => {
     if (demo) {
@@ -166,28 +339,6 @@ export function ManagerPaymentSetupModal({
       setStripeReady(Boolean(body.paymentReady ?? (body.payoutsEnabled && body.chargesEnabled)));
     } catch {
       setStripeReady(false);
-    }
-  }, [demo]);
-
-  const loadGmailStatus = useCallback(async () => {
-    if (demo) {
-      setGmailStatus({ connected: false, email: null, configured: true, lastSyncAt: null, lastSyncMarkedPaid: null });
-      return;
-    }
-    try {
-      const res = await fetch("/api/portal/gmail-payments", { credentials: "include" });
-      const data = (await res.json().catch(() => ({}))) as {
-        status?: {
-          connected: boolean;
-          email: string | null;
-          configured: boolean;
-          lastSyncAt: string | null;
-          lastSyncMarkedPaid: number | null;
-        };
-      };
-      if (res.ok && data.status) setGmailStatus(data.status);
-    } catch {
-      setGmailStatus(null);
     }
   }, [demo]);
 
@@ -216,11 +367,13 @@ export function ManagerPaymentSetupModal({
   }, [demo, showToast]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setActiveChannel(null);
+      return;
+    }
     void loadStripeStatus();
     void loadSettings();
-    void loadGmailStatus();
-  }, [open, loadStripeStatus, loadSettings, loadGmailStatus]);
+  }, [open, loadStripeStatus, loadSettings]);
 
   useEffect(() => {
     if (!open) return;
@@ -231,7 +384,7 @@ export function ManagerPaymentSetupModal({
 
   async function persistSettings(
     patch: Partial<ManagerManualPaymentSettingsView>,
-    channel: "zelle" | "venmo" | null = null,
+    channel: PaymentChannel | null = null,
   ) {
     if (demo) {
       setDraft((prev) => draftFromSettings({ ...prev, ...patch }));
@@ -276,11 +429,6 @@ export function ManagerPaymentSetupModal({
     }
   }
 
-  function openExternal(url: string) {
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) showToast("Allow pop-ups to open the link.");
-  }
-
   async function linkStripe() {
     setStripeBusy(true);
     try {
@@ -290,197 +438,83 @@ export function ManagerPaymentSetupModal({
     }
   }
 
-  function copyInboxAddress() {
-    const address = draft.paymentInboxAddress?.trim();
-    if (!address) return;
-    void navigator.clipboard?.writeText(address).then(() => {
-      showToast("Forwarding address copied.");
-    });
-  }
-
-  function linkGmail() {
-    if (demo) {
-      showToast("Gmail connect is disabled in demo mode.");
-      return;
-    }
-    setGmailBusy(true);
-    const origin = encodeURIComponent(window.location.origin);
-    window.location.assign(`/api/portal/gmail-payments/connect?origin=${origin}`);
-  }
-
-  async function syncGmail() {
-    if (demo) return;
-    setGmailSyncBusy(true);
-    try {
-      const res = await fetch("/api/portal/gmail-payments/sync", { method: "POST", credentials: "include" });
-      const data = (await res.json().catch(() => ({}))) as {
-        result?: { scanned: number; markedPaid: number; unmatched: number };
-        error?: string;
-      };
-      if (!res.ok) {
-        showToast(data.error ?? "Gmail sync failed.");
-        return;
-      }
-      const r = data.result;
-      showToast(
-        r
-          ? `Synced ${r.scanned} receipt${r.scanned === 1 ? "" : "s"}; ${r.markedPaid} marked paid.`
-          : "Gmail sync complete.",
-      );
-      void loadGmailStatus();
-    } catch {
-      showToast("Gmail sync failed.");
-    } finally {
-      setGmailSyncBusy(false);
-    }
-  }
-
   async function toggleAutoMark(enabled: boolean) {
     await persistSettings({ receiptAutoMarkEnabled: enabled });
   }
 
-  const zelleConnected = draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0;
-  const venmoConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
+  const zelleContactConnected = draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0;
+  const venmoContactConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
+  const gmailLinked = Boolean(gmailStatus?.connected);
+  const autoMarkOn = draft.receiptAutoMarkEnabled !== false;
+  const zelleTrackingReady = zelleContactConnected && gmailLinked && autoMarkOn;
+  const venmoTrackingReady = venmoContactConnected && gmailLinked && autoMarkOn;
+
+  const channelModalProps = {
+    draft,
+    setDraft,
+    paymentInboxAddress: draft.paymentInboxAddress,
+    autoMarkEnabled: autoMarkOn,
+    onAutoMarkChange: toggleAutoMark,
+    gmailStatus,
+    gmailBusy,
+    gmailSyncBusy,
+    onLinkGmail: linkGmail,
+    onSyncGmail: () => void syncGmail(),
+    showToast,
+  };
 
   return (
-    <Modal open={open} title="Link payment" onClose={onClose}>
-      <div className="space-y-3">
-        {loading ? <p className="text-sm text-muted">Loading…</p> : null}
-        {draft.paymentInboxAddress ? (
-          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">Auto-track receipts</p>
-            <p className="text-sm text-foreground">
-              Link Gmail to read Zelle and Venmo notification emails, or forward them to the address below.
-              We match the <span className="font-mono">PL-</span> code and amount, then mark the charge paid.
-            </p>
-            <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold text-foreground">Gmail</span>
-                {gmailStatus?.connected ? (
-                  <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">
-                    {gmailStatus.email ?? "Connected"}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={linkGmail}
-                    disabled={gmailBusy || gmailStatus?.configured === false}
-                    data-attr="manager-payment-gmail-link"
-                    className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
-                  >
-                    {gmailBusy ? "Opening…" : "Link Gmail"}
-                  </button>
-                )}
-              </div>
-              {gmailStatus?.configured === false ? (
-                <p className="text-xs text-muted">Google sign-in is not configured on this server.</p>
-              ) : null}
-              {gmailStatus?.connected ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                    disabled={gmailSyncBusy}
-                    data-attr="manager-payment-gmail-sync"
-                    onClick={() => void syncGmail()}
-                  >
-                    {gmailSyncBusy ? "Syncing…" : "Sync now"}
-                  </Button>
-                  {gmailStatus.lastSyncAt ? (
-                    <span className="self-center text-xs text-muted">
-                      Last sync {new Date(gmailStatus.lastSyncAt).toLocaleString()}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  checked={draft.receiptAutoMarkEnabled !== false}
-                  onChange={(e) => void toggleAutoMark(e.target.checked)}
-                  data-attr="manager-payment-auto-mark-toggle"
-                />
-                Automatically mark matching charges paid
-              </label>
-            </div>
-            <div>
-              <p className="text-xs text-muted">Or forward receipts to:</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <code className="break-all rounded-md bg-card px-2 py-1 text-xs text-foreground">
-                  {draft.paymentInboxAddress}
-                </code>
-                <button
-                  type="button"
-                  onClick={copyInboxAddress}
-                  data-attr="manager-payment-inbox-copy"
-                  className="text-sm font-medium text-primary hover:underline"
-                >
-                  Copy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowGmailFilterHelp((v) => !v)}
-                  className="text-sm font-medium text-primary hover:underline"
-                  data-attr="manager-payment-gmail-filter-help"
-                >
-                  {showGmailFilterHelp ? "Hide Gmail filter steps" : "Gmail filter steps"}
-                </button>
-              </div>
-            </div>
-            {showGmailFilterHelp ? (
-              <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted">
-                <li>In Gmail: Settings → See all settings → Filters and Blocked Addresses → Create filter.</li>
-                <li>From: <span className="font-mono">venmo.com OR zellepay.com</span></li>
-                <li>Choose “Forward it to” and paste the address above (add it in Gmail forwarding first if needed).</li>
-                <li>Save the filter. New Zelle/Venmo emails will auto-mark matching charges.</li>
-              </ol>
-            ) : null}
-          </div>
-        ) : null}
-        <HubRow
-          label="Stripe link"
-          connected={stripeReady}
-          onLink={() => void linkStripe()}
-          dataAttr="manager-payment-stripe-link"
-          busy={stripeBusy}
-        />
-        <ManualChannelSetup
-          label="Zelle"
-          placeholder="email or phone"
-          value={draft.zelleContact}
-          connected={zelleConnected}
-          saving={savingChannel === "zelle"}
-          onChange={(zelleContact) => setDraft((prev) => ({ ...prev, zelleContact }))}
-          onSave={() =>
+    <>
+      <Modal open={open} title="Link payment" onClose={onClose} assistantStrip={false}>
+        <div className="space-y-3">
+          {loading ? <p className="text-sm text-muted">Loading…</p> : null}
+          <HubRow
+            label="Stripe"
+            connected={stripeReady}
+            onLink={() => void linkStripe()}
+            dataAttr="manager-payment-stripe-link"
+            busy={stripeBusy}
+          />
+          <HubRow
+            label="Zelle"
+            connected={zelleTrackingReady}
+            onLink={() => setActiveChannel("zelle")}
+            dataAttr="manager-payment-zelle-link"
+            linkLabel="Link Zelle"
+          />
+          <HubRow
+            label="Venmo"
+            connected={venmoTrackingReady}
+            onLink={() => setActiveChannel("venmo")}
+            dataAttr="manager-payment-venmo-link"
+            linkLabel="Link Venmo"
+          />
+        </div>
+      </Modal>
+
+      {activeChannel ? (
+        <ChannelPaymentSetupModal
+          channel={activeChannel}
+          open
+          onClose={() => setActiveChannel(null)}
+          saving={savingChannel === activeChannel}
+          onSaveContact={() =>
             void persistSettings(
-              { zelleContact: draft.zelleContact.trim(), zellePaymentsEnabled: draft.zelleContact.trim().length > 0 },
-              "zelle",
+              activeChannel === "zelle"
+                ? {
+                    zelleContact: draft.zelleContact.trim(),
+                    zellePaymentsEnabled: draft.zelleContact.trim().length > 0,
+                  }
+                : {
+                    venmoContact: draft.venmoContact.trim(),
+                    venmoPaymentsEnabled: draft.venmoContact.trim().length > 0,
+                  },
+              activeChannel,
             )
           }
-          onOpenProvider={() => openExternal(ZELLE_URL)}
-          linkDataAttr="manager-payment-zelle-link"
-          saveDataAttr="manager-payment-zelle-save"
+          {...channelModalProps}
         />
-        <ManualChannelSetup
-          label="Venmo"
-          placeholder="@username or phone"
-          value={draft.venmoContact}
-          connected={venmoConnected}
-          saving={savingChannel === "venmo"}
-          onChange={(venmoContact) => setDraft((prev) => ({ ...prev, venmoContact }))}
-          onSave={() =>
-            void persistSettings(
-              { venmoContact: draft.venmoContact.trim(), venmoPaymentsEnabled: draft.venmoContact.trim().length > 0 },
-              "venmo",
-            )
-          }
-          onOpenProvider={() => openExternal(VENMO_URL)}
-          linkDataAttr="manager-payment-venmo-link"
-          saveDataAttr="manager-payment-venmo-save"
-        />
-      </div>
-    </Modal>
+      ) : null}
+    </>
   );
 }

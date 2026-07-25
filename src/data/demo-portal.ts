@@ -263,6 +263,10 @@ export type DemoManagerWorkOrderRow = {
   vendorPaymentChannel?: "zelle" | "venmo" | "ach";
   vendorZelleContactSnapshot?: string;
   vendorVenmoContactSnapshot?: string;
+  /** WO- memo code for Zelle/Venmo vendor payouts. */
+  paymentReference?: string;
+  /** Gmail message id when auto-marked from vendor Gmail sync. */
+  paidViaGmailMessageId?: string;
   /** ISO timestamp of the resident's last manager reminder for this pending request. */
   residentReminderSentAt?: string;
 };

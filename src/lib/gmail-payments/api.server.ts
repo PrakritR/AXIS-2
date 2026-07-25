@@ -10,6 +10,7 @@ import {
 import { resolveGoogleCalendarRedirectOrigin } from "@/lib/google-calendar/api.server";
 
 import { GMAIL_PAYMENTS_OAUTH_SCOPES } from "./scopes";
+import type { GmailPaymentTrackRole } from "./portal-role";
 import {
   loadGmailPaymentsConnection,
   saveGmailPaymentsConnection,
@@ -41,17 +42,26 @@ export function isGmailPaymentsOAuthConfigured(): boolean {
   return isGoogleCalendarOAuthConfigured();
 }
 
-export function gmailPaymentsOAuthRedirectUri(browserOrigin: string): string {
-  return `${resolveGoogleCalendarRedirectOrigin(browserOrigin)}/api/portal/gmail-payments/callback`;
+export function gmailPaymentsOAuthRedirectUri(browserOrigin: string, role: GmailPaymentTrackRole = "manager"): string {
+  const base = resolveGoogleCalendarRedirectOrigin(browserOrigin);
+  if (role === "vendor") return `${base}/api/vendor/gmail-payments/callback`;
+  return `${base}/api/portal/gmail-payments/callback`;
 }
 
 export type GmailPaymentsOAuthState = {
   userId: string;
   returnOrigin: string;
+  role: GmailPaymentTrackRole;
 };
 
-function signOAuthState(managerUserId: string, returnOrigin: string): string {
-  const payload = JSON.stringify({ uid: managerUserId, t: Date.now(), returnOrigin, kind: "gmail-payments" });
+function signOAuthState(userId: string, returnOrigin: string, role: GmailPaymentTrackRole): string {
+  const payload = JSON.stringify({
+    uid: userId,
+    t: Date.now(),
+    returnOrigin,
+    kind: "gmail-payments",
+    role,
+  });
   const sig = createHmac("sha256", stateSecret()).update(payload).digest("base64url");
   return Buffer.from(`${payload}|${sig}`).toString("base64url");
 }
@@ -67,7 +77,13 @@ export function verifyGmailPaymentsOAuthState(state: string): GmailPaymentsOAuth
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-    const parsed = JSON.parse(payload) as { uid?: string; t?: number; returnOrigin?: string; kind?: string };
+    const parsed = JSON.parse(payload) as {
+      uid?: string;
+      t?: number;
+      returnOrigin?: string;
+      kind?: string;
+      role?: GmailPaymentTrackRole;
+    };
     if (parsed.kind !== "gmail-payments" || !parsed.uid || typeof parsed.t !== "number") return null;
     if (Date.now() - parsed.t > 15 * 60 * 1000) return null;
     const returnOrigin =
@@ -75,16 +91,21 @@ export function verifyGmailPaymentsOAuthState(state: string): GmailPaymentsOAuth
         ? parsed.returnOrigin.trim().replace(/\/$/, "")
         : null;
     if (!returnOrigin) return null;
-    return { userId: parsed.uid, returnOrigin };
+    const role = parsed.role === "vendor" ? "vendor" : "manager";
+    return { userId: parsed.uid, returnOrigin, role };
   } catch {
     return null;
   }
 }
 
-export function buildGmailPaymentsOAuthUrl(browserOrigin: string, managerUserId: string): string {
+export function buildGmailPaymentsOAuthUrl(
+  browserOrigin: string,
+  userId: string,
+  role: GmailPaymentTrackRole = "manager",
+): string {
   const returnOrigin = browserOrigin.replace(/\/$/, "");
-  const redirectUri = gmailPaymentsOAuthRedirectUri(browserOrigin);
-  const state = signOAuthState(managerUserId, returnOrigin);
+  const redirectUri = gmailPaymentsOAuthRedirectUri(browserOrigin, role);
+  const state = signOAuthState(userId, returnOrigin, role);
   const params = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri,
@@ -108,11 +129,12 @@ async function fetchGoogleAccountEmail(accessToken: string): Promise<string | nu
 
 export async function exchangeGmailPaymentsCode(
   db: SupabaseClient,
-  managerUserId: string,
+  userId: string,
   code: string,
   browserOrigin: string,
+  role: GmailPaymentTrackRole = "manager",
 ): Promise<GmailPaymentsConnection> {
-  const redirectUri = gmailPaymentsOAuthRedirectUri(browserOrigin);
+  const redirectUri = gmailPaymentsOAuthRedirectUri(browserOrigin, role);
   const body = new URLSearchParams({
     code,
     client_id: clientId(),
@@ -143,8 +165,8 @@ export async function exchangeGmailPaymentsCode(
       ? new Date(Date.now() + data.expires_in * 1000).toISOString()
       : null;
 
-  const existing = await loadGmailPaymentsConnection(db, managerUserId);
-  return saveGmailPaymentsConnection(db, managerUserId, {
+  const existing = await loadGmailPaymentsConnection(db, userId, role);
+  return saveGmailPaymentsConnection(db, userId, role, {
     connected: true,
     email,
     refreshToken: data.refresh_token ?? existing.refreshToken,
@@ -189,9 +211,10 @@ async function refreshAccessToken(connection: GmailPaymentsConnection): Promise<
 
 export async function ensureGmailPaymentsAccessToken(
   db: SupabaseClient,
-  managerUserId: string,
+  userId: string,
+  role: GmailPaymentTrackRole = "manager",
 ): Promise<{ accessToken: string; connection: GmailPaymentsConnection }> {
-  const connection = await loadGmailPaymentsConnection(db, managerUserId);
+  const connection = await loadGmailPaymentsConnection(db, userId, role);
   if (!connection.connected || !connection.refreshToken) {
     throw new Error("Gmail is not connected.");
   }
@@ -202,7 +225,7 @@ export async function ensureGmailPaymentsAccessToken(
     return { accessToken: connection.accessToken, connection };
   }
   const refreshed = await refreshAccessToken(connection);
-  const next = await saveGmailPaymentsConnection(db, managerUserId, {
+  const next = await saveGmailPaymentsConnection(db, userId, role, {
     accessToken: refreshed.accessToken,
     accessTokenExpiresAt: refreshed.expiresAt,
   });
