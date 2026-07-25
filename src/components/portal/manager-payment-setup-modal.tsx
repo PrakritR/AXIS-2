@@ -2,64 +2,59 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
+import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-client";
 import {
   DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS,
   MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT,
   type ManagerManualPaymentSettings,
 } from "@/lib/manager-manual-payment-settings";
 
-type Draft = ManagerManualPaymentSettings & { applyToAllListings: boolean };
-type Pane = "hub" | "stripe" | "zelle" | "venmo";
+const ZELLE_URL = "https://www.zellepay.com/";
+const VENMO_URL = "https://account.venmo.com/";
 
-function draftFromSettings(settings: ManagerManualPaymentSettings | null, applyToAll: boolean): Draft {
-  return {
-    ...(settings ?? DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS),
-    applyToAllListings: applyToAll,
-  };
-}
-
-function methodAction(connected: boolean): string {
-  return connected ? "Connected" : "Link";
+function draftFromSettings(settings: ManagerManualPaymentSettings | null): ManagerManualPaymentSettings {
+  return settings ?? DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS;
 }
 
 function HubRow({
   label,
   connected,
-  onClick,
+  onLink,
   dataAttr,
+  busy,
 }: {
   label: string;
   connected: boolean;
-  onClick: () => void;
+  onLink: () => void;
   dataAttr: string;
+  busy?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-attr={dataAttr}
-      className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-left transition hover:border-primary/30 hover:bg-accent/20"
-    >
+    <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
       <span className="text-sm font-semibold text-foreground">{label}</span>
-      <span
-        className={`text-sm font-medium ${connected ? "text-[var(--status-confirmed-fg)]" : "text-primary"}`}
-      >
-        {methodAction(connected)}
-      </span>
-    </button>
+      {connected ? (
+        <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">Connected</span>
+      ) : (
+        <button
+          type="button"
+          onClick={onLink}
+          disabled={busy}
+          data-attr={dataAttr}
+          className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+        >
+          {busy ? "Opening…" : "Link"}
+        </button>
+      )}
+    </div>
   );
 }
 
 export function ManagerPaymentSetupModal({
   open,
   onClose,
-  portalBase,
+  portalBase: _portalBase,
 }: {
   open: boolean;
   onClose: () => void;
@@ -67,10 +62,11 @@ export function ManagerPaymentSetupModal({
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
-  const [pane, setPane] = useState<Pane>("hub");
-  const [draft, setDraft] = useState<Draft>(() => draftFromSettings(null, false));
+  const [draft, setDraft] = useState<ManagerManualPaymentSettings>(() =>
+    draftFromSettings(null),
+  );
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeReady, setStripeReady] = useState(false);
 
   const loadStripeStatus = useCallback(async () => {
@@ -96,13 +92,10 @@ export function ManagerPaymentSetupModal({
   }, [demo]);
 
   useEffect(() => {
-    if (!open) {
-      setPane("hub");
-      return;
-    }
+    if (!open) return;
     void loadStripeStatus();
     if (demo) {
-      setDraft(draftFromSettings(DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS, false));
+      setDraft(draftFromSettings(DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS));
       return;
     }
     setLoading(true);
@@ -116,200 +109,70 @@ export function ManagerPaymentSetupModal({
           showToast(data.error ?? "Could not load payment setup.");
           return;
         }
-        setDraft(draftFromSettings(data.settings ?? null, false));
+        setDraft(draftFromSettings(data.settings ?? null));
       })
       .catch(() => showToast("Could not load payment setup."))
       .finally(() => setLoading(false));
-  }, [open, demo, showToast]);
+  }, [open, demo, showToast, loadStripeStatus]);
 
-  async function saveManual(method: "zelle" | "venmo") {
-    const zelleContact = sanitizePaymentContactInput(draft.zelleContact).trim();
-    const venmoContact = sanitizePaymentContactInput(draft.venmoContact).trim();
-    const nextDraft =
-      method === "zelle"
-        ? {
-            ...draft,
-            zellePaymentsEnabled: zelleContact.length > 0,
-            zelleContact,
-          }
-        : {
-            ...draft,
-            venmoPaymentsEnabled: venmoContact.length > 0,
-            venmoContact,
-          };
+  useEffect(() => {
+    if (!open) return;
+    const onFocus = () => void loadStripeStatus();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [open, loadStripeStatus]);
 
-    if (method === "zelle" && nextDraft.zellePaymentsEnabled && !zelleContact) {
-      showToast("Enter a Zelle phone or email.");
-      return;
+  function openExternal(url: string) {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      showToast("Allow pop-ups to open the link.");
     }
-    if (method === "venmo" && nextDraft.venmoPaymentsEnabled && !venmoContact) {
-      showToast("Enter a Venmo username, phone, or email.");
-      return;
-    }
+  }
 
-    const payload: ManagerManualPaymentSettings & { applyToAllListings?: boolean } = {
-      zellePaymentsEnabled: nextDraft.zellePaymentsEnabled,
-      zelleContact: nextDraft.zelleContact,
-      venmoPaymentsEnabled: nextDraft.venmoPaymentsEnabled,
-      venmoContact: nextDraft.venmoContact,
-      applyToAllListings: nextDraft.applyToAllListings,
-    };
-
-    if (demo) {
-      setDraft(nextDraft);
-      window.dispatchEvent(new CustomEvent(MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT, { detail: payload }));
-      showToast(`${method === "zelle" ? "Zelle" : "Venmo"} saved.`);
-      setPane("hub");
-      return;
-    }
-
-    setSaving(true);
+  async function linkStripe() {
+    setStripeBusy(true);
     try {
-      const res = await fetch("/api/portal/manager-manual-payment-settings", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        settings?: ManagerManualPaymentSettings;
-        error?: string;
-      };
-      if (!res.ok || !data.settings) {
-        showToast(data.error ?? "Could not save.");
-        return;
-      }
-      setDraft(draftFromSettings(data.settings, nextDraft.applyToAllListings));
-      window.dispatchEvent(new CustomEvent(MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT, { detail: data.settings }));
-      showToast(`${method === "zelle" ? "Zelle" : "Venmo"} saved.`);
-      setPane("hub");
-    } catch {
-      showToast("Could not save.");
+      await openStripeConnectOnboarding({ showToast });
     } finally {
-      setSaving(false);
+      setStripeBusy(false);
     }
+  }
+
+  function linkZelle() {
+    openExternal(ZELLE_URL);
+  }
+
+  function linkVenmo() {
+    openExternal(VENMO_URL);
   }
 
   const zelleConnected = draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0;
   const venmoConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
 
-  const title =
-    pane === "hub"
-      ? "Link payment"
-      : pane === "stripe"
-        ? "Stripe link"
-        : pane === "zelle"
-          ? "Zelle link"
-          : "Venmo link";
-
-  const footer =
-    pane === "hub" ? undefined : pane === "stripe" ? (
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full"
-          onClick={() => {
-            void loadStripeStatus();
-            setPane("hub");
-          }}
-        >
-          Back
-        </Button>
-      </div>
-    ) : (
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={() => setPane("hub")}>
-          Back
-        </Button>
-        <Button
-          type="button"
-          variant="primary"
-          className="rounded-full"
-          disabled={saving || loading}
-          onClick={() => void saveManual(pane)}
-          data-attr={pane === "zelle" ? "manager-payment-zelle-save" : "manager-payment-venmo-save"}
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-    );
-
   return (
-    <Modal open={open} title={title} onClose={onClose} footer={footer}>
-      {pane === "hub" ? (
-        <div className="space-y-2">
-          {loading ? <p className="text-sm text-muted">Loading…</p> : null}
-          <HubRow
-            label="Stripe link"
-            connected={stripeReady}
-            onClick={() => setPane("stripe")}
-            dataAttr="manager-payment-stripe-row"
-          />
-          <HubRow
-            label="Zelle link"
-            connected={zelleConnected}
-            onClick={() => setPane("zelle")}
-            dataAttr="manager-payment-zelle-row"
-          />
-          <HubRow
-            label="Venmo link"
-            connected={venmoConnected}
-            onClick={() => setPane("venmo")}
-            dataAttr="manager-payment-venmo-row"
-          />
-        </div>
-      ) : null}
-
-      {pane === "stripe" ? (
-        <PortalStripeConnectPanel basePath={portalBase} variant="embedded" returnPath={`${portalBase}/payments`} />
-      ) : null}
-
-      {pane === "zelle" ? (
-        <div className="space-y-3">
-          <Input
-            value={draft.zelleContact}
-            onChange={(e) =>
-              setDraft((prev) => ({ ...prev, zelleContact: sanitizePaymentContactInput(e.target.value) }))
-            }
-            placeholder="Phone or email"
-            data-attr="manager-payment-zelle-contact-input"
-          />
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border"
-              checked={draft.applyToAllListings}
-              onChange={(e) => setDraft((prev) => ({ ...prev, applyToAllListings: e.target.checked }))}
-              data-attr="manager-payment-apply-all-listings"
-            />
-            Apply to all listings
-          </label>
-        </div>
-      ) : null}
-
-      {pane === "venmo" ? (
-        <div className="space-y-3">
-          <Input
-            value={draft.venmoContact}
-            onChange={(e) =>
-              setDraft((prev) => ({ ...prev, venmoContact: sanitizePaymentContactInput(e.target.value) }))
-            }
-            placeholder="@username, phone, or email"
-            data-attr="manager-payment-venmo-contact-input"
-          />
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border"
-              checked={draft.applyToAllListings}
-              onChange={(e) => setDraft((prev) => ({ ...prev, applyToAllListings: e.target.checked }))}
-              data-attr="manager-payment-apply-all-listings"
-            />
-            Apply to all listings
-          </label>
-        </div>
-      ) : null}
+    <Modal open={open} title="Link payment" onClose={onClose}>
+      <div className="space-y-2">
+        {loading ? <p className="text-sm text-muted">Loading…</p> : null}
+        <HubRow
+          label="Stripe link"
+          connected={stripeReady}
+          onLink={() => void linkStripe()}
+          dataAttr="manager-payment-stripe-link"
+          busy={stripeBusy}
+        />
+        <HubRow
+          label="Zelle link"
+          connected={zelleConnected}
+          onLink={linkZelle}
+          dataAttr="manager-payment-zelle-link"
+        />
+        <HubRow
+          label="Venmo link"
+          connected={venmoConnected}
+          onLink={linkVenmo}
+          dataAttr="manager-payment-venmo-link"
+        />
+      </div>
     </Modal>
   );
 }
