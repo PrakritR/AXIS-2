@@ -136,6 +136,16 @@ export function ManagerPaymentSetupModal({
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeReady, setStripeReady] = useState(false);
   const [savingChannel, setSavingChannel] = useState<"zelle" | "venmo" | null>(null);
+  const [gmailStatus, setGmailStatus] = useState<{
+    connected: boolean;
+    email: string | null;
+    configured: boolean;
+    lastSyncAt: string | null;
+    lastSyncMarkedPaid: number | null;
+  } | null>(null);
+  const [gmailBusy, setGmailBusy] = useState(false);
+  const [gmailSyncBusy, setGmailSyncBusy] = useState(false);
+  const [showGmailFilterHelp, setShowGmailFilterHelp] = useState(false);
 
   const loadStripeStatus = useCallback(async () => {
     if (demo) {
@@ -156,6 +166,28 @@ export function ManagerPaymentSetupModal({
       setStripeReady(Boolean(body.paymentReady ?? (body.payoutsEnabled && body.chargesEnabled)));
     } catch {
       setStripeReady(false);
+    }
+  }, [demo]);
+
+  const loadGmailStatus = useCallback(async () => {
+    if (demo) {
+      setGmailStatus({ connected: false, email: null, configured: true, lastSyncAt: null, lastSyncMarkedPaid: null });
+      return;
+    }
+    try {
+      const res = await fetch("/api/portal/gmail-payments", { credentials: "include" });
+      const data = (await res.json().catch(() => ({}))) as {
+        status?: {
+          connected: boolean;
+          email: string | null;
+          configured: boolean;
+          lastSyncAt: string | null;
+          lastSyncMarkedPaid: number | null;
+        };
+      };
+      if (res.ok && data.status) setGmailStatus(data.status);
+    } catch {
+      setGmailStatus(null);
     }
   }, [demo]);
 
@@ -187,7 +219,8 @@ export function ManagerPaymentSetupModal({
     if (!open) return;
     void loadStripeStatus();
     void loadSettings();
-  }, [open, loadStripeStatus, loadSettings]);
+    void loadGmailStatus();
+  }, [open, loadStripeStatus, loadSettings, loadGmailStatus]);
 
   useEffect(() => {
     if (!open) return;
@@ -211,7 +244,12 @@ export function ManagerPaymentSetupModal({
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draft, ...patch, applyToAllListings: true, receiptAutoMarkEnabled: true }),
+        body: JSON.stringify({
+          ...draft,
+          ...patch,
+          applyToAllListings: true,
+          receiptAutoMarkEnabled: patch.receiptAutoMarkEnabled ?? draft.receiptAutoMarkEnabled !== false,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         settings?: ManagerManualPaymentSettingsView;
@@ -260,6 +298,47 @@ export function ManagerPaymentSetupModal({
     });
   }
 
+  function linkGmail() {
+    if (demo) {
+      showToast("Gmail connect is disabled in demo mode.");
+      return;
+    }
+    setGmailBusy(true);
+    const origin = encodeURIComponent(window.location.origin);
+    window.location.assign(`/api/portal/gmail-payments/connect?origin=${origin}`);
+  }
+
+  async function syncGmail() {
+    if (demo) return;
+    setGmailSyncBusy(true);
+    try {
+      const res = await fetch("/api/portal/gmail-payments/sync", { method: "POST", credentials: "include" });
+      const data = (await res.json().catch(() => ({}))) as {
+        result?: { scanned: number; markedPaid: number; unmatched: number };
+        error?: string;
+      };
+      if (!res.ok) {
+        showToast(data.error ?? "Gmail sync failed.");
+        return;
+      }
+      const r = data.result;
+      showToast(
+        r
+          ? `Synced ${r.scanned} receipt${r.scanned === 1 ? "" : "s"}; ${r.markedPaid} marked paid.`
+          : "Gmail sync complete.",
+      );
+      void loadGmailStatus();
+    } catch {
+      showToast("Gmail sync failed.");
+    } finally {
+      setGmailSyncBusy(false);
+    }
+  }
+
+  async function toggleAutoMark(enabled: boolean) {
+    await persistSettings({ receiptAutoMarkEnabled: enabled });
+  }
+
   const zelleConnected = draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0;
   const venmoConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
 
@@ -268,25 +347,96 @@ export function ManagerPaymentSetupModal({
       <div className="space-y-3">
         {loading ? <p className="text-sm text-muted">Loading…</p> : null}
         {draft.paymentInboxAddress ? (
-          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 space-y-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted">Auto-track receipts</p>
-            <p className="mt-1 text-sm text-foreground">
-              Forward Zelle and Venmo receipt emails here. We match the <span className="font-mono">PL-</span> code
-              and amount, then mark the charge paid.
+            <p className="text-sm text-foreground">
+              Link Gmail to read Zelle and Venmo notification emails, or forward them to the address below.
+              We match the <span className="font-mono">PL-</span> code and amount, then mark the charge paid.
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <code className="break-all rounded-md bg-card px-2 py-1 text-xs text-foreground">
-                {draft.paymentInboxAddress}
-              </code>
-              <button
-                type="button"
-                onClick={copyInboxAddress}
-                data-attr="manager-payment-inbox-copy"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Copy
-              </button>
+            <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-foreground">Gmail</span>
+                {gmailStatus?.connected ? (
+                  <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">
+                    {gmailStatus.email ?? "Connected"}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={linkGmail}
+                    disabled={gmailBusy || gmailStatus?.configured === false}
+                    data-attr="manager-payment-gmail-link"
+                    className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                  >
+                    {gmailBusy ? "Opening…" : "Link Gmail"}
+                  </button>
+                )}
+              </div>
+              {gmailStatus?.configured === false ? (
+                <p className="text-xs text-muted">Google sign-in is not configured on this server.</p>
+              ) : null}
+              {gmailStatus?.connected ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    disabled={gmailSyncBusy}
+                    data-attr="manager-payment-gmail-sync"
+                    onClick={() => void syncGmail()}
+                  >
+                    {gmailSyncBusy ? "Syncing…" : "Sync now"}
+                  </Button>
+                  {gmailStatus.lastSyncAt ? (
+                    <span className="self-center text-xs text-muted">
+                      Last sync {new Date(gmailStatus.lastSyncAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={draft.receiptAutoMarkEnabled !== false}
+                  onChange={(e) => void toggleAutoMark(e.target.checked)}
+                  data-attr="manager-payment-auto-mark-toggle"
+                />
+                Automatically mark matching charges paid
+              </label>
             </div>
+            <div>
+              <p className="text-xs text-muted">Or forward receipts to:</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <code className="break-all rounded-md bg-card px-2 py-1 text-xs text-foreground">
+                  {draft.paymentInboxAddress}
+                </code>
+                <button
+                  type="button"
+                  onClick={copyInboxAddress}
+                  data-attr="manager-payment-inbox-copy"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGmailFilterHelp((v) => !v)}
+                  className="text-sm font-medium text-primary hover:underline"
+                  data-attr="manager-payment-gmail-filter-help"
+                >
+                  {showGmailFilterHelp ? "Hide Gmail filter steps" : "Gmail filter steps"}
+                </button>
+              </div>
+            </div>
+            {showGmailFilterHelp ? (
+              <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted">
+                <li>In Gmail: Settings → See all settings → Filters and Blocked Addresses → Create filter.</li>
+                <li>From: <span className="font-mono">venmo.com OR zellepay.com</span></li>
+                <li>Choose “Forward it to” and paste the address above (add it in Gmail forwarding first if needed).</li>
+                <li>Save the filter. New Zelle/Venmo emails will auto-mark matching charges.</li>
+              </ol>
+            ) : null}
           </div>
         ) : null}
         <HubRow
