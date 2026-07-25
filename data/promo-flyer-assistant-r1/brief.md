@@ -31,5 +31,4 @@ The assistant must **never dead-end** on the generic copy
 
 ## Ship
 
-- PR to `cursor-2`: #108 (`fm/promo-flyer-assistant-r1`)
-- Follow-on PR to `prakrit` (same branch) after `cursor-2` CI green
+- PR to `prakrit`: #108 (`fm/promo-flyer-assistant-r1`) — merge when captain approves
