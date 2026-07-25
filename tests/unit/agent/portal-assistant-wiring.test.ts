@@ -177,4 +177,9 @@ describe("personas are role-scoped", () => {
     expect(SYSTEM_PROMPT).toContain("create_promotion");
     expect(SYSTEM_PROMPT).toContain("referenceImageUrls");
   });
+
+  it("manager persona allows lease config updates inside the Lease modal", () => {
+    expect(SYSTEM_PROMPT).toContain("update_property_lease_config");
+    expect(SYSTEM_PROMPT).toMatch(/Lease modal/i);
+  });
 });

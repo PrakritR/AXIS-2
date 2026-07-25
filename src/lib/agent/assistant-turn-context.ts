@@ -23,3 +23,8 @@ export function isListingDraftAssistantContext(hint: string): boolean {
     h.includes("listing·")
   );
 }
+
+export function isLeaseAssistantContext(hint: string): boolean {
+  const h = hint.toLowerCase();
+  return h.startsWith("lease modal") || h.includes("edit lease ·") || h.includes("lease —");
+}
