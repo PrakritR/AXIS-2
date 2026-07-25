@@ -78,3 +78,19 @@ describe("payment-automation-settings", () => {
     expect(normalizeManagerAutomationSettings({}).overdueDailyEnabled).toBe(false);
   });
 });
+
+describe("late-fee opt-in", () => {
+  it("defaults late-fee notices OFF", () => {
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.lateFeeNoticeEnabled).toBe(false);
+    expect(normalizeManagerAutomationSettings({}).lateFeeNoticeEnabled).toBe(false);
+  });
+
+  it("legacy rows without the field stay OFF; explicit true opts in", () => {
+    expect(
+      normalizeManagerAutomationSettings({ preDueReminderDays: [3] }).lateFeeNoticeEnabled,
+    ).toBe(false);
+    expect(
+      normalizeManagerAutomationSettings({ lateFeeNoticeEnabled: true }).lateFeeNoticeEnabled,
+    ).toBe(true);
+  });
+});

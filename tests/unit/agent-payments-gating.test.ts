@@ -87,25 +87,30 @@ function makeFakeDb(charges: HouseholdCharge[]) {
     from(table: string) {
       return {
         select() {
-          return {
-            eq() {
-              return {
-                order() {
-                  return {
-                    range: async (from: number, to: number) => {
-                      if (table === "portal_household_charge_records") {
-                        const page = charges
-                          .slice(from, to + 1)
-                          .map((c) => ({ row_data: c }));
-                        return { data: page, error: null };
-                      }
-                      return { data: [], error: null };
-                    },
-                  };
-                },
-              };
-            },
+          // Self-chaining thenable builder: the charge loader ends in
+          // `.range()`, while the inbox thread lookup chains several `.eq()`s
+          // and awaits `.limit()` directly — both must resolve.
+          type Chain = {
+            eq: (col: string, val: unknown) => Chain;
+            order: (col: string, opts?: unknown) => Chain;
+            limit: (n: number) => Chain;
+            range: (from: number, to: number) => Promise<{ data: unknown[]; error: null }>;
+            then: (onFulfilled: (v: { data: unknown[]; error: null }) => unknown) => unknown;
           };
+          const builder: Chain = {
+            eq: () => builder,
+            order: () => builder,
+            limit: () => builder,
+            range: async (from: number, to: number) => {
+              if (table === "portal_household_charge_records") {
+                const page = charges.slice(from, to + 1).map((c) => ({ row_data: c }));
+                return { data: page, error: null };
+              }
+              return { data: [], error: null };
+            },
+            then: (onFulfilled) => onFulfilled({ data: [], error: null }),
+          };
+          return builder;
         },
         insert: async (row: AuditRow) => {
           if (table === "audit_log") {

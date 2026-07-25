@@ -8,7 +8,9 @@ import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notif
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
+import { inboxDeepLinkForRole } from "@/lib/platform/parity";
 import { appendInboxThreadReply, deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
+import { sendPortalConversationEmails } from "@/lib/portal-email-send.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -48,15 +50,6 @@ function scopeForRole(role: string | null | undefined): string {
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
   if (normalized === "vendor") return VENDOR_INBOX_SCOPE;
   return RESIDENT_INBOX_SCOPE;
-}
-
-/** Deep-link a push notification tap into the recipient's own inbox. */
-function inboxDeepLinkForRole(role: string | null | undefined): string {
-  const normalized = String(role ?? "").trim().toLowerCase();
-  if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
-  if (normalized === "admin") return "/admin/communication/email/unopened";
-  if (normalized === "vendor") return "/vendor/communication/email/unopened";
-  return "/resident/communication/email/unopened";
 }
 
 type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" };
@@ -483,25 +476,24 @@ export async function POST(req: Request) {
 
     let emailResendId: string | null = null;
     let emailSent = false;
+    let emailResults = new Map<string, { sent: boolean; resendId: string | null }>();
 
     if (emailToSend.length > 0) {
-      const apiKey = process.env.RESEND_API_KEY?.trim();
-      if (apiKey) {
-        const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
-        const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
-        try {
-          const res = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ from, to: emailToSend, subject, text, html }),
-          });
-          const emailPayload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
-          if (res.ok) {
-            emailResendId = emailPayload.id ?? null;
-            emailSent = true;
-          }
-        } catch {
-          // Inbox already written — soft-fail external email.
+      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
+      // Per-recipient sends carrying the signed Reply-To + threading anchor.
+      // Inbox already written — email stays best-effort, soft-failing per recipient.
+      emailResults = await sendPortalConversationEmails({
+        senderUserId: user.id,
+        toEmails: emailToSend,
+        subject,
+        text,
+        html,
+      });
+      for (const email of emailToSend) {
+        const result = emailResults.get(email);
+        if (result?.sent) {
+          emailSent = true;
+          emailResendId = emailResendId ?? result.resendId;
         }
       }
     }
@@ -524,8 +516,8 @@ export async function POST(req: Request) {
               subject,
               body: text,
               sentAt,
-              emailSent: emailSent && emailToSend.includes(recipient.email),
-              emailResendId: emailSent ? emailResendId : null,
+              emailSent: emailResults.get(recipient.email)?.sent === true,
+              emailResendId: emailResults.get(recipient.email)?.resendId ?? null,
             },
           },
           { onConflict: "id" },
