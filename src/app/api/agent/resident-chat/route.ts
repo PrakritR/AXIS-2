@@ -11,6 +11,11 @@ import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
+import {
+  formatAgentChatUserError,
+  PENDING_ACTION_SAVE_FAILED_NOTE,
+} from "@/lib/agent/assistant-turn-error";
+import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 export const runtime = "nodejs";
 
@@ -72,7 +77,14 @@ export async function POST(req: Request) {
       traceActor,
       messages.map((m) => ({ role: m.role, content: String(m.content) })),
       (observer) =>
-        runAgentTurn({ ctx, registry, system: RESIDENT_SYSTEM_PROMPT, messages, observer }),
+        runAgentTurn({
+          ctx,
+          registry,
+          system: RESIDENT_SYSTEM_PROMPT,
+          messages,
+          observer,
+          ...(messagesNeedVisionModel(messages) ? { model: visionPinnedModel() } : {}),
+        }),
     );
     track("assistant_message_sent", ctx.userId, {
       portal: "resident",
@@ -88,6 +100,7 @@ export async function POST(req: Request) {
     // leaves the server.
     const proposal = result.pendingAction;
     let pendingAction: { id: string; preview: ActionPreview } | null = null;
+    let reply = result.reply;
     if (proposal) {
       const actionId = await createPendingAction(ctx, proposal.toolName, proposal.input, proposal.preview, {
         portal: "resident",
@@ -100,6 +113,8 @@ export async function POST(req: Request) {
           tool: proposal.toolName,
           batch: proposal.preview.batchCount ?? 1,
         });
+      } else {
+        reply = reply.trim() ? `${reply.trim()}\n\n${PENDING_ACTION_SAVE_FAILED_NOTE}` : PENDING_ACTION_SAVE_FAILED_NOTE;
       }
     }
 
@@ -107,7 +122,7 @@ export async function POST(req: Request) {
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
-        content: result.reply,
+        content: reply,
         toolTrace: {
           tools: result.toolTrace,
           model: result.model,
@@ -118,13 +133,14 @@ export async function POST(req: Request) {
     ]);
 
     return NextResponse.json({
-      reply: result.reply,
+      reply,
       toolTrace: result.toolTrace,
       sessionId,
       ...(pendingAction ? { pendingAction } : {}),
     });
   } catch (e) {
     console.error("[agent/resident-chat] turn failed:", e);
-    return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

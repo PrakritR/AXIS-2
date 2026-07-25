@@ -16,6 +16,12 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import {
+  draftFieldsFromLeaseSource,
+  propertyLeaseSourceLabel,
+  resolvePropertyLeaseSource,
+  type PropertyLeaseSource,
+} from "@/lib/property-lease-source";
 
 /**
  * Property records vary in shape by lifecycle status: `property_data` holds the
@@ -746,5 +752,163 @@ export const sharePropertyLinkTool = defineWriteTool({
     }
     await updateAuditResult(ctx, dedupeKey, { toEmail, delivery: "failed" }, { clearDedupeKey: true });
     throw new Error(`The invite email could not be sent: ${result.error}`);
+  },
+});
+
+const LEASE_SOURCE_INPUT = z.enum(["axis_default", "custom_comments", "custom_format"]);
+
+function leaseSourceInputLabel(source: z.infer<typeof LEASE_SOURCE_INPUT>): string {
+  if (source === "axis_default") return propertyLeaseSourceLabel("axis_default");
+  if (source === "custom_format") return propertyLeaseSourceLabel("custom_format");
+  return propertyLeaseSourceLabel("custom_comments");
+}
+
+function validateLeaseConfigInput(input: {
+  leaseSource: z.infer<typeof LEASE_SOURCE_INPUT>;
+  customLeaseTerms?: string;
+  leaseTemplateDocUrl?: string;
+}): string | null {
+  if (input.leaseSource === "custom_comments") {
+    return input.customLeaseTerms?.trim()
+      ? null
+      : "customLeaseTerms is required when leaseSource is custom_comments.";
+  }
+  if (input.leaseSource === "custom_format") {
+    return input.leaseTemplateDocUrl?.trim()
+      ? null
+      : "leaseTemplateDocUrl is required when leaseSource is custom_format (upload a PDF in chat or use the modal).";
+  }
+  return null;
+}
+
+function applyLeaseConfigToSubmission(
+  sub: ManagerListingSubmissionV1,
+  input: {
+    leaseSource: z.infer<typeof LEASE_SOURCE_INPUT>;
+    customLeaseTerms?: string;
+    leaseTemplateDocUrl?: string;
+    leaseTemplateDocName?: string;
+  },
+): ManagerListingSubmissionV1 {
+  const source: PropertyLeaseSource =
+    input.leaseSource === "axis_default"
+      ? "axis_default"
+      : input.leaseSource === "custom_format"
+        ? "custom_format"
+        : "custom_comments";
+  const modeFields = draftFieldsFromLeaseSource(source);
+  return normalizeManagerListingSubmissionV1({
+    ...sub,
+    ...modeFields,
+    customLeaseTerms: source === "custom_comments" ? (input.customLeaseTerms?.trim() ?? "") : "",
+    leaseTemplateDocUrl: source === "custom_format" ? (input.leaseTemplateDocUrl?.trim() ?? null) : null,
+    leaseTemplateDocName:
+      source === "custom_format" ? (input.leaseTemplateDocName?.trim() ?? "Lease template.pdf") : "",
+  });
+}
+
+export const updatePropertyLeaseConfigTool = defineWriteTool({
+  name: "update_property_lease_config",
+  description:
+    "Update per-property lease document settings for a listing: PropLane standard lease (axis_default), custom manager terms addendum (custom_comments + customLeaseTerms), or a manager-uploaded PDF template (custom_format + leaseTemplateDocUrl). Use in the Lease modal when propertyId is in context, or after list_properties resolves the id. Does not create or sign resident lease packets — those live on the Leases page.",
+  inputSchema: z
+    .object({
+      propertyId: z.string().min(1).describe("Property id from list_properties or the Lease modal context."),
+      leaseSource: LEASE_SOURCE_INPUT.describe(
+        "axis_default = PropLane-generated lease; custom_comments = addendum text; custom_format = uploaded PDF template.",
+      ),
+      customLeaseTerms: z
+        .string()
+        .optional()
+        .describe("Required when leaseSource is custom_comments — clauses to append to the generated lease."),
+      leaseTemplateDocUrl: z
+        .string()
+        .optional()
+        .describe("Required when leaseSource is custom_format — URL or data URL of the PDF template."),
+      leaseTemplateDocName: z.string().optional().describe("Optional display name for the PDF template."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const validationError = validateLeaseConfigInput(input);
+    if (validationError) throw new Error(validationError);
+    const rec = await loadOwnedPropertyRecord(ctx, input.propertyId);
+    if (!rec) {
+      throw new Error("No property with that id belongs to this landlord. Use list_properties to get valid ids.");
+    }
+    const existingSub = listingSubmissionFromRecord(rec);
+    if (!existingSub) {
+      throw new Error("This property has no listing submission to update — open it in Properties first.");
+    }
+    const src = asObject(rec.property_data) ?? asObject(rec.row_data);
+    const title = str(src, "title") ?? str(src, "buildingName") ?? rec.id;
+    const current = resolvePropertyLeaseSource(existingSub as ManagerListingSubmissionV1);
+    const nextLabel = leaseSourceInputLabel(input.leaseSource);
+    const lines = [
+      { label: "Property", value: title },
+      { label: "Lease source", value: `${propertyLeaseSourceLabel(current)} → ${nextLabel}` },
+    ];
+    if (input.leaseSource === "custom_comments" && input.customLeaseTerms?.trim()) {
+      lines.push({
+        label: "Custom terms",
+        value: input.customLeaseTerms.trim().slice(0, 200) + (input.customLeaseTerms.length > 200 ? "…" : ""),
+      });
+    }
+    if (input.leaseSource === "custom_format") {
+      lines.push({ label: "PDF template", value: input.leaseTemplateDocName?.trim() || "Uploaded template" });
+    }
+    return {
+      kind: "update_property_lease_config",
+      title: "Update lease settings",
+      summary: `Update lease document settings for ${title}.`,
+      fields: lines,
+      confirmLabel: "Save lease settings",
+    };
+  },
+  handler: async (ctx, input) => {
+    const validationError = validateLeaseConfigInput(input);
+    if (validationError) throw new Error(validationError);
+    const rec = await loadOwnedPropertyRecord(ctx, input.propertyId);
+    if (!rec) throw new Error("No property with that id belongs to this landlord.");
+    const existingSub = listingSubmissionFromRecord(rec);
+    if (!existingSub) throw new Error("This property has no listing submission to update.");
+
+    const dedupeKey = `update_property_lease_config:${ctx.landlordId}:${rec.id}:${input.leaseSource}:${auditDayBucket()}`;
+    const audit = await writeAuditLog(ctx, {
+      action: "update_property_lease_config",
+      toolName: "update_property_lease_config",
+      inputSummary: { propertyId: rec.id, leaseSource: input.leaseSource },
+      dedupeKey,
+    });
+    if (!audit.recorded) {
+      if (audit.duplicate) return { reply: "Those lease settings were already saved for this property today." };
+      throw new Error("Could not record the action; lease settings were not saved.");
+    }
+
+    const merged = applyLeaseConfigToSubmission(
+      normalizeManagerListingSubmissionV1(existingSub as ManagerListingSubmissionV1),
+      input,
+    );
+    const payloads = writeSubmissionToRecordPayloads(rec, merged);
+    const { error } = await ctx.db
+      .from("manager_property_records")
+      .update({
+        row_data: payloads.row_data,
+        property_data: payloads.property_data,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", rec.id)
+      .eq("manager_user_id", ctx.landlordId);
+    if (error) {
+      await updateAuditResult(ctx, dedupeKey, { saved: false }, { clearDedupeKey: true });
+      throw new Error(error.message);
+    }
+
+    await updateAuditResult(ctx, dedupeKey, { saved: true, propertyId: rec.id, leaseSource: input.leaseSource });
+    const src = asObject(rec.property_data) ?? asObject(rec.row_data);
+    const title = str(src, "title") ?? str(src, "buildingName") ?? rec.id;
+    return {
+      reply: `Saved lease settings for ${title} (${leaseSourceInputLabel(input.leaseSource)}). Residents signing after this change use the updated lease document.`,
+      resultSummary: { propertyId: rec.id, leaseSource: input.leaseSource },
+    };
   },
 });

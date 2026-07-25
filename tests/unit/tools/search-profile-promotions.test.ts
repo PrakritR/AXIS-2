@@ -60,9 +60,11 @@ import { getManagerProfileTool, getDashboardSummaryTool } from "@/lib/tools/doma
 import {
   listPromotionsTool,
   createPromotionTool,
+  generatePromotionFlyerTool,
   updatePromotionTool,
   deletePromotionTool,
 } from "@/lib/tools/domains/promotions";
+import { normalizeReferenceImageUrls } from "@/lib/promotion-generate-flyer.server";
 import { listCoManagersTool } from "@/lib/tools/domains/team";
 import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
@@ -617,6 +619,32 @@ describe("promotions tools", () => {
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.reply).toMatch(/already/i);
     expect(store.manager_promotion_records).toHaveLength(1);
+  });
+
+  it("normalizeReferenceImageUrls keeps only listing-photos URLs", () => {
+    const urls = normalizeReferenceImageUrls([
+      "https://evil.test/photo.jpg",
+      "https://x.supabase.co/storage/v1/object/public/listing-photos/u/1.jpg",
+    ]);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("listing-photos");
+  });
+
+  it("generate_promotion_flyer preview accepts style notes and reference URLs", async () => {
+    const { ctx } = makeWritableCtx({
+      manager_promotion_records: [promoRow("promo-1", "manager_a")],
+    });
+    const ref = "https://x.supabase.co/storage/v1/object/public/listing-photos/u/ref.jpg";
+    const preview = await previewWrite(generatePromotionFlyerTool, ctx, {
+      promotionId: "promo-1",
+      extraInstructions: "Match the reference: bold headline, navy background, large hero photo.",
+      referenceImageUrls: [ref],
+    });
+    expect(preview.ok).toBe(true);
+    if (preview.ok) {
+      expect(preview.preview.fields?.some((f) => f.label === "Style notes")).toBe(true);
+      expect(preview.preview.fields?.some((f) => f.label === "Reference images")).toBe(true);
+    }
   });
 
   it("update_promotion refuses foreign rows and merges onto current row_data", async () => {

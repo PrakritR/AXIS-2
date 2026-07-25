@@ -11,7 +11,17 @@ import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
-import { enrichMessagesWithUploadedListingPhotos } from "@/lib/listing-draft-agent.server";
+import { enrichManagerChatImageAttachments } from "@/lib/listing-draft-agent.server";
+import {
+  assistantContextHintFromMessages,
+  isListingDraftAssistantContext,
+  isPromotionAssistantContext,
+} from "@/lib/agent/assistant-turn-context";
+import {
+  formatAgentChatUserError,
+  PENDING_ACTION_SAVE_FAILED_NOTE,
+} from "@/lib/agent/assistant-turn-error";
+import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 export const runtime = "nodejs";
 
@@ -64,8 +74,14 @@ export async function POST(req: Request) {
   if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
   messages = attached.messages;
   if (attached.imageCount > 0) {
+    const contextHint = assistantContextHintFromMessages(messages);
+    const listingDraft = isListingDraftAssistantContext(contextHint);
+    const promotion = isPromotionAssistantContext(contextHint);
     try {
-      messages = await enrichMessagesWithUploadedListingPhotos(ctx.db, ctx.landlordId, messages);
+      messages = await enrichManagerChatImageAttachments(ctx.db, ctx.landlordId, messages, {
+        requireSuccessfulUpload: listingDraft,
+        purpose: promotion ? "promotion" : "listing",
+      });
     } catch (e) {
       console.error("[agent/chat] listing photo upload failed:", e);
       return NextResponse.json(
@@ -94,6 +110,7 @@ export async function POST(req: Request) {
           messages,
           observer,
           allowWriteTools: MANAGER_INLINE_WRITE_TOOLS,
+          ...(messagesNeedVisionModel(messages) ? { model: visionPinnedModel() } : {}),
         }),
     );
     track("assistant_message_sent", ctx.userId, {
@@ -110,6 +127,7 @@ export async function POST(req: Request) {
     // leaves the server.
     const proposal = result.pendingAction;
     let pendingAction: { id: string; preview: ActionPreview } | null = null;
+    let reply = result.reply;
     if (proposal) {
       const actionId = await createPendingAction(ctx, proposal.toolName, proposal.input, proposal.preview, {
         portal: "manager",
@@ -122,6 +140,8 @@ export async function POST(req: Request) {
           tool: proposal.toolName,
           batch: proposal.preview.batchCount ?? 1,
         });
+      } else {
+        reply = reply.trim() ? `${reply.trim()}\n\n${PENDING_ACTION_SAVE_FAILED_NOTE}` : PENDING_ACTION_SAVE_FAILED_NOTE;
       }
     }
 
@@ -129,7 +149,7 @@ export async function POST(req: Request) {
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
-        content: result.reply,
+        content: reply,
         toolTrace: {
           tools: result.toolTrace,
           model: result.model,
@@ -140,13 +160,14 @@ export async function POST(req: Request) {
     ]);
 
     return NextResponse.json({
-      reply: result.reply,
+      reply,
       toolTrace: result.toolTrace,
       sessionId,
       ...(pendingAction ? { pendingAction } : {}),
     });
   } catch (e) {
     console.error("[agent/chat] turn failed:", e);
-    return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

@@ -24,6 +24,8 @@ export function ManagerPropertyLeasePanel({
   onUpdated,
   showToast,
   propertyHint,
+  propertyId,
+  propertyLabel,
   demoMode = false,
   sectionActions,
 }: {
@@ -33,6 +35,8 @@ export function ManagerPropertyLeasePanel({
   onUpdated: () => void;
   showToast: (m: string) => void;
   propertyHint?: PropertyLeasePreviewHint;
+  propertyId?: string | null;
+  propertyLabel?: string | null;
   demoMode?: boolean;
   sectionActions?: ReactNode;
 }) {
@@ -94,6 +98,8 @@ export function ManagerPropertyLeasePanel({
         sub={sub}
         saveTarget={saveTarget}
         managerUserId={managerUserId}
+        propertyId={propertyId}
+        propertyLabel={propertyLabel}
         propertyHint={propertyHint}
         demoMode={demoMode}
         onClose={() => setModalOpen(false)}

@@ -39,6 +39,7 @@ export function Modal({
   dense = false,
   assistantStrip = true,
   assistantContext,
+  assistantStorageScopeKey,
 }: {
   open: boolean;
   title: ReactNode;
@@ -58,6 +59,8 @@ export function Modal({
   assistantStrip?: boolean;
   /** Passed to the assistant as modal context (defaults to stringified title). */
   assistantContext?: string;
+  /** Stable assistant thread scope when contextHint is long or dynamic. */
+  assistantStorageScopeKey?: string;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -163,7 +166,7 @@ export function Modal({
           {showAssistantStrip && assistantConversationInstance > 0 ? (
             <ModalAssistantStrip
               contextHint={assistantHint}
-              storageScopeKey={assistantHint}
+              storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
               conversationInstance={assistantConversationInstance}
             />
           ) : null}

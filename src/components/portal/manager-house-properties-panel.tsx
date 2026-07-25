@@ -620,6 +620,8 @@ function ManagerPropertyInlineDetails({
             sub={managerSubmission}
             saveTarget={houseSaveTarget}
             managerUserId={managerUserId}
+            propertyId={stablePropertyId}
+            propertyLabel={leasePropertyHint?.buildingName ?? row?.buildingName}
             onUpdated={onUpdated}
             showToast={showToast}
             propertyHint={leasePropertyHint}
