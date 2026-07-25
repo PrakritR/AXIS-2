@@ -54,7 +54,13 @@ function isRetryableConfirmStatus(status: number): boolean {
  * write itself and never posts model-/client-supplied action arguments at
  * confirm time.
  */
-export function useAssistantConversation(endpoint: string) {
+export type AssistantConversationOptions = {
+  /** When set, messages are stored separately from the main portal assistant thread. */
+  storageScope?: string;
+};
+
+export function useAssistantConversation(endpoint: string, options: AssistantConversationOptions = {}) {
+  const storageScope = options.storageScope?.trim() || undefined;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,14 +71,18 @@ export function useAssistantConversation(endpoint: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMessages(loadAssistantChatMessages(endpoint));
+    setChatHydrated(false);
+    setMessages(loadAssistantChatMessages(endpoint, storageScope));
+    setLastTools([]);
+    setPendingAction(null);
+    setError(null);
     setChatHydrated(true);
-  }, [endpoint]);
+  }, [endpoint, storageScope]);
 
   useEffect(() => {
     if (!chatHydrated) return;
-    saveAssistantChatMessages(endpoint, messages);
-  }, [chatHydrated, endpoint, messages]);
+    saveAssistantChatMessages(endpoint, messages, storageScope);
+  }, [chatHydrated, endpoint, messages, storageScope]);
 
   const send = useCallback(
     async (prompt?: string) => {
@@ -172,13 +182,13 @@ export function useAssistantConversation(endpoint: string) {
   const reset = useCallback(() => {
     attachments.forEach(revokeAttachmentPreview);
     setMessages([]);
-    clearAssistantChatMessages(endpoint);
+    clearAssistantChatMessages(endpoint, storageScope);
     setLastTools([]);
     setPendingAction(null);
     setError(null);
     setInput("");
     setAttachments([]);
-  }, [attachments, endpoint]);
+  }, [attachments, endpoint, storageScope]);
 
   return {
     input,

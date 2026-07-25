@@ -29,15 +29,18 @@ export type AssistantConversationValue = {
 
 const AssistantConversationContext = createContext<AssistantConversationValue | null>(null);
 
-/** One conversation shared by the popup and the docked right rail. */
+/** One conversation shared by the popup and the docked right rail (unless storageScope is set). */
 export function AssistantConversationProvider({
   endpoint,
+  storageScope,
   children,
 }: {
   endpoint: string;
+  /** Isolates chat history — used for modal strips so they do not inherit the main thread. */
+  storageScope?: string;
   children: ReactNode;
 }) {
-  const conversation = useAssistantConversation(endpoint);
+  const conversation = useAssistantConversation(endpoint, { storageScope });
   return (
     <AssistantConversationContext.Provider value={conversation}>
       {children}

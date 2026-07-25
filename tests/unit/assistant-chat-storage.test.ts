@@ -6,6 +6,7 @@ import {
   assistantChatStorageKey,
   clearAssistantChatMessages,
   loadAssistantChatMessages,
+  modalAssistantStorageScope,
   saveAssistantChatMessages,
 } from "@/lib/axis-assistant/assistant-chat-storage";
 
@@ -45,5 +46,14 @@ describe("assistant-chat-storage", () => {
     saveAssistantChatMessages(ENDPOINT, [{ role: "user", content: "x" }]);
     clearAssistantChatMessages(ENDPOINT);
     expect(loadAssistantChatMessages(ENDPOINT)).toEqual([]);
+  });
+
+  it("keeps modal-scoped history separate from the main portal thread", () => {
+    const modalScope = modalAssistantStorageScope("New promotion", 2);
+    saveAssistantChatMessages(ENDPOINT, [{ role: "user", content: "main" }]);
+    saveAssistantChatMessages(ENDPOINT, [{ role: "user", content: "promo" }], modalScope);
+    expect(loadAssistantChatMessages(ENDPOINT)).toEqual([{ role: "user", content: "main" }]);
+    expect(loadAssistantChatMessages(ENDPOINT, modalScope)).toEqual([{ role: "user", content: "promo" }]);
+    expect(assistantChatStorageKey(ENDPOINT, modalScope)).toContain("modal:new-promotion:2");
   });
 });
