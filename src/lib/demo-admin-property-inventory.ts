@@ -269,6 +269,33 @@ export function adminPropertyRentDisplayLabel(row: AdminPropertyRow): string {
   return row.rentRangeLabel || `$${row.monthlyRent}/mo`;
 }
 
+/** Stable display label for sorting manager property tables (never empty). */
+export function adminPropertyRowDisplayLabel(row: AdminPropertyRow): string {
+  const name = row.buildingName.trim();
+  if (name) return name;
+  const address = row.address.trim();
+  if (address) return address;
+  return "Untitled property";
+}
+
+/** Deterministic manager-portal property order (name, then address, then id). */
+export function compareAdminPropertyRowsForDisplay(a: AdminPropertyRow, b: AdminPropertyRow): number {
+  const byLabel = adminPropertyRowDisplayLabel(a).localeCompare(adminPropertyRowDisplayLabel(b), undefined, {
+    sensitivity: "base",
+    numeric: true,
+  });
+  if (byLabel !== 0) return byLabel;
+  const byAddress = a.address.localeCompare(b.address, undefined, { sensitivity: "base", numeric: true });
+  if (byAddress !== 0) return byAddress;
+  const idA = (a.listingId ?? a.adminRefId).trim();
+  const idB = (b.listingId ?? b.adminRefId).trim();
+  return idA.localeCompare(idB);
+}
+
+export function sortAdminPropertyRowsForDisplay(rows: AdminPropertyRow[]): AdminPropertyRow[] {
+  return [...rows].sort(compareAdminPropertyRowsForDisplay);
+}
+
 function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
   const seen = new Set<string>();
   const out: AdminPropertyRow[] = [];
@@ -278,7 +305,7 @@ function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
     seen.add(key);
     out.push(row);
   }
-  return out;
+  return sortAdminPropertyRowsForDisplay(out);
 }
 
 function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, userId: string): AdminPropertyRow[] {
