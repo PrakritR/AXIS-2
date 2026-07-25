@@ -92,6 +92,10 @@ export async function POST(req: Request) {
     return ok({ rateLimited: true });
   }
 
+  // A verified reply token routes the mail into its portal conversation
+  // thread instead of the support inbox. Anything that fails verification
+  // (foreign domain, tampered MAC, mismatched From) falls through to the
+  // support ingest below — visible in the admin inbox, never trusted or lost.
   const reply = parseReplyAddress(parsed.toEmails, parsed.fromEmail);
   if (reply) {
     let handled: boolean;
@@ -141,7 +145,6 @@ export async function POST(req: Request) {
     }
     return ok({ paymentInbox: true });
   }
-
 
   let created: boolean;
   try {
