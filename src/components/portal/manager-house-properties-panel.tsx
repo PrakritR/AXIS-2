@@ -266,7 +266,6 @@ function ManagerPropertyInlineDetails({
   );
 
   const displaySub = portalSub?.sub ?? null;
-  const [previewEditorOpen, setPreviewEditorOpen] = useState(false);
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [draftEditorOpen, setDraftEditorOpen] = useState(false);
 
@@ -316,7 +315,6 @@ function ManagerPropertyInlineDetails({
   const listingOwnerUserId = portalSub?.ownerUserId ?? managerUserId;
 
   const openFullListingEditor = () => setListingEditorOpen(true);
-  const openPreviewEditor = () => setPreviewEditorOpen(true);
 
   const copyApplyLink = () => {
     if (!listingId) return;
@@ -386,68 +384,49 @@ function ManagerPropertyInlineDetails({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {bucket === 2 && listingId ? (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            {canEditListing ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={sectionHeaderBtn}
-                data-attr="listing-preview-edit"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openPreviewEditor();
-                }}
-              >
-                Edit preview
-              </Button>
-            ) : null}
-            {canEditAction ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={sectionHeaderBtn}
-                data-attr="listing-edit-full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openFullListingEditor();
-                }}
-              >
-                Edit listing
-              </Button>
-            ) : null}
-          </div>
-          <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
-          <div className="flex flex-wrap items-center gap-2">
+          {canEditAction ? (
             <Button
               type="button"
               variant="outline"
               className={sectionHeaderBtn}
-              data-attr="listing-unlist"
+              data-attr="listing-edit-full"
               onClick={(e) => {
                 e.stopPropagation();
-                deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)));
+                openFullListingEditor();
               }}
             >
-              Unlist
+              Edit listing
             </Button>
-            {canDeleteAction ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                data-attr="listing-delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-                  deferCatalogMutation(() =>
-                    run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
-                  );
-                }}
-              >
-                Delete listing
-              </Button>
-            ) : null}
-          </div>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className={sectionHeaderBtn}
+            data-attr="listing-unlist"
+            onClick={(e) => {
+              e.stopPropagation();
+              deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)));
+            }}
+          >
+            Unlist
+          </Button>
+          {canDeleteAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+                deferCatalogMutation(() =>
+                  run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
+                );
+              }}
+            >
+              Delete listing
+            </Button>
+          ) : null}
         </>
       ) : null}
 
@@ -550,11 +529,9 @@ function ManagerPropertyInlineDetails({
   const listingFormProps = portalSub
     ? {
         onClose: () => {
-          setPreviewEditorOpen(false);
           setListingEditorOpen(false);
         },
         onSubmitted: () => {
-          setPreviewEditorOpen(false);
           setListingEditorOpen(false);
           onUpdated();
         },
@@ -607,7 +584,7 @@ function ManagerPropertyInlineDetails({
         contentClassName="p-0"
       >
         {hasPreview ? (
-          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
+          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl">
             <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
           </ListingPreviewScrollShell>
         ) : bucket === 3 || bucket === 5 ? (
@@ -658,10 +635,6 @@ function ManagerPropertyInlineDetails({
           onUpdated={onUpdated}
           headerActionsExtra={promotionHeaderExtra}
         />
-      ) : null}
-
-      {previewEditorOpen && listingFormProps ? (
-        <ManagerAddListingForm {...listingFormProps} wizardScope="preview" />
       ) : null}
 
       {listingEditorOpen && listingFormProps ? (

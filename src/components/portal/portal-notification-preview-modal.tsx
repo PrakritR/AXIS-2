@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import {
   Modal,
+  ModalFooter,
   MODAL_INSET_BOX_CLASS,
   MODAL_WARNING_BOX_CLASS,
 } from "@/components/ui/modal";
@@ -147,7 +148,7 @@ export function PortalNotificationPreviewModal({
   const messageReady = skipMessage || (draftSubject.trim().length > 0 && draftBody.trim().length > 0);
 
   const footer = (
-    <div className="flex flex-wrap justify-end gap-2">
+    <ModalFooter>
       <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={confirmBusy}>
         {cancelLabel}
       </Button>
@@ -170,7 +171,7 @@ export function PortalNotificationPreviewModal({
       >
         {confirmBusy ? confirmBusyLabel : effectiveConfirmLabel}
       </Button>
-    </div>
+    </ModalFooter>
   );
 
   return (

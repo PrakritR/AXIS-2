@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
@@ -1241,12 +1241,32 @@ export function ManagerWorkOrdersPanel({
         </div>
       </div>
 
-      <Modal open={Boolean(completeRow)} onClose={() => setCompleteRow(null)} title="Complete work order">
+      <Modal
+        open={Boolean(completeRow)}
+        onClose={() => setCompleteRow(null)}
+        title="Complete work order"
+        description={
+          completeRow ? `${completeRow.propertyName} · ${completeRow.title}` : undefined
+        }
+        footer={
+          completeRow ? (
+            <ModalFooter>
+              <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
+                {completeBusy
+                  ? "Completing…"
+                  : completeDraft.notifyResident && completeRow.residentEmail?.includes("@")
+                    ? "Complete & notify"
+                    : "Complete & log expenses"}
+              </Button>
+            </ModalFooter>
+          ) : undefined
+        }
+      >
         {completeRow ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted">
-              {completeRow.propertyName} · {completeRow.title}
-            </p>
             <label className="flex flex-col gap-1 text-xs font-medium text-muted">
               Category
               <Select
@@ -1360,28 +1380,38 @@ export function ManagerWorkOrdersPanel({
                 ) : null}
               </div>
             ) : null}
-            <div className="flex justify-start gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
-                Cancel
-              </Button>
-              <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
-                {completeBusy
-                  ? "Completing…"
-                  : completeDraft.notifyResident && completeRow.residentEmail?.includes("@")
-                    ? "Complete & notify"
-                    : "Complete & log expenses"}
-              </Button>
-            </div>
           </div>
         ) : null}
       </Modal>
 
-      <Modal open={Boolean(approvePayRow)} onClose={() => setApprovePayRow(null)} title="Approve & pay">
+      <Modal
+        open={Boolean(approvePayRow)}
+        onClose={() => setApprovePayRow(null)}
+        title="Approve & pay"
+        description={
+          approvePayRow ? `${approvePayRow.propertyName} · ${approvePayRow.title}` : undefined
+        }
+        footer={
+          approvePayRow ? (
+            <ModalFooter>
+              <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                data-attr="work-order-approve-pay-confirm"
+                onClick={() => void submitApprovePay(approvePayRow)}
+                disabled={approvePayBusy}
+              >
+                {approvePayBusy ? "Approving…" : "Approve & pay"}
+              </Button>
+            </ModalFooter>
+          ) : undefined
+        }
+      >
         {approvePayRow ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted">
-              {approvePayRow.propertyName} · {approvePayRow.title}
-            </p>
             <p className="text-sm text-foreground">
               Pay{" "}
               <span className="font-semibold">
@@ -1405,20 +1435,6 @@ export function ManagerWorkOrdersPanel({
               This logs the expense, marks the work order completed, and records the vendor as paid (bookkeeping
               only; no funds are transferred).
             </p>
-            <div className="flex justify-start gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                data-attr="work-order-approve-pay-confirm"
-                onClick={() => void submitApprovePay(approvePayRow)}
-                disabled={approvePayBusy}
-              >
-                {approvePayBusy ? "Approving…" : "Approve & pay"}
-              </Button>
-            </div>
           </div>
         ) : null}
       </Modal>

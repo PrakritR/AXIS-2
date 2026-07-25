@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
+import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -155,7 +155,28 @@ export function ManagerAddOutgoingPaymentModal({
   }
 
   return (
-    <Modal open={open} title="Add outgoing payment" onClose={onClose}>
+    <Modal
+      open={open}
+      title="Add outgoing payment"
+      onClose={onClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            disabled={saving}
+            onClick={() => void save()}
+            data-attr="outgoing-payment-save"
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4 text-sm">
         <p className="text-muted">
           Log taxes, mortgage, PropLane fees, vendor invoices, and other property expenses. Vendor work-order payouts
@@ -209,21 +230,6 @@ export function ManagerAddOutgoingPaymentModal({
             <p className="text-xs text-muted">Add vendors in Services → Vendors → Vendor settings.</p>
           ) : null}
         </label>
-        <div className="flex flex-wrap justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={saving}
-            onClick={() => void save()}
-            data-attr="outgoing-payment-save"
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

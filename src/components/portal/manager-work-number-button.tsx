@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { copyTextToClipboard } from "@/lib/manager-property-links";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -55,15 +55,12 @@ export function ManagerWorkNumberButton({ className }: { className?: string }) {
       >
         View number
       </Button>
-      <Modal open={open} title="Work number" onClose={() => setOpen(false)}>
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            This number is auto-assigned for your manager account and cannot be edited here.
-          </p>
-          <p className="rounded-xl border border-border bg-accent/25 px-3 py-2 text-base font-semibold text-foreground">
-            {formatPhoneDisplay(workNumber)}
-          </p>
-          <div className="flex gap-2">
+      <Modal
+        open={open}
+        title="Work number"
+        onClose={() => setOpen(false)}
+        footer={
+          <ModalFooter>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setOpen(false)}>
               Close
             </Button>
@@ -76,7 +73,16 @@ export function ManagerWorkNumberButton({ className }: { className?: string }) {
             >
               Copy number
             </Button>
-          </div>
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            This number is auto-assigned for your manager account and cannot be edited here.
+          </p>
+          <p className="rounded-xl border border-border bg-accent/25 px-3 py-2 text-base font-semibold text-foreground">
+            {formatPhoneDisplay(workNumber)}
+          </p>
         </div>
       </Modal>
     </>

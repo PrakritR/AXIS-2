@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import {
   createManagerListingServiceOption,
   type ManagerListingServiceOption,
@@ -150,7 +150,7 @@ export function ServiceOfferingEditModal({
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
       footer={
-        <>
+        <ModalFooter>
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>
@@ -163,7 +163,7 @@ export function ServiceOfferingEditModal({
           >
             Save
           </Button>
-        </>
+        </ModalFooter>
       }
     >
       <div className="space-y-3">

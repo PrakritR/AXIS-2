@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
@@ -174,14 +174,14 @@ export function ManagerPropertyHouseDetailsPanel({
   );
 
   const editFooter = (
-    <>
+    <ModalFooter>
       <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
         Cancel
       </Button>
       <Button type="button" variant="primary" className="rounded-full" onClick={save}>
         Save house details
       </Button>
-    </>
+    </ModalFooter>
   );
 
   return (

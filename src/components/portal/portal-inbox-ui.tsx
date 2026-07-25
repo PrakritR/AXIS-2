@@ -5,7 +5,7 @@ import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Pencil, 
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
@@ -136,7 +136,21 @@ export function InboxComposeModal({
   };
 
   return (
-    <Modal open={open} title={title} onClose={onClose}>
+    <Modal
+      open={open}
+      title={title}
+      onClose={onClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" className="rounded-full" onClick={submit}>
+            Send
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4">
         <div>
           <label className="text-xs font-semibold text-muted" htmlFor="inbox-compose-to">
@@ -169,14 +183,6 @@ export function InboxComposeModal({
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your message…"
           />
-        </div>
-        <div className="flex flex-wrap justify-start gap-2 pt-2">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" className="rounded-full" onClick={submit}>
-            Send
-          </Button>
         </div>
       </div>
     </Modal>

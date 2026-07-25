@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
+import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeCamera } from "@/lib/native/use-native-camera";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
@@ -270,7 +270,18 @@ export function ResidentAddDocumentModal({
   };
 
   return (
-    <Modal open={open} title="Add to documents" onClose={onClose}>
+    <Modal
+      open={open}
+      title="Add to documents"
+      onClose={onClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="primary" className="rounded-full" onClick={() => void onSave()} disabled={busy || !file}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-muted">
           Upload a photo, PDF, or file you want to keep with your housing records. It appears in the Other documents tab.
@@ -331,12 +342,6 @@ export function ResidentAddDocumentModal({
             className="mt-1.5 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/25"
           />
         </label>
-
-        <div className="flex justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" className="rounded-full" onClick={() => void onSave()} disabled={busy || !file}>
-            {busy ? "Saving…" : "Save"}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

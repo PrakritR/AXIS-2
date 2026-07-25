@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
+import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Input, Select } from "@/components/ui/input";
@@ -367,6 +367,22 @@ export function ManagerAddPaymentModal({
         onClose={handleClose}
         dense
         panelClassName="max-w-xl p-3 sm:p-4"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="outline" className="h-9 rounded-full px-4 text-sm" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="h-9 rounded-full px-4 text-sm"
+              onClick={reviewPayment}
+              disabled={!propertyId}
+            >
+              Review & add payment
+            </Button>
+          </ModalFooter>
+        }
       >
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="flex flex-col gap-0.5 sm:col-span-2">
@@ -455,20 +471,6 @@ export function ManagerAddPaymentModal({
               <option value="paid">Paid</option>
             </Select>
           </label>
-          <div className="flex justify-start gap-2 pt-1 sm:col-span-2">
-            <Button type="button" variant="outline" className="h-9 rounded-full px-4 text-sm" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="h-9 rounded-full px-4 text-sm"
-              onClick={reviewPayment}
-              disabled={!propertyId}
-            >
-              Review & add payment
-            </Button>
-          </div>
         </div>
       </Modal>
 

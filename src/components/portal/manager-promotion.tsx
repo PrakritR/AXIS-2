@@ -14,7 +14,7 @@ import {
   samePropertyId,
 } from "@/lib/manager-portfolio-access";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
@@ -687,14 +687,14 @@ export function ManagerPromotion() {
         onClose={closeForm}
         panelClassName="max-w-2xl"
         footer={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Updating…" : "Update flyer"}
-            </Button>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
             </Button>
-          </div>
+            <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
+              {generating ? "Updating…" : "Update flyer"}
+            </Button>
+          </ModalFooter>
         }
       >
         {/* The Modal body scrolls — no nested scroller, which trapped touch

@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Select, Textarea } from "@/components/ui/input";
 import { PromotionAiDraftPhotoPicker } from "@/components/portal/promotion-ai-draft-card";
 import { PromotionPropertyPicker } from "@/components/portal/promotion-form";
@@ -230,7 +230,7 @@ export function PromotionTextGenerateModal({
       panelClassName="max-w-lg"
       dense
       footer={
-        <>
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
@@ -242,7 +242,7 @@ export function PromotionTextGenerateModal({
           >
             {busy ? "Generating…" : "Generate promotion text"}
           </Button>
-        </>
+        </ModalFooter>
       }
     >
       <PromotionTextComposer
