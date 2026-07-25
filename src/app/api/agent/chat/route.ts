@@ -11,6 +11,7 @@ import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
+import { enrichMessagesWithUploadedListingPhotos } from "@/lib/listing-draft-agent.server";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,17 @@ export async function POST(req: Request) {
   const attached = applyChatAttachments(messages, body);
   if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
   messages = attached.messages;
+  if (attached.imageCount > 0) {
+    try {
+      messages = await enrichMessagesWithUploadedListingPhotos(ctx.db, ctx.landlordId, messages);
+    } catch (e) {
+      console.error("[agent/chat] listing photo upload failed:", e);
+      return NextResponse.json(
+        { error: "We could not save your photos. Try again or use smaller images." },
+        { status: 500 },
+      );
+    }
+  }
 
   const sessionId = await ensureAgentSession(ctx, "manager", body.sessionId as string | undefined);
 

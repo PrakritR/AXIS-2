@@ -4,6 +4,10 @@ import { ChevronsRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
+import {
+  AssistantChatHistoryControls,
+  AssistantChatHistoryPanel,
+} from "@/components/portal/assistant-chat-history-panel";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
   AssistantUndockToPopupButton,
@@ -45,7 +49,7 @@ export function AssistantDockPanel({
   onCollapse,
   onUndockToPopup,
 }: AssistantDockPanelProps) {
-  const { input, setInput, attachments, setAttachments, messages, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset } =
+  const { input, setInput, attachments, setAttachments, messages, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset, threads, activeThreadId, historyOpen, multiThread, openHistory, closeHistory, selectThread, startNewChat } =
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -103,7 +107,16 @@ export function AssistantDockPanel({
             </div>
             <div className="flex shrink-0 items-center gap-1">
             {onUndockToPopup ? <AssistantUndockToPopupButton onClick={onUndockToPopup} /> : null}
-            {hasConversation ? (
+            {multiThread ? (
+              <AssistantChatHistoryControls
+                onOpenHistory={openHistory}
+                onNewChat={() => {
+                  startNewChat();
+                  requestAnimationFrame(() => inputRef.current?.focus());
+                }}
+                showNewChat
+              />
+            ) : hasConversation ? (
               <button
                 type="button"
                 onClick={() => {
@@ -140,6 +153,20 @@ export function AssistantDockPanel({
         </div>
       ) : null}
 
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {multiThread && !compact ? (
+          <AssistantChatHistoryPanel
+            open={historyOpen}
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onSelect={selectThread}
+            onNewChat={() => {
+              startNewChat();
+              requestAnimationFrame(() => inputRef.current?.focus());
+            }}
+            onClose={closeHistory}
+          />
+        ) : null}
       <div
         ref={scrollRef}
         className={cn(
@@ -203,6 +230,7 @@ export function AssistantDockPanel({
             ) : null}
           </div>
         ) : null}
+      </div>
       </div>
 
       <form

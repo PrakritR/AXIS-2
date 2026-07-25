@@ -207,7 +207,7 @@ export function buildDraftPropertyRowData(fields: DraftPropertyFields, submitted
 export const createPropertyTool = defineWriteTool({
   name: "create_property",
   description:
-    "Create a new draft property listing for the current landlord from basic facts (title, address, beds/baths, rent). The draft is saved with status 'pending' — an Axis admin must review and approve it before it goes live; it does not publish anything immediately.",
+    "Create a minimal property stub from basic facts only (no photos or rich marketing copy). Prefer create_listing_draft for the chat-guided full listing flow. Saves status 'pending' for admin review.",
   inputSchema: z
     .object({
       title: z.string().min(1).describe("Listing title / building name."),

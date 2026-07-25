@@ -60,6 +60,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   upsertApplicationRowToServer,
+  upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
@@ -98,6 +99,7 @@ import {
   residentCanViewLeaseRow,
   sendLeaseBackToManager,
   sendLeaseToResident,
+  syncLeasePipelineFromApplications,
   syncLeasePipelineFromServer,
   downloadLeaseFromRow,
   printLeaseAsPdf,
@@ -339,6 +341,10 @@ export function ManagerResidents({
   const [arMoveInFee, setArMoveInFee] = useState("");
   const [arSecurityDeposit, setArSecurityDeposit] = useState("");
   const [arNotes, setArNotes] = useState("");
+  const [arSendWelcome, setArSendWelcome] = useState(true);
+  const [arSignedLeaseFileName, setArSignedLeaseFileName] = useState("");
+  const [arSignedLeaseDataUrl, setArSignedLeaseDataUrl] = useState("");
+  const [arSaving, setArSaving] = useState(false);
 
   // Edit resident
   const [editResidentOpen, setEditResidentOpen] = useState(false);
@@ -967,15 +973,21 @@ export function ManagerResidents({
   async function sendResidentAccountEmail(res: ActiveResident) {
     setWelcomeEmailBusyForResident(res.id);
     try {
-      const response = await fetch("/api/portal/send-resident-welcome", {
+      const endpoint = res.manuallyAdded
+        ? "/api/portal/onboard-existing-resident"
+        : "/api/portal/send-resident-welcome";
+      const payload = res.manuallyAdded
+        ? { applicationId: res.axisId, sendWelcomeEmail: true }
+        : { to: res.email, residentName: res.name, axisId: res.axisId };
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ to: res.email, residentName: res.name, axisId: res.axisId }),
+        body: JSON.stringify(payload),
       });
-      const data = (await response.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
+      const data = (await response.json()) as { ok?: boolean; error?: string; mailtoHref?: string; welcomeEmailSent?: boolean };
       if (response.ok && data.ok) {
-        showToast("Account setup email sent.");
+        showToast(res.manuallyAdded ? "Portal setup email sent." : "Account setup email sent.");
         return;
       }
       if (typeof data.mailtoHref === "string") {
@@ -1175,51 +1187,88 @@ export function ManagerResidents({
   }, [userId]);
 
   function saveManualResident() {
-    if (!arName.trim()) { showToast("Enter the resident's name."); return; }
-    if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
-    const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
-    const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
-    const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
-    const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
-    const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
-    const propLabel = arPropertyId
-      ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
-      : "—";
-    const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
-    const nextRow: DemoApplicantRow = {
-      id: axisId,
-      name: arName.trim(),
-      email: arEmail.trim(),
-      property: propLabel,
-      stage: "Active",
-      bucket: "approved",
-      detail: "",
-      assignedPropertyId: arPropertyId || undefined,
-      assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
-      signedMonthlyRent: rent ?? undefined,
-      managerUserId: userId ?? undefined,
-      manuallyAdded: true,
-      manualResidentDetails: {
-        moveInDate: arMoveInDate || undefined,
-        moveOutDate: arMoveOutDate || undefined,
-        monthlyUtilities: utilities ?? undefined,
-        moveInFee: moveInFee ?? undefined,
-        securityDeposit: secDeposit ?? undefined,
-        roomNumber: selectedRoomLabel || undefined,
-        leaseTerm: arLeaseTerm || undefined,
-        notes: arNotes.trim() || undefined,
-      },
-    };
-    appendManagerApplicationRow(nextRow);
-    recordApprovedApplicationCharges(nextRow, userId ?? null);
-    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-    setChargeTab("pending");
-    setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
-    setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
-    setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
-    setAddResidentOpen(false);
-    setHcTick((n) => n + 1);
-    showToast(`Resident added. PropLane ID: ${axisId}`);
+    void (async () => {
+      if (arSaving) return;
+      if (!arName.trim()) { showToast("Enter the resident's name."); return; }
+      if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
+      const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
+      const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
+      const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
+      const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
+      const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+      const propLabel = arPropertyId
+        ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
+        : "—";
+      const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
+      const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
+      const nextRow: DemoApplicantRow = {
+        id: axisId,
+        name: arName.trim(),
+        email: arEmail.trim(),
+        property: propLabel,
+        stage: "Active",
+        bucket: "approved",
+        detail: "",
+        assignedPropertyId: arPropertyId || undefined,
+        assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+        signedMonthlyRent: rent ?? undefined,
+        managerUserId: userId ?? undefined,
+        manuallyAdded: true,
+        manualResidentDetails: {
+          moveInDate: arMoveInDate || undefined,
+          moveOutDate: arMoveOutDate || undefined,
+          monthlyUtilities: utilities ?? undefined,
+          moveInFee: moveInFee ?? undefined,
+          securityDeposit: secDeposit ?? undefined,
+          roomNumber: selectedRoomLabel || undefined,
+          leaseTerm: arLeaseTerm || undefined,
+          notes: arNotes.trim() || undefined,
+          signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
+          signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
+          signedLeaseUploadedAt,
+          externallySignedLease: true,
+        },
+      };
+      setArSaving(true);
+      try {
+        appendManagerApplicationRow(nextRow, { skipServerMirror: true });
+        const persisted = await upsertApplicationRowToServerAwait(nextRow, {
+          existingResidentOnboarding: { sendWelcomeEmail: arSendWelcome },
+        });
+        if (!persisted.ok) {
+          if (persisted.mailtoHref) {
+            const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+            openMailtoHref(persisted.mailtoHref);
+          }
+          showToast(persisted.error ?? "Could not complete resident onboarding.");
+          return;
+        }
+        recordApprovedApplicationCharges(nextRow, userId ?? null);
+        syncLeasePipelineFromApplications(userId ?? null);
+
+        showToast(
+          persisted.welcomeEmailSent
+            ? `Resident added. Portal setup email sent to ${arEmail.trim()}.`
+            : `Resident added. PropLane ID: ${axisId}`,
+        );
+
+        await Promise.all([
+          syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
+          syncLeasePipelineFromServer(userId ?? null, { force: true }),
+          syncHouseholdChargesFromServer(true),
+        ]);
+        setChargeTab("pending");
+        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
+        setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
+        setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
+        setArSignedLeaseFileName(""); setArSignedLeaseDataUrl(""); setArSendWelcome(true);
+        setAddResidentOpen(false);
+        setHcTick((n) => n + 1);
+        setLeaseTick((n) => n + 1);
+      } finally {
+        setArSaving(false);
+      }
+    })();
   }
 
   function openEditResidentModal() {
@@ -2665,9 +2714,26 @@ export function ManagerResidents({
         </div>
       </Modal>
 
-      <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
+      <Modal
+        open={addResidentOpen}
+        title="Add resident"
+        onClose={() => setAddResidentOpen(false)}
+        footer={
+          <div className="flex justify-start gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
+              {arSaving ? "Adding…" : "Add resident"}
+            </Button>
+          </div>
+        }
+      >
         <div className="space-y-3">
-          <p className="text-xs text-muted">Creates an active resident record with a PropLane ID. No application or lease is generated.</p>
+          <p className="text-xs text-muted">
+            Onboard an existing tenant: creates an active resident record, treats the lease as already signed,
+            sets up payments, and can email portal instructions (no application or screening).
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Full name *</span>
@@ -2771,6 +2837,46 @@ export function ManagerResidents({
               </label>
             ) : null}
             <label className="col-span-2 flex flex-col gap-1 text-sm">
+              <span className="font-medium text-muted">Signed lease (PDF, optional)</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                className="text-sm text-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.type !== "application/pdf") {
+                    showToast("Please choose a PDF file.");
+                    e.target.value = "";
+                    return;
+                  }
+                  if (file.size > 3.5 * 1024 * 1024) {
+                    showToast("PDF too large (max 3.5 MB).");
+                    e.target.value = "";
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setArSignedLeaseDataUrl(reader.result as string);
+                    setArSignedLeaseFileName(file.name);
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+              {arSignedLeaseFileName ? (
+                <span className="text-xs text-muted">Attached: {arSignedLeaseFileName}</span>
+              ) : null}
+            </label>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={arSendWelcome}
+                onChange={(e) => setArSendWelcome(e.target.checked)}
+                className="size-4 rounded border-border"
+              />
+              <span>Email portal setup instructions to the resident</span>
+            </label>
+            <label className="col-span-2 flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Notes</span>
               <Textarea
                 className="min-h-[72px]"
@@ -2780,14 +2886,24 @@ export function ManagerResidents({
               />
             </label>
           </div>
-          <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
-          </div>
         </div>
       </Modal>
 
-      <Modal open={editResidentOpen} title="Edit resident" onClose={() => setEditResidentOpen(false)}>
+      <Modal
+        open={editResidentOpen}
+        title="Edit resident"
+        onClose={() => setEditResidentOpen(false)}
+        footer={
+          <div className="flex justify-start gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
+              Save resident
+            </Button>
+          </div>
+        }
+      >
         <div className="space-y-3">
           <p className="text-xs text-muted">Changes here update the resident record and application simultaneously.</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -2916,14 +3032,6 @@ export function ManagerResidents({
                 placeholder="Any additional details about this resident…"
               />
             </label>
-          </div>
-          <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
-              Save resident
-            </Button>
           </div>
         </div>
       </Modal>
@@ -3067,6 +3175,16 @@ export function ManagerResidents({
           if (messageBusy) return;
           setMessageOpen(false);
         }}
+        footer={
+          <div className="flex justify-start gap-2">
+            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
+              {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
+            </Button>
+          </div>
+        }
       >
         <div className="space-y-3">
           <p className="text-sm text-muted">
@@ -3105,14 +3223,6 @@ export function ManagerResidents({
               />
             </label>
           ) : null}
-          <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
-              {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
-            </Button>
-          </div>
         </div>
       </Modal>
       </ManagerPortalPageShell>

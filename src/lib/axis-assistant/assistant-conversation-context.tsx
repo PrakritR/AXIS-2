@@ -8,6 +8,7 @@ import {
   type PendingAction,
   type ToolTraceEntry,
 } from "@/lib/axis-assistant/use-assistant-conversation";
+import type { AssistantChatThreadSummary } from "@/lib/axis-assistant/assistant-chat-threads";
 
 export type AssistantConversationValue = {
   input: string;
@@ -17,6 +18,10 @@ export type AssistantConversationValue = {
     value: import("@/lib/assistant-chat-attachments.client").PendingChatAttachment[],
   ) => void;
   messages: ChatMessage[];
+  threads: AssistantChatThreadSummary[];
+  activeThreadId: string;
+  historyOpen: boolean;
+  multiThread: boolean;
   lastTools: ToolTraceEntry[];
   pendingAction: PendingAction | null;
   loading: boolean;
@@ -25,19 +30,26 @@ export type AssistantConversationValue = {
   send: (prompt?: string) => Promise<void>;
   resolvePendingAction: (decision: "confirm" | "deny") => Promise<void>;
   reset: () => void;
+  openHistory: () => void;
+  closeHistory: () => void;
+  selectThread: (threadId: string) => void;
+  startNewChat: () => void;
 };
 
 const AssistantConversationContext = createContext<AssistantConversationValue | null>(null);
 
-/** One conversation shared by the popup and the docked right rail. */
+/** One conversation shared by the popup and the docked right rail (unless storageScope is set). */
 export function AssistantConversationProvider({
   endpoint,
+  storageScope,
   children,
 }: {
   endpoint: string;
+  /** Isolates chat history — used for modal strips so they do not inherit the main thread. */
+  storageScope?: string;
   children: ReactNode;
 }) {
-  const conversation = useAssistantConversation(endpoint);
+  const conversation = useAssistantConversation(endpoint, { storageScope });
   return (
     <AssistantConversationContext.Provider value={conversation}>
       {children}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
@@ -69,6 +69,15 @@ export function Modal({
     (typeof title === "string" ? title.trim() : "") ||
     "Portal modal";
 
+  const [assistantConversationInstance, setAssistantConversationInstance] = useState(0);
+  const wasOpenRef = useRef(false);
+  useLayoutEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setAssistantConversationInstance((n) => n + 1);
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
   if (!open || !isClient) return null;
 
   return createPortal(
@@ -127,14 +136,20 @@ export function Modal({
           {footer ? (
             <div
               className={cn(
-                "shrink-0 border-t border-border",
+                "shrink-0 border-t border-border bg-card",
                 dense ? "mt-2 pt-2" : "mt-4 pt-4",
               )}
             >
               {footer}
             </div>
           ) : null}
-          {showAssistantStrip ? <ModalAssistantStrip contextHint={assistantHint} /> : null}
+          {showAssistantStrip && assistantConversationInstance > 0 ? (
+            <ModalAssistantStrip
+              contextHint={assistantHint}
+              storageScopeKey={assistantHint}
+              conversationInstance={assistantConversationInstance}
+            />
+          ) : null}
         </div>
       </div>
     </div>,

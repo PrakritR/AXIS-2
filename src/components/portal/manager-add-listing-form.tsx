@@ -4719,6 +4719,7 @@ export function ManagerAddListingForm({
           </div>
           <ModalAssistantStrip
             contextHint={`${wizardTitlePrefix} · ${LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing"}`}
+            storageScopeKey={wizardTitlePrefix}
           />
         </div>
       </form>

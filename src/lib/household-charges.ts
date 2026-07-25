@@ -2267,7 +2267,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         ? sub?.securityDeposit
         : undefined,
   );
-  pushCharge("security_deposit", securityDeposit, chargeTitle("security_deposit"), true, "Before lease signing");
+  pushCharge(
+    "security_deposit",
+    securityDeposit,
+    chargeTitle("security_deposit"),
+    !row.manuallyAdded,
+    row.manuallyAdded ? moveInDue : "Before lease signing",
+  );
 
   const moveInFee = savedAmount(
     row.application?.managerMoveInFeeOverride,

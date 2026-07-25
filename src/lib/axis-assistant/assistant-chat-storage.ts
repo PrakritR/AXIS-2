@@ -13,15 +13,29 @@ type StoredPayload = {
   messages: ChatMessage[];
 };
 
-export function assistantChatStorageKey(endpoint: string): string {
+export function assistantChatStorageKey(endpoint: string, storageScope?: string): string {
   const path = endpoint.trim() || "/api/agent/chat";
-  return `axis:assistant-chat:v${STORAGE_VERSION}:${path}`;
+  const scope = storageScope?.trim();
+  const base = `axis:assistant-chat:v${STORAGE_VERSION}:${path}`;
+  return scope ? `${base}:${scope}` : base;
 }
 
-export function loadAssistantChatMessages(endpoint: string): ChatMessage[] {
+/** Stable slug for modal-scoped assistant threads (separate from the main dock/popup chat). */
+export function modalAssistantStorageScope(contextKey: string, instance = 0): string {
+  const slug =
+    contextKey
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "modal";
+  return instance > 0 ? `modal:${slug}:${instance}` : `modal:${slug}`;
+}
+
+export function loadAssistantChatMessages(endpoint: string, storageScope?: string): ChatMessage[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(assistantChatStorageKey(endpoint));
+    const raw = window.localStorage.getItem(assistantChatStorageKey(endpoint, storageScope));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as StoredPayload;
     if (parsed.v !== STORAGE_VERSION || !Array.isArray(parsed.messages)) return [];
@@ -39,23 +53,27 @@ export function loadAssistantChatMessages(endpoint: string): ChatMessage[] {
   }
 }
 
-export function saveAssistantChatMessages(endpoint: string, messages: ChatMessage[]): void {
+export function saveAssistantChatMessages(
+  endpoint: string,
+  messages: ChatMessage[],
+  storageScope?: string,
+): void {
   if (typeof window === "undefined") return;
   try {
     const payload: StoredPayload = {
       v: STORAGE_VERSION,
       messages: messages.slice(-MAX_STORED_MESSAGES),
     };
-    window.localStorage.setItem(assistantChatStorageKey(endpoint), JSON.stringify(payload));
+    window.localStorage.setItem(assistantChatStorageKey(endpoint, storageScope), JSON.stringify(payload));
   } catch {
     /* quota or private mode */
   }
 }
 
-export function clearAssistantChatMessages(endpoint: string): void {
+export function clearAssistantChatMessages(endpoint: string, storageScope?: string): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(assistantChatStorageKey(endpoint));
+    window.localStorage.removeItem(assistantChatStorageKey(endpoint, storageScope));
   } catch {
     /* ignore */
   }

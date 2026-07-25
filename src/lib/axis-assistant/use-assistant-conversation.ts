@@ -13,6 +13,13 @@ import {
   loadAssistantChatMessages,
   saveAssistantChatMessages,
 } from "@/lib/axis-assistant/assistant-chat-storage";
+import type { AssistantChatThreadSummary } from "@/lib/axis-assistant/assistant-chat-threads";
+import {
+  loadAssistantThreadState,
+  persistAssistantThreadMessages,
+  startNewAssistantThread,
+  switchAssistantThread,
+} from "@/lib/axis-assistant/assistant-chat-threads";
 import { notifyAgentPendingActionsChanged } from "@/lib/axis-assistant/pending-actions-events";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -54,10 +61,20 @@ function isRetryableConfirmStatus(status: number): boolean {
  * write itself and never posts model-/client-supplied action arguments at
  * confirm time.
  */
-export function useAssistantConversation(endpoint: string) {
+export type AssistantConversationOptions = {
+  /** When set, messages are stored separately from the main portal assistant thread. */
+  storageScope?: string;
+};
+
+export function useAssistantConversation(endpoint: string, options: AssistantConversationOptions = {}) {
+  const storageScope = options.storageScope?.trim() || undefined;
+  const multiThread = !storageScope;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState("");
+  const [threads, setThreads] = useState<AssistantChatThreadSummary[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [chatHydrated, setChatHydrated] = useState(false);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -65,14 +82,32 @@ export function useAssistantConversation(endpoint: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMessages(loadAssistantChatMessages(endpoint));
+    setChatHydrated(false);
+    setHistoryOpen(false);
+    if (multiThread) {
+      const state = loadAssistantThreadState(endpoint);
+      setActiveThreadId(state.activeThreadId);
+      setThreads(state.threads);
+      setMessages(state.messages);
+    } else {
+      setActiveThreadId("");
+      setThreads([]);
+      setMessages(loadAssistantChatMessages(endpoint, storageScope));
+    }
+    setLastTools([]);
+    setPendingAction(null);
+    setError(null);
     setChatHydrated(true);
-  }, [endpoint]);
+  }, [endpoint, multiThread, storageScope]);
 
   useEffect(() => {
     if (!chatHydrated) return;
-    saveAssistantChatMessages(endpoint, messages);
-  }, [chatHydrated, endpoint, messages]);
+    if (multiThread && activeThreadId) {
+      setThreads(persistAssistantThreadMessages(endpoint, activeThreadId, messages));
+    } else if (!multiThread) {
+      saveAssistantChatMessages(endpoint, messages, storageScope);
+    }
+  }, [activeThreadId, chatHydrated, endpoint, messages, multiThread, storageScope]);
 
   const send = useCallback(
     async (prompt?: string) => {
@@ -171,14 +206,50 @@ export function useAssistantConversation(endpoint: string) {
 
   const reset = useCallback(() => {
     attachments.forEach(revokeAttachmentPreview);
-    setMessages([]);
-    clearAssistantChatMessages(endpoint);
+    if (multiThread) {
+      const next = startNewAssistantThread(endpoint, activeThreadId, messages);
+      setActiveThreadId(next.activeThreadId);
+      setThreads(next.threads);
+      setMessages(next.messages);
+    } else {
+      setMessages([]);
+      clearAssistantChatMessages(endpoint, storageScope);
+    }
     setLastTools([]);
     setPendingAction(null);
     setError(null);
     setInput("");
     setAttachments([]);
-  }, [attachments, endpoint]);
+    setHistoryOpen(false);
+  }, [activeThreadId, attachments, endpoint, messages, multiThread, storageScope]);
+
+  const openHistory = useCallback(() => {
+    if (!multiThread) return;
+    setHistoryOpen(true);
+  }, [multiThread]);
+
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+
+  const selectThread = useCallback(
+    (threadId: string) => {
+      if (!multiThread) return;
+      const next = switchAssistantThread(endpoint, threadId, { id: activeThreadId, messages });
+      setActiveThreadId(next.activeThreadId);
+      setMessages(next.messages);
+      setThreads(next.threads);
+      setPendingAction(null);
+      setLastTools([]);
+      setError(null);
+    },
+    [activeThreadId, endpoint, messages, multiThread],
+  );
+
+  const startNewChat = useCallback(() => {
+    reset();
+    requestAnimationFrame(() => {
+      /* focus handled by caller */
+    });
+  }, [reset]);
 
   return {
     input,
@@ -186,6 +257,10 @@ export function useAssistantConversation(endpoint: string) {
     attachments,
     setAttachments,
     messages,
+    threads,
+    activeThreadId,
+    historyOpen,
+    multiThread,
     lastTools,
     pendingAction,
     loading,
@@ -194,5 +269,9 @@ export function useAssistantConversation(endpoint: string) {
     send,
     resolvePendingAction,
     reset,
+    openHistory,
+    closeHistory,
+    selectThread,
+    startNewChat,
   } as const;
 }
