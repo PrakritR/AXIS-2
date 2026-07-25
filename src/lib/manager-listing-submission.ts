@@ -233,6 +233,8 @@ export type ManagerListingSubmissionV1 = {
   /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
   shortTermMoveInFee?: string;
   applicationFee: string;
+  /** Refundable deposit securing the application; credited toward security deposit on approval. */
+  holdingDeposit?: string;
   /** When true, residents may apply to additional properties or rooms beyond their first application. */
   allowMultiplePropertyApplications?: boolean;
   /**
@@ -1504,6 +1506,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     shortTermDailyCost: "",
     shortTermDeposit: "",
     applicationFee: "",
+    holdingDeposit: "$100",
     securityDeposit: "",
     moveInFee: "",
     paymentAtSigningIncludes: ["security_deposit", "move_in_fee"],
