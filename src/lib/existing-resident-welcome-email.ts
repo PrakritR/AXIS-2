@@ -3,7 +3,7 @@
  */
 
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
-import { residentSetupAccountUrl } from "@/lib/auth/resident-setup-token";
+import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
 
 export const EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT =
   "Your PropLane resident portal — pay rent and manage your home";
@@ -100,7 +100,11 @@ export function buildExistingResidentWelcomeMailtoHref(params: {
   setupToken?: string;
   propertyLabel?: string;
 }): string {
-  const signupUrl = residentSetupAccountUrl(params.origin || resolveEmailLinkBaseUrl(), params.axisId, params.setupToken);
+  const signupUrl = residentAccountCreationUrl(
+    params.origin || resolveEmailLinkBaseUrl(),
+    params.axisId,
+    params.setupToken,
+  );
   const body = buildExistingResidentWelcomeEmailBody({
     residentName: params.residentName,
     axisId: params.axisId,
