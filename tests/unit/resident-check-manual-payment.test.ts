@@ -17,6 +17,7 @@ vi.mock("@/lib/household-charges.server", () => ({
 
 import {
   MANUAL_PAYMENT_NOT_PAID_MESSAGE,
+  chargeKeyPart,
   checkApplicationFeeManualPayment,
   checkResidentManualPayments,
 } from "@/lib/resident-check-manual-payment.server";
@@ -221,5 +222,21 @@ describe("checkApplicationFeeManualPayment", () => {
     } else {
       throw new Error("expected paid application fee");
     }
+  });
+});
+
+describe("chargeKeyPart", () => {
+  it("slugifies normal input the same as before", () => {
+    expect(chargeKeyPart("Resident@Example.com")).toBe("resident_example_com");
+    expect(chargeKeyPart("  prop-1  ")).toBe("prop_1");
+    expect(chargeKeyPart("!!!")).toBe("unknown");
+  });
+
+  it("strips leading/trailing separators without polynomial backtracking", () => {
+    expect(chargeKeyPart("___abc___")).toBe("abc");
+    const adversarial = "_".repeat(200_000);
+    const start = performance.now();
+    expect(chargeKeyPart(adversarial)).toBe("unknown");
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
