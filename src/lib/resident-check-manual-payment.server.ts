@@ -23,9 +23,16 @@ type ChargeRow = {
   manager_user_id: string | null;
 };
 
-function chargeKeyPart(raw: string): string {
-  const cleaned = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  return cleaned || "unknown";
+export function chargeKeyPart(raw: string): string {
+  // `.replace(/[^a-z0-9]+/g, "_")` is a single linear pass; stripping the edge
+  // underscores with a character scan avoids the `/^_+|_+$/` pattern, whose
+  // `_+$` backtracks polynomially on a long run of `_` (js/polynomial-redos).
+  const cleaned = raw.slice(0, 512).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  let start = 0;
+  let end = cleaned.length;
+  while (start < end && cleaned[start] === "_") start += 1;
+  while (end > start && cleaned[end - 1] === "_") end -= 1;
+  return cleaned.slice(start, end) || "unknown";
 }
 
 function applicationFeeFallbackChargeId(residentEmail: string, propertyId: string): string {

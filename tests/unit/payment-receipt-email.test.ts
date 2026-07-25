@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePaymentReceiptEmail, parseWorkOrderPaymentReceiptEmail } from "@/lib/payment-receipt-email/parse-receipt";
+import {
+  bankSenderIsAllowed,
+  parsePaymentReceiptEmail,
+  parseWorkOrderPaymentReceiptEmail,
+} from "@/lib/payment-receipt-email/parse-receipt";
 import {
   extractPaymentInboxToken,
   paymentInboxAddress,
@@ -69,6 +73,71 @@ describe("parsePaymentReceiptEmail", () => {
         body: "PL-ABC123",
       }),
     ).toBeNull();
+  });
+});
+
+describe("bankSenderIsAllowed — hostname match, never substring (money-path auth)", () => {
+  it("accepts an exact allowed bank domain", () => {
+    expect(bankSenderIsAllowed("chase.com")).toBe(true);
+    expect(bankSenderIsAllowed("alerts@chase.com")).toBe(true);
+  });
+
+  it("accepts a true subdomain of an allowed bank domain", () => {
+    expect(bankSenderIsAllowed("secure.chase.com")).toBe(true);
+    expect(bankSenderIsAllowed("noreply@email.bankofamerica.com")).toBe(true);
+  });
+
+  it("rejects a lookalike host that only prefixes the bank domain", () => {
+    expect(bankSenderIsAllowed("chase.com.attacker.example")).toBe(false);
+    expect(bankSenderIsAllowed("statements@chase.com.attacker.example")).toBe(false);
+  });
+
+  it("rejects a URL that merely mentions the bank domain in its path/query", () => {
+    expect(bankSenderIsAllowed("attacker.example/?redirect=chase.com")).toBe(false);
+    expect(bankSenderIsAllowed("https://attacker.example/chase.com")).toBe(false);
+  });
+
+  it("rejects an email whose real domain is not a bank domain", () => {
+    expect(bankSenderIsAllowed("chase.com@attacker.example")).toBe(false);
+    expect(bankSenderIsAllowed("spam@evil.com")).toBe(false);
+  });
+
+  it("rejects hostless / unparseable input rather than falling through to accept", () => {
+    expect(bankSenderIsAllowed("")).toBe(false);
+    expect(bankSenderIsAllowed("not an email or url")).toBe(false);
+  });
+});
+
+describe("parsePaymentReceiptEmail — genuine bank-sent Zelle receipt still verifies", () => {
+  it("accepts a real Chase Zelle receipt (channel from body, sender host verified)", () => {
+    const parsed = parsePaymentReceiptEmail({
+      fromEmail: "no.reply.alerts@chase.com",
+      subject: "You sent money with Zelle®",
+      body: "You sent $200.00 with Zelle. Memo: PL-ABC123",
+    });
+    expect(parsed).toEqual({
+      channel: "zelle",
+      amountCents: 20000,
+      paymentReference: "PL-ABC123",
+      referenceKind: "resident_charge",
+    });
+  });
+
+  it("rejects a Zelle-looking receipt from a bank lookalike host", () => {
+    expect(
+      parsePaymentReceiptEmail({
+        fromEmail: "alerts@chase.com.attacker.example",
+        subject: "You sent money with Zelle®",
+        body: "You sent $200.00 with Zelle. Memo: PL-ABC123",
+      }),
+    ).toBeNull();
+  });
+
+  it("parses adversarial comma-repetition input fast (no polynomial backtracking)", () => {
+    const body = `You sent with Zelle. Memo: PL-ABC123 ${"$".repeat(1)}${",".repeat(100_000)}`;
+    const start = performance.now();
+    parsePaymentReceiptEmail({ fromEmail: "no.reply@chase.com", subject: "Zelle", body });
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 
