@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
 import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -221,14 +221,11 @@ export function ShareLeadLinkModal({
 
   const actionFooter =
     properties.length > 0 ? (
-      <div className="flex justify-start gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Close
-        </Button>
+      <ModalFooter>
         <Button type="button" variant="primary" className="rounded-full" disabled={propertyIds.length === 0} onClick={openSendPreview}>
           Preview & send
         </Button>
-      </div>
+      </ModalFooter>
     ) : undefined;
 
   return (

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import {
   CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
   customApplicationFieldKeyFromLabel,
@@ -251,6 +251,22 @@ export function ApplicationQuestionEditModal({
       onClose={onClose}
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            data-attr="application-question-save"
+            onClick={save}
+          >
+            Save
+          </Button>
+        </ModalFooter>
+      }
     >
       <div className="space-y-3">
         <ApplicationQuestionFields
@@ -260,20 +276,6 @@ export function ApplicationQuestionEditModal({
           onOptionsTextChange={onOptionsTextChange}
           error={error}
         />
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          className="rounded-full"
-          data-attr="application-question-save"
-          onClick={save}
-        >
-          Save
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
       </div>
     </Modal>
   );

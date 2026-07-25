@@ -55,14 +55,15 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId,
   onUpdated,
   showToast,
-  sectionActions,
+  headerActionsExtra,
 }: {
   sub: ManagerListingSubmissionV1;
   saveTarget: QuestionsSaveTarget;
   managerUserId: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
-  sectionActions?: ReactNode;
+  /** Share / link actions shown in the section header (visible when collapsed). */
+  headerActionsExtra?: ReactNode;
 }) {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -107,19 +108,24 @@ export function ManagerPropertyApplicationQuestionsPanel({
         collapsible={hasPreview}
         toggleDataAttr="application-section-toggle"
         headerActions={
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            data-attr="application-questions-add"
-            onClick={() => setListModalOpen(true)}
-          >
-            Edit
-          </Button>
+          <>
+            {headerActionsExtra}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="application-questions-add"
+              onClick={(e) => {
+                e.stopPropagation();
+                setListModalOpen(true);
+              }}
+            >
+              Edit
+            </Button>
+          </>
         }
         contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
       >
-        {sectionActions}
         {hasPreview ? (
           <div className="space-y-2">
             {RENTAL_APPLICATION_SECTIONS.map((section) => {

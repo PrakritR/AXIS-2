@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
+import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { submitBugFeedbackReport, type BugFeedbackReporterRole } from "@/lib/portal-bug-feedback";
 import { BUG_FEEDBACK_MAX_ATTACHMENTS, uploadBugFeedbackImages } from "@/lib/bug-feedback-attachments";
@@ -109,10 +109,23 @@ export function PortalFeedbackSubmitModal({
   const atAttachmentLimit = attachments.length >= BUG_FEEDBACK_MAX_ATTACHMENTS;
 
   return (
-    <Modal open={open} title="Add feedback" onClose={handleClose} panelClassName="max-w-lg">
-      <p className="mb-4 text-sm text-muted">
-        Share ideas, report issues, or tell us what would make PropLane better for you.
-      </p>
+    <Modal
+      open={open}
+      title="Add feedback"
+      onClose={handleClose}
+      panelClassName="max-w-lg"
+      description="Share ideas, report issues, or tell us what would make PropLane better for you."
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void handleSubmit()}>
+            {busy ? "Sending…" : "Send feedback"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4">
         <div>
           <label className={MODAL_FIELD_LABEL_CLASS} htmlFor="feedback-title">
@@ -179,14 +192,6 @@ export function PortalFeedbackSubmitModal({
           <p className="mt-1 text-[10px] text-muted">
             {attachments.length}/{BUG_FEEDBACK_MAX_ATTACHMENTS} images selected
           </p>
-        </div>
-        <div className="flex flex-wrap justify-start gap-2 pt-2">
-          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void handleSubmit()}>
-            {busy ? "Sending…" : "Send feedback"}
-          </Button>
         </div>
       </div>
     </Modal>

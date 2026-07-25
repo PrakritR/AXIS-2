@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import {
   EMPTY_DRAFT,
@@ -534,14 +534,14 @@ export function ManagerPropertyPromotionPanel({
         onClose={closeForm}
         panelClassName="max-w-2xl"
         footer={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Updating…" : "Update flyer"}
-            </Button>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
             </Button>
-          </div>
+            <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
+              {generating ? "Updating…" : "Update flyer"}
+            </Button>
+          </ModalFooter>
         }
       >
         <PromotionForm

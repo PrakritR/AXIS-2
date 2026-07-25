@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -130,10 +130,6 @@ function deferCatalogMutation(fn: () => void) {
   });
 }
 
-function ListingSectionActions({ children }: { children: ReactNode }) {
-  return <div className="mb-3 flex flex-wrap gap-2 border-b border-border pb-3">{children}</div>;
-}
-
 const MANAGER_STAGES = [
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
@@ -192,7 +188,7 @@ function ManagerPropertyInlineDetails({
   );
   const rich = useMemo(() => (previewProperty ? getListingRichContent(previewProperty) : null), [previewProperty]);
   const hasPreview = Boolean(previewProperty && rich);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState(true);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -270,7 +266,6 @@ function ManagerPropertyInlineDetails({
   );
 
   const displaySub = portalSub?.sub ?? null;
-  const [previewEditorOpen, setPreviewEditorOpen] = useState(false);
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [draftEditorOpen, setDraftEditorOpen] = useState(false);
 
@@ -320,7 +315,6 @@ function ManagerPropertyInlineDetails({
   const listingOwnerUserId = portalSub?.ownerUserId ?? managerUserId;
 
   const openFullListingEditor = () => setListingEditorOpen(true);
-  const openPreviewEditor = () => setPreviewEditorOpen(true);
 
   const copyApplyLink = () => {
     if (!listingId) return;
@@ -340,28 +334,34 @@ function ManagerPropertyInlineDetails({
     })();
   };
 
-  const applicationSectionActions =
+  const applicationHeaderExtra =
     bucket === 2 && listingId ? (
-      <ListingSectionActions>
+      <>
         <Button
           type="button"
           variant="outline"
-          className={`${actionBtnClass} text-xs`}
+          className={`${actionBtnClass} h-8 px-3 text-xs`}
           data-attr="listing-send-to-prospect"
-          onClick={() => onSendToProspect?.(listingId)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSendToProspect?.(listingId);
+          }}
         >
           Send to prospect
         </Button>
         <Button
           type="button"
           variant="outline"
-          className={`${actionBtnClass} text-xs`}
+          className={`${actionBtnClass} h-8 px-3 text-xs`}
           data-attr="listing-copy-apply-link"
-          onClick={copyApplyLink}
+          onClick={(e) => {
+            e.stopPropagation();
+            copyApplyLink();
+          }}
         >
           Copy apply link
         </Button>
-      </ListingSectionActions>
+      </>
     ) : null;
 
   const promotionHeaderExtra =
@@ -371,7 +371,10 @@ function ManagerPropertyInlineDetails({
         variant="outline"
         className="h-8 rounded-full px-3 text-xs"
         data-attr="listing-copy-tour-link"
-        onClick={copyTourLink}
+        onClick={(e) => {
+          e.stopPropagation();
+          copyTourLink();
+        }}
       >
         Copy tour link
       </Button>
@@ -381,20 +384,6 @@ function ManagerPropertyInlineDetails({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {bucket === 2 && listingId ? (
         <>
-          {canEditListing ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={sectionHeaderBtn}
-              data-attr="listing-preview-edit"
-              onClick={(e) => {
-                e.stopPropagation();
-                openPreviewEditor();
-              }}
-            >
-              Edit preview
-            </Button>
-          ) : null}
           {canEditAction ? (
             <Button
               type="button"
@@ -540,11 +529,9 @@ function ManagerPropertyInlineDetails({
   const listingFormProps = portalSub
     ? {
         onClose: () => {
-          setPreviewEditorOpen(false);
           setListingEditorOpen(false);
         },
         onSubmitted: () => {
-          setPreviewEditorOpen(false);
           setListingEditorOpen(false);
           onUpdated();
         },
@@ -585,6 +572,30 @@ function ManagerPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
+      <PortalCollapsibleSection
+        title="Preview"
+        titleVariant="label"
+        expanded={previewExpanded}
+        onExpandedChange={setPreviewExpanded}
+        collapsible={hasPreview || bucket === 3 || bucket === 5}
+        surfaceMuted={false}
+        toggleDataAttr="listing-preview-toggle"
+        headerActions={previewHeaderActions}
+        contentClassName="p-0"
+      >
+        {hasPreview ? (
+          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl">
+            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
+          </ListingPreviewScrollShell>
+        ) : bucket === 3 || bucket === 5 ? (
+          <p className="px-4 py-3 text-sm text-muted">
+            {bucket === 5
+              ? "Finish the draft wizard to see a public preview."
+              : "Relist this property to restore the public preview."}
+          </p>
+        ) : null}
+      </PortalCollapsibleSection>
+
       {bucket !== 3 && bucket !== 5 ? (
         <>
           <ManagerPropertyHouseDetailsPanel
@@ -602,7 +613,7 @@ function ManagerPropertyInlineDetails({
             managerUserId={managerUserId}
             onUpdated={onUpdated}
             showToast={showToast}
-            sectionActions={applicationSectionActions}
+            headerActionsExtra={applicationHeaderExtra}
           />
 
           <ManagerPropertyLeasePanel
@@ -624,34 +635,6 @@ function ManagerPropertyInlineDetails({
           onUpdated={onUpdated}
           headerActionsExtra={promotionHeaderExtra}
         />
-      ) : null}
-
-      <PortalCollapsibleSection
-        title="Preview"
-        titleVariant="label"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
-        collapsible={hasPreview || bucket === 3 || bucket === 5}
-        surfaceMuted={false}
-        toggleDataAttr="listing-preview-toggle"
-        headerActions={previewHeaderActions}
-        contentClassName="p-0"
-      >
-        {hasPreview ? (
-          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
-            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
-          </ListingPreviewScrollShell>
-        ) : bucket === 3 || bucket === 5 ? (
-          <p className="px-4 py-3 text-sm text-muted">
-            {bucket === 5
-              ? "Finish the draft wizard to see a public preview."
-              : "Relist this property to restore the public preview."}
-          </p>
-        ) : null}
-      </PortalCollapsibleSection>
-
-      {previewEditorOpen && listingFormProps ? (
-        <ManagerAddListingForm {...listingFormProps} wizardScope="preview" />
       ) : null}
 
       {listingEditorOpen && listingFormProps ? (

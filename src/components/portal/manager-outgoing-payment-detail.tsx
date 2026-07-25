@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalPaymentMethodPicker } from "@/components/portal/portal-payment-method-picker";
 import {
@@ -262,7 +262,28 @@ export function ManagerOutgoingPaymentDetail({
       </PortalTableDetailActions>
       ) : null}
 
-      <Modal open={payConfirmOpen} onClose={() => setPayConfirmOpen(false)} title="Confirm vendor payment">
+      <Modal
+        open={payConfirmOpen}
+        onClose={() => setPayConfirmOpen(false)}
+        title="Confirm vendor payment"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setPayConfirmOpen(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="manager-outgoing-payment-confirm-pay"
+              disabled={busy || (paymentMethod !== "ach" && !manualSentConfirmed)}
+              onClick={() => void submitPay()}
+            >
+              {busy ? "Processing…" : paymentMethod === "ach" ? "Approve & pay" : "Mark as paid"}
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="space-y-4 text-sm">
           <p>
             Pay <span className="font-semibold text-foreground">{row.amountLabel}</span> to{" "}
@@ -294,21 +315,6 @@ export function ManagerOutgoingPaymentDetail({
               <span>I sent this payment outside PropLane.</span>
             </label>
           )}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setPayConfirmOpen(false)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="manager-outgoing-payment-confirm-pay"
-              disabled={busy || (paymentMethod !== "ach" && !manualSentConfirmed)}
-              onClick={() => void submitPay()}
-            >
-              {busy ? "Processing…" : paymentMethod === "ach" ? "Approve & pay" : "Mark as paid"}
-            </Button>
-          </div>
         </div>
       </Modal>
     </>

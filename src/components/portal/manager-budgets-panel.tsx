@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {Input, Select} from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   PORTAL_DATA_TABLE,
@@ -127,7 +127,21 @@ export function ManagerBudgetsPanel() {
         </div>
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add / update budget">
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Add / update budget"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void createBudget()}>
+              Save budget
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-muted">Category</label>
@@ -151,12 +165,6 @@ export function ManagerBudgetsPanel() {
               onChange={(e) => setDraft((d) => ({ ...d, annual: e.target.value }))}
               placeholder="12000.00"
             />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void createBudget()}>Save budget</Button>
           </div>
         </div>
       </Modal>
