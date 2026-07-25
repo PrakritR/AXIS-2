@@ -1,15 +1,19 @@
 # Axis native apps (iOS + Android)
 
 Axis ships to the App Store and Google Play as a **Capacitor** native shell that
-loads the live, server-rendered site (`https://www.axis-seattle-housing.com`).
+loads the live, server-rendered site (`https://prop-lane.space`).
 The app reuses 100% of the web app — auth, Stripe, the manager/resident/admin
 portals — and adds real native capabilities (push notifications, camera) on top.
 
-The shell still points at that legacy host, which stays live and is still
-recognized as production, even though the canonical *web* origin for outbound
-email/SMS/shareable links is now `https://prop-lane.space`
-(`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Repointing the WebView means
-changing `capacitor.config.ts` + `CAP_SERVER_URL` — a native-shell rebuild.
+The shell now points at the canonical PropLane origin (`https://prop-lane.space`,
+`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`); the legacy
+`www.axis-seattle-housing.com` host stays live and is still recognized as
+production, and its deep links remain declared so already-installed builds keep
+working. Repointing the WebView means changing `capacitor.config.ts` +
+`CAP_SERVER_URL` — a native-shell rebuild. **Note:** because WebView session
+cookies are scoped per registrable domain, an installed app that updates to a
+build loading the new domain starts with no session and prompts a one-time
+re-login; this is inherent to the domain cutover, not a bug.
 
 - **Web/UI changes ship instantly** via your normal Vercel deploy. No app-store
   review needed for content or UI — the WebView always loads the latest site.
@@ -194,7 +198,7 @@ The WebView loads whatever URL is in `ios/App/App/capacitor.config.json`:
 
 | `server.url` | What you see |
 | --- | --- |
-| `https://www.axis-seattle-housing.com/...` | Production website (old UI until deployed) |
+| `https://prop-lane.space/...` | Production website (old UI until deployed) |
 | `http://127.0.0.1:3000/auth/welcome` | Local mobile welcome (Resident / Manager) |
 
 Run `npm run cap:dev` with `npm run dev` running, then rebuild in Xcode.
@@ -324,6 +328,9 @@ account, Supabase must redirect back into the Axis app — not the marketing hom
 **1. Supabase redirect URLs** (Authentication → URL configuration → Redirect URLs). **Required:**
 
 ```
+https://prop-lane.space/auth/callback
+https://prop-lane.space/auth/callback/partner-pricing
+https://prop-lane.space/auth/callback/resident-signup
 https://www.axis-seattle-housing.com/auth/callback
 https://www.axis-seattle-housing.com/auth/callback/partner-pricing
 https://www.axis-seattle-housing.com/auth/callback/resident-signup
