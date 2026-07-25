@@ -41,6 +41,7 @@ vi.mock("@/lib/auth/co-manager-module-scope", () => ({
 }));
 vi.mock("@/lib/auth/provision-approved-resident", () => ({ provisionApprovedResidentAccount }));
 vi.mock("@/lib/manager-applications-storage", () => ({
+  MANAGER_APPLICATIONS_EVENT: "axis:manager-applications",
   isDraftApplicationRow: () => false,
   normalizeApplicationAxisId: (id: string) => id.trim(),
 }));
