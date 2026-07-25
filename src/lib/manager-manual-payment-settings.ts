@@ -84,17 +84,26 @@ export async function loadManagerManualPaymentSettings(
   managerUserId: string,
 ): Promise<ManagerManualPaymentSettings> {
   const mode = await resolveStorageMode(db);
+  // A conditional select string is a union of literals the typed client's
+  // parser rejects — branch so each `.select()` gets a single literal.
+  if (mode === "column") {
+    const { data, error } = await db
+      .from("manager_automation_settings")
+      .select("manual_payments, row_data")
+      .eq("manager_user_id", managerUserId)
+      .maybeSingle();
+    if (error) throw error;
+    return normalizeManagerManualPaymentSettings(data?.manual_payments);
+  }
   const { data, error } = await db
     .from("manager_automation_settings")
-    .select(mode === "column" ? "manual_payments, row_data" : "row_data")
+    .select("row_data")
     .eq("manager_user_id", managerUserId)
     .maybeSingle();
   if (error) throw error;
-  const raw =
-    mode === "column"
-      ? data?.manual_payments
-      : (data?.row_data as Record<string, unknown> | null)?.manualPayments;
-  return normalizeManagerManualPaymentSettings(raw);
+  return normalizeManagerManualPaymentSettings(
+    (data?.row_data as Record<string, unknown> | null)?.manualPayments,
+  );
 }
 
 export async function saveManagerManualPaymentSettings(
