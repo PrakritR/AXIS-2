@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { applicationPdfHref } from "@/components/portal/manager-applications";
 import { triggerDocumentDownload } from "@/components/portal/resident-other-documents";
@@ -407,7 +407,25 @@ export function DocumentsDownloadAllModal({
   };
 
   return (
-    <Modal open={open} title="Download all" onClose={onClose} panelClassName="max-w-lg">
+    <Modal
+      open={open}
+      title="Download all"
+      onClose={onClose}
+      panelClassName="max-w-lg"
+      footer={
+        <ModalFooter>
+          <Button
+            type="button"
+            className="rounded-full"
+            disabled={downloading || selectedCount === 0 || sections.length === 0}
+            onClick={() => void handleDownload()}
+            data-attr="documents-download-all-submit"
+          >
+            {downloading ? "Downloading…" : `Download${selectedCount > 0 ? ` (${selectedCount})` : ""}`}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-muted">
           Choose which document sections and files to download. Your browser may ask to allow multiple downloads.
@@ -433,17 +451,6 @@ export function DocumentsDownloadAllModal({
           </div>
         )}
 
-        <div className="flex justify-start gap-2 border-t border-border pt-4">
-          <Button
-            type="button"
-            className="rounded-full"
-            disabled={downloading || selectedCount === 0 || sections.length === 0}
-            onClick={() => void handleDownload()}
-            data-attr="documents-download-all-submit"
-          >
-            {downloading ? "Downloading…" : `Download${selectedCount > 0 ? ` (${selectedCount})` : ""}`}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

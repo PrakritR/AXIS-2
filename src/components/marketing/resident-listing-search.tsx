@@ -354,7 +354,7 @@ export function ResidentHousingChat({
       );
     } catch {
       setStatus("error");
-      setSummary("The assistant ran into an error. Please try again.");
+      setSummary("Could not reach the search assistant. Check your connection and try again.");
     }
   }
 

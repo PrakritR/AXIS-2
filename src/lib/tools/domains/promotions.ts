@@ -143,6 +143,7 @@ async function persistGeneratedFlyer(
   promotionId: string,
   current: ManagerPromotionRow,
   extraInstructions: string,
+  referenceImageUrls: string[] = [],
 ): Promise<{ merged: ManagerPromotionRow; source: string }> {
   const inputs = current.inputs ?? {
     headline: current.title,
@@ -161,6 +162,7 @@ async function persistGeneratedFlyer(
     inputs,
     propertyLabel,
     extraInstructions,
+    referenceImageUrls,
   );
 
   const nowIso = new Date().toISOString();
@@ -217,6 +219,13 @@ export const createPromotionTool = defineWriteTool({
         .string()
         .optional()
         .describe("Optional property details / selling points to seed the flyer copy with."),
+      referenceImageUrls: z
+        .array(z.string().url())
+        .max(3)
+        .optional()
+        .describe(
+          "Optional reference flyer image URLs from the chat upload note (listing-photos) to match layout/style.",
+        ),
     })
     .strict(),
   preview: async (ctx, input) => {
@@ -233,6 +242,9 @@ export const createPromotionTool = defineWriteTool({
       { label: "Template", value: templateLabel(template) },
     ];
     if (input.notes?.trim()) lines.push({ label: "Notes", value: input.notes.trim() });
+    if (input.referenceImageUrls?.length) {
+      lines.push({ label: "Reference images", value: `${input.referenceImageUrls.length} attached` });
+    }
     return {
       kind: "create_promotion",
       title: "Create promotion",
@@ -301,8 +313,9 @@ export const createPromotionTool = defineWriteTool({
     }
     await updateAuditResult(ctx, dedupeKey, { created: true, promotionId: row.id });
     const notes = input.notes?.trim() ?? "";
+    const referenceImageUrls = input.referenceImageUrls ?? [];
     try {
-      const { merged, source } = await persistGeneratedFlyer(ctx, row.id, row, notes);
+      const { merged, source } = await persistGeneratedFlyer(ctx, row.id, row, notes, referenceImageUrls);
       await updateAuditResult(ctx, dedupeKey, { created: true, promotionId: row.id, flyerGenerated: true, source });
       return {
         reply: `Created the promotion "${merged.title}"${propertyLabel ? ` for ${propertyLabel}` : ""} and generated its flyer${source === "fallback" ? " (offline copy)" : ""}. Open Promotions → Image to preview or download.`,
@@ -328,6 +341,11 @@ export const generatePromotionFlyerTool = defineWriteTool({
         .string()
         .optional()
         .describe("Optional style or layout notes from the manager (e.g. match an uploaded reference)."),
+      referenceImageUrls: z
+        .array(z.string().url())
+        .max(3)
+        .optional()
+        .describe("Optional reference flyer URLs from the chat upload note."),
     })
     .strict(),
   preview: async (ctx, input) => {
@@ -340,6 +358,9 @@ export const generatePromotionFlyerTool = defineWriteTool({
     ];
     if (input.extraInstructions?.trim()) {
       lines.push({ label: "Style notes", value: input.extraInstructions.trim() });
+    }
+    if (input.referenceImageUrls?.length) {
+      lines.push({ label: "Reference images", value: `${input.referenceImageUrls.length} attached` });
     }
     return {
       kind: "generate_promotion_flyer",
@@ -373,6 +394,7 @@ export const generatePromotionFlyerTool = defineWriteTool({
       promotionId,
       current,
       input.extraInstructions?.trim() ?? "",
+      input.referenceImageUrls ?? [],
     );
     await updateAuditResult(ctx, dedupeKey, { generated: true, promotionId, source });
     return {

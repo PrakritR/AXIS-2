@@ -87,27 +87,27 @@ function makeFakeDb(charges: HouseholdCharge[]) {
     from(table: string) {
       return {
         select() {
-          // Chainable builder covering both read shapes the executor uses:
-          // charge pages (.eq().order().range()) and the person-thread lookup
-          // in deliverPortalMessageThreadSide (.eq()×4.order().limit()).
-          const builder = {
+          type Chain = {
+            eq: (col: string, val: unknown) => Chain;
+            order: (col: string, opts?: unknown) => Chain;
+            limit: (n: number) => Promise<{ data: unknown[]; error: null }> | Chain;
+            range: (from: number, to: number) => Promise<{ data: unknown[]; error: null }>;
+            then: (onFulfilled: (v: { data: unknown[]; error: null }) => unknown) => unknown;
+          };
+          const inboxData = () =>
+            table === "portal_inbox_thread_records" ? inboxThreads.map((r) => ({ ...r })) : [];
+          const builder: Chain = {
             eq: () => builder,
             order: () => builder,
-            limit: async () => {
-              if (table === "portal_inbox_thread_records") {
-                return { data: inboxThreads.map((r) => ({ ...r })), error: null };
-              }
-              return { data: [], error: null };
-            },
+            limit: async () => ({ data: inboxData(), error: null }),
             range: async (from: number, to: number) => {
               if (table === "portal_household_charge_records") {
-                const page = charges
-                  .slice(from, to + 1)
-                  .map((c) => ({ row_data: c }));
+                const page = charges.slice(from, to + 1).map((c) => ({ row_data: c }));
                 return { data: page, error: null };
               }
               return { data: [], error: null };
             },
+            then: (onFulfilled) => onFulfilled({ data: inboxData(), error: null }),
           };
           return builder;
         },

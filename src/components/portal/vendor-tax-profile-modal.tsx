@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {Input, Select} from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 export type VendorTaxDraft = {
@@ -116,7 +116,21 @@ export function VendorTaxProfileModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`W-9 / tax info${vendorName ? ` · ${vendorName}` : ""}`}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`W-9 / tax info${vendorName ? ` · ${vendorName}` : ""}`}
+      footer={
+        <ModalFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void save()} disabled={saving || loading}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       {loading ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : (
@@ -185,14 +199,6 @@ export function VendorTaxProfileModal({
           </label>
         </div>
       )}
-      <div className="mt-6 flex justify-start gap-2">
-        <Button variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={() => void save()} disabled={saving || loading}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
     </Modal>
   );
 }

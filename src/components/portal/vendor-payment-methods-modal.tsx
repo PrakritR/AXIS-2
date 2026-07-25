@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
@@ -128,7 +128,28 @@ export function VendorPaymentMethodsModal({
   }
 
   return (
-    <Modal open={open} title="Payment methods" onClose={onClose}>
+    <Modal
+      open={open}
+      title="Payment methods"
+      onClose={onClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            onClick={() => void save()}
+            disabled={saving}
+            data-attr="vendor-payment-methods-save"
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4 text-sm">
         <p className="text-muted">
           Choose how property managers can pay you for completed work. These details are shared when you send payment
@@ -210,22 +231,6 @@ export function VendorPaymentMethodsModal({
               />
             </div>
           ) : null}
-        </div>
-
-        <div className="flex flex-wrap justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            onClick={() => void save()}
-            disabled={saving}
-            data-attr="vendor-payment-methods-save"
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
         </div>
       </div>
     </Modal>

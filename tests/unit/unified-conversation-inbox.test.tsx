@@ -80,6 +80,15 @@ vi.mock("@/lib/portal-inbox-storage", async (importOriginal) => ({
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => ALL_THREADS,
   syncPersistedInboxFromServer: () => Promise.resolve(ALL_THREADS),
+  persistInbox: () => {},
+  persistInboxAwait: () => Promise.resolve(),
+  invalidatePersistedInboxCache: () => {},
+  inboxMutationInFlight: () => false,
+  runInboxMutation: (fn: () => unknown) => fn(),
+  stagePersistedInboxRows: () => {},
+  upsertPersistedInboxRows: () => Promise.resolve(true),
+  deleteInboxThreadIds: () => Promise.resolve(true),
+  appendReplyToInboxThread: () => null,
   inboxThreadSortMs: (id: string, t?: string) => {
     const m = String(id ?? "").match(/(\d{10,})/);
     if (m) return parseInt(m[1]!, 10);
@@ -113,9 +122,7 @@ describe("unified conversation inbox (no folder tabs)", () => {
     // Trashed conversation is NOT in the default view.
     expect(screen.queryByText("Old Flyer")).toBeNull();
 
-    // Archive is reachable via the list segment control, not a folder tab bar.
-    const toggle = screen.getByRole("tab", { name: /archived/i });
-    expect(toggle).toBeTruthy();
+    const toggle = screen.getByRole("tab", { name: /Archived/i });
     fireEvent.click(toggle);
     expect(screen.getByText("Old Flyer")).toBeTruthy();
     expect(screen.queryByText("Dana Ramirez")).toBeNull();

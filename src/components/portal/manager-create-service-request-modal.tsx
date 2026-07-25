@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -405,7 +405,7 @@ export function ManagerCreateServiceRequestModal({
       onClose={onClose}
       title="Add add-on service"
       footer={
-        <div className="flex justify-start gap-2">
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -421,7 +421,7 @@ export function ManagerCreateServiceRequestModal({
           >
             {busy ? "Saving…" : "Add add-on service"}
           </Button>
-        </div>
+        </ModalFooter>
       }
     >
       <div className="space-y-4">

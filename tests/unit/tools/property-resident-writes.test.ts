@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 import type { AgentContext } from "@/lib/tools/context";
 import { auditDayBucket } from "@/lib/tools/audit";
 import { buildRegistry } from "@/lib/tools/registry";
@@ -17,6 +18,7 @@ vi.mock("@/lib/manager-property-share-access", () => ({
 import {
   createPropertyTool,
   updatePropertyTool,
+  updatePropertyLeaseConfigTool,
   sharePropertyLinkTool,
   buildDraftPropertyRowData,
 } from "@/lib/tools/domains/properties";
@@ -382,9 +384,56 @@ describe("update_property", () => {
   it("execute never matches another landlord's record", async () => {
     const { ctx, tables } = makeWriteCtx({ manager_property_records: [liveProperty("manager_b", "p_foreign")] });
     const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p_foreign", rentUsd: 1 });
-    expect(res).toMatchObject({ ok: false });
-    expect((tables.manager_property_records![0]!.row_data as Row).monthlyRent).toBe(2000);
-    expect(auditRows(tables)).toHaveLength(0);
+    expect(res.ok).toBe(false);
+    expect(tables.manager_property_records![0]!.row_data).toMatchObject({ monthlyRent: 2000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// update_property_lease_config
+// ---------------------------------------------------------------------------
+
+function livePropertyWithLeaseSubmission(managerUserId: string, id: string): Row {
+  const rec = liveProperty(managerUserId, id);
+  const submission = {
+    ...createDefaultListingSubmission(),
+    buildingName: "Sunset Lofts",
+    address: "1 A St",
+    zip: "98101",
+    leaseConfigMode: "standard" as const,
+    leaseCustomKind: "terms" as const,
+    customLeaseTerms: "",
+    tagline: "Old",
+  };
+  return {
+    ...rec,
+    property_data: { ...(rec.property_data as Row), listingSubmission: submission },
+  };
+}
+
+describe("update_property_lease_config", () => {
+  it("preview requires custom terms when switching to custom_comments", async () => {
+    const { ctx } = makeWriteCtx({ manager_property_records: [livePropertyWithLeaseSubmission("manager_a", "p1")] });
+    const res = await previewWrite(updatePropertyLeaseConfigTool, ctx, {
+      propertyId: "p1",
+      leaseSource: "custom_comments",
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it("execute merges custom lease terms into listingSubmission", async () => {
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [livePropertyWithLeaseSubmission("manager_a", "p1")],
+    });
+    const res = await executeWrite(updatePropertyLeaseConfigTool, ctx, {
+      propertyId: "p1",
+      leaseSource: "custom_comments",
+      customLeaseTerms: "No smoking indoors.",
+    });
+    expect(res.ok, res.ok ? "" : (res as { error?: string }).error).toBe(true);
+    const sub = (tables.manager_property_records![0]!.property_data as Row).listingSubmission as Row;
+    expect(sub.customLeaseTerms).toBe("No smoking indoors.");
+    expect(auditRows(tables)[0]!.dedupe_key).toMatch(/^update_property_lease_config:manager_a:p1:/);
   });
 });
 

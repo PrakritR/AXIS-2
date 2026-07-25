@@ -1,4 +1,5 @@
 import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
+import { appendManualPaymentInstructions } from "@/lib/manual-payment-instructions";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
@@ -27,8 +28,10 @@ export async function deliverPaymentReminder(input: {
   /** Defaults to 'payments'. Email/SMS follow the resident's per-category preference. */
   eventCategory?: NotificationCategory;
 }): Promise<{ sent: boolean; error?: string }> {
-  const { db, charge, managerId, dedupId, managerName, managerSmsFromNumber, apiKey, from, subject, text, html, slotLabel } =
+  const { db, charge, managerId, dedupId, managerName, managerSmsFromNumber, apiKey, from, subject, slotLabel } =
     input;
+  const text = appendManualPaymentInstructions(input.text, charge);
+  const html = reminderHtmlFromText(text);
   if (!isUnpaidHouseholdCharge(charge)) {
     return { sent: false, error: "charge_paid" };
   }

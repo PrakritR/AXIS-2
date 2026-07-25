@@ -451,21 +451,30 @@ describe("backfillInboundEmailBody", () => {
 });
 
 describe("POST /api/webhooks/email/inbound", () => {
-  const ENV = ["VERCEL", "RESEND_INBOUND_WEBHOOK_SECRET"] as const;
+  const ENV = ["VERCEL", "RESEND_INBOUND_WEBHOOK_SECRET", "RESEND_REPLY_DOMAIN"] as const;
   const ingestSpy = vi.fn(async () => ({ created: true }));
   const backfillSpy = vi.fn(async () => ({ updated: true }));
+  const replyIngestSpy = vi.fn(async () => ({ handled: true, appended: true }));
+  const replyBackfillSpy = vi.fn(async () => ({ updated: true }));
 
   beforeEach(() => {
     for (const k of ENV) delete process.env[k];
     vi.resetModules();
     ingestSpy.mockClear();
     backfillSpy.mockClear();
+    replyIngestSpy.mockClear();
+    replyIngestSpy.mockImplementation(async () => ({ handled: true, appended: true }));
+    replyBackfillSpy.mockClear();
     vi.doMock("@/lib/inbound-email/inbound-email.server", async () => {
       const actual = await vi.importActual<typeof import("@/lib/inbound-email/inbound-email.server")>(
         "@/lib/inbound-email/inbound-email.server",
       );
       return { ...actual, ingestInboundEmail: ingestSpy, backfillInboundEmailBody: backfillSpy };
     });
+    vi.doMock("@/lib/inbound-email/inbound-email-reply.server", () => ({
+      ingestInboundEmailReply: replyIngestSpy,
+      backfillInboundEmailReplyBody: replyBackfillSpy,
+    }));
   });
   afterEach(() => {
     for (const k of ENV) delete process.env[k];
@@ -563,6 +572,89 @@ describe("POST /api/webhooks/email/inbound", () => {
     });
     expect(res.status).toBe(500);
     expect(backfillSpy).not.toHaveBeenCalled();
+  });
+
+  async function postSigned(payload: unknown, svixId: string) {
+    const body = JSON.stringify(payload);
+    const ts = Math.floor(Date.now() / 1000);
+    return post(body, {
+      "Content-Type": "application/json",
+      "svix-id": svixId,
+      "svix-timestamp": String(ts),
+      "svix-signature": svixSign(body, SECRET, svixId, ts),
+    });
+  }
+
+  function withReplyAddress(from: string, to: string) {
+    return {
+      ...RECEIVED_PAYLOAD,
+      data: { ...RECEIVED_PAYLOAD.data, from, to: [to] },
+    };
+  }
+
+  const OWNER_ID = "3f9a1b2c-4d5e-6f70-8192-a3b4c5d6e7f8";
+
+  async function buildTokenFor(from: string): Promise<string> {
+    // Real token from the real module — the route's parseReplyAddress is unmocked.
+    const { buildReplyAddress } = await import("@/lib/inbound-email/reply-address.server");
+    return buildReplyAddress(OWNER_ID, from)!;
+  }
+
+  it("routes a verified reply token to the conversation ingest, not the support inbox", async () => {
+    process.env.VERCEL = "1";
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
+    process.env.RESEND_REPLY_DOMAIN = "in.prop-lane.space";
+    const token = await buildTokenFor("jane@example.com");
+
+    const res = await postSigned(withReplyAddress("Jane Prospect <jane@example.com>", token), "msg_r1");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, reply: true });
+    expect(replyIngestSpy).toHaveBeenCalledOnce();
+    expect(replyIngestSpy.mock.calls[0]![1]).toBe(OWNER_ID);
+    expect(replyBackfillSpy).toHaveBeenCalledOnce();
+    expect(ingestSpy).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the support ingest when the From does not match the token's pair", async () => {
+    process.env.VERCEL = "1";
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
+    process.env.RESEND_REPLY_DOMAIN = "in.prop-lane.space";
+    const token = await buildTokenFor("jane@example.com");
+
+    const res = await postSigned(withReplyAddress("Mallory <mallory@example.com>", token), "msg_r2");
+    expect(res.status).toBe(200);
+    expect(replyIngestSpy).not.toHaveBeenCalled();
+    expect(ingestSpy).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to the support ingest when the token owner no longer resolves", async () => {
+    process.env.VERCEL = "1";
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
+    process.env.RESEND_REPLY_DOMAIN = "in.prop-lane.space";
+    replyIngestSpy.mockImplementationOnce(async () => ({ handled: false, appended: false }));
+    const token = await buildTokenFor("jane@example.com");
+
+    const res = await postSigned(withReplyAddress("jane@example.com", token), "msg_r3");
+    expect(res.status).toBe(200);
+    expect(replyIngestSpy).toHaveBeenCalledOnce();
+    expect(ingestSpy).toHaveBeenCalledOnce(); // support inbox still gets the mail
+    expect(replyBackfillSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when the reply ingest write fails so Resend redelivers", async () => {
+    process.env.VERCEL = "1";
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET = SECRET;
+    process.env.RESEND_REPLY_DOMAIN = "in.prop-lane.space";
+    replyIngestSpy.mockImplementationOnce(async () => {
+      throw new Error("db down");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const token = await buildTokenFor("jane@example.com");
+
+    const res = await postSigned(withReplyAddress("jane@example.com", token), "msg_r4");
+    expect(res.status).toBe(500);
+    expect(ingestSpy).not.toHaveBeenCalled();
+    expect(replyBackfillSpy).not.toHaveBeenCalled();
   });
 
   it("acks non-received events without ingesting", async () => {

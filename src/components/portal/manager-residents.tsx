@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
 import {Input, Textarea, Select} from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -2719,14 +2719,14 @@ export function ManagerResidents({
         title="Add resident"
         onClose={() => setAddResidentOpen(false)}
         footer={
-          <div className="flex justify-start gap-2">
+          <ModalFooter>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>
               Cancel
             </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
               {arSaving ? "Adding…" : "Add resident"}
             </Button>
-          </div>
+          </ModalFooter>
         }
       >
         <div className="space-y-3">
@@ -2894,14 +2894,14 @@ export function ManagerResidents({
         title="Edit resident"
         onClose={() => setEditResidentOpen(false)}
         footer={
-          <div className="flex justify-start gap-2">
+          <ModalFooter>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
               Cancel
             </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
               Save resident
             </Button>
-          </div>
+          </ModalFooter>
         }
       >
         <div className="space-y-3">
@@ -3176,14 +3176,14 @@ export function ManagerResidents({
           setMessageOpen(false);
         }}
         footer={
-          <div className="flex justify-start gap-2">
+          <ModalFooter>
             <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
               Cancel
             </Button>
             <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
               {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
             </Button>
-          </div>
+          </ModalFooter>
         }
       >
         <div className="space-y-3">

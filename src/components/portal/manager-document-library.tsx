@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalStatusPills,
@@ -776,14 +776,14 @@ function UploadModal({
       onClose={onClose}
       title={title}
       footer={
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+        <ModalFooter>
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
             {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
-        </div>
+        </ModalFooter>
       }
     >
       <div className="space-y-4">
@@ -1000,14 +1000,14 @@ function EditDocumentModal({
       title="Edit document"
       dense
       footer={
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+        <ModalFooter>
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>
-        </div>
+        </ModalFooter>
       }
     >
       <div className="space-y-3">
@@ -1124,7 +1124,7 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
       panelClassName="max-w-3xl"
       footer={
         doc ? (
-          <div className="flex justify-end gap-2">
+          <ModalFooter>
             <Button
               type="button"
               variant="outline"
@@ -1135,7 +1135,7 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
             >
               {downloading ? "Downloading…" : "Download"}
             </Button>
-          </div>
+          </ModalFooter>
         ) : null
       }
     >

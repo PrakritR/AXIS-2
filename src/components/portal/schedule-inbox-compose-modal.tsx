@@ -274,9 +274,6 @@ export function ScheduleInboxComposeForm({
               </Button>
             )
           ) : null}
-          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onClose}>
-            Close
-          </Button>
         </div>
       </div>
   );

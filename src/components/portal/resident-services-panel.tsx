@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { formatPacificDate } from "@/lib/pacific-time";
 import { Select } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -1100,6 +1100,17 @@ export function ResidentServicesPanel({
     }
   };
 
+  const serviceRequestIsCustom =
+    requestTypeId === CUSTOM_SERVICE_REQUEST_OFFER_ID || availableOffers.length === 0;
+  const serviceRequestCatalogSelected =
+    Boolean(requestTypeId) &&
+    requestTypeId !== CUSTOM_SERVICE_REQUEST_OFFER_ID &&
+    availableOffers.some((o) => o.id === requestTypeId);
+  const serviceRequestSubmitDisabled =
+    serviceSubmitting ||
+    !requestTypeId ||
+    (serviceRequestIsCustom ? !customTitle.trim() || !customPriceLimit.trim() : !serviceRequestCatalogSelected);
+
   return (
     <ManagerPortalPageShell
       title="Services"
@@ -1367,6 +1378,20 @@ export function ResidentServicesPanel({
         title="Report maintenance"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
         panelClassName="max-w-lg"
+        footer={
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              data-attr="resident-maintenance-submit"
+              onClick={() => { void submitMaintenance(); }}
+              disabled={maintenanceSubmitting}
+            >
+              {maintenanceSubmitting ? "Submitting…" : "Submit"}
+            </Button>
+          </ModalFooter>
+        }
       >
         <p className="text-xs text-muted">Describe the issue. Your property manager will be notified.</p>
         <div className="mt-4 grid gap-3">
@@ -1456,17 +1481,6 @@ export function ResidentServicesPanel({
             </div>
           ) : null}
         </div>
-        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button
-            type="button"
-            className="rounded-full"
-            data-attr="resident-maintenance-submit"
-            onClick={() => { void submitMaintenance(); }}
-            disabled={maintenanceSubmitting}
-          >
-            {maintenanceSubmitting ? "Submitting…" : "Submit"}
-          </Button>
-        </div>
       </Modal>
 
       {/* Request modal */}
@@ -1475,6 +1489,21 @@ export function ResidentServicesPanel({
         title="Request add-on service"
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
+        footer={
+          modalMode === "service" ? (
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                onClick={() => { void submitService(); }}
+                disabled={serviceRequestSubmitDisabled}
+              >
+                {serviceSubmitting ? "Sending…" : "Send request"}
+              </Button>
+            </ModalFooter>
+          ) : undefined
+        }
       >
         {(() => {
           const isCustom =
@@ -1601,23 +1630,6 @@ export function ResidentServicesPanel({
                   </div>
                 ) : null}
               </div>
-
-              <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-                <Button
-                  type="button"
-                  className="rounded-full"
-                  onClick={() => { void submitService(); }}
-                  disabled={
-                    serviceSubmitting ||
-                    !requestTypeId ||
-                    (isCustom
-                      ? !customTitle.trim() || !customPriceLimit.trim()
-                      : !selectedCatalogOffer)
-                  }
-                >
-                  {serviceSubmitting ? "Sending…" : "Send request"}
-                </Button>
-              </div>
             </>
           );
         })()}
@@ -1629,6 +1641,15 @@ export function ResidentServicesPanel({
         title="Edit add-on service"
         onClose={() => setEditingRequest(null)}
         panelClassName="max-w-lg"
+        footer={
+          editingRequest ? (
+            <ModalFooter>
+              <Button type="button" variant="primary" className="rounded-full" data-attr="resident-service-request-edit-save" onClick={saveRequestEdit}>
+                Save changes
+              </Button>
+            </ModalFooter>
+          ) : undefined
+        }
       >
         {editingRequest ? (
           <>
@@ -1650,11 +1671,6 @@ export function ResidentServicesPanel({
             </div>
           </>
         ) : null}
-        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" className="rounded-full" data-attr="resident-service-request-edit-save" onClick={saveRequestEdit}>
-            Save changes
-          </Button>
-        </div>
       </Modal>
 
       {/* Edit work order modal */}
@@ -1663,6 +1679,13 @@ export function ResidentServicesPanel({
         title="Edit work order"
         onClose={() => setEditingWorkOrder(null)}
         panelClassName="max-w-lg"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="primary" className="rounded-full" data-attr="resident-work-order-edit-save" onClick={saveWorkOrderEdit}>
+              Save changes
+            </Button>
+          </ModalFooter>
+        }
       >
         <p className="text-xs text-muted">Update your maintenance request. Your property manager sees these changes.</p>
         <div className="mt-4 grid gap-3">
@@ -1715,11 +1738,6 @@ export function ResidentServicesPanel({
               className="bg-card"
             />
           </div>
-        </div>
-        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" className="rounded-full" data-attr="resident-work-order-edit-save" onClick={saveWorkOrderEdit}>
-            Save changes
-          </Button>
         </div>
       </Modal>
     </ManagerPortalPageShell>

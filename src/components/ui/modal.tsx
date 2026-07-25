@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
@@ -14,22 +15,38 @@ import { cn } from "@/lib/utils";
 
 export { MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_PANEL_CLASS, MODAL_WARNING_BOX_CLASS, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal-styles";
 
+/** Top-right dismiss control — Carbon / Primer / Watson pattern (icon, 44px target). */
+export const MODAL_HEADER_CLOSE_CLASS =
+  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/**
+ * Sticky footer action row: secondary actions first, primary action last (rightmost).
+ * Pair with Modal `footer` — header × dismisses; Cancel in footer is explicit for forms.
+ */
+export function ModalFooter({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("flex flex-wrap items-center justify-end gap-2", className)}>{children}</div>;
+}
+
 export function Modal({
   open,
   title,
   onClose,
   children,
   footer,
+  description,
   panelClassName,
   stackClassName,
   dense = false,
   assistantStrip = true,
   assistantContext,
+  assistantStorageScopeKey,
 }: {
   open: boolean;
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
+  /** Optional one-line context under the title (visual + `aria-describedby`). */
+  description?: ReactNode;
   /** Sticky footer below the scrollable body (action buttons, etc.). */
   footer?: ReactNode;
   /** Width / layout overrides merged onto the default glass panel shell. */
@@ -42,6 +59,8 @@ export function Modal({
   assistantStrip?: boolean;
   /** Passed to the assistant as modal context (defaults to stringified title). */
   assistantContext?: string;
+  /** Stable assistant thread scope when contextHint is long or dynamic. */
+  assistantStorageScopeKey?: string;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -95,28 +114,29 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
+          aria-describedby={description ? "modal-description" : undefined}
         >
           <div
             className={cn(
-              "flex shrink-0 items-start justify-between border-b border-border",
+              "flex shrink-0 items-start justify-between gap-3 border-b border-border",
               dense ? "gap-2 pb-2" : "gap-4 pb-4",
             )}
           >
-            <h3
-              id="modal-title"
-              className={cn("min-w-0 font-semibold text-foreground", dense ? "text-base" : "text-lg")}
-            >
-              {title}
-            </h3>
-            <button
-              type="button"
-              onClick={onClose}
-              className={cn(
-                "shrink-0 rounded-full border border-border bg-card font-semibold text-muted hover:bg-foreground/5",
-                dense ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-sm",
-              )}
-            >
-              Close
+            <div className="min-w-0 flex-1">
+              <h3
+                id="modal-title"
+                className={cn("font-semibold text-foreground", dense ? "text-base" : "text-lg")}
+              >
+                {title}
+              </h3>
+              {description ? (
+                <p id="modal-description" className="mt-1 text-sm leading-relaxed text-muted">
+                  {description}
+                </p>
+              ) : null}
+            </div>
+            <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
+              <X className="h-5 w-5" aria-hidden />
             </button>
           </div>
           <div
@@ -137,7 +157,7 @@ export function Modal({
             <div
               className={cn(
                 "shrink-0 border-t border-border bg-card",
-                dense ? "mt-2 pt-2" : "mt-4 pt-4",
+                dense ? "mt-2 pt-3" : "mt-4 pt-4",
               )}
             >
               {footer}
@@ -146,7 +166,7 @@ export function Modal({
           {showAssistantStrip && assistantConversationInstance > 0 ? (
             <ModalAssistantStrip
               contextHint={assistantHint}
-              storageScopeKey={assistantHint}
+              storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
               conversationInstance={assistantConversationInstance}
             />
           ) : null}

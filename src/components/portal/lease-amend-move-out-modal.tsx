@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { computeLeaseEndDate, shouldAutoComputeLeaseEnd } from "@/lib/rental-application/lease-dates";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
@@ -151,7 +151,22 @@ export function LeaseAmendMoveOutModal({
     : "—";
 
   return (
-    <Modal open={open} title={title} onClose={onClose} panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6">
+    <Modal
+      open={open}
+      title={title}
+      onClose={onClose}
+      panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
+      footer={
+        <ModalFooter className="w-full">
+          <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => void handleConfirm()}>
+            {submitting ? "Saving…" : direction === "decrease" ? "Update move-out" : "Extend lease"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="mb-5 flex items-center gap-3 rounded-xl bg-accent/30 px-4 py-3 text-sm">
         <span className="text-muted">Current move-out date</span>
         <span className="ml-auto font-semibold text-foreground">{currentEndFormatted}</span>
@@ -194,15 +209,6 @@ export function LeaseAmendMoveOutModal({
           </p>
         </div>
       ) : null}
-
-      <div className="flex gap-2.5">
-        <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => void handleConfirm()}>
-          {submitting ? "Saving…" : direction === "decrease" ? "Update move-out" : "Extend lease"}
-        </Button>
-      </div>
     </Modal>
   );
 }

@@ -58,6 +58,23 @@ describe("classifyComplexity", () => {
     // Short, but a real question past the opening turns: stays standard, not simple.
     expect(classifyComplexity(convo("the Oak St one?", 4))).toBe("standard");
   });
+
+  it("reads text from multipart user messages that include images", () => {
+    expect(
+      classifyComplexity([
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "[Context: New promotion (flyer)]\n\nGenerate a similar flyer for this house with the same bold layout",
+            },
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "abc" } },
+          ],
+        },
+      ]),
+    ).toBe("standard");
+  });
 });
 
 describe("selectModel", () => {

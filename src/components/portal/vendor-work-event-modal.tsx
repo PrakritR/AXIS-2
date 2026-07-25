@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { formatMinuteOfDayLabel, minuteOfDayToTimeInputValue, timeInputValueToMinuteOfDay } from "@/lib/vendor-availability";
 
 export type VendorWorkEventDraft = {
@@ -66,7 +66,40 @@ export function VendorWorkEventModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={draft?.id ? "Edit work block" : "Add work to calendar"}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={draft?.id ? "Edit work block" : "Add work to calendar"}
+      footer={
+        <ModalFooter className="w-full">
+          {draft?.id && onDelete ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mr-auto rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+              disabled={saving}
+              data-attr="vendor-work-event-delete"
+              onClick={() => onDelete(draft.id!)}
+            >
+              Delete
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            disabled={saving || !title.trim() || !summary}
+            data-attr="vendor-work-event-save"
+            onClick={handleSave}
+          >
+            {saving ? "Saving…" : draft?.id ? "Save changes" : "Add work"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-4">
         <label className="block text-sm">
           <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-muted">Title</span>
@@ -110,34 +143,11 @@ export function VendorWorkEventModal({
             />
           </label>
         </div>
-        {summary ? <p className="text-sm text-muted">{summary}</p> : <p className="text-sm text-rose-600">End time must be after start time.</p>}
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-          {draft?.id && onDelete ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="mr-auto rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-              disabled={saving}
-              data-attr="vendor-work-event-delete"
-              onClick={() => onDelete(draft.id!)}
-            >
-              Delete
-            </Button>
-          ) : null}
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={saving || !title.trim() || !summary}
-            data-attr="vendor-work-event-save"
-            onClick={handleSave}
-          >
-            {saving ? "Saving…" : draft?.id ? "Save changes" : "Add work"}
-          </Button>
-        </div>
+        {summary ? (
+          <p className="text-sm text-muted">{summary}</p>
+        ) : (
+          <p className="text-sm text-rose-600">End time must be after start time.</p>
+        )}
       </div>
     </Modal>
   );

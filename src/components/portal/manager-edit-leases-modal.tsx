@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { ManagerLeaseEditorModal } from "@/components/portal/manager-lease-editor-modal";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
@@ -104,15 +104,28 @@ export function ManagerEditLeasesModal({
       <Modal
         open={open && editingPropertyIds.length === 0}
         title="Edit lease settings"
+        description="Choose which properties' lease documents you want to edit. Bulk edits apply the same template to every selection."
         onClose={closeAll}
         panelClassName="max-w-md"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={closeAll}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              data-attr="leases-edit-continue"
+              disabled={selectedIds.size === 0 || propertyOptions.length === 0}
+              onClick={continueFromSelect}
+            >
+              Continue
+            </Button>
+          </ModalFooter>
+        }
       >
-        <p className="text-sm text-muted">
-          Choose which properties&apos; lease documents you want to edit. When you select multiple, the same settings
-          apply to all: standard PropLane lease, custom terms, or an uploaded template.
-        </p>
-
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3">
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-accent/20 px-3 py-2.5">
             <input
               type="checkbox"
@@ -147,22 +160,6 @@ export function ManagerEditLeasesModal({
             )}
           </div>
         </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            data-attr="leases-edit-continue"
-            disabled={selectedIds.size === 0 || propertyOptions.length === 0}
-            onClick={continueFromSelect}
-          >
-            Continue
-          </Button>
-          <Button type="button" variant="outline" className="rounded-full" onClick={closeAll}>
-            Cancel
-          </Button>
-        </div>
       </Modal>
 
       {resolved && managerUserId ? (
@@ -171,6 +168,8 @@ export function ManagerEditLeasesModal({
           title={editorTitle}
           sub={resolved.sub}
           propertyIds={editingPropertyIds}
+          propertyId={editingPropertyIds[0]}
+          propertyLabel={propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label}
           managerUserId={managerUserId}
           onClose={onEditorClose}
           onSaved={onEditorSaved}

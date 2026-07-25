@@ -496,7 +496,7 @@ function buildDefaultMultiRoomBundleCard(
     id: "bundle-multi-room",
     label: "Two or more rooms",
     price,
-    promo: "Combine any bedrooms on one lease",
+    promo: "Combine 2+ bedrooms on one lease",
     roomsLine: `${rooms.length} room${rooms.length === 1 ? "" : "s"} available — rent 2 or more together`,
     roomLines: rooms.map((room) => perRoomBundleSummaryLine(room, sub)),
     summaryItems: [

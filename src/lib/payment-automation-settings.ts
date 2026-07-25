@@ -49,7 +49,7 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   scheduleVisibilityDays: 3,
   overdueDailyEnabled: true,
   overdueDailyStartDays: 1,
-  lateFeeNoticeEnabled: true,
+  lateFeeNoticeEnabled: false,
   lateFeeNoticeDaysAfterDue: 5,
   sameDayReminderEnabled: true,
   proposeTourConfirmations: false,
@@ -223,7 +223,9 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
     scheduleVisibilityDays: visibilityDays,
     overdueDailyEnabled,
     overdueDailyStartDays,
-    lateFeeNoticeEnabled: row.lateFeeNoticeEnabled !== false,
+    // Opt-in like proposeTourConfirmations below: late-fee notices create real
+    // charges, so no saved value must never auto-enable them.
+    lateFeeNoticeEnabled: row.lateFeeNoticeEnabled === true,
     lateFeeNoticeDaysAfterDue: Math.max(
       0,
       Math.min(30, Math.round(Number(row.lateFeeNoticeDaysAfterDue ?? base.lateFeeNoticeDaysAfterDue) || base.lateFeeNoticeDaysAfterDue)),

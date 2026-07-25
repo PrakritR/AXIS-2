@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components/ui/checkbox-multi-select";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_INBOX_COMPOSE_PREFILL_EVENT } from "@/lib/demo/demo-playback";
@@ -321,7 +321,21 @@ export function ScopedInboxComposeModal({
   };
 
   return (
-    <Modal open={open} title={title} onClose={onClose}>
+    <Modal
+      open={open}
+      title={title}
+      onClose={onClose}
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
+            {scheduleLater ? "Schedule" : deliverViaSms ? "Send email + SMS" : "Send"}
+          </Button>
+        </ModalFooter>
+      }
+    >
       <div className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <CheckboxMultiSelect
@@ -418,14 +432,6 @@ export function ScopedInboxComposeModal({
           </>
         ) : null}
 
-        <div className="flex flex-wrap justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
-            {scheduleLater ? "Schedule" : deliverViaSms ? "Send email + SMS" : "Send"}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

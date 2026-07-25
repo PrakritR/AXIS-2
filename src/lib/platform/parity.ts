@@ -41,6 +41,15 @@ export const REGISTERED_PUSH_DEEP_LINKS = [
   "/vendor/communication/email/unopened",
 ] as const;
 
+/** Deep-link a message-notification tap into the recipient's own inbox. */
+export function inboxDeepLinkForRole(role: string | null | undefined): string {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
+  if (normalized === "admin") return "/admin/communication/email/unopened";
+  if (normalized === "vendor") return "/vendor/communication/email/unopened";
+  return "/resident/communication/email/unopened";
+}
+
 export type PlatformSurface = "web" | "native-webview";
 
 /** Both web and native app use the same routes and React components. */
