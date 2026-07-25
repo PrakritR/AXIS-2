@@ -15,6 +15,7 @@ import { writeAuditLog, updateAuditResult } from "../audit";
 /** Every charge kind the site models (mirrors HouseholdChargeKind exactly). */
 const CHARGE_KINDS = [
   "application_fee",
+  "holding_deposit",
   "first_month_rent",
   "prorated_rent",
   "prorated_last_month_rent",
