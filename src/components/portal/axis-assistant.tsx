@@ -23,6 +23,10 @@ import {
   AssistantDockToRailButton,
 } from "@/components/portal/assistant-layout-controls";
 import {
+  AssistantChatHistoryControls,
+  AssistantChatHistoryPanel,
+} from "@/components/portal/assistant-chat-history-panel";
+import {
   AssistantPendingActionCard,
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
@@ -126,7 +130,14 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     setError,
     send,
     resolvePendingAction,
-    reset,
+    threads,
+    activeThreadId,
+    historyOpen,
+    multiThread,
+    openHistory,
+    closeHistory,
+    selectThread,
+    startNewChat,
   } = useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -201,7 +212,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   }, []);
 
   function resetConversation() {
-    reset();
+    startNewChat();
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -270,7 +281,13 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 {!isSmall ? (
                   <AssistantDockToRailButton onClick={dockToRail} />
                 ) : null}
-                {hasConversation && (
+                {multiThread ? (
+                  <AssistantChatHistoryControls
+                    onOpenHistory={openHistory}
+                    onNewChat={resetConversation}
+                    showNewChat
+                  />
+                ) : hasConversation ? (
                   <button
                     type="button"
                     onClick={resetConversation}
@@ -287,7 +304,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       />
                     </svg>
                   </button>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={closePanel}
@@ -303,6 +320,17 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
           </div>
 
           {hideEmptyChrome ? null : (
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {multiThread ? (
+                <AssistantChatHistoryPanel
+                  open={historyOpen}
+                  threads={threads}
+                  activeThreadId={activeThreadId}
+                  onSelect={selectThread}
+                  onNewChat={resetConversation}
+                  onClose={closeHistory}
+                />
+              ) : null}
             <div
               ref={scrollRef}
               className={cn(
@@ -371,6 +399,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                   )}
                 </div>
               )}
+            </div>
             </div>
           )}
 
