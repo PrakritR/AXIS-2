@@ -12,6 +12,7 @@ import {
 } from "@/components/portal/promotion-text-generate-modal";
 import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-links";
 import type { PromotionAssetKind } from "@/lib/promotion-assets";
+import { buildPromotionNewModalAssistantContext } from "@/lib/promotion-assistant-context";
 import type { PromotionTextFormat } from "@/lib/promotion-text";
 
 const PROMOTION_KIND_OPTIONS: { id: PromotionAssetKind; label: string; description: string }[] = [
@@ -155,6 +156,7 @@ export function PromotionNewModal({
   }
 
   const selected = PROMOTION_KIND_OPTIONS.find((o) => o.id === kind);
+  const assistantContext = buildPromotionNewModalAssistantContext(draft, kind);
 
   return (
     <Modal
@@ -162,6 +164,8 @@ export function PromotionNewModal({
       title="New promotion"
       onClose={onClose}
       panelClassName="max-w-2xl"
+      assistantContext={assistantContext}
+      assistantStorageScopeKey="New promotion"
       footer={
         kind === "flyer" ? (
           <div className="flex flex-wrap gap-2">

@@ -171,4 +171,10 @@ describe("personas are role-scoped", () => {
       expect(prompt).not.toMatch(/Axis (Assistant|Housing)/);
     }
   });
+
+  it("manager persona allows promotion tools inside the New promotion modal", () => {
+    expect(SYSTEM_PROMPT).toMatch(/New promotion modal/i);
+    expect(SYSTEM_PROMPT).toContain("create_promotion");
+    expect(SYSTEM_PROMPT).toContain("referenceImageUrls");
+  });
 });

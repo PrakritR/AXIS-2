@@ -11,7 +11,12 @@ import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
-import { enrichMessagesWithUploadedListingPhotos } from "@/lib/listing-draft-agent.server";
+import { enrichManagerChatImageAttachments } from "@/lib/listing-draft-agent.server";
+import {
+  assistantContextHintFromMessages,
+  isListingDraftAssistantContext,
+  isPromotionAssistantContext,
+} from "@/lib/agent/assistant-turn-context";
 
 export const runtime = "nodejs";
 
@@ -64,8 +69,14 @@ export async function POST(req: Request) {
   if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
   messages = attached.messages;
   if (attached.imageCount > 0) {
+    const contextHint = assistantContextHintFromMessages(messages);
+    const listingDraft = isListingDraftAssistantContext(contextHint);
+    const promotion = isPromotionAssistantContext(contextHint);
     try {
-      messages = await enrichMessagesWithUploadedListingPhotos(ctx.db, ctx.landlordId, messages);
+      messages = await enrichManagerChatImageAttachments(ctx.db, ctx.landlordId, messages, {
+        requireSuccessfulUpload: listingDraft,
+        purpose: promotion ? "promotion" : "listing",
+      });
     } catch (e) {
       console.error("[agent/chat] listing photo upload failed:", e);
       return NextResponse.json(

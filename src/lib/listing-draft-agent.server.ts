@@ -66,11 +66,28 @@ export function appendListingPhotoUrlsToUserMessage(
   message: Anthropic.MessageParam,
   urls: string[],
 ): Anthropic.MessageParam {
+  return appendUploadedImageUrlsToUserMessage(message, urls, "listing");
+}
+
+export type ChatImageUploadPurpose = "listing" | "promotion";
+
+/** Annotate the last user turn with durable image URLs for tool calls. */
+export function appendUploadedImageUrlsToUserMessage(
+  message: Anthropic.MessageParam,
+  urls: string[],
+  purpose: ChatImageUploadPurpose,
+): Anthropic.MessageParam {
   if (!urls.length || !Array.isArray(message.content)) return message;
-  const note = [
-    "Uploaded listing photos (use these exact URLs in housePhotoUrls for create_listing_draft or update_listing_draft):",
-    ...urls.map((url, index) => `${index + 1}. ${url}`),
-  ].join("\n");
+  const note =
+    purpose === "promotion"
+      ? [
+          "Reference flyer image(s) for style matching. When proposing create_promotion or generate_promotion_flyer, pass these exact URLs in referenceImageUrls and describe layout, colors, and typography in notes or extraInstructions:",
+          ...urls.map((url, index) => `${index + 1}. ${url}`),
+        ].join("\n")
+      : [
+          "Uploaded listing photos (use these exact URLs in housePhotoUrls for create_listing_draft or update_listing_draft):",
+          ...urls.map((url, index) => `${index + 1}. ${url}`),
+        ].join("\n");
   return {
     role: "user",
     content: [...message.content, { type: "text", text: note }],
@@ -201,14 +218,40 @@ export async function enrichMessagesWithUploadedListingPhotos(
   managerUserId: string,
   messages: Anthropic.MessageParam[],
 ): Promise<Anthropic.MessageParam[]> {
+  return enrichManagerChatImageAttachments(db, managerUserId, messages, {
+    requireSuccessfulUpload: true,
+    purpose: "listing",
+  });
+}
+
+/**
+ * Upload chat images when possible and annotate the turn. Listing-draft flows
+ * require a durable URL; promotion and other surfaces keep inline vision blocks
+ * when upload fails so the turn still succeeds.
+ */
+export async function enrichManagerChatImageAttachments(
+  db: SupabaseClient,
+  managerUserId: string,
+  messages: Anthropic.MessageParam[],
+  opts: { requireSuccessfulUpload: boolean; purpose: ChatImageUploadPurpose },
+): Promise<Anthropic.MessageParam[]> {
   if (!messages.length) return messages;
   const last = messages[messages.length - 1]!;
   const blocks = imageBlocksFromUserMessage(last);
   if (!blocks.length) return messages;
-  const urls = await persistListingPhotoUrlsFromImageBlocks(db, managerUserId, blocks);
+  let urls: string[] = [];
+  try {
+    urls = await persistListingPhotoUrlsFromImageBlocks(db, managerUserId, blocks);
+  } catch (e) {
+    if (opts.requireSuccessfulUpload) throw e;
+    console.warn("[agent/chat] optional image upload failed:", e);
+  }
+  if (opts.requireSuccessfulUpload && blocks.length > 0 && urls.length === 0) {
+    throw new Error("Could not upload attached photos.");
+  }
   if (!urls.length) return messages;
   const next = [...messages];
-  next[next.length - 1] = appendListingPhotoUrlsToUserMessage(last, urls);
+  next[next.length - 1] = appendUploadedImageUrlsToUserMessage(last, urls, opts.purpose);
   return next;
 }
 
