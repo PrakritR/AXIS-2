@@ -35,6 +35,24 @@ Stripe: one line item at face value, no `application_fee_amount`,
 `transfer_data` destination, no `on_behalf_of`), and
 `tests/unit/stripe-ledger-fees.test.ts` (fee attribution).
 
+**The destination is per-manager and the gate has NO platform fallback.** The
+`transfer_data.destination` is resolved from the paying charge's owning manager
+via `resolveAndValidateManagerConnectForPayments` (`src/lib/stripe-connect.ts`),
+which reads that manager's own `profiles.stripe_connect_account_id`. If the
+manager has not onboarded (no account) or Stripe reports transfers not yet active
+(onboarding incomplete), the checkout is REFUSED
+(`MANAGER_NO_CONNECT_ACCOUNT` / `MANAGER_CONNECT_TRANSFERS_NOT_READY`) before any
+session is created — a charge is never silently routed to the platform account.
+This holds for both household charges (`stripe-household-charge-checkout.server.ts`)
+and application fees (`api/stripe/application-fee-checkout/route.ts`). Manager
+Payment setup shows "Connected" ONLY when Stripe reports the account can actually
+receive money; an existing-but-unfinished account reads as "incomplete"
+(`src/lib/stripe-setup-state.ts`). Coverage:
+`tests/unit/manager-connect-destination-routing.test.ts` (per-manager destination
+isolation + the no-onboard block, real resolver against a fake DB),
+`tests/unit/stripe-connect.test.ts` (the resolver gate), and
+`tests/unit/stripe-setup-state.test.ts` (the UI truth mapping).
+
 **Ledger attribution: the Stripe fee is NOT the manager's.** `ledger_entries` is
 the manager's book, so `enrichLedgerPaymentFromStripeCharge` writes
 `stripe_fee_cents = 0` and `net_cents = charge.amount - application_fee` (the

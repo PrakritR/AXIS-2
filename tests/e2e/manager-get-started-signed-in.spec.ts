@@ -75,7 +75,7 @@ async function expectFullCreateForm(page: Page) {
   await expect(page.getByPlaceholder("Phone number")).toBeVisible();
   await expect(page.getByPlaceholder(/Password \(8\+/)).toBeVisible();
   await expect(page.getByRole("button", { name: /continue with google/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /create property account/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /set up property manager|create property account/i })).toBeVisible();
 }
 
 test.describe('"Get started" while signed in', () => {
@@ -142,7 +142,7 @@ test.describe('"Get started" while signed in', () => {
     await page.getByPlaceholder(/Password \(8\+/).fill("SecondAcct123!");
     await page.screenshot({ path: shot("signed-in-filled-new-account"), fullPage: true });
 
-    await page.getByRole("button", { name: /create property account/i }).click();
+    await page.getByRole("button", { name: /set up property manager|create property account/i }).click();
     await page.waitForURL(/\/portal/, { timeout: 60_000 });
     await page.waitForLoadState("networkidle").catch(() => {});
 

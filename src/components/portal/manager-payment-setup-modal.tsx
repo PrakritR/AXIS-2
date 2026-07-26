@@ -13,6 +13,7 @@ import {
   type ManagerManualPaymentSettingsView,
 } from "@/lib/manager-manual-payment-settings";
 import { useGmailPaymentTrack } from "@/components/portal/gmail-payment-auto-track-panel";
+import { stripeSetupStateFromStatus, type StripeSetupState } from "@/lib/stripe-setup-state";
 
 const DEMO_INBOX = "payments+demo-token@prop-lane.space";
 
@@ -29,6 +30,8 @@ function HubRow({
   dataAttr,
   busy,
   linkLabel = "Link",
+  pending = false,
+  pendingLabel = "Finish setup",
 }: {
   label: string;
   connected: boolean;
@@ -36,6 +39,9 @@ function HubRow({
   dataAttr: string;
   busy?: boolean;
   linkLabel?: string;
+  /** Account exists but Stripe reports it cannot yet receive money (onboarding incomplete). */
+  pending?: boolean;
+  pendingLabel?: string;
 }) {
   return (
     <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
@@ -48,6 +54,16 @@ function HubRow({
           className="text-sm font-medium text-[var(--status-confirmed-fg)] hover:underline"
         >
           Connected · Manage
+        </button>
+      ) : pending ? (
+        <button
+          type="button"
+          onClick={onLink}
+          disabled={busy}
+          data-attr={dataAttr}
+          className="text-sm font-medium text-[var(--status-pending-fg)] hover:underline disabled:opacity-50"
+        >
+          {busy ? "Opening…" : `${pendingLabel} →`}
         </button>
       ) : (
         <button
@@ -307,7 +323,8 @@ export function ManagerPaymentSetupModal({
   const [draft, setDraft] = useState<ManagerManualPaymentSettingsView>(() => draftFromSettings(null));
   const [loading, setLoading] = useState(false);
   const [stripeBusy, setStripeBusy] = useState(false);
-  const [stripeReady, setStripeReady] = useState(false);
+  const [stripeState, setStripeState] = useState<StripeSetupState>("unlinked");
+  const [stripeIssue, setStripeIssue] = useState<string | null>(null);
   const [savingChannel, setSavingChannel] = useState<PaymentChannel | null>(null);
   const [activeChannel, setActiveChannel] = useState<PaymentChannel | null>(null);
 
@@ -319,7 +336,8 @@ export function ManagerPaymentSetupModal({
 
   const loadStripeStatus = useCallback(async () => {
     if (demo) {
-      setStripeReady(true);
+      setStripeState("ready");
+      setStripeIssue(null);
       return;
     }
     try {
@@ -327,15 +345,29 @@ export function ManagerPaymentSetupModal({
       const body = (await res.json()) as {
         payoutsEnabled?: boolean;
         chargesEnabled?: boolean;
+        transfersEnabled?: boolean;
         paymentReady?: boolean;
+        connected?: boolean;
+        accountId?: string | null;
+        stripeError?: string | null;
+        demo?: boolean;
+        message?: string;
       };
       if (!res.ok) {
-        setStripeReady(false);
+        setStripeState("unknown");
+        setStripeIssue("Couldn't check your Stripe status. Try again.");
         return;
       }
-      setStripeReady(Boolean(body.paymentReady ?? (body.payoutsEnabled && body.chargesEnabled)));
+      const nextState = stripeSetupStateFromStatus(body);
+      setStripeState(nextState);
+      setStripeIssue(
+        nextState === "unknown"
+          ? body.stripeError ?? body.message ?? "Couldn't check your Stripe status. Try again."
+          : null,
+      );
     } catch {
-      setStripeReady(false);
+      setStripeState("unknown");
+      setStripeIssue("Couldn't check your Stripe status. Try again.");
     }
   }, [demo]);
 
@@ -465,13 +497,28 @@ export function ManagerPaymentSetupModal({
       <Modal open={open} title="Payment setup" onClose={onClose} assistantStrip={false}>
         <div className="space-y-3">
           {loading ? <p className="text-sm text-muted">Loading…</p> : null}
+          <p className="text-xs text-muted">
+            Stripe deposits resident payments into your own connected Stripe account and pays out to your bank, not to
+            PropLane. Each manager links their own account.
+          </p>
           <HubRow
             label="Stripe"
-            connected={stripeReady}
+            connected={stripeState === "ready"}
+            pending={stripeState === "incomplete"}
+            pendingLabel="Finish setup"
             onLink={() => void linkStripe()}
             dataAttr="manager-payment-stripe-link"
             busy={stripeBusy}
           />
+          {stripeState === "incomplete" ? (
+            <p className="text-xs text-[var(--status-pending-fg)]">
+              Your Stripe account isn&apos;t ready to receive money yet. Finish onboarding (identity + bank details) so
+              resident payments can be deposited.
+            </p>
+          ) : null}
+          {stripeState === "unknown" && stripeIssue ? (
+            <p className="text-xs text-[var(--status-pending-fg)]">{stripeIssue}</p>
+          ) : null}
           <HubRow
             label="Zelle"
             connected={zelleTrackingReady}

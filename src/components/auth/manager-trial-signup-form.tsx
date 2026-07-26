@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
+import { AuthSignedInRoleBanner } from "@/components/auth/auth-signed-in-role-banner";
 import { PricingAppleContinueButton } from "@/components/auth/pricing-apple-continue-button";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -267,19 +268,7 @@ export function ManagerTrialSignupForm({
       ) : (
         <>
           {signedInUser || accountReady ? (
-            <div className="rounded-2xl border border-border bg-card/50 px-3 py-2 text-center text-[12px] leading-snug text-muted">
-              {accountReady ? <>Your property account is ready. </> : null}
-              {signedInUser?.email ? (
-                <>You&apos;re signed in as <span className="font-semibold text-foreground">{signedInUser.email}</span>. </>
-              ) : (
-                <>You&apos;re already signed in. </>
-              )}
-              Create a new property account below, or{" "}
-              <Link href="/auth/continue" className="font-semibold text-primary hover:opacity-90">
-                continue to your portal
-              </Link>
-              .
-            </div>
+            <AuthSignedInRoleBanner role="manager" email={signedInUser?.email ?? null} />
           ) : null}
           <div className="space-y-3">
             <PricingAppleContinueButton
@@ -342,7 +331,7 @@ export function ManagerTrialSignupForm({
             disabled={locked}
             onClick={() => void submit()}
           >
-            {busy ? "Creating…" : "Create property account"}
+            {busy ? "Creating…" : signedInUser ? "Set up property manager" : "Create property account"}
           </Button>
         </>
       )}

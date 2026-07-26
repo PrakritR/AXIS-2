@@ -5,14 +5,16 @@ import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { AUTH_PORTAL_PICKER_OPTIONS } from "@/lib/auth/auth-portal-picker-options";
-import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
-import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
+import {
+  AUTH_PORTAL_PICKER_OPTIONS,
+  type AuthPortalPickerId,
+} from "@/lib/auth/auth-portal-picker-options";
+import { authCreateAccountHref } from "@/lib/auth/auth-role-signup-routes";
 import { isGetStartedDestination, resolvePostAuthDestination } from "@/lib/auth/resolve-post-auth-destination";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 /**
  * Portal chooser for a signed-in user with no portal role yet (new OAuth/email login).
@@ -25,13 +27,25 @@ function GetStartedContent() {
   const [resolving, setResolving] = useState(true);
   useAuthWelcomeChrome(true);
 
+  const stackOptions = useMemo(
+    () =>
+      AUTH_PORTAL_PICKER_OPTIONS.map((opt) => ({
+        id: opt.id,
+        label: opt.chooserLabel,
+        hint: opt.chooserHint,
+        icon: opt.icon,
+        tone: opt.tone,
+      })),
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const { redirectTo, resolutionFailed } = await resolvePostAuthDestination("/auth/continue");
       if (cancelled) return;
       if (redirectTo && !isGetStartedDestination(redirectTo)) {
-        window.location.replace(nativeAwarePath(redirectTo));
+        window.location.replace(redirectTo);
         return;
       }
       if (resolutionFailed) {
@@ -44,17 +58,11 @@ function GetStartedContent() {
     };
   }, [showToast]);
 
-  const choose = async (id: string) => {
+  const choose = (id: string) => {
+    const role = id as AuthPortalPickerId;
+    if (!AUTH_PORTAL_PICKER_OPTIONS.some((opt) => opt.id === role)) return;
     setBusy(id);
-    if (id === "manager") {
-      window.location.replace(
-        nativeAwarePath("/auth/create-account?mode=create&role=manager"),
-      );
-      return;
-    }
-    // Residents create accounts from the emailed setup link after applying — not here.
-    showToast("Apply first, then use the account setup link from your email. Or sign in if you already have an account.");
-    window.location.replace(nativeAwarePath("/rent/browse"));
+    window.location.replace(authCreateAccountHref(role));
   };
 
   const signOut = async () => {
@@ -82,28 +90,13 @@ function GetStartedContent() {
       <AuthPageHeader
         showLogo
         title="How do you want to use PropLane?"
-        subtitle="Pick the option that fits you; you can add the other later."
+        subtitle="Pick the option that fits you; you can add other portal types later from Settings."
         accent={false}
       />
 
       <AuthRoleStack
-        options={[
-          {
-            id: "manager",
-            label: "Set up as a property manager",
-            hint: "List properties, screen applicants & collect rent",
-            icon: "manager",
-            tone: "blue",
-          },
-          {
-            id: "resident",
-            label: "I'm applying to rent",
-            hint: "Browse homes, apply, then set up from your email link",
-            icon: "resident",
-            tone: "steel",
-          },
-        ]}
-        onSelect={(id) => void choose(id)}
+        options={stackOptions}
+        onSelect={choose}
         disabled={busy !== null}
         busyId={busy}
       />

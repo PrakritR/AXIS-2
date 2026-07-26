@@ -25,6 +25,7 @@ import {
   resolveSignInNextPath,
 } from "@/lib/auth/post-oauth-routing";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { AUTH_PORTAL_PICKER_OPTIONS } from "@/lib/auth/auth-portal-picker-options";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
@@ -381,6 +382,7 @@ function NativeAuthHubInner({
   }, [router, signInHref]);
 
   const browseHomesHref = residentBrowseFromAuthHref();
+  const createRoleHint = AUTH_PORTAL_PICKER_OPTIONS.find((opt) => opt.id === role)?.hint ?? "";
   const onBrowseHomesClick = useMemo(
     () => portalNavClick(router, browseHomesHref, { preferFullNavigation: true }),
     [browseHomesHref, router],
@@ -420,6 +422,9 @@ function NativeAuthHubInner({
 
           <div className={`space-y-3 ${isNative && !isCreate ? "" : isCreate ? "" : "mt-4"}`}>
             {isCreate ? <RoleToggle role={role} onChange={handleRoleChange} disabled={locked} /> : null}
+            {isCreate && createRoleHint ? (
+              <p className="text-center text-[11px] leading-snug text-muted sm:text-xs">{createRoleHint}</p>
+            ) : null}
 
             {isCreate ? (
               role === "resident" ? (
