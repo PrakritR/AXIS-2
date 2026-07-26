@@ -10,12 +10,21 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? process.env.NEXT_PUBLIC_APP_U
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/global-setup.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "github" : "list",
   timeout: 60_000,
+  // Hard suite-wide wall-clock cap so a broken run can never hang. Per-test
+  // timeouts (60s) don't bound the whole suite: 131 specs run serially at
+  // retries: 2, so a systemic failure (e.g. sign-in never succeeding) can burn
+  // hours before GitHub's 6h job default. globalSetup fails such runs in seconds;
+  // this is the backstop if a run degrades some other way. E2E has no measured
+  // healthy runtime on main yet, so this is a deliberately generous cap kept
+  // under the CI job's 30-min timeout-minutes, which is the hard backstop.
+  globalTimeout: 25 * 60_000,
   expect: { timeout: 10_000 },
   use: {
     baseURL,

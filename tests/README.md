@@ -20,6 +20,15 @@ For manager E2E signup, set `AXIS_PAYMENT_WAIVER_CODE=FREE100` to skip Stripe ch
 
 For manager/resident/admin portal E2E tests, run `npm run test:seed` then set `E2E_TESTS_ENABLED=1` in `.env.test`.
 
+> **`E2E_TESTS_ENABLED=1` is a promise that the portal accounts are reachable.**
+> The portal specs sign in as seeded accounts before asserting anything, so with
+> the flag on but the accounts unseeded (or the `E2E_*` credentials wrong) every
+> spec stalls on `waitForURL`. Playwright's `globalSetup`
+> (`tests/global-setup.ts`) does one real sign-in per seeded role (admin,
+> manager, resident) first and fails the run in seconds with an actionable
+> message instead of letting 131 specs grind for hours. Only turn the flag on
+> where the accounts actually exist.
+
 ## GitHub Actions secrets
 
 Configure these in your repository settings for CI:
@@ -34,6 +43,16 @@ Configure these in your repository settings for CI:
 | `STRIPE_SECRET_KEY` | Stripe test mode key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe test webhook secret |
 | `CRON_SECRET` | Cron route auth |
+
+The `e2e` job additionally sets `E2E_TESTS_ENABLED=1`, so it also needs the portal
+credentials below **and** the matching accounts seeded into the test project — the
+`globalSetup` preflight fails the job fast if they are absent:
+
+| Secret | Purpose |
+|--------|---------|
+| `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` | Admin portal sign-in |
+| `E2E_MANAGER_EMAIL` / `E2E_MANAGER_PASSWORD` | Manager portal sign-in |
+| `E2E_RESIDENT_EMAIL` / `E2E_RESIDENT_PASSWORD` | Resident portal sign-in |
 
 ## Seed / cleanup
 
