@@ -3,73 +3,6 @@
 
 # SMS / phone system (Twilio)
 
-## Which rail is authoritative (read this first)
-
-**Twilio is the single primary transport.** Every manager- and resident-scoped
-SMS routes through the unified Twilio path (`sendPropLaneSms` →
-`sendSms`), sending from the per-manager work number
-(`profiles.sms_from_number`). The Claw Messenger shared agent line
-(`+12053690702`, a NON-Twilio WebSocket gateway to `claw-messenger.onrender.com`
-driven by `scripts/claw-messenger-gateway.mjs`) is a **legacy fallback that is
-being retired** — it is engaged only while its flag is on.
-
-The rail is decided in ONE place: **`src/lib/sms-transport-mode.ts`**.
-- `smsPrimaryTransport()` → `"twilio"` unless the Claw fallback is engaged.
-- `isClawFallbackEnabled()` — the single master switch (client-safe,
-  `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED`, keeping the old
-  `isClawSharedLineBridgeEnabled()` truthiness so no deployment changed). That
-  old name is now a thin deprecated alias.
-- `isClawTransportEnabled()` (`proplane-sms-transport.server.ts`) is the
-  server-side send gate: the Claw fallback only transmits when its flag is
-  engaged AND it is configured with an API key (`CLAW_MESSENGER_ENABLED=1` +
-  `CLAW_MESSENGER_API_KEY`). No flag → Twilio.
-
-There is NO second "which rail is primary" flag and no contradictory doctrine:
-if you find code or a comment implying Claw is primary, it is stale — fix it to
-match this section.
-
-**Two money / live-traffic guards, both OFF by default — do not weaken:**
-- **`SMS_PROVISIONING_ENABLED`** (`isSmsProvisioningEnabled()`) gates BUYING a
-  per-manager Twilio number in `ensureManagerSmsNumber`. Twilio being the primary
-  transport does NOT authorize spend; until firstmate flips this on (alongside
-  A2P campaign registration), every purchase path returns `provisioning_disabled`
-  and buys nothing.
-- **`SMS_RELAY_POOL_AUTOBUY`** (unchanged) gates the relay pool auto-buy.
-
-**Retiring Claw for good** is a config flip firstmate owns: turn the Claw
-fallback flag OFF and turn `SMS_PROVISIONING_ENABLED` + A2P registration ON.
-Production keeps the fallback flag on today, so its behavior is unchanged until
-that flip. The Claw code (gateway script, `/api/webhooks/claw-messenger`,
-`claw-*` modules) is retained as the fallback, not deleted, because A2P is not
-yet production-ready and removing it would strand production with no rail.
-
-## Opt-out (STOP) is unified across BOTH stores
-
-STOP is recorded in two places by different webhooks, and **every send funnels
-through one unified read, `isPhoneOptedOut` (`src/lib/sms-consent.ts`), which
-honors both** — a STOP recorded on either path blocks every outbound rail:
-- **`sms_consent` ledger** (phone-keyed) — written by the manager work-line
-  webhook `/api/twilio/inbound` (`recordOptOut`/`recordOptIn`).
-- **`profiles.sms_opt_out_at`** (user-keyed) — written by the vendor-agent
-  webhook `/api/webhooks/twilio/sms`, which now ALSO writes the ledger so a
-  vendor STOP is durably recorded on the canonical store too.
-
-The vendor agent's own gates (`vendor-agent.server.ts`) also consult
-`isPhoneOptedOut` for the vendor's phone, passing `{ userId }` so the vendor's
-own profile row joins the comparison even when its stored phone is empty or
-unmatchable — a legacy user-keyed STOP (recorded before the ledger existed)
-still blocks until a later opt-in supersedes it. Opt-in supersede is computed
-GLOBALLY across both stores: the
-latest opt-in anywhere (`opted_in_at` or `sms_consent_at`) beats an older
-opt-out anywhere, so a STOP on one line followed by a START on the other
-re-enables the number instead of dead-ending. The vendor webhook's START also
-clears `profiles.sms_opt_out_at` across all stored phone formats
-(`profilePhoneVariants`, the one shared variant set both webhooks use). Both
-stores fail OPEN on infra error (a DB blip never drops all messaging; a
-profiles-side error falls back to the ledger alone). Coverage:
-`tests/unit/sms-opt-out-unified.test.ts`,
-`tests/unit/sms-transport-authoritative.test.ts`.
-
 ## Conversation identity is per-counterparty, NOT the phone pair (read this first)
 
 A conversation used to be derived from the phone-number pair on the wire
@@ -232,12 +165,11 @@ Carriers do not allow sending SMS *from* a personal number — do not fake it.
   `TWILIO_WEBHOOK_URL` + `TWILIO_VERIFY_SERVICE_SID`; per-manager numbers go
   in `profiles.sms_from_number`. Everything no-ops gracefully without them.
 
-**Claw shared agent line (LEGACY FALLBACK — mapped-manager trial + admin
-oversight).** `src/lib/claw-resident-messaging.server.ts` /
-`claw-relay.server.ts` run a SEPARATE, non-Twilio transport from the primary
-work-number system above. It is a fallback, not a co-primary: only while the
-Claw fallback flag is engaged (`isClawTransportEnabled()`) do sends route
-through the one shared agent line instead of Twilio. A small trial cohort (`clawMappedManagerEmails()`, env
+**Claw shared agent line (mapped-manager trial + admin oversight).**
+`src/lib/claw-resident-messaging.server.ts` / `claw-relay.server.ts` run a
+SEPARATE transport from the Twilio work-number system above: when Claw is
+enabled (`isClawTransportEnabled()`), all sends route through one shared
+agent line. A small trial cohort (`clawMappedManagerEmails()`, env
 `CLAW_MESSENGER_MANAGER_EMAILS`) shares that line; forwarding targets for
 their threads are the env `CLAW_MESSENGER_MANAGER_FORWARD_PHONES` list plus
 `resolveAdminForwardPhone()` — the Axis admin account's own `profiles.phone`
@@ -290,15 +222,127 @@ Bought numbers must join the Messaging Service
 releases the number. A2P compliance pages: `/sms-terms` + the SMS opt-in
 section on `/privacy`.
 
-## Claw Messenger (LEGACY FALLBACK shared line, `+12053690702`)
+**Web opt-in consent (carrier-required).** The public tours-contact page
+(`/rent/tours-contact`) is what Twilio's A2P reviewer inspects, so every public
+form there that collects a phone renders a carrier-compliant SMS consent
+checkbox (`SmsConsentCheckbox` in
+`src/components/marketing/sms-consent-checkbox.tsx`): unchecked by default,
+optional (submitting without it still works), not bundled with any other
+agreement, naming sender + message types + STOP/HELP and linking `/privacy` +
+`/tos`. The decision is persisted two ways: `smsConsent` + a SERVER-stamped
+`smsConsentAt` on the `PartnerInquiry` record (the route coerces the flag to a
+strict boolean and ignores any client-supplied timestamp, so per-lead consent is
+provable), and a positive opt-in written to the `sms_consent` ledger via
+`recordOptIn(..., "tours-contact")` in the `partner-inquiries` /
+`property-lead-message` routes. The load-bearing
+send gate is in `textTourGuest` (`tour-notification-delivery.server.ts`): a
+prospect is texted ONLY when `smsConsent === true`. Absence of a prior STOP is
+NOT consent — `sendResidentOutboundSms`/`sendSms` only check `isPhoneOptedOut`,
+which fails open, so a positive opt-in is required before any tour SMS. A later
+inbound STOP still supersedes the recorded opt-in. Coverage:
+`tests/unit/tour-guest-sms-consent.test.ts`,
+`tests/unit/partner-inquiry-sms-consent.test.ts`,
+`tests/unit/tours-contact-sms-consent-ui.test.tsx`.
 
-Twilio is the authoritative primary (see "Which rail is authoritative" at the
-top). The Claw shared agent line is the legacy fallback and is only live while
-its flag is engaged. While engaged, `ensureManagerSmsNumber` keeps
-`sms_from_number` on the Claw line and does not buy a Twilio number (and even
-with the fallback off, the `SMS_PROVISIONING_ENABLED` money guard keeps
-purchases dark until firstmate flips it). When the fallback is on, its inbound
-flow is: `scripts/claw-messenger-gateway.mjs` (a long-running WS client,
+## Per-manager number: provisioning + registration state machine
+
+`profiles.sms_from_number` is the denormalized "active number" cache every send /
+inbound path reads; **`manager_sms_numbers`** (migration
+`20260725120000_manager_sms_numbers.sql`, service-role-only, RLS no policies) is
+the source of truth for the number's LIFECYCLE and the manager's MESSAGING
+REGISTRATION. Pure gates live in `src/lib/sms/number-registration-policy.ts`; the
+server state machine in `src/lib/sms/manager-number-provisioning.server.ts`.
+
+- **`provision_state`** ∈ `pending_registration | provisioning | active | failed
+  | released`. **`registration_state`** ∈ `pending | approved | rejected`.
+- **One number per manager, idempotent.** `provisionManagerNumber` short-circuits
+  on an existing active number — re-running never buys a second. A provider error
+  leaves a retryable `failed` (attempts++/`last_error`), never a half-created
+  record. The atomic `profiles.sms_from_number` claim + rollback-on-race
+  (releasing the just-bought number) is unchanged.
+- **Money guard.** Real Twilio purchases happen ONLY when
+  `SMS_PROVISIONING_ENABLED=1`. Off by default: a fleet parks in
+  `pending_registration` at zero cost. `provisionManagerNumber` /
+  `activatePendingManagerNumbers({limit})` are bounded + observable; the daily
+  `backfill-manager-work-numbers` cron drives the sweep. Cost shape: one number
+  per manager per month, and all numbers sit under ONE brand/campaign whose
+  segment ceiling is shared — throttle observably, never silently drop.
+- **Registration is PER MANAGER (ISV/reseller model), one code path.** A number
+  can be `active` yet unsendable until that manager's OWN registration is
+  approved (`managerCanSendFromOwnNumber` = active + approved;
+  `resolveActiveManagerSendNumber` → null otherwise, callers fall back). A single
+  shared registration is the degenerate case: every row's `registration_ref`
+  points at the shared record and `effectiveRegistrationState` reads
+  `SMS_SHARED_REGISTRATION_STATE` from env, so ONE flip approves everyone.
+  `setManagerRegistrationState` (admin `POST /api/admin/manager-sms-registration`)
+  detaches a manager to their own state (ref → null) unless an explicit `ref` is
+  passed.
+- **Signup** (`scheduleManagerMessagingReady`) always seeds a parked record via
+  `ensureManagerNumberRecord`. Release on deactivation is reversible
+  (`releaseManagerNumber` → `released`, history kept; `restoreManagerNumber`).
+
+## Per-manager SMS proxy relay (`src/lib/sms/manager-relay.server.ts`)
+
+One PropLane number carries BOTH legs of a resident conversation, wired into
+`/api/twilio/inbound`:
+
+- **Leg 1 (resident → manager):** stored in the PropLane thread AND forwarded as
+  an SMS to the manager's own verified cell, labelled with the sender's NAME (or
+  a masked `Texter ····1234` handle) — never the raw resident number.
+  Skipped when the Claw shared-line bridge is on (that path forwards itself).
+- **Leg 2 (manager → resident):** the manager texts the SAME PropLane number from
+  their cell. `detectManagerSelfReply` (From = manager's verified phone, To =
+  their work number — the To pins the manager, so it is cross-tenant safe) routes
+  it to their **active resident conversation**. DETERMINISTIC RULE: the
+  resident-role thread with the newest message in either direction. Delivered to
+  the resident FROM the PropLane number (manager cell never exposed), stored in
+  the same thread.
+
+## Consent + quiet hours are transport-level (never bypassed)
+
+`sendPropLaneSms` gates EVERY send (Claw and Twilio branches) on `isPhoneOptedOut`
++ quiet hours before dispatch — closing the old ungated Claw path that texted
+opted-out numbers (AI replies, manager tour alert) and got the campaign rejected.
+`sendClass` ∈ `control | transactional | automated`: `control` (STOP/HELP) and
+explicit `skipConsentCheck` bypass the opt-out check; quiet hours suppress ONLY
+`automated` (rent reminders, bulk notices). The **weekly rent reminder**
+(`src/lib/sms/weekly-rent-reminder.server.ts`, cron
+`/api/cron/weekly-rent-reminders`) sends `automated` from the manager's own
+number and is idempotent PER ISO WEEK — the `portal_outbound_mail_records` dedup
+row is CLAIMED (`upsert … ignoreDuplicates`) before the send, so a retry /
+redeploy / duplicate tick can never text a resident twice.
+
+### `isPhoneOptedOut` is unified across BOTH opt-out stores
+
+STOP is recorded in two places by different webhooks, and the single gate above
+(`isPhoneOptedOut`, `src/lib/sms-consent.ts`) honors **both**, so a STOP recorded
+on either path blocks every outbound rail:
+
+- **`sms_consent` ledger** (phone-keyed) — the manager work-line webhook
+  (`/api/twilio/inbound`) writes it via `recordOptOut`/`recordOptIn`.
+- **`profiles.sms_opt_out_at` / `sms_consent_at`** (user-keyed) — the vendor-agent
+  webhook (`/api/webhooks/twilio/sms`) writes the column AND now also records the
+  ledger, so a vendor STOP is durable on the canonical store too.
+
+Supersede is computed **globally** across both stores (latest opt-in anywhere
+beats an older opt-out anywhere), so a STOP on one line followed by a START on
+the other re-enables the number instead of dead-ending — carriers expect START to
+work. `isPhoneOptedOut(db, phone, { userId })` folds a user-keyed row's timestamps
+into the same comparison, so a legacy STOP recorded against a profile whose phone
+column is empty still blocks until a later opt-in supersedes it; the vendor-agent
+gates use this unified read so they agree with the send choke point. Both stores
+fail OPEN on infra error (a DB blip never drops all messaging). One shared
+`profilePhoneVariants` helper (`sms-consent.ts`) matches un-normalized phone
+columns and is reused by the inbound webhooks so the variant sets cannot drift.
+Coverage: `tests/unit/sms-opt-out-unified.test.ts`.
+
+## Claw Messenger (production shared line, `+12053690702`)
+
+The live PropLane messaging system today is ONE shared agent line (Twilio
+per-manager numbers above are provisioned but dormant while Claw is primary —
+`ensureManagerSmsNumber` deliberately keeps `sms_from_number` on the Claw
+line and does not buy a Twilio number while `isClawSharedLineBridgeEnabled()`).
+Inbound flow: `scripts/claw-messenger-gateway.mjs` (a long-running WS client,
 NOT a Vercel function) → `POST /api/webhooks/claw-messenger` →
 `handleClawLeasingInbound` (`src/lib/claw-leasing-bot.server.ts`) → either the
 resident/payment/lease hub (`claw-resident-actions.server.ts`) or the

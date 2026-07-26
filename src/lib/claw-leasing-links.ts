@@ -2,12 +2,10 @@
  * Client-safe listing SMS helpers (no Node/ws imports).
  * Used by listing CTAs (`sms:` deep links) and server auto-replies.
  *
- * Twilio is PropLane's authoritative primary SMS transport. The Claw Messenger
- * shared agent line is a LEGACY FALLBACK, engaged only while
- * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED` is on — see `sms-transport-mode.ts` for
- * the single rail decision and `docs/agents/sms-system.md` for the topology.
- * While that fallback flag is on, work-number UI and
- * `proplane-sms-transport.server.ts` use the Claw agent phone.
+ * PropLane messaging (the transport that actually sends and receives) runs on
+ * ONE shared Claw Messenger agent line — keep
+ * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so work-number UI and
+ * `proplane-sms-transport.server.ts` keep using the Claw agent phone.
  *
  * Public listing CTAs are the one exception: in PRODUCTION they point at the
  * property's own manager's phone instead. That split lives entirely in
@@ -17,7 +15,6 @@
  */
 
 import { normalizePhoneE164 } from "@/lib/communication-other-recipients";
-import { isClawFallbackEnabled } from "@/lib/sms-transport-mode";
 
 export const CLAW_DEFAULT_AGENT_PHONE = "+12053690702";
 
@@ -48,26 +45,30 @@ export function isFictionalUs555Number(phone: string | null | undefined): boolea
 }
 
 /**
- * @deprecated Use `isClawFallbackEnabled()` from `@/lib/sms-transport-mode`.
- * Kept as a name-compatible alias for the many existing call sites/tests. Twilio
- * is the primary transport; this predicate answers "is the Claw legacy fallback
- * engaged?", the single master switch now owned by `sms-transport-mode.ts`.
+ * Claw Messenger is the active PropLane messaging system (single shared agent
+ * line). Client-safe — driven by NEXT_PUBLIC_ so listing CTAs work in the browser.
+ * Set `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=0` only when flipping to Twilio later.
  */
 export function isClawSharedLineBridgeEnabled(): boolean {
-  return isClawFallbackEnabled();
+  const flag = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED?.trim();
+  // Default ON for the Claw-primary era when unset in client bundles that
+  // still ship the public agent phone — but prefer an explicit "1".
+  if (flag === "0" || flag === "false") return false;
+  if (flag === "1" || flag === "true") return true;
+  // Fallback: if the public agent phone is configured, treat Claw as primary.
+  return Boolean(process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE?.trim());
 }
 
-/** @deprecated Alias — Twilio is primary; this is "is the Claw fallback on?". */
+/** @deprecated Alias — Claw is primary, not a temporary bridge. */
 export function isClawMessagingPrimary(): boolean {
-  return isClawFallbackEnabled();
+  return isClawSharedLineBridgeEnabled();
 }
 
-/** Fictional 555 placeholders, or non-Claw numbers while the Claw fallback is on. */
+/** Fictional 555 placeholders, or non-Claw numbers when Claw is primary. */
 export function isPlaceholderManagerWorkNumber(phone: string | null | undefined): boolean {
   if (isFictionalUs555Number(phone)) return true;
-  if (isClawFallbackEnabled()) {
-    // While the Claw fallback is engaged, only the shared agent line is a real
-    // work number (Twilio numbers are not bought in that mode).
+  if (isClawSharedLineBridgeEnabled()) {
+    // Under Claw-primary, only the shared agent line is a real work number.
     return !isLegacyClawSharedSmsNumber(phone);
   }
   if (isLegacyClawSharedSmsNumber(phone)) return true;
@@ -76,9 +77,9 @@ export function isPlaceholderManagerWorkNumber(phone: string | null | undefined)
 
 /**
  * Shared PropLane messaging number for the SEND transport
- * (`proplane-sms-transport.server.ts`) and work-number display. While the Claw
- * legacy fallback is engaged this is ALWAYS the single agent line; otherwise it
- * carries whatever per-manager Twilio number was passed in.
+ * (`proplane-sms-transport.server.ts`) and work-number display. When Claw is
+ * primary, ALWAYS the single agent line — one phone runs the entire messaging
+ * system.
  *
  * NOT the public listing CTA number any more: that is `listingCtaSmsPhone`
  * below, fed by `resolveListingCtaSmsPhone`, which routes production prospects
@@ -86,7 +87,7 @@ export function isPlaceholderManagerWorkNumber(phone: string | null | undefined)
  * of that split.
  */
 export function managerContactSmsPhoneForPublicCta(phone: string | null | undefined): string | null {
-  if (isClawFallbackEnabled()) {
+  if (isClawSharedLineBridgeEnabled()) {
     return clawLeasingAgentPhoneE164();
   }
   const trimmed = phone?.trim();

@@ -8,6 +8,7 @@ import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyForPublicLink } from "@/lib/rental-application/data";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
+import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import {
   appendPartnerInquiryToServer,
   dateHasAvailability,
@@ -509,7 +510,7 @@ function TourFlow({
                 return next;
               })
             }
-            onSubmit={async ({ name, email, phone, notes }) => {
+            onSubmit={async ({ name, email, phone, notes, smsConsent }) => {
               if (bookingTour) return;
               const errs: Record<string, string> = {};
               if (!name.trim()) errs.name = "Name is required.";
@@ -543,6 +544,8 @@ function TourFlow({
                     name: name.trim(),
                     email: email.trim(),
                     phone: phone.trim(),
+                    smsConsent,
+                    smsConsentAt: smsConsent ? new Date().toISOString() : undefined,
                     kind: "tour",
                     managerUserId: manager.userId,
                     tourGroupId,
@@ -844,12 +847,13 @@ function Step3({
   fieldErrors: Record<string, string>;
   returnAfterAuth: string;
   onFieldChange: (key: string) => void;
-  onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void | Promise<void>;
+  onSubmit: (payload: { name: string; email: string; phone: string; notes: string; smsConsent: boolean }) => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const signInHref = residentSignInHref(returnAfterAuth);
   const createAccountHref = residentCreateAccountHref(returnAfterAuth);
 
@@ -923,10 +927,12 @@ function Step3({
         <textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />
       </Field>
 
+      <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="tour-sms-consent" />
+
       <button
         type="button"
         disabled={submitting}
-        onClick={() => onSubmit({ name, email, phone, notes })}
+        onClick={() => onSubmit({ name, email, phone, notes, smsConsent })}
         className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
         data-attr="tour-book-submit"
@@ -966,6 +972,7 @@ function MessageFlow({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isOther = topic === "Other";
 
@@ -1001,6 +1008,8 @@ function MessageFlow({
           name: n,
           email: em,
           phone: phone.trim() || undefined,
+          smsConsent,
+          smsConsentAt: smsConsent ? new Date().toISOString() : undefined,
           topic: resolvedTopic,
           body: msg,
         }),
@@ -1014,6 +1023,7 @@ function MessageFlow({
       setEmail("");
       setPhone("");
       setMessage("");
+      setSmsConsent(false);
       setTopic("");
       setOtherTopicDetail("");
       onSuccess();
@@ -1092,6 +1102,7 @@ function MessageFlow({
           <Field label="Message *">
             <textarea rows={4} placeholder="Tell us more so we can help…" className={`${inputCls} resize-none`} value={message} onChange={(e) => setMessage(e.target.value)} />
           </Field>
+          <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="message-sms-consent" />
         </div>
       </div>
 
@@ -1150,13 +1161,6 @@ function ChevronRightIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 18l6-6-6-6" />
-    </svg>
-  );
-}
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9l6 6 6-6" />
     </svg>
   );
 }

@@ -4,6 +4,8 @@ import { runAgentTurn } from "@/lib/agent/loop";
 import { sanitizeChatMessages, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { buildDemoAgentContext } from "@/lib/demo/demo-agent-context";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
+import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
+import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 export const runtime = "nodejs";
 
@@ -69,7 +71,12 @@ export async function POST(req: Request) {
 
   try {
     const ctx = buildDemoAgentContext();
-    const result = await runAgentTurn({ ctx, registry: agentRegistry, messages });
+    const result = await runAgentTurn({
+      ctx,
+      registry: agentRegistry,
+      messages,
+      ...(messagesNeedVisionModel(messages) ? { model: visionPinnedModel() } : {}),
+    });
     if (result.pendingAction) {
       // /demo never persists a proposal: the id is the literal "demo", which no
       // confirm path can ever claim, so the card is a preview and nothing else.
@@ -88,6 +95,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply: result.reply, toolTrace: result.toolTrace });
   } catch (e) {
     console.error("[agent/demo-chat] turn failed:", e);
-    return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

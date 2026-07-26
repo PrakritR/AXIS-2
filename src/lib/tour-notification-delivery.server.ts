@@ -141,6 +141,8 @@ export type TourInquiryPayload = {
   name?: unknown;
   email?: unknown;
   phone?: unknown;
+  /** Explicit A2P/CTIA SMS opt-in captured on the tours-contact form. */
+  smsConsent?: unknown;
   notes?: unknown;
   propertyId?: unknown;
   propertyTitle?: unknown;
@@ -230,11 +232,23 @@ export async function notifyManagerTourRequest(
 }
 
 
-/** Text the tour guest via the resident SMS channel (unified transport). */
-async function textTourGuest(args: { guestPhone: string | null; text: string }): Promise<void> {
+/** Text the tour guest via the resident SMS channel (Claw shared line). */
+async function textTourGuest(args: { guestPhone: string | null; smsConsent: boolean; text: string }): Promise<void> {
   const phone = (args.guestPhone ?? "").trim();
   if (!phone) return;
+  // Carrier compliance (A2P 10DLC / CTIA): a prospect is texted ONLY when they
+  // explicitly opted in on the tours-contact form. Absence of a prior STOP is
+  // NOT consent — the send-time opt-out ledger fails open (see
+  // resident-outbound-sms.server.ts), so the positive opt-in captured with the
+  // lead is the load-bearing gate. This does not weaken STOP/HELP handling: a
+  // later STOP still supersedes the recorded opt-in in the sms_consent ledger.
+  if (args.smsConsent !== true) return;
   await sendResidentOutboundSms({ to: phone, text: args.text }).catch(() => undefined);
+}
+
+/** Read the explicit SMS opt-in flag persisted alongside a tour inquiry. */
+function inquirySmsConsent(inquiry: TourInquiryPayload): boolean {
+  return (inquiry as Record<string, unknown>).smsConsent === true;
 }
 
 export async function notifyTenantTourRequestReceived(
@@ -276,9 +290,10 @@ export async function notifyTenantTourRequestReceived(
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
   await textTourGuest({
     guestPhone,
+    smsConsent: inquirySmsConsent(inquiry),
     text: `PropLane: we received your tour request for ${ctx.propertyTitle}${
       ctx.tourStartIso ? ` (${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)})` : ""
-    }. We'll text you here once it's confirmed. Details: ${listingLink}`,
+    }. We'll text you here once it's confirmed. Details: ${listingLink}. Reply STOP to opt out, HELP for help.`,
   });
 
   if (email.error) return { ok: true, skipped: true, error: email.error };
@@ -340,9 +355,10 @@ export async function notifyTenantTourConfirmed(
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
   await textTourGuest({
     guestPhone,
+    smsConsent: inquirySmsConsent(inquiry),
     text: `PropLane: your tour of ${ctx.propertyTitle} is confirmed${
       ctx.tourStartIso ? ` for ${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)}` : ""
-    }.${instructions ? ` ${instructions.trim()}` : ""} Reply here with any questions. Details: ${listingLink}`,
+    }.${instructions ? ` ${instructions.trim()}` : ""} Reply here with any questions. Details: ${listingLink}. Reply STOP to opt out, HELP for help.`,
   });
 
   if (email.error) return { ok: true, skipped: true, error: email.error };

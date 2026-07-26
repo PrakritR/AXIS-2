@@ -12,7 +12,7 @@ const result = spawnSync(
   ["cap", "sync"],
   {
     stdio: "inherit",
-    env: { ...process.env, CAP_SERVER_URL: "https://www.axis-seattle-housing.com" },
+    env: { ...process.env, CAP_SERVER_URL: "https://prop-lane.space" },
   },
 );
 

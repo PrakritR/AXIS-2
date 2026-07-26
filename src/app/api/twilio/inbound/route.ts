@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import twilio from "twilio";
 import { handleClawLeasingInbound } from "@/lib/claw-leasing-bot.server";
 import { rateLimit } from "@/lib/rate-limit";
-import { profilePhoneVariants, recordOptIn, recordOptOut } from "@/lib/sms-consent";
+import { recordOptIn, recordOptOut } from "@/lib/sms-consent";
+import { isClawSharedLineBridgeEnabled } from "@/lib/claw-leasing-links";
+import {
+  detectManagerSelfReply,
+  forwardResidentInboundToManagerCell,
+  handleManagerReplyInbound,
+} from "@/lib/sms/manager-relay.server";
 import { twilioMediaUrls } from "@/lib/sms-media.server";
 import { inboundLogIdentityFields } from "@/lib/manager-sms-messages.server";
 import { relayInboundSms } from "@/lib/sms-relay.server";
@@ -21,6 +27,26 @@ export const maxDuration = 60;
 const SMS_STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const SMS_START_KEYWORDS = new Set(["START", "YES", "UNSTOP"]);
 const SMS_HELP_KEYWORDS = new Set(["HELP", "INFO"]);
+
+function digitsOf(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return digits;
+}
+
+/** Common storage formats for one US number, for direct-column matching. */
+function phoneVariants(raw: string): string[] {
+  const d = digitsOf(raw);
+  if (d.length !== 10) return [raw.trim()].filter(Boolean);
+  return [
+    `+1${d}`,
+    d,
+    `1${d}`,
+    `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`,
+    `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`,
+    raw.trim(),
+  ].filter(Boolean);
+}
 
 /** Empty TwiML — replies are sent asynchronously via the Messaging API. */
 function twimlOk(reply?: string): NextResponse {
@@ -128,7 +154,7 @@ export async function POST(req: Request) {
   const { data: managerRows } = await db
     .from("profiles")
     .select("id")
-    .in("sms_from_number", profilePhoneVariants(toPhone))
+    .in("sms_from_number", phoneVariants(toPhone))
     .limit(1);
   const managerId = String((managerRows ?? [])[0]?.id ?? "").trim();
   if (!managerId) {
@@ -147,6 +173,40 @@ export async function POST(req: Request) {
 
   const workNumber = normalizeE164(toPhone) ?? toPhone;
 
+  // Leg 2 — manager reply. If the sender is this manager's OWN verified cell
+  // texting their own work number, route the text to their active resident
+  // conversation instead of treating the manager as a resident.
+  const selfReply = await detectManagerSelfReply(db, { managerUserId: managerId, fromPhone, toPhone });
+  if (selfReply) {
+    const relayed = await handleManagerReplyInbound(db, {
+      managerUserId: managerId,
+      workNumber: selfReply.workNumber,
+      body,
+    });
+    await db
+      .from("inbound_sms_log")
+      .insert({
+        manager_user_id: managerId,
+        from_phone: fromPhone,
+        to_phone: toPhone,
+        matched_sender_user_id: managerId,
+        body,
+        message_sid: messageSid,
+        ...inboundLogIdentityFields({ managerUserId: managerId, counterpartyRole: "manager", fromPhone }),
+      })
+      .then(() => undefined, () => undefined);
+    let notice: string | undefined;
+    if (!relayed.ok) {
+      notice =
+        relayed.error === "registration_pending"
+          ? "Your PropLane number isn't approved to send yet. We'll notify you when it's active."
+          : relayed.error === "no_active_conversation"
+            ? "No active resident conversation to reply to. Open PropLane to pick a recipient."
+            : "Couldn't send that reply. Open PropLane to try again.";
+    }
+    return twimlOk(notice);
+  }
+
   try {
     await handleClawLeasingInbound({
       from: fromPhone,
@@ -159,6 +219,18 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("twilio inbound leasing handler failed", managerId, e);
     return twimlOk();
+  }
+
+  // Leg 1 — forward the resident's text to the manager's own cell (labelled,
+  // never the raw number). Only in the per-manager Twilio regime; the Claw
+  // shared line has its own forward path, so this avoids a double forward.
+  if (!isClawSharedLineBridgeEnabled()) {
+    await forwardResidentInboundToManagerCell(db, {
+      managerUserId: managerId,
+      workNumber,
+      fromPhone,
+      body,
+    }).catch(() => undefined);
   }
 
   // Belt-and-suspenders: the leasing handler already logs inbound with its

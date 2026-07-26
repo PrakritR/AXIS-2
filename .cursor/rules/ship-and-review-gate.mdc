@@ -23,7 +23,8 @@ production without following it (unless the user explicitly waives a named step)
 5. Never treat “Vercel production is live” as done without confirming TestFlight
    (or documenting why the job skipped).
 
-Details: `AGENTS.md` (Branching & deployment), `docs/ship-gate.md`.
+Details: `AGENTS.md` (Branching & deployment), `docs/ship-gate.md`,
+`docs/agents/deployment-workflow.md`.
 
 ## Reviews required for non-trivial changes
 

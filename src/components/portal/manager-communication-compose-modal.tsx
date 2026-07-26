@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components/ui/checkbox-multi-select";
 import {
   PORTAL_TOOLBAR_GROUP,
@@ -464,7 +464,7 @@ export function ManagerCommunicationComposeModal({
       dense
       panelClassName="max-h-[min(92dvh,36rem)]"
       footer={
-        <div className="flex flex-wrap justify-end gap-2">
+        <ModalFooter>
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={sending}>
             Cancel
           </Button>
@@ -478,7 +478,7 @@ export function ManagerCommunicationComposeModal({
           >
             {sendLabel}
           </Button>
-        </div>
+        </ModalFooter>
       }
     >
       <div className="flex min-h-0 flex-col gap-2.5">

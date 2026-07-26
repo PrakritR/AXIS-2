@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   PORTAL_DATA_TABLE,
@@ -164,7 +164,21 @@ export function ManagerBillsPanel() {
         </div>
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add bill">
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Add bill"
+        footer={
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => void createBill()}>
+              Create bill
+            </Button>
+          </ModalFooter>
+        }
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-muted">Description</label>
@@ -177,12 +191,6 @@ export function ManagerBillsPanel() {
           <div>
             <label className="text-xs font-semibold text-muted">Due date</label>
             <Input className="mt-1" type="date" value={draft.dueDate} onChange={(e) => setDraft((d) => ({ ...d, dueDate: e.target.value }))} />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void createBill()}>Create bill</Button>
           </div>
         </div>
       </Modal>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
@@ -55,12 +55,15 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId,
   onUpdated,
   showToast,
+  headerActionsExtra,
 }: {
   sub: ManagerListingSubmissionV1;
   saveTarget: QuestionsSaveTarget;
   managerUserId: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
+  /** Share / link actions shown in the section header (visible when collapsed). */
+  headerActionsExtra?: ReactNode;
 }) {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -105,15 +108,21 @@ export function ManagerPropertyApplicationQuestionsPanel({
         collapsible={hasPreview}
         toggleDataAttr="application-section-toggle"
         headerActions={
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            data-attr="application-questions-add"
-            onClick={() => setListModalOpen(true)}
-          >
-            Edit
-          </Button>
+          <>
+            {headerActionsExtra}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="application-questions-add"
+              onClick={(e) => {
+                e.stopPropagation();
+                setListModalOpen(true);
+              }}
+            >
+              Edit
+            </Button>
+          </>
         }
         contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
       >

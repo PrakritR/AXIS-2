@@ -180,11 +180,6 @@ export function ManagerPropertyServiceOptionsPanel({
             + Add offering
           </Button>
         </div>
-        <div className="mt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={closeListModal}>
-            Close
-          </Button>
-        </div>
       </Modal>
 
       <ServiceOfferingEditModal

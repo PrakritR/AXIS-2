@@ -70,8 +70,9 @@ registered with Stripe and the domain-association file hosted:
   ```
 
   Registers `NEXT_PUBLIC_CANONICAL_APP_URL` / `NEXT_PUBLIC_APP_URL` hostnames
-  (production only). For Axis: `www.axis-seattle-housing.com` (and the apex if you
-  serve checkout there).
+  (production only). For PropLane: `prop-lane.space` (the canonical origin the
+  site and app WebView load), plus the legacy `www.axis-seattle-housing.com`
+  while that host stays live.
 
 The **hosted** application-fee redirect renders on `checkout.stripe.com`, which
 Stripe verifies itself — so Apple Pay there works even before our own domain is

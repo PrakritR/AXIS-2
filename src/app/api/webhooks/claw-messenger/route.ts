@@ -50,8 +50,7 @@ function authorized(req: Request, rawBody: string): boolean {
 }
 
 export async function POST(req: Request) {
-  // Claw is the LEGACY FALLBACK rail (single shared agent line) — inbound only
-  // arrives here while the fallback is engaged; see sms-transport-mode.ts.
+  // Claw is the production PropLane messaging rail (single shared agent line).
   if (!isClawMessengerConfigured()) {
     return NextResponse.json(
       {

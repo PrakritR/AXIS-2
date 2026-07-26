@@ -42,7 +42,7 @@ beforeEach(() => {
   priorVercelEnv = process.env.VERCEL_ENV;
   priorNodeEnv = process.env.NODE_ENV;
   priorClawFlag = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
-  // Engage the Claw fallback in every environment; only CTA targeting splits.
+  // Claw is the primary transport in every environment; only CTA targeting splits.
   process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
 });
 

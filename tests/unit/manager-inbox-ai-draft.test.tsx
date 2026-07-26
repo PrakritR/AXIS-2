@@ -36,18 +36,8 @@ const THREADS = [
   },
 ];
 
-vi.mock("@/lib/portal-inbox-storage", () => ({
-  collapsePersonInboxThreads: (threads: unknown[]) => threads,
-  resolveCollapsedInboxThread: (id: string | null, collapsed: Array<{ id: string }>) => collapsed.find((t) => t.id === id) ?? null,
-  inboxThreadCounterpartyEmail: (t: { email?: string }) => t.email ?? "",
-  mergeInboxRowsWithLocalTrash: (rows: unknown[]) => rows,
-  countUnopenedPersistedInbox: () => 0,
-  beginInboxMutation: () => {},
-  endInboxMutation: () => {},
-  appendPersistedInboxThread: () => {},
-  seedDemoInbox: () => {},
-  RESIDENT_INBOX_STORAGE_KEY: "resident-inbox",
-  VENDOR_INBOX_STORAGE_KEY: "vendor-inbox",
+vi.mock("@/lib/portal-inbox-storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/portal-inbox-storage")>()),
   MANAGER_INBOX_STORAGE_KEY: "manager-inbox",
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   loadPersistedInbox: () => THREADS,

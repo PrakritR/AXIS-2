@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Terms for the PropLane property management text messaging program: message frequency, rates, HELP and STOP instructions, and support contacts.",
 };
 
-const LAST_UPDATED = "July 14, 2026";
+const LAST_UPDATED = "July 25, 2026";
 
 export default function SmsTermsPage() {
   return (
@@ -23,20 +23,47 @@ export default function SmsTermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Program description</h2>
             <p className="mt-2">
-              PropLane property management messaging (&ldquo;the Program&rdquo;) provides two-way conversational text
-              messages between property managers and their residents regarding an active tenancy, for example rent
-              reminders, maintenance and work-order updates, scheduling, and messages relayed between a resident and
-              their property manager through a dedicated PropLane number. The Program does not send marketing or
-              promotional content.
+              PropLane property management messaging (&ldquo;the Program&rdquo;) sends two kinds of text messages from
+              PropLane numbers:
+            </p>
+            <ul className="mt-3 list-disc space-y-2 ps-5">
+              <li>
+                <strong className="font-medium text-foreground">Tenancy messages</strong> — two-way conversational
+                texts between property managers and their residents regarding an active tenancy, for example rent
+                reminders, maintenance and work-order updates, scheduling, and messages relayed between a resident and
+                their property manager through a dedicated PropLane number.
+              </li>
+              <li>
+                <strong className="font-medium text-foreground">Tour and rental-inquiry messages</strong> — texts to
+                prospective residents about tour scheduling and their rental inquiry, sent to the number they provide
+                when requesting a tour or contacting a property.
+              </li>
+            </ul>
+            <p className="mt-3">
+              For both, message frequency varies and message and data rates may apply. The Program does not send
+              marketing or promotional content.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-semibold text-foreground">Opting in</h2>
-            <p className="mt-2">
-              You opt in by entering your mobile number in the PropLane app or website, verifying ownership of that
-              number with a one-time passcode, and checking an explicit consent box agreeing to receive text messages
-              about your tenancy. Consent is not a condition of any purchase or of your tenancy.
+            <p className="mt-2">There are two ways to opt in, depending on the messages you want to receive:</p>
+            <ul className="mt-3 list-disc space-y-2 ps-5">
+              <li>
+                <strong className="font-medium text-foreground">Tenancy messages</strong> — you opt in by entering
+                your mobile number in the PropLane app or website, verifying ownership of that number with a one-time
+                passcode, and checking an explicit consent box agreeing to receive text messages about your tenancy.
+              </li>
+              <li>
+                <strong className="font-medium text-foreground">Tour and rental-inquiry messages</strong> — you opt in
+                by checking the explicit consent box on the tour-scheduling or send-a-message form when you provide
+                your phone number, agreeing to receive text messages from PropLane about tour scheduling and your
+                rental inquiry at that number.
+              </li>
+            </ul>
+            <p className="mt-3">
+              Consent is optional and is not a condition of any purchase, of your tenancy, or of booking a tour or
+              sending a message.
             </p>
           </section>
 

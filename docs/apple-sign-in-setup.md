@@ -97,6 +97,10 @@ http://localhost:3000/auth/callback/vendor-signup
 Production (replace origin):
 
 ```
+https://prop-lane.space/auth/callback
+https://prop-lane.space/auth/callback/partner-pricing
+https://prop-lane.space/auth/callback/resident-signup
+https://prop-lane.space/auth/callback/vendor-signup
 https://www.axis-seattle-housing.com/auth/callback
 https://www.axis-seattle-housing.com/auth/callback/partner-pricing
 https://www.axis-seattle-housing.com/auth/callback/resident-signup

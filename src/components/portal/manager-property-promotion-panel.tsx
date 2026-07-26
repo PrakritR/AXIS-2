@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import {
   EMPTY_DRAFT,
@@ -90,10 +90,12 @@ export function ManagerPropertyPromotionPanel({
   listingId,
   showToast,
   onUpdated,
+  headerActionsExtra,
 }: {
   listingId: string;
   showToast: (m: string) => void;
   onUpdated?: () => void;
+  headerActionsExtra?: ReactNode;
 }) {
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   // Aborts the copy request owned by whichever compose modal is open.
@@ -473,15 +475,18 @@ export function ManagerPropertyPromotionPanel({
         className="mt-4"
         toggleDataAttr="promotion-section-toggle"
         headerActions={
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            onClick={openNewPromotion}
-            data-attr="manager-property-new-promotion"
-          >
-            New promotion
-          </Button>
+          <>
+            {headerActionsExtra}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              onClick={openNewPromotion}
+              data-attr="manager-property-new-promotion"
+            >
+              New promotion
+            </Button>
+          </>
         }
         contentClassName="px-4 py-3"
       >
@@ -529,14 +534,14 @@ export function ManagerPropertyPromotionPanel({
         onClose={closeForm}
         panelClassName="max-w-2xl"
         footer={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Updating…" : "Update flyer"}
-            </Button>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancel
             </Button>
-          </div>
+            <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
+              {generating ? "Updating…" : "Update flyer"}
+            </Button>
+          </ModalFooter>
         }
       >
         <PromotionForm

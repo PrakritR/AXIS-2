@@ -39,6 +39,24 @@ else
   note "missing docs/ship-gate.md"
 fi
 
+if [[ -f "vercel.json" ]] && grep -q '"main": true' vercel.json && grep -q '"\*\*": false' vercel.json; then
+  pass "vercel.json limits deploymentEnabled to main"
+else
+  bad "vercel.json must set git.deploymentEnabled main=true and **=false"
+fi
+
+if [[ -f "scripts/vercel-should-build.sh" ]] && grep -q 'branch.*main' scripts/vercel-should-build.sh; then
+  pass "vercel-should-build.sh only allows main"
+else
+  bad "scripts/vercel-should-build.sh must skip non-main branches"
+fi
+
+if git ls-remote --exit-code origin refs/heads/production >/dev/null 2>&1; then
+  bad "remote branch origin/production still exists — delete it; only main may deploy"
+else
+  pass "no legacy origin/production branch"
+fi
+
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 echo "INFO current branch: $BRANCH"
 if [[ "$BRANCH" == "main" ]]; then

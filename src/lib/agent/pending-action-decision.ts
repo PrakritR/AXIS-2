@@ -23,6 +23,7 @@ import {
 import type { ToolRegistry } from "@/lib/tools/registry";
 import { appendAgentMessages } from "@/lib/agent/sessions";
 import { track } from "@/lib/analytics/posthog";
+import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
 
 type DecisionActor = PendingActionActor & { landlordId: string };
 
@@ -58,10 +59,8 @@ export async function handlePendingActionDecision<Ctx extends DecisionActor>(arg
     );
   } catch (e) {
     console.error(`[agent/${portal}] confirm action failed:`, e);
-    return NextResponse.json(
-      { error: "The assistant ran into an error. Please try again." },
-      { status: 500 },
-    );
+    const { message, httpStatus } = formatAgentChatUserError(e);
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 
   if (!result.ok) {

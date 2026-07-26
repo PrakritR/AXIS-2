@@ -1,4 +1,4 @@
-# Supabase and Stripe setup (Axis)
+# Supabase and Stripe setup (PropLane)
 
 This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription mode) so managers pay before creating a password. Portal tables are empty until you wire your own queries; **public listings** still use local mock inventory.
 
@@ -15,15 +15,12 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    supabase link --project-ref <your-project-ref>
    npm run db:push        # applies everything in supabase/migrations/
    ```
-   Axis runs two projects (a shared dev/test project and production) that are kept
+   PropLane runs two projects (a shared dev/test project and production) that are kept
    identical via these migrations. See [`docs/database-environments.md`](docs/database-environments.md)
    for the full two-project model and the dev → prod push workflow.
 4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below). For development you may disable **Confirm email** under Auth settings so sign-up can insert `profiles` immediately; in production keep confirmations on and confirm email before expecting a `profiles` row from client sign-up.
-5. **Authentication → URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`) and add redirect URLs:
-   - `{your-domain}/auth/callback`
-   - `{your-domain}/auth/callback/partner-pricing` (Google signup from Partner pricing)
-   - `{your-domain}/auth/callback/resident-signup` (Google signup from Create account → Resident)
-   - `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, and `http://localhost:3000/auth/callback/resident-signup` for local dev (exact paths — no `?next=` query on OAuth redirect URLs)
+5. **Authentication → URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`; production is `https://prop-lane.space`) and add redirect URLs. The authoritative production allowlist — including the native-app callbacks and the retained legacy `axis-seattle-housing.com` entries — is in [`docs/mobile-app.md` → Google sign-in (native app)](docs/mobile-app.md); Apple callbacks are in [`docs/apple-sign-in-setup.md`](docs/apple-sign-in-setup.md). For local dev also add:
+   - `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, and `http://localhost:3000/auth/callback/resident-signup` (exact paths — no `?next=` query on OAuth redirect URLs)
    - Optional: `http://localhost:3000/**` wildcard if you use older callback links with query params
 
 For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL` to your custom domain so links do not use the default `*.vercel.app` deployment URL.
@@ -31,7 +28,7 @@ For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL`
 ### Profiles and manager purchases
 
 - `profiles`: one row per user (`id` = `auth.users.id`), `role`, optional `manager_id`, `application_approved` for residents.
-- `manager_purchases`: written when Stripe checkout completes; links `stripe_checkout_session_id`, `email`, `manager_id`, and later `user_id` when the manager finishes password setup.
+- `manager_purchases`: written when Stripe checkout completes; links `stripe_checkout_session_id`, `email`, `manager_id`, and later `user_id` when the manager finishes password setup. (Apple In-App Purchase on iOS writes the same table via the RevenueCat webhook — see `docs/agents/apple-iap.md`.)
 
 ### Google sign-in
 
@@ -42,34 +39,34 @@ For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL`
 
    `https://<your-project-ref>.supabase.co/auth/v1/callback`
 
-   Do **not** put your website URL (`https://www.axis-seattle-housing.com/auth/callback`) here — that causes `redirect_uri_mismatch`.
+   Do **not** put your website URL (`https://prop-lane.space/auth/callback`) here — that causes `redirect_uri_mismatch`.
 
 5. Ensure `{your-domain}/auth/callback` is listed under Supabase **Authentication → URL configuration → Redirect URLs** (not in Google Cloud redirect URIs).
-6. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing Axis accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
+6. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing PropLane accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
 
-### Google “Continue to …” branding (show Axis, not supabase.co)
+### Google “Continue to …” branding (show PropLane, not supabase.co)
 
 Google’s account picker shows **“to continue to {domain}”** based on your OAuth client’s **redirect URI host**. With Supabase Auth, that host is `*.supabase.co`, so users may see `qahnczmilgptcedaqype.supabase.co` until you brand the consent screen.
 
 **In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → OAuth consent screen:**
 
-1. Set **App name** to `Axis` (or `Axis Seattle Housing`).
-2. Upload your **App logo** (square, at least 120×120 px — use your Axis mark).
+1. Set **App name** to `PropLane`.
+2. Upload your **App logo** (square, at least 120×120 px — use the PropLane paper-plane mark).
 3. Set **User support email** and **Developer contact** to your team address.
-4. Under **Authorized domains**, add `axis-seattle-housing.com` (and `supabase.co` if not already present).
-5. Add **Application home page**: `https://www.axis-seattle-housing.com`
+4. Under **Authorized domains**, add `prop-lane.space` (and `supabase.co` if not already present).
+5. Add **Application home page**: `https://prop-lane.space`
 6. Add **Privacy policy** and **Terms of service** URLs on your domain (required for production / verification).
 7. Publish the consent screen to **Production** when ready (Testing mode only allows listed test users).
 
-After saving, new sign-ins should show your **Axis** name and logo (like other apps’ “Continue to Yelp” screen). The subtitle may still mention the Supabase hostname in some cases; fully replacing it requires a [Supabase custom auth domain](https://supabase.com/docs/guides/auth/auth-helpers/auth-ui#custom-domains) (paid add-on) so the redirect host is `auth.axis-seattle-housing.com`.
+After saving, new sign-ins should show your **PropLane** name and logo (like other apps’ “Continue to Yelp” screen). The subtitle may still mention the Supabase hostname in some cases; fully replacing it requires a [Supabase custom auth domain](https://supabase.com/docs/guides/auth/auth-helpers/auth-ui#custom-domains) (paid add-on) so the redirect host is `auth.prop-lane.space`.
 
 **Checklist:**
 
 | Where | What to set |
 |-------|-------------|
-| Google OAuth consent screen | App name **Axis**, logo, home page, privacy/terms |
+| Google OAuth consent screen | App name **PropLane**, logo, home page, privacy/terms |
 | Google Credentials → OAuth client | Redirect URI = `https://<project-ref>.supabase.co/auth/v1/callback` only |
-| Supabase → Auth → URL config | Site URL = `https://www.axis-seattle-housing.com`, redirect URLs include `/auth/callback` |
+| Supabase → Auth → URL config | Site URL = `https://prop-lane.space`; redirect URLs per [`docs/mobile-app.md` → Google sign-in (native app)](docs/mobile-app.md) |
 | Supabase → Auth → Google provider | Same Google client ID + secret as Cloud Console |
 
 ### Manager personal Google Calendar (per-manager OAuth)
@@ -82,20 +79,24 @@ Sign-in Google OAuth (above) is separate from **Calendar sync**. Each manager co
 2. Enable the **Google Calendar API** for the same project: APIs & Services → Library → search “Google Calendar API” → **Enable**. (Without this, connect succeeds but event sync fails.)
 3. Add **Authorized redirect URIs** (use the port you open in the browser — each port needs its own URI unless `GOOGLE_CALENDAR_REDIRECT_ORIGIN` is set):
    - `http://localhost:3010/api/portal/google-calendar/callback` (Cursor 1)
+   - `http://localhost:3010/api/portal/gmail-payments/callback` (Gmail payment tracking — same port as calendar when using redirect override)
    - `http://localhost:3009/api/portal/google-calendar/callback` (prakrit integration)
+   - `http://localhost:3009/api/portal/gmail-payments/callback`
    - `http://localhost:3011/api/portal/google-calendar/callback` (Cursor 2)
+   - `http://localhost:3011/api/portal/gmail-payments/callback`
    - Production: `{NEXT_PUBLIC_APP_URL}/api/portal/google-calendar/callback` (read from Vercel / `.env.local` — do not hardcode a marketing domain)
+   - Production: `{NEXT_PUBLIC_APP_URL}/api/portal/gmail-payments/callback`
 4. Set `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET` in `.env.local` / Vercel.
    Use the **same** Google OAuth client ID and secret as Supabase **Authentication → Providers → Google** so sign-in tokens work for calendar sync.
 5. Apply migration `20260723220000_google_calendar_integration.sql` on Supabase.
 
 **Per manager:** managers who **create an account with Google** automatically request Calendar scopes during sign-in; tokens are saved when provisioning finishes (no manual **Connect** step when Supabase returns provider tokens). If inline tokens are missing, the app redirects through calendar OAuth once after account setup.
 
-**Allow any manager Google account (no per-user test-user list):** publish the OAuth consent screen to **In production** in Google Cloud. Testing mode only allows manually listed test users — that restriction is enforced by Google, not PropPlane. Production still requires privacy policy and terms URLs; Calendar scopes may need Google verification.
+**Allow any manager Google account (no per-user test-user list):** publish the OAuth consent screen to **In production** in Google Cloud. Testing mode only allows manually listed test users — that restriction is enforced by Google, not PropLane. Production still requires privacy policy and terms URLs; Calendar scopes may need Google verification.
 
 #### Error: `Access blocked` / `403 access_denied` on Google’s sign-in page
 
-Google shows this **before** PropPlane receives a token. The OAuth consent screen is in **Testing** mode, so only emails listed as **Test users** may authorize the app (named “axis” or similar in Cloud Console).
+Google shows this **before** PropLane receives a token. The OAuth consent screen is in **Testing** mode, so only emails listed as **Test users** may authorize the app (named “axis” or similar in Cloud Console).
 
 Fix (pick one):
 
@@ -111,11 +112,11 @@ Use these exact values when configuring Google + Supabase for the live site:
 |---------|--------|
 | Supabase project URL | `https://qahnczmilgptcedaqype.supabase.co` |
 | Google **Authorized redirect URI** (Google Cloud only) | `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` |
-| Supabase **Site URL** | `https://www.axis-seattle-housing.com` |
-| Supabase **Redirect URLs** | `https://www.axis-seattle-housing.com/auth/callback`, `https://www.axis-seattle-housing.com/auth/callback/partner-pricing`, `https://www.axis-seattle-housing.com/auth/callback/resident-signup`, `https://www.axis-seattle-housing.com/**`, `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, `http://localhost:3000/auth/callback/resident-signup` |
-| App OAuth callback (this website) | `https://www.axis-seattle-housing.com/auth/callback` and `/auth/callback/partner-pricing` for Partner pricing Google signup |
+| Supabase **Site URL** | `https://prop-lane.space` |
+| Supabase **Redirect URLs** | The production allowlist in [`docs/mobile-app.md` → Google sign-in (native app)](docs/mobile-app.md) (Apple callbacks: [`docs/apple-sign-in-setup.md`](docs/apple-sign-in-setup.md)), plus the localhost dev entries from step 5 above |
+| App OAuth callback (this website) | `https://prop-lane.space/auth/callback` and `/auth/callback/partner-pricing` for Partner pricing Google signup |
 
-Verify live config: open `https://www.axis-seattle-housing.com/api/auth/oauth-providers` — it should report `googleEnabled: true` and the redirect URIs above.
+Verify live config: open `https://prop-lane.space/api/auth/oauth-providers` — it should report `googleEnabled: true` and the redirect URIs above.
 
 #### Error: `Unable to exchange external code`
 
@@ -124,7 +125,7 @@ This means **Supabase could not trade Google's authorization code for a session*
 Fix in this order:
 
 1. **Google Cloud Console → Credentials** — OAuth client must be type **Web application** (not Desktop).
-2. **Authorized redirect URIs** must include exactly `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` — do **not** put `https://www.axis-seattle-housing.com/auth/callback` here.
+2. **Authorized redirect URIs** must include exactly `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` — do **not** put `https://prop-lane.space/auth/callback` here.
 3. **Supabase → Authentication → Providers → Google** — paste the **same** Client ID and Client secret from that Google OAuth client (re-copy if the secret was ever rotated). Save and re-enable Google.
 4. **Supabase → Authentication → URL configuration** — Site URL and redirect URLs as in the table above.
 5. Retest at `/auth/sign-in` → Continue with Google. After OAuth works, paid manager signup (Pro/Business → Continue with Google) will proceed to Stripe checkout.

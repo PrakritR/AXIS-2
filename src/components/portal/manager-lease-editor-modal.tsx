@@ -15,7 +15,9 @@ import {
   type ManagerPropertySaveTarget,
 } from "@/lib/manager-property-save-target";
 import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
-import { leaseSourceFromDraft, type PropertyLeaseSource } from "@/lib/property-lease-source";
+import { leaseSourceFromDraft } from "@/lib/property-lease-source";
+import type { PropertyLeaseSource } from "@/lib/property-lease-source";
+import { buildLeaseModalAssistantContext } from "@/lib/lease-assistant-context";
 
 function draftFromSubmission(sub: ManagerListingSubmissionV1): LeaseConfigDraft {
   return {
@@ -90,6 +92,8 @@ export function ManagerLeaseEditorModal({
   propertyIds,
   managerUserId,
   propertyHint,
+  propertyId,
+  propertyLabel,
   demoMode = false,
   onClose,
   onSaved,
@@ -103,6 +107,9 @@ export function ManagerLeaseEditorModal({
   propertyIds?: string[];
   managerUserId: string;
   propertyHint?: PropertyLeasePreviewHint;
+  /** Listing / pending property id for the assistant (from Properties). */
+  propertyId?: string | null;
+  propertyLabel?: string | null;
   demoMode?: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -197,13 +204,21 @@ export function ManagerLeaseEditorModal({
     save();
   };
 
+  const assistantContext = buildLeaseModalAssistantContext({
+    propertyId,
+    propertyIds: bulkIds.length ? bulkIds : undefined,
+    propertyLabel: propertyLabel ?? propertyHint?.buildingName ?? title,
+    currentSource: source,
+  });
+
   return (
     <Modal
       open={open}
       title={title}
       onClose={closeAndSave}
       panelClassName="max-w-2xl"
-      assistantContext="Lease — PropLane standard, custom clauses, or PDF template"
+      assistantContext={assistantContext}
+      assistantStorageScopeKey="Lease modal"
     >
       {bulkIds.length > 1 ? (
         <p className="mb-4 text-sm text-muted">

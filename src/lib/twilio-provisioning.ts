@@ -2,10 +2,10 @@ import twilio from "twilio";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   clawLeasingAgentPhoneE164,
+  isClawSharedLineBridgeEnabled,
   isLegacyClawSharedSmsNumber,
   isPlaceholderManagerWorkNumber,
 } from "@/lib/claw-leasing-links";
-import { isClawFallbackEnabled, isSmsProvisioningEnabled } from "@/lib/sms-transport-mode";
 import { PRODUCTION_APP_ORIGIN, resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 export type EnsureManagerSmsNumberResult =
@@ -18,68 +18,26 @@ export type EnsureManagerSmsNumberResult =
  * against, so the purchased number's smsUrl MUST match it verbatim. Otherwise
  * we build it off the canonical (never-vercel) app origin.
  */
-function resolveInboundWebhookUrl(): string {
+export function resolveInboundWebhookUrl(): string {
   const explicit = process.env.TWILIO_WEBHOOK_URL?.trim();
   if (explicit) return explicit;
   const base = (resolveEmailLinkBaseUrl() || PRODUCTION_APP_ORIGIN).replace(/\/$/, "");
   return `${base}/api/twilio/inbound`;
 }
 
+export type PurchaseTwilioNumberResult =
+  | { ok: true; number: string; sid: string; messagingServiceSid: string | null }
+  | { ok: false; error: string };
+
 /**
- * Provision (or reuse) a per-manager Axis work number for two-way SMS.
- *
- * Idempotent: if `profiles.sms_from_number` is already set to a real Twilio
- * number, it is returned unchanged. Legacy shared Claw agent lines stamped on
- * the profile are treated as unset so a real Twilio number is purchased.
+ * Provider-only Twilio purchase: find an SMS-capable US local number, buy it,
+ * wire the inbound webhook, and best-effort attach it to the Messaging Service
+ * (so it inherits the A2P campaign). Does NO database writes — the state-machine
+ * caller owns persistence, the atomic slot claim, and rollback-on-race.
  */
-export async function ensureManagerSmsNumber(
-  db: SupabaseClient,
-  managerUserId: string,
-  opts?: { areaCode?: string },
-): Promise<EnsureManagerSmsNumberResult> {
-  if (!managerUserId) return { ok: false, error: "Missing manager id." };
-
-  // 1. Idempotent short-circuit — already provisioned with a real number.
-  try {
-    const { data: existing, error } = await db
-      .from("profiles")
-      .select("sms_from_number")
-      .eq("id", managerUserId)
-      .maybeSingle();
-    if (error) return { ok: false, error: error.message };
-    const current = String(existing?.sms_from_number ?? "").trim();
-    if (current) {
-      // Keep the shared Claw line while the legacy fallback is engaged — do not
-      // buy Twilio yet.
-      if (isLegacyClawSharedSmsNumber(current) && isClawFallbackEnabled()) {
-        return { ok: true, number: current };
-      }
-      if (!isPlaceholderManagerWorkNumber(current)) {
-        return { ok: true, number: current };
-      }
-    }
-
-    // MONEY GUARD: buying a Twilio number costs real money and must not happen
-    // until firstmate flips `SMS_PROVISIONING_ENABLED` on (alongside A2P
-    // campaign registration). Twilio being the primary transport does NOT
-    // authorize spend. Off by default, so every purchase path stays dark until
-    // that flip.
-    if (!isSmsProvisioningEnabled()) {
-      return { ok: false, error: "provisioning_disabled" };
-    }
-
-    if (current) {
-      // Clear placeholder stamp so the purchase path can claim the slot.
-      await db
-        .from("profiles")
-        .update({ sms_from_number: null })
-        .eq("id", managerUserId)
-        .eq("sms_from_number", current);
-    }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not read the profile." };
-  }
-
+export async function purchaseManagerTwilioNumber(opts?: {
+  areaCode?: string;
+}): Promise<PurchaseTwilioNumberResult> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   if (!accountSid || !authToken) {
@@ -92,7 +50,6 @@ export async function ensureManagerSmsNumber(
   try {
     const client = twilio(accountSid, authToken);
 
-    // 2. Find an available SMS-capable US local number.
     const available = await client.availablePhoneNumbers("US").local.list({
       ...(areaCode ? { areaCode } : {}),
       smsEnabled: true,
@@ -108,7 +65,6 @@ export async function ensureManagerSmsNumber(
       };
     }
 
-    // 3. Purchase it, wiring the inbound SMS webhook to our handler.
     const purchased = await client.incomingPhoneNumbers.create({
       phoneNumber: candidate,
       smsUrl: resolveInboundWebhookUrl(),
@@ -117,71 +73,102 @@ export async function ensureManagerSmsNumber(
     const number = String(purchased.phoneNumber ?? candidate).trim();
     const phoneNumberSid = String(purchased.sid ?? "").trim();
 
-    // 4. Attach to the Messaging Service when configured (best-effort — the
-    // number already works for send/receive without it).
-    const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
-    if (messagingServiceSid && phoneNumberSid) {
+    let messagingServiceSid: string | null = null;
+    const svc = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+    if (svc && phoneNumberSid) {
       try {
-        await client.messaging.v1.services(messagingServiceSid).phoneNumbers.create({ phoneNumberSid });
+        await client.messaging.v1.services(svc).phoneNumbers.create({ phoneNumberSid });
+        messagingServiceSid = svc;
       } catch {
         /* non-fatal: retriable from the Twilio console */
       }
     }
 
-    // 5. Atomically claim the slot (service-role): only persist if still unset,
-    //    so a concurrent provision (double-click) can't leave two purchased
-    //    numbers. If the claim writes zero rows — a DB error OR a concurrent
-    //    winner already stored a number — release the number we just bought so
-    //    it isn't orphaned and billed, then reconcile.
-    const { data: claimed, error } = await db
-      .from("profiles")
-      .update({ sms_from_number: number })
-      .eq("id", managerUserId)
-      .is("sms_from_number", null)
-      .select("sms_from_number");
-    if (error || !claimed || claimed.length === 0) {
-      if (phoneNumberSid) {
-        await client
-          .incomingPhoneNumbers(phoneNumberSid)
-          .remove()
-          .then(() => undefined, () => undefined);
-      }
-      if (error) return { ok: false, error: error.message };
-      // Concurrent winner — return whatever number is now stored.
-      const { data: winner } = await db
-        .from("profiles")
-        .select("sms_from_number")
-        .eq("id", managerUserId)
-        .maybeSingle();
-      const won = String(winner?.sms_from_number ?? "").trim();
-      return won
-        ? { ok: true, number: won }
-        : { ok: false, error: "Could not persist the work number." };
-    }
-
-    return { ok: true, number };
+    return { ok: true, number, sid: phoneNumberSid, messagingServiceSid };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not provision a work number." };
   }
 }
 
+/** Release a purchased Twilio number (rollback-on-race / deliberate release). */
+export async function releaseTwilioNumber(sid: string | null | undefined): Promise<void> {
+  const s = String(sid ?? "").trim();
+  if (!s) return;
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+  if (!accountSid || !authToken) return;
+  try {
+    await twilio(accountSid, authToken).incomingPhoneNumbers(s).remove();
+  } catch {
+    /* ignore — best effort */
+  }
+}
+
 /**
- * Read the manager's work number for SMS UI / sends.
- * Keeps the Claw shared line while the legacy fallback is engaged; otherwise
- * provisions a per-manager Twilio number (behind the provisioning money guard).
+ * Back-compat wrapper. The per-manager number lifecycle now lives in the
+ * `manager_sms_numbers` state machine (`provisionManagerNumber`), which is
+ * money-guarded (`SMS_PROVISIONING_ENABLED`) and records provider ids + state.
+ * Existing callers keep the same `{ ok, number }` contract.
+ *
+ * Idempotent: a real stored number is returned unchanged; the legacy Claw shared
+ * line is kept while the bridge is on so Twilio stays dormant during A2P review.
+ */
+export async function ensureManagerSmsNumber(
+  db: SupabaseClient,
+  managerUserId: string,
+  opts?: { areaCode?: string },
+): Promise<EnsureManagerSmsNumberResult> {
+  if (!managerUserId) return { ok: false, error: "Missing manager id." };
+
+  try {
+    const { data: existing } = await db
+      .from("profiles")
+      .select("sms_from_number")
+      .eq("id", managerUserId)
+      .maybeSingle();
+    const current = String(existing?.sms_from_number ?? "").trim();
+    if (current) {
+      if (isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
+        return { ok: true, number: current };
+      }
+      if (!isPlaceholderManagerWorkNumber(current)) {
+        return { ok: true, number: current };
+      }
+      // Clear the placeholder stamp so the state machine can claim the slot.
+      await db
+        .from("profiles")
+        .update({ sms_from_number: null })
+        .eq("id", managerUserId)
+        .eq("sms_from_number", current)
+        .then(() => undefined, () => undefined);
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not read the profile." };
+  }
+
+  const { provisionManagerNumber } = await import("@/lib/sms/manager-number-provisioning.server");
+  const res = await provisionManagerNumber(db, managerUserId, opts);
+  return res.ok ? { ok: true, number: res.number } : { ok: false, error: res.error };
+}
+
+/**
+ * Read the manager's work number for SMS UI / display. Keeps the Claw shared
+ * line while the bridge is on; otherwise returns the stored number (even when
+ * registration is still pending — the manager should see their own number).
+ * SEND-gating (registration approved) is applied separately by
+ * `resolveActiveManagerSendNumber`.
  */
 export async function resolveManagerWorkNumber(
   db: SupabaseClient,
   managerUserId: string,
 ): Promise<string | null> {
   if (!managerUserId) return null;
-  // Claw legacy fallback: one shared agent line for every manager.
-  if (isClawFallbackEnabled()) {
+  if (isClawSharedLineBridgeEnabled()) {
     return clawLeasingAgentPhoneE164();
   }
   const { data } = await db.from("profiles").select("sms_from_number").eq("id", managerUserId).maybeSingle();
   const current = String(data?.sms_from_number ?? "").trim();
-  if (current && isLegacyClawSharedSmsNumber(current) && isClawFallbackEnabled()) {
+  if (current && isLegacyClawSharedSmsNumber(current) && isClawSharedLineBridgeEnabled()) {
     return current;
   }
   if (current && !isPlaceholderManagerWorkNumber(current)) return current;

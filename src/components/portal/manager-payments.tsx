@@ -28,7 +28,7 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
+import { ManagerPaymentSetupModal } from "@/components/portal/manager-payment-setup-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -104,6 +104,7 @@ export function ManagerPayments() {
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
+  const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
   const [bankLinkBanner, setBankLinkBanner] = useState(false);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
@@ -211,14 +212,18 @@ export function ManagerPayments() {
       }
       if (connect === "done") {
         setBankLinkBanner(true);
+        showToast("Bank account linked. You're ready to receive resident payments.");
+      } else if (connect === "refresh") {
+        showToast("Setup link expired. Open Payment setup to try again.");
       }
-      // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
+      window.history.replaceState({}, "", `${portalBase}/payments`);
+      window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
       return;
     }
     if (payouts === "1") {
       window.location.replace(`${portalBase}/payments`);
     }
-  }, [portalBase]);
+  }, [portalBase, showToast]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -440,11 +445,15 @@ export function ManagerPayments() {
               Reminders
             </Button>
           ) : null}
-          <PortalStripeConnectPanel
-            basePath={portalBase}
-            variant="header"
-            onConnectDone={() => setBankLinkBanner(true)}
-          />
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => setPaymentSetupOpen(true)}
+            data-attr="payments-setup"
+          >
+            Payment setup
+          </Button>
           <Button
             type="button"
             variant="primary"
@@ -535,6 +544,11 @@ export function ManagerPayments() {
           setOutgoingTick((n) => n + 1);
           void syncManagerOutgoingExpensesFromServer(true);
         }}
+      />
+      <ManagerPaymentSetupModal
+        open={paymentSetupOpen}
+        onClose={() => setPaymentSetupOpen(false)}
+        portalBase={portalBase}
       />
 
     </ManagerPortalPageShell>

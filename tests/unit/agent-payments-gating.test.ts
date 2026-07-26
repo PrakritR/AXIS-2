@@ -93,14 +93,16 @@ function makeFakeDb(charges: HouseholdCharge[]) {
           type Chain = {
             eq: (col: string, val: unknown) => Chain;
             order: (col: string, opts?: unknown) => Chain;
-            limit: (n: number) => Chain;
+            limit: (n: number) => Promise<{ data: unknown[]; error: null }> | Chain;
             range: (from: number, to: number) => Promise<{ data: unknown[]; error: null }>;
             then: (onFulfilled: (v: { data: unknown[]; error: null }) => unknown) => unknown;
           };
+          const inboxData = () =>
+            table === "portal_inbox_thread_records" ? inboxThreads.map((r) => ({ ...r })) : [];
           const builder: Chain = {
             eq: () => builder,
             order: () => builder,
-            limit: () => builder,
+            limit: async () => ({ data: inboxData(), error: null }),
             range: async (from: number, to: number) => {
               if (table === "portal_household_charge_records") {
                 const page = charges.slice(from, to + 1).map((c) => ({ row_data: c }));
@@ -108,7 +110,7 @@ function makeFakeDb(charges: HouseholdCharge[]) {
               }
               return { data: [], error: null };
             },
-            then: (onFulfilled) => onFulfilled({ data: [], error: null }),
+            then: (onFulfilled) => onFulfilled({ data: inboxData(), error: null }),
           };
           return builder;
         },
@@ -122,7 +124,11 @@ function makeFakeDb(charges: HouseholdCharge[]) {
           return { error: null };
         },
         upsert: async (row: Record<string, unknown>) => {
-          if (table === "portal_inbox_thread_records") inboxThreads.push({ ...row });
+          if (table === "portal_inbox_thread_records") {
+            const existing = inboxThreads.find((r) => r.id === row.id);
+            if (existing) Object.assign(existing, row);
+            else inboxThreads.push({ ...row });
+          }
           return { error: null };
         },
         update(vals: Partial<AuditRow>) {

@@ -71,7 +71,7 @@ npm ci
 # marker guards against a stray dev URL being baked in.
 echo "▸ npx cap sync ios (production URL)"
 rm -f .cap-dev-server
-CAP_SERVER_URL="https://www.axis-seattle-housing.com" npx cap sync ios
+CAP_SERVER_URL="https://prop-lane.space" npx cap sync ios
 
 # Mirrors the GitHub workflow's parity check (ios-testflight.yml): prove the
 # baked capacitor.config.json points at the production origin before archiving.

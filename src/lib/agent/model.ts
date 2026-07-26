@@ -15,6 +15,7 @@
  * want to avoid.
  */
 import type Anthropic from "@anthropic-ai/sdk";
+import { lastUserText as lastUserMessageText } from "@/lib/agent/chat-handler";
 
 export type ModelTier = "simple" | "standard" | "complex";
 
@@ -112,12 +113,9 @@ const TRIVIAL_PHRASES = [
   "bye",
 ];
 
+
 function lastUserText(messages: Anthropic.MessageParam[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && m.role === "user" && typeof m.content === "string") return m.content;
-  }
-  return "";
+  return lastUserMessageText(messages);
 }
 
 /**

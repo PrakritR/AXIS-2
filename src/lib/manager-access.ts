@@ -1,4 +1,5 @@
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
+import { isAppleBilledManagerPurchase } from "@/lib/manager-apple-purchase";
 import { isSignupTrialManagerPurchase, resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
 import { RESIDENT_FREE_TIER_SECTION_IDS } from "@/lib/portals/resident-sections";
 
@@ -140,6 +141,8 @@ export type ManagerPurchaseRowRecord = {
   stripe_checkout_session_id: string | null;
   /** Optional: only the access-resolution path selects/needs this. */
   promo_code?: string | null;
+  /** Apple IAP anchor (App Store original transaction id); only the access path needs it. */
+  apple_original_transaction_id?: string | null;
   paid_at: string | null;
   user_id: string | null;
 };
@@ -180,6 +183,7 @@ export function resolveManagerSubscriptionTierFromPurchase(input: {
   stripeSubscriptionId?: string | null | undefined;
   stripeCheckoutSessionId?: string | null | undefined;
   promoCode?: string | null | undefined;
+  appleOriginalTransactionId?: string | null | undefined;
   paidAt?: string | null | undefined;
   hasPurchaseRow: boolean;
   nowMs?: number;
@@ -195,9 +199,14 @@ export function resolveManagerSubscriptionTierFromPurchase(input: {
     billing === "admin" || isAdminManagedManagerPurchase(input.stripeCheckoutSessionId);
   const isWaiverGrant = isWaiverGrantedManagerPurchase(input.promoCode);
   const isTrialGrant = isSignupTrialManagerPurchase(billing);
+  const isAppleGrant = isAppleBilledManagerPurchase(billing, input.appleOriginalTransactionId);
 
   if (normalized === "pro" || normalized === "business") {
     if (hasStripe) return "paid";
+    // Apple IAP is a webhook-driven grant: access lasts until the App Store
+    // reports expiry/refund (never date-math on paid_at). An authorized Apple
+    // grant (billing='apple' + original transaction id) is paid.
+    if (isAppleGrant) return "paid";
     // Coupon / payment-waiver grants are comp access; the `billing` field is the
     // plan cadence chosen at signup, not a comp period, so it must not be run
     // through the date-based expiry the way admin grants are.

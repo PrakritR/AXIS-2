@@ -1,5 +1,5 @@
 /**
- * Rigorous coverage for Claw fallback messaging: CTA deep links, intent
+ * Rigorous coverage for Claw-primary messaging: CTA deep links, intent
  * classification, and prospect-vs-manager routing helpers.
  */
 import { describe, expect, it } from "vitest";
@@ -100,7 +100,7 @@ const FREEFORM_CASES: Array<{ text: string; intent: ReturnType<typeof classifyLe
   { text: "Name: Sam\nEmail: sam@example.com\nSaturday 2pm", intent: "tour_details", cta: true },
 ];
 
-describe("Claw fallback single-number messaging", () => {
+describe("Claw-primary single-number messaging", () => {
   it("keeps the shared agent line as the PropLane transport number when Claw is enabled", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
