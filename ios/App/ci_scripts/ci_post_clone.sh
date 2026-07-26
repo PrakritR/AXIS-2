@@ -32,16 +32,16 @@ ensure_node() {
   export PATH="$(brew --prefix "node@${major}")/bin:$PATH"
 }
 
-# Prefer Node 24 (GitHub Actions TestFlight workflow); fall back to 22 (.nvmrc).
-if [ "$(node_major)" != "24" ] && [ "$(node_major)" != "22" ]; then
-  if brew info node@24 >/dev/null 2>&1; then
-    ensure_node 24
-  else
-    ensure_node 22
-  fi
+# Match .nvmrc / package.json engines (22.x). GitHub Actions may use 24, but
+# Xcode Cloud Homebrew reliably provides node@22.
+if [ "$(node_major)" != "22" ]; then
+  ensure_node 22
 fi
 
 echo "▸ using node $(node -v) / npm $(npm -v)"
+
+# Xcode Cloud networking can be flaky with the default npm socket pool.
+npm config set maxsockets 3
 
 echo "▸ npm ci"
 npm ci
