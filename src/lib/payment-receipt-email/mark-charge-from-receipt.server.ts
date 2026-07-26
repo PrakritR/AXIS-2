@@ -27,17 +27,18 @@ async function receiptSourceAlreadyProcessed(
     .eq(`row_data->>${field}`, sourceId)
     .limit(1);
   if (error) {
-    console.warn(`payment-receipt idempotency check failed (${field})`, sourceId, error.message);
-    return false;
+    throw new Error(`payment-receipt idempotency check failed (${field}) for ${sourceId}: ${error.message}`);
   }
   return (data ?? []).length > 0;
 }
 
 /**
  * Batched idempotency lookup: which of these source email ids are already
- * written onto a charge. One query per sync instead of one per message; a
- * failed lookup logs and returns empty (same fail-open behavior as the
- * per-message check — the amount/identity match is still required to credit).
+ * written onto a charge. One query per sync instead of one per message. Fails
+ * CLOSED like `loadPendingChargesForManager`: a query error throws so the sync
+ * records an error and skips the batch — an empty result here would let a
+ * re-scanned receipt context-match a different later same-amount charge and
+ * falsely credit it.
  */
 export async function loadProcessedReceiptSourceIds(
   db: SupabaseClient,
@@ -50,8 +51,7 @@ export async function loadProcessedReceiptSourceIds(
     .select(`source:row_data->>${field}`)
     .in(`row_data->>${field}`, sourceIds);
   if (error) {
-    console.warn(`payment-receipt batched idempotency check failed (${field})`, error.message);
-    return new Set();
+    throw new Error(`payment-receipt batched idempotency check failed (${field}): ${error.message}`);
   }
   return new Set(
     ((data ?? []) as { source: string | null }[])

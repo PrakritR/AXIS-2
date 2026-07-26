@@ -164,11 +164,19 @@ const MEMO_CONTEXT_MAX_CHARS = 4000;
  * BODY boilerplate legitimately contains them ("If you didn't request this
  * transfer", "Send and request money", "view your statement"), as can a payer's
  * own note ("rent as requested"), and none of that may veto a genuine receipt.
+ *
+ * The request rejects are scoped to SOLICITATION phrasings ("X requests $50",
+ * "is requesting", "payment request from X"). A request COMPLETION — Venmo's
+ * "X paid your $50.00 request" / "X completed your request" — is genuine money
+ * received (a manager collecting rent via Venmo requests) and must not be
+ * caught by the bare word "request".
  */
 const RECEIPT_SUBJECT_REJECT_PATTERNS = [
   /\byou paid\b/i,
   /\byou sent\b/i,
-  /\brequest(?:s|ed|ing)?\b/i,
+  /\brequest(?:s|ed|ing)\b/i,
+  /\bpayment request\b/i,
+  /\brequest from\b/i,
   /\bis charging\b/i,
   /\breminder\b/i,
   /\bstatement\b/i,
@@ -176,15 +184,22 @@ const RECEIPT_SUBJECT_REJECT_PATTERNS = [
 ];
 
 /**
- * Positive received-money phrasings. Directional by construction: an outbound
- * notice says "You paid X" / "You sent X" and a request says "X requests $Y",
- * none of which contain these shapes.
+ * Positive received-money phrasings, drawn from real provider/bank copy:
+ * Venmo "X paid you $Y" / "X paid your $Y request", Zelle app "X sent you $Y",
+ * Chase/BofA "You received $Y from X", Wells Fargo "You've received money with
+ * Zelle®". Directional by construction: an outbound notice says "You paid X" /
+ * "You sent X" and a solicitation says "X requests $Y" / "you have received a
+ * payment request", none of which contain these shapes — the received-money
+ * patterns look ahead to exclude a trailing "… request" on the same line.
  */
 const RECEIPT_INBOUND_PATTERNS = [
   /\bpaid you\b/i,
   /\bsent you\b/i,
-  /\byou received\b/i,
+  /\byou(?:['’]ve| have)? received\b(?![^\n]{0,60}?\brequest\b)/i,
+  /\breceived money with\s+zelle\b/i,
   /\breceived\s+\$?[\d.,]{1,15}\s+from\b/i,
+  /\bpaid your\b[^\n]{0,60}?\brequest\b/i,
+  /\bcompleted your\b[^\n]{0,60}?\brequest\b/i,
 ];
 
 /**
@@ -195,11 +210,12 @@ const INBOUND_SIGNAL_BODY_MAX_CHARS = 2000;
 
 /**
  * True only when the email POSITIVELY reads as money received — an inbound
- * phrasing ("X paid you", "sent you", "you received", "received $… from Y") in
- * the subject or the top of the body — AND the subject does not headline a
- * request/reminder/statement/outbound send. Zelle's "You have received a
- * payment request from X" satisfies the received-from shape but is caught by
- * the subject reject.
+ * phrasing ("X paid you", "sent you", "you've/you have received",
+ * "received $… from Y", "X paid your $Y request") in the subject or the top of
+ * the body — AND the subject does not headline a solicitation/reminder/
+ * statement/outbound send. Zelle's "You have received a payment request from X"
+ * is excluded twice: the subject reject fires on "payment request", and the
+ * received-money pattern's lookahead refuses a trailing "… request".
  */
 export function receiptIndicatesInboundPayment(subject: string, body: string): boolean {
   if (RECEIPT_SUBJECT_REJECT_PATTERNS.some((pattern) => pattern.test(subject))) return false;
@@ -226,14 +242,18 @@ export type ResidentReceiptContext = {
 /**
  * Pull the payer's display name out of a Zelle/Venmo notification. Handles the
  * common received-money phrasings: "Junaid Mohammed paid you $50.00",
- * "… sent you …", and "You received $50.00 from Junaid Mohammed". Returns null
- * when no name can be confidently isolated.
+ * "… sent you …", "You received $50.00 from Junaid Mohammed", and the
+ * request-completion forms "Junaid Mohammed paid your $50.00 request" /
+ * "… completed your request". Returns null when no name can be confidently
+ * isolated.
  */
 export function extractReceiptPayerName(subject: string, body: string): string | null {
   const hay = `${subject}\n${body}`;
   const patterns = [
     /^\s*([A-Za-z][A-Za-z.'\- ]{1,60}?)\s+paid you\b/im,
     /^\s*([A-Za-z][A-Za-z.'\- ]{1,60}?)\s+sent you\b/im,
+    /^\s*([A-Za-z][A-Za-z.'\- ]{1,60}?)\s+paid your\b/im,
+    /^\s*([A-Za-z][A-Za-z.'\- ]{1,60}?)\s+completed your\b/im,
     /\breceived\b[^\n]{0,40}?\bfrom\s+([A-Za-z][A-Za-z.'\- ]{1,60}?)(?:\s+with\s+zelle|\s+for\b|[.,!\n]|$)/i,
   ];
   for (const pattern of patterns) {

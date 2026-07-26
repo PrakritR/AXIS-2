@@ -14,7 +14,10 @@ const { upsertMock, deliverMock } = vi.hoisted(() => ({
 vi.mock("@/lib/household-charges.server", () => ({ upsertManagerCharges: upsertMock }));
 vi.mock("@/lib/portal-inbox-delivery", () => ({ deliverPortalInboxMessage: deliverMock }));
 
-import { markChargePaidFromReceipt } from "@/lib/payment-receipt-email/mark-charge-from-receipt.server";
+import {
+  loadProcessedReceiptSourceIds,
+  markChargePaidFromReceipt,
+} from "@/lib/payment-receipt-email/mark-charge-from-receipt.server";
 
 const MANAGER_ID = "mgr-1";
 
@@ -148,6 +151,27 @@ describe("markChargePaidFromReceipt — reference-less real receipt", () => {
     expect(upsertMock).toHaveBeenCalledTimes(1);
   });
 
+  it("credits the matching charge from a Venmo request-COMPLETION receipt", async () => {
+    const db = makeDb([charge({})], new Set<string>());
+    const receipt = contextFor({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid your $50.00 request",
+      body: "Junaid Mohammed paid your $50.00 request\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+
+    const result = await markChargePaidFromReceipt(db, MANAGER_ID, receipt, {
+      sourceId: "gmail-msg-completion",
+      sourceField: "paidViaGmailMessageId",
+    });
+
+    expect(result.outcome).toBe("marked_paid");
+    if (result.outcome === "marked_paid") {
+      expect(result.chargeId).toBe("hc_app_fee_junaid");
+      expect(result.matchedBy).toBe("context");
+    }
+    expect(upsertMock).toHaveBeenCalledTimes(1);
+  });
+
   it("never credits from a Venmo payment REQUEST (no money received)", async () => {
     const requestEmail = {
       fromEmail: "venmo@venmo.com",
@@ -203,5 +227,39 @@ describe("markChargePaidFromReceipt — reference-less real receipt", () => {
     expect(first.outcome).toBe("marked_paid");
     expect(second.outcome).toBe("idempotent");
     expect(upsertMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails CLOSED when the per-message idempotency check errors — throws, never credits", async () => {
+    const failingDb = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            limit: async () => ({ data: null, error: { message: "db down" } }),
+          }),
+        }),
+      }),
+    } as never;
+
+    await expect(
+      markChargePaidFromReceipt(failingDb, MANAGER_ID, contextFor(REAL_VENMO_RECEIPT), {
+        sourceId: "gmail-msg-err",
+        sourceField: "paidViaGmailMessageId",
+      }),
+    ).rejects.toThrow(/idempotency check failed/);
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
+  it("fails CLOSED when the batched idempotency lookup errors — throws instead of returning empty", async () => {
+    const failingDb = {
+      from: () => ({
+        select: () => ({
+          in: async () => ({ data: null, error: { message: "db down" } }),
+        }),
+      }),
+    } as never;
+
+    await expect(
+      loadProcessedReceiptSourceIds(failingDb, "paidViaGmailMessageId", ["gmail-msg-1"]),
+    ).rejects.toThrow(/idempotency check failed/);
   });
 });
