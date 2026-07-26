@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   bankSenderIsAllowed,
+  extractReceiptPayerName,
   parsePaymentReceiptEmail,
+  parseResidentReceiptContext,
   parseWorkOrderPaymentReceiptEmail,
 } from "@/lib/payment-receipt-email/parse-receipt";
 import {
@@ -71,6 +73,215 @@ describe("parsePaymentReceiptEmail", () => {
         fromEmail: "spam@evil.com",
         subject: "You paid $50.00",
         body: "PL-ABC123",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("extractReceiptPayerName", () => {
+  it("pulls the payer from a Venmo 'X paid you' subject", () => {
+    expect(extractReceiptPayerName("Junaid Mohammed paid you $50.00", "")).toBe("Junaid Mohammed");
+  });
+
+  it("pulls the payer from a 'You received $X from Y' line", () => {
+    expect(
+      extractReceiptPayerName("You received money", "You received $50.00 from Junaid Mohammed with Zelle"),
+    ).toBe("Junaid Mohammed");
+  });
+
+  it("returns null when no payer can be isolated", () => {
+    expect(extractReceiptPayerName("Payment received", "Thanks for your payment")).toBeNull();
+  });
+});
+
+describe("parseResidentReceiptContext — reference-less real receipts", () => {
+  it("parses the captain's real Venmo receipt (no PL- code)", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid you $50.00",
+      body: "Junaid Mohammed paid you $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.channel).toBe("venmo");
+    expect(ctx?.amountCents).toBe(5000);
+    expect(ctx?.paymentReference).toBeNull();
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+    expect(ctx?.memoText).toContain("5257 Brooklyn avenue");
+  });
+
+  it("still captures the PL- code when the resident included one", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Jane Doe paid you $150.00",
+      body: "Memo: PL-ABC123",
+    });
+    expect(ctx?.paymentReference).toBe("PL-ABC123");
+    expect(ctx?.amountCents).toBe(15000);
+  });
+
+  it("rejects an untrusted sender even with an amount", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "spam@evil.com",
+        subject: "You got paid $50.00",
+        body: "5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("parseResidentReceiptContext — direction guard (money must have been RECEIVED)", () => {
+  it("rejects a Venmo payment REQUEST from a trusted sender", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "Junaid Mohammed requests $50.00",
+        body: "Junaid Mohammed requests $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a noun-phrased Venmo solicitation — 'sent you a request for $50.00'", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "Junaid Mohammed sent you a request for $50.00",
+        body: "Junaid Mohammed sent you a request for $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a body-only request solicitation under a neutral subject", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "New notification from Venmo",
+        body: "Junaid Mohammed sent you a request for $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a Zelle payment-request phrasing that mimics 'received … from'", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "noreply@zellepay.com",
+        subject: "You have received a payment request",
+        body: "You have received a payment request from Junaid Mohammed for $50.00\n5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects an OUTBOUND 'You paid' send even when the memo names the property", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "You paid Junaid Mohammed $50.00",
+        body: "You paid Junaid Mohammed $50.00\nRefund — Application fee at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects an outbound send, request reminder, and statement even with a PL- code", () => {
+    for (const email of [
+      { subject: "You sent $50.00 with Zelle", body: "Memo: PL-ABC123" },
+      { subject: "Reminder: Junaid Mohammed requests $50.00", body: "PL-ABC123" },
+      { subject: "Your Venmo statement", body: "Junaid Mohammed paid you $50.00 · statement · PL-ABC123" },
+    ]) {
+      expect(parseResidentReceiptContext({ fromEmail: "venmo@venmo.com", ...email })).toBeNull();
+    }
+  });
+
+  it("still accepts a genuine receipt whose BODY contains reject-word boilerplate", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid you $50.00",
+      body: [
+        "Junaid Mohammed paid you $50.00",
+        "Application fee for room 5 at 5257 Brooklyn avenue",
+        "If you did not request this transfer, contact us.",
+        "View your statement online.",
+        "Send and request money with Venmo.",
+      ].join("\n"),
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.amountCents).toBe(5000);
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("accepts a Venmo 'X paid you' receipt", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid you $50.00",
+      body: "Junaid Mohammed paid you $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.channel).toBe("venmo");
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("accepts Wells Fargo's \"You've received money with Zelle®\" from an allow-listed bank sender", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "alerts@notify.wellsfargo.com",
+      subject: "You've received money with Zelle®",
+      body: "You've received $500.00 from Junaid Mohammed with Zelle\nRent for 5257 Brooklyn Avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.channel).toBe("zelle");
+    expect(ctx?.amountCents).toBe(50000);
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("accepts the 'you have received' contraction-free bank phrasing", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "no.reply.alerts@chase.com",
+      subject: "You have received money with Zelle®",
+      body: "You have received $50.00 from JUNAID MOHAMMED\nZelle payment for 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.channel).toBe("zelle");
+    expect(ctx?.amountCents).toBe(5000);
+  });
+
+  it("accepts a 'You received $X from Y' Zelle receipt", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "noreply@zellepay.com",
+      subject: "You received $50.00 from Junaid Mohammed",
+      body: "You received $50.00 from Junaid Mohammed\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.channel).toBe("zelle");
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("accepts a Venmo request COMPLETION — 'X paid your $50.00 request' is money received", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid your $50.00 request",
+      body: "Junaid Mohammed paid your $50.00 request\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.amountCents).toBe(5000);
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("accepts a 'X completed your request' completion notice", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed completed your request",
+      body: "Junaid Mohammed completed your request for $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.amountCents).toBe(5000);
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("does not accept an email whose only inbound phrasing is buried deep in the footer", () => {
+    const filler = "Lorem ipsum dolor sit amet. ".repeat(120);
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "News from Venmo — $50.00 offers inside",
+        body: `${filler}\nA friend paid you before? Invite more friends!`,
       }),
     ).toBeNull();
   });

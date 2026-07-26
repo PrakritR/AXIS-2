@@ -5,7 +5,7 @@ import { resolveInboundEmailBody } from "@/lib/inbound-email/inbound-email.serve
 import { loadManagerManualPaymentSettings } from "@/lib/manager-manual-payment-settings";
 
 import { extractPaymentInboxToken, resolveManagerIdByPaymentInboxToken } from "./payment-inbox";
-import { parsePaymentReceiptEmail } from "./parse-receipt";
+import { parseResidentReceiptContext } from "./parse-receipt";
 import { markChargePaidFromReceipt } from "./mark-charge-from-receipt.server";
 
 export type ProcessPaymentReceiptResult =
@@ -31,7 +31,7 @@ export async function processInboundPaymentReceiptEmail(
   }
 
   const body = await resolveInboundEmailBody(parsed);
-  const receipt = parsePaymentReceiptEmail({
+  const receipt = parseResidentReceiptContext({
     fromEmail: parsed.fromEmail,
     subject: parsed.subject,
     body,

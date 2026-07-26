@@ -188,6 +188,7 @@ describe("group application — manager reconciliation", () => {
     // Organizer is approved even though this member is still in review.
     expect(screen.getByText("Jordan Reyes")).toBeTruthy();
     expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Incomplete").length).toBeGreaterThan(0);
     dumpHtml("manager-expanded", container.innerHTML);
   });
 
