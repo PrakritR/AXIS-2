@@ -29,7 +29,15 @@ function nowIso(): string {
 
 /** Derive which per-property lease templates should exist from listing offered terms. */
 export function buildLeaseTemplateSeeds(
-  sub: Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody" | "shortTermRentalsAllowed" | "rooms" | "entireHomeMonthlyRent">,
+  sub: Pick<
+    ManagerListingSubmissionV1,
+    | "allowedLeaseTerms"
+    | "leaseTermsBody"
+    | "shortTermRentalsAllowed"
+    | "rooms"
+    | "entireHomeMonthlyRent"
+    | "listingPlaceCategoryId"
+  >,
 ): LeaseTemplateSeed[] {
   const allowed = resolveAllowedLeaseTerms(sub);
   const seeds: LeaseTemplateSeed[] = [];
