@@ -144,3 +144,46 @@ of the branch is required before promote** (self-serve account creation is auth-
 - `src/lib/rental-application/public-apply-session.ts` — `publicApplyCreateAccountHref`
 - `AGENTS.md`, `docs/agents/resident-onboarding.md` — new resident-onboarding model
 - `tests/unit/public-apply-account-prompt.test.tsx` (new), `tests/unit/resident-register-route.test.ts` (rewritten), `tests/integration/auth/resident-setup-gate.test.ts` (updated)
+
+---
+
+## Addendum — pipeline review findings, rebase onto main, and reconciliation
+
+The `no-mistakes` review (captain's requested security review) caught **two real
+security issues** in the first-pass code, exactly as the captain anticipated:
+
+1. **Application-takeover (ask-user, captain-decided).** Self-serve
+   `resident-register` used `email_confirm:true` + inheriting provisioning, so
+   anyone who knew a guest applicant's email could create an account and inherit
+   their (possibly approved) application. **Captain decision: option A + email
+   verification, default-deny.** Implemented: `resident-register` mints a CLEAN
+   profile (`application_approved=false`, no PII, no link) via a new
+   `inheritFromApplication:false` flag on `provisionResidentAccountByEmail`
+   (token/OAuth callers keep inheriting); re-inheritance is gated on the reused
+   setup-link email token; signup/apply are never blocked on the inbox.
+   Test: `provision-resident-default-deny.test.ts`.
+2. **Protocol-relative open redirect** via the `next` param (`//evil.com`) —
+   hardened at both `ResidentSignupForm` and `native-auth-hub` (reject `//`, `/\`).
+   Plus two info fixes: sign-in fallback now preserves intent+next; stale router
+   comment corrected.
+
+**Reconciliation with the multi-role lane (PR #126, landed on main).** That lane
+independently shipped `POST /api/auth/create-resident-account` (adds the resident
+role to an already-signed-in manager/vendor — no second auth user) and its own
+signed-in prompt. Rebased this branch onto `origin/main` and reconciled to ONE
+model, no competing paths:
+
+- The apply surface's single decision point `resolvePublicApplyView` (from main)
+  already routes **anonymous → my gate** (Create account → self-serve
+  `resident-register`) and **signed-in manager/vendor → their prompt →
+  `create-resident-account`**. Both prompts kept separate, as both lanes intended.
+- Added a guard so a signed-in manager/vendor who reaches the create-account
+  **resident tab** is offered the additive `create-resident-account` path, never a
+  second auth user.
+- Docs (`AGENTS.md`, `docs/agents/resident-onboarding.md`) unified to the
+  three-path model (anonymous self-serve / signed-in additive / guest fallback).
+
+**Note on process:** the pipeline's own fix agent crashed (`exit 1`) applying the
+follow-on email-ordering fix, so the security hardening above was re-derived and
+committed by hand between runs, then re-validated. Full unit suite green
+(441 files / 2732 tests); typecheck + lint clean.
