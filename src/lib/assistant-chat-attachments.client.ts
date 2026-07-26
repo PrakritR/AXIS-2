@@ -41,8 +41,39 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+async function rawImageFileToChatAttachment(
+  file: File,
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+): Promise<PendingChatAttachment | null> {
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) return null;
+  try {
+    const dataBase64 = await fileToBase64(file);
+    if (!dataBase64) return null;
+    const previewUrl =
+      mediaType === "image/jpeg" || mediaType === "image/png" || mediaType === "image/webp" || mediaType === "image/gif"
+        ? `data:${mediaType};base64,${dataBase64}`
+        : undefined;
+    return {
+      id: randomId(),
+      kind: "image",
+      fileName: file.name || "image",
+      mediaType,
+      dataBase64,
+      previewUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function imageFileToChatAttachment(file: File): Promise<PendingChatAttachment | null> {
-  if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_UPLOAD_BYTES) return null;
+  const looksJpeg =
+    file.type === "image/jpeg" ||
+    file.type === "image/pjpeg" ||
+    /\.jpe?g$/i.test(file.name);
+  const looksPng = file.type === "image/png" || /\.png$/i.test(file.name);
+  if (!file.type.startsWith("image/") && !looksJpeg && !looksPng && file.type !== "") return null;
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) return null;
   try {
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -79,6 +110,14 @@ async function imageFileToChatAttachment(file: File): Promise<PendingChatAttachm
       previewUrl: jpegDataUrl,
     };
   } catch {
+    if (looksJpeg) return rawImageFileToChatAttachment(file, "image/jpeg");
+    if (looksPng) return rawImageFileToChatAttachment(file, "image/png");
+    if (file.type === "image/webp" || /\.webp$/i.test(file.name)) {
+      return rawImageFileToChatAttachment(file, "image/webp");
+    }
+    if (file.type === "image/gif" || /\.gif$/i.test(file.name)) {
+      return rawImageFileToChatAttachment(file, "image/gif");
+    }
     return null;
   }
 }
@@ -102,7 +141,12 @@ async function pdfFileToChatAttachment(file: File): Promise<PendingChatAttachmen
 }
 
 export async function prepareChatAttachment(file: File): Promise<PendingChatAttachment | null> {
-  if (file.type.startsWith("image/") || file.type === "") {
+  const name = file.name || "";
+  const looksImage =
+    file.type.startsWith("image/") ||
+    file.type === "" ||
+    /\.(jpe?g|png|webp|gif)$/i.test(name);
+  if (looksImage) {
     const image = await imageFileToChatAttachment(file);
     if (image) return image;
   }
