@@ -10,6 +10,8 @@
 	</array>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:prop-lane.space</string>
+		<string>applinks:www.prop-lane.space</string>
 		<string>applinks:www.axis-seattle-housing.com</string>
 		<string>applinks:axis-seattle-housing.com</string>
 	</array>

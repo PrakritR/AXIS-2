@@ -16,7 +16,7 @@ function readServerBase(): string {
   } catch {
     /* ignore */
   }
-  return "https://www.axis-seattle-housing.com";
+  return "https://prop-lane.space";
 }
 
 /**
@@ -31,6 +31,9 @@ const nativeAppUrl = `${serverBase}${nativeEntryPath}`;
 
 function allowNavigationHosts(): string[] {
   const hosts = [
+    "prop-lane.space",
+    "www.prop-lane.space",
+    // Legacy hosts kept so already-installed shells (and their deep links) keep working.
     "www.axis-seattle-housing.com",
     "axis-seattle-housing.com",
     "localhost",

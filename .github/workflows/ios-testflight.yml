@@ -55,7 +55,7 @@ jobs:
           rm -f .cap-dev-server
           npx cap sync ios
         env:
-          CAP_SERVER_URL: https://www.axis-seattle-housing.com
+          CAP_SERVER_URL: https://prop-lane.space
 
       - name: Verify Release config points at production
         run: CONFIGURATION=Release bash scripts/verify-cap-prod-config.sh
