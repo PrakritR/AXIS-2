@@ -165,18 +165,16 @@ const MEMO_CONTEXT_MAX_CHARS = 4000;
  * transfer", "Send and request money", "view your statement"), as can a payer's
  * own note ("rent as requested"), and none of that may veto a genuine receipt.
  *
- * The request rejects are scoped to SOLICITATION phrasings ("X requests $50",
- * "is requesting", "payment request from X"). A request COMPLETION — Venmo's
- * "X paid your $50.00 request" / "X completed your request" — is genuine money
- * received (a manager collecting rent via Venmo requests) and must not be
- * caught by the bare word "request".
+ * Any subject that mentions "request" in ANY form — "X requests $50", "is
+ * requesting", "payment request from X", "sent you a request for $X" — is a
+ * SOLICITATION and is rejected wholesale, regardless of which other words
+ * surround it. The single exemption is a request COMPLETION — Venmo's "X paid
+ * your $50.00 request" / "X completed your request" — which is genuine money
+ * received (a manager collecting rent via Venmo requests).
  */
 const RECEIPT_SUBJECT_REJECT_PATTERNS = [
   /\byou paid\b/i,
   /\byou sent\b/i,
-  /\brequest(?:s|ed|ing)\b/i,
-  /\bpayment request\b/i,
-  /\brequest from\b/i,
   /\bis charging\b/i,
   /\breminder\b/i,
   /\bstatement\b/i,
@@ -184,22 +182,32 @@ const RECEIPT_SUBJECT_REJECT_PATTERNS = [
 ];
 
 /**
+ * The only "request"-flavored phrasings that mean money RECEIVED: a completed
+ * Venmo request. Everything else containing "request" is a solicitation.
+ */
+const RECEIPT_REQUEST_COMPLETION_PATTERNS = [
+  /\bpaid your\b[^\n]{0,60}?\brequest\b/i,
+  /\bcompleted your\b[^\n]{0,60}?\brequest\b/i,
+];
+
+/**
  * Positive received-money phrasings, drawn from real provider/bank copy:
  * Venmo "X paid you $Y" / "X paid your $Y request", Zelle app "X sent you $Y",
  * Chase/BofA "You received $Y from X", Wells Fargo "You've received money with
  * Zelle®". Directional by construction: an outbound notice says "You paid X" /
- * "You sent X" and a solicitation says "X requests $Y" / "you have received a
- * payment request", none of which contain these shapes — the received-money
- * patterns look ahead to exclude a trailing "… request" on the same line.
+ * "You sent X" and a solicitation says "X requests $Y" / "sent you a request",
+ * none of which contain these shapes — every direct phrasing looks ahead to
+ * refuse a trailing "… request" on the same line, so a noun-phrased
+ * solicitation can never qualify as inbound; completions qualify only via the
+ * dedicated completion patterns.
  */
 const RECEIPT_INBOUND_PATTERNS = [
-  /\bpaid you\b/i,
-  /\bsent you\b/i,
+  /\bpaid you\b(?![^\n]{0,60}?\brequest\b)/i,
+  /\bsent you\b(?![^\n]{0,60}?\brequest\b)/i,
   /\byou(?:['’]ve| have)? received\b(?![^\n]{0,60}?\brequest\b)/i,
   /\breceived money with\s+zelle\b/i,
   /\breceived\s+\$?[\d.,]{1,15}\s+from\b/i,
-  /\bpaid your\b[^\n]{0,60}?\brequest\b/i,
-  /\bcompleted your\b[^\n]{0,60}?\brequest\b/i,
+  ...RECEIPT_REQUEST_COMPLETION_PATTERNS,
 ];
 
 /**
@@ -213,12 +221,21 @@ const INBOUND_SIGNAL_BODY_MAX_CHARS = 2000;
  * phrasing ("X paid you", "sent you", "you've/you have received",
  * "received $… from Y", "X paid your $Y request") in the subject or the top of
  * the body — AND the subject does not headline a solicitation/reminder/
- * statement/outbound send. Zelle's "You have received a payment request from X"
- * is excluded twice: the subject reject fires on "payment request", and the
- * received-money pattern's lookahead refuses a trailing "… request".
+ * statement/outbound send. The solicitation reject gates the WHOLE decision:
+ * any subject mentioning "request" that is not a completion is refused before
+ * a single inbound pattern is consulted, so "sent you a request for $X" and
+ * "You have received a payment request from X" can never qualify via the
+ * phrasings they embed; the per-pattern lookaheads catch the same shapes when
+ * they appear only in the body.
  */
 export function receiptIndicatesInboundPayment(subject: string, body: string): boolean {
   if (RECEIPT_SUBJECT_REJECT_PATTERNS.some((pattern) => pattern.test(subject))) return false;
+  if (
+    /\brequest/i.test(subject) &&
+    !RECEIPT_REQUEST_COMPLETION_PATTERNS.some((pattern) => pattern.test(subject))
+  ) {
+    return false;
+  }
   const headline = `${subject}\n${body.slice(0, INBOUND_SIGNAL_BODY_MAX_CHARS)}`;
   return RECEIPT_INBOUND_PATTERNS.some((pattern) => pattern.test(headline));
 }

@@ -141,6 +141,26 @@ describe("parseResidentReceiptContext — direction guard (money must have been 
     ).toBeNull();
   });
 
+  it("rejects a noun-phrased Venmo solicitation — 'sent you a request for $50.00'", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "Junaid Mohammed sent you a request for $50.00",
+        body: "Junaid Mohammed sent you a request for $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a body-only request solicitation under a neutral subject", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "New notification from Venmo",
+        body: "Junaid Mohammed sent you a request for $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
   it("rejects a Zelle payment-request phrasing that mimics 'received … from'", () => {
     expect(
       parseResidentReceiptContext({
