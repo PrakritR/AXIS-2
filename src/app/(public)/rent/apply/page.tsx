@@ -26,9 +26,14 @@ export default async function ApplyPage({
     redirect(applyPath);
   }
 
+  // A signed-in NON-resident (manager or vendor) does not apply as their current
+  // identity — they create a separate resident account and apply from the
+  // resident portal. Resolved server-side so the surface never flashes or blanks.
+  const signedInNonResident = Boolean(ctx.user) && !hasRole(ctx, "resident");
+
   return (
     <Suspense fallback={<div className="mx-auto max-w-3xl px-4 py-16 text-center text-muted">Loading application…</div>}>
-      <PublicApplyClient />
+      <PublicApplyClient signedInNonResident={signedInNonResident} />
     </Suspense>
   );
 }
