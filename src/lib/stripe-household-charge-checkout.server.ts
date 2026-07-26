@@ -6,7 +6,12 @@ import {
 } from "@/lib/household-charge-payment-eligibility";
 import { normalizeManagerSkuTier } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
-import { axisPaymentsEnabledOnListing, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
+import { loadManagerManualPaymentSettings } from "@/lib/manager-manual-payment-settings";
+import {
+  axisPaymentsEnabledOnListing,
+  resolveServiceFeePayer,
+  type ResidentAxisPaymentMethod,
+} from "@/lib/payment-policy";
 import { getStripe } from "@/lib/stripe";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
 import {
@@ -176,6 +181,11 @@ export async function createHouseholdChargeCheckout(
 
     const { tier: managerTierRaw } = await getManagerPurchaseSku(managerUserId);
     const managerTier = normalizeManagerSkuTier(managerTierRaw) ?? "free";
+    // Who pays the service fee is resolved live from the manager's current plan
+    // + Pro setting, so a plan change or a toggle flip takes effect on the very
+    // next charge with no per-charge state.
+    const managerSettings = await loadManagerManualPaymentSettings(db, managerUserId);
+    const feePayer = resolveServiceFeePayer(managerTier, managerSettings.serviceFeePayer);
     const stripe = getStripe();
     const connect = await resolveAndValidateManagerConnectForPayments(stripe, db, managerUserId);
     if (!connect.ok) {
@@ -221,6 +231,7 @@ export async function createHouseholdChargeCheckout(
       mode: input.mode,
       paymentMethod: input.paymentMethod,
       managerTier,
+      feePayer,
       returnUrl: `${input.appOrigin}/resident/payments?ach_checkout=return&session_id={CHECKOUT_SESSION_ID}`,
       successUrl: `${input.appOrigin}/resident/payments?ach_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${input.appOrigin}/resident/payments?ach_checkout=cancel`,

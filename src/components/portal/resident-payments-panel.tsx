@@ -41,8 +41,10 @@ import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts"
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
 import {
   residentPaymentMethodLabel,
+  residentProcessingFeeCents,
   residentProcessingFeeDisplayLabel,
   type ResidentAxisPaymentMethod,
+  type ServiceFeePayer,
 } from "@/lib/payment-policy";
 import { nativePlatformRequestHeaders } from "@/lib/platform/native-client";
 import {
@@ -160,8 +162,35 @@ export function ResidentPaymentsPanel({
   const [setupCheckout, setSetupCheckout] = useState<{ kind: "card" | "ach"; clientSecret: string } | null>(null);
   const [setupLoading, setSetupLoading] = useState<"card" | "ach" | null>(null);
   const [leaseTick, setLeaseTick] = useState(0);
+  // Who pays the service fee, for the manager linked to this resident. Drives the
+  // pre-checkout disclosure only; the checkout session is the authoritative
+  // amount. Defaults to "resident" (the safe direction — over-shows a possible
+  // fee rather than hiding one) until the fetch resolves; demo has no real
+  // manager, so it shows the no-fee state.
+  const [serviceFeePayer, setServiceFeePayer] = useState<ServiceFeePayer>(() =>
+    isDemoModeActive() ? "proplane" : "resident",
+  );
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
+  const residentPaysServiceFee = serviceFeePayer === "resident";
+
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/portal/resident-service-fee", { credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { serviceFeePayer?: ServiceFeePayer };
+        if (!cancelled && data.serviceFeePayer) setServiceFeePayer(data.serviceFeePayer);
+      } catch {
+        /* keep the safe "resident" default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const residentLeaseRow = useMemo(() => {
     void leaseTick;
@@ -637,7 +666,10 @@ export function ResidentPaymentsPanel({
       availableManualChannelsForCharges(scopeCharges).includes(option.id),
     );
     const options = [
-      ...paymentMethodOptions.map((option) => ({ ...option, feeLabel: residentProcessingFeeDisplayLabel(option.id) })),
+      ...paymentMethodOptions.map((option) => ({
+        ...option,
+        feeLabel: residentPaysServiceFee ? residentProcessingFeeDisplayLabel(option.id) : "No added fees",
+      })),
       ...manualOptions.map((option) => ({ ...option, feeLabel: "No added fees" })),
     ];
     return (
@@ -689,13 +721,15 @@ export function ResidentPaymentsPanel({
         {checkout.totalCents != null && checkout.subtotalCents != null ? (
           <div className="flex items-baseline justify-between rounded-xl border border-border bg-accent/30 px-4 py-3">
             <span className="text-xs text-muted">
-              {/* Both fee fields are 0 — PropLane covers processing — so the
-                  breakdown collapses to "no added fees". The conditional stays
-                  so a fee could never be collected without being shown. */}
+              {/* Authoritative itemization straight from the checkout session:
+                  `processingFeeCents` is what the resident is charged on top (the
+                  service fee, when they pay it), 0 when the manager or PropLane
+                  covers it — so the breakdown shows the fee if and only if the
+                  resident actually pays one. */}
               {(checkout.processingFeeCents ?? 0) + (checkout.axisFeeCents ?? 0) > 0 ? (
                 <>
                   Subtotal {formatUsd(checkout.subtotalCents)}
-                  {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
+                  {checkout.processingFeeCents ? ` · Service fee ${formatUsd(checkout.processingFeeCents)}` : ""}
                   {checkout.axisFeeCents ? ` · PropLane fee ${formatUsd(checkout.axisFeeCents)}` : ""}
                 </>
               ) : (
@@ -937,7 +971,20 @@ export function ResidentPaymentsPanel({
     [confirmCharges],
   );
 
+  // The exact service fee the resident will be charged for this confirmation,
+  // computed the SAME way checkout does (`residentProcessingFeeCents`) so the
+  // pre-Stripe disclosure can never understate what Stripe collects. Only when
+  // the resident pays it and only on a Stripe method.
+  const confirmServiceFeeCents = useMemo(() => {
+    if (!residentPaysServiceFee || !payConfirm || !isStripeResidentPayMethod(payConfirm.method)) return 0;
+    return residentProcessingFeeCents(confirmSubtotalCents, payConfirm.method);
+  }, [residentPaysServiceFee, payConfirm, confirmSubtotalCents]);
+
   const confirmTotalLabel = useMemo(() => formatUsd(confirmSubtotalCents), [confirmSubtotalCents]);
+  const confirmTotalWithFeeLabel = useMemo(
+    () => formatUsd(confirmSubtotalCents + confirmServiceFeeCents),
+    [confirmSubtotalCents, confirmServiceFeeCents],
+  );
 
 
   return (
@@ -1155,9 +1202,10 @@ export function ResidentPaymentsPanel({
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {checkoutMethodOptions.map((option) => {
                   const selected = paymentMethod === option.id;
-                  const feeLabel = option.id === "zelle" || option.id === "venmo"
-                    ? "No added fees"
-                    : residentProcessingFeeDisplayLabel(option.id as ResidentAxisPaymentMethod);
+                  const feeLabel =
+                    option.id === "zelle" || option.id === "venmo" || !residentPaysServiceFee
+                      ? "No added fees"
+                      : residentProcessingFeeDisplayLabel(option.id as ResidentAxisPaymentMethod);
                   return (
                     <button
                       key={option.id}
@@ -1269,18 +1317,39 @@ export function ResidentPaymentsPanel({
                 {confirmCharges.length === 1 ? "Amount" : `${confirmCharges.length} charges`}:{" "}
                 <span className="font-semibold tabular-nums">{confirmTotalLabel}</span>
               </p>
-              {/* Face value, every method: PropLane covers payment processing,
-                  so the amount above is exactly what Stripe collects. */}
+              {/* Itemize exactly what Stripe will collect. When the resident pays
+                  the service fee it is shown as its own line and folded into the
+                  total; otherwise there are no added fees. Derived from
+                  residentProcessingFeeCents so it can never understate checkout. */}
               <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-                <p className="flex items-center justify-between gap-3 text-muted">
-                  <span>Added fees</span>
-                  <span className="tabular-nums">$0.00</span>
-                </p>
-                <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
-                  <span>Total due</span>
-                  <span className="tabular-nums">{confirmTotalLabel}</span>
-                </p>
-                <p className="mt-1.5 text-xs text-muted">PropLane covers payment processing.</p>
+                {confirmServiceFeeCents > 0 ? (
+                  <>
+                    <p className="flex items-center justify-between gap-3 text-muted">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">{confirmTotalLabel}</span>
+                    </p>
+                    <p className="mt-1.5 flex items-center justify-between gap-3 text-muted">
+                      <span>Service fee · {residentProcessingFeeDisplayLabel(payConfirm.method)}</span>
+                      <span className="tabular-nums">{formatUsd(confirmServiceFeeCents)}</span>
+                    </p>
+                    <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
+                      <span>Total due</span>
+                      <span className="tabular-nums">{confirmTotalWithFeeLabel}</span>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="flex items-center justify-between gap-3 text-muted">
+                      <span>Added fees</span>
+                      <span className="tabular-nums">$0.00</span>
+                    </p>
+                    <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
+                      <span>Total due</span>
+                      <span className="tabular-nums">{confirmTotalLabel}</span>
+                    </p>
+                    <p className="mt-1.5 text-xs text-muted">No added fees on this payment.</p>
+                  </>
+                )}
               </div>
             </>
           ) : (

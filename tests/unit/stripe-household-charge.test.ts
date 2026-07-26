@@ -15,10 +15,10 @@ vi.mock("@/lib/push-notifications.server", () => ({
 }));
 
 describe("stripe-household-charge", () => {
-  it("retains nothing from an ACH charge — no processing pass-through, no platform fee", () => {
-    // PropLane absorbs Stripe's processing cost, so the Connect application fee
-    // is 0 and the manager receives the full $100.
-    expect(axisAchPlatformFeeCents(10000)).toBe(0);
+  it("resident-pays application fee on an ACH charge is Stripe's 0.8% cost", () => {
+    // axisAchPlatformFeeCents is the resident-pays Connect application fee (the
+    // service fee retained), so it equals Stripe's 0.8% ACH cost on $100.
+    expect(axisAchPlatformFeeCents(10000)).toBe(80);
     expect(axisAchPlatformFeeCents(0)).toBe(0);
   });
 
