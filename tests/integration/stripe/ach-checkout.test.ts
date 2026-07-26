@@ -42,6 +42,11 @@ vi.mock("@/lib/household-charge-payment-eligibility", () => ({
 
 vi.mock("@/lib/payment-policy", () => ({
   axisPaymentsEnabledOnListing: vi.fn(() => true),
+  resolveServiceFeePayer: vi.fn(() => "resident"),
+}));
+
+vi.mock("@/lib/manager-manual-payment-settings", () => ({
+  loadManagerManualPaymentSettings: vi.fn().mockResolvedValue({ serviceFeePayer: "resident" }),
 }));
 
 vi.mock("@/lib/stripe-household-charge", () => ({

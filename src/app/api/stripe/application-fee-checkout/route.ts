@@ -141,6 +141,12 @@ export async function POST(req: Request) {
       mode: "hosted",
       destinationAccountId: connect.accountId,
       managerTier,
+      // The plan-based service fee applies to RESIDENT charges, not the rental
+      // application fee: an applicant is not yet a resident, and plan-pricing an
+      // applicant would leak the manager's plan tier onto public listing pages.
+      // Applicants pay the fee at face value (PropLane absorbs Stripe's cost) on
+      // every plan — `feePayer: "proplane"`.
+      feePayer: "proplane",
       // Card method-class → Stripe Checkout surfaces Apple Pay / Google Pay on
       // eligible devices with a card-entry fallback. A one-time application fee
       // is a far cleaner mobile pay than an ACH bank-login handshake.

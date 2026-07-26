@@ -12,6 +12,8 @@ import {
   MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT,
   type ManagerManualPaymentSettingsView,
 } from "@/lib/manager-manual-payment-settings";
+import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
+import type { ProServiceFeeChoice } from "@/lib/payment-policy";
 import { useGmailPaymentTrack } from "@/components/portal/gmail-payment-auto-track-panel";
 import { stripeSetupStateFromStatus, type StripeSetupState } from "@/lib/stripe-setup-state";
 
@@ -331,6 +333,8 @@ export function ManagerPaymentSetupModal({
   const [stripeIssue, setStripeIssue] = useState<string | null>(null);
   const [savingChannel, setSavingChannel] = useState<PaymentChannel | null>(null);
   const [activeChannel, setActiveChannel] = useState<PaymentChannel | null>(null);
+  const [skuTier, setSkuTier] = useState<ManagerSkuTier | null>(null);
+  const [savingFeePayer, setSavingFeePayer] = useState(false);
 
   const { gmailStatus, gmailBusy, gmailSyncBusy, linkGmail, syncGmail } = useGmailPaymentTrack({
     role: "manager",
@@ -399,6 +403,22 @@ export function ManagerPaymentSetupModal({
     }
   }, [demo, showToast]);
 
+  const loadTier = useCallback(async () => {
+    if (demo) {
+      // Show the Pro chooser in the demo so it is discoverable during a walkthrough.
+      setSkuTier("pro");
+      return;
+    }
+    try {
+      const res = await fetch("/api/manager/subscription", { credentials: "include" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { tier?: string | null };
+      setSkuTier(normalizeManagerSkuTier(data.tier ?? null));
+    } catch {
+      /* leave null — the fee-payer chooser simply stays hidden */
+    }
+  }, [demo]);
+
   useEffect(() => {
     if (!open) {
       setActiveChannel(null);
@@ -406,7 +426,8 @@ export function ManagerPaymentSetupModal({
     }
     void loadStripeStatus();
     void loadSettings();
-  }, [open, loadStripeStatus, loadSettings]);
+    void loadTier();
+  }, [open, loadStripeStatus, loadSettings, loadTier]);
 
   useEffect(() => {
     if (!open) return;
@@ -475,6 +496,16 @@ export function ManagerPaymentSetupModal({
     await persistSettings({ receiptAutoMarkEnabled: enabled });
   }
 
+  async function changeFeePayer(choice: ProServiceFeeChoice) {
+    if ((draft.serviceFeePayer ?? "resident") === choice) return;
+    setSavingFeePayer(true);
+    try {
+      await persistSettings({ serviceFeePayer: choice });
+    } finally {
+      setSavingFeePayer(false);
+    }
+  }
+
   const zelleContactConnected = draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0;
   const venmoContactConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
   const gmailLinked = Boolean(gmailStatus?.connected);
@@ -522,6 +553,51 @@ export function ManagerPaymentSetupModal({
           ) : null}
           {stripeState === "unknown" && stripeIssue ? (
             <p className="text-xs text-[var(--status-pending-fg)]">{stripeIssue}</p>
+          ) : null}
+          {skuTier === "pro" ? (
+            <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3.5">
+              <p className="text-sm font-semibold text-foreground">Online payment service fee</p>
+              <p className="text-xs text-muted">
+                Choose who covers the payment processing fee on resident online payments (card, bank, Link). Your rent
+                still deposits into your own Stripe account either way.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {(["resident", "manager"] as const).map((choice) => {
+                  const selected = (draft.serviceFeePayer ?? "resident") === choice;
+                  return (
+                    <button
+                      key={choice}
+                      type="button"
+                      disabled={savingFeePayer}
+                      onClick={() => void changeFeePayer(choice)}
+                      data-attr={`manager-service-fee-payer-${choice}`}
+                      className={`flex flex-col rounded-xl border px-3 py-2.5 text-left transition disabled:opacity-60 ${
+                        selected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                          : "border-border bg-background hover:border-primary/30"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold text-foreground">
+                        {choice === "resident" ? "Resident pays" : "I'll cover it"}
+                      </span>
+                      <span className="mt-0.5 text-xs text-muted">
+                        {choice === "resident" ? "Added at checkout" : "Deducted from your payout"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : skuTier === "business" ? (
+            <p className="text-xs text-muted">
+              PropLane covers the payment processing fee on resident online payments — neither you nor your residents are
+              charged it.
+            </p>
+          ) : skuTier === "free" ? (
+            <p className="text-xs text-muted">
+              On the Free plan, residents cover the payment processing fee on online payments. Upgrade to Pro to choose
+              who pays.
+            </p>
           ) : null}
           <HubRow
             label="Zelle"
