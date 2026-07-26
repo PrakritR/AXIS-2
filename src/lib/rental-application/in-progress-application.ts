@@ -29,10 +29,16 @@ export function isSubmittedPendingApplicationRow(row: DemoApplicantRow): boolean
 export function inProgressApplicationResumeUrl(origin: string, row: DemoApplicantRow): string {
   const base = origin.replace(/\/$/, "");
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
-  const path = pid
-    ? `/resident/applications/apply?propertyId=${encodeURIComponent(pid)}`
-    : "/resident/applications/apply";
+  const path = pid ? `/rent/apply?propertyId=${encodeURIComponent(pid)}` : "/rent/apply";
   return `${base}${path}`;
+}
+
+/** True when a draft snapshot should sync to the server (portal or public guest apply). */
+export function shouldSyncInProgressDraft(input: {
+  email: string;
+  propertyId: string;
+}): boolean {
+  return input.email.trim().includes("@") && Boolean(input.propertyId.trim());
 }
 
 export function buildInProgressApplicationRow(input: {

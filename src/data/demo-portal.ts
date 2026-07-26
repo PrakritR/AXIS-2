@@ -72,6 +72,8 @@ export type DemoApplicantRow = {
   setupTokenHash?: string | null;
   /** ISO expiry for the resident account setup token. */
   setupTokenExpiresAt?: string | null;
+  /** ISO timestamp when the one-time setup email was sent after the applicant started (not submitted). */
+  startedSetupEmailSentAt?: string | null;
   /** ISO timestamp when the setup token was used to create/link a resident account. */
   setupTokenConsumedAt?: string | null;
   /** Checkr criminal background check (clear/consider) — run per-applicant on demand. */

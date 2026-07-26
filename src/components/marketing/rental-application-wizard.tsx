@@ -45,6 +45,7 @@ import {
 import {
   isInProgressApplicationRow,
   markApplicationSubmitInitiated,
+  shouldSyncInProgressDraft,
   syncInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -252,6 +253,7 @@ function RentalApplicationWizardInner({
 
   /** listingPrefillKey already applied to the form — prevents re-clobbering user edits when catalogs refresh. */
   const listingPrefillAppliedRef = useRef("");
+  const startedSetupEmailAxisRef = useRef<string | null>(null);
 
   useEffect(() => {
     void syncPublicApprovedApplicationsFromServer().then(() => setOccupancySyncEpoch((n) => n + 1));
@@ -370,13 +372,42 @@ function RentalApplicationWizardInner({
   }, [draftReady, form]);
 
   useEffect(() => {
-    if (!draftReady || mode !== "portal") return;
-    const email = form.email.trim();
+    if (!draftReady) return;
+    const email = (mode === "portal" ? sessionEmail ?? form.email : form.email).trim();
     const pid = form.propertyId.trim();
-    if (!email.includes("@") || !pid) return;
+    if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
     const axisId = ensureRentalWizardAxisId();
     syncInProgressApplicationRow({ axisId, form, residentEmail: email });
-  }, [draftReady, mode, form]);
+
+    if (mode !== "public" || isDemoModeActive()) return;
+    if (startedSetupEmailAxisRef.current === axisId) return;
+
+    const notifyKey = `application_started_notified_${axisId}`;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(notifyKey) === "1") {
+      startedSetupEmailAxisRef.current = axisId;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetch("/api/portal/send-application-started", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), axisId }),
+      })
+        .then((res) => {
+          if (!res.ok) return;
+          startedSetupEmailAxisRef.current = axisId;
+          try {
+            window.sessionStorage.setItem(notifyKey, "1");
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => undefined);
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [draftReady, form, mode, sessionEmail]);
 
   useEffect(() => {
     if (!draftReady || mode !== "portal") return;
