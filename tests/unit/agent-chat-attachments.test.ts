@@ -44,4 +44,12 @@ describe("parseChatImages", () => {
     const result = parseChatImages([{ mediaType: "image/jpeg", dataBase64: "YWJj" }]);
     expect(result.ok).toBe(true);
   });
+
+  it("strips whitespace from base64 payloads", () => {
+    const result = parseChatImages([{ mediaType: "image/jpeg", dataBase64: "YWJj\n" }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.blocks[0]?.source).toMatchObject({ type: "base64", data: "YWJj" });
+    }
+  });
 });
