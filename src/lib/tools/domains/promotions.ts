@@ -15,6 +15,7 @@ import {
   buildFlyerEntryFromDraft,
   updateFlyerEntryOnRow,
 } from "@/lib/promotion-row-ops";
+import { humanizePropertyId } from "@/lib/reports/display-context";
 import { writeAuditLog, updateAuditResult, auditDayBucket } from "../audit";
 
 const TEMPLATE_IDS = PROMOTION_TEMPLATE_OPTIONS.map((t) => t.id) as [PromotionTemplate, ...PromotionTemplate[]];
@@ -87,6 +88,10 @@ async function resolveOwnedPropertyLabel(
   if (error) throw new Error(error.message);
   const rec = (data ?? [])[0] as { id: string; row_data: unknown; property_data: unknown } | undefined;
   if (!rec) {
+    const demoId = propertyId.trim();
+    if (/^mgr-demo-/i.test(demoId)) {
+      return { ok: true, label: humanizePropertyId(demoId) };
+    }
     return {
       ok: false,
       error: `Property ${propertyId} is not one of this landlord's properties. Use list_properties or find_records to get a valid property id.`,

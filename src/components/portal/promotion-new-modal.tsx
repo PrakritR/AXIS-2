@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
-import { PromotionForm, type PromotionDraft } from "@/components/portal/promotion-form";
+import {
+  CUSTOM_PROPERTY_KEY,
+  PromotionForm,
+  PromotionPropertyPicker,
+  type PromotionDraft,
+} from "@/components/portal/promotion-form";
 import {
   PromotionTextComposer,
   type PromotionTextComposerHandle,
@@ -14,10 +19,12 @@ import type { ManagerPromotionPropertyOption } from "@/lib/manager-property-link
 import type { PromotionAssetKind } from "@/lib/promotion-assets";
 import { buildPromotionNewModalAssistantContext } from "@/lib/promotion-assistant-context";
 import type { PromotionTextFormat } from "@/lib/promotion-text";
+import { PromotionUploadComposer } from "@/components/portal/promotion-upload-composer";
 
 const PROMOTION_KIND_OPTIONS: { id: PromotionAssetKind; label: string; description: string }[] = [
   { id: "flyer", label: "Flyer", description: "Printable or social-ready design." },
   { id: "text", label: "Text", description: "Caption, email, SMS, or listing blurb." },
+  { id: "upload", label: "Upload your own", description: "Use your own image or PDF for this property." },
 ];
 
 type FlyerContentField = Exclude<keyof PromotionDraft, "propertyKey" | "images">;
@@ -86,6 +93,8 @@ export function PromotionNewModal({
   textInitialFormat,
   textInitialTone,
   textInitialImages,
+  onUploadPromotion,
+  uploadBusy = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -102,6 +111,8 @@ export function PromotionNewModal({
   textInitialFormat?: PromotionTextFormat;
   textInitialTone?: string;
   textInitialImages?: string[];
+  onUploadPromotion?: (file: File) => void | Promise<void>;
+  uploadBusy?: boolean;
 }) {
   const [kind, setKind] = useState<PromotionAssetKind>(initialKind);
   // Snapshot of the flyer draft as it was seeded. Anything the user changes from
@@ -111,6 +122,9 @@ export function PromotionNewModal({
   const flyerBasePropertyRef = useRef<string>(draft.propertyKey);
   const textDirtyRef = useRef(false);
   const textComposerRef = useRef<PromotionTextComposerHandle>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -118,6 +132,9 @@ export function PromotionNewModal({
     flyerBaseRef.current = draft;
     flyerBasePropertyRef.current = draft.propertyKey;
     textDirtyRef.current = false;
+    setUploadFile(null);
+    setUploadFileName(null);
+    setUploadError(null);
     // Intentionally only re-run on open — draft is captured as the opening seed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialKind]);
@@ -138,9 +155,13 @@ export function PromotionNewModal({
 
   function requestSwitch(next: PromotionAssetKind) {
     if (next === kind) return;
-    if (flyerBusy || textBusy) return;
+    if (flyerBusy || textBusy || uploadBusy) return;
     const leavingDirty =
-      kind === "flyer" ? flyerContentChanged(draft, flyerBaseRef.current) : textDirtyRef.current;
+      kind === "flyer"
+        ? flyerContentChanged(draft, flyerBaseRef.current)
+        : kind === "text"
+          ? textDirtyRef.current
+          : Boolean(uploadFile);
     if (
       leavingDirty &&
       typeof window !== "undefined" &&
@@ -152,8 +173,23 @@ export function PromotionNewModal({
     // (seed + property autofill); the text composer unmounts when kind changes.
     if (kind === "flyer") setDraft(flyerBaseRef.current);
     textDirtyRef.current = false;
+    setUploadFile(null);
+    setUploadFileName(null);
+    setUploadError(null);
     setKind(next);
   }
+
+  const saveUpload = () => {
+    if (!hidePropertyPicker && draft.propertyKey === CUSTOM_PROPERTY_KEY) {
+      setUploadError("Select a property for this promotion.");
+      return;
+    }
+    if (!uploadFile) {
+      setUploadError("Choose a promotion file to upload.");
+      return;
+    }
+    void onUploadPromotion?.(uploadFile);
+  };
 
   const selected = PROMOTION_KIND_OPTIONS.find((o) => o.id === kind);
   const assistantContext = buildPromotionNewModalAssistantContext(draft, kind);
@@ -179,6 +215,20 @@ export function PromotionNewModal({
               data-attr="promotion-generate"
             >
               {flyerBusy ? "Generating…" : "Generate flyer"}
+            </Button>
+          </ModalFooter>
+        ) : kind === "upload" ? (
+          <ModalFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={saveUpload}
+              disabled={uploadBusy || !uploadFile}
+              data-attr="promotion-upload-save"
+            >
+              {uploadBusy ? "Saving…" : "Save promotion"}
             </Button>
           </ModalFooter>
         ) : (
@@ -210,7 +260,7 @@ export function PromotionNewModal({
             className="mt-1"
             value={kind}
             onChange={(e) => requestSwitch(e.target.value as PromotionAssetKind)}
-            disabled={flyerBusy || textBusy}
+            disabled={flyerBusy || textBusy || uploadBusy}
             data-attr="promotion-new-kind"
           >
             {PROMOTION_KIND_OPTIONS.map((opt) => (
@@ -230,6 +280,26 @@ export function PromotionNewModal({
             onSelectProperty={onSelectProperty}
             hidePropertyPicker={hidePropertyPicker}
           />
+        ) : kind === "upload" ? (
+          <div className="space-y-4">
+            {!hidePropertyPicker ? (
+              <PromotionPropertyPicker
+                id="promotion-upload-property"
+                value={draft.propertyKey}
+                listings={listings}
+                onSelect={onSelectProperty}
+              />
+            ) : null}
+            <PromotionUploadComposer
+              fileName={uploadFileName}
+              error={uploadError}
+              onPickFile={(file) => {
+                setUploadError(null);
+                setUploadFile(file);
+                setUploadFileName(file?.name ?? null);
+              }}
+            />
+          </div>
         ) : (
           <PromotionTextComposer
             ref={textComposerRef}

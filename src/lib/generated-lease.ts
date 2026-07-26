@@ -18,6 +18,7 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
 import { leaseCss } from "@/lib/lease-templates/types";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -146,7 +147,13 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
   };
   const leasedRoom = resolveLeasedRoomProperty(normalizedApplication);
   const listingProperty = resolveApplicationListing(normalizedApplication) ?? leasedRoom;
-  const submission = submissionFor(listingProperty) ?? submissionFor(leasedRoom);
+  const rawSubmission = submissionFor(listingProperty) ?? submissionFor(leasedRoom);
+  const submission = rawSubmission
+    ? submissionWithLeaseTemplateForApplication(
+        normalizeManagerListingSubmissionV1(rawSubmission),
+        normalizedApplication,
+      )
+    : undefined;
   return {
     application: normalizedApplication,
     leasedRoom,

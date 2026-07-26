@@ -81,6 +81,7 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
   type UtilitiesPaymentModel,
@@ -2982,7 +2983,7 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Lease terms"
-                description="Choose which lease lengths applicants can select. Short-term stays add “Short-Term Stay” automatically when enabled below."
+                description="Choose which lease lengths applicants can select. PropLane creates a lease template for each option — edit them later under Lease on the property panel."
               >
                 <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
                   <FieldLabel required>Lease lengths offered</FieldLabel>
@@ -3012,11 +3013,11 @@ export function ManagerAddListingForm({
                                   nextStandard,
                                   Boolean(s.shortTermRentalsAllowed),
                                 );
-                                return {
+                                return syncPropertyLeaseTemplatesFromListing({
                                   ...s,
                                   allowedLeaseTerms: next,
                                   leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                                };
+                                });
                               });
                             }}
                           />
@@ -3049,12 +3050,12 @@ export function ManagerAddListingForm({
                       setSub((s) => {
                         const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
                         const next = syncShortTermLeaseTermInAllowed(standard, on);
-                        return {
+                        return syncPropertyLeaseTemplatesFromListing({
                           ...s,
                           shortTermRentalsAllowed: on,
                           allowedLeaseTerms: next,
                           leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                        };
+                        });
                       });
                     }}
                   />

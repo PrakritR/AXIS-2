@@ -75,8 +75,8 @@ describe("property lease source", () => {
 
   it("labels sources for display", () => {
     expect(propertyLeaseSourceLabel("axis_default")).toBe("PropLane default");
-    expect(propertyLeaseSourceLabel("custom_comments")).toBe("Custom comments");
-    expect(propertyLeaseSourceLabel("custom_format")).toBe("Custom lease format");
+    expect(propertyLeaseSourceLabel("custom_comments")).toBe("Custom clauses");
+    expect(propertyLeaseSourceLabel("custom_format")).toBe("Your PDF");
   });
 });
 

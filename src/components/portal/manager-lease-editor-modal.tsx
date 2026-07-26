@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
+import { Modal, ModalFooter } from "@/components/ui/modal";
+import { Input } from "@/components/ui/input";
 import {
   LeaseConfigForm,
   readLeaseTemplateFile,
   type LeaseConfigDraft,
 } from "@/components/portal/lease-config-form";
+import { LeaseConfigPreview } from "@/components/portal/lease-config-preview";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   persistLeaseConfigToPropertyIds,
@@ -14,10 +17,13 @@ import {
   type LeaseConfigFields,
   type ManagerPropertySaveTarget,
 } from "@/lib/manager-property-save-target";
-import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
-import { leaseSourceFromDraft } from "@/lib/property-lease-source";
-import type { PropertyLeaseSource } from "@/lib/property-lease-source";
 import { buildLeaseModalAssistantContext } from "@/lib/lease-assistant-context";
+import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
+import { leaseSourceFromDraft, type PropertyLeaseSource } from "@/lib/property-lease-source";
+import {
+  updatePropertyLeaseTemplate,
+  type PropertyLeaseTemplate,
+} from "@/lib/property-lease-templates";
 
 function draftFromSubmission(sub: ManagerListingSubmissionV1): LeaseConfigDraft {
   return {
@@ -39,40 +45,6 @@ function validateLeaseDraft(draft: LeaseConfigDraft, source: PropertyLeaseSource
     : "Enter the lease information you want included, or use the PropLane default lease.";
 }
 
-function LeaseConfigPreview({
-  preview,
-}: {
-  preview: ReturnType<typeof buildPropertyLeasePreview>;
-}) {
-  if (preview.unsupportedJurisdiction) {
-    return (
-      <p className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm text-muted">
-        {preview.plainText}
-      </p>
-    );
-  }
-  if (preview.html) {
-    return (
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <iframe
-          title="Lease preview"
-          srcDoc={preview.html}
-          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          className="h-[min(48vh,400px)] w-full"
-        />
-      </div>
-    );
-  }
-  if (preview.plainText) {
-    return (
-      <p className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm text-muted">
-        {preview.plainText}
-      </p>
-    );
-  }
-  return null;
-}
-
 function leaseFieldsFromDraft(draft: LeaseConfigDraft): LeaseConfigFields {
   return {
     leaseConfigMode: draft.leaseConfigMode ?? "standard",
@@ -82,6 +54,8 @@ function leaseFieldsFromDraft(draft: LeaseConfigDraft): LeaseConfigFields {
     leaseTemplateDocName: draft.leaseTemplateDocName ?? "",
   };
 }
+
+const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
 /** Edit lease configuration for a property — same options as the listing wizard Lease step. */
 export function ManagerLeaseEditorModal({
@@ -95,6 +69,9 @@ export function ManagerLeaseEditorModal({
   propertyId,
   propertyLabel,
   demoMode = false,
+  templateId,
+  templates,
+  onTemplatesSaved,
   onClose,
   onSaved,
   showToast,
@@ -111,18 +88,28 @@ export function ManagerLeaseEditorModal({
   propertyId?: string | null;
   propertyLabel?: string | null;
   demoMode?: boolean;
+  /** When editing one template in a multi-lease property panel. */
+  templateId?: string;
+  templates?: PropertyLeaseTemplate[];
+  onTemplatesSaved?: (templates: PropertyLeaseTemplate[]) => boolean;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFromSubmission(sub));
+  const [templateLabel, setTemplateLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setDraft(draftFromSubmission(sub));
     setError(null);
-  }, [open, sub]);
+    if (templateId && templates) {
+      setTemplateLabel(templates.find((t) => t.id === templateId)?.label ?? "");
+    } else {
+      setTemplateLabel("");
+    }
+  }, [open, sub, templateId, templates]);
 
   const source = leaseSourceFromDraft(draft);
 
@@ -138,6 +125,8 @@ export function ManagerLeaseEditorModal({
     () => buildPropertyLeasePreview(previewSub, { hint: propertyHint, demo: demoMode }),
     [previewSub, propertyHint, demoMode],
   );
+
+  const showGeneratedPreview = source === "axis_default" || source === "custom_comments";
 
   const customTermsError =
     error && source === "custom_comments" ? error : null;
@@ -189,6 +178,23 @@ export function ManagerLeaseEditorModal({
       showToast("Could not save lease settings.");
       return false;
     }
+
+    if (templateId && templates && onTemplatesSaved) {
+      const nextTemplates = updatePropertyLeaseTemplate(templates, templateId, {
+        label: templateLabel.trim() || templates.find((t) => t.id === templateId)?.label || "Lease",
+        leaseConfigMode: leaseFields.leaseConfigMode,
+        leaseCustomKind: leaseFields.leaseCustomKind,
+        customLeaseTerms: leaseFields.customLeaseTerms,
+        leaseTemplateDocUrl: leaseFields.leaseTemplateDocUrl,
+        leaseTemplateDocName: leaseFields.leaseTemplateDocName,
+      });
+      if (!onTemplatesSaved(nextTemplates)) return false;
+      showToast("Lease template saved.");
+      onClose();
+      onSaved();
+      return true;
+    }
+
     const next: ManagerListingSubmissionV1 = { ...sub, ...leaseFields };
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not save lease settings.");
@@ -200,9 +206,7 @@ export function ManagerLeaseEditorModal({
     return true;
   };
 
-  const closeAndSave = () => {
-    save();
-  };
+  const dismiss = () => onClose();
 
   const assistantContext = buildLeaseModalAssistantContext({
     propertyId,
@@ -215,36 +219,72 @@ export function ManagerLeaseEditorModal({
     <Modal
       open={open}
       title={title}
-      onClose={closeAndSave}
+      onClose={dismiss}
       panelClassName="max-w-2xl"
       assistantContext={assistantContext}
       assistantStorageScopeKey="Lease modal"
+      footer={
+        <ModalFooter>
+          <Button type="button" variant="outline" className="rounded-full" onClick={dismiss}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            onClick={() => save()}
+            data-attr="property-lease-edit-save"
+          >
+            Save lease
+          </Button>
+        </ModalFooter>
+      }
     >
-      {bulkIds.length > 1 ? (
-        <p className="mb-4 text-sm text-muted">
-          These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
-          replaced when you close.
-        </p>
-      ) : null}
-      <LeaseConfigForm
-        variant="modal"
-        dataAttrPrefix="property"
-        draft={draft}
-        onDraftChange={(patch) => {
-          setError(null);
-          setDraft((d) => ({ ...d, ...patch }));
-        }}
-        onStandardToggle={() => setError(null)}
-        onCustomTermsChange={() => setError(null)}
-        onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
-        customTermsError={customTermsError}
-        leaseTemplateError={leaseTemplateError}
-      />
+      <div className="space-y-4">
+        {bulkIds.length > 1 ? (
+          <p className="text-sm text-muted">
+            These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
+            replaced when you save.
+          </p>
+        ) : null}
+        {templateId ? (
+          <div>
+            <label
+              className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted"
+              htmlFor="property-lease-edit-name"
+            >
+              Lease name
+            </label>
+            <Input
+              id="property-lease-edit-name"
+              value={templateLabel}
+              onChange={(e) => setTemplateLabel(e.target.value)}
+              data-attr="property-lease-edit-name"
+            />
+          </div>
+        ) : null}
+        <LeaseConfigForm
+          variant="modal"
+          dataAttrPrefix="property"
+          draft={draft}
+          onDraftChange={(patch) => {
+            setError(null);
+            setDraft((d) => ({ ...d, ...patch }));
+          }}
+          onStandardToggle={() => setError(null)}
+          onCustomTermsChange={() => setError(null)}
+          onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
+          customTermsError={customTermsError}
+          leaseTemplateError={leaseTemplateError}
+        />
 
-      <div className="mt-6">
-        <LeaseConfigPreview preview={preview} />
+        {showGeneratedPreview ? (
+          <div>
+            <p className={fieldLabelClass}>Lease preview</p>
+            <LeaseConfigPreview preview={preview} />
+          </div>
+        ) : null}
       </div>
-
     </Modal>
   );
 }

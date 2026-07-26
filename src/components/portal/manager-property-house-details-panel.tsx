@@ -193,6 +193,7 @@ export function ManagerPropertyHouseDetailsPanel({
         }
         expanded={expanded}
         onExpandedChange={setExpanded}
+        headerActionsInline
         headerActions={
           <Button
             type="button"

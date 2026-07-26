@@ -6,6 +6,7 @@ import {
   estimateCostUsd,
   TIER_MODELS,
 } from "@/lib/agent/model";
+import { visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 const userTurn = (content: string): Anthropic.MessageParam => ({ role: "user", content });
 
@@ -135,5 +136,14 @@ describe("env overrides", () => {
     expect(mod.TIER_MODELS.standard).toBe("forced-model");
     expect(mod.TIER_MODELS.complex).toBe("forced-model");
     expect(mod.AGENT_MODEL).toBe("forced-model");
+  });
+
+  it("visionPinnedModel ignores AXIS_AGENT_MODEL global override", async () => {
+    vi.stubEnv("AXIS_AGENT_MODEL", "claude-haiku-4-5");
+    vi.stubEnv("AXIS_AGENT_MODEL_VISION", "");
+    vi.stubEnv("AXIS_AGENT_MODEL_STANDARD", "");
+    vi.resetModules();
+    const mod = await import("@/lib/agent/assistant-vision-turn");
+    expect(mod.visionPinnedModel().model).toBe("claude-sonnet-4-6");
   });
 });

@@ -104,6 +104,8 @@ export type ManagerPromotionRow = {
    * {@link readFlyerEntries} migrates that shape into one entry.
    */
   flyerCopies?: FlyerEntry[];
+  /** Manager-uploaded promotion files (image or PDF), not AI-generated. */
+  uploadCopies?: import("@/lib/promotion-upload").PromotionUploadEntry[];
   createdAt: string;
   updatedAt: string;
 };
