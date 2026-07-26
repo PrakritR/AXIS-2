@@ -287,11 +287,21 @@ export function ManagerApplications() {
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
+    const pull = () => void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(sync);
     sync();
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(sync);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") pull();
+    };
+    window.addEventListener("focus", pull);
+    document.addEventListener("visibilitychange", onVisible);
+    const poll = window.setInterval(pull, 20_000);
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
+      window.removeEventListener("focus", pull);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(poll);
     };
   }, [authReady, userId]);
 
@@ -367,14 +377,22 @@ export function ManagerApplications() {
   );
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
+  const incompleteCount = useMemo(
+    () => scopedRows.filter((r) => r.bucket === "pending" && isInProgressApplicationRow(r)).length,
+    [scopedRows],
+  );
   const tabs = useMemo(
     () =>
       [
-        { id: "pending" as const, label: "Pending", count: counts.pending },
+        {
+          id: "pending" as const,
+          label: incompleteCount > 0 ? `Pending · ${incompleteCount} incomplete` : "Pending",
+          count: counts.pending,
+        },
         { id: "approved" as const, label: "Approved", count: counts.approved },
         { id: "rejected" as const, label: "Rejected", count: counts.rejected },
       ] as const,
-    [counts],
+    [counts, incompleteCount],
   );
 
   const rowsForBucket = useMemo(() => {
@@ -736,10 +754,12 @@ export function ManagerApplications() {
           icon="application"
           message={
             scopedRows.length === 0
-              ? "No applications yet."
+              ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete (under Pending) as soon as they enter their email."
               : propertyFilter.trim()
                 ? "No applications for this property yet."
-                : "No applications in this tab yet."
+                : bucket === "pending"
+                  ? "No pending applications. Incomplete drafts from your apply link also appear in this tab."
+                  : "No applications in this tab yet."
           }
         />
       ) : (
