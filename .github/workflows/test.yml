@@ -43,6 +43,11 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     needs: integration
+    # Backstop so a hung suite costs minutes, not GitHub's 6h job default. The
+    # real guards against hanging are Playwright's globalSetup preflight and
+    # globalTimeout (see playwright.config.ts); this is the outer safety net that
+    # also covers the setup steps (npm ci, browser install, build).
+    timeout-minutes: 30
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
