@@ -3,20 +3,20 @@ description: Mandatory ship gate — production→iOS TestFlight, security/bug/c
 alwaysApply: true
 ---
 
-# Ship & review gate (Axis)
+# Ship & review gate (PropLane)
 
 This rule always applies. Do not mark feature work complete or promote to
 production without following it (unless the user explicitly waives a named step).
 
 ## When pushing / promoting to production
 
-1. **Only `git push origin main` triggers Vercel production.** Pushes to `prakrit`,
-   `claude`, `cursor-*`, or any other branch must not expect a deploy (Vercel skips
-   them via Ignored Build Step + `vercel.json`). Verify on localhost first.
-2. Promote only via fast-forward: `prakrit` → `main` → `git push origin main`
-   (`main` is the production branch; there is no `production` branch).
-3. That push must update **web (Vercel)** and **iOS (TestFlight)**:
-   - Workflow: `.github/workflows/ios-testflight.yml` (runs on `push` to `main`).
+1. **`main` is dev/staging (Vercel Preview).** Only **`git push origin production`**
+   updates the live site (`prop-lane.space`). Pushes to agent branches are skipped.
+2. Promote only via fast-forward: integrate on `main` → verify preview →
+   `git merge --ff-only main` on `production` → `git push origin production`.
+   Use `bash scripts/promote-main-to-production.sh` when available.
+3. That **production** push must update **web (Vercel)** and **iOS (TestFlight)**:
+   - Workflow: `.github/workflows/ios-testflight.yml` (runs on `push` to `production`).
    - After push, watch the **iOS TestFlight** GitHub Action until success (or report
      missing `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` secrets).
 4. Run `npm run ship:preflight` before promote when the script is available.

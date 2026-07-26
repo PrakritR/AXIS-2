@@ -6,10 +6,10 @@ substantial feature. Agents must follow it (see `AGENTS.md` and
 
 ## Why
 
-- **Web** deploys from Vercel on every push to `main` only (the production branch).
-  Non-`main` pushes are skipped via the Vercel project Ignored Build Step plus
-  `vercel.json` (`git.deploymentEnabled` + `scripts/vercel-should-build.sh`).
-- **iOS** uploads to TestFlight from GitHub Actions on the same push
+- **Web (live)** deploys from Vercel on every push to **`production`** only.
+- **`main`** builds **Preview** deployments (staging). Non-`main` / non-`production`
+  pushes are skipped via the Vercel Ignored Build Step plus `vercel.json`.
+- **iOS** uploads to TestFlight from GitHub Actions on push to **`production`**
   (`.github/workflows/ios-testflight.yml`), keeping the Capacitor shell aligned
   with the repo while the WebView loads the live site.
 - Reviews and full feature testing catch auth, cache, and edge regressions that
@@ -24,7 +24,7 @@ npm run ship:preflight
 Checks:
 
 - On a clean promote path (or warns about dirty tree)
-- `ios-testflight.yml` present and triggers on `main`
+- `ios-testflight.yml` present and triggers on `production`
 - Capacitor prod URL guard script present
 - Reminds about App Store Connect secrets
 
@@ -64,14 +64,23 @@ Do **not** use `/demo` as the only proof for production-like flows.
 ```bash
 git checkout main
 git pull
-git merge --ff-only prakrit
-git push origin main
-git checkout prakrit
+# merge agent/prakrit work into main first, verify preview
+bash scripts/promote-main-to-production.sh
+```
+
+Or manually:
+
+```bash
+git checkout production
+git pull
+git merge --ff-only main
+git push origin production
+git checkout main
 ```
 
 Then verify:
 
-1. Vercel production deployment succeeded
+1. Vercel **Production** deployment succeeded (from `production` branch)
 2. GitHub Action **iOS TestFlight** succeeded (or secrets missing — report it)
 3. Spot-check the live site for the shipped feature
 
