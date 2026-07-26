@@ -1,10 +1,16 @@
 # Resident account creation (after a rental application)
 
-Residents never self-serve a generic account. An account is only created once an
-application exists and the person proves they control the application's email —
-either by holding the one-time **setup token** (emailed, or handed to the guest
-in-session right after applying) or by an **OAuth** email match. There is no
-password path without a token.
+Residents never self-serve a generic account. A NEW auth user is only created
+once an application exists and the person proves they control the application's
+email — either by holding the one-time **setup token** (emailed, or handed to
+the guest in-session right after applying) or by an **OAuth** email match.
+There is no password path without a token.
+
+Scope note: an already-signed-in manager/vendor adding the resident ROLE to
+their existing login (`POST /api/auth/create-resident-account`, no application
+or token needed — the session already proves email control) is a separate
+mechanism owned by the "Multi-role accounts" section of `AGENTS.md`, not this
+flow. It never creates a second auth user.
 
 ## The one canonical flow
 
