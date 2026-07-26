@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { ACTIVE_PORTAL_COOKIE } from "@/lib/auth/portal-access";
+import { normalizePortalRoles } from "@/lib/auth/portal-roles";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -61,6 +62,21 @@ export async function POST() {
       const { error } = await service.from("profiles").update({ role: nextPrimaryRole }).eq("id", user.id);
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    }
+
+    // Backfill any role the account currently resolves to that lives only in
+    // the legacy profiles.role column: normalizePortalRoles ignores that
+    // fallback once profile_roles has ANY row, so inserting `resident` without
+    // this would collapse a legacy-only manager/vendor down to just resident.
+    const { data: existingRoleRows } = await service
+      .from("profile_roles")
+      .select("role")
+      .eq("user_id", user.id);
+    const currentRoles = normalizePortalRoles(existingRoleRows, existingProfile?.role as string | undefined);
+    for (const role of currentRoles) {
+      if (role !== "resident") {
+        await ensureProfileRoleRow(service, user.id, role);
       }
     }
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { markPublicApplyGuestContinue } from "@/lib/rental-application/public-apply-session";
 
 /**
  * Shown on the PUBLIC apply surface when the visitor is signed in but does NOT
@@ -84,7 +85,10 @@ export function SignedInResidentAccountPrompt({
           className="min-h-[44px] w-full rounded-full text-[15px] font-semibold"
           data-attr="signed-in-apply-as-guest"
           disabled={busy}
-          onClick={onContinueGuest}
+          onClick={() => {
+            markPublicApplyGuestContinue(propertyId);
+            onContinueGuest();
+          }}
         >
           Apply as a guest instead
         </Button>

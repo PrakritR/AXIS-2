@@ -19,16 +19,20 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { POST as createResidentAccount } from "@/app/api/auth/create-resident-account/route";
 
-/** Fake `profiles` table query surface that records update/insert calls. */
-function fakeService(existingProfile: { role?: string } | null) {
+/** Fake `profiles` + `profile_roles` query surface that records update/insert calls. */
+function fakeService(existingProfile: { role?: string } | null, existingRoleRows: { role: string }[] = []) {
   const update = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
   const insert = vi.fn().mockResolvedValue({ error: null });
   const select = vi.fn().mockReturnValue({
     eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: existingProfile }) }),
   });
+  const rolesSelect = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ data: existingRoleRows, error: null }),
+  });
   const service = {
     from: vi.fn((table: string) => {
       if (table === "profiles") return { select, update, insert };
+      if (table === "profile_roles") return { select: rolesSelect };
       return {};
     }),
   };
@@ -82,6 +86,34 @@ describe("POST /api/auth/create-resident-account", () => {
     expect(res.status).toBe(200);
     expect(insert).toHaveBeenCalledWith({ id: "new-1", email: "new@axis.test", role: "resident" });
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "new-1", "resident");
+  });
+
+  it("backfills a legacy-only manager role so adding resident never collapses it away", async () => {
+    // profile_roles is EMPTY — the manager role resolves solely from the legacy
+    // profiles.role column. normalizePortalRoles ignores that fallback once
+    // profile_roles has ANY row, so the route must materialize the manager row
+    // BEFORE inserting resident, or roles collapse to ["resident"] only.
+    signedInAs("legacy-mgr-1");
+    const { service } = fakeService({ role: "manager" }, []);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
+
+    const res = await createResidentAccount();
+    expect(res.status).toBe(200);
+    expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-mgr-1", "manager");
+    expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-mgr-1", "resident");
+    const calls = vi.mocked(ensureProfileRoleRow).mock.calls.map((c) => c[2]);
+    expect(calls.indexOf("manager")).toBeLessThan(calls.indexOf("resident"));
+  });
+
+  it("maps a legacy 'owner' profiles.role to a manager profile_roles row", async () => {
+    signedInAs("legacy-owner-1");
+    const { service } = fakeService({ role: "owner" }, []);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
+
+    const res = await createResidentAccount();
+    expect(res.status).toBe(200);
+    expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-owner-1", "manager");
+    expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-owner-1", "resident");
   });
 
   it("is idempotent — re-running for a user who already holds resident does not remove other roles", async () => {
