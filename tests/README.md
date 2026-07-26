@@ -24,9 +24,10 @@ For manager/resident/admin portal E2E tests, run `npm run test:seed` then set `E
 > The portal specs sign in as seeded accounts before asserting anything, so with
 > the flag on but the accounts unseeded (or the `E2E_*` credentials wrong) every
 > spec stalls on `waitForURL`. Playwright's `globalSetup`
-> (`tests/global-setup.ts`) does one real admin sign-in first and fails the run
-> in seconds with an actionable message instead of letting 131 specs grind for
-> hours. Only turn the flag on where the accounts actually exist.
+> (`tests/global-setup.ts`) does one real sign-in per seeded role (admin,
+> manager, resident) first and fails the run in seconds with an actionable
+> message instead of letting 131 specs grind for hours. Only turn the flag on
+> where the accounts actually exist.
 
 ## GitHub Actions secrets
 
