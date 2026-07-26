@@ -465,7 +465,7 @@ mobile app pipeline:
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
    runs on `push` to `production`: `npx cap sync ios` with
-   `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
+   `CAP_SERVER_URL=https://prop-lane.space`, then
    `bundle exec fastlane beta` uploads a new build to **TestFlight**. The
    workflow also exposes `workflow_dispatch` for an on-demand build.
 

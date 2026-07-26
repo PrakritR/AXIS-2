@@ -87,6 +87,9 @@ function makeFakeDb(charges: HouseholdCharge[]) {
     from(table: string) {
       return {
         select() {
+          // Self-chaining thenable builder: the charge loader ends in
+          // `.range()`, while the inbox thread lookup chains several `.eq()`s
+          // and awaits `.limit()` directly — both must resolve.
           type Chain = {
             eq: (col: string, val: unknown) => Chain;
             order: (col: string, opts?: unknown) => Chain;

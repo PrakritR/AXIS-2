@@ -13,7 +13,7 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG_JSON="$REPO_ROOT/ios/App/App/capacitor.config.json"
-PROD_ORIGIN="https://www.axis-seattle-housing.com"
+PROD_ORIGIN="https://prop-lane.space"
 
 fail() {
   echo "error: [cap-prod-guard] $1" >&2

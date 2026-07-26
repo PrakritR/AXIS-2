@@ -122,6 +122,8 @@ describe("unified conversation inbox (no folder tabs)", () => {
     // Trashed conversation is NOT in the default view.
     expect(screen.queryByText("Old Flyer")).toBeNull();
 
+    // Archive is reachable from the list itself — a segment control inside the
+    // unified list, not a top-level folder tab.
     const toggle = screen.getByRole("tab", { name: /Archived/i });
     fireEvent.click(toggle);
     expect(screen.getByText("Old Flyer")).toBeTruthy();

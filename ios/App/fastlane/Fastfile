@@ -1,6 +1,6 @@
 default_platform(:ios)
 
-# Axis iOS release automation.
+# PropLane iOS release automation.
 #
 # The `beta` lane builds the app and ships it to TestFlight. It authenticates with
 # an App Store Connect API key (never an Apple ID / password), auto-manages signing
@@ -61,7 +61,7 @@ platform :ios do
         teamID: "8FH3GVHCZ9",
       },
       output_directory: "build",
-      output_name: "Axis.ipa",
+      output_name: "PropLane.ipa",
       clean: true,
     )
 
