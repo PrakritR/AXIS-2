@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
-  buildInProgressApplicationRow,
+  shouldSyncInProgressDraft,
   inProgressApplicationResumeUrl,
+  buildInProgressApplicationRow,
+  applicationStageDisplayLabel,
+  INCOMPLETE_APPLICATION_LABEL,
   isInProgressApplicationRow,
   isSubmittedPendingApplicationRow,
   syncInProgressApplicationRow,
@@ -96,7 +99,18 @@ describe("in-progress-application", () => {
     expect(isSubmittedPendingApplicationRow(withdrawn)).toBe(false);
   });
 
-  it("builds resume url with property id", () => {
+  it("maps in-progress storage stage to Incomplete in the UI", () => {
+    const form = { ...createInitialRentalWizardState(), propertyId: "prop-1" };
+    const row = buildInProgressApplicationRow({
+      axisId: "PROPLANE-ABC",
+      form,
+      residentEmail: "jane@test.com",
+    });
+    expect(row.stage).toBe(IN_PROGRESS_APPLICATION_STAGE);
+    expect(applicationStageDisplayLabel(row)).toBe(INCOMPLETE_APPLICATION_LABEL);
+  });
+
+  it("uses public apply resume url", () => {
     const form = { ...createInitialRentalWizardState(), propertyId: "prop-1", fullLegalName: "Jane Doe" };
     const row = buildInProgressApplicationRow({
       axisId: "AXIS-ABC",

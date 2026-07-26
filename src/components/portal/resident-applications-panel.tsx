@@ -48,7 +48,10 @@ import {
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
-import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
+import {
+  applicationStageDisplayLabel,
+  isInProgressApplicationRow,
+} from "@/lib/rental-application/in-progress-application";
 import {
   canResidentWithdrawApplication,
   isWithdrawnApplicationRow,
@@ -77,8 +80,8 @@ function displayRoomForRow(row: DemoApplicantRow): string {
 function rowStatusLabel(row: DemoApplicantRow): string {
   if (row.bucket === "approved") return "Approved";
   if (row.bucket === "rejected") return "Rejected";
-  if (isInProgressApplicationRow(row)) return "Incomplete";
-  return "Pending review";
+  if (isWithdrawnApplicationRow(row)) return "Withdrawn";
+  return applicationStageDisplayLabel(row);
 }
 
 function continueApplicationPath(row: DemoApplicantRow): string {

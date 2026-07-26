@@ -11,8 +11,21 @@ import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 export const IN_PROGRESS_APPLICATION_STAGE = "In progress";
 
+/** User-facing label for draft applications (stored stage remains `In progress`). */
+export const INCOMPLETE_APPLICATION_LABEL = "Incomplete";
+
 export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
   return row.bucket === "pending" && row.stage.trim().toLowerCase() === IN_PROGRESS_APPLICATION_STAGE.toLowerCase();
+}
+
+/** Display label for application stage everywhere in the product UI, PDFs, and assistant tools. */
+export function applicationStageDisplayLabel(row: Pick<DemoApplicantRow, "bucket" | "stage">): string {
+  if (isInProgressApplicationRow(row as DemoApplicantRow)) return INCOMPLETE_APPLICATION_LABEL;
+  const stage = row.stage?.trim();
+  if (stage) return stage;
+  if (row.bucket === "approved") return "Approved";
+  if (row.bucket === "rejected") return "Rejected";
+  return "Pending review";
 }
 
 /**

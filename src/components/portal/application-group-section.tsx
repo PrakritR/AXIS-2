@@ -10,7 +10,7 @@ import {
   type ApplicationGroupMemberStatus,
   type GroupRowInput,
 } from "@/lib/rental-application/application-groups";
-import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
+import { isInProgressApplicationRow, INCOMPLETE_APPLICATION_LABEL } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 
 type ApplicationStatusPill = {
@@ -37,7 +37,7 @@ export function applicationStatusForRow(row: DemoApplicantRow): ApplicationGroup
 const APPLICATION_STATUS_PILL: Record<ApplicationGroupMemberStatus, ApplicationStatusPill> = {
   approved: { label: "Approved", tone: "confirmed" },
   rejected: { label: "Rejected", tone: "overdue" },
-  in_progress: { label: "Incomplete", tone: "neutral" },
+  in_progress: { label: INCOMPLETE_APPLICATION_LABEL, tone: "neutral" },
   flagged: { label: "Flagged", tone: "overdue" },
   screened: { label: "Screened", tone: "info" },
   screening: { label: "Screening", tone: "pending" },

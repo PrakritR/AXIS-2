@@ -8,6 +8,11 @@ import {
 } from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { digitsOnly } from "@/lib/rental-application/masks";
+import {
+  applicationStageDisplayLabel,
+  INCOMPLETE_APPLICATION_LABEL,
+  isInProgressApplicationRow,
+} from "@/lib/rental-application/in-progress-application";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -54,6 +59,7 @@ function yesNo(value: string | null | undefined): string {
 function statusLabel(row: DemoApplicantRow): string {
   if (row.bucket === "approved") return "Approved";
   if (row.bucket === "rejected") return "Rejected";
+  if (isInProgressApplicationRow(row)) return INCOMPLETE_APPLICATION_LABEL;
   return "Pending review";
 }
 
@@ -384,7 +390,7 @@ export async function buildApplicationPdf(
     { label: "SSN", value: maskSsn(app.ssn) },
     { label: "Driver's license", value: clean(app.driversLicense) },
     { label: "Application status", value: statusLabel(row) },
-    { label: "Stage", value: clean(row.stage) },
+    { label: "Stage", value: applicationStageDisplayLabel(row) },
   ]);
 
   // ---- Property / placement ----------------------------------------------
