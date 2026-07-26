@@ -9,7 +9,7 @@ import {
 } from "@/components/auth/auth-mobile-primitives";
 import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
 import { ManagerTrialSignupForm } from "@/components/auth/manager-trial-signup-form";
-import { ResidentSignupBlocked } from "@/components/auth/resident-signup-blocked";
+import { ResidentSignupForm } from "@/components/auth/resident-signup-form";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -428,7 +428,13 @@ function NativeAuthHubInner({
 
             {isCreate ? (
               role === "resident" ? (
-                <ResidentSignupBlocked compact />
+                <ResidentSignupForm
+                  variant="compact"
+                  disabled={locked}
+                  hideLegalFooter
+                  initialEmail={email}
+                  nextPath={nextFromUrl && nextFromUrl.startsWith("/") ? nextFromUrl : "/resident/applications"}
+                />
               ) : role === "vendor" ? (
                 <VendorSignupForm
                   variant="compact"

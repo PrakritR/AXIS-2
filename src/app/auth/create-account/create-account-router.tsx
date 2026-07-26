@@ -14,15 +14,16 @@ import CreateAccountClient from "./create-account-client";
 export default function CreateAccountRouter() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id")?.trim() ?? "";
-  const role = searchParams.get("role")?.trim().toLowerCase() ?? "";
   const axisId = searchParams.get("axis_id")?.trim() ?? "";
 
   if (sessionId) {
     return <CreateAccountClient />;
   }
 
-  // Old resident create-account links (with or without axis_id) → setup-link message.
-  if (role === "resident" || axisId) {
+  // Legacy resident links that pinned an Axis ID keep the setup-link message
+  // (that flow completes an emailed handoff). Generic resident signup now goes
+  // to the unified hub, which renders the resident create-account form.
+  if (axisId) {
     return (
       <AuthCard>
         <ResidentSignupBlocked />
