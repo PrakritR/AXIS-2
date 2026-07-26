@@ -1,4 +1,5 @@
-import { chromium } from "@playwright/test";
+import { chromium, type Browser } from "@playwright/test";
+import { E2E_ACCOUNTS } from "./fixtures";
 
 // Preflight for the portal E2E suite.
 //
@@ -11,31 +12,32 @@ import { chromium } from "@playwright/test";
 // it. That is exactly how CI on `main` hung: the E2E_* repo secrets do not exist,
 // so sign-in submitted empty credentials and never navigated.
 //
-// This preflight does ONE real admin sign-in as a smoke check. If it cannot
-// complete within a short budget it throws immediately, so a misconfigured suite
-// fails in seconds with an actionable message instead of hanging. It is a no-op
-// unless E2E_TESTS_ENABLED=1, so it never affects local runs that intentionally
-// skip the portal specs.
+// This preflight does one real sign-in per seeded role (admin, manager,
+// resident) as a smoke check, each in a fresh browser context so sessions never
+// carry over. It resolves credentials from the SAME `E2E_ACCOUNTS` the specs
+// use, so it can never pass green while the specs sign in as someone else. If
+// any role cannot complete within a short budget it throws immediately, naming
+// the role, so a misconfigured suite fails in seconds with an actionable message
+// instead of hanging. It is a no-op unless E2E_TESTS_ENABLED=1, so it never
+// affects local runs that intentionally skip the portal specs.
 const SMOKE_TIMEOUT_MS = 25_000;
 
-function adminCredentials() {
-  return {
-    email: process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.axis.local",
-    password: process.env.E2E_ADMIN_PASSWORD?.trim() || "TestAdmin123!",
-  };
-}
+const PREFLIGHT_ROLES = [
+  { role: "admin", emailEnvVar: "E2E_ADMIN_EMAIL", next: "/admin/dashboard" },
+  { role: "manager", emailEnvVar: "E2E_MANAGER_EMAIL", next: "/portal/dashboard" },
+  { role: "resident", emailEnvVar: "E2E_RESIDENT_EMAIL", next: "/resident/dashboard" },
+] as const;
 
-async function globalSetup() {
-  if (process.env.E2E_TESTS_ENABLED !== "1") return;
-
-  const baseURL =
-    process.env.PLAYWRIGHT_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const { email, password } = adminCredentials();
-  const next = "/admin/dashboard";
-
-  const browser = await chromium.launch();
+async function smokeSignIn(
+  browser: Browser,
+  baseURL: string,
+  next: string,
+  email: string,
+  password: string,
+) {
+  const context = await browser.newContext({ baseURL });
   try {
-    const page = await browser.newPage({ baseURL });
+    const page = await context.newPage();
     await page.goto(`${baseURL}/auth/sign-in?next=${encodeURIComponent(next)}`, {
       waitUntil: "domcontentloaded",
       timeout: SMOKE_TIMEOUT_MS,
@@ -47,30 +49,51 @@ async function globalSetup() {
       (url) => url.pathname === next || url.pathname.startsWith(`${next}/`),
       { timeout: SMOKE_TIMEOUT_MS },
     );
-  } catch (error) {
-    const usedDefaultAccount = !process.env.E2E_ADMIN_EMAIL?.trim();
-    const lines = [
-      "E2E preflight failed: could not sign in as the admin E2E account.",
-      `Tried "${email}" against ${baseURL}.`,
-    ];
-    if (usedDefaultAccount) {
-      lines.push("(E2E_ADMIN_EMAIL is unset/blank, so the built-in default account name was used.)");
+  } finally {
+    await context.close();
+  }
+}
+
+async function globalSetup() {
+  if (process.env.E2E_TESTS_ENABLED !== "1") return;
+
+  const baseURL =
+    process.env.PLAYWRIGHT_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  const browser = await chromium.launch();
+  try {
+    for (const { role, emailEnvVar, next } of PREFLIGHT_ROLES) {
+      const { email, password } = E2E_ACCOUNTS[role];
+      try {
+        await smokeSignIn(browser, baseURL, next, email, password);
+      } catch (error) {
+        const usedDefaultAccount = !process.env[emailEnvVar]?.trim();
+        const lines = [
+          `E2E preflight failed: could not sign in as the ${role} E2E account.`,
+          `Tried "${email}" against ${baseURL}.`,
+        ];
+        if (usedDefaultAccount) {
+          lines.push(
+            `(${emailEnvVar} is unset/blank, so the built-in default account name was used.)`,
+          );
+        }
+        lines.push(
+          "",
+          "E2E_TESTS_ENABLED=1 makes the portal suite sign in as seeded accounts, but the",
+          `${role} sign-in never completed. The accounts are almost certainly not seeded in the`,
+          "target Supabase project, or the E2E_* credential secrets are missing/wrong. Without",
+          "them every portal spec times out on waitForURL and the job hangs for hours.",
+          "",
+          "Fix one of:",
+          "  • Seed the accounts (`npm run test:seed`) and set the E2E_* repo secrets to match, or",
+          "  • Unset E2E_TESTS_ENABLED so the portal specs skip instead of timing out.",
+          "See tests/README.md.",
+          "",
+          `Underlying error: ${(error as Error).message.split("\n")[0]}`,
+        );
+        throw new Error(lines.join("\n"));
+      }
     }
-    lines.push(
-      "",
-      "E2E_TESTS_ENABLED=1 makes the portal suite sign in as seeded accounts, but the",
-      "sign-in never completed. The accounts are almost certainly not seeded in the target",
-      "Supabase project, or the E2E_* credential secrets are missing/wrong. Without them",
-      "every portal spec times out on waitForURL and the job hangs for hours.",
-      "",
-      "Fix one of:",
-      "  • Seed the accounts (`npm run test:seed`) and set the E2E_* repo secrets to match, or",
-      "  • Unset E2E_TESTS_ENABLED so the portal specs skip instead of timing out.",
-      "See tests/README.md.",
-      "",
-      `Underlying error: ${(error as Error).message.split("\n")[0]}`,
-    );
-    throw new Error(lines.join("\n"));
   } finally {
     await browser.close();
   }

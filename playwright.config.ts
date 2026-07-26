@@ -21,9 +21,10 @@ export default defineConfig({
   // timeouts (60s) don't bound the whole suite: 131 specs run serially at
   // retries: 2, so a systemic failure (e.g. sign-in never succeeding) can burn
   // hours before GitHub's 6h job default. globalSetup fails such runs in seconds;
-  // this is the backstop if a run degrades some other way. A healthy suite
-  // finishes well inside this.
-  globalTimeout: 15 * 60_000,
+  // this is the backstop if a run degrades some other way. E2E has no measured
+  // healthy runtime on main yet, so this is a deliberately generous cap kept
+  // under the CI job's 30-min timeout-minutes, which is the hard backstop.
+  globalTimeout: 25 * 60_000,
   expect: { timeout: 10_000 },
   use: {
     baseURL,

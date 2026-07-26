@@ -40,25 +40,27 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const testRunId = process.argv[2]?.trim() || `seed-${Date.now()}`;
 
-const adminEmail = (process.env.E2E_ADMIN_EMAIL ?? "admin@test.axis.local").toLowerCase();
-const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "TestAdmin123!";
-const managerEmail = (process.env.E2E_MANAGER_EMAIL ?? "manager@test.axis.local").toLowerCase();
-const managerPassword = process.env.E2E_MANAGER_PASSWORD ?? "TestManager123!";
-const residentEmail = (process.env.E2E_RESIDENT_EMAIL ?? "resident@test.axis.local").toLowerCase();
-const residentPassword = process.env.E2E_RESIDENT_PASSWORD ?? "TestResident123!";
+// `?.trim() ||` (never `??`): CI injects a missing secret as an empty string,
+// which must fall back to the same defaults tests/fixtures/index.ts resolves.
+const adminEmail = (process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.axis.local").toLowerCase();
+const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || "TestAdmin123!";
+const managerEmail = (process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.axis.local").toLowerCase();
+const managerPassword = process.env.E2E_MANAGER_PASSWORD?.trim() || "TestManager123!";
+const residentEmail = (process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.axis.local").toLowerCase();
+const residentPassword = process.env.E2E_RESIDENT_PASSWORD?.trim() || "TestResident123!";
 // Must match E2E_RESIDENT_AXIS_ID in tests/fixtures/index.ts. The application
 // record id IS the resident's axis id (see normalizeApplicationAxisId), and the
 // resident's `profiles.manager_id` stores the same axis id — that is where the
 // app reads it (resident-portal-access.ts, resident-profile-panel.tsx).
-const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
-const vendorEmail = (process.env.E2E_VENDOR_EMAIL ?? "vendor@test.axis.local").toLowerCase();
-const vendorPassword = process.env.E2E_VENDOR_PASSWORD ?? "TestVendor123!";
+const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID?.trim() || "AXIS-TESTRSID";
+const vendorEmail = (process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.axis.local").toLowerCase();
+const vendorPassword = process.env.E2E_VENDOR_PASSWORD?.trim() || "TestVendor123!";
 // All-portals sandbox account for manual testing: one login that can open every
 // portal (admin + manager + resident + vendor) via the sign-in role picker.
 // Matches CANONICAL_DEMO_ADMIN_EMAIL / CANONICAL_DEMO_GUIDED_EMAIL in
 // src/lib/demo/demo-canonical-accounts.ts.
-const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL ?? "testeverything@test.axis.local").toLowerCase();
-const everythingPassword = process.env.E2E_EVERYTHING_PASSWORD ?? "TestEverything123!";
+const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL?.trim() || "testeverything@test.axis.local").toLowerCase();
+const everythingPassword = process.env.E2E_EVERYTHING_PASSWORD?.trim() || "TestEverything123!";
 const EVERYTHING_NAME = "Test Everything";
 // Keep in sync with src/lib/demo/demo-canonical-accounts.ts (plain-node script
 // can't import the TS module).
@@ -226,8 +228,8 @@ try {
   await ensureManagerStripeCustomer(stripe, supabase, { email: managerEmail, userId: managerUserId });
 
   // ── Second test manager (public browse catalog) ────────────────────────────
-  const manager2Email = (process.env.E2E_MANAGER2_EMAIL ?? "manager2@test.axis.local").toLowerCase();
-  const manager2Password = process.env.E2E_MANAGER2_PASSWORD ?? "TestManager123!";
+  const manager2Email = (process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.axis.local").toLowerCase();
+  const manager2Password = process.env.E2E_MANAGER2_PASSWORD?.trim() || "TestManager123!";
   const existingManager2User = managerList?.users?.find((u) => u.email?.toLowerCase() === manager2Email);
   let manager2Id = "MGR-TESTE2E2";
   if (existingManager2User) {
