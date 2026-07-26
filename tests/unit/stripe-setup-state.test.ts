@@ -9,7 +9,19 @@ describe("stripeSetupStateFromStatus", () => {
   it("ready only when Stripe reports the account can receive money", () => {
     expect(stripeSetupStateFromStatus({ paymentReady: true })).toBe("ready");
     expect(
-      stripeSetupStateFromStatus({ payoutsEnabled: true, chargesEnabled: true, connected: true }),
+      stripeSetupStateFromStatus({ payoutsEnabled: true, transfersEnabled: true, connected: true }),
+    ).toBe("ready");
+  });
+
+  it("readiness fallback ignores chargesEnabled (transfers-only Express accounts)", () => {
+    // A transfers-only destination account has charges_enabled=false yet is payout-ready.
+    expect(
+      stripeSetupStateFromStatus({
+        connected: true,
+        payoutsEnabled: true,
+        transfersEnabled: true,
+        chargesEnabled: false,
+      }),
     ).toBe("ready");
   });
 
@@ -31,5 +43,24 @@ describe("stripeSetupStateFromStatus", () => {
   it("unlinked when there is no connected account at all", () => {
     expect(stripeSetupStateFromStatus({ connected: false, accountId: null })).toBe("unlinked");
     expect(stripeSetupStateFromStatus({})).toBe("unlinked");
+  });
+
+  it("unknown when a transient Stripe error hid the real account state", () => {
+    // The status route's degraded branch: account exists, Stripe call failed.
+    // Must NOT read as "incomplete", which would tell an onboarded manager to redo onboarding.
+    expect(
+      stripeSetupStateFromStatus({
+        connected: true,
+        accountId: "acct_1",
+        paymentReady: false,
+        stripeError: "Stripe timed out",
+      }),
+    ).toBe("unknown");
+  });
+
+  it("unknown when the server has no Stripe keys (keyless dev demo branch)", () => {
+    expect(
+      stripeSetupStateFromStatus({ demo: true, connected: true, accountId: "acct_1", paymentReady: false }),
+    ).toBe("unknown");
   });
 });

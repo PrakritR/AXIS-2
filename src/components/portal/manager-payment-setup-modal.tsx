@@ -324,6 +324,7 @@ export function ManagerPaymentSetupModal({
   const [loading, setLoading] = useState(false);
   const [stripeBusy, setStripeBusy] = useState(false);
   const [stripeState, setStripeState] = useState<StripeSetupState>("unlinked");
+  const [stripeIssue, setStripeIssue] = useState<string | null>(null);
   const [savingChannel, setSavingChannel] = useState<PaymentChannel | null>(null);
   const [activeChannel, setActiveChannel] = useState<PaymentChannel | null>(null);
 
@@ -336,6 +337,7 @@ export function ManagerPaymentSetupModal({
   const loadStripeStatus = useCallback(async () => {
     if (demo) {
       setStripeState("ready");
+      setStripeIssue(null);
       return;
     }
     try {
@@ -343,17 +345,29 @@ export function ManagerPaymentSetupModal({
       const body = (await res.json()) as {
         payoutsEnabled?: boolean;
         chargesEnabled?: boolean;
+        transfersEnabled?: boolean;
         paymentReady?: boolean;
         connected?: boolean;
         accountId?: string | null;
+        stripeError?: string | null;
+        demo?: boolean;
+        message?: string;
       };
       if (!res.ok) {
-        setStripeState("unlinked");
+        setStripeState("unknown");
+        setStripeIssue("Couldn't check your Stripe status. Try again.");
         return;
       }
-      setStripeState(stripeSetupStateFromStatus(body));
+      const nextState = stripeSetupStateFromStatus(body);
+      setStripeState(nextState);
+      setStripeIssue(
+        nextState === "unknown"
+          ? body.stripeError ?? body.message ?? "Couldn't check your Stripe status. Try again."
+          : null,
+      );
     } catch {
-      setStripeState("unlinked");
+      setStripeState("unknown");
+      setStripeIssue("Couldn't check your Stripe status. Try again.");
     }
   }, [demo]);
 
@@ -501,6 +515,9 @@ export function ManagerPaymentSetupModal({
               Your Stripe account isn&apos;t ready to receive money yet. Finish onboarding (identity + bank details) so
               resident payments can be deposited.
             </p>
+          ) : null}
+          {stripeState === "unknown" && stripeIssue ? (
+            <p className="text-xs text-[var(--status-pending-fg)]">{stripeIssue}</p>
           ) : null}
           <HubRow
             label="Zelle"
