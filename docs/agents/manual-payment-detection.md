@@ -20,11 +20,15 @@ Both paths run the SAME parse → match → mark-paid pipeline
 sender host must be Venmo/Zelle (or an allow-listed bank for Zelle,
 `BANK_RECEIPT_DOMAINS`) — a mere mention of "venmo"/"zelle" in the body from an
 untrusted host is rejected. The email must also read as **money received**
-(`receiptTextIndicatesInboundPayment`: "X paid you" / "sent you" /
-"received $… from Y"); payment requests, request reminders,
-statements/transaction history, and outbound "You paid / You sent" notices are
-rejected before matching — even with a `PL-` code — because a request note is
-payer-controlled and none of them mean money arrived.
+(`receiptIndicatesInboundPayment`: "X paid you" / "sent you" / "you received" /
+"received $… from Y" in the subject or the top of the body); payment requests,
+request reminders, statements/transaction history, and outbound
+"You paid / You sent" notices are rejected before matching — even with a `PL-`
+code — because a request note is payer-controlled and none of them mean money
+arrived. The reject words are checked against the **subject line only**: real
+receipt bodies legitimately contain them ("If you didn't request this
+transfer", "view your statement"), and body boilerplate must never veto a
+genuine receipt.
 
 ## Matching — two tiers, biased to safety
 

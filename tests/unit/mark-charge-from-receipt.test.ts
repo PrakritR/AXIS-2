@@ -126,6 +126,28 @@ describe("markChargePaidFromReceipt — reference-less real receipt", () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
+  it("credits a genuine receipt whose body carries reject-word boilerplate", async () => {
+    const db = makeDb([charge({})], new Set<string>());
+    const receipt = contextFor({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid you $50.00",
+      body: [
+        "Junaid Mohammed paid you $50.00",
+        "Application fee for room 5 at 5257 Brooklyn avenue",
+        "If you did not request this transfer, contact us.",
+        "View your statement online.",
+      ].join("\n"),
+    });
+
+    const result = await markChargePaidFromReceipt(db, MANAGER_ID, receipt, {
+      sourceId: "gmail-msg-boilerplate",
+      sourceField: "paidViaGmailMessageId",
+    });
+
+    expect(result.outcome).toBe("marked_paid");
+    expect(upsertMock).toHaveBeenCalledTimes(1);
+  });
+
   it("never credits from a Venmo payment REQUEST (no money received)", async () => {
     const requestEmail = {
       fromEmail: "venmo@venmo.com",

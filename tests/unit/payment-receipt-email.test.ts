@@ -170,6 +170,34 @@ describe("parseResidentReceiptContext — direction guard (money must have been 
       expect(parseResidentReceiptContext({ fromEmail: "venmo@venmo.com", ...email })).toBeNull();
     }
   });
+
+  it("still accepts a genuine receipt whose BODY contains reject-word boilerplate", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid you $50.00",
+      body: [
+        "Junaid Mohammed paid you $50.00",
+        "Application fee for room 5 at 5257 Brooklyn avenue",
+        "If you did not request this transfer, contact us.",
+        "View your statement online.",
+        "Send and request money with Venmo.",
+      ].join("\n"),
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.amountCents).toBe(5000);
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+  });
+
+  it("does not accept an email whose only inbound phrasing is buried deep in the footer", () => {
+    const filler = "Lorem ipsum dolor sit amet. ".repeat(120);
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "News from Venmo — $50.00 offers inside",
+        body: `${filler}\nA friend paid you before? Invite more friends!`,
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("bankSenderIsAllowed — hostname match, never substring (money-path auth)", () => {

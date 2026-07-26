@@ -158,8 +158,14 @@ const MEMO_CONTEXT_MAX_CHARS = 4000;
  * None of them mean money arrived, so none may ever mark a charge paid. The
  * request note is fully payer-controlled, which makes an unguarded request
  * email a resident-triggerable false credit.
+ *
+ * These reject words are checked against the SUBJECT line only — the
+ * transaction headline, where they reliably name the email's purpose. Receipt
+ * BODY boilerplate legitimately contains them ("If you didn't request this
+ * transfer", "Send and request money", "view your statement"), as can a payer's
+ * own note ("rent as requested"), and none of that may veto a genuine receipt.
  */
-const RECEIPT_REJECT_PATTERNS = [
+const RECEIPT_SUBJECT_REJECT_PATTERNS = [
   /\byou paid\b/i,
   /\byou sent\b/i,
   /\brequest(?:s|ed|ing)?\b/i,
@@ -169,22 +175,36 @@ const RECEIPT_REJECT_PATTERNS = [
   /\btransaction history\b/i,
 ];
 
+/**
+ * Positive received-money phrasings. Directional by construction: an outbound
+ * notice says "You paid X" / "You sent X" and a request says "X requests $Y",
+ * none of which contain these shapes.
+ */
 const RECEIPT_INBOUND_PATTERNS = [
   /\bpaid you\b/i,
   /\bsent you\b/i,
-  /\breceived\b[^\n]{0,60}?\bfrom\b/i,
+  /\byou received\b/i,
+  /\breceived\s+\$?[\d.,]{1,15}\s+from\b/i,
 ];
 
 /**
- * True only when the text POSITIVELY reads as money received ("X paid you",
- * "sent you", "received $… from Y") and carries no request/reminder/statement/
- * outbound phrasing. Reject wins over accept: Zelle's "You have received a
- * payment request from X" satisfies the received-from shape but is not money.
+ * The transaction headline lives at the top of the notification; bounding the
+ * positive-signal scan keeps a long footer from being what qualifies an email.
  */
-export function receiptTextIndicatesInboundPayment(text: string): boolean {
-  const scoped = text.length > AMOUNT_SCAN_MAX_CHARS ? text.slice(0, AMOUNT_SCAN_MAX_CHARS) : text;
-  if (RECEIPT_REJECT_PATTERNS.some((pattern) => pattern.test(scoped))) return false;
-  return RECEIPT_INBOUND_PATTERNS.some((pattern) => pattern.test(scoped));
+const INBOUND_SIGNAL_BODY_MAX_CHARS = 2000;
+
+/**
+ * True only when the email POSITIVELY reads as money received — an inbound
+ * phrasing ("X paid you", "sent you", "you received", "received $… from Y") in
+ * the subject or the top of the body — AND the subject does not headline a
+ * request/reminder/statement/outbound send. Zelle's "You have received a
+ * payment request from X" satisfies the received-from shape but is caught by
+ * the subject reject.
+ */
+export function receiptIndicatesInboundPayment(subject: string, body: string): boolean {
+  if (RECEIPT_SUBJECT_REJECT_PATTERNS.some((pattern) => pattern.test(subject))) return false;
+  const headline = `${subject}\n${body.slice(0, INBOUND_SIGNAL_BODY_MAX_CHARS)}`;
+  return RECEIPT_INBOUND_PATTERNS.some((pattern) => pattern.test(headline));
 }
 
 /**
@@ -228,7 +248,7 @@ export function extractReceiptPayerName(subject: string, body: string): string |
  * Parse a resident-charge receipt for BOTH the reference path and the
  * reference-less fallback. Requires a trusted channel + sender + a positive
  * amount (same authentication as {@link parsePaymentReceiptEmail}) AND
- * received-money phrasing ({@link receiptTextIndicatesInboundPayment}) — a
+ * received-money phrasing ({@link receiptIndicatesInboundPayment}) — a
  * payment request, reminder, statement, or outbound send is never a candidate,
  * even when it carries a `PL-` code. The code itself is optional here. Returns
  * null for anything that is not a genuine, amount-bearing inbound Zelle/Venmo
@@ -246,7 +266,7 @@ export function parseResidentReceiptContext(opts: {
   const channel = inferChannel(opts);
   if (!channel) return null;
   if (!senderLooksLikeReceipt(opts.fromEmail, channel)) return null;
-  if (!receiptTextIndicatesInboundPayment(combined)) return null;
+  if (!receiptIndicatesInboundPayment(subject, body)) return null;
 
   const amountCents = parseAmountCents(combined);
   if (amountCents == null) return null;
