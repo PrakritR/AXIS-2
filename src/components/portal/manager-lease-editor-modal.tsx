@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import {
   readLeaseTemplateFile,
   type LeaseConfigDraft,
 } from "@/components/portal/lease-config-form";
+import { LeaseConfigPreview } from "@/components/portal/lease-config-preview";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   persistLeaseConfigToPropertyIds,
@@ -17,7 +18,7 @@ import {
   type ManagerPropertySaveTarget,
 } from "@/lib/manager-property-save-target";
 import { buildLeaseModalAssistantContext } from "@/lib/lease-assistant-context";
-import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
+import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
 import { leaseSourceFromDraft, type PropertyLeaseSource } from "@/lib/property-lease-source";
 import {
   updatePropertyLeaseTemplate,
@@ -54,6 +55,8 @@ function leaseFieldsFromDraft(draft: LeaseConfigDraft): LeaseConfigFields {
   };
 }
 
+const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
+
 /** Edit lease configuration for a property — same options as the listing wizard Lease step. */
 export function ManagerLeaseEditorModal({
   open,
@@ -65,7 +68,7 @@ export function ManagerLeaseEditorModal({
   propertyHint,
   propertyId,
   propertyLabel,
-  demoMode: _demoMode = false,
+  demoMode = false,
   templateId,
   templates,
   onTemplatesSaved,
@@ -109,6 +112,21 @@ export function ManagerLeaseEditorModal({
   }, [open, sub, templateId, templates]);
 
   const source = leaseSourceFromDraft(draft);
+
+  const previewSub = useMemo(
+    (): ManagerListingSubmissionV1 => ({
+      ...sub,
+      ...draft,
+    }),
+    [sub, draft],
+  );
+
+  const preview = useMemo(
+    () => buildPropertyLeasePreview(previewSub, { hint: propertyHint, demo: demoMode }),
+    [previewSub, propertyHint, demoMode],
+  );
+
+  const showGeneratedPreview = source === "axis_default" || source === "custom_comments";
 
   const customTermsError =
     error && source === "custom_comments" ? error : null;
@@ -202,7 +220,7 @@ export function ManagerLeaseEditorModal({
       open={open}
       title={title}
       onClose={dismiss}
-      panelClassName="max-w-md"
+      panelClassName="max-w-2xl"
       assistantContext={assistantContext}
       assistantStorageScopeKey="Lease modal"
       footer={
@@ -259,6 +277,13 @@ export function ManagerLeaseEditorModal({
           customTermsError={customTermsError}
           leaseTemplateError={leaseTemplateError}
         />
+
+        {showGeneratedPreview ? (
+          <div>
+            <p className={fieldLabelClass}>Lease preview</p>
+            <LeaseConfigPreview preview={preview} />
+          </div>
+        ) : null}
       </div>
     </Modal>
   );

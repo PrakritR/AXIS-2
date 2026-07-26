@@ -18,11 +18,22 @@ type LegacyLeaseTemplateKind = "standard" | "short-term";
 
 export type StoredPropertyLeaseTemplateKind = PropertyLeaseTemplateKind | LegacyLeaseTemplateKind;
 
+export type PropertyLeaseListingSeedKey =
+  | "fixed-term"
+  | "month-to-month"
+  | "short-term"
+  | "custom-term"
+  | "primary";
+
 export type PropertyLeaseTemplate = {
   id: string;
   kind: PropertyLeaseTemplateKind;
   /** Manager-facing label shown in the property lease list. */
   label: string;
+  /** When auto-created from listing offered terms, stable key for merge/sync. */
+  listingSeedKey?: PropertyLeaseListingSeedKey;
+  /** Application lease-term choices that route applicants to this template. */
+  applicationLeaseTerms?: string[];
   leaseConfigMode: "standard" | "custom";
   leaseCustomKind: "terms" | "document";
   customLeaseTerms: string;
@@ -108,6 +119,8 @@ export function createPropertyLeaseTemplate(args: {
   customLeaseTerms?: string;
   leaseTemplateDocUrl?: string | null;
   leaseTemplateDocName?: string;
+  listingSeedKey?: PropertyLeaseListingSeedKey;
+  applicationLeaseTerms?: string[];
 }): PropertyLeaseTemplate {
   const kindMeta = PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === args.kind);
   const sourceFields = draftFieldsFromLeaseSource(args.source);
@@ -121,6 +134,8 @@ export function createPropertyLeaseTemplate(args: {
     customLeaseTerms: args.customLeaseTerms?.trim() ?? "",
     leaseTemplateDocUrl: args.leaseTemplateDocUrl ?? null,
     leaseTemplateDocName: args.leaseTemplateDocName?.trim() ?? "",
+    listingSeedKey: args.listingSeedKey,
+    applicationLeaseTerms: args.applicationLeaseTerms?.length ? [...args.applicationLeaseTerms] : undefined,
     createdAt: stamp,
     updatedAt: stamp,
   };

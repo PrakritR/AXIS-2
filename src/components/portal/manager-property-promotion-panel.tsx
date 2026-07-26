@@ -23,7 +23,6 @@ import {
 } from "@/components/portal/promotion-asset-detail";
 import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
-import { PromotionUploadModal } from "@/components/portal/promotion-upload-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
 import { syncPropertyPipelineFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -114,7 +113,6 @@ export function ManagerPropertyPromotionPanel({
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [showNewModal, setShowNewModal] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
@@ -481,6 +479,7 @@ export function ManagerPropertyPromotionPanel({
       upsertManagerPromotion(appendUploadEntryToRow(row, entry));
       setTick((n) => n + 1);
       onUpdated?.();
+      closeForm();
       showToast("Promotion uploaded.");
     } finally {
       setUploadBusy(false);
@@ -556,20 +555,11 @@ export function ManagerPropertyPromotionPanel({
         expanded={sectionExpanded}
         onExpandedChange={setSectionExpanded}
         collapsible
-        className="mt-4"
+        headerActionsInline
         toggleDataAttr="promotion-section-toggle"
         headerActions={
           <>
             {headerActionsExtra}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              onClick={() => setShowUploadModal(true)}
-              data-attr="manager-property-upload-promotion"
-            >
-              Upload
-            </Button>
             <Button
               type="button"
               variant="outline"
@@ -594,13 +584,6 @@ export function ManagerPropertyPromotionPanel({
         />
       </PortalCollapsibleSection>
 
-      <PromotionUploadModal
-        open={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onUpload={uploadPromotion}
-        busy={uploadBusy}
-      />
-
       <PromotionNewModal
         open={showNewModal}
         onClose={closeForm}
@@ -613,6 +596,8 @@ export function ManagerPropertyPromotionPanel({
         flyerBusy={generating}
         onGenerateText={(opts) => void createOrRegenerateText(opts, null)}
         textBusy={generatingTextId !== null}
+        onUploadPromotion={(file) => void uploadPromotion(file)}
+        uploadBusy={uploadBusy}
       />
 
       {/* Edit an existing text promotion (create-new lives in PromotionNewModal). */}

@@ -539,7 +539,7 @@ function ManagerPropertyInlineDetails({
       : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <PortalCollapsibleSection
         title="Preview"
         titleVariant="label"
@@ -547,6 +547,7 @@ function ManagerPropertyInlineDetails({
         onExpandedChange={setPreviewExpanded}
         collapsible={hasPreview || bucket === 3 || bucket === 5}
         surfaceMuted={false}
+        headerActionsInline
         toggleDataAttr="listing-preview-toggle"
         headerActions={previewHeaderActions}
         contentClassName="p-0"

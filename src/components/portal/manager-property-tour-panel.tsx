@@ -38,6 +38,7 @@ export function ManagerPropertyTourPanel({
         expanded={expanded}
         onExpandedChange={setExpanded}
         collapsible
+        headerActionsInline
         toggleDataAttr="property-calendar-section-toggle"
         headerActions={
           <Button
@@ -53,7 +54,7 @@ export function ManagerPropertyTourPanel({
             Send tour link
           </Button>
         }
-        contentClassName="px-4 py-4"
+        contentClassName="px-4 py-2"
       >
         <PortalCalendarPanels
           key={storageKey ?? "property-calendar-unavailable"}

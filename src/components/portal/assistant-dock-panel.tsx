@@ -67,8 +67,9 @@ export function AssistantDockPanel({
       await send(prompt);
       return;
     }
-    const body = prompt?.trim() || userMessageContentFromInput(input, attachments);
-    if (!body) return;
+    const rawBody = prompt?.trim() || userMessageContentFromInput(input, attachments);
+    if (!rawBody) return;
+    const body = rawBody.replace(/^\[Context:[^\]]+\]\s*/gim, "").trim() || rawBody;
     const scoped = `[Context: ${hint}]\n\n${body}`;
     if (prompt?.trim()) {
       await send(scoped);

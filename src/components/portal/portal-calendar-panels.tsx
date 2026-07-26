@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Mouse
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
@@ -95,6 +96,10 @@ const CALENDAR_INACTIVE_SLOT =
   "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06] [html[data-theme=dark]_&]:portal-calendar-inactive-slot";
 const CALENDAR_CO_MANAGER_SLOT =
   "border-violet-300 bg-violet-100 text-violet-950 ring-1 ring-inset ring-violet-300/80 [html[data-theme=dark]_&]:border-violet-400/40 [html[data-theme=dark]_&]:bg-violet-500/15 [html[data-theme=dark]_&]:text-violet-100";
+const COMPACT_CALENDAR_ACTION_BTN =
+  "h-7 shrink-0 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-foreground hover:bg-accent/70";
+const COMPACT_TIME_SELECT_TRIGGER =
+  "h-7 min-h-0 w-full rounded-none border-0 bg-transparent px-2 text-xs font-semibold text-foreground shadow-none ring-0 hover:bg-accent/40 focus:border-transparent focus:ring-0";
 export const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
 const MEETING_PEER_COLOR =
@@ -680,57 +685,96 @@ export function PortalCalendarPanels({
     eventSummaryLabel ??
     (isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting");
 
-  const renderTimeWindowControl = (compact = false) => (
-    <div className={compact ? "flex items-center gap-1 whitespace-nowrap" : "flex flex-wrap items-center gap-2"}>
-      <span
-        className={
-          compact
-            ? "text-[10px] font-semibold uppercase tracking-[0.12em] text-muted"
-            : "text-xs font-semibold uppercase tracking-[0.14em] text-muted"
-        }
-      >
-        Show
-      </span>
-      <Select
-        className={compact ? "min-w-[5.75rem] text-xs" : ""}
-        value={String(visibleStartSlot)}
-        onChange={(e) => {
-          const nextStart = Number.parseInt(e.target.value, 10);
-          if (!Number.isFinite(nextStart)) return;
-          setVisibleStartSlot(nextStart);
-          setVisibleEndSlotExclusive((current) =>
-            current <= nextStart ? Math.min(nextStart + 1, SLOTS_PER_DAY) : current,
-          );
-        }}
-      >
-        {slotRowIndices.map((slot) => (
-          <option key={`start-${slot}`} value={slot}>
-            {formatAvailabilitySlotLabel(slot)}
-          </option>
-        ))}
-      </Select>
-      <span className={compact ? "text-[11px] font-medium text-muted" : "text-sm font-medium text-muted"}>to</span>
-      <Select
-        className={compact ? "min-w-[5.75rem] text-xs" : ""}
-        value={String(visibleEndSlotExclusive)}
-        onChange={(e) => {
-          const nextEnd = Number.parseInt(e.target.value, 10);
-          if (!Number.isFinite(nextEnd)) return;
-          setVisibleEndSlotExclusive(nextEnd);
-          setVisibleStartSlot((current) => (current >= nextEnd ? Math.max(0, nextEnd - 1) : current));
-        }}
-      >
-        {slotRowIndices
-          .map((slot) => slot + 1)
-          .filter((slot) => slot > visibleStartSlot && slot <= SLOTS_PER_DAY)
-          .map((slot) => (
-            <option key={`end-${slot}`} value={slot}>
-              {formatSlotEndLabel(slot)}
+  const startTimeOptions = useMemo(
+    () =>
+      slotRowIndices.map((slot) => ({
+        value: String(slot),
+        label: formatAvailabilitySlotLabel(slot),
+      })),
+    [slotRowIndices],
+  );
+  const endTimeOptions = useMemo(
+    () =>
+      slotRowIndices
+        .map((slot) => slot + 1)
+        .filter((slot) => slot > visibleStartSlot && slot <= SLOTS_PER_DAY)
+        .map((slot) => ({
+          value: String(slot),
+          label: formatSlotEndLabel(slot),
+        })),
+    [slotRowIndices, visibleStartSlot],
+  );
+
+  const renderTimeWindowControl = (compact = false) => {
+    const onStartChange = (nextRaw: string) => {
+      const nextStart = Number.parseInt(nextRaw, 10);
+      if (!Number.isFinite(nextStart)) return;
+      setVisibleStartSlot(nextStart);
+      setVisibleEndSlotExclusive((current) =>
+        current <= nextStart ? Math.min(nextStart + 1, SLOTS_PER_DAY) : current,
+      );
+    };
+    const onEndChange = (nextRaw: string) => {
+      const nextEnd = Number.parseInt(nextRaw, 10);
+      if (!Number.isFinite(nextEnd)) return;
+      setVisibleEndSlotExclusive(nextEnd);
+      setVisibleStartSlot((current) => (current >= nextEnd ? Math.max(0, nextEnd - 1) : current));
+    };
+
+    if (compact) {
+      return (
+        <div className="inline-flex shrink-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm">
+          <FieldSingleSelect
+            hideLabel
+            label="Start time"
+            variant="pill"
+            wrapperClassName="w-[5.25rem] shrink-0"
+            triggerClassName={COMPACT_TIME_SELECT_TRIGGER}
+            value={String(visibleStartSlot)}
+            onChange={onStartChange}
+            options={startTimeOptions}
+          />
+          <span className="flex items-center border-x border-border/50 bg-accent/25 px-1.5 text-[10px] font-medium text-muted">
+            –
+          </span>
+          <FieldSingleSelect
+            hideLabel
+            label="End time"
+            variant="pill"
+            wrapperClassName="w-[5.25rem] shrink-0"
+            triggerClassName={COMPACT_TIME_SELECT_TRIGGER}
+            value={String(visibleEndSlotExclusive)}
+            onChange={onEndChange}
+            options={endTimeOptions}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</span>
+        <Select value={String(visibleStartSlot)} onChange={(e) => onStartChange(e.target.value)}>
+          {slotRowIndices.map((slot) => (
+            <option key={`start-${slot}`} value={slot}>
+              {formatAvailabilitySlotLabel(slot)}
             </option>
           ))}
-      </Select>
-    </div>
-  );
+        </Select>
+        <span className="text-sm font-medium text-muted">to</span>
+        <Select value={String(visibleEndSlotExclusive)} onChange={(e) => onEndChange(e.target.value)}>
+          {slotRowIndices
+            .map((slot) => slot + 1)
+            .filter((slot) => slot > visibleStartSlot && slot <= SLOTS_PER_DAY)
+            .map((slot) => (
+              <option key={`end-${slot}`} value={slot}>
+                {formatSlotEndLabel(slot)}
+              </option>
+            ))}
+        </Select>
+      </div>
+    );
+  };
 
   const shiftAnchor = (dir: -1 | 1) => {
     if (viewMode === "month") setAnchorDate((d) => addMonths(d, dir));
@@ -1155,58 +1199,88 @@ export function PortalCalendarPanels({
     const vendorMode = Boolean(vendorDayFlexibility);
     return (
       <>
-        <Card className="p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
-              <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous days">
+        <Card className="overflow-hidden p-0 shadow-sm">
+          <div className="flex items-center gap-2 overflow-x-auto border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 px-2 py-2 sm:gap-2.5 sm:px-3 [html[data-theme=dark]_&]:portal-calendar-week-banner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="inline-flex shrink-0 items-center rounded-full border border-border/70 bg-card p-0.5 shadow-sm">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-7 w-7 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
+                onClick={() => shiftAvailabilityWeek(-1)}
+                aria-label="Previous week"
+              >
                 ←
               </Button>
-              {vendorMode ? (
-                <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5">
-                  <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
-                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatWeekRangeMonSun(weekMonday)}</p>
-                </div>
-              ) : (
-                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
-                    <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatWeekRangeMonSun(weekMonday)}</p>
-                    {tourScopeLabel ? (
-                      <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p>
-                    ) : null}
-                  </div>
-                  {!readOnly && !vendorMode ? (
-                    <div className="shrink-0 pl-1">{renderTimeWindowControl(true)}</div>
-                  ) : null}
-                </div>
-              )}
-              <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next days">
+              <p className="whitespace-nowrap px-2 text-xs font-semibold text-foreground sm:text-sm">
+                {formatWeekRangeMonSun(weekMonday)}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-7 w-7 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
+                onClick={() => shiftAvailabilityWeek(1)}
+                aria-label="Next week"
+              >
                 →
               </Button>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {saveStatus === "saving" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-              {saveStatus === "saved" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
-              {saveStatus === "error" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
+
+            {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
+
+            {!vendorMode ? (
+              <div className="flex shrink-0 items-center gap-0.5">
+                {!readOnly ? (
+                  <>
+                    <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
+                      Copy week
+                    </Button>
+                    <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
+                      Block
+                    </Button>
+                    <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
+                      Clear
+                    </Button>
+                  </>
+                ) : null}
+                {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={COMPACT_CALENDAR_ACTION_BTN}
+                    onClick={() => {
+                      setSelectedHouseIds(new Set());
+                      setUpdateToHousesOpen(true);
+                    }}
+                  >
+                    Update houses
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+              {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
+              {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
               {!readOnly ? (
-                <div className={`px-2.5 py-1 text-xs font-semibold sm:text-sm ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
+                <div className={`px-2 py-0.5 text-[11px] font-semibold sm:text-xs ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
               ) : null}
               {vendorMode ? (
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 rounded-full px-3 text-xs"
+                  className="h-7 shrink-0 rounded-full px-2.5 text-xs"
                   data-attr="vendor-flexible-settings-open"
                   onClick={vendorDayFlexibility!.onOpenFlexibleSettings}
                 >
-                  Flexible settings
+                  Flexible
                 </Button>
               ) : null}
               {vendorMode && vendorCalendarActions?.onAddWork ? (
                 <Button
                   type="button"
                   variant="primary"
-                  className="h-8 rounded-full px-3 text-xs"
+                  className="h-7 shrink-0 rounded-full px-2.5 text-xs"
                   data-attr="vendor-add-work-open"
                   onClick={vendorCalendarActions.onAddWork}
                 >
@@ -1216,34 +1290,9 @@ export function PortalCalendarPanels({
             </div>
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {!readOnly && !vendorMode ? (
-              <>
-                <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
-                  Copy previous week
-                </Button>
-                <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
-                  Create block
-                </Button>
-                <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
-                  Clear week
-                </Button>
-              </>
-            ) : null}
-            {!vendorMode && otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => { setSelectedHouseIds(new Set()); setUpdateToHousesOpen(true); }}
-              >
-                Update to houses
-              </Button>
-            ) : null}
-          </div>
-
+          <div className="p-3 sm:p-4">
           {upcomingMeetingSummary.total > 0 ? (
-            <div className="mt-4 rounded-2xl border px-4 py-3 portal-banner-info">
+            <div className="mt-2 rounded-2xl border px-4 py-3 portal-banner-info">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-bold text-sky-950 portal-calendar-callout-sky-title [html[data-theme=dark]_&]:portal-calendar-callout-sky-title">
@@ -1370,7 +1419,7 @@ export function PortalCalendarPanels({
             return (
               <>
                 {/* Mobile: one day at a time — the multi-column grid never fits a phone width. */}
-                <div className="mt-4 lg:hidden">
+                <div className="mt-2 lg:hidden">
                   <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {activeBlockDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
@@ -1421,7 +1470,7 @@ export function PortalCalendarPanels({
                 </div>
 
                 {/* Desktop: full-week grid with horizontal scroll on narrower viewports. */}
-                <div className="mt-4 hidden lg:block">
+                <div className="mt-2 hidden lg:block">
                   <div className="overflow-hidden rounded-2xl border border-border bg-card">
                     <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
                       <div className={`grid min-w-[760px] grid-cols-[52px_repeat(7,minmax(72px,1fr))] text-[10px] sm:text-xs ${CALENDAR_GRID_GAP}`}>
@@ -1435,10 +1484,16 @@ export function PortalCalendarPanels({
                                 0,
                               );
                           return (
-                            <div key={ds} className={`px-1 py-2 text-center sm:px-2 ${CALENDAR_HEADER_CELL}`}>
-                              <p className="font-bold uppercase tracking-[0.08em] sm:tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
-                              <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                              <p className={`mt-0.5 text-[10px] font-medium sm:text-[11px] ${CALENDAR_OPEN_COUNT}`}>{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</p>
+                            <div key={ds} className={`px-1 py-2.5 text-center sm:px-2 ${CALENDAR_HEADER_CELL}`}>
+                              <p className="text-[11px] font-semibold text-muted sm:text-xs">
+                                {d.toLocaleDateString(undefined, { weekday: "short" })}
+                              </p>
+                              <p className="mt-0.5 text-sm font-semibold text-foreground">
+                                {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                              </p>
+                              <p className={`mt-0.5 text-[10px] font-medium sm:text-[11px] ${CALENDAR_OPEN_COUNT}`}>
+                                {readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}
+                              </p>
                               {renderFlexibleToggle(d.getDay())}
                             </div>
                           );
@@ -1459,6 +1514,7 @@ export function PortalCalendarPanels({
               </>
             );
           })()}
+          </div>
         </Card>
 
         <Modal
@@ -1816,11 +1872,12 @@ export function PortalCalendarPanels({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Availability editor</p>
-          <div className="mt-2 flex items-start justify-between gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <div className="min-w-0">
               <h2 className="text-xl font-semibold text-foreground">Public booking windows</h2>
               {tourScopeLabel ? <p className="mt-1 text-sm font-medium text-primary">{tourScopeLabel}</p> : null}
             </div>
+            <div className="hidden h-7 w-px shrink-0 bg-border/80 sm:block" aria-hidden />
             {renderTimeWindowControl(true)}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">

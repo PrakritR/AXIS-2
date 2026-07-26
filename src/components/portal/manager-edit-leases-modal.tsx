@@ -170,6 +170,9 @@ export function ManagerEditLeasesModal({
           propertyIds={editingPropertyIds}
           propertyId={editingPropertyIds[0]}
           propertyLabel={propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label}
+          propertyHint={{
+            buildingName: propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label,
+          }}
           managerUserId={managerUserId}
           onClose={onEditorClose}
           onSaved={onEditorSaved}

@@ -24,6 +24,8 @@ export type PortalCollapsibleSectionProps = {
   surfaceMuted?: boolean;
   /** Uppercase muted label (Preview block) instead of semibold title. */
   titleVariant?: "section" | "label" | "resident";
+  /** Keep header actions on the title row (property section toolbars). */
+  headerActionsInline?: boolean;
 };
 
 /**
@@ -45,6 +47,7 @@ export function PortalCollapsibleSection({
   toggleDataAttr = "portal-section-toggle",
   surfaceMuted = true,
   titleVariant = "section",
+  headerActionsInline = false,
 }: PortalCollapsibleSectionProps) {
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
   const isControlled = controlledExpanded !== undefined;
@@ -80,7 +83,7 @@ export function PortalCollapsibleSection({
       } ${className}`.trim()}
     >
       <div
-        className={`flex flex-wrap items-start justify-between gap-x-2 gap-y-3 bg-accent/30 px-4 py-3 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2.5 ${
+        className={`flex items-center justify-between gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
           canCollapse ? "cursor-pointer" : ""
         }`}
         role={canCollapse ? "button" : undefined}
@@ -111,7 +114,10 @@ export function PortalCollapsibleSection({
         </div>
         {headerActions ? (
           <div
-            className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 lg:ml-auto lg:w-auto lg:max-w-[70%] lg:justify-end"
+            className={cn(
+              "flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2",
+              headerActionsInline ? "ml-2" : "w-full lg:ml-auto lg:w-auto lg:max-w-[70%] lg:justify-end",
+            )}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -122,8 +128,8 @@ export function PortalCollapsibleSection({
       {showBody ? (
         <div
           className={cn(
-            "px-4 pb-4 pt-4 sm:pt-5 [html[data-native]_&]:px-3 [html[data-native]_&]:pb-3 [html[data-native]_&]:pt-3",
-            contentClassName ?? "pb-6",
+            "px-4 pb-3 pt-3 [html[data-native]_&]:px-3 [html[data-native]_&]:pb-2.5 [html[data-native]_&]:pt-2.5",
+            contentClassName ?? "pb-4",
           )}
         >
           {children}

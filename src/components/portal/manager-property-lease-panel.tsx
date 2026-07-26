@@ -4,10 +4,6 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PropertyLeaseFormModal } from "@/components/portal/property-lease-form-modal";
-import {
-  PropertyLeaseUploadModal,
-  buildUploadedLeaseTemplate,
-} from "@/components/portal/property-lease-upload-modal";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
@@ -20,6 +16,7 @@ import {
   syncLegacyLeaseFieldsFromTemplates,
   type PropertyLeaseTemplate,
 } from "@/lib/property-lease-templates";
+import { formatApplicationLeaseTermsLabel, syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 
 type LeaseSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -70,16 +67,16 @@ export function ManagerPropertyLeasePanel({
   sectionActions?: ReactNode;
 }) {
   const [formOpen, setFormOpen] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [sectionExpanded, setSectionExpanded] = useState(false);
 
-  const templates = useMemo(() => readPropertyLeaseTemplates(sub), [sub]);
+  const syncedSub = useMemo(() => syncPropertyLeaseTemplatesFromListing(sub), [sub]);
+  const templates = useMemo(() => readPropertyLeaseTemplates(syncedSub), [syncedSub]);
 
   const persistTemplates = (nextTemplates: PropertyLeaseTemplate[]) => {
     if (!saveTarget || !managerUserId) return false;
-    const next = syncLegacyLeaseFieldsFromTemplates(sub, nextTemplates);
+    const next = syncLegacyLeaseFieldsFromTemplates(syncedSub, nextTemplates);
     return persistManagerListingSubmission(saveTarget, managerUserId, next);
   };
 
@@ -121,31 +118,20 @@ export function ManagerPropertyLeasePanel({
         expanded={sectionExpanded}
         onExpandedChange={setSectionExpanded}
         collapsible
-        className="mt-4"
+        headerActionsInline
         toggleDataAttr="lease-section-toggle"
         headerActions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="property-lease-upload"
-              onClick={() => setUploadOpen(true)}
-            >
-              Upload
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="property-lease-add"
-              onClick={openAdd}
-            >
-              Add lease
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            data-attr="property-lease-add"
+            onClick={openAdd}
+          >
+            Add lease
+          </Button>
         }
-        contentClassName="px-4 py-3"
+        contentClassName="px-4 py-2"
       >
         {sectionActions}
         <div className="space-y-2">
@@ -159,6 +145,11 @@ export function ManagerPropertyLeasePanel({
                 <p className="text-xs text-muted">
                   {propertyLeaseTypeLabel(template.kind)} · {leaseDocumentSummary(template)}
                 </p>
+                {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
+                  <p className="mt-0.5 text-xs text-muted">
+                    Applicants: {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms)}
+                  </p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <Button
@@ -185,22 +176,6 @@ export function ManagerPropertyLeasePanel({
           ))}
         </div>
       </PortalCollapsibleSection>
-
-      <PropertyLeaseUploadModal
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        showToast={showToast}
-        onUploaded={({ label, dataUrl, fileName }) => {
-          const created = buildUploadedLeaseTemplate({ label, dataUrl, fileName });
-          const next = [...templates, created];
-          if (!persistTemplates(next)) {
-            showToast("Could not upload lease.");
-            return false;
-          }
-          onUpdated();
-          return true;
-        }}
-      />
 
       <PropertyLeaseFormModal
         open={formOpen}

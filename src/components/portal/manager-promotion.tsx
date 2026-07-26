@@ -67,6 +67,7 @@ import {
   buildTextEntryFromCopy,
   removeFlyerEntryFromRow,
   removeTextEntryFromRow,
+  appendUploadEntryToRow,
   syncPromotionRowLegacy,
   updateFlyerEntryOnRow,
   updateTextEntryOnRow,
@@ -82,6 +83,11 @@ import {
   deleteManagerPromotionRow,
 } from "@/lib/manager-promotions-storage";
 import { readPromotionTextEntries, type PromotionTextEntry, type PromotionTextFormat } from "@/lib/promotion-text";
+import {
+  fileToPromotionUpload,
+  makePromotionUploadId,
+  type PromotionUploadEntry,
+} from "@/lib/promotion-upload";
 import {
   PROPERTY_PIPELINE_EVENT,
   syncPropertyPipelineFromServer,
@@ -139,6 +145,7 @@ export function ManagerPromotion() {
   const [propertyTick, setPropertyTick] = useState(0);
   // Unified "New promotion" modal (type dropdown + inline flyer/text form).
   const [showNewModal, setShowNewModal] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   // Edit-flyer modal (create-new now lives in the unified modal above).
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
@@ -537,6 +544,57 @@ export function ManagerPromotion() {
     }
   }
 
+  async function uploadPromotion(file: File) {
+    if (!userId) return;
+    const { propertyId, propertyLabel: label } = promotionTextIdentityFromDraft(draft);
+    if (!propertyId) {
+      showToast("Select a property for this promotion.");
+      return;
+    }
+    setUploadBusy(true);
+    try {
+      const parsed = await fileToPromotionUpload(file);
+      if (!parsed) {
+        showToast("Upload a JPG, PNG, or PDF up to 12 MB.");
+        return;
+      }
+      const now = new Date().toISOString();
+      const entry: PromotionUploadEntry = {
+        id: makePromotionUploadId(),
+        title: nextPromotionAssetDefaultTitle(assets, "upload"),
+        kind: parsed.kind,
+        fileUrl: parsed.fileUrl,
+        fileName: file.name,
+        mimeType: parsed.mimeType,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const existing = readManagerPromotionRows().find((p) => p.propertyId === propertyId) ?? null;
+      const row =
+        existing ??
+        syncPromotionRowLegacy({
+          id: makePromotionId(),
+          managerUserId: userId,
+          propertyId,
+          propertyLabel: label,
+          title: "Promotion",
+          theme: "cobalt",
+          flyerSize: "letter",
+          status: "generated",
+          inputs: draftInputs(draft),
+          copy: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      upsertManagerPromotion(appendUploadEntryToRow(row, entry));
+      closeForm();
+      revealAsset(makePromotionAssetId(row.id, "upload", entry.id), "image", propertyId);
+      showToast("Promotion uploaded.");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   function saveAssetTitle(asset: PromotionAsset, title: string) {
     if (asset.kind === "flyer" && asset.flyerEntry) {
       upsertManagerPromotion(updateFlyerEntryOnRow(asset.row, asset.flyerEntry.id, { title }));
@@ -678,6 +736,8 @@ export function ManagerPromotion() {
         flyerBusy={generating}
         onGenerateText={(opts) => void createTextFromModal(opts)}
         textBusy={generatingTextId !== null}
+        onUploadPromotion={(file) => void uploadPromotion(file)}
+        uploadBusy={uploadBusy}
       />
 
       {/* Edit an existing flyer (create-new lives in PromotionNewModal above). */}

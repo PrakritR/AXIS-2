@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { TIER_MODELS, type ModelTier } from "@/lib/agent/model";
+import type { ModelTier } from "@/lib/agent/model";
 
 /** True when the conversation includes image or PDF blocks the model must read. */
 export function messagesNeedVisionModel(messages: Anthropic.MessageParam[]): boolean {
@@ -12,7 +12,14 @@ export function messagesNeedVisionModel(messages: Anthropic.MessageParam[]): boo
   return false;
 }
 
-/** Vision requires Sonnet-or-better; pin standard tier for the whole turn. */
+/**
+ * Vision + tools need a vision-capable model. Never inherit `AXIS_AGENT_MODEL`
+ * when it pins Haiku for cost — that combination fails attachment turns.
+ */
 export function visionPinnedModel(): { model: string; tier: ModelTier } {
-  return { model: TIER_MODELS.standard, tier: "standard" };
+  const model =
+    process.env.AXIS_AGENT_MODEL_VISION?.trim() ||
+    process.env.AXIS_AGENT_MODEL_STANDARD?.trim() ||
+    "claude-sonnet-4-6";
+  return { model, tier: "standard" };
 }

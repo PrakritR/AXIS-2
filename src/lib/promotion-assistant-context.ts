@@ -13,6 +13,11 @@ export type PromotionAssistantDraftSlice = {
 
 export const PROMOTION_CUSTOM_PROPERTY_KEY = "__custom__";
 
+/** Keep modal context on one line so `[Context: …]` parsing stays reliable. */
+function singleLineField(value: string, maxLen: number): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, maxLen);
+}
+
 /** Rich context line for the New promotion modal assistant strip. */
 export function buildPromotionNewModalAssistantContext(
   draft: PromotionAssistantDraftSlice,
@@ -21,15 +26,17 @@ export function buildPromotionNewModalAssistantContext(
   const parts = [`New promotion (${kind})`];
   if (draft.propertyKey && draft.propertyKey !== PROMOTION_CUSTOM_PROPERTY_KEY) {
     parts.push(`propertyId=${draft.propertyKey}`);
-    if (draft.propertyLabel.trim()) parts.push(`property=${draft.propertyLabel.trim()}`);
+    if (draft.propertyLabel.trim()) parts.push(`property=${singleLineField(draft.propertyLabel, 80)}`);
   } else {
     parts.push("property=custom (no listing selected)");
   }
-  if (draft.address.trim()) parts.push(`address=${draft.address.trim()}`);
-  if (draft.headline.trim()) parts.push(`headline=${draft.headline.trim()}`);
-  if (draft.price.trim()) parts.push(`price=${draft.price.trim()}`);
-  if (draft.sellingPoints.trim()) parts.push(`sellingPoints=${draft.sellingPoints.trim().slice(0, 120)}`);
-  if (draft.aiPrompt.trim()) parts.push(`styleNotes=${draft.aiPrompt.trim().slice(0, 160)}`);
+  if (draft.address.trim()) parts.push(`address=${singleLineField(draft.address, 120)}`);
+  if (draft.headline.trim()) parts.push(`headline=${singleLineField(draft.headline, 100)}`);
+  if (draft.price.trim()) parts.push(`price=${singleLineField(draft.price, 40)}`);
+  if (draft.sellingPoints.trim()) {
+    parts.push(`sellingPoints=${singleLineField(draft.sellingPoints, 120)}`);
+  }
+  if (draft.aiPrompt.trim()) parts.push(`styleNotes=${singleLineField(draft.aiPrompt, 160)}`);
   parts.push(
     "Propose create_promotion or generate_promotion_flyer when the manager wants a flyer; use propertyId above and referenceImageUrls from uploaded images.",
   );

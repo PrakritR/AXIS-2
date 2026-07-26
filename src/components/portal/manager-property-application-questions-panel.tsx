@@ -106,6 +106,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
         expanded={previewExpanded}
         onExpandedChange={setPreviewExpanded}
         collapsible={hasPreview}
+        headerActionsInline
         toggleDataAttr="application-section-toggle"
         headerActions={
           <>
