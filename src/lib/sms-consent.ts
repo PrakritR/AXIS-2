@@ -25,25 +25,117 @@ export function normalizeConsentPhone(phone: string): string {
 }
 
 /**
- * True when the number's latest consent state is opted-out: an sms_consent row
- * exists with opted_out_at set and no opt-in that is at least as recent. A
- * number we've never seen is treated as NOT opted out.
+ * Common stored formats for one US number, so phone columns stored
+ * un-normalized (`(555) 123-4567`, `5551234567`, `+15551234567`) can be
+ * matched against any input format. The single shared variant set — the
+ * inbound webhooks and the consent read both use it so they cannot drift.
  */
-export async function isPhoneOptedOut(db: SupabaseClient, phone: string): Promise<boolean> {
-  const key = normalizeConsentPhone(phone);
-  if (!key) return false;
-  const { data } = await db
-    .from("sms_consent")
-    .select("opted_in_at, opted_out_at")
-    .eq("phone", key)
-    .maybeSingle();
-  if (!data) return false;
-  const optedOutAt = data.opted_out_at ? Date.parse(String(data.opted_out_at)) : null;
+export function profilePhoneVariants(phone: string): string[] {
+  const raw = String(phone ?? "").trim();
+  const key = normalizeConsentPhone(raw);
+  if (key.length !== 10) return [...new Set([raw, key])].filter(Boolean);
+  return [
+    ...new Set([
+      `+1${key}`,
+      key,
+      `1${key}`,
+      `(${key.slice(0, 3)}) ${key.slice(3, 6)}-${key.slice(6)}`,
+      `${key.slice(0, 3)}-${key.slice(3, 6)}-${key.slice(6)}`,
+      raw,
+    ]),
+  ].filter(Boolean);
+}
+
+/** Opted out iff opted_out_at is set and no opt-in is at least as recent. */
+export function optedOutFromTimestamps(
+  optedInRaw: unknown,
+  optedOutRaw: unknown,
+): boolean {
+  const optedOutAt = optedOutRaw ? Date.parse(String(optedOutRaw)) : null;
   if (optedOutAt == null || Number.isNaN(optedOutAt)) return false;
-  const optedInAt = data.opted_in_at ? Date.parse(String(data.opted_in_at)) : null;
-  // Opted out unless a later (or simultaneous) opt-in supersedes it.
+  const optedInAt = optedInRaw ? Date.parse(String(optedInRaw)) : null;
   if (optedInAt != null && !Number.isNaN(optedInAt) && optedInAt >= optedOutAt) return false;
   return true;
+}
+
+/**
+ * True when the number is opted out — the single unified read path. STOP and
+ * START are recorded in two places by different webhooks:
+ *   1. `sms_consent` ledger (phone-keyed) — the manager work-line webhook.
+ *   2. `profiles.sms_opt_out_at` / `sms_consent_at` (user-keyed) — the
+ *      vendor-agent webhook and in-portal consent.
+ * Every send funnels through this choke point. Supersede is computed GLOBALLY
+ * across both stores: the latest opt-in anywhere beats an older opt-out
+ * anywhere, so a STOP on one line followed by a START on the other re-enables
+ * the number instead of dead-ending. When `opts.userId` is given, that
+ * profile row's timestamps join the same comparison even if its stored phone
+ * is empty or unmatchable — a legacy user-keyed STOP keeps blocking until a
+ * later opt-in on any store supersedes it. A number we've never seen is NOT
+ * opted out; a secondary-store error drops only that store's timestamps, so
+ * the ledger alone still governs.
+ */
+export async function isPhoneOptedOut(
+  db: SupabaseClient,
+  phone: string,
+  opts?: { userId?: string | null },
+): Promise<boolean> {
+  const key = normalizeConsentPhone(phone);
+  const userId = opts?.userId ?? null;
+  if (!key && !userId) return false;
+
+  const optIns: number[] = [];
+  const optOuts: number[] = [];
+  const push = (arr: number[], raw: unknown) => {
+    const t = raw ? Date.parse(String(raw)) : NaN;
+    if (!Number.isNaN(t)) arr.push(t);
+  };
+
+  if (key) {
+    // 1) Canonical phone-keyed ledger.
+    const { data: ledger } = await db
+      .from("sms_consent")
+      .select("opted_in_at, opted_out_at")
+      .eq("phone", key)
+      .maybeSingle();
+    push(optIns, ledger?.opted_in_at);
+    push(optOuts, ledger?.opted_out_at);
+
+    // 2) Bridge the vendor store: any profile whose phone matches this number
+    // contributes its opt-out/consent timestamps to the global comparison.
+    try {
+      const { data: profiles } = await db
+        .from("profiles")
+        .select("sms_opt_out_at, sms_consent_at")
+        .in("phone", profilePhoneVariants(phone));
+      for (const p of profiles ?? []) {
+        push(optIns, p.sms_consent_at);
+        push(optOuts, p.sms_opt_out_at);
+      }
+    } catch {
+      /* fail open on the secondary store — the timestamps gathered above still govern */
+    }
+  }
+
+  // 3) Explicit user-keyed row (e.g. the vendor bound to a session), covering
+  // opt-outs recorded against a profile whose phone column doesn't match.
+  if (userId) {
+    try {
+      const { data: own } = await db
+        .from("profiles")
+        .select("sms_opt_out_at, sms_consent_at")
+        .eq("id", userId)
+        .maybeSingle();
+      push(optIns, own?.sms_consent_at);
+      push(optOuts, own?.sms_opt_out_at);
+    } catch {
+      /* fail open on the secondary store — the timestamps gathered above still govern */
+    }
+  }
+
+  if (optOuts.length === 0) return false;
+  const latestOut = Math.max(...optOuts);
+  const latestIn = optIns.length > 0 ? Math.max(...optIns) : null;
+  return latestIn == null || latestIn < latestOut;
 }
 
 /** Record that a number opted OUT (STOP/UNSUBSCRIBE/…). Idempotent upsert. */

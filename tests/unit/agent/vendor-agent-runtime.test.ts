@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { buildAlternatingHistory } from "@/lib/agent/vendor-agent.server";
+import { buildAlternatingHistory, deliverVendorAgentReply } from "@/lib/agent/vendor-agent.server";
 import { buildRegistry, defineTool, defineWriteTool, runReadTool, toAnthropicTools } from "@/lib/tools/registry";
 import { buildVendorAgentContext } from "@/lib/tools/context";
+import { sendSms } from "@/lib/twilio";
+
+vi.mock("@/lib/twilio", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/twilio")>();
+  return { ...actual, sendSms: vi.fn(async () => ({ sent: true })) };
+});
 
 describe("buildAlternatingHistory", () => {
   it("merges consecutive same-role rows and drops a leading assistant run", () => {
@@ -63,5 +69,99 @@ describe("write-tool allowlist", () => {
     // Allowlisting one write never opens another.
     const other = await runReadTool(registry, ctx, "write_thing", {}, { allowWrite: ["different_tool"] });
     expect(other.ok).toBe(false);
+  });
+});
+
+// The vendor gate must agree with the unified send choke point: a STOP on one
+// store followed by a later START on the other re-enables the SMS leg.
+describe("vendor SMS gate follows the unified cross-store consent read", () => {
+  const EARLIER = "2026-07-24T00:00:00.000Z";
+  const LATER = "2026-07-26T00:00:00.000Z";
+
+  type ProfileRow = { phone: string | null; sms_opt_out_at?: string | null; sms_consent_at?: string | null };
+  type ConsentRow = { phone: string; opted_in_at?: string | null; opted_out_at?: string | null };
+
+  function makeDb(opts: { profile: ProfileRow | null; consent?: ConsentRow[] }) {
+    return {
+      from(table: string) {
+        if (table === "profiles") {
+          let phones: string[] | null = null;
+          const chain: Record<string, unknown> = {
+            select: () => chain,
+            eq: () => chain,
+            in: (_col: string, vals: string[]) => {
+              phones = vals;
+              return chain;
+            },
+            maybeSingle: async () => ({ data: opts.profile, error: null }),
+            then: (resolve: (v: unknown) => unknown) =>
+              Promise.resolve({
+                data:
+                  opts.profile && phones && phones.includes(String(opts.profile.phone ?? ""))
+                    ? [opts.profile]
+                    : [],
+                error: null,
+              }).then(resolve),
+          };
+          return chain;
+        }
+        if (table === "sms_consent") {
+          let key: string | null = null;
+          const chain: Record<string, unknown> = {
+            select: () => chain,
+            eq: (_col: string, val: string) => {
+              key = val;
+              return chain;
+            },
+            maybeSingle: async () => ({
+              data: (opts.consent ?? []).find((r) => r.phone === key) ?? null,
+              error: null,
+            }),
+          };
+          return chain;
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    } as never;
+  }
+
+  const session = {
+    id: "sess-1",
+    vendor_user_id: "vendor-1",
+    vendor_phone_e164: "+15551234567",
+    inbox_thread_id: null,
+  } as never;
+
+  beforeEach(() => {
+    vi.mocked(sendSms).mockClear();
+    process.env.AXIS_AGENT_SMS_FROM = "+15550009999";
+  });
+
+  it("sends after STOP on profiles then START recorded only on the ledger", async () => {
+    const db = makeDb({
+      profile: { phone: "(555) 123-4567", sms_opt_out_at: EARLIER, sms_consent_at: null },
+      consent: [{ phone: "5551234567", opted_in_at: LATER }],
+    });
+    await deliverVendorAgentReply(db, session, "hello", "sms");
+    expect(vi.mocked(sendSms)).toHaveBeenCalledWith("+15551234567", "hello", "+15550009999");
+  });
+
+  it("stays muted when the profiles STOP is newer than the ledger opt-in", async () => {
+    const db = makeDb({
+      profile: { phone: "(555) 123-4567", sms_opt_out_at: LATER, sms_consent_at: null },
+      consent: [{ phone: "5551234567", opted_in_at: EARLIER }],
+    });
+    await deliverVendorAgentReply(db, session, "hello", "sms");
+    expect(vi.mocked(sendSms)).not.toHaveBeenCalled();
+  });
+
+  it("stays muted for a legacy user-keyed STOP with an unmatchable profile phone", async () => {
+    // Pre-ledger STOP: sms_opt_out_at set, profiles.phone empty, no ledger row.
+    const db = makeDb({
+      profile: { phone: "", sms_opt_out_at: EARLIER, sms_consent_at: null },
+      consent: [],
+    });
+    await deliverVendorAgentReply(db, session, "hello", "sms");
+    expect(vi.mocked(sendSms)).not.toHaveBeenCalled();
   });
 });

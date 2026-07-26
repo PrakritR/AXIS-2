@@ -15,6 +15,7 @@ import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { buildVendorAgentContext } from "@/lib/tools/context";
 import { vendorWorkOrderAgentRegistry } from "@/lib/tools";
 import { ESCALATE_TOOL_NAME } from "@/lib/tools/domains/vendor-work-order";
+import { isPhoneOptedOut, optedOutFromTimestamps } from "@/lib/sms-consent";
 import { normalizeE164, sendSms } from "@/lib/twilio";
 
 type Db = SupabaseClient;
@@ -105,10 +106,22 @@ async function vendorSmsState(db: Db, session: VendorAgentSessionRow): Promise<{
   if (!session.vendor_user_id) return { optedOut: false, consentAt: null };
   const { data } = await db
     .from("profiles")
-    .select("sms_opt_out_at, sms_consent_at")
+    .select("phone, sms_opt_out_at, sms_consent_at")
     .eq("id", session.vendor_user_id)
     .maybeSingle();
-  return { optedOut: Boolean(data?.sms_opt_out_at), consentAt: (data?.sms_consent_at as string | null) ?? null };
+  let optedOut = optedOutFromTimestamps(data?.sms_consent_at, data?.sms_opt_out_at);
+  // The unified read (global supersede across the ledger, phone-matched
+  // profiles, AND the vendor's own user-keyed row) is AUTHORITATIVE, so this
+  // gate always agrees with the send-time choke point — a STOP recorded on
+  // either store blocks, and a later cross-store START re-enables — while a
+  // legacy user-keyed STOP with an unmatchable phone still counts.
+  const phone = String((data?.phone as string | null) ?? "").trim() || session.vendor_phone_e164 || null;
+  try {
+    optedOut = await isPhoneOptedOut(db, phone ?? "", { userId: session.vendor_user_id });
+  } catch {
+    /* fail open — same posture as the send-time choke point */
+  }
+  return { optedOut, consentAt: (data?.sms_consent_at as string | null) ?? null };
 }
 
 /** Send the agent's reply out over every channel the session has. Not a model tool.
@@ -290,8 +303,8 @@ export async function ensureVendorAgentSession(
       .select("phone, sms_opt_out_at, sms_consent_at")
       .eq("id", args.vendorUserId)
       .maybeSingle();
-    rawPhone = (data?.phone as string | null) ?? null;
-    optedOut = Boolean(data?.sms_opt_out_at);
+    rawPhone = String((data?.phone as string | null) ?? "").trim() || null;
+    optedOut = optedOutFromTimestamps(data?.sms_consent_at, data?.sms_opt_out_at);
     consentOk = Boolean(data?.sms_consent_at);
   }
   if (!rawPhone) {
@@ -303,6 +316,17 @@ export async function ensureVendorAgentSession(
     rawPhone = ((data?.row_data as { phone?: string } | null)?.phone ?? "").trim() || null;
   }
   const phoneE164 = rawPhone ? normalizeE164(rawPhone) : null;
+  // Unified opt-out: the global read (ledger + profile variants + the
+  // vendor's own user-keyed row, global supersede) is AUTHORITATIVE, covering
+  // the directory-only number, cross-store re-opt-ins, and legacy user-keyed
+  // STOPs with an unmatchable phone alike.
+  if (phoneE164 || args.vendorUserId) {
+    try {
+      optedOut = await isPhoneOptedOut(db, phoneE164 ?? "", { userId: args.vendorUserId });
+    } catch {
+      /* fail open — consistent with the send-time choke point */
+    }
+  }
 
   const { data: sessionData, error } = await db
     .from("agent_sessions")
