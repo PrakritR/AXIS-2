@@ -104,7 +104,7 @@ describe("in-progress-application", () => {
       residentEmail: "jane@test.com",
     });
     expect(inProgressApplicationResumeUrl("https://axis.test", row)).toBe(
-      "https://axis.test/resident/applications/apply?propertyId=prop-1",
+      "https://axis.test/rent/apply?propertyId=prop-1",
     );
   });
 

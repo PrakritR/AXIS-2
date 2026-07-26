@@ -77,7 +77,7 @@ function displayRoomForRow(row: DemoApplicantRow): string {
 function rowStatusLabel(row: DemoApplicantRow): string {
   if (row.bucket === "approved") return "Approved";
   if (row.bucket === "rejected") return "Rejected";
-  if (isInProgressApplicationRow(row)) return "In progress";
+  if (isInProgressApplicationRow(row)) return "Incomplete";
   return "Pending review";
 }
 

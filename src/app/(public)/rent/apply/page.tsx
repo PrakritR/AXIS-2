@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { redirect } from "next/navigation";
 import { PublicApplyClient } from "./public-apply-client";
@@ -25,5 +26,9 @@ export default async function ApplyPage({
     redirect(applyPath);
   }
 
-  return <PublicApplyClient />;
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-3xl px-4 py-16 text-center text-muted">Loading application…</div>}>
+      <PublicApplyClient />
+    </Suspense>
+  );
 }
