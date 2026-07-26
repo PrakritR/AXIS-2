@@ -1194,7 +1194,10 @@ export function ManagerAddListingForm({
       buildListingModalAssistantContext({
         wizardTitle: wizardTitlePrefix,
         stepLabel: LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing",
-        propertyId: savedListingId ?? draftIdRef.current,
+        // savedListingId mirrors draftIdRef at every render-observable point
+        // (both start from editDraftId; every ref assignment of a real id also
+        // sets it), and refs must not be read during render (react-hooks/refs).
+        propertyId: savedListingId,
         submission: sub,
       }),
     [wizardTitlePrefix, stepIndex, savedListingId, sub],
