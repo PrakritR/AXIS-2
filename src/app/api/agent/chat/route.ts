@@ -81,6 +81,7 @@ export async function POST(req: Request) {
       messages = await enrichManagerChatImageAttachments(ctx.db, ctx.landlordId, messages, {
         requireSuccessfulUpload: listingDraft,
         purpose: promotion ? "promotion" : "listing",
+        contextHint,
       });
     } catch (e) {
       console.error("[agent/chat] listing photo upload failed:", e);

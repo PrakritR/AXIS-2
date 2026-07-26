@@ -13,10 +13,13 @@ import {
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
+import { buildListingModalAssistantContext } from "@/lib/listing-assistant-context";
+import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
   submitManagerPendingPropertyToServer,
+  syncPropertyPipelineFromServer,
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
@@ -30,6 +33,7 @@ import {
   listingWizardHasUnsavedInput,
   stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
+import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import {
   propertyMediaReadinessLabel,
@@ -1182,6 +1186,38 @@ export function ManagerAddListingForm({
   const isFinalStep = stepIndex === lastStepIndex;
   const isPreviewWizard = wizardScope === "preview";
   const wizardTitlePrefix = isPreviewWizard ? "Edit preview" : isEditMode ? "Edit listing" : "New listing";
+  const [savedListingId, setSavedListingId] = useState<string | null>(
+    () => editDraftId?.trim() || editPendingId?.trim() || editListingId?.trim() || editRequestChangeId?.trim() || null,
+  );
+  const listingAssistantContext = useMemo(
+    () =>
+      buildListingModalAssistantContext({
+        wizardTitle: wizardTitlePrefix,
+        stepLabel: LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing",
+        propertyId: savedListingId ?? draftIdRef.current,
+        submission: sub,
+      }),
+    [wizardTitlePrefix, stepIndex, savedListingId, sub],
+  );
+
+  useEffect(() => {
+    const propertyId = savedListingId ?? draftIdRef.current;
+    if (!propertyId?.trim() || !userId) return;
+    const onAssistantUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<ListingAssistantUpdatedDetail>).detail;
+      if (!detail || detail.propertyId !== propertyId) return;
+      void (async () => {
+        await syncPropertyPipelineFromServer({ userId, force: true });
+        const hit = resolveManagerListingSubmissionForPropertyId(userId, propertyId);
+        if (hit) {
+          setSub(normalizeManagerListingSubmissionV1(hit.sub));
+          showToast("Assistant added photos to your listing.");
+        }
+      })();
+    };
+    window.addEventListener(LISTING_ASSISTANT_UPDATED_EVENT, onAssistantUpdated);
+    return () => window.removeEventListener(LISTING_ASSISTANT_UPDATED_EVENT, onAssistantUpdated);
+  }, [savedListingId, showToast, userId]);
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
@@ -2183,6 +2219,7 @@ export function ManagerAddListingForm({
       }
       setDraftSaveError(null);
       draftIdRef.current = savedId;
+      setSavedListingId(savedId);
       onSaved?.();
       const droppedAttachments = droppedAttachmentsRef.current;
       droppedAttachmentsRef.current = false;
@@ -2460,7 +2497,7 @@ export function ManagerAddListingForm({
           </p>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
           {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
@@ -4780,7 +4817,13 @@ export function ManagerAddListingForm({
           ) : null}
         </div>
 
-        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
+        <ModalAssistantStrip
+          contextHint={listingAssistantContext}
+          storageScopeKey={wizardTitlePrefix}
+          className="z-10 shrink-0 px-5 sm:px-6"
+        />
+
+        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
           {draftSaveError ? (
             <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
               {draftSaveError}
@@ -4842,10 +4885,6 @@ export function ManagerAddListingForm({
               )}
             </div>
           </div>
-          <ModalAssistantStrip
-            contextHint={`${wizardTitlePrefix} · ${LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing"}`}
-            storageScopeKey={wizardTitlePrefix}
-          />
         </div>
       </form>
 

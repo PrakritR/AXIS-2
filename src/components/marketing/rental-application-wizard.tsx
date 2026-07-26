@@ -789,10 +789,6 @@ function RentalApplicationWizardInner({
   }, [demoAutofillSubmitPending, finalizeApplicationSubmit, form]);
 
   const primaryButtonLabel = useMemo(() => {
-    if (step === 3) {
-      const stepErrors = validateRentalWizardStep(3, form);
-      if (countValidationErrors(stepErrors) > 0) return "Search house";
-    }
     if (step !== 12) return "Continue";
     if (!applicationFeeGate.needsFee) return submitting ? "Submitting…" : "Submit application";
     const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
