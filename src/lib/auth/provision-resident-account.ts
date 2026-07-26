@@ -63,13 +63,16 @@ export type ProvisionResidentResult =
   | { ok: false; status: number; error: string };
 
 /**
- * Resident signup without typing an Axis ID — links by email when an application
- * exists. Callers that have PROVEN email control (setup token, OAuth) inherit a
- * matching application's identity/approval by default. Callers that have NOT
- * proven control (anonymous self-serve `resident-register`) MUST pass
- * `inheritFromApplication: false` — default-deny — so signup can never claim or
- * inherit a prior applicant's application; that only happens later, once the
- * verification link is used.
+ * Resident account provisioning — links by email when an application exists.
+ *
+ * **Default-deny inheritance.** Inheriting a matching application's identity and
+ * approval requires PROVEN email control, so a caller must OPT IN with
+ * `inheritFromApplication: true`. Only the setup-token and OAuth flows (which
+ * prove control) pass it. The default — and anything that forgets the flag,
+ * including the anonymous self-serve `resident-register` path — inherits NOTHING:
+ * a clean profile (`application_approved=false`, no application PII, no link),
+ * so a failure to prove control can never accidentally claim a prior applicant's
+ * application.
  */
 export async function provisionResidentAccountByEmail(
   supabase: SupabaseClient,
@@ -89,11 +92,11 @@ export async function provisionResidentAccountByEmail(
   // application snapshot — it is the most recent value they vouched for.
   const explicitPhone = opts.phone?.trim() ? normalizeE164(opts.phone.trim()) : null;
 
-  // Default-deny: unproven callers never inherit. When inheritance is off we
-  // never even LOOK UP the application, so no id/approval/PII can leak onto the
-  // fresh profile — every downstream field already treats a null match as "clean".
+  // Default-deny: only an explicit opt-in (proven email control) looks up the
+  // application at all. Otherwise `matchingApplication` stays null and every
+  // downstream field treats it as a clean, un-inheriting profile.
   const matchingApplication =
-    opts.inheritFromApplication === false ? null : await findApplicationByEmail(supabase, normalEmail);
+    opts.inheritFromApplication === true ? await findApplicationByEmail(supabase, normalEmail) : null;
   const linkedApplication = Boolean(matchingApplication);
 
   const existingAuthId = await findAuthUserIdByEmail(supabase, normalEmail);

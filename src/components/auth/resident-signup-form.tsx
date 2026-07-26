@@ -4,6 +4,7 @@ import posthog from "posthog-js";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
+import { ResidentAppleSignUpButton } from "@/components/auth/resident-apple-sign-up-button";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,7 +159,10 @@ export function ResidentSignupForm({
   };
 
   const socialBlock = (
-    <ResidentGoogleSignUpButton axisId={axisId} nextPath={resolvedNext} disabled={locked} />
+    <div className="space-y-3">
+      <ResidentAppleSignUpButton axisId={axisId} nextPath={resolvedNext} disabled={locked} />
+      <ResidentGoogleSignUpButton axisId={axisId} nextPath={resolvedNext} disabled={locked} />
+    </div>
   );
 
   const fieldsCompact = (

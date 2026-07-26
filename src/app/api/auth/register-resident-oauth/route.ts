@@ -68,6 +68,9 @@ export async function POST(req: Request) {
       email: oauthEmail,
       fullName,
       phone: lookup.phone,
+      // OAuth + setup token authorize this flow — email control is proven, so
+      // inherit the matching application's identity/approval (default-deny opt-in).
+      inheritFromApplication: true,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });

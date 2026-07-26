@@ -73,12 +73,27 @@ describe("provisionResidentAccountByEmail default-deny", () => {
     expect(captured.upsert?.phone).not.toContain("2065551111");
   });
 
-  it("default (proven caller) DOES inherit the approved application — proving the flag is the gate", async () => {
+  it("the DEFAULT (no flag) inherits nothing — fail-safe: a forgotten flag never grants inheritance", async () => {
+    const { client, captured } = mockSupabase();
+    const result = await provisionResidentAccountByEmail(client as never, {
+      userId: "user-1",
+      email: "guest@example.com",
+      fullName: "New Person",
+      // No inheritFromApplication flag at all → default-deny.
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.linkedApplication).toBe(false);
+    expect(captured.upsert?.application_approved).toBe(false);
+    expect(captured.upsert?.full_name).toBe("New Person");
+  });
+
+  it("inheritFromApplication:true (proven caller) DOES inherit — proving the flag is the gate", async () => {
     const { client, captured } = mockSupabase();
     const result = await provisionResidentAccountByEmail(client as never, {
       userId: "user-1",
       email: "guest@example.com",
       // No fullName so we can observe the application's name being inherited.
+      inheritFromApplication: true,
     });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.linkedApplication).toBe(true);
