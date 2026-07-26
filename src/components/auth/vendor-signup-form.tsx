@@ -1,9 +1,10 @@
 "use client";
 
 import posthog from "posthog-js";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
+import { AuthSignedInRoleBanner } from "@/components/auth/auth-signed-in-role-banner";
 import { VendorAppleSignUpButton } from "@/components/auth/vendor-apple-sign-up-button";
 import { VendorGoogleSignUpButton } from "@/components/auth/vendor-google-sign-up-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -54,6 +55,19 @@ export function VendorSignupForm({
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [localDevConfirmHint, setLocalDevConfirmHint] = useState(false);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      if (!cancelled) setSignedInEmail(data.session?.user?.email ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const compact = variant === "compact";
   const locked = disabled || busy;
@@ -206,6 +220,8 @@ export function VendorSignupForm({
           Free vendor account · work orders &amp; payouts through PropLane.
         </p>
 
+        {signedInEmail ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
+
         {socialBlock}
 
         <AuthDivider label="or enter your details" />
@@ -220,7 +236,7 @@ export function VendorSignupForm({
           onClick={() => void submit()}
           event="vendor_signup_submitted"
         >
-          {busy ? "Creating…" : "Create vendor account"}
+          {busy ? "Creating…" : signedInEmail ? "Set up vendor account" : "Create vendor account"}
         </Button>
 
         {error ? <p className="text-center text-xs text-rose-600">{error}</p> : null}
@@ -237,6 +253,7 @@ export function VendorSignupForm({
 
   return (
     <div className="space-y-4">
+      {signedInEmail ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
       {socialBlock}
       <AuthDivider label="or enter your details" />
       {passwordFieldsDefault}
@@ -252,7 +269,7 @@ export function VendorSignupForm({
         data-attr="vendor-signup-submit"
         event="vendor_signup_submitted"
       >
-        {busy ? "Creating account…" : "Create vendor account"}
+        {busy ? "Creating account…" : signedInEmail ? "Set up vendor account" : "Create vendor account"}
       </Button>
       {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
     </div>
