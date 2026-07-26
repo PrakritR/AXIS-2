@@ -130,6 +130,48 @@ describe("parseResidentReceiptContext — reference-less real receipts", () => {
   });
 });
 
+describe("parseResidentReceiptContext — direction guard (money must have been RECEIVED)", () => {
+  it("rejects a Venmo payment REQUEST from a trusted sender", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "Junaid Mohammed requests $50.00",
+        body: "Junaid Mohammed requests $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a Zelle payment-request phrasing that mimics 'received … from'", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "noreply@zellepay.com",
+        subject: "You have received a payment request",
+        body: "You have received a payment request from Junaid Mohammed for $50.00\n5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects an OUTBOUND 'You paid' send even when the memo names the property", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "venmo@venmo.com",
+        subject: "You paid Junaid Mohammed $50.00",
+        body: "You paid Junaid Mohammed $50.00\nRefund — Application fee at 5257 Brooklyn avenue",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects an outbound send, request reminder, and statement even with a PL- code", () => {
+    for (const email of [
+      { subject: "You sent $50.00 with Zelle", body: "Memo: PL-ABC123" },
+      { subject: "Reminder: Junaid Mohammed requests $50.00", body: "PL-ABC123" },
+      { subject: "Your Venmo statement", body: "Junaid Mohammed paid you $50.00 · statement · PL-ABC123" },
+    ]) {
+      expect(parseResidentReceiptContext({ fromEmail: "venmo@venmo.com", ...email })).toBeNull();
+    }
+  });
+});
+
 describe("bankSenderIsAllowed — hostname match, never substring (money-path auth)", () => {
   it("accepts an exact allowed bank domain", () => {
     expect(bankSenderIsAllowed("chase.com")).toBe(true);

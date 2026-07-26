@@ -19,7 +19,12 @@ Both paths run the SAME parse → match → mark-paid pipeline
 (`src/lib/payment-receipt-email/`). Only genuine receipts are trusted: the
 sender host must be Venmo/Zelle (or an allow-listed bank for Zelle,
 `BANK_RECEIPT_DOMAINS`) — a mere mention of "venmo"/"zelle" in the body from an
-untrusted host is rejected.
+untrusted host is rejected. The email must also read as **money received**
+(`receiptTextIndicatesInboundPayment`: "X paid you" / "sent you" /
+"received $… from Y"); payment requests, request reminders,
+statements/transaction history, and outbound "You paid / You sent" notices are
+rejected before matching — even with a `PL-` code — because a request note is
+payer-controlled and none of them mean money arrived.
 
 ## Matching — two tiers, biased to safety
 
@@ -33,13 +38,15 @@ model never invents a match.
 2. **Reference-less fallback (`receipt-fallback-match.ts`).** Real people write
    "Application fee for room 5 at 5257 Brooklyn avenue" with no code. We match on
    **amount + payer name + property/unit context**:
-   - Payer name must share **first + last** with the resident on file.
+   - Payer name must share **two distinct tokens (first + last)** with the
+     resident on file.
    - Property match needs the **street number _and_ a distinctive word** from the
      listing label in the memo (a generic "avenue" alone never matches).
    - Auto-mark only when **exactly one** charge has the amount and a strong
-     identity signal. Otherwise → **`ambiguous`**, surfaced for the manager to
-     confirm. **Amount alone never auto-credits.** A wrong auto-credit is worse
-     than leaving a charge pending.
+     identity signal. Otherwise the receipt is counted **`ambiguous`** and the
+     charge simply stays **pending** for the manager to mark paid manually —
+     there is no approval queue, and nothing is credited. **Amount alone never
+     auto-credits.** A wrong auto-credit is worse than leaving a charge pending.
 
 **Idempotency:** the source email id is written onto the charge
 (`paidViaGmailMessageId` / `paidViaEmailReceiptId`); re-processing the same
@@ -67,8 +74,9 @@ applied to at most one charge.
 ### Detection timing
 - **Forwarded email:** matched the moment the receipt lands.
 - **Linked Gmail:** matched when the manager taps **Sync now**.
-- Anything we can't confidently attribute is surfaced as **ambiguous** for the
-  manager to confirm, not silently credited.
+- Anything we can't confidently attribute is counted **ambiguous** and left
+  alone — the charge stays pending for the manager to mark paid manually, and
+  is never silently credited.
 
 ## Tests
 - `tests/unit/receipt-fallback-match.test.ts` — name/property/amount matching.

@@ -126,6 +126,44 @@ describe("markChargePaidFromReceipt — reference-less real receipt", () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
+  it("never credits from a Venmo payment REQUEST (no money received)", async () => {
+    const requestEmail = {
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed requests $50.00",
+      body: "Junaid Mohammed requests $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    };
+    const receipt = parseResidentReceiptContext(requestEmail);
+    expect(receipt).toBeNull();
+
+    const db = makeDb([charge({})], new Set());
+    if (receipt) {
+      await markChargePaidFromReceipt(db, MANAGER_ID, receipt, {
+        sourceId: "gmail-msg-request",
+        sourceField: "paidViaGmailMessageId",
+      });
+    }
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
+  it("never credits from the manager's own OUTBOUND 'You paid' email", async () => {
+    const outboundEmail = {
+      fromEmail: "venmo@venmo.com",
+      subject: "You paid Junaid Mohammed $50.00",
+      body: "You paid Junaid Mohammed $50.00\nRefund — Application fee at 5257 Brooklyn avenue",
+    };
+    const receipt = parseResidentReceiptContext(outboundEmail);
+    expect(receipt).toBeNull();
+
+    const db = makeDb([charge({})], new Set());
+    if (receipt) {
+      await markChargePaidFromReceipt(db, MANAGER_ID, receipt, {
+        sourceId: "gmail-msg-outbound",
+        sourceField: "paidViaGmailMessageId",
+      });
+    }
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
   it("is idempotent — the same receipt processed twice never double-credits", async () => {
     const processed = new Set<string>();
     // First run persists the source id (as the real upsert would).

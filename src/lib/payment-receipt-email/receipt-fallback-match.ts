@@ -84,15 +84,16 @@ function nameTokens(value: string): string[] {
 
 /**
  * True only when the payer name and the resident-on-file name share at least two
- * tokens (first + last). Requires both sides to carry ≥ 2 name tokens so a lone
- * first name ("John") can never match every John on the ledger.
+ * DISTINCT tokens (first + last). Requires both sides to carry ≥ 2 distinct name
+ * tokens so a lone first name ("John") — or a duplicated one ("Junaid Junaid") —
+ * can never match every John on the ledger.
  */
 export function payerNameMatchesResident(payerName: string | null, residentName: string): boolean {
   if (!payerName) return false;
-  const pt = nameTokens(payerName);
+  const pt = new Set(nameTokens(payerName));
   const rt = new Set(nameTokens(residentName));
-  if (pt.length < 2 || rt.size < 2) return false;
-  const overlap = pt.filter((t) => rt.has(t));
+  if (pt.size < 2 || rt.size < 2) return false;
+  const overlap = [...pt].filter((t) => rt.has(t));
   return overlap.length >= 2;
 }
 

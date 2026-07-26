@@ -38,6 +38,10 @@ describe("payerNameMatchesResident", () => {
     expect(payerNameMatchesResident("Junaid", "Junaid Mohammed")).toBe(false);
   });
 
+  it("does not let a duplicated payer token count as first + last", () => {
+    expect(payerNameMatchesResident("Junaid Junaid", "Junaid Mohammed")).toBe(false);
+  });
+
   it("returns false for a null payer name", () => {
     expect(payerNameMatchesResident(null, "Junaid Mohammed")).toBe(false);
   });

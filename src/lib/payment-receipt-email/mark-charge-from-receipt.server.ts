@@ -33,7 +33,34 @@ async function receiptSourceAlreadyProcessed(
   return (data ?? []).length > 0;
 }
 
-async function loadPendingChargesForManager(
+/**
+ * Batched idempotency lookup: which of these source email ids are already
+ * written onto a charge. One query per sync instead of one per message; a
+ * failed lookup logs and returns empty (same fail-open behavior as the
+ * per-message check — the amount/identity match is still required to credit).
+ */
+export async function loadProcessedReceiptSourceIds(
+  db: SupabaseClient,
+  field: "paidViaEmailReceiptId" | "paidViaGmailMessageId",
+  sourceIds: string[],
+): Promise<Set<string>> {
+  if (sourceIds.length === 0) return new Set();
+  const { data, error } = await db
+    .from("portal_household_charge_records")
+    .select(`source:row_data->>${field}`)
+    .in(`row_data->>${field}`, sourceIds);
+  if (error) {
+    console.warn(`payment-receipt batched idempotency check failed (${field})`, error.message);
+    return new Set();
+  }
+  return new Set(
+    ((data ?? []) as { source: string | null }[])
+      .map((row) => row.source)
+      .filter((source): source is string => Boolean(source)),
+  );
+}
+
+export async function loadPendingChargesForManager(
   db: SupabaseClient,
   managerUserId: string,
 ): Promise<HouseholdCharge[]> {
@@ -59,14 +86,24 @@ export async function markChargePaidFromReceipt(
   opts: {
     sourceId: string;
     sourceField: "paidViaEmailReceiptId" | "paidViaGmailMessageId";
+    /**
+     * Batched sync state: the caller already ran the idempotency lookup and
+     * loaded pending charges once for the whole sync, so this call does zero
+     * extra reads. The caller owns keeping `pendingCharges` current (drop a
+     * charge after it is marked paid).
+     */
+    preloaded?: { alreadyProcessed: boolean; pendingCharges: HouseholdCharge[] };
   },
 ): Promise<MarkChargeFromReceiptResult> {
-  if (await receiptSourceAlreadyProcessed(db, opts.sourceId, opts.sourceField)) {
+  const alreadyProcessed = opts.preloaded
+    ? opts.preloaded.alreadyProcessed
+    : await receiptSourceAlreadyProcessed(db, opts.sourceId, opts.sourceField);
+  if (alreadyProcessed) {
     return { outcome: "idempotent", sourceId: opts.sourceId };
   }
 
   const referenceLabel = receipt.paymentReference ?? "(no reference)";
-  const pending = await loadPendingChargesForManager(db, managerUserId);
+  const pending = opts.preloaded?.pendingCharges ?? (await loadPendingChargesForManager(db, managerUserId));
 
   let charge: HouseholdCharge;
   let matchedBy: "reference" | "context";

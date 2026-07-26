@@ -152,6 +152,42 @@ export function parsePaymentReceiptEmail(opts: {
 const MEMO_CONTEXT_MAX_CHARS = 4000;
 
 /**
+ * Trusted senders mail far more than received-money receipts: payment requests,
+ * request reminders, statements, and the account holder's own outbound "You
+ * paid" notices all come from the same hosts and all carry a dollar amount.
+ * None of them mean money arrived, so none may ever mark a charge paid. The
+ * request note is fully payer-controlled, which makes an unguarded request
+ * email a resident-triggerable false credit.
+ */
+const RECEIPT_REJECT_PATTERNS = [
+  /\byou paid\b/i,
+  /\byou sent\b/i,
+  /\brequest(?:s|ed|ing)?\b/i,
+  /\bis charging\b/i,
+  /\breminder\b/i,
+  /\bstatement\b/i,
+  /\btransaction history\b/i,
+];
+
+const RECEIPT_INBOUND_PATTERNS = [
+  /\bpaid you\b/i,
+  /\bsent you\b/i,
+  /\breceived\b[^\n]{0,60}?\bfrom\b/i,
+];
+
+/**
+ * True only when the text POSITIVELY reads as money received ("X paid you",
+ * "sent you", "received $… from Y") and carries no request/reminder/statement/
+ * outbound phrasing. Reject wins over accept: Zelle's "You have received a
+ * payment request from X" satisfies the received-from shape but is not money.
+ */
+export function receiptTextIndicatesInboundPayment(text: string): boolean {
+  const scoped = text.length > AMOUNT_SCAN_MAX_CHARS ? text.slice(0, AMOUNT_SCAN_MAX_CHARS) : text;
+  if (RECEIPT_REJECT_PATTERNS.some((pattern) => pattern.test(scoped))) return false;
+  return RECEIPT_INBOUND_PATTERNS.some((pattern) => pattern.test(scoped));
+}
+
+/**
  * A resident-charge receipt with everything we can pull off the notification —
  * including receipts that carry NO `PL-` code. `paymentReference` is null when
  * absent; `payerName` and `memoText` back the reference-less fallback match.
@@ -191,9 +227,12 @@ export function extractReceiptPayerName(subject: string, body: string): string |
 /**
  * Parse a resident-charge receipt for BOTH the reference path and the
  * reference-less fallback. Requires a trusted channel + sender + a positive
- * amount (same authentication as {@link parsePaymentReceiptEmail}); the `PL-`
- * code is optional here. Returns null for anything that is not a genuine,
- * amount-bearing Zelle/Venmo receipt.
+ * amount (same authentication as {@link parsePaymentReceiptEmail}) AND
+ * received-money phrasing ({@link receiptTextIndicatesInboundPayment}) — a
+ * payment request, reminder, statement, or outbound send is never a candidate,
+ * even when it carries a `PL-` code. The code itself is optional here. Returns
+ * null for anything that is not a genuine, amount-bearing inbound Zelle/Venmo
+ * receipt.
  */
 export function parseResidentReceiptContext(opts: {
   fromEmail: string;
@@ -207,6 +246,7 @@ export function parseResidentReceiptContext(opts: {
   const channel = inferChannel(opts);
   if (!channel) return null;
   if (!senderLooksLikeReceipt(opts.fromEmail, channel)) return null;
+  if (!receiptTextIndicatesInboundPayment(combined)) return null;
 
   const amountCents = parseAmountCents(combined);
   if (amountCents == null) return null;
