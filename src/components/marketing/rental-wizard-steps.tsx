@@ -25,7 +25,6 @@ import {
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
 import { listingHoldingDepositAmount } from "@/lib/household-charges";
-import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
@@ -1833,13 +1832,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
-    // PropLane covers Stripe's processing cost, so the applicant is charged the
-    // listing's application fee at face value on every channel. This stays
-    // derived from `residentProcessingFeeCents` (rather than hard-coded to 0) so
-    // the disclosure can never drift from what checkout actually collects.
-    const appFeeProcessingCents = !applicationFeeGate.paid && channels.ach && isAchApplicationFeeChannel(payChannel)
-      ? residentProcessingFeeCents(appFeeSubtotalCents, "card")
-      : 0;
+    // The plan-based service fee applies to RESIDENT charges, not the rental
+    // application fee. An applicant always pays the application fee at face value
+    // (PropLane absorbs Stripe's cost) — the application-fee checkout passes
+    // `feePayer: "proplane"` — so no processing fee is ever added here.
+    const appFeeProcessingCents = 0;
     const appFeeLabel =
       appFeeProcessingCents > 0
         ? `$${((appFeeSubtotalCents + appFeeProcessingCents) / 100).toFixed(2)}`

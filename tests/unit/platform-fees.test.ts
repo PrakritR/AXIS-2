@@ -37,14 +37,14 @@ describe("platform-fees", () => {
 });
 
 describe("resident payment fees", () => {
-  it("residents pay no fee on any method — PropLane absorbs processing", () => {
-    expect(residentProcessingFeeCents(10000, "ach")).toBe(0);
-    expect(residentProcessingFeeCents(10000, "card")).toBe(0);
-    expect(residentProcessingFeeCents(10000, "link")).toBe(0);
+  it("the service fee is Stripe's real per-method cost", () => {
+    expect(residentProcessingFeeCents(10000, "ach")).toBe(80); // 0.8%
+    expect(residentProcessingFeeCents(10000, "card")).toBe(320); // 2.9% + $0.30
+    expect(residentProcessingFeeCents(10000, "link")).toBe(320);
   });
 
-  it("retains nothing from the charge — application fee is 0 on every tier", () => {
-    expect(residentConnectApplicationFeeCents(10000, "ach", "free")).toBe(0);
-    expect(residentConnectApplicationFeeCents(10000, "card", "business")).toBe(0);
+  it("the retained application fee (resident-pays value) equals the service fee — the 0-bps platform take adds nothing", () => {
+    expect(residentConnectApplicationFeeCents(10000, "ach", "free")).toBe(80);
+    expect(residentConnectApplicationFeeCents(10000, "card", "business")).toBe(320);
   });
 });

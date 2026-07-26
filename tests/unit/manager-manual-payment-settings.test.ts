@@ -27,6 +27,7 @@ describe("manager manual payment settings", () => {
       venmoPaymentsEnabled: true,
       venmoContact: "@payme",
       receiptAutoMarkEnabled: true,
+      serviceFeePayer: "resident",
     });
   });
 
@@ -44,6 +45,7 @@ describe("manager manual payment settings", () => {
       venmoPaymentsEnabled: false,
       venmoContact: "",
       receiptAutoMarkEnabled: true,
+      serviceFeePayer: "resident",
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   axisAchCheckoutProcessing,
   createAxisAchCheckoutSession,
 } from "@/lib/stripe-axis-ach-checkout";
+import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import { mockCheckoutSession } from "../mocks/stripe/events";
 
 describe("stripe-axis-ach-checkout", () => {
@@ -168,19 +169,16 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
     expect(calls[0]).not.toHaveProperty("payment_method_configuration");
   });
 
-  // ── Money path: face value in, full subtotal out, PropLane bears Stripe's fee.
+  // ── Money path: the ACTUAL session params for each fee-payer.
   //
-  // These assert the ACTUAL session params, not just the policy helpers: the
-  // payer is charged the subtotal and nothing else, `application_fee_amount` is
-  // never sent, and the charge is a DESTINATION charge on PropLane's platform
-  // account (transfer_data.destination, no on_behalf_of, no Stripe-Account
-  // header) — which is what puts Stripe's processing fee on PropLane instead of
-  // the manager.
-  describe("no fees: payer charged subtotal, manager paid subtotal", () => {
+  // Every case stays a DESTINATION charge on PropLane's platform account
+  // (transfer_data.destination, no on_behalf_of, no Stripe-Account header), so
+  // the money always lands in the manager's own account. Only who bears the
+  // service fee moves; `application_fee_amount` and the fee line item follow.
+  describe("service fee placement by fee-payer", () => {
     const methods = ["ach", "card", "link"] as const;
-    const tiers = ["free", "pro", "business", null] as const;
-    // $1.00 floor, a $0.30-fixed-fee-sensitive amount, the old ACH cap boundary,
-    // and a large rent payment.
+    // $1.00 floor, a $0.30-fixed-fee-sensitive amount, the ACH cap boundary, and
+    // a large rent payment.
     const subtotals = [100, 5_000, 62_500, 499_900];
 
     function lineItemTotal(params: Record<string, unknown>): number {
@@ -189,49 +187,122 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
     }
 
     for (const method of methods) {
-      for (const tier of tiers) {
-        for (const subtotal of subtotals) {
-          it(`${method} @ $${(subtotal / 100).toFixed(2)} (tier=${tier ?? "none"})`, async () => {
-            const { stripe, calls } = captureStripe();
-            const result = await createAxisAchCheckoutSession(stripe, {
-              ...baseInput,
-              amountCents: subtotal,
-              paymentMethod: method,
-              managerTier: tier,
-            });
-            const params = calls[0]!;
-            const pid = params.payment_intent_data as Record<string, unknown>;
+      for (const subtotal of subtotals) {
+        const fee = residentProcessingFeeCents(subtotal, method);
 
-            // 1. The payer is charged EXACTLY the subtotal: no fee line item.
-            expect(lineItemTotal(params)).toBe(subtotal);
-            expect((params.line_items as unknown[]).length).toBe(1);
-            expect(result.totalCents).toBe(subtotal);
-            expect(result.subtotalCents).toBe(subtotal);
-            expect(result.processingFeeCents).toBe(0);
-            expect(result.axisFeeCents).toBe(0);
-
-            // 2. Nothing is retained, so the FULL subtotal transfers out.
-            expect(pid).not.toHaveProperty("application_fee_amount");
-            expect(result.platformFeeCents).toBe(0);
-            expect(lineItemTotal(params) - 0).toBe(subtotal);
-
-            // 3. Destination charge on the PLATFORM account — PropLane is
-            //    merchant of record and therefore bears Stripe's fee.
-            expect(pid.transfer_data).toEqual({ destination: "acct_test" });
-            expect(pid).not.toHaveProperty("on_behalf_of");
-
-            // 4. The disclosed metadata matches what was charged.
-            const metadata = params.metadata as Record<string, string>;
-            expect(metadata.subtotal_cents).toBe(String(subtotal));
-            expect(metadata.processing_fee_cents).toBe("0");
-            expect(metadata.axis_fee_cents).toBe("0");
+        it(`resident pays: ${method} @ $${(subtotal / 100).toFixed(2)} → subtotal + fee, appFee=fee`, async () => {
+          const { stripe, calls } = captureStripe();
+          const result = await createAxisAchCheckoutSession(stripe, {
+            ...baseInput,
+            amountCents: subtotal,
+            paymentMethod: method,
+            feePayer: "resident",
           });
-        }
+          const params = calls[0]!;
+          const pid = params.payment_intent_data as Record<string, unknown>;
+
+          // The resident is charged subtotal + fee, shown as its own line item.
+          expect(lineItemTotal(params)).toBe(subtotal + fee);
+          expect((params.line_items as unknown[]).length).toBe(2);
+          expect(result.totalCents).toBe(subtotal + fee);
+          expect(result.subtotalCents).toBe(subtotal);
+          expect(result.processingFeeCents).toBe(fee);
+          expect(result.axisFeeCents).toBe(0);
+
+          // The fee is retained as the application fee; the manager still gets the subtotal.
+          expect(pid.application_fee_amount).toBe(fee);
+          expect(result.platformFeeCents).toBe(fee);
+          expect(lineItemTotal(params) - fee).toBe(subtotal);
+
+          expect(pid.transfer_data).toEqual({ destination: "acct_test" });
+          expect(pid).not.toHaveProperty("on_behalf_of");
+
+          const metadata = params.metadata as Record<string, string>;
+          expect(metadata.fee_payer).toBe("resident");
+          expect(metadata.subtotal_cents).toBe(String(subtotal));
+          expect(metadata.processing_fee_cents).toBe(String(fee));
+          expect(metadata.service_fee_cents).toBe(String(fee));
+          expect(metadata.manager_payout_cents).toBe(String(subtotal));
+        });
+
+        it(`manager pays: ${method} @ $${(subtotal / 100).toFixed(2)} → face value, appFee=fee`, async () => {
+          const { stripe, calls } = captureStripe();
+          const result = await createAxisAchCheckoutSession(stripe, {
+            ...baseInput,
+            amountCents: subtotal,
+            paymentMethod: method,
+            feePayer: "manager",
+          });
+          const params = calls[0]!;
+          const pid = params.payment_intent_data as Record<string, unknown>;
+
+          // Resident pays exactly the subtotal (no fee line item)…
+          expect(lineItemTotal(params)).toBe(subtotal);
+          expect((params.line_items as unknown[]).length).toBe(1);
+          expect(result.totalCents).toBe(subtotal);
+          expect(result.processingFeeCents).toBe(0);
+
+          // …but the fee is retained, so the manager nets subtotal − fee.
+          expect(pid.application_fee_amount).toBe(fee);
+          expect(result.platformFeeCents).toBe(fee);
+          expect(lineItemTotal(params) - fee).toBe(subtotal - fee);
+
+          expect(pid.transfer_data).toEqual({ destination: "acct_test" });
+          expect(pid).not.toHaveProperty("on_behalf_of");
+
+          const metadata = params.metadata as Record<string, string>;
+          expect(metadata.fee_payer).toBe("manager");
+          expect(metadata.manager_payout_cents).toBe(String(subtotal - fee));
+          expect(metadata.service_fee_cents).toBe(String(fee));
+        });
+
+        it(`PropLane pays: ${method} @ $${(subtotal / 100).toFixed(2)} → face value, no appFee`, async () => {
+          const { stripe, calls } = captureStripe();
+          const result = await createAxisAchCheckoutSession(stripe, {
+            ...baseInput,
+            amountCents: subtotal,
+            paymentMethod: method,
+            feePayer: "proplane",
+          });
+          const params = calls[0]!;
+          const pid = params.payment_intent_data as Record<string, unknown>;
+
+          // Resident pays face value; nothing retained → PropLane bears Stripe's fee.
+          expect(lineItemTotal(params)).toBe(subtotal);
+          expect((params.line_items as unknown[]).length).toBe(1);
+          expect(result.totalCents).toBe(subtotal);
+          expect(result.processingFeeCents).toBe(0);
+          expect(result.axisFeeCents).toBe(0);
+          expect(pid).not.toHaveProperty("application_fee_amount");
+          expect(result.platformFeeCents).toBe(0);
+
+          expect(pid.transfer_data).toEqual({ destination: "acct_test" });
+          expect(pid).not.toHaveProperty("on_behalf_of");
+
+          const metadata = params.metadata as Record<string, string>;
+          expect(metadata.fee_payer).toBe("proplane");
+          expect(metadata.manager_payout_cents).toBe(String(subtotal));
+        });
       }
     }
 
-    it("never emits a processing/service fee line item on a multi-charge session", async () => {
+    it("defaults to PropLane-absorbs (face value) when feePayer is omitted", async () => {
       const { stripe, calls } = captureStripe();
+      const result = await createAxisAchCheckoutSession(stripe, {
+        ...baseInput,
+        amountCents: 5_000,
+        paymentMethod: "card",
+      });
+      const params = calls[0]!;
+      expect(lineItemTotal(params)).toBe(5_000);
+      expect(result.totalCents).toBe(5_000);
+      expect(params.payment_intent_data).not.toHaveProperty("application_fee_amount");
+    });
+
+    it("resident-pays multi-charge session appends ONE fee line for the whole subtotal", async () => {
+      const { stripe, calls } = captureStripe();
+      const subtotal = 180_000 + 7_350;
+      const fee = residentProcessingFeeCents(subtotal, "card");
       const result = await createAxisAchCheckoutSession(stripe, {
         ...baseInput,
         amountCents: undefined,
@@ -240,12 +311,17 @@ describe("createAxisAchCheckoutSession — payment-method surface", () => {
           { amountCents: 7_350, productName: "Utilities — March" },
         ],
         paymentMethod: "card",
+        feePayer: "resident",
       });
       const params = calls[0]!;
       const items = params.line_items as { price_data: { product_data: { name: string } } }[];
-      expect(items.map((i) => i.price_data.product_data.name)).toEqual(["Rent — March", "Utilities — March"]);
-      expect(result.totalCents).toBe(187_350);
-      expect(params.payment_intent_data).not.toHaveProperty("application_fee_amount");
+      expect(items.map((i) => i.price_data.product_data.name)).toEqual([
+        "Rent — March",
+        "Utilities — March",
+        "Payment processing fee",
+      ]);
+      expect(result.totalCents).toBe(subtotal + fee);
+      expect((params.payment_intent_data as Record<string, unknown>).application_fee_amount).toBe(fee);
     });
   });
 });

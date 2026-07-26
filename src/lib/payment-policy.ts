@@ -1,6 +1,7 @@
 import { parseMoneyAmount } from "@/lib/parse-money";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { platformFeeCents } from "@/lib/platform-fees";
+import type { ManagerSkuTier } from "@/lib/manager-access";
 
 export type RentDueDayMode = "first_of_month" | "last_of_month";
 
@@ -21,51 +22,97 @@ export const MANAGER_PAYMENT_PRESETS = [
 
 export type ManagerPaymentPresetId = (typeof MANAGER_PAYMENT_PRESETS)[number]["id"];
 
-/** @deprecated Residents pay no ACH percentage — PropLane absorbs processing. Always 0. */
-export const AXIS_ACH_FEE_PERCENT = 0;
+/** @deprecated Legacy display constant — prefer residentProcessingFeeCents. Stripe's ACH rate is 0.8%. */
+export const AXIS_ACH_FEE_PERCENT = 0.8;
 
 export type ResidentAxisPaymentMethod = "ach" | "card" | "link";
 
 /**
- * PropLane absorbs Stripe's processing cost on resident/applicant payments, so
- * bank/ACH adds nothing to what the payer owes. Always 0 — kept as a named
- * function because checkout, disclosure copy, and reporting all read it for
- * intent, and one place returning 0 is what makes "face value" unforgeable.
+ * Who bears the payment "service fee" (Stripe's real processing cost) on a
+ * resident charge. Resolved per manager from the plan tier + the Pro choice by
+ * {@link resolveServiceFeePayer}; it is the single value that decides how the
+ * fee is placed on the Connect destination charge:
+ * - `resident`  — added on top of what the resident pays (retained as the
+ *   Connect `application_fee_amount`, so the manager still gets the subtotal).
+ * - `manager`   — NOT added to the resident total; retained as the
+ *   `application_fee_amount`, so it comes out of the manager's proceeds.
+ * - `proplane`  — no fee added and none retained; PropLane's own Stripe balance
+ *   bears Stripe's cost (the historical "face value on every method" model).
  */
-export function achProcessingFeeCents(subtotalCents: number): number {
-  void subtotalCents;
-  return 0;
-}
+export type ServiceFeePayer = "resident" | "manager" | "proplane";
 
-/** @deprecated Renamed to achProcessingFeeCents — residents are never charged it. */
-export const achPlatformRecoupCents = achProcessingFeeCents;
+/** The stored per-manager choice a Pro manager makes; only consulted on the Pro tier. */
+export type ProServiceFeeChoice = "resident" | "manager";
+
+export function normalizeProServiceFeeChoice(raw: unknown): ProServiceFeeChoice {
+  return raw === "manager" ? "manager" : "resident";
+}
 
 /**
- * Fee added on top of the subtotal at checkout. **Always 0**: the resident (and
- * the rental applicant) pays exactly face value on every method — bank/ACH,
- * card, and Link. Stripe's real processing cost is borne by PropLane's own
- * platform balance, because every resident charge is a Connect DESTINATION
- * charge created on the platform account (PropLane is merchant of record) with
- * `application_fee_amount` omitted, so Stripe deducts its fee from PropLane
- * while the full subtotal transfers to the manager.
+ * The plan rule, in one place:
+ * - Free → the resident always pays (no choice).
+ * - Pro  → the manager's stored choice ("resident" default, or "manager").
+ * - Business → PropLane absorbs it.
+ *
+ * `tier` is already normalized by callers (`normalizeManagerSkuTier(...) ?? "free"`),
+ * so a legacy/unknown tier arrives here as `"free"` — resident pays, matching the
+ * money layer's existing treatment of an unknown plan.
  */
-export function residentProcessingFeeCents(subtotalCents: number, method: ResidentAxisPaymentMethod): number {
-  void method;
-  return achProcessingFeeCents(subtotalCents);
+export function resolveServiceFeePayer(tier: ManagerSkuTier, proChoice: ProServiceFeeChoice): ServiceFeePayer {
+  if (tier === "business") return "proplane";
+  if (tier === "pro") return proChoice;
+  return "resident";
 }
 
+/**
+ * Stripe's actual per-method processing cost — the "service fee". This is a
+ * pass-through of Stripe's price, never a PropLane markup:
+ * - ACH/bank: 0.8% of the subtotal, capped at $5.00 (a cap, hence computed here
+ *   rather than a flat bps+fixed).
+ * - card/Link: 2.9% + $0.30.
+ * The single knob for the fee amount; every disclosure and every charge derives
+ * from it so they can never drift.
+ */
+export function achProcessingFeeCents(subtotalCents: number): number {
+  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
+  return Math.min(Math.round((subtotalCents * 80) / 10_000), 500);
+}
+
+/** @deprecated Renamed to achProcessingFeeCents. */
+export const achPlatformRecoupCents = achProcessingFeeCents;
+
+const RESIDENT_PROCESSING_FEE_BPS: Record<Exclude<ResidentAxisPaymentMethod, "ach">, number> = {
+  card: 290,
+  link: 290,
+};
+
+const RESIDENT_PROCESSING_FEE_FIXED_CENTS: Record<Exclude<ResidentAxisPaymentMethod, "ach">, number> = {
+  card: 30,
+  link: 30,
+};
+
+/**
+ * Stripe's per-method processing cost for a subtotal — the raw "service fee"
+ * BEFORE deciding who pays it. Placement (added to the resident, taken from the
+ * manager, or absorbed by PropLane) is decided by {@link residentServiceFeeBreakdown}.
+ */
+export function residentProcessingFeeCents(subtotalCents: number, method: ResidentAxisPaymentMethod): number {
+  if (!Number.isFinite(subtotalCents) || subtotalCents <= 0) return 0;
+  if (method === "ach") return achProcessingFeeCents(subtotalCents);
+  const bps = RESIDENT_PROCESSING_FEE_BPS[method];
+  const fixed = RESIDENT_PROCESSING_FEE_FIXED_CENTS[method];
+  return Math.floor((subtotalCents * bps) / 10_000) + fixed;
+}
+
+/** Platform take rate (0 bps on every tier). Kept separate from the service fee. */
 export function residentAxisPlatformFeeCents(subtotalCents: number, managerTier?: string | null): number {
   return platformFeeCents(subtotalCents, "rent", managerTier);
 }
 
 /**
- * `application_fee_amount` set on the Connect destination charge. It is exactly
- * what the payer was charged ON TOP of the subtotal, so the manager's payout is
- * always the full subtotal. Both components are 0 today (residents pay face
- * value, and the platform take rate is 0 bps on every tier), which is precisely
- * how PropLane ends up bearing Stripe's fee: with no application fee, the whole
- * subtotal transfers out of the platform balance that Stripe already debited.
- * Never set this above what the payer actually paid on top.
+ * @deprecated The Connect `application_fee_amount` now depends on WHO pays the
+ * fee — use {@link residentServiceFeeBreakdown}. Retained for back-compat as the
+ * resident-pays value (service fee + the 0-bps platform take).
  */
 export function residentConnectApplicationFeeCents(
   subtotalCents: number,
@@ -75,20 +122,58 @@ export function residentConnectApplicationFeeCents(
   return residentProcessingFeeCents(subtotalCents, method) + residentAxisPlatformFeeCents(subtotalCents, managerTier);
 }
 
+export type ResidentServiceFeeBreakdown = {
+  /** Stripe's real processing cost for this method+subtotal (0 when PropLane absorbs). */
+  serviceFeeCents: number;
+  /** Added on top of the subtotal the resident pays (only when the resident pays). */
+  residentAddedFeeCents: number;
+  /** Retained by PropLane as the Connect `application_fee_amount` (funds Stripe's cost). */
+  applicationFeeCents: number;
+  /** What the manager's connected account receives (subtotal, less any fee the manager absorbs). */
+  managerPayoutCents: number;
+  /** Total the resident is charged (subtotal + residentAddedFeeCents). */
+  totalCents: number;
+};
+
 /**
- * Fee the MANAGER absorbs out of a resident payment. PropLane absorbs Stripe's
- * processing cost and takes no platform fee, so the manager receives the full
- * subtotal and this is always 0 — kept as a named function so reporting reads
- * intent.
+ * The single source of truth for how the service fee lands on a Connect
+ * destination charge, given who pays it. The checkout builder and every
+ * disclosure derive from this, so the resident total, the retained
+ * `application_fee_amount`, and the manager payout can never disagree.
+ *
+ * Invariant, true in all three cases: `totalCents - applicationFeeCents === managerPayoutCents`.
  */
-export function managerAbsorbedPaymentFeeCents(): number {
-  return 0;
+export function residentServiceFeeBreakdown(
+  subtotalCents: number,
+  method: ResidentAxisPaymentMethod,
+  feePayer: ServiceFeePayer,
+): ResidentServiceFeeBreakdown {
+  const serviceFeeCents = feePayer === "proplane" ? 0 : residentProcessingFeeCents(subtotalCents, method);
+  const residentAddedFeeCents = feePayer === "resident" ? serviceFeeCents : 0;
+  const applicationFeeCents = feePayer === "proplane" ? 0 : serviceFeeCents;
+  const managerPayoutCents = subtotalCents - (feePayer === "manager" ? serviceFeeCents : 0);
+  const totalCents = subtotalCents + residentAddedFeeCents;
+  return { serviceFeeCents, residentAddedFeeCents, applicationFeeCents, managerPayoutCents, totalCents };
 }
 
-/** Per-method fee disclosure. Every method is free to the payer — PropLane covers processing. */
+/**
+ * Fee the MANAGER absorbs out of a resident payment for a given fee-payer.
+ * Non-zero only when the manager pays (Pro, "manager" choice); the manager is
+ * kept whole otherwise. Kept as a named function so reporting reads intent.
+ */
+export function managerAbsorbedPaymentFeeCents(
+  subtotalCents: number,
+  method: ResidentAxisPaymentMethod,
+  feePayer: ServiceFeePayer,
+): number {
+  return feePayer === "manager" ? residentProcessingFeeCents(subtotalCents, method) : 0;
+}
+
+/** Per-method fee disclosure — the rate a resident sees when THEY pay the fee. */
 export function residentProcessingFeeDisplayLabel(method: ResidentAxisPaymentMethod): string {
-  void method;
-  return "No added fees";
+  if (method === "ach") return "0.8% bank processing (max $5.00)";
+  if (method === "link") return "2.9% + $0.30 Link processing";
+  return "2.9% + $0.30 card processing";
 }
 
 export function residentPaymentMethodLabel(method: ResidentAxisPaymentMethod): string {

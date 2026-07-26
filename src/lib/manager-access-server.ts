@@ -10,6 +10,8 @@ import {
   type ManagerSubscriptionTier,
   type ManagerPurchaseRowRecord,
 } from "@/lib/manager-access";
+import { loadManagerManualPaymentSettings } from "@/lib/manager-manual-payment-settings";
+import { resolveServiceFeePayer, type ServiceFeePayer } from "@/lib/payment-policy";
 
 /**
  * Server-only manager_purchases reads/writes (service role). Split out of
@@ -164,6 +166,36 @@ const getManagerSubscriptionTierByManagerIdCached = cache(
 
 export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<ManagerSubscriptionTier> {
   return getManagerSubscriptionTierByManagerIdCached(managerId);
+}
+
+/**
+ * Who pays the resident-payment service fee for a manager, resolved from their
+ * plan + Pro setting. Keyed by `manager_id` so a resident can resolve their OWN
+ * manager (their `profiles.manager_id`) for pre-checkout disclosure. Falls back
+ * to "resident" on any failure — the safe direction for disclosure, since it
+ * over-shows a possible fee rather than hiding one (the checkout session is the
+ * authoritative amount either way).
+ */
+export async function getManagerServiceFeePayerByManagerId(managerId: string): Promise<ServiceFeePayer> {
+  const normalized = managerId.trim();
+  if (!normalized) return "resident";
+  try {
+    const supabase = createSupabaseServiceRoleClient();
+    const { data } = await supabase
+      .from("manager_purchases")
+      .select("user_id, tier")
+      .eq("manager_id", normalized)
+      .maybeSingle();
+    if (!data) return "resident";
+    const tier = normalizeManagerSkuTier(data.tier != null ? String(data.tier) : null) ?? "free";
+    const userId = data.user_id != null ? String(data.user_id).trim() : "";
+    const proChoice = userId
+      ? (await loadManagerManualPaymentSettings(supabase, userId)).serviceFeePayer
+      : "resident";
+    return resolveServiceFeePayer(tier, proChoice);
+  } catch {
+    return "resident";
+  }
 }
 
 /** Raw tier + billing from manager_purchases (service role). */

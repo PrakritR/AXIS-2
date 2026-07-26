@@ -1,9 +1,8 @@
 import type Stripe from "stripe";
 import {
-  residentAxisPlatformFeeCents,
-  residentConnectApplicationFeeCents,
-  residentProcessingFeeCents,
+  residentServiceFeeBreakdown,
   type ResidentAxisPaymentMethod,
+  type ServiceFeePayer,
 } from "@/lib/payment-policy";
 
 export const APPLICATION_FEE_CHECKOUT_PURPOSE = "rental_application_fee";
@@ -36,6 +35,13 @@ export type AxisAchCheckoutInput = {
   destinationAccountId: string;
   paymentMethod?: ResidentAxisPaymentMethod;
   managerTier?: string | null;
+  /**
+   * Who bears the service fee on this charge. Callers resolve it from the
+   * manager's plan + Pro setting (`resolveServiceFeePayer`). Defaults to
+   * `proplane` (face value, no fee) when omitted, so any caller that has not
+   * opted in keeps the historical behavior.
+   */
+  feePayer?: ServiceFeePayer;
 };
 
 export type AxisAchCheckoutResult =
@@ -189,15 +195,19 @@ function paymentMethodEntryEnabled(value: unknown): boolean {
  * Creates a Stripe Checkout Session for Connect DESTINATION charges: the charge
  * is created on the PLATFORM account (PropLane is merchant of record) with
  * `transfer_data.destination` pointing at the manager's connected account. It is
- * never a direct charge and never uses `on_behalf_of`, so Stripe's processing
- * fee is debited from PropLane's balance, not the manager's.
+ * never a direct charge and never uses `on_behalf_of` / a `Stripe-Account`
+ * header, so the manager's own account always receives the money.
  *
- * Today `residentProcessingFeeCents` and the tier fee are both 0, so:
- *   payer is charged `subtotalCents`, `application_fee_amount` is omitted, and
- *   the FULL subtotal transfers to the manager — leaving PropLane net short by
- *   exactly Stripe's fee. That is the intended arrangement: residents and
- *   applicants pay face value, managers are kept whole, PropLane absorbs
- *   processing.
+ * Who bears the service fee (Stripe's real processing cost) is decided by
+ * `input.feePayer` (default `proplane`). All three cases keep the SAME
+ * destination charge; only the numbers move, per `residentServiceFeeBreakdown`:
+ *   - `resident`  → charged `subtotal + fee`; `application_fee_amount = fee` is
+ *     retained by PropLane (which pays Stripe); manager receives `subtotal`.
+ *   - `manager`   → charged `subtotal`; `application_fee_amount = fee` retained;
+ *     manager receives `subtotal - fee` (the manager absorbs the cost).
+ *   - `proplane`  → charged `subtotal`; NO `application_fee_amount`; the whole
+ *     subtotal transfers out of PropLane's platform balance, which Stripe has
+ *     already debited its fee from — so PropLane bears the cost (face value).
  *
  * Used for resident portal payments (rent, utilities, application fees) — not
  * manager subscriptions.
@@ -207,6 +217,7 @@ export async function createAxisAchCheckoutSession(
   input: AxisAchCheckoutInput,
 ): Promise<AxisAchCheckoutResult> {
   const paymentMethod = input.paymentMethod ?? "ach";
+  const feePayer: ServiceFeePayer = input.feePayer ?? "proplane";
   const chargeLineItems =
     input.lineItems && input.lineItems.length > 0
       ? input.lineItems
@@ -223,11 +234,18 @@ export async function createAxisAchCheckoutSession(
     throw new Error("Amount must be at least $1.00.");
   }
 
-  const processingFeeCents = residentProcessingFeeCents(subtotalCents, paymentMethod);
-  const axisFeeCents = residentAxisPlatformFeeCents(subtotalCents, input.managerTier);
-  const applicationFeeAmount = residentConnectApplicationFeeCents(subtotalCents, paymentMethod, input.managerTier);
-  if (applicationFeeAmount > 0 && applicationFeeAmount >= subtotalCents + processingFeeCents + axisFeeCents) {
-    throw new Error("Platform fee configuration prevents this charge.");
+  const fee = residentServiceFeeBreakdown(subtotalCents, paymentMethod, feePayer);
+  // `processingFeeCents` in the result/metadata means "what the resident is
+  // charged on top" (0 unless the resident pays), so the resident-facing
+  // itemization derives straight from it. `axisFeeCents` stays the 0-bps
+  // platform take. `applicationFeeAmount` is what PropLane retains on the
+  // destination charge; `managerPayoutCents` is what the manager nets.
+  const processingFeeCents = fee.residentAddedFeeCents;
+  const axisFeeCents = 0;
+  const applicationFeeAmount = fee.applicationFeeCents;
+  const managerPayoutCents = fee.managerPayoutCents;
+  if (applicationFeeAmount > 0 && applicationFeeAmount >= fee.totalCents) {
+    throw new Error("Service fee configuration prevents this charge.");
   }
 
   const residentEmail = input.residentEmail.trim().toLowerCase();
@@ -241,6 +259,7 @@ export async function createAxisAchCheckoutSession(
       ...input.metadata,
       payment_method: paymentMethod,
       manager_tier: input.managerTier?.trim().toLowerCase() || "free",
+      fee_payer: feePayer,
     },
   };
   if (applicationFeeAmount > 0) {
@@ -266,23 +285,20 @@ export async function createAxisAchCheckoutSession(
     quantity: 1,
   }));
 
-  // Unreached while PropLane absorbs processing (both fees are 0), and kept
-  // deliberately: it is what keeps the add-on the payer is charged and the
-  // application fee we retain in lockstep, so no future fee can be retained
-  // without also being disclosed as its own line item.
-  if (processingFeeCents + axisFeeCents > 0) {
-    const feeParts: string[] = [residentProcessingFeeLabel(paymentMethod)];
-    if (axisFeeCents > 0) {
-      feeParts.push("PropLane service fee");
-    }
+  // The service fee is a disclosed line item ONLY when the resident actually
+  // pays it (added on top). When the manager absorbs it or PropLane covers it,
+  // the resident pays face value and sees no fee line. Keeping the fee retention
+  // (`application_fee_amount`) and the resident-visible line item in lockstep is
+  // what stops a fee from ever being collected from the resident undisclosed.
+  if (processingFeeCents > 0) {
     stripeLineItems.push({
       price_data: {
         currency: "usd",
         product_data: {
-          name: "Payment processing & service fee",
-          description: feeParts.join(" · "),
+          name: "Payment processing fee",
+          description: residentProcessingFeeLabel(paymentMethod),
         },
-        unit_amount: processingFeeCents + axisFeeCents,
+        unit_amount: processingFeeCents,
       },
       quantity: 1,
     });
@@ -292,9 +308,8 @@ export async function createAxisAchCheckoutSession(
 
   // Hard money invariant, checked against the numbers actually sent to Stripe:
   // whatever the payer is charged, minus whatever PropLane retains, must equal
-  // the subtotal the manager is owed. Today that reduces to
-  // `totalCents === subtotalCents` with no application fee at all.
-  if (totalCents - applicationFeeAmount !== subtotalCents) {
+  // what the manager is owed — in every fee-payer case.
+  if (totalCents !== fee.totalCents || totalCents - applicationFeeAmount !== managerPayoutCents) {
     throw new Error("Checkout total does not reconcile with the manager payout.");
   }
 
@@ -309,9 +324,12 @@ export async function createAxisAchCheckoutSession(
       ...input.metadata,
       payment_method: paymentMethod,
       manager_tier: input.managerTier?.trim().toLowerCase() || "free",
+      fee_payer: feePayer,
       subtotal_cents: String(subtotalCents),
       processing_fee_cents: String(processingFeeCents),
       axis_fee_cents: String(axisFeeCents),
+      service_fee_cents: String(fee.serviceFeeCents),
+      manager_payout_cents: String(managerPayoutCents),
     },
     payment_intent_data: paymentIntentData,
   };
