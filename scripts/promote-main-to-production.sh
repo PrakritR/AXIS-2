@@ -7,7 +7,7 @@ cd "$ROOT"
 
 git fetch origin main production
 
-if ! git merge-base --is-ancestor origin/main origin/production 2>/dev/null; then
+if ! git merge-base --is-ancestor origin/production origin/main 2>/dev/null; then
   echo "error: origin/production is not an ancestor of origin/main — resolve before ff-only promote" >&2
   exit 1
 fi
