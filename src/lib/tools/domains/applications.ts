@@ -4,6 +4,7 @@ import type { AgentContext } from "../context";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { resolveBackgroundCheckStatus } from "@/lib/application-background-check";
 import { stageLabelForApplicationBucket } from "@/lib/application-review";
+import { applicationStageDisplayLabel } from "@/lib/rental-application/in-progress-application";
 import { backgroundCheckConfigured, checkrPackage } from "@/lib/checkr/config";
 import { runBackgroundCheck } from "@/lib/checkr/background-check";
 import { checkrOrderCostCents } from "@/lib/checkr/packages";
@@ -34,7 +35,7 @@ function summarizeApplicant(r: DemoApplicantRow) {
     name: r.name || null,
     email: (r.email || "").trim().toLowerCase() || null,
     property: r.property || null,
-    stage: r.stage || null,
+    stage: applicationStageDisplayLabel(r),
     bucket: r.bucket || null,
     assignedRoom: r.assignedRoomChoice || null,
     signedMonthlyRent: typeof r.signedMonthlyRent === "number" ? r.signedMonthlyRent : null,
@@ -118,7 +119,7 @@ export const getApplicationDetailsTool = defineTool({
         name: r.name || null,
         email: (r.email || rec.resident_email || "").trim().toLowerCase() || null,
         property: r.property || null,
-        stage: r.stage || null,
+        stage: applicationStageDisplayLabel(r),
         bucket: r.bucket || null,
         desiredLeaseStart: r.application?.leaseStart?.trim() || null,
         desiredLeaseEnd: r.application?.leaseEnd?.trim() || null,

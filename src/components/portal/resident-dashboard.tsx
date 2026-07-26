@@ -38,6 +38,11 @@ import {
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { applicationsForResidentEmail } from "@/lib/rental-application/application-policy";
 import {
+  applicationStageDisplayLabel,
+  INCOMPLETE_APPLICATION_LABEL,
+  isInProgressApplicationRow,
+} from "@/lib/rental-application/in-progress-application";
+import {
   MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
@@ -298,12 +303,13 @@ function leaseKpiValue(tone: string): { value: string; accent: boolean } {
 function applicationStatusBadge(row: DemoApplicantRow): { label: string; tone: "emerald" | "amber" | "rose" | "slate" } {
   if (row.bucket === "approved") return { label: "Approved", tone: "emerald" };
   if (row.bucket === "rejected") return { label: "Rejected", tone: "rose" };
+  if (isInProgressApplicationRow(row)) return { label: INCOMPLETE_APPLICATION_LABEL, tone: "amber" };
   return { label: row.stage?.trim() || "Pending", tone: "amber" };
 }
 
 function applicationSubtitle(row: DemoApplicantRow): string {
   const property = row.property?.trim() || row.application?.propertyId?.trim() || "";
-  const stage = row.stage?.trim();
+  const stage = applicationStageDisplayLabel(row);
   if (property && stage) return `${property} · ${stage}`;
   return property || stage || "Application";
 }

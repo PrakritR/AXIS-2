@@ -180,7 +180,12 @@ function ChannelPaymentSetupModal({
         <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
           <p className="text-sm font-semibold text-foreground">Step 3 — Link Gmail</p>
           <p className="text-xs text-muted">
-            We read {label} notification emails and match the <span className="font-mono">PL-</span> code and amount.
+            We read {label} notification emails and match the <span className="font-mono">PL-</span> code and amount. If
+            a resident forgets the code, we still match on the amount plus their name and property; anything we
+            can&apos;t confidently match is never auto-marked — the charge stays pending for you to mark paid manually.
+            Linked-Gmail receipts are checked when you tap{" "}
+            <span className="font-medium">Sync now</span>; set up forwarding in Step 4 to have them matched the moment
+            they arrive.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {gmailStatus?.connected ? (
@@ -314,7 +319,6 @@ function ChannelPaymentSetupModal({
 export function ManagerPaymentSetupModal({
   open,
   onClose,
-  portalBase: _portalBase,
 }: {
   open: boolean;
   onClose: () => void;
