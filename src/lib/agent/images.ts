@@ -30,12 +30,17 @@ export type ParsedChatDocuments =
   | { ok: true; blocks: Anthropic.DocumentBlockParam[] }
   | { ok: false; error: string };
 
+function normalizeBase64Payload(data: string): string {
+  return data.replace(/\s/g, "");
+}
+
 function validateBase64Payload(
   data: string,
   totalChars: { value: number },
 ): string | null {
-  if (!data || !/^[A-Za-z0-9+/=]+$/.test(data)) return "Invalid attachment data.";
-  totalChars.value += data.length;
+  const normalized = normalizeBase64Payload(data);
+  if (!normalized || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) return "Invalid attachment data.";
+  totalChars.value += normalized.length;
   if (totalChars.value > MAX_TOTAL_ATTACHMENT_BASE64_CHARS) {
     return "Attachments are too large — try fewer or smaller files.";
   }
@@ -54,7 +59,7 @@ export function parseChatImages(raw: unknown): ParsedChatImages {
   const totalChars = { value: 0 };
   for (const item of raw as ChatImageInput[]) {
     const mediaType = String(item?.mediaType ?? "").trim().toLowerCase();
-    const data = String(item?.dataBase64 ?? "").trim();
+    const data = normalizeBase64Payload(String(item?.dataBase64 ?? "").trim());
     if (!ALLOWED_IMAGE_MEDIA_TYPES.has(mediaType)) {
       return { ok: false, error: "Unsupported image type — use JPEG, PNG, WebP, or GIF." };
     }
@@ -84,7 +89,7 @@ export function parseChatDocuments(raw: unknown): ParsedChatDocuments {
   const totalChars = { value: 0 };
   for (const item of raw as ChatDocumentInput[]) {
     const mediaType = String(item?.mediaType ?? "").trim().toLowerCase();
-    const data = String(item?.dataBase64 ?? "").trim();
+    const data = normalizeBase64Payload(String(item?.dataBase64 ?? "").trim());
     if (!ALLOWED_DOCUMENT_MEDIA_TYPES.has(mediaType)) {
       return { ok: false, error: "Unsupported document type — use PDF." };
     }
