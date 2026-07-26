@@ -15,10 +15,22 @@ describe("isUnsafeRedirectPath", () => {
     expect(isUnsafeRedirectPath("%2F%2Fevil.com")).toBe(true);
   });
 
+  it("flags tab/newline/CR-obfuscated protocol-relative paths (never literally start with '//')", () => {
+    // A browser's URL parser strips ASCII tab/newline/CR anywhere in the
+    // string before resolving, so these all resolve to a DIFFERENT origin
+    // even though none of them literally starts with "//" or "/\\" — a naive
+    // prefix check misses every one of these.
+    expect(isUnsafeRedirectPath("/\t/evil.com")).toBe(true);
+    expect(isUnsafeRedirectPath("/\n/evil.com")).toBe(true);
+    expect(isUnsafeRedirectPath("/\r/evil.com")).toBe(true);
+    expect(isUnsafeRedirectPath("/\t\\evil.com")).toBe(true);
+  });
+
   it("allows normal same-origin paths", () => {
     expect(isUnsafeRedirectPath("/portal/dashboard")).toBe(false);
     expect(isUnsafeRedirectPath("/auth/continue")).toBe(false);
     expect(isUnsafeRedirectPath("/resident/dashboard")).toBe(false);
+    expect(isUnsafeRedirectPath("/rent/apply?propertyId=mgr-qa-madison")).toBe(false);
   });
 });
 

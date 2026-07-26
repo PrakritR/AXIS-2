@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { FIELD_LABEL_CLASS } from "@/lib/ui-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 
@@ -76,12 +77,10 @@ export function ResidentSignupForm({
 
   const compact = variant === "compact";
   const locked = disabled || busy;
-  // Guard against protocol-relative ("//evil") and backslash ("/\\evil") open
-  // redirects — nextPath is URL-controlled.
-  const resolvedNext =
-    nextPath.startsWith("/") && !nextPath.startsWith("//") && !nextPath.startsWith("/\\")
-      ? nextPath
-      : "/resident/applications";
+  // nextPath is URL-controlled — reject anything that would resolve
+  // off-origin (protocol-relative, backslash, or obfuscated variants of
+  // either) before it can reach `window.location.replace`.
+  const resolvedNext = !isUnsafeRedirectPath(nextPath) ? nextPath : "/resident/applications";
 
   const addResidentRole = async () => {
     setError(null);

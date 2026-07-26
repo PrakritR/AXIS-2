@@ -25,6 +25,7 @@ import {
   resolveSignInNextPath,
 } from "@/lib/auth/post-oauth-routing";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
 import { AUTH_PORTAL_PICKER_OPTIONS } from "@/lib/auth/auth-portal-picker-options";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
@@ -433,11 +434,7 @@ function NativeAuthHubInner({
                   disabled={locked}
                   hideLegalFooter
                   initialEmail={email}
-                  nextPath={
-                    nextFromUrl && nextFromUrl.startsWith("/") && !nextFromUrl.startsWith("//") && !nextFromUrl.startsWith("/\\")
-                      ? nextFromUrl
-                      : "/resident/applications"
-                  }
+                  nextPath={nextFromUrl && !isUnsafeRedirectPath(nextFromUrl) ? nextFromUrl : "/resident/applications"}
                 />
               ) : role === "vendor" ? (
                 <VendorSignupForm
