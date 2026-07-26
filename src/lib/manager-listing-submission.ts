@@ -351,6 +351,8 @@ export type ManagerListingSubmissionV1 = {
   leaseTemplateDocUrl?: string | null;
   /** Original filename of the uploaded lease template. */
   leaseTemplateDocName?: string;
+  /** Multiple lease templates per property (standard, month-to-month, short-term, custom). */
+  propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
 };
 
 /** Fee fields must be filled with a dollar amount; use 0 when there is no charge. */
@@ -1148,6 +1150,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     leaseUtilities: normalizeLeaseUtilities((sub as { leaseUtilities?: unknown }).leaseUtilities),
     leaseTemplateDocUrl: typeof sub.leaseTemplateDocUrl === "string" ? sub.leaseTemplateDocUrl || null : null,
     leaseTemplateDocName: typeof sub.leaseTemplateDocName === "string" ? sub.leaseTemplateDocName : "",
+    propertyLeaseTemplates: Array.isArray((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates)
+      ? ((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates as import("@/lib/property-lease-templates").PropertyLeaseTemplate[])
+      : undefined,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,

@@ -23,6 +23,23 @@ describe("buildPromotionNewModalAssistantContext", () => {
     expect(ctx).toContain("create_promotion");
   });
 
+  it("collapses multiline selling points onto one context line", () => {
+    const ctx = buildPromotionNewModalAssistantContext(
+      {
+        propertyKey: "mgr-demo-lakeview",
+        propertyLabel: "Lakeview Studio",
+        address: "2100 Westlake Ave N",
+        headline: "Water-view studio",
+        sellingPoints: "1 bed · 1 bath\nIn-unit laundry\nFast Wi-Fi",
+        price: "$1,800 / mo",
+        aiPrompt: "",
+      },
+      "flyer",
+    );
+    expect(ctx).not.toMatch(/\n/);
+    expect(ctx).toContain("sellingPoints=");
+  });
+
   it("marks custom promotions without a listing id", () => {
     const ctx = buildPromotionNewModalAssistantContext(
       {

@@ -18,6 +18,8 @@ import {
   PromotionFlyerHeaderActions,
   PromotionTextAssetDetail,
   PromotionTextHeaderActions,
+  PromotionUploadAssetDetail,
+  PromotionUploadHeaderActions,
 } from "@/components/portal/promotion-asset-detail";
 import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
@@ -56,11 +58,19 @@ import {
   buildTextEntryFromCopy,
   removeFlyerEntryFromRow,
   removeTextEntryFromRow,
+  removeUploadEntryFromRow,
+  appendUploadEntryToRow,
   syncPromotionRowLegacy,
   updateFlyerEntryOnRow,
   updateTextEntryOnRow,
 } from "@/lib/promotion-row-ops";
 import { type PromotionTextEntry, type PromotionTextFormat } from "@/lib/promotion-text";
+import {
+  fileToPromotionUpload,
+  makePromotionUploadId,
+  readPromotionUploadEntries,
+  type PromotionUploadEntry,
+} from "@/lib/promotion-upload";
 
 function flyerEntryToDraft(row: ManagerPromotionRow, entry: FlyerEntry, listingId: string): PromotionDraft {
   return {
@@ -103,6 +113,7 @@ export function ManagerPropertyPromotionPanel({
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -384,6 +395,11 @@ export function ManagerPropertyPromotionPanel({
       upsertManagerPromotion(updateFlyerEntryOnRow(asset.row, asset.flyerEntry.id, { title }));
     } else if (asset.kind === "text" && asset.textEntry) {
       upsertManagerPromotion(updateTextEntryOnRow(asset.row, asset.textEntry.id, { title }));
+    } else if (asset.kind === "upload" && asset.uploadEntry) {
+      const entries = readPromotionUploadEntries(asset.row).map((entry) =>
+        entry.id === asset.uploadEntry!.id ? { ...entry, title, updatedAt: new Date().toISOString() } : entry,
+      );
+      upsertManagerPromotion(syncPromotionRowLegacy({ ...asset.row, uploadCopies: entries }));
     }
     setTick((n) => n + 1);
     onUpdated?.();
@@ -404,6 +420,10 @@ export function ManagerPropertyPromotionPanel({
       const next = removeTextEntryFromRow(asset.row, asset.textEntry.id);
       if (next) upsertManagerPromotion(next);
       else deleteManagerPromotionRow(asset.row.id);
+    } else if (asset.kind === "upload" && asset.uploadEntry) {
+      const next = removeUploadEntryFromRow(asset.row, asset.uploadEntry.id);
+      if (next) upsertManagerPromotion(next);
+      else deleteManagerPromotionRow(asset.row.id);
     }
     if (expandedId === asset.id) setExpandedId(null);
     setTick((n) => n + 1);
@@ -418,6 +438,54 @@ export function ManagerPropertyPromotionPanel({
     ? assets.find((a) => a.id === textModalAssetId) ?? null
     : null;
 
+  async function uploadPromotion(file: File) {
+    if (!userId || !propertyId) return;
+    setUploadBusy(true);
+    try {
+      const parsed = await fileToPromotionUpload(file);
+      if (!parsed) {
+        showToast("Upload a JPG, PNG, or PDF up to 12 MB.");
+        return;
+      }
+      const now = new Date().toISOString();
+      const entry: PromotionUploadEntry = {
+        id: makePromotionUploadId(),
+        title: nextPromotionAssetDefaultTitle(assets, "upload"),
+        kind: parsed.kind,
+        fileUrl: parsed.fileUrl,
+        fileName: file.name,
+        mimeType: parsed.mimeType,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const existing = readManagerPromotionRows().find((p) => p.propertyId === propertyId) ?? null;
+      const seededDraft = draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts);
+      const row =
+        existing ??
+        syncPromotionRowLegacy({
+          id: makePromotionId(),
+          managerUserId: userId,
+          propertyId,
+          propertyLabel: listings.find((l) => l.id === propertyId)?.label ?? "Property",
+          title: "Promotion",
+          theme: "cobalt",
+          flyerSize: "letter",
+          status: "generated",
+          inputs: draftInputs(seededDraft),
+          copy: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      upsertManagerPromotion(appendUploadEntryToRow(row, entry));
+      setTick((n) => n + 1);
+      onUpdated?.();
+      closeForm();
+      showToast("Promotion uploaded.");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   const renderHeaderActions = (asset: PromotionAsset) => {
     if (asset.kind === "flyer") {
       return (
@@ -431,6 +499,18 @@ export function ManagerPropertyPromotionPanel({
             if (flyerAsset) deleteAsset(flyerAsset);
           }}
           canDelete
+        />
+      );
+    }
+
+    if (asset.kind === "upload") {
+      return (
+        <PromotionUploadHeaderActions
+          asset={asset}
+          onDelete={(row, entryId) => {
+            const uploadAsset = assets.find((a) => a.row.id === row.id && a.uploadEntry?.id === entryId);
+            if (uploadAsset) deleteAsset(uploadAsset);
+          }}
         />
       );
     }
@@ -455,6 +535,9 @@ export function ManagerPropertyPromotionPanel({
     if (asset.kind === "flyer") {
       return <PromotionFlyerAssetDetail asset={asset} />;
     }
+    if (asset.kind === "upload") {
+      return <PromotionUploadAssetDetail asset={asset} />;
+    }
 
     return (
       <PromotionTextAssetDetail
@@ -472,7 +555,7 @@ export function ManagerPropertyPromotionPanel({
         expanded={sectionExpanded}
         onExpandedChange={setSectionExpanded}
         collapsible
-        className="mt-4"
+        headerActionsInline
         toggleDataAttr="promotion-section-toggle"
         headerActions={
           <>
@@ -513,6 +596,8 @@ export function ManagerPropertyPromotionPanel({
         flyerBusy={generating}
         onGenerateText={(opts) => void createOrRegenerateText(opts, null)}
         textBusy={generatingTextId !== null}
+        onUploadPromotion={(file) => void uploadPromotion(file)}
+        uploadBusy={uploadBusy}
       />
 
       {/* Edit an existing text promotion (create-new lives in PromotionNewModal). */}

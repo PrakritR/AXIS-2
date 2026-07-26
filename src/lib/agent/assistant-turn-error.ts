@@ -46,14 +46,20 @@ function mapAssistantTurnFailure(error: unknown): AssistantTurnFailure {
       };
     }
     if (error.status === 413 || error.status === 400) {
-      if (attachmentOrContextHint(error.message)) {
-        if (error.message.toLowerCase().includes("token") || error.message.toLowerCase().includes("context")) {
-          return {
-            message:
-              "This conversation is too long for one turn. Start a new chat or ask about one thing at a time.",
-            httpStatus: 400,
-          };
-        }
+      const lower = error.message.toLowerCase();
+      if (lower.includes("token") || lower.includes("context") || lower.includes("too long")) {
+        return {
+          message:
+            "This conversation is too long for one turn. Start a new chat or ask about one thing at a time.",
+          httpStatus: 400,
+        };
+      }
+      if (
+        attachmentOrContextHint(error.message) ||
+        lower.includes("invalid") ||
+        lower.includes("could not process") ||
+        lower.includes("image")
+      ) {
         return {
           message:
             "That attachment could not be processed. Try a smaller JPEG or PNG, or send your question without the file.",

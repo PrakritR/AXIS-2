@@ -249,10 +249,31 @@ export async function enrichManagerChatImageAttachments(
   if (opts.requireSuccessfulUpload && blocks.length > 0 && urls.length === 0) {
     throw new Error("Could not upload attached photos.");
   }
-  if (!urls.length) return messages;
   const next = [...messages];
-  next[next.length - 1] = appendUploadedImageUrlsToUserMessage(last, urls, opts.purpose);
+  if (urls.length > 0) {
+    next[next.length - 1] = appendUploadedImageUrlsToUserMessage(last, urls, opts.purpose);
+    return next;
+  }
+  if (opts.purpose === "promotion" && blocks.length > 0) {
+    next[next.length - 1] = appendPromotionVisionFallbackNote(last);
+  }
   return next;
+}
+
+/** When storage upload fails, keep inline vision blocks and tell the model how to proceed. */
+function appendPromotionVisionFallbackNote(message: Anthropic.MessageParam): Anthropic.MessageParam {
+  if (!Array.isArray(message.content)) return message;
+  return {
+    role: "user",
+    content: [
+      ...message.content,
+      {
+        type: "text",
+        text:
+          "Reference flyer image is attached above for visual style. Describe layout, colors, and typography in notes or extraInstructions when proposing create_promotion or generate_promotion_flyer. referenceImageUrls is optional on this turn when the image is visible here.",
+      },
+    ],
+  };
 }
 
 export const LISTING_CREATION_CHECKLIST = {

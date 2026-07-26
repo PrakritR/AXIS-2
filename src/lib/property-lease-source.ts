@@ -13,22 +13,19 @@ export const PROPERTY_LEASE_SOURCE_OPTIONS: readonly {
     id: "axis_default",
     label: "PropLane default",
     shortLabel: "PropLane default",
-    detail:
-      "PropLane generates a complete lease from the approved application and this listing — rent, deposits, house rules, and local disclosures included.",
+    detail: "PropLane builds the full lease from the approved application and listing — rent, deposits, house rules, and disclosures.",
   },
   {
     id: "custom_comments",
-    label: "Custom comments",
-    shortLabel: "Custom comments",
-    detail:
-      "Write the clauses you want. PropLane adds them to the generated lease as an addendum under “Additional Provisions from Property Manager”.",
+    label: "Custom clauses",
+    shortLabel: "Custom clauses",
+    detail: "Add your own provisions. PropLane attaches them to the generated lease under “Additional Provisions from Property Manager”.",
   },
   {
     id: "custom_format",
-    label: "Custom lease format",
-    shortLabel: "Custom lease format",
-    detail:
-      "Your uploaded PDF becomes the lease document. PropLane adds a placement summary and e-signatures.",
+    label: "Upload your lease",
+    shortLabel: "Your PDF",
+    detail: "Your uploaded PDF is the lease document. PropLane adds a placement summary and e-signatures.",
   },
 ] as const;
 

@@ -17,15 +17,22 @@ import {
   type PromotionTextEntry,
 } from "@/lib/promotion-text";
 
-export type PromotionAssetKind = "flyer" | "text";
+import {
+  promotionUploadDisplayTitle,
+  readPromotionUploadEntries,
+  type PromotionUploadEntry,
+} from "@/lib/promotion-upload";
+
+export type PromotionAssetKind = "flyer" | "text" | "upload";
 
 export type PromotionAsset = {
-  /** Stable expand key: `${rowId}::flyer::${entryId}` or `${rowId}::text::${entryId}` */
+  /** Stable expand key: `${rowId}::flyer::${entryId}` etc. */
   id: string;
   kind: PromotionAssetKind;
   row: ManagerPromotionRow;
   flyerEntry?: FlyerEntry;
   textEntry?: PromotionTextEntry;
+  uploadEntry?: PromotionUploadEntry;
   propertyLabel: string;
   propertyId: string | null;
   /** Primary subtitle line (headline preview or channel/format). */
@@ -89,6 +96,19 @@ export function flattenPromotionAssets(rows: ManagerPromotionRow[]): PromotionAs
         createdAt: entry.createdAt || row.updatedAt || row.createdAt,
       });
     });
+
+    readPromotionUploadEntries(row).forEach((entry, index) => {
+      assets.push({
+        id: makePromotionAssetId(row.id, "upload", entry.id),
+        kind: "upload",
+        row,
+        uploadEntry: entry,
+        propertyLabel,
+        propertyId: row.propertyId,
+        subtitle: entry.kind === "pdf" ? "Uploaded PDF" : "Uploaded image",
+        createdAt: entry.createdAt || row.createdAt,
+      });
+    });
   }
 
   return assets;
@@ -123,12 +143,19 @@ export function promotionAssetBoxTitle(asset: PromotionAsset, indexWithinKind: n
   if (asset.kind === "text" && asset.textEntry) {
     return promotionTextEntryDisplayTitle(asset.textEntry, indexWithinKind);
   }
-  return asset.kind === "flyer" ? "Flyer" : "Promotion text";
+  if (asset.kind === "upload" && asset.uploadEntry) {
+    return promotionUploadDisplayTitle(asset.uploadEntry, indexWithinKind);
+  }
+  if (asset.kind === "flyer") return "Flyer";
+  if (asset.kind === "upload") return "Upload";
+  return "Promotion text";
 }
 
 /** Kind badge label for stacked cards. */
 export function promotionAssetKindLabel(kind: PromotionAssetKind): string {
-  return kind === "flyer" ? "Flyer" : "Text";
+  if (kind === "flyer") return "Flyer";
+  if (kind === "upload") return "Upload";
+  return "Text";
 }
 
 /** Default numbered label for the next asset of a kind (1-based sequence). */
@@ -142,7 +169,7 @@ export function nextPromotionAssetDefaultTitle(
 
 /** Per-kind sequence numbers for a sorted asset list (Flyer 1, Text 1, Flyer 2, …). */
 export function promotionAssetKindIndices(assets: PromotionAsset[]): Map<string, number> {
-  const counts: Record<PromotionAssetKind, number> = { flyer: 0, text: 0 };
+  const counts: Record<PromotionAssetKind, number> = { flyer: 0, text: 0, upload: 0 };
   const indices = new Map<string, number>();
   for (const asset of assets) {
     const index = counts[asset.kind]++;
@@ -158,6 +185,9 @@ export function promotionAssetListTitle(asset: PromotionAsset, indexWithinKind: 
   }
   if (asset.kind === "text" && asset.textEntry) {
     return promotionTextEntryDisplayTitle(asset.textEntry, indexWithinKind);
+  }
+  if (asset.kind === "upload" && asset.uploadEntry) {
+    return promotionUploadDisplayTitle(asset.uploadEntry, indexWithinKind);
   }
   return promotionAssetKindLabel(asset.kind);
 }

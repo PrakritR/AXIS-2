@@ -45,7 +45,9 @@ export function PromotionAssetStack({
         const storedTitle =
           asset.kind === "flyer"
             ? (asset.flyerEntry?.title ?? "")
-            : (asset.textEntry?.title ?? "");
+            : asset.kind === "upload"
+              ? (asset.uploadEntry?.title ?? "")
+              : (asset.textEntry?.title ?? "");
 
         return (
           <div key={asset.id} className={PORTAL_MOBILE_CARD_CLASS}>
