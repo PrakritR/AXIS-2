@@ -129,7 +129,7 @@ const listing = (id: string, name: string) => ({ id, name }) as unknown as MockP
 /**
  * Let the mount effects (applications sync + pipeline sync) flush, then dump the
  * surface. Dumping BEFORE the assertions is deliberate: it means a red run
- * against the pre-fix code still leaves the "No applications yet." screenshot
+ * against the pre-fix code still leaves the empty-state screenshot
  * the manager actually reported.
  */
 async function settleAndDump(name: string, container: HTMLElement) {
@@ -158,7 +158,7 @@ describe("manager Applications tab — pending application on a cold property ca
     expect(await screen.findByText("Maya Alvarez")).toBeTruthy();
     expect(screen.getAllByText("The Magnolia · 2B").length).toBeGreaterThan(0);
     // Pending pill carries the count, and the empty state is gone.
-    expect(screen.queryByText("No applications yet.")).toBeNull();
+    expect(screen.queryByText(/^No applications yet/)).toBeNull();
     await waitFor(() => expect(screen.getByText("Pending").textContent).toContain("1"));
     // Another manager's row is still filtered out on the same cold cache.
     expect(screen.queryByText("Not Your Applicant")).toBeNull();
@@ -169,7 +169,7 @@ describe("manager Applications tab — pending application on a cold property ca
 
     const { container } = render(<ManagerApplications />);
 
-    expect(await screen.findByText("No applications yet.")).toBeTruthy();
+    expect(await screen.findByText(/^No applications yet/)).toBeTruthy();
     expect(screen.queryByText("Not Your Applicant")).toBeNull();
 
     dumpHtml("other-manager-hidden", container.innerHTML);
@@ -182,7 +182,7 @@ describe("manager Applications tab — pending application on a cold property ca
     ROWS = [{ ...RESIDENT_APPLICATION, managerUserId: "owner-user" }];
 
     const { container } = render(<ManagerApplications />);
-    expect(await screen.findByText("No applications yet.")).toBeTruthy();
+    expect(await screen.findByText(/^No applications yet/)).toBeTruthy();
     dumpHtml("co-manager-before-hydrate", container.innerHTML);
 
     // Cache hydrates: the accepted link now grants applications on that property.
