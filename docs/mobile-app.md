@@ -203,50 +203,27 @@ The WebView loads whatever URL is in `ios/App/App/capacitor.config.json`:
 
 Run `npm run cap:dev` with `npm run dev` running, then rebuild in Xcode.
 
-### Xcode Cloud: “branch is not associated with the workflow”
+### Xcode Cloud is retired — GitHub Actions is the only TestFlight pipeline
 
-**Product → Xcode Cloud → Manage Workflows** → edit start conditions → add
-`feat/mobile-app-shell` (or `feat/*`). Xcode Cloud builds the native shell only;
-it does not run your local `npm run dev`.
+**Do not build this app with Xcode Cloud.** The one build+upload path is the
+GitHub Actions workflow
+[`.github/workflows/ios-testflight.yml`](../.github/workflows/ios-testflight.yml),
+which on every push to `production` (and on `workflow_dispatch`) runs `npm ci`,
+`npx cap sync ios` at the production `CAP_SERVER_URL`, the
+`scripts/verify-cap-prod-config.sh` Release guard, and `fastlane beta` to upload
+to TestFlight. It self-skips until the `ASC_*` secrets exist.
 
-### Xcode Cloud: “package at node_modules/@capacitor/… doesn’t exist in file system”
-
-`ios/App/CapApp-SPM/Package.swift` pulls every Capacitor plugin from
-`node_modules` by relative path (`../../../node_modules/@capacitor/app`, …). A
-fresh Xcode Cloud clone has **no `node_modules`** — Xcode Cloud runs `xcodebuild`
-directly and nothing runs `npm ci` — so SPM can’t resolve any of those packages
-and the build dies with:
-
-```
-Could not resolve package dependencies: the package at
-'/Volumes/workspace/repository/node_modules/@capacitor/push-notifications'
-cannot be accessed (doesn't exist in file system)
-```
-
-The fix is **[`ci_scripts/ci_post_clone.sh`](../ci_scripts/ci_post_clone.sh)** at
-the repo root. Xcode Cloud runs it automatically after clone (by exact
-name/location; it must stay executable, committed with the exec bit) **before**
-package resolution. It:
-
-1. Installs **Node 22** via Homebrew — Xcode Cloud runners ship no Node, and
-   `package.json` `engines` require 22.x (`brew install node@22`, PATH-added
-   since versioned formulae are keg-only).
-2. Runs **`npm ci`** (lockfile-exact, never `npm install`).
-3. Runs **`npx cap sync ios`** at the **production** `CAP_SERVER_URL` — Xcode
-   Cloud builds Release, whose WebView must load the live site (same as
-   `npm run cap:prod`).
-4. Runs `scripts/verify-cap-prod-config.sh` (as `CONFIGURATION=Release`) to
-   prove the baked `capacitor.config.json` points at the production origin —
-   the same guard the GitHub workflow runs.
-5. **Verifies** all seven SPM-referenced packages landed in `node_modules` and
-   **fails loudly** otherwise — a silent partial install reproduces the exact
-   error above, just later and more opaquely inside `xcodebuild`.
-
-This mirrors the `npm ci` + `npx cap sync ios` steps in
-[`.github/workflows/ios-testflight.yml`](../.github/workflows/ios-testflight.yml)
-so the Xcode Cloud and GitHub pipelines build the same thing. The script writes
-only `node_modules` and the Capacitor-generated iOS config; it never commits into
-`ios/App/Pods` or other generated output.
+Xcode Cloud was a redundant second pipeline that did the same thing. It failed
+continuously (builds 54–97) because Apple only runs `ci_scripts/ci_post_clone.sh`
+when that folder sits next to the Xcode project it builds (`ios/App/`), not at
+the git repo root where ours lived — so the post-clone step never ran, no
+`npm ci` / `npx cap sync` happened, and `xcodebuild` couldn't resolve the
+Capacitor packages `CapApp-SPM/Package.swift` references from `node_modules`
+(`the package at '…/node_modules/@capacitor/…' cannot be accessed`). Rather than
+maintain two pipelines, Xcode Cloud was disabled in App Store Connect and its
+`ci_scripts/ci_post_clone.sh` deleted (it was never invoked by the GitHub
+workflow, which inlines the same steps). If you ever re-enable Xcode Cloud,
+restore that script **inside `ios/App/ci_scripts/`**, not the repo root.
 
 ### “‘apple-sign-in’ depends on ‘capacitor-swift-pm’ 7.0.0..&lt;8.0.0”
 
@@ -259,8 +236,8 @@ core plugins. `xcodebuild -resolvePackageDependencies` cannot satisfy both.
 The fix is **[`patches/@capacitor-community+apple-sign-in+7.1.0.patch`](../patches/@capacitor-community+apple-sign-in+7.1.0.patch)**,
 which widens that one dependency range to `"7.0.0"..<"9.0.0"`. The root
 `postinstall` script runs `patch-package`, so **every `npm ci` re-applies it** —
-Xcode Cloud (`ci_post_clone.sh`) and GitHub Actions included — and a fresh clone
-is never left with the unpatched plugin. The plugin's Swift source only uses
+the GitHub Actions build included — and a fresh clone is never left with the
+unpatched plugin. The plugin's Swift source only uses
 stable `CAPPlugin` / `CAPBridgedPlugin` APIs that exist in capacitor-swift-pm 8,
 so widening the range is compile-safe.
 
