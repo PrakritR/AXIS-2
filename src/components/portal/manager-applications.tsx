@@ -720,9 +720,9 @@ export function ManagerApplications() {
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => setInviteModalOpen(true)}
             disabled={shareableProperties.length === 0}
-            title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
+            title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
           >
-            Invite
+            Send
           </Button>
         </div>
       }
