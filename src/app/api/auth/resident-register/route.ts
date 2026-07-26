@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { normalizeE164 } from "@/lib/twilio";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
+import { POST as sendResidentSetupLink } from "@/app/api/auth/resident-setup-link/route";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -79,15 +80,40 @@ export async function POST(req: Request) {
       userId = created.user.id;
     }
 
+    // DEFAULT-DENY: a self-serve signup has NOT proven control of this email, so
+    // it never inherits or claims a prior guest application — it mints a clean
+    // resident profile (application_approved=false, no application PII).
     const provisioned = await provisionResidentAccountByEmail(supabase, {
       userId,
       email,
       fullName,
       phone,
+      inheritFromApplication: false,
     });
     if (!provisioned.ok) {
       return NextResponse.json({ error: provisioned.error }, { status: provisioned.status });
     }
+
+    // Verification-gated re-inheritance: if a prior guest application exists for
+    // this email, email the one-time setup link (the token proves control). Only
+    // using that link links/inherits the application — signup itself never does.
+    // Non-blocking (after()) so the smooth create-account → apply flow is not held
+    // on the inbox round-trip. The setup-link route is neutral + rate-limited and
+    // never returns the token to the browser.
+    const verifyEmail = email;
+    after(async () => {
+      try {
+        await sendResidentSetupLink(
+          new Request("http://localhost/api/auth/resident-setup-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: verifyEmail }),
+          }),
+        );
+      } catch {
+        /* non-critical — the "lost my email" resend on create-account is the backup */
+      }
+    });
 
     return NextResponse.json({
       ok: true,

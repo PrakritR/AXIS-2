@@ -1,7 +1,7 @@
 "use client";
 
 import posthog from "posthog-js";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
@@ -51,10 +51,57 @@ export function ResidentSignupForm({
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A signed-in manager/vendor who lands here must NOT mint a second auth user
+  // via self-serve signup — they add the resident role to their existing login
+  // (the additive path owned by the multi-role lane). Only anonymous visitors
+  // see the self-serve form.
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase.auth.getSession();
+        if (!cancelled) setSignedInEmail(data.session?.user?.email ?? null);
+      } catch {
+        if (!cancelled) setSignedInEmail(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const compact = variant === "compact";
   const locked = disabled || busy;
-  const resolvedNext = nextPath.startsWith("/") ? nextPath : "/resident/applications";
+  // Guard against protocol-relative ("//evil") and backslash ("/\\evil") open
+  // redirects — nextPath is URL-controlled.
+  const resolvedNext =
+    nextPath.startsWith("/") && !nextPath.startsWith("//") && !nextPath.startsWith("/\\")
+      ? nextPath
+      : "/resident/applications";
+
+  const addResidentRole = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auth/create-resident-account", { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as { redirectTo?: string; error?: string };
+      if (!res.ok) {
+        setError(body.error || "Could not add resident access. Please try again.");
+        setBusy(false);
+        return;
+      }
+      // Prefer the listing-context next; full navigation so the flipped
+      // active-portal cookie + new resident role are re-read by the portal guard.
+      const dest = resolvedNext !== "/resident/applications" ? resolvedNext : body.redirectTo || "/resident/applications/apply";
+      window.location.assign(nativeAwarePath(dest));
+    } catch {
+      setError("Could not add resident access. Please try again.");
+      setBusy(false);
+    }
+  };
 
   const submit = async () => {
     setError(null);
@@ -88,7 +135,9 @@ export function ResidentSignupForm({
         password,
       });
       if (signInError) {
-        router.push("/auth/sign-in");
+        // Preserve the resident intent + listing context so a manual sign-in
+        // still lands them on this application, not a generic portal.
+        router.push(`/auth/sign-in?intent=resident&next=${encodeURIComponent(resolvedNext)}`);
         return;
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
@@ -216,6 +265,32 @@ export function ResidentSignupForm({
       </div>
     </>
   );
+
+  // Signed-in manager/vendor: no second auth user. Offer the additive path
+  // (resident role on the same login) instead of the self-serve form.
+  if (signedInEmail) {
+    return (
+      <div className={compact ? "resident-signup-form space-y-3" : "space-y-4"}>
+        <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
+          <p className="text-[13px] font-semibold text-foreground">You&apos;re signed in as {signedInEmail}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted">
+            Add resident access to your existing login — same email, no new password, its own resident portal. Switch
+            back anytime without signing out.
+          </p>
+        </div>
+        <Button
+          type="button"
+          data-attr="resident-add-role-submit"
+          className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+          disabled={locked}
+          onClick={() => void addResidentRole()}
+        >
+          {busy ? "Setting up…" : "Add resident access & apply"}
+        </Button>
+        {error ? <p className="text-center text-xs text-rose-600">{error}</p> : null}
+      </div>
+    );
+  }
 
   if (compact) {
     return (

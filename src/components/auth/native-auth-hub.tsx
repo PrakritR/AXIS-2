@@ -433,7 +433,11 @@ function NativeAuthHubInner({
                   disabled={locked}
                   hideLegalFooter
                   initialEmail={email}
-                  nextPath={nextFromUrl && nextFromUrl.startsWith("/") ? nextFromUrl : "/resident/applications"}
+                  nextPath={
+                    nextFromUrl && nextFromUrl.startsWith("/") && !nextFromUrl.startsWith("//") && !nextFromUrl.startsWith("/\\")
+                      ? nextFromUrl
+                      : "/resident/applications"
+                  }
                 />
               ) : role === "vendor" ? (
                 <VendorSignupForm

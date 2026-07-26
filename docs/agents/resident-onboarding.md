@@ -108,7 +108,9 @@ POST /api/auth/resident-setup   (password)      POST /api/auth/register-resident
 - Unit: `tests/unit/resident-setup-token-relink.test.ts`,
   `resident-setup-route.test.ts`, `send-application-submitted-handoff-route.test.ts`,
   `register-resident-oauth-relink-route.test.ts`,
-  `resident-register-disabled-route.test.ts`, plus existing
+  `resident-register-route.test.ts` (self-serve input validation),
+  `provision-resident-default-deny.test.ts` (unverified signup inherits nothing),
+  `public-apply-account-prompt.test.tsx` (3-action gate), plus existing
   `resident-setup-token.test.ts` / `guest-application-upsert.test.ts`.
 - E2E (gated `RESIDENT_SETUP_E2E_ENABLED=1`, dev/test only):
   `tests/e2e/resident-account-setup.spec.ts`.

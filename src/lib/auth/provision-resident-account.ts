@@ -62,10 +62,24 @@ export type ProvisionResidentResult =
   | { ok: true; axisId: string; linkedApplication: boolean }
   | { ok: false; status: number; error: string };
 
-/** Resident signup without typing an Axis ID — links by email when an application exists. */
+/**
+ * Resident signup without typing an Axis ID — links by email when an application
+ * exists. Callers that have PROVEN email control (setup token, OAuth) inherit a
+ * matching application's identity/approval by default. Callers that have NOT
+ * proven control (anonymous self-serve `resident-register`) MUST pass
+ * `inheritFromApplication: false` — default-deny — so signup can never claim or
+ * inherit a prior applicant's application; that only happens later, once the
+ * verification link is used.
+ */
 export async function provisionResidentAccountByEmail(
   supabase: SupabaseClient,
-  opts: { userId: string; email: string; fullName?: string | null; phone?: string | null },
+  opts: {
+    userId: string;
+    email: string;
+    fullName?: string | null;
+    phone?: string | null;
+    inheritFromApplication?: boolean;
+  },
 ): Promise<ProvisionResidentResult> {
   const normalEmail = opts.email.trim().toLowerCase();
   if (!normalEmail.includes("@")) {
@@ -75,7 +89,11 @@ export async function provisionResidentAccountByEmail(
   // application snapshot — it is the most recent value they vouched for.
   const explicitPhone = opts.phone?.trim() ? normalizeE164(opts.phone.trim()) : null;
 
-  const matchingApplication = await findApplicationByEmail(supabase, normalEmail);
+  // Default-deny: unproven callers never inherit. When inheritance is off we
+  // never even LOOK UP the application, so no id/approval/PII can leak onto the
+  // fresh profile — every downstream field already treats a null match as "clean".
+  const matchingApplication =
+    opts.inheritFromApplication === false ? null : await findApplicationByEmail(supabase, normalEmail);
   const linkedApplication = Boolean(matchingApplication);
 
   const existingAuthId = await findAuthUserIdByEmail(supabase, normalEmail);

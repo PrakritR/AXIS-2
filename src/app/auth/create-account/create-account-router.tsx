@@ -8,8 +8,12 @@ import CreateAccountClient from "./create-account-client";
 
 /**
  * Unified create-account surface.
- * Resident self-serve signup is blocked — accounts come from emailed setup links.
- * Legacy manager checkout session_id still uses CreateAccountClient.
+ * Generic resident create-account (`role=resident`, no legacy `axis_id`) routes to
+ * the enabled `ResidentSignupForm` via `NativeAuthHub` — an anonymous visitor
+ * self-serves a resident account; a signed-in manager/vendor is offered the
+ * additive path instead. Legacy `axis_id` links keep `ResidentSignupBlocked`
+ * (they complete an emailed setup-token handoff). Manager checkout `session_id`
+ * still uses CreateAccountClient.
  */
 export default function CreateAccountRouter() {
   const searchParams = useSearchParams();
