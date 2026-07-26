@@ -74,6 +74,7 @@ import {
   createListingDraftTool,
   updateListingDraftTool,
 } from "./domains/listing-draft";
+import { applyListingPhotosTool, getListingMediaInventoryTool } from "./domains/listing-media";
 import { listInboxThreadsTool, getThreadMessagesTool, updateThreadTool } from "./domains/inbox";
 import {
   sendMessageTool,
@@ -137,6 +138,7 @@ export const agentRegistry = buildRegistry([
   listPropertiesTool,
   getPropertyDetailsTool,
   getListingCreationChecklistTool,
+  getListingMediaInventoryTool,
   listInboxThreadsTool,
   getThreadMessagesTool,
   listCalendarEventsTool,
@@ -187,6 +189,7 @@ export const agentRegistry = buildRegistry([
   createPropertyTool,
   createListingDraftTool,
   updateListingDraftTool,
+  applyListingPhotosTool,
   updatePropertyTool,
   updatePropertyLeaseConfigTool,
   copyListingPhotosTool,

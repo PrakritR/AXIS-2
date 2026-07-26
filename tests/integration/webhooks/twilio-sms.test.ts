@@ -34,8 +34,20 @@ function smsRequest(params: Record<string, string>, signature: string | null = "
 function mockDb() {
   const profileUpdates: Array<{ patch: Record<string, unknown>; ids: string[] }> = [];
   const sessionUpdates: Array<Record<string, unknown>> = [];
+  // Cross-store opt-out unification: vendor STOP/START now also write the
+  // canonical `sms_consent` ledger (so the opt-out blocks EVERY send rail, not
+  // just the vendor agent). Capture those upserts so the tests can assert it.
+  const consentUpserts: Array<{ row: Record<string, unknown>; opts?: unknown }> = [];
   const client = {
     from(table: string) {
+      if (table === "sms_consent") {
+        return {
+          upsert: (row: Record<string, unknown>, opts?: unknown) => {
+            consentUpserts.push({ row, opts });
+            return Promise.resolve({ error: null });
+          },
+        };
+      }
       if (table === "agent_sessions") {
         const chain = {
           select: () => chain,
@@ -69,7 +81,7 @@ function mockDb() {
       throw new Error(`unexpected table ${table}`);
     },
   };
-  return { client: client as never, profileUpdates, sessionUpdates };
+  return { client: client as never, profileUpdates, sessionUpdates, consentUpserts };
 }
 
 describe("/api/webhooks/twilio/sms", () => {
@@ -120,11 +132,17 @@ describe("/api/webhooks/twilio/sms", () => {
   });
 
   it("STOP records the opt-out, unbinds the number, and never runs a turn", async () => {
-    const { client, profileUpdates, sessionUpdates } = mockDb();
+    const { client, profileUpdates, sessionUpdates, consentUpserts } = mockDb();
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client);
 
     const res = await POST(smsRequest({ From: "+12065550001", Body: "STOP" }));
     expect(res.status).toBe(200);
+    // Cross-store unification: STOP writes the canonical sms_consent ledger too,
+    // keyed by the normalized bare-10-digit phone, so it blocks EVERY send rail.
+    expect(consentUpserts).toHaveLength(1);
+    expect(consentUpserts[0]!.row.phone).toBe("2065550001");
+    expect(consentUpserts[0]!.row.opted_out_at).toBeTruthy();
+    // …and still the vendor-store column + session unbind, as before.
     expect(profileUpdates[0]!.ids).toEqual(["vendor-user-1"]);
     expect(profileUpdates[0]!.patch.sms_opt_out_at).toBeTruthy();
     expect(sessionUpdates[0]!.vendor_phone_e164).toBeNull();

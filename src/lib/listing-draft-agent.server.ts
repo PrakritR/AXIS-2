@@ -76,18 +76,27 @@ export function appendUploadedImageUrlsToUserMessage(
   message: Anthropic.MessageParam,
   urls: string[],
   purpose: ChatImageUploadPurpose,
+  contextHint?: string | null,
 ): Anthropic.MessageParam {
   if (!urls.length || !Array.isArray(message.content)) return message;
+  const hint = contextHint?.trim() ?? "";
+  const listingModalOpen =
+    purpose === "listing" && /edit listing|new listing|listing ·/i.test(hint);
   const note =
     purpose === "promotion"
       ? [
           "Reference flyer image(s) for style matching. When proposing create_promotion or generate_promotion_flyer, pass these exact URLs in referenceImageUrls and describe layout, colors, and typography in notes or extraInstructions:",
           ...urls.map((url, index) => `${index + 1}. ${url}`),
         ].join("\n")
-      : [
-          "Uploaded listing photos (use these exact URLs in housePhotoUrls for create_listing_draft or update_listing_draft):",
-          ...urls.map((url, index) => `${index + 1}. ${url}`),
-        ].join("\n");
+      : listingModalOpen
+        ? [
+            "Uploaded listing photos. Visually classify each image, then propose apply_listing_photos with propertyId from context and the correct target (house, room, bathroom, or shared_space) plus targetId when needed. URLs:",
+            ...urls.map((url, index) => `${index + 1}. ${url}`),
+          ].join("\n")
+        : [
+            "Uploaded listing photos (use these exact URLs in housePhotoUrls for create_listing_draft or update_listing_draft):",
+            ...urls.map((url, index) => `${index + 1}. ${url}`),
+          ].join("\n");
   return {
     role: "user",
     content: [...message.content, { type: "text", text: note }],
@@ -233,7 +242,7 @@ export async function enrichManagerChatImageAttachments(
   db: SupabaseClient,
   managerUserId: string,
   messages: Anthropic.MessageParam[],
-  opts: { requireSuccessfulUpload: boolean; purpose: ChatImageUploadPurpose },
+  opts: { requireSuccessfulUpload: boolean; purpose: ChatImageUploadPurpose; contextHint?: string | null },
 ): Promise<Anthropic.MessageParam[]> {
   if (!messages.length) return messages;
   const last = messages[messages.length - 1]!;
@@ -251,7 +260,7 @@ export async function enrichManagerChatImageAttachments(
   }
   const next = [...messages];
   if (urls.length > 0) {
-    next[next.length - 1] = appendUploadedImageUrlsToUserMessage(last, urls, opts.purpose);
+    next[next.length - 1] = appendUploadedImageUrlsToUserMessage(last, urls, opts.purpose, opts.contextHint);
     return next;
   }
   if (opts.purpose === "promotion" && blocks.length > 0) {

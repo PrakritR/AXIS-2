@@ -312,6 +312,30 @@ number and is idempotent PER ISO WEEK — the `portal_outbound_mail_records` ded
 row is CLAIMED (`upsert … ignoreDuplicates`) before the send, so a retry /
 redeploy / duplicate tick can never text a resident twice.
 
+### `isPhoneOptedOut` is unified across BOTH opt-out stores
+
+STOP is recorded in two places by different webhooks, and the single gate above
+(`isPhoneOptedOut`, `src/lib/sms-consent.ts`) honors **both**, so a STOP recorded
+on either path blocks every outbound rail:
+
+- **`sms_consent` ledger** (phone-keyed) — the manager work-line webhook
+  (`/api/twilio/inbound`) writes it via `recordOptOut`/`recordOptIn`.
+- **`profiles.sms_opt_out_at` / `sms_consent_at`** (user-keyed) — the vendor-agent
+  webhook (`/api/webhooks/twilio/sms`) writes the column AND now also records the
+  ledger, so a vendor STOP is durable on the canonical store too.
+
+Supersede is computed **globally** across both stores (latest opt-in anywhere
+beats an older opt-out anywhere), so a STOP on one line followed by a START on
+the other re-enables the number instead of dead-ending — carriers expect START to
+work. `isPhoneOptedOut(db, phone, { userId })` folds a user-keyed row's timestamps
+into the same comparison, so a legacy STOP recorded against a profile whose phone
+column is empty still blocks until a later opt-in supersedes it; the vendor-agent
+gates use this unified read so they agree with the send choke point. Both stores
+fail OPEN on infra error (a DB blip never drops all messaging). One shared
+`profilePhoneVariants` helper (`sms-consent.ts`) matches un-normalized phone
+columns and is reused by the inbound webhooks so the variant sets cannot drift.
+Coverage: `tests/unit/sms-opt-out-unified.test.ts`.
+
 ## Claw Messenger (production shared line, `+12053690702`)
 
 The live PropLane messaging system today is ONE shared agent line (Twilio

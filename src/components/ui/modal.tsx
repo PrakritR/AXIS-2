@@ -153,6 +153,14 @@ export function Modal({
           >
             {children}
           </div>
+          {showAssistantStrip && assistantConversationInstance > 0 ? (
+            <ModalAssistantStrip
+              contextHint={assistantHint}
+              storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
+              conversationInstance={assistantConversationInstance}
+              className={cn(dense ? "px-0" : undefined)}
+            />
+          ) : null}
           {footer ? (
             <div
               className={cn(
@@ -162,13 +170,6 @@ export function Modal({
             >
               {footer}
             </div>
-          ) : null}
-          {showAssistantStrip && assistantConversationInstance > 0 ? (
-            <ModalAssistantStrip
-              contextHint={assistantHint}
-              storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
-              conversationInstance={assistantConversationInstance}
-            />
           ) : null}
         </div>
       </div>

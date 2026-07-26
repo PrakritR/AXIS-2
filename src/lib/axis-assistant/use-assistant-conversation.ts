@@ -21,6 +21,7 @@ import {
   switchAssistantThread,
 } from "@/lib/axis-assistant/assistant-chat-threads";
 import { notifyAgentPendingActionsChanged } from "@/lib/axis-assistant/pending-actions-events";
+import { notifyListingAssistantUpdated } from "@/lib/listing-assistant-events";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type ToolTraceEntry = { tool: string; ok: boolean };
@@ -166,6 +167,10 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
   const resolvePendingAction = useCallback(
     async (decision: "confirm" | "deny") => {
       if (!pendingAction || loading) return;
+      const confirmedKind = pendingAction.preview.kind;
+      const listingIdForRefresh = pendingAction.preview.fields
+        .find((f) => f.label === "Listing id")
+        ?.value?.trim();
       setError(null);
       setLoading(true);
       try {
@@ -193,6 +198,13 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
           setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
           setLastTools(data.toolTrace ?? []);
           setPendingAction(null);
+          if (
+            decision === "confirm" &&
+            confirmedKind === "apply_listing_photos" &&
+            listingIdForRefresh
+          ) {
+            notifyListingAssistantUpdated({ propertyId: listingIdForRefresh, tool: "apply_listing_photos" });
+          }
         }
       } catch {
         setError("Network error.");

@@ -172,7 +172,7 @@ export function AssistantDockPanel({
         ref={scrollRef}
         className={cn(
           "flex min-h-0 flex-col overflow-y-auto px-4",
-          compact ? "max-h-40 py-2" : "flex-1 py-4",
+          compact ? "min-h-0 flex-1 py-2" : "flex-1 py-4",
           !hasConversation && !compact && "flex-1",
         )}
       >
