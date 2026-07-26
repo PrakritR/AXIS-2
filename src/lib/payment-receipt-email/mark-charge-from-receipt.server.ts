@@ -3,20 +3,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { upsertManagerCharges } from "@/lib/household-charges.server";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { chargePaymentReference } from "@/lib/manual-payment-instructions";
-import { parseMoneyAmount } from "@/lib/parse-money";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
-import type { ParsedPaymentReceipt } from "@/lib/payment-receipt-email/parse-receipt";
+import type { ResidentReceiptContext } from "@/lib/payment-receipt-email/parse-receipt";
+import {
+  chargeAmountCents,
+  matchChargeByContext,
+} from "@/lib/payment-receipt-email/receipt-fallback-match";
 
 export type MarkChargeFromReceiptResult =
   | { outcome: "idempotent"; sourceId: string }
-  | { outcome: "marked_paid"; chargeId: string; channel: "venmo" | "zelle"; sourceId: string }
+  | { outcome: "marked_paid"; chargeId: string; channel: "venmo" | "zelle"; sourceId: string; matchedBy: "reference" | "context" }
   | { outcome: "no_match"; paymentReference: string; sourceId: string }
   | { outcome: "ambiguous"; paymentReference: string; matchCount: number; sourceId: string };
-
-function chargeAmountCents(charge: HouseholdCharge): number {
-  const label = charge.balanceLabel?.trim() || charge.amountLabel?.trim() || "";
-  return Math.round(parseMoneyAmount(label) * 100);
-}
 
 async function receiptSourceAlreadyProcessed(
   db: SupabaseClient,
@@ -57,7 +55,7 @@ async function loadPendingChargesForManager(
 export async function markChargePaidFromReceipt(
   db: SupabaseClient,
   managerUserId: string,
-  receipt: ParsedPaymentReceipt,
+  receipt: ResidentReceiptContext,
   opts: {
     sourceId: string;
     sourceField: "paidViaEmailReceiptId" | "paidViaGmailMessageId";
@@ -67,31 +65,60 @@ export async function markChargePaidFromReceipt(
     return { outcome: "idempotent", sourceId: opts.sourceId };
   }
 
+  const referenceLabel = receipt.paymentReference ?? "(no reference)";
   const pending = await loadPendingChargesForManager(db, managerUserId);
-  const matches = pending.filter((charge) => {
-    if (chargePaymentReference(charge) !== receipt.paymentReference) return false;
-    const expected = chargeAmountCents(charge);
-    if (expected <= 0) return false;
-    return Math.abs(expected - receipt.amountCents) <= 1;
-  });
 
-  if (matches.length === 0) {
-    return {
-      outcome: "no_match",
-      sourceId: opts.sourceId,
-      paymentReference: receipt.paymentReference,
-    };
-  }
-  if (matches.length > 1) {
-    return {
-      outcome: "ambiguous",
-      sourceId: opts.sourceId,
-      paymentReference: receipt.paymentReference,
-      matchCount: matches.length,
-    };
+  let charge: HouseholdCharge;
+  let matchedBy: "reference" | "context";
+
+  if (receipt.paymentReference) {
+    // Strong path: the resident typed the PL- code. Trust it exactly — never
+    // fall through to fuzzy matching on a code that resolves to nothing (a typo
+    // must not be silently re-attributed to some other charge).
+    const reference = receipt.paymentReference;
+    const matches = pending.filter((c) => {
+      if (chargePaymentReference(c) !== reference) return false;
+      const expected = chargeAmountCents(c);
+      if (expected <= 0) return false;
+      return Math.abs(expected - receipt.amountCents) <= 1;
+    });
+    if (matches.length === 0) {
+      return { outcome: "no_match", sourceId: opts.sourceId, paymentReference: referenceLabel };
+    }
+    if (matches.length > 1) {
+      return {
+        outcome: "ambiguous",
+        sourceId: opts.sourceId,
+        paymentReference: referenceLabel,
+        matchCount: matches.length,
+      };
+    }
+    charge = matches[0]!;
+    matchedBy = "reference";
+  } else {
+    // Fallback path: no reference code. Match on amount + payer identity +
+    // property/unit context, biasing to `ambiguous` so a weak match is surfaced
+    // for the manager rather than auto-credited.
+    const result = matchChargeByContext(pending, {
+      amountCents: receipt.amountCents,
+      payerName: receipt.payerName,
+      memoText: receipt.memoText,
+    });
+    if (result.kind === "none") {
+      return { outcome: "no_match", sourceId: opts.sourceId, paymentReference: referenceLabel };
+    }
+    if (result.kind === "ambiguous") {
+      return {
+        outcome: "ambiguous",
+        sourceId: opts.sourceId,
+        paymentReference: referenceLabel,
+        matchCount: result.matchCount,
+      };
+    }
+    charge = result.charge;
+    matchedBy = "context";
   }
 
-  const charge = matches[0]!;
   const now = new Date().toISOString();
   const merged: HouseholdCharge = {
     ...charge,
@@ -132,5 +159,6 @@ export async function markChargePaidFromReceipt(
     sourceId: opts.sourceId,
     chargeId: charge.id,
     channel: receipt.channel,
+    matchedBy,
   };
 }

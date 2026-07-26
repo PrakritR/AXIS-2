@@ -148,6 +148,79 @@ export function parsePaymentReceiptEmail(opts: {
   return parseWithReference(opts, PL_REFERENCE, "resident_charge");
 }
 
+/** Bound the memo text we retain for reference-less matching. */
+const MEMO_CONTEXT_MAX_CHARS = 4000;
+
+/**
+ * A resident-charge receipt with everything we can pull off the notification —
+ * including receipts that carry NO `PL-` code. `paymentReference` is null when
+ * absent; `payerName` and `memoText` back the reference-less fallback match.
+ */
+export type ResidentReceiptContext = {
+  channel: PaymentReceiptChannel;
+  amountCents: number;
+  /** `PL-XXXXXX` code if the resident included one, else null. */
+  paymentReference: string | null;
+  /** Display name of the person who sent the payment, from the notification copy. */
+  payerName: string | null;
+  /** Subject + body (bounded) retained only for property/unit context matching. */
+  memoText: string;
+};
+
+/**
+ * Pull the payer's display name out of a Zelle/Venmo notification. Handles the
+ * common received-money phrasings: "Junaid Mohammed paid you $50.00",
+ * "… sent you …", and "You received $50.00 from Junaid Mohammed". Returns null
+ * when no name can be confidently isolated.
+ */
+export function extractReceiptPayerName(subject: string, body: string): string | null {
+  const hay = `${subject}\n${body}`;
+  const patterns = [
+    /^\s*([A-Za-z][A-Za-z.'\- ]{1,60}?)\s+paid you\b/im,
+    /^\s*([A-Za-z][A-Za-z.'\- ]{1,60}?)\s+sent you\b/im,
+    /\breceived\b[^\n]{0,40}?\bfrom\s+([A-Za-z][A-Za-z.'\- ]{1,60}?)(?:\s+with\s+zelle|\s+for\b|[.,!\n]|$)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(hay);
+    const raw = match?.[1]?.replace(/\s+/g, " ").trim();
+    if (raw && /[A-Za-z]{2,}/.test(raw) && raw.toLowerCase() !== "you") return raw;
+  }
+  return null;
+}
+
+/**
+ * Parse a resident-charge receipt for BOTH the reference path and the
+ * reference-less fallback. Requires a trusted channel + sender + a positive
+ * amount (same authentication as {@link parsePaymentReceiptEmail}); the `PL-`
+ * code is optional here. Returns null for anything that is not a genuine,
+ * amount-bearing Zelle/Venmo receipt.
+ */
+export function parseResidentReceiptContext(opts: {
+  fromEmail: string;
+  subject: string;
+  body: string;
+}): ResidentReceiptContext | null {
+  const subject = opts.subject.trim();
+  const body = opts.body.trim();
+  const combined = `${subject}\n${body}`;
+
+  const channel = inferChannel(opts);
+  if (!channel) return null;
+  if (!senderLooksLikeReceipt(opts.fromEmail, channel)) return null;
+
+  const amountCents = parseAmountCents(combined);
+  if (amountCents == null) return null;
+
+  const refMatch = PL_REFERENCE.exec(combined);
+  return {
+    channel,
+    amountCents,
+    paymentReference: refMatch?.[1] ?? null,
+    payerName: extractReceiptPayerName(subject, body),
+    memoText: combined.slice(0, MEMO_CONTEXT_MAX_CHARS),
+  };
+}
+
 /** Parse vendor work-order payout receipt (WO- reference). */
 export function parseWorkOrderPaymentReceiptEmail(opts: {
   fromEmail: string;

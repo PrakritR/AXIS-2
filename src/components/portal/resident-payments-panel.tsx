@@ -765,7 +765,7 @@ export function ResidentPaymentsPanel({
             </p>
           </div>
         ) : null}
-        {row.paymentReference && (row.zelleContactSnapshot || row.venmoContactSnapshot) ? (
+        {row.zelleContactSnapshot || row.venmoContactSnapshot ? (
           <div className="glass-card mb-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
             <p className="text-xs font-semibold text-foreground">Payment reference</p>
             <p className="mt-1 text-sm leading-relaxed text-muted">
@@ -774,13 +774,14 @@ export function ResidentPaymentsPanel({
                 type="button"
                 className="font-mono font-semibold text-primary underline-offset-2 hover:underline"
                 onClick={() => {
-                  void navigator.clipboard?.writeText(row.paymentReference ?? "");
+                  void navigator.clipboard?.writeText(chargePaymentReference(row));
                   showToast("Reference copied.");
                 }}
               >
-                {row.paymentReference}
+                {chargePaymentReference(row)}
               </button>{" "}
-              in your Zelle or Venmo memo so your manager can match this payment.
+              in your Zelle or Venmo memo so your manager can match this payment automatically. No code? We can still
+              match it from your name and the property, but the code is fastest.
             </p>
           </div>
         ) : null}
@@ -788,16 +789,9 @@ export function ResidentPaymentsPanel({
           <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
             <p className="text-xs font-semibold">Pay with Zelle</p>
             <p className="mt-1 text-sm leading-relaxed">
-              Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>.
-              {row.paymentReference ? (
-                <>
-                  {" "}
-                  Put <span className="font-mono font-medium">{row.paymentReference}</span> in the memo.
-                </>
-              ) : (
-                <> Include your name and unit in the memo.</>
-              )}{" "}
-              After you send payment, tap <span className="font-semibold">Check payment</span> below.
+              Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Put{" "}
+              <span className="font-mono font-medium">{chargePaymentReference(row)}</span> in the memo. After you send
+              payment, tap <span className="font-semibold">Check payment</span> below.
             </p>
           </div>
         ) : null}
@@ -805,16 +799,9 @@ export function ResidentPaymentsPanel({
           <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
             <p className="text-xs font-semibold">Pay with Venmo</p>
             <p className="mt-1 text-sm leading-relaxed">
-              Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>.
-              {row.paymentReference ? (
-                <>
-                  {" "}
-                  Put <span className="font-mono font-medium">{row.paymentReference}</span> in the note.
-                </>
-              ) : (
-                <> Include your name and unit in the note.</>
-              )}{" "}
-              After you send payment, tap <span className="font-semibold">Check payment</span> below.
+              Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Put{" "}
+              <span className="font-mono font-medium">{chargePaymentReference(row)}</span> in the note. After you send
+              payment, tap <span className="font-semibold">Check payment</span> below.
             </p>
           </div>
         ) : null}

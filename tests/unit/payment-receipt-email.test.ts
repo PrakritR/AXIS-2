@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   bankSenderIsAllowed,
+  extractReceiptPayerName,
   parsePaymentReceiptEmail,
+  parseResidentReceiptContext,
   parseWorkOrderPaymentReceiptEmail,
 } from "@/lib/payment-receipt-email/parse-receipt";
 import {
@@ -71,6 +73,58 @@ describe("parsePaymentReceiptEmail", () => {
         fromEmail: "spam@evil.com",
         subject: "You paid $50.00",
         body: "PL-ABC123",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("extractReceiptPayerName", () => {
+  it("pulls the payer from a Venmo 'X paid you' subject", () => {
+    expect(extractReceiptPayerName("Junaid Mohammed paid you $50.00", "")).toBe("Junaid Mohammed");
+  });
+
+  it("pulls the payer from a 'You received $X from Y' line", () => {
+    expect(
+      extractReceiptPayerName("You received money", "You received $50.00 from Junaid Mohammed with Zelle"),
+    ).toBe("Junaid Mohammed");
+  });
+
+  it("returns null when no payer can be isolated", () => {
+    expect(extractReceiptPayerName("Payment received", "Thanks for your payment")).toBeNull();
+  });
+});
+
+describe("parseResidentReceiptContext — reference-less real receipts", () => {
+  it("parses the captain's real Venmo receipt (no PL- code)", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Junaid Mohammed paid you $50.00",
+      body: "Junaid Mohammed paid you $50.00\nApplication fee for room 5 at 5257 Brooklyn avenue",
+    });
+    expect(ctx).not.toBeNull();
+    expect(ctx?.channel).toBe("venmo");
+    expect(ctx?.amountCents).toBe(5000);
+    expect(ctx?.paymentReference).toBeNull();
+    expect(ctx?.payerName).toBe("Junaid Mohammed");
+    expect(ctx?.memoText).toContain("5257 Brooklyn avenue");
+  });
+
+  it("still captures the PL- code when the resident included one", () => {
+    const ctx = parseResidentReceiptContext({
+      fromEmail: "venmo@venmo.com",
+      subject: "Jane Doe paid you $150.00",
+      body: "Memo: PL-ABC123",
+    });
+    expect(ctx?.paymentReference).toBe("PL-ABC123");
+    expect(ctx?.amountCents).toBe(15000);
+  });
+
+  it("rejects an untrusted sender even with an amount", () => {
+    expect(
+      parseResidentReceiptContext({
+        fromEmail: "spam@evil.com",
+        subject: "You got paid $50.00",
+        body: "5257 Brooklyn avenue",
       }),
     ).toBeNull();
   });

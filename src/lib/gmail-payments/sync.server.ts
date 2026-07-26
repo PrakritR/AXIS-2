@@ -4,7 +4,7 @@ import { loadManagerManualPaymentSettings } from "@/lib/manager-manual-payment-s
 import { markChargePaidFromReceipt } from "@/lib/payment-receipt-email/mark-charge-from-receipt.server";
 import { markWorkOrderPaidFromVendorReceipt } from "@/lib/payment-receipt-email/mark-work-order-from-receipt.server";
 import {
-  parsePaymentReceiptEmail,
+  parseResidentReceiptContext,
   parseWorkOrderPaymentReceiptEmail,
 } from "@/lib/payment-receipt-email/parse-receipt";
 
@@ -47,20 +47,21 @@ export async function syncGmailPaymentReceipts(
   };
 
   for (const msg of messages) {
-    const receipt =
-      role === "manager"
-        ? parsePaymentReceiptEmail({ fromEmail: msg.fromEmail, subject: msg.subject, body: msg.body })
-        : parseWorkOrderPaymentReceiptEmail({ fromEmail: msg.fromEmail, subject: msg.subject, body: msg.body });
-    if (!receipt) continue;
-
+    const email = { fromEmail: msg.fromEmail, subject: msg.subject, body: msg.body };
     try {
-      const outcome =
-        role === "manager"
-          ? await markChargePaidFromReceipt(db, userId, receipt, {
-              sourceId: msg.id,
-              sourceField: "paidViaGmailMessageId",
-            })
-          : await markWorkOrderPaidFromVendorReceipt(db, userId, receipt, msg.id);
+      let outcome: { outcome: "marked_paid" | "no_match" | "ambiguous" | "idempotent" } | null = null;
+      if (role === "manager") {
+        const receipt = parseResidentReceiptContext(email);
+        if (!receipt) continue;
+        outcome = await markChargePaidFromReceipt(db, userId, receipt, {
+          sourceId: msg.id,
+          sourceField: "paidViaGmailMessageId",
+        });
+      } else {
+        const receipt = parseWorkOrderPaymentReceiptEmail(email);
+        if (!receipt) continue;
+        outcome = await markWorkOrderPaidFromVendorReceipt(db, userId, receipt, msg.id);
+      }
 
       switch (outcome.outcome) {
         case "marked_paid":
