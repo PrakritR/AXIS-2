@@ -12,7 +12,7 @@ architecture reference behind it; keep the two in sync.
 
 | Path | Trigger | Latency |
 | --- | --- | --- |
-| **Linked Gmail** | Manager taps **Sync now** (`POST /api/portal/gmail-payments/sync`) | On sync only — no automatic cron |
+| **Linked Gmail** | Manager taps **Sync now** (`POST /api/portal/gmail-payments/sync`); a resident's **Check payment** also runs a sync (`resident-check-manual-payment.server.ts`) | On sync only — no automatic cron |
 | **Forwarded email** (`payments+<token>@…`) | A Gmail filter forwards receipts; the inbound webhook processes each on arrival | Instant |
 
 Both paths run the SAME parse → match → mark-paid pipeline
@@ -41,12 +41,13 @@ model never invents a match.
    resolves to nothing is `no_match` — never re-attributed by fuzzy fallback.
 2. **Reference-less fallback (`receipt-fallback-match.ts`).** Real people write
    "Application fee for room 5 at 5257 Brooklyn avenue" with no code. We match on
-   **amount + payer name + property/unit context**:
-   - Payer name must share **two distinct tokens (first + last)** with the
-     resident on file.
-   - Property match needs the **street number _and_ a distinctive word** from the
-     listing label in the memo (a generic "avenue" alone never matches).
-   - Auto-mark only when **exactly one** charge has the amount and a strong
+   **amount plus an identity signal — payer name and/or property/unit context**
+   (either signal suffices; each has its own bar):
+   - A payer-name signal requires **two distinct tokens (first + last)** shared
+     with the resident on file.
+   - A property signal needs the **street number _and_ a distinctive word** from
+     the listing label in the memo (a generic "avenue" alone never matches).
+   - Auto-mark only when **exactly one** charge has the amount and at least one
      identity signal. Otherwise the receipt is counted **`ambiguous`** and the
      charge simply stays **pending** for the manager to mark paid manually —
      there is no approval queue, and nothing is credited. **Amount alone never
@@ -77,7 +78,8 @@ applied to at most one charge.
 
 ### Detection timing
 - **Forwarded email:** matched the moment the receipt lands.
-- **Linked Gmail:** matched when the manager taps **Sync now**.
+- **Linked Gmail:** matched when the manager taps **Sync now** (or a resident
+  taps **Check payment**, which triggers the same sync).
 - Anything we can't confidently attribute is counted **ambiguous** and left
   alone — the charge stays pending for the manager to mark paid manually, and
   is never silently credited.

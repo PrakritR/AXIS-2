@@ -317,7 +317,6 @@ function ChannelPaymentSetupModal({
 export function ManagerPaymentSetupModal({
   open,
   onClose,
-  portalBase: _portalBase,
 }: {
   open: boolean;
   onClose: () => void;
