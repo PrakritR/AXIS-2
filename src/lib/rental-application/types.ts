@@ -104,6 +104,14 @@ export type RentalWizardFormState = {
   applicationFeePayChannel: "ach" | "zelle" | "venmo" | "other" | "stripe";
   /** Step 12 — applicant attests they sent a manual fee payment (manager must still mark the charge paid). */
   applicationFeeZelleSentConfirmed: boolean;
+  /** Step 12 — a manager-issued code the applicant entered to waive the application fee. */
+  applicationFeeWaiverCode: string;
+  /**
+   * Step 12 — the waiver code above has been validated AND redeemed server-side
+   * (`/api/public/application-fee-waiver`). Once true the applicant owes nothing
+   * and Stripe checkout is skipped entirely for this application.
+   */
+  applicationFeeWaived: boolean;
   /** Step 9 — answers to the listing's manager-defined application questions. */
   customFieldAnswers: RentalCustomFieldAnswer[];
   /**

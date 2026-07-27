@@ -39,6 +39,10 @@ function applicationFeeFallbackChargeId(residentEmail: string, propertyId: strin
   return `hc_app_fee_${chargeKeyPart(residentEmail)}_${chargeKeyPart(propertyId)}`;
 }
 
+function holdingDepositFallbackChargeId(residentEmail: string, propertyId: string): string {
+  return `hc_holding_${chargeKeyPart(residentEmail)}_${chargeKeyPart(propertyId)}`;
+}
+
 function isChargePaid(row: ChargeRow, charge: HouseholdCharge): boolean {
   return row.status === "paid" || charge.status === "paid";
 }
@@ -82,6 +86,34 @@ async function loadApplicationFeeRow(
   return rows[0] ?? null;
 }
 
+async function loadHoldingDepositRow(
+  db: SupabaseClient,
+  residentEmail: string,
+  propertyId: string,
+  residentUserId?: string | null,
+): Promise<ChargeRow | null> {
+  const email = residentEmail.trim().toLowerCase();
+  const pid = propertyId.trim();
+  if (!email || !pid) return null;
+
+  const { data, error } = await db
+    .from("portal_household_charge_records")
+    .select("id, row_data, status, manager_user_id")
+    .eq("kind", "holding_deposit")
+    .eq("property_id", pid)
+    .eq("resident_email", email)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as ChargeRow[];
+  if (residentUserId) {
+    const byUser = rows.find((row) => row.row_data?.residentUserId === residentUserId);
+    if (byUser) return byUser;
+  }
+  return rows[0] ?? null;
+}
+
 async function syncManagersForCharges(db: SupabaseClient, managerIds: Iterable<string>): Promise<void> {
   for (const managerUserId of managerIds) {
     if (!managerUserId.trim()) continue;
@@ -93,30 +125,21 @@ async function syncManagersForCharges(db: SupabaseClient, managerIds: Iterable<s
   }
 }
 
-async function ensureApplicationFeeChargeRow(
-  db: SupabaseClient,
-  input: {
-    residentEmail: string;
-    propertyId: string;
-    residentUserId?: string | null;
-    residentName?: string;
-  },
-): Promise<ChargeRow | null> {
-  const existing = await loadApplicationFeeRow(
-    db,
-    input.residentEmail,
-    input.propertyId,
-    input.residentUserId,
-  );
-  if (existing) return existing;
+type ListingLookup = {
+  managerUserId: string;
+  propertyLabel: string;
+  sub: ManagerListingSubmissionV1;
+};
 
-  const managerUserId = await resolveManagerUserIdForProperty(db, input.propertyId);
+/** Shared by the fee and deposit row-ensure paths so each does only one property fetch, not two. */
+async function loadListingForProperty(db: SupabaseClient, propertyId: string): Promise<ListingLookup | null> {
+  const managerUserId = await resolveManagerUserIdForProperty(db, propertyId);
   if (!managerUserId) return null;
 
   const { data: propertyRecord, error } = await db
     .from("manager_property_records")
     .select("property_data")
-    .eq("id", input.propertyId.trim())
+    .eq("id", propertyId.trim())
     .maybeSingle();
   if (error) throw new Error(error.message);
 
@@ -126,6 +149,32 @@ async function ensureApplicationFeeChargeRow(
       : null;
   const sub = propertyData?.listingSubmission as ManagerListingSubmissionV1 | undefined;
   if (!sub || sub.v !== 1) return null;
+
+  const propertyLabel = typeof propertyData?.title === "string" ? propertyData.title : sub.buildingName || "Listing";
+  return { managerUserId, propertyLabel, sub };
+}
+
+async function ensureApplicationFeeChargeRow(
+  db: SupabaseClient,
+  input: {
+    residentEmail: string;
+    propertyId: string;
+    residentUserId?: string | null;
+    residentName?: string;
+  },
+  listing?: ListingLookup | null,
+): Promise<ChargeRow | null> {
+  const existing = await loadApplicationFeeRow(
+    db,
+    input.residentEmail,
+    input.propertyId,
+    input.residentUserId,
+  );
+  if (existing) return existing;
+
+  const resolved = listing ?? (await loadListingForProperty(db, input.propertyId));
+  if (!resolved) return null;
+  const { managerUserId, propertyLabel, sub } = resolved;
 
   const amount = parseMoneyAmount(sub.applicationFee);
   if (amount <= 0) return null;
@@ -140,7 +189,7 @@ async function ensureApplicationFeeChargeRow(
     residentName: input.residentName?.trim() || "Applicant",
     residentUserId: input.residentUserId ?? null,
     propertyId: input.propertyId.trim(),
-    propertyLabel: typeof propertyData?.title === "string" ? propertyData.title : sub.buildingName || "Listing",
+    propertyLabel,
     managerUserId,
     kind: "application_fee",
     title: "Application fee",
@@ -157,6 +206,57 @@ async function ensureApplicationFeeChargeRow(
 
   await upsertManagerCharges(db, managerUserId, [charge as unknown as Record<string, unknown>]);
   return loadApplicationFeeRow(db, email, input.propertyId, input.residentUserId);
+}
+
+/**
+ * Sibling of `ensureApplicationFeeChargeRow` for the holding-deposit leg of a
+ * combined at-application charge. Only ever called when the listing's
+ * `holdingDepositTiming` is "at_application" — the caller checks that first.
+ */
+async function ensureHoldingDepositChargeRow(
+  db: SupabaseClient,
+  input: {
+    residentEmail: string;
+    propertyId: string;
+    residentUserId?: string | null;
+    residentName?: string;
+  },
+  listing: ListingLookup,
+): Promise<ChargeRow | null> {
+  const existing = await loadHoldingDepositRow(db, input.residentEmail, input.propertyId, input.residentUserId);
+  if (existing) return existing;
+
+  const { managerUserId, propertyLabel, sub } = listing;
+  const amount = parseMoneyAmount(sub.holdingDeposit ?? "");
+  if (amount <= 0) return null;
+
+  const email = input.residentEmail.trim();
+  const label = sub.holdingDeposit?.trim() || `$${amount.toFixed(2)}`;
+  const chargeId = holdingDepositFallbackChargeId(email, input.propertyId);
+  const charge: HouseholdCharge = {
+    id: chargeId,
+    createdAt: new Date().toISOString(),
+    residentEmail: email,
+    residentName: input.residentName?.trim() || "Applicant",
+    residentUserId: input.residentUserId ?? null,
+    propertyId: input.propertyId.trim(),
+    propertyLabel,
+    managerUserId,
+    kind: "holding_deposit",
+    title: "Holding deposit",
+    amountLabel: label,
+    balanceLabel: label.includes("$") ? label : `$${amount.toFixed(2)}`,
+    status: "pending",
+    paymentReference: generatePaymentReference(chargeId),
+    zelleContactSnapshot:
+      sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined,
+    venmoContactSnapshot:
+      sub.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined,
+    blocksLeaseUntilPaid: false,
+  };
+
+  await upsertManagerCharges(db, managerUserId, [charge as unknown as Record<string, unknown>]);
+  return loadHoldingDepositRow(db, email, input.propertyId, input.residentUserId);
 }
 
 export async function checkResidentManualPayments(
@@ -223,6 +323,8 @@ export async function checkApplicationFeeManualPayment(
     propertyId: string;
     residentUserId?: string | null;
     residentName?: string;
+    /** Skip requiring the fee charge — a manager waiver code already covered it. */
+    feeWaived?: boolean;
   },
 ): Promise<CheckManualPaymentResult> {
   const email = input.residentEmail.trim().toLowerCase();
@@ -234,37 +336,71 @@ export async function checkApplicationFeeManualPayment(
     return { ok: false, status: 400, error: "propertyId is required." };
   }
 
-  const row =
-    (await ensureApplicationFeeChargeRow(db, input)) ??
-    (await loadApplicationFeeRow(db, email, propertyId, input.residentUserId));
-  if (!row) {
-    return { ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE };
+  const listing = await loadListingForProperty(db, propertyId);
+  const depositAtApplication = listing?.sub.holdingDepositTiming === "at_application";
+  const depositOwed = depositAtApplication && parseMoneyAmount(listing?.sub.holdingDeposit ?? "") > 0;
+  const feeOwed = !input.feeWaived;
+
+  const charges: HouseholdCharge[] = [];
+  const managerIds = new Set<string>();
+
+  if (feeOwed) {
+    const row =
+      (await ensureApplicationFeeChargeRow(db, input, listing)) ??
+      (await loadApplicationFeeRow(db, email, propertyId, input.residentUserId));
+    if (!row) {
+      return { ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE };
+    }
+    const charge = row.row_data;
+    if (!charge?.id) {
+      return { ok: false, status: 500, error: "Invalid application fee record." };
+    }
+    const managerUserId = (row.manager_user_id as string | null)?.trim() || charge.managerUserId?.trim() || "";
+    if (managerUserId) managerIds.add(managerUserId);
   }
 
-  const charge = row.row_data;
-  if (!charge?.id) {
-    return { ok: false, status: 500, error: "Invalid application fee record." };
+  if (depositOwed && listing) {
+    const row =
+      (await ensureHoldingDepositChargeRow(db, input, listing)) ??
+      (await loadHoldingDepositRow(db, email, propertyId, input.residentUserId));
+    if (!row) {
+      return { ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE };
+    }
+    const charge = row.row_data;
+    if (!charge?.id) {
+      return { ok: false, status: 500, error: "Invalid holding deposit record." };
+    }
+    const managerUserId = (row.manager_user_id as string | null)?.trim() || charge.managerUserId?.trim() || "";
+    if (managerUserId) managerIds.add(managerUserId);
   }
 
-  const managerUserId =
-    (row.manager_user_id as string | null)?.trim() || charge.managerUserId?.trim() || "";
-  if (managerUserId) {
-    await syncManagersForCharges(db, [managerUserId]);
+  if (managerIds.size > 0) {
+    await syncManagersForCharges(db, managerIds);
   }
 
-  const refreshed = (await loadApplicationFeeRow(db, email, propertyId, input.residentUserId)) ?? row;
-  const refreshedCharge = refreshed.row_data;
-  if (!refreshedCharge?.id) {
-    return { ok: false, status: 500, error: "Invalid application fee record." };
+  if (feeOwed) {
+    const refreshed = await loadApplicationFeeRow(db, email, propertyId, input.residentUserId);
+    const refreshedCharge = refreshed?.row_data;
+    if (!refreshed || !refreshedCharge?.id) {
+      return { ok: false, status: 500, error: "Invalid application fee record." };
+    }
+    if (!isChargePaid(refreshed, refreshedCharge)) {
+      return { ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE };
+    }
+    charges.push({ ...refreshedCharge, id: String(refreshedCharge.id ?? refreshed.id) });
   }
 
-  if (!isChargePaid(refreshed, refreshedCharge)) {
-    return { ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE };
+  if (depositOwed) {
+    const refreshed = await loadHoldingDepositRow(db, email, propertyId, input.residentUserId);
+    const refreshedCharge = refreshed?.row_data;
+    if (!refreshed || !refreshedCharge?.id) {
+      return { ok: false, status: 500, error: "Invalid holding deposit record." };
+    }
+    if (!isChargePaid(refreshed, refreshedCharge)) {
+      return { ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE };
+    }
+    charges.push({ ...refreshedCharge, id: String(refreshedCharge.id ?? refreshed.id) });
   }
 
-  return {
-    ok: true,
-    paid: true,
-    charges: [{ ...refreshedCharge, id: String(refreshedCharge.id ?? refreshed.id) }],
-  };
+  return { ok: true, paid: true, charges };
 }

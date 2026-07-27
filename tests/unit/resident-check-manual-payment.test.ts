@@ -54,9 +54,18 @@ function makeCharge(overrides: Partial<HouseholdCharge> & { id: string }): House
   };
 }
 
-function makeDb(rows: ChargeRow[]) {
+function makeDb(rows: ChargeRow[], propertyData: Record<string, unknown> | null = null) {
   const store = rows.map((row) => ({ ...row, row_data: { ...row.row_data } }));
   const from = vi.fn((table: string) => {
+    if (table === "manager_property_records") {
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: propertyData ? { property_data: propertyData } : null, error: null }),
+          }),
+        }),
+      };
+    }
     if (table !== "portal_household_charge_records") {
       return {
         select: () => ({
@@ -221,6 +230,133 @@ describe("checkApplicationFeeManualPayment", () => {
       expect(result.charges[0]?.status).toBe("paid");
     } else {
       throw new Error("expected paid application fee");
+    }
+  });
+});
+
+describe("checkApplicationFeeManualPayment — combined fee + at-application holding deposit", () => {
+  beforeEach(() => {
+    syncGmailPaymentReceipts.mockClear();
+  });
+
+  const combinedListingPropertyData = {
+    listingSubmission: {
+      v: 1,
+      applicationFee: "$50",
+      holdingDeposit: "$100",
+      holdingDepositTiming: "at_application",
+    },
+  };
+
+  it("is not paid until BOTH the fee and the deposit charges are paid", async () => {
+    const feeCharge = makeCharge({ id: "hc-app-fee", kind: "application_fee", status: "paid" });
+    const depositCharge = makeCharge({ id: "hc-deposit", kind: "holding_deposit", status: "pending" });
+    const db = makeDb(
+      [
+        {
+          id: "hc-app-fee",
+          row_data: feeCharge,
+          status: "paid",
+          manager_user_id: "manager-1",
+          kind: "application_fee",
+          property_id: "prop-1",
+          resident_email: "applicant@example.com",
+          updated_at: "2026-03-01T00:00:00.000Z",
+        },
+        {
+          id: "hc-deposit",
+          row_data: depositCharge,
+          status: "pending",
+          manager_user_id: "manager-1",
+          kind: "holding_deposit",
+          property_id: "prop-1",
+          resident_email: "applicant@example.com",
+          updated_at: "2026-03-01T00:00:00.000Z",
+        },
+      ],
+      combinedListingPropertyData,
+    );
+
+    const result = await checkApplicationFeeManualPayment(db, {
+      residentEmail: "applicant@example.com",
+      propertyId: "prop-1",
+    });
+
+    expect(result).toEqual({ ok: true, paid: false, message: MANUAL_PAYMENT_NOT_PAID_MESSAGE });
+  });
+
+  it("returns both charges once the fee AND the deposit are paid", async () => {
+    const feeCharge = makeCharge({ id: "hc-app-fee", kind: "application_fee", status: "paid" });
+    const depositCharge = makeCharge({ id: "hc-deposit", kind: "holding_deposit", status: "paid" });
+    const db = makeDb(
+      [
+        {
+          id: "hc-app-fee",
+          row_data: feeCharge,
+          status: "paid",
+          manager_user_id: "manager-1",
+          kind: "application_fee",
+          property_id: "prop-1",
+          resident_email: "applicant@example.com",
+          updated_at: "2026-03-01T00:00:00.000Z",
+        },
+        {
+          id: "hc-deposit",
+          row_data: depositCharge,
+          status: "paid",
+          manager_user_id: "manager-1",
+          kind: "holding_deposit",
+          property_id: "prop-1",
+          resident_email: "applicant@example.com",
+          updated_at: "2026-03-01T00:00:00.000Z",
+        },
+      ],
+      combinedListingPropertyData,
+    );
+
+    const result = await checkApplicationFeeManualPayment(db, {
+      residentEmail: "applicant@example.com",
+      propertyId: "prop-1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok && result.paid) {
+      expect(result.charges.map((c) => c.kind).sort()).toEqual(["application_fee", "holding_deposit"]);
+    } else {
+      throw new Error("expected both charges paid");
+    }
+  });
+
+  it("skips the fee entirely (feeWaived) and only requires the deposit", async () => {
+    const depositCharge = makeCharge({ id: "hc-deposit", kind: "holding_deposit", status: "paid" });
+    const db = makeDb(
+      [
+        {
+          id: "hc-deposit",
+          row_data: depositCharge,
+          status: "paid",
+          manager_user_id: "manager-1",
+          kind: "holding_deposit",
+          property_id: "prop-1",
+          resident_email: "applicant@example.com",
+          updated_at: "2026-03-01T00:00:00.000Z",
+        },
+      ],
+      combinedListingPropertyData,
+    );
+
+    const result = await checkApplicationFeeManualPayment(db, {
+      residentEmail: "applicant@example.com",
+      propertyId: "prop-1",
+      feeWaived: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok && result.paid) {
+      expect(result.charges).toHaveLength(1);
+      expect(result.charges[0]?.kind).toBe("holding_deposit");
+    } else {
+      throw new Error("expected the deposit-only result to be paid");
     }
   });
 });

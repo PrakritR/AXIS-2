@@ -40,10 +40,14 @@ vi.mock("@/lib/household-charge-payment-eligibility", () => ({
   resolveListingForHouseholdCharge: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@/lib/payment-policy", () => ({
-  axisPaymentsEnabledOnListing: vi.fn(() => true),
-  resolveServiceFeePayer: vi.fn(() => "resident"),
-}));
+vi.mock("@/lib/payment-policy", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/payment-policy")>("@/lib/payment-policy");
+  return {
+    ...actual,
+    axisPaymentsEnabledOnListing: vi.fn(() => true),
+    resolveServiceFeePayer: vi.fn(() => "resident"),
+  };
+});
 
 vi.mock("@/lib/manager-manual-payment-settings", () => ({
   loadManagerManualPaymentSettings: vi.fn().mockResolvedValue({ serviceFeePayer: "resident" }),

@@ -68,6 +68,7 @@ import {
   buildApplicationCompletionReminderBody,
 } from "@/lib/application-completion-reminder-email";
 import {
+  findHoldingDepositCharge,
   removeAllApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
@@ -654,8 +655,29 @@ export function ManagerApplications() {
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+    // A holding deposit collected AT APPLICATION (the manager's per-listing
+    // choice — see `holdingDepositTiming`) is never auto-refunded when the
+    // application is later rejected or withdrawn: PropLane has no automated
+    // refund flow, and whether the deposit is even refundable is a
+    // legal/lease-terms question the manager must resolve directly with the
+    // applicant. This is a read-only reminder, not a code decision.
+    const rejectedOrWithdrawn = row.bucket === "rejected" || isWithdrawnApplicationRow(row);
+    const rowPropertyId = row.application?.propertyId?.trim() || row.propertyId?.trim() || "";
+    const paidDepositCharge =
+      rejectedOrWithdrawn && row.email && rowPropertyId
+        ? findHoldingDepositCharge(row.email, rowPropertyId, null, row.id)
+        : undefined;
+    const showPaidDepositNote = paidDepositCharge?.status === "paid";
     return (
     <>
+      {showPaidDepositNote ? (
+        <div className="rounded-xl border px-4 py-3 text-sm portal-banner-pending" data-attr="application-paid-deposit-note">
+          <span className="font-semibold">Holding deposit already paid ({paidDepositCharge.amountLabel}).</span>{" "}
+          {row.bucket === "rejected" ? "This application was rejected" : "This application was withdrawn"} —
+          PropLane does not automatically refund it. Handle any refund directly with the applicant per your lease
+          terms.
+        </div>
+      ) : null}
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
           // A resident-withdrawn row keeps `bucket === "pending"`, but approving it

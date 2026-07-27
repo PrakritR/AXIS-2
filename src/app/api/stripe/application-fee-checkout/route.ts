@@ -1,20 +1,10 @@
 import { NextResponse } from "next/server";
-import { applicationFeeCentsFromPropertyData } from "@/lib/application-fee-server";
+import { createApplicationFeeCheckout } from "@/lib/application-fee-checkout.server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { parseMoneyAmount } from "@/lib/parse-money";
-import { normalizeManagerSkuTier } from "@/lib/manager-access";
-import { getManagerPurchaseSku } from "@/lib/manager-access-server";
-import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
-import {
-  APPLICATION_FEE_CHECKOUT_PURPOSE,
-  createAxisAchCheckoutSession,
-  stripeNotConfiguredError,
-} from "@/lib/stripe-axis-ach-checkout";
-import { resolveAndValidateManagerConnectForPayments } from "@/lib/stripe-connect";
+import { stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
 
 export const runtime = "nodejs";
 
@@ -22,32 +12,24 @@ type Body = {
   propertyId?: string;
   residentEmail?: string;
   residentName?: string;
-  /** Gross amount in USD cents (integer). */
-  amountCents?: number;
   /** Listing owner Supabase user id (matches `profiles.id` / `MockProperty.managerUserId`). */
   managerUserId?: string;
   /** Checkout return path (defaults to public apply). Must start with `/`. */
   returnPath?: string;
+  /** True once a manager waiver code has already been redeemed for this fee. */
+  feeWaived?: boolean;
 };
 
-function clampAmountCents(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  const x = Math.round(n);
-  if (x < 100 || x > 100_000) return 0;
-  return x;
-}
-
-function listingFromPropertyData(propertyData: unknown): ManagerListingSubmissionV1 | null {
-  if (!propertyData || typeof propertyData !== "object") return null;
-  const submission = (propertyData as { listingSubmission?: unknown }).listingSubmission;
-  if (!submission || typeof submission !== "object") return null;
-  if ((submission as { v?: unknown }).v !== 1) return null;
-  return normalizeManagerListingSubmissionV1(submission as ManagerListingSubmissionV1);
-}
-
 /**
- * Creates a Stripe Checkout Session (ACH / US bank account) with Connect destination charges
- * for the rental application fee when Axis payments are enabled on the listing.
+ * Creates a Stripe Checkout Session (card / Apple Pay / Google Pay) with
+ * Connect destination charges for the rental application fee, and — only on
+ * listings where the manager opted `holdingDepositTiming` into
+ * "at_application" — the holding deposit combined into the SAME session as a
+ * second line item (see `createApplicationFeeCheckout`). On the default
+ * "after_approval" listings the deposit is never collected here; it is
+ * charged under Payments after approval. A fee fully waived by a manager
+ * waiver code with no deposit due never reaches this route at all (nothing
+ * to charge) — see `/api/public/application-fee-waiver`.
  */
 export async function POST(req: Request) {
   try {
@@ -66,103 +48,37 @@ export async function POST(req: Request) {
     }
 
     const db = createSupabaseServiceRoleClient();
-    const { data: propertyRow } = await db
-      .from("manager_property_records")
-      .select("property_data, manager_user_id")
-      .eq("id", propertyId)
-      .maybeSingle();
-
-    // The Connect payout destination must be the property's REAL owner (server
-    // record), so verify the client-supplied managerUserId actually owns this
-    // property — otherwise the application fee could be routed to an arbitrary
-    // manager's Connect account.
-    const ownerUserId = String(propertyRow?.manager_user_id ?? "").trim();
-    if (!ownerUserId || managerUserId !== ownerUserId) {
-      return NextResponse.json({ error: "This property is not owned by the specified manager." }, { status: 403 });
-    }
-
-    const listing = listingFromPropertyData(propertyRow?.property_data);
-    if (!listingApplicationFeeChannels(listing ?? undefined).ach) {
-      return NextResponse.json(
-        {
-          code: "AXIS_PAYMENTS_DISABLED",
-          error: "Online card payments are not enabled for this property. Use Zelle or Venmo if available.",
-        },
-        { status: 422 },
-      );
-    }
-
-    // The charge amount is derived from the listing's SERVER-stored application
-    // fee, never from body.amountCents — otherwise an applicant could pay $1 for a
-    // fee the manager configured at, say, $50, and still be marked fee-paid.
-    const amountCents = clampAmountCents(parseMoneyAmount(listing?.applicationFee ?? "") * 100);
-    if (amountCents <= 0) {
-      return NextResponse.json(
-        { code: "NO_APPLICATION_FEE", error: "This listing has no application fee configured." },
-        { status: 422 },
-      );
-    }
-
     const stripe = getStripe();
-    const connect = await resolveAndValidateManagerConnectForPayments(stripe, db, managerUserId);
-    if (!connect.ok) {
-      return NextResponse.json(
-        {
-          code: connect.code === "NO_ACCOUNT" ? "MANAGER_NO_CONNECT_ACCOUNT" : "MANAGER_CONNECT_TRANSFERS_NOT_READY",
-          error: connect.error,
-        },
-        { status: 422 },
-      );
-    }
-
-    const { tier: managerTierRaw } = await getManagerPurchaseSku(managerUserId);
-    const managerTier = normalizeManagerSkuTier(managerTierRaw) ?? "free";
-
     const appUrl = resolveAppOrigin(req);
     const returnPath =
       typeof body.returnPath === "string" && body.returnPath.startsWith("/")
         ? body.returnPath.split("?")[0] ?? "/rent/apply"
         : "/rent/apply";
 
-    const metadata: Record<string, string> = {
-      purpose: APPLICATION_FEE_CHECKOUT_PURPOSE,
-      property_id: propertyId.slice(0, 450),
-      resident_email: residentEmail.toLowerCase().slice(0, 450),
-      manager_user_id: managerUserId,
-    };
-    if (residentName) metadata.resident_name = residentName.slice(0, 450);
-
-    const result = await createAxisAchCheckoutSession(stripe, {
+    const result = await createApplicationFeeCheckout(db, stripe, {
+      propertyId,
       residentEmail,
-      amountCents,
-      productName: "Rental application fee",
-      productDescription: `Listing ${propertyId.slice(0, 120)}`,
-      metadata,
-      mode: "hosted",
-      destinationAccountId: connect.accountId,
-      managerTier,
-      // The plan-based service fee applies to RESIDENT charges, not the rental
-      // application fee: an applicant is not yet a resident, and plan-pricing an
-      // applicant would leak the manager's plan tier onto public listing pages.
-      // Applicants pay the fee at face value (PropLane absorbs Stripe's cost) on
-      // every plan — `feePayer: "proplane"`.
-      feePayer: "proplane",
-      // Card method-class → Stripe Checkout surfaces Apple Pay / Google Pay on
-      // eligible devices with a card-entry fallback. A one-time application fee
-      // is a far cleaner mobile pay than an ACH bank-login handshake.
-      paymentMethod: "card",
+      residentName: residentName || undefined,
+      managerUserId,
+      feeWaived: body.feeWaived === true,
       successUrl: `${appUrl}${returnPath}?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}${returnPath}?fee_checkout=cancel`,
     });
 
-    if (result.mode !== "hosted") {
-      return NextResponse.json({ error: "Hosted checkout URL was not returned." }, { status: 500 });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
     }
 
     return NextResponse.json({
       url: result.url,
       sessionId: result.sessionId,
-      platformFeeCents: result.platformFeeCents,
+      // Itemized so the caller can show "application fee + service fee = total"
+      // before redirecting — never a surprise amount on Stripe's page.
+      applicationFeeCents: result.itemization.applicationFeeCents,
+      holdingDepositCents: result.itemization.holdingDepositCents,
+      serviceFeeCents: result.itemization.serviceFeeCents,
+      totalCents: result.itemization.totalCents,
+      platformFeeCents: 0,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Checkout failed";

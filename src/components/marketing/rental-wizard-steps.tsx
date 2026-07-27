@@ -24,7 +24,6 @@ import {
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
-import { listingHoldingDepositAmount } from "@/lib/household-charges";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
@@ -148,11 +147,32 @@ export type WizardStepsProps = {
     displayLabel: string;
     amount: number;
     waived?: boolean;
+    /** True when a manager waiver code has been redeemed for this application. */
+    codeWaived?: boolean;
+    /** Holding deposit dollars due AT APPLICATION — 0 unless the listing opted into `holdingDepositTiming: "at_application"`. */
+    depositAmount?: number;
+    /** Whether this listing collects its deposit at application at all (the manager's per-listing choice). */
+    depositAtApplication?: boolean;
+    /** Fee (if owed) + deposit (if owed), before any service fee. */
+    totalDue?: number;
+    /** True once the fee leg specifically no longer needs paying (not owed, waived, or already paid) — independent of any deposit still due. */
+    feePaid?: boolean;
   };
   applicationFeeCheckBusy?: boolean;
   applicationFeeCheckError?: string | null;
   applicationFeePaymentVerified?: boolean;
   onCheckApplicationFeePayment?: () => void;
+  /** Server-computed application fee + holding deposit + service fee + total; null while loading or unavailable. */
+  feeItemization?: {
+    applicationFeeCents: number;
+    holdingDepositCents: number;
+    serviceFeeCents: number;
+    totalCents: number;
+  } | null;
+  feeItemizationLoading?: boolean;
+  waiverCodeBusy?: boolean;
+  waiverCodeError?: string | null;
+  onApplyWaiverCode?: () => void;
   /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
   occupancySyncEpoch: number;
   showAvailabilityWarnings: boolean;
@@ -281,7 +301,28 @@ function CustomQuestionField({
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings, applicationFeeCheckBusy, applicationFeeCheckError, applicationFeePaymentVerified, onCheckApplicationFeePayment } = p;
+  const {
+    step,
+    form,
+    errors,
+    mode = "public",
+    propertyOptions,
+    propertyLocked,
+    patch,
+    editFromReview,
+    applicationFeeGate,
+    occupancySyncEpoch,
+    showAvailabilityWarnings,
+    applicationFeeCheckBusy,
+    applicationFeeCheckError,
+    applicationFeePaymentVerified,
+    onCheckApplicationFeePayment,
+    feeItemization,
+    feeItemizationLoading,
+    waiverCodeBusy,
+    waiverCodeError,
+    onApplyWaiverCode,
+  } = p;
 
   const listingSub = (() => {
     const prop = getPropertyById(form.propertyId);
@@ -1793,15 +1834,28 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
+    // `applicationFeeGate.amount` is already 0 whenever the fee itself is not
+    // owed (waived by code, first-application policy, or no fee configured) —
+    // see `residentApplicationFeeGate`. It never reflects the deposit.
     const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
-    // The plan-based service fee applies to RESIDENT charges, not the rental
-    // application fee. An applicant always pays the application fee at face value
-    // (PropLane absorbs Stripe's cost) — the application-fee checkout passes
-    // `feePayer: "proplane"` — so no processing fee is ever added here.
-    const appFeeProcessingCents = 0;
+    const depositAtApplication = Boolean(applicationFeeGate.depositAtApplication);
+    const depositCents =
+      feeItemization?.holdingDepositCents ??
+      (depositAtApplication ? Math.round((applicationFeeGate.depositAmount ?? 0) * 100) : 0);
+    // Who bears the Stripe service fee (Free = applicant, Pro = manager's
+    // setting, Business = PropLane absorbs) is resolved server-side and
+    // fetched via `feeItemization` — never re-derived here, so the number
+    // shown can never drift from what checkout actually charges.
+    const appFeeProcessingCents = feeItemization?.serviceFeeCents ?? 0;
+    const appFeeTotalCents = feeItemization?.totalCents ?? appFeeSubtotalCents + depositCents;
+    // Combined charge (fee + deposit in one payment) or a fee-waived-by-code
+    // applicant who still owes a deposit — either way this is more than a
+    // bare application-fee number, so it gets the itemized breakdown rather
+    // than a single headline figure.
+    const showItemizedBreakdown = depositAtApplication || appFeeProcessingCents > 0 || applicationFeeGate.codeWaived;
     const appFeeLabel =
-      appFeeProcessingCents > 0
-        ? `$${((appFeeSubtotalCents + appFeeProcessingCents) / 100).toFixed(2)}`
+      showItemizedBreakdown
+        ? `$${(appFeeTotalCents / 100).toFixed(2)}`
         : sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
     const enabledChannels = [
       channels.ach ? ("ach" as const) : null,
@@ -1832,43 +1886,85 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         {applicationFeeGate.needsFee ? (
           <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-              {appFeeProcessingCents > 0 ? "Total due" : "Application fee"}
+              {showItemizedBreakdown ? "Total due" : "Application fee"}
             </p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
-            {appFeeProcessingCents > 0 ? (
-              <p className="mt-1 text-xs text-muted">
-                Includes ${(appFeeProcessingCents / 100).toFixed(2)} card processing fee.
-              </p>
-            ) : applicationFeeGate.needsFee && !applicationFeeGate.paid ? (
-              <p className="mt-1 text-xs text-muted">No added fees — PropLane covers payment processing.</p>
-            ) : null}
-            {applicationFeeGate.paid ? (
-              <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
-                Paid
+            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">
+              {feeItemizationLoading ? "…" : appFeeLabel}
+            </p>
+            {showItemizedBreakdown ? (
+              <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted">
+                <div className="flex items-center justify-between">
+                  <dt>Application fee</dt>
+                  <dd className="tabular-nums text-foreground">
+                    {applicationFeeGate.codeWaived ? "Waived" : `$${(appFeeSubtotalCents / 100).toFixed(2)}`}
+                  </dd>
+                </div>
+                {depositAtApplication ? (
+                  <div className="flex items-center justify-between">
+                    <dt>Holding deposit</dt>
+                    <dd className="tabular-nums text-foreground">${(depositCents / 100).toFixed(2)}</dd>
+                  </div>
+                ) : null}
+                {appFeeProcessingCents > 0 ? (
+                  <div className="flex items-center justify-between">
+                    <dt>Card processing fee</dt>
+                    <dd className="tabular-nums text-foreground">${(appFeeProcessingCents / 100).toFixed(2)}</dd>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between font-semibold text-foreground">
+                  <dt>Total</dt>
+                  <dd className="tabular-nums">${(appFeeTotalCents / 100).toFixed(2)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-1 text-xs text-muted">No added fees.</p>
+            )}
+            {depositAtApplication ? (
+              <p className="mt-3 text-xs text-muted">
+                The holding deposit is credited toward your security deposit if your application is approved.
               </p>
             ) : null}
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-            {applicationFeeGate.waived
-              ? "No application fee is required. Your first application fee already covers additional applications."
-              : "No application fee is required for this listing."}
+            {applicationFeeGate.paid
+              ? "Payment received."
+              : applicationFeeGate.codeWaived
+                ? "No application fee is required — your waiver code covers it in full."
+                : applicationFeeGate.waived
+                  ? "No application fee is required. Your first application fee already covers additional applications."
+                  : "No application fee is required for this listing."}
           </div>
         )}
-        {(() => {
-          const holding = form.propertyId ? listingHoldingDepositAmount(form.propertyId) : { amount: 0, displayLabel: "—" };
-          if (!(holding.amount > 0)) return null;
-          return (
-            <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Holding deposit</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{holding.displayLabel}</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                Secures your application while it is reviewed. When you are approved, this amount is credited toward your
-                security deposit.
-              </p>
+        {applicationFeeGate.amount > 0 && !applicationFeeGate.codeWaived && !applicationFeeGate.feePaid ? (
+          <div className="space-y-2 rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <p className="text-sm font-semibold text-foreground">Fee waive promotion</p>
+            <p className="text-xs text-muted">
+              A code from the property manager waives the application fee entirely — nothing is charged for it. Any
+              holding deposit due at application is separate and still stands.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={form.applicationFeeWaiverCode}
+                onChange={(e) => patch({ applicationFeeWaiverCode: e.target.value })}
+                placeholder="Enter code"
+                data-attr="rental-application-waiver-code-input"
+                className="sm:max-w-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full px-4 text-[13px]"
+                disabled={waiverCodeBusy || !form.applicationFeeWaiverCode.trim()}
+                data-attr="rental-application-waiver-code-apply"
+                onClick={() => onApplyWaiverCode?.()}
+              >
+                {waiverCodeBusy ? "Applying…" : "Apply code"}
+              </Button>
             </div>
-          );
-        })()}
+            {waiverCodeError ? <p className="text-xs font-medium text-red-600">{waiverCodeError}</p> : null}
+          </div>
+        ) : null}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
             <p className="text-sm font-semibold text-foreground">Payment method</p>
@@ -1960,7 +2056,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               {sub!.zelleContact!.trim()}
             </p>
             <p className="mt-2 leading-relaxed">
-              Send the fee, then tap <span className="font-semibold">Check payment</span> below before you submit.
+              Send the amount due above, then tap <span className="font-semibold">Check payment</span> below before you submit.
             </p>
           </div>
         ) : null}
@@ -1971,7 +2067,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               {sub!.venmoContact!.trim()}
             </p>
             <p className="mt-2 leading-relaxed">
-              Send the fee, then tap <span className="font-semibold">Check payment</span> below before you submit.
+              Send the amount due above, then tap <span className="font-semibold">Check payment</span> below before you submit.
             </p>
           </div>
         ) : null}
