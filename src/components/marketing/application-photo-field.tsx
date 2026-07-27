@@ -2,67 +2,118 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { APPLICATION_SAVE_STATUS_EVENT } from "@/lib/manager-applications-storage";
 import {
   acceptForSlot,
+  APPLICATION_DOCUMENTS_BUCKET,
   formatBytes,
   isAllowedApplicationPhotoMime,
   MAX_APPLICATION_PHOTO_BYTES,
   MAX_APPLICATION_PHOTO_SIZE_LABEL,
+  validateApplicationPhotoUpload,
 } from "@/lib/rental-application/application-photos";
 import type { ApplicationPhotoAttachment, ApplicationPhotoSlot } from "@/lib/rental-application/types";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const DISPLAYABLE_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(new Error("Could not read the file."));
-    reader.readAsDataURL(file);
-  });
+// A license stays legible at 2048px, and re-encoding a phone capture to JPEG at
+// this edge keeps uploads to a few hundred KB. Small files skip the pass.
+const DOWNSCALE_MAX_EDGE = 2048;
+const DOWNSCALE_JPEG_QUALITY = 0.85;
+const DOWNSCALE_SKIP_BYTES = 1_048_576;
+
+type PreparedUpload = { blob: Blob; mimeType: string; fileName: string };
+
+async function prepareFileForUpload(file: File): Promise<PreparedUpload> {
+  const original: PreparedUpload = { blob: file, mimeType: file.type, fileName: file.name || "photo" };
+  if (!file.type.startsWith("image/") || file.size <= DOWNSCALE_SKIP_BYTES) return original;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, DOWNSCALE_MAX_EDGE / Math.max(bitmap.width, bitmap.height, 1));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return original;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", DOWNSCALE_JPEG_QUALITY),
+    );
+    if (!blob || blob.size === 0) return original;
+    const base = (file.name || "").replace(/\.[A-Za-z0-9]+$/, "").trim() || "photo";
+    return { blob, mimeType: "image/jpeg", fileName: `${base}.jpg` };
+  } catch {
+    // A format the browser can't decode (e.g. HEIC on desktop) uploads as-is —
+    // the signed-URL transport carries it without a serverless body limit.
+    return original;
+  }
 }
 
 async function uploadApplicationPhoto(params: {
   applicationId: string;
   slot: ApplicationPhotoSlot;
   file: File;
-  email?: string;
+  setupToken?: string | null;
 }): Promise<{ ok: true; attachment: ApplicationPhotoAttachment } | { ok: false; error: string }> {
-  if (params.file.size > MAX_APPLICATION_PHOTO_BYTES) {
-    return { ok: false, error: `That file is too large. Keep it under ${MAX_APPLICATION_PHOTO_SIZE_LABEL}.` };
-  }
   if (params.file.type && !isAllowedApplicationPhotoMime(params.file.type, params.slot)) {
     return { ok: false, error: "That file type isn’t supported. Use a JPG, PNG, or PDF." };
   }
-  let dataUrl: string;
-  try {
-    dataUrl = await readFileAsDataUrl(params.file);
-  } catch {
-    return { ok: false, error: "Could not read the file. Please try again." };
+  const prepared = await prepareFileForUpload(params.file);
+  if (prepared.blob.size > MAX_APPLICATION_PHOTO_BYTES) {
+    return { ok: false, error: `That file is too large. Keep it under ${MAX_APPLICATION_PHOTO_SIZE_LABEL}.` };
   }
+  const validated = validateApplicationPhotoUpload(params.slot, prepared.mimeType, prepared.blob.size);
+  if (!validated.ok) return { ok: false, error: validated.error };
   try {
     const res = await fetch("/api/portal/application-photos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        action: "sign",
         applicationId: params.applicationId,
         slot: params.slot,
-        dataUrl,
-        fileName: params.file.name,
-        email: params.email?.trim().toLowerCase() || undefined,
+        fileName: prepared.fileName,
+        mimeType: validated.mime,
+        sizeBytes: prepared.blob.size,
+        setupToken: params.setupToken || undefined,
       }),
     });
-    const json = (await res.json().catch(() => ({}))) as { attachment?: ApplicationPhotoAttachment; error?: string };
-    if (!res.ok || !json.attachment) {
+    const json = (await res.json().catch(() => ({}))) as {
+      path?: string;
+      token?: string;
+      fileName?: string;
+      error?: string;
+    };
+    if (!res.ok || !json.path || !json.token) {
       return { ok: false, error: json.error || "Upload failed. Please try again." };
     }
-    return { ok: true, attachment: json.attachment };
+    const supabase = createSupabaseBrowserClient();
+    const { error: uploadError } = await supabase.storage
+      .from(APPLICATION_DOCUMENTS_BUCKET)
+      .uploadToSignedUrl(json.path, json.token, prepared.blob, { contentType: validated.mime });
+    if (uploadError) return { ok: false, error: "Upload failed. Please try again." };
+    return {
+      ok: true,
+      attachment: {
+        storagePath: json.path,
+        fileName: json.fileName || prepared.fileName,
+        mimeType: validated.mime,
+        sizeBytes: prepared.blob.size,
+        uploadedAt: new Date().toISOString(),
+      },
+    };
   } catch {
     return { ok: false, error: "Upload failed — check your connection and try again." };
   }
 }
 
-async function deleteApplicationPhoto(params: { applicationId: string; storagePath: string; email?: string }): Promise<void> {
+async function deleteApplicationPhoto(params: {
+  applicationId: string;
+  storagePath: string;
+  setupToken?: string | null;
+}): Promise<void> {
   try {
     await fetch("/api/portal/application-photos", {
       method: "DELETE",
@@ -70,12 +121,13 @@ async function deleteApplicationPhoto(params: { applicationId: string; storagePa
       body: JSON.stringify({
         applicationId: params.applicationId,
         storagePath: params.storagePath,
-        email: params.email?.trim().toLowerCase() || undefined,
+        setupToken: params.setupToken || undefined,
       }),
     });
   } catch {
-    // Best-effort: the reference is already gone from the form, so a failed
-    // byte-delete only leaves an unreferenced object reclaimed by later sweeps.
+    // Best-effort: the reference is already gone from the form. A failed
+    // byte-delete leaves an unreferenced object that is reclaimed only when the
+    // application row itself is hard-deleted — there is no periodic sweep.
   }
 }
 
@@ -105,6 +157,7 @@ function AttachmentPreview({
       <img
         src={localPreview ?? readUrl}
         alt={attachment.fileName}
+        loading="lazy"
         onError={() => setFailed(true)}
         className="h-28 w-full rounded-lg border border-border object-cover [html[data-theme=dark]_&]:border-white/12"
       />
@@ -129,7 +182,13 @@ type SinglePhotoFieldProps = {
   attachment: ApplicationPhotoAttachment | null;
   onChange: (next: ApplicationPhotoAttachment | null) => void;
   getApplicationId: () => string;
-  email?: string;
+  /**
+   * Guest (no-session) capture: uploads are authorized by the row's
+   * resident-setup token, minted when the draft first persists. Until the token
+   * exists the capture UI is replaced by an inline hint.
+   */
+  setupTokenRequired?: boolean;
+  getSetupToken?: () => string | null;
   readOnly?: boolean;
   dataAttr?: string;
 };
@@ -143,7 +202,8 @@ export function ApplicationPhotoField({
   attachment,
   onChange,
   getApplicationId,
-  email,
+  setupTokenRequired,
+  getSetupToken,
   readOnly,
   dataAttr,
 }: SinglePhotoFieldProps) {
@@ -151,7 +211,24 @@ export function ApplicationPhotoField({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFailedFile, setLastFailedFile] = useState<File | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  // Starts pessimistic when a token is required (matching the server render —
+  // sessionStorage is client-only) and the mount effect lifts the gate.
+  const [setupTokenReady, setSetupTokenReady] = useState(() => !setupTokenRequired);
+
+  // The token arrives asynchronously with the first successful autosave, which
+  // announces itself via the save-status event — re-check then.
+  useEffect(() => {
+    if (!setupTokenRequired) {
+      setSetupTokenReady(true);
+      return;
+    }
+    const update = () => setSetupTokenReady(Boolean(getSetupToken?.()));
+    update();
+    window.addEventListener(APPLICATION_SAVE_STATUS_EVENT, update);
+    return () => window.removeEventListener(APPLICATION_SAVE_STATUS_EVENT, update);
+  }, [setupTokenRequired, getSetupToken]);
 
   // Revoke object URLs on unmount / change to avoid leaks.
   useEffect(() => {
@@ -167,13 +244,17 @@ export function ApplicationPhotoField({
       setBusy(true);
       const applicationId = getApplicationId();
       const previous = attachment;
-      const result = await uploadApplicationPhoto({ applicationId, slot, file, email });
+      const setupToken = getSetupToken?.() ?? null;
+      const result = await uploadApplicationPhoto({ applicationId, slot, file, setupToken });
       if (!result.ok) {
-        // A failed upload must never look like a success: leave the field as-is.
+        // A failed upload must never look like a success: leave the field as-is
+        // and keep the file so Retry can re-run it.
         setError(result.error);
+        setLastFailedFile(file);
         setBusy(false);
         return;
       }
+      setLastFailedFile(null);
       const nextPreview = URL.createObjectURL(file);
       setLocalPreview((old) => {
         if (old) URL.revokeObjectURL(old);
@@ -183,10 +264,10 @@ export function ApplicationPhotoField({
       setBusy(false);
       // Retake: reclaim the object we just replaced (best-effort).
       if (previous?.storagePath && previous.storagePath !== result.attachment.storagePath) {
-        void deleteApplicationPhoto({ applicationId, storagePath: previous.storagePath, email });
+        void deleteApplicationPhoto({ applicationId, storagePath: previous.storagePath, setupToken });
       }
     },
-    [attachment, email, getApplicationId, onChange, slot],
+    [attachment, getApplicationId, getSetupToken, onChange, slot],
   );
 
   const handleRemove = useCallback(async () => {
@@ -201,10 +282,14 @@ export function ApplicationPhotoField({
     });
     onChange(null); // remove from the form immediately so it is never submitted
     if (removed.storagePath) {
-      await deleteApplicationPhoto({ applicationId, storagePath: removed.storagePath, email });
+      await deleteApplicationPhoto({
+        applicationId,
+        storagePath: removed.storagePath,
+        setupToken: getSetupToken?.() ?? null,
+      });
     }
     setBusy(false);
-  }, [attachment, email, getApplicationId, onChange]);
+  }, [attachment, getApplicationId, getSetupToken, onChange]);
 
   // Only resolves (never mints) an id here — an attachment already implies one exists.
   const readUrl = attachment ? readUrlFor(getApplicationId(), slot, index) : "";
@@ -217,7 +302,7 @@ export function ApplicationPhotoField({
       {attachment ? (
         <div className="space-y-2">
           <AttachmentPreview attachment={attachment} localPreview={localPreview} readUrl={readUrl} />
-          {!readOnly ? (
+          {!readOnly && setupTokenReady ? (
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -244,6 +329,10 @@ export function ApplicationPhotoField({
         </div>
       ) : readOnly ? (
         <p className="text-sm text-muted">Not provided</p>
+      ) : !setupTokenReady ? (
+        <p className="text-sm text-muted">
+          Add your email above first — once your application saves, you can attach photos here.
+        </p>
       ) : (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
@@ -272,9 +361,23 @@ export function ApplicationPhotoField({
       )}
 
       {error ? (
-        <p className="text-sm text-red-600" role="alert">
-          {error}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm text-red-600" role="alert">
+            {error}
+          </p>
+          {lastFailedFile ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="px-4 text-[13px]"
+              disabled={busy}
+              onClick={() => void handleFile(lastFailedFile)}
+              data-attr={dataAttr ? `${dataAttr}-retry` : undefined}
+            >
+              Retry
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Camera-first input (opens the camera on a phone). */}
@@ -308,7 +411,8 @@ type IncomeProofPhotosProps = {
   attachments: ApplicationPhotoAttachment[];
   onChange: (next: ApplicationPhotoAttachment[]) => void;
   getApplicationId: () => string;
-  email?: string;
+  setupTokenRequired?: boolean;
+  getSetupToken?: () => string | null;
   readOnly?: boolean;
   max?: number;
 };
@@ -318,7 +422,8 @@ export function IncomeProofPhotos({
   attachments,
   onChange,
   getApplicationId,
-  email,
+  setupTokenRequired,
+  getSetupToken,
   readOnly,
   max = 3,
 }: IncomeProofPhotosProps) {
@@ -343,7 +448,8 @@ export function IncomeProofPhotos({
             onChange(copy);
           }}
           getApplicationId={getApplicationId}
-          email={email}
+          setupTokenRequired={setupTokenRequired}
+          getSetupToken={getSetupToken}
           readOnly={readOnly}
           dataAttr="application-income-proof"
         />
@@ -359,7 +465,8 @@ export function IncomeProofPhotos({
             if (next) onChange([...list, next]);
           }}
           getApplicationId={getApplicationId}
-          email={email}
+          setupTokenRequired={setupTokenRequired}
+          getSetupToken={getSetupToken}
           dataAttr="application-income-proof-add"
         />
       ) : null}

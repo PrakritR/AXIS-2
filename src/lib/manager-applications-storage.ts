@@ -330,6 +330,39 @@ function emitApplicationSaveStatus(ok: boolean, id: string): void {
   window.dispatchEvent(new CustomEvent(APPLICATION_SAVE_STATUS_EVENT, { detail: { ok, id } }));
 }
 
+/**
+ * Guest autosaves return a freshly-rotated resident-setup token for the row.
+ * The photo-capture fields use it as their write credential (a guest may only
+ * mint photo uploads with the row's current token), so remember the latest one
+ * per application id. sessionStorage so an in-tab reload keeps uploads working;
+ * it never outlives the tab.
+ */
+const APPLICATION_SETUP_TOKEN_STORE_PREFIX = "axis.applicationSetupToken.";
+
+function applicationSetupTokenKey(id: string): string {
+  return normalizeApplicationAxisId(id).toUpperCase();
+}
+
+export function rememberApplicationSetupToken(id: string, token: string): void {
+  const key = applicationSetupTokenKey(id);
+  if (!key || !token || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(APPLICATION_SETUP_TOKEN_STORE_PREFIX + key, token);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getApplicationSetupToken(id: string): string | null {
+  const key = applicationSetupTokenKey(id);
+  if (!key || typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(APPLICATION_SETUP_TOKEN_STORE_PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+
 function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
   if (typeof window === "undefined" || isDemoModeActive()) return Promise.resolve();
   return fetch("/api/manager-applications", {
@@ -338,7 +371,13 @@ function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   })
-    .then((res) => {
+    .then(async (res) => {
+      if (res.ok) {
+        const body = (await res.json().catch(() => null)) as { setupToken?: string } | null;
+        if (typeof body?.setupToken === "string" && body.setupToken) {
+          rememberApplicationSetupToken(row.id, body.setupToken);
+        }
+      }
       emitApplicationSaveStatus(res.ok, row.id);
     })
     .catch(() => emitApplicationSaveStatus(false, row.id));
@@ -506,6 +545,7 @@ export async function upsertApplicationRowToServerAwait(
         ? body.setupHref
         : undefined;
     const setupToken = typeof body?.setupToken === "string" && body.setupToken ? body.setupToken : undefined;
+    if (setupToken) rememberApplicationSetupToken(row.id, setupToken);
     const onboarding = body?.existingResidentOnboarding;
     return {
       ok: true,

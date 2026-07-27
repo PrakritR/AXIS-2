@@ -52,6 +52,7 @@ function PhotoThumb({
           <img
             src={url}
             alt={label}
+            loading="lazy"
             onError={() => setFailed(true)}
             className="h-32 w-full rounded-lg border border-border object-cover [html[data-theme=dark]_&]:border-white/12"
           />

@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
+import { isResidentSetupTokenValid } from "@/lib/auth/resident-setup-token";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
-import {
-  applicationPhotoExtForMime,
-  isAllowedApplicationPhotoMime,
-  MAX_APPLICATION_PHOTO_BYTES,
-} from "@/lib/rental-application/application-photos";
+import { APPLICATION_DOCUMENTS_BUCKET } from "@/lib/rental-application/application-photos";
 import type { ApplicationPhotoSlot } from "@/lib/rental-application/types";
+
+export { APPLICATION_DOCUMENTS_BUCKET };
 
 /**
  * Server-only helpers for the applicant photo bucket. The authorization
@@ -17,8 +16,6 @@ import type { ApplicationPhotoSlot } from "@/lib/rental-application/types";
  * the service-role client inside the API routes; nothing here trusts an owner id
  * supplied by the client.
  */
-
-export const APPLICATION_DOCUMENTS_BUCKET = "application-documents";
 
 type ServiceClient = SupabaseClient;
 
@@ -114,38 +111,66 @@ export function isPathInApplicationFolder(path: string, applicationId: string): 
   return path.startsWith(`application/${applicationPhotoFolderKey(applicationId)}/`);
 }
 
-export type ParsedApplicationPhoto = { ok: true; mime: string; ext: string; bytes: Buffer } | { ok: false; error: string };
+/**
+ * Per-application object quota. The meaningful maximum is 5 (front + back ID
+ * plus 3 income documents); 6 leaves headroom for the transient retake overlap
+ * (new object uploaded before the replaced one is removed) while still bounding
+ * what any one application id can ever cost in storage.
+ */
+export const MAX_APPLICATION_PHOTO_OBJECTS = 6;
+
+/** How many objects already live under an application's folder. */
+export async function countApplicationPhotoObjects(db: ServiceClient, applicationId: string): Promise<number> {
+  const folder = `application/${applicationPhotoFolderKey(applicationId)}`;
+  const { data, error } = await db.storage
+    .from(APPLICATION_DOCUMENTS_BUCKET)
+    .list(folder, { limit: MAX_APPLICATION_PHOTO_OBJECTS + 1 });
+  if (error || !data) return 0;
+  return data.length;
+}
+
+/** The stored-row facts a write decision needs (read from the row, never the client). */
+export type ApplicationPhotoWriteTarget = {
+  ownership: StoredApplicationOwnership;
+  bucket: string | null;
+  setupTokenHash: string | null;
+  setupTokenExpiresAt: string | null;
+  setupTokenConsumedAt: string | null;
+};
 
 /**
- * Decode + validate a `data:` URL for a slot. Enforces the MIME allowlist and
- * the size cap server-side so a client that skips its own check cannot store a
- * disallowed or oversized object.
+ * The single write (sign-upload / delete) authorization decision:
+ *
+ * - No stored row → deny for everyone. The client persists the draft first (the
+ *   guest upsert is what mints the setup token), so there is never a legitimate
+ *   write against a nonexistent application.
+ * - A decided (non-pending) application is immutable except to an admin —
+ *   retention Option A: photos live exactly as long as the row, and only the
+ *   row's hard delete removes them.
+ * - A guest is authorized ONLY by the row's unguessable resident-setup token,
+ *   never by a claimed email — an id + email probe must learn nothing.
+ * - A signed-in actor authorizes by session: manager property access, or the
+ *   authenticated email matching the stored applicant email (multi-role logins).
  */
-export function parseApplicationPhotoDataUrl(dataUrl: unknown, slot: ApplicationPhotoSlot): ParsedApplicationPhoto {
-  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) {
-    return { ok: false, error: "A file is required." };
+export function authorizeApplicationPhotoWrite(params: {
+  actor: ApplicationPhotoActor;
+  row: ApplicationPhotoWriteTarget | null;
+  setupToken?: string | null;
+  sessionEmail?: string | null;
+}): boolean {
+  const { actor, row } = params;
+  if (!row) return false;
+  if (actor.kind === "admin") return true;
+  if (row.bucket && row.bucket !== "pending") return false;
+  if (actor.kind === "guest") {
+    const token = (params.setupToken ?? "").trim();
+    if (!token) return false;
+    return isResidentSetupTokenValid(row, token);
   }
-  const commaIndex = dataUrl.indexOf(",");
-  if (commaIndex < 0) return { ok: false, error: "Invalid file data." };
-  const header = dataUrl.slice(5, commaIndex); // strip "data:"
-  const base64 = dataUrl.slice(commaIndex + 1);
-  const mime = header.split(";")[0]?.trim().toLowerCase() ?? "";
-  if (!isAllowedApplicationPhotoMime(mime, slot)) {
-    return { ok: false, error: "That file type isn’t supported. Use a JPG, PNG, or PDF." };
-  }
-  const ext = applicationPhotoExtForMime(mime);
-  if (!ext) return { ok: false, error: "That file type isn’t supported." };
-  let bytes: Buffer;
-  try {
-    bytes = Buffer.from(base64, "base64");
-  } catch {
-    return { ok: false, error: "Invalid file data." };
-  }
-  if (bytes.length === 0) return { ok: false, error: "The file is empty." };
-  if (bytes.length > MAX_APPLICATION_PHOTO_BYTES) {
-    return { ok: false, error: "That file is too large. Keep it under 15 MB." };
-  }
-  return { ok: true, mime, ext, bytes };
+  if (canActorAccessApplicationPhoto(actor, row.ownership)) return true;
+  const email = (params.sessionEmail ?? "").trim();
+  if (!email) return false;
+  return canActorAccessApplicationPhoto({ kind: "resident", email }, row.ownership);
 }
 
 /** Content-type for a downloaded object based on its extension. */
@@ -177,6 +202,7 @@ export async function reclaimApplicationPhotos(db: ServiceClient, applicationId:
     await db.storage.from(APPLICATION_DOCUMENTS_BUCKET).remove(paths);
   } catch {
     // Storage cleanup is best-effort; a leftover object is never user-visible
-    // (the row that referenced it is gone) and is reclaimed by later sweeps.
+    // (the row that referenced it is gone). There is no periodic sweep — an
+    // object that survives this pass stays until removed by hand.
   }
 }

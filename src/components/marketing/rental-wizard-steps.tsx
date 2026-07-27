@@ -190,6 +190,12 @@ export type WizardStepsProps = {
    * an attached photo resumes with the rest of the answers.
    */
   getApplicationId?: () => string;
+  /**
+   * Guest (no-session) capture is gated on the row's resident-setup token —
+   * minted when the draft first autosaves — which authorizes the photo writes.
+   */
+  photoSetupTokenRequired?: boolean;
+  getPhotoSetupToken?: () => string | null;
 };
 
 function displayOrDash(v: string | null | undefined) {
@@ -967,7 +973,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   attachment={form.idPhotoFront}
                   onChange={(next) => patch({ idPhotoFront: next })}
                   getApplicationId={getApplicationId}
-                  email={form.email}
+                  setupTokenRequired={p.photoSetupTokenRequired}
+                  getSetupToken={p.getPhotoSetupToken}
                   readOnly={photosReadOnly}
                   dataAttr="application-id-photo-front"
                 />
@@ -977,7 +984,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   attachment={form.idPhotoBack}
                   onChange={(next) => patch({ idPhotoBack: next })}
                   getApplicationId={getApplicationId}
-                  email={form.email}
+                  setupTokenRequired={p.photoSetupTokenRequired}
+                  getSetupToken={p.getPhotoSetupToken}
                   readOnly={photosReadOnly}
                   dataAttr="application-id-photo-back"
                 />
@@ -1450,7 +1458,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               attachments={form.incomeProofPhotos}
               onChange={(next) => patch({ incomeProofPhotos: next })}
               getApplicationId={getApplicationId}
-              email={form.email}
+              setupTokenRequired={p.photoSetupTokenRequired}
+              getSetupToken={p.getPhotoSetupToken}
               readOnly={photosReadOnly}
             />
           </div>

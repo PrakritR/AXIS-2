@@ -37,23 +37,33 @@ and no vehicle field exists. Add more slots only where a photo genuinely helps.
   **resumes exactly like any other answer** through the existing autosave/resume
   path — never inline base64 (`row_data` is re-uploaded on every keystroke).
 
-## The one route + the one authorization decision
+## The one route + the two authorization decisions
 
 `/api/portal/application-photos` (`src/app/api/portal/application-photos/route.ts`):
 
-- **POST** uploads bytes (MIME allowlist + 15 MB cap enforced server-side by
-  `parseApplicationPhotoDataUrl`) and returns the reference the client stores on
-  the form. A **failed upload returns an error and never a reference** — the
-  client leaves the field untouched, so a failure can never look like success.
+- **POST `{action:"sign"}`** mints a Supabase **signed upload URL** after
+  authorization; the browser downscales the image client-side (longest edge
+  ≤ 2048px, JPEG q0.85, `prepareFileForUpload` in `application-photo-field.tsx`)
+  and uploads **directly to Storage** with `uploadToSignedUrl` — the bytes never
+  pass through the serverless function, so phone captures clear Vercel's ~4.5 MB
+  body limit. The sign endpoint enforces the MIME allowlist + 15 MB cap
+  (`validateApplicationPhotoUpload`, also run client-side), a per-application
+  object quota (`MAX_APPLICATION_PHOTO_OBJECTS`), and a per-IP in-memory rate
+  limit (per-instance, defense-in-depth). A **failed mint/upload surfaces a
+  field-level error with Retry and never a reference** — a failure can never
+  look like success.
 - **GET** streams a stored photo. The storage path is resolved from the STORED
-  row (never the client), guarded with `isPathInApplicationFolder`, and served
-  `Cache-Control: private, no-store` (never a 302 to storage). Denials return
+  row (never the client), guarded with `isPathInApplicationFolder`, served
+  `Cache-Control: private, no-store` (never a 302 to storage), with the
+  `Content-Disposition` filename re-sanitized at serve time. Denials return
   **404** so which applications exist is not leaked.
-- **DELETE** removes an object on applicant remove/retake.
+- **DELETE** removes an object on applicant remove/retake — **pending rows
+  only** (see retention below).
 
-`canActorAccessApplicationPhoto(actor, ownership)` in
-`application-photos.server.ts` is the **single security decision** and is a pure
-function so the boundary is unit-provable (`tests/unit/application-photo-access.test.ts`):
+Two pure decisions in `application-photos.server.ts`, both unit-provable
+(`tests/unit/application-photo-access.test.ts`):
+
+`canActorAccessApplicationPhoto(actor, ownership)` — **reads**:
 
 - **Manager** — in only when the application is attributed to them OR its
   property is one they can reach today (`accessiblePropertyIdsForManager`, the
@@ -61,11 +71,25 @@ function so the boundary is unit-provable (`tests/unit/application-photo-access.
   B from reading manager A's applicant's ID photo. Property access — not the
   frozen attribution stamp — is authoritative, so a transferred property still
   resolves to the current owner.
-- **Applicant** — resident by authenticated session email, or guest by claimed
-  email, must match the application's stored applicant email. **Reads never
-  accept a guest** (a guest can't server-resume answers either; live capture
-  uses the in-memory preview).
+- **Applicant** — resident by authenticated session email matching the stored
+  applicant email. **Reads never accept a guest** (a guest can't server-resume
+  answers either; live capture uses the in-memory preview).
 - **Admin** — always.
+
+`authorizeApplicationPhotoWrite({actor, row, setupToken, sessionEmail})` —
+**writes (sign + delete)**:
+
+- **No stored row → deny for everyone.** The draft must persist first; there is
+  no unbounded upload path into arbitrary application ids.
+- **Guest** — authorized ONLY by the row's unguessable **resident-setup token**
+  (the one the guest application upsert mints and returns; the client remembers
+  the latest via `rememberApplicationSetupToken` and the capture UI stays gated
+  behind an inline hint until it exists). **Never by a claimed email**, and every
+  write denial returns one identical 403 `"Not allowed."` — probing an id+email
+  reveals nothing.
+- **Decided (non-pending) row → immutable to everyone but admin** (retention).
+- **Signed-in** — manager property access or authenticated-email applicant
+  match, as for reads.
 
 ## Variant sanitisation
 
@@ -96,7 +120,12 @@ Two invariants follow from that choice and MUST hold:
   folder key is uppercased (`applicationPhotoFolderKey`) so upload-time and
   delete-time ids can't drift by case and orphan the files. Coverage:
   `tests/unit/application-photo-access.test.ts` (“an application delete removes
-  the bytes”). Applicant remove/retake also deletes the replaced object.
+  the bytes”). Applicant remove/retake also deletes the replaced object — but
+  only while the row is still **pending**; the API refuses destructive writes on
+  a decided application for every actor except admin, so an applicant cannot
+  strip the record after a decision. There is **no periodic orphan sweep** — an
+  object left behind by a failed best-effort delete stays until the row's hard
+  delete.
 - **The applicant-facing copy is honest about retention.** Step 4 / step 7 say
   the photo is shared with the property manager for this application and **kept
   with the application record** — it does NOT imply deletion after a decision,

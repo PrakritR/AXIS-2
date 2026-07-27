@@ -75,6 +75,7 @@ import {
 } from "@/lib/wizard-field-errors";
 import {
   APPLICATION_SAVE_STATUS_EVENT,
+  getApplicationSetupToken,
   replaceManagerApplicationRowInCache,
   syncManagerApplicationsFromServer,
   syncPublicApprovedApplicationsFromServer,
@@ -1716,6 +1717,8 @@ function RentalApplicationWizardInner({
                 goToStep={goToStep}
                 editFromReview={editFromReview}
                 getApplicationId={ensureRentalWizardAxisId}
+                photoSetupTokenRequired={mode !== "portal" && !sessionEmail?.includes("@")}
+                getPhotoSetupToken={() => getApplicationSetupToken(ensureRentalWizardAxisId())}
               />
             </div>
 

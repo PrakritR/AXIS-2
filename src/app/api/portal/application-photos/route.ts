@@ -2,16 +2,19 @@ import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
-import { isApplicationPhotoSlot } from "@/lib/rental-application/application-photos";
+import { isApplicationPhotoSlot, validateApplicationPhotoUpload } from "@/lib/rental-application/application-photos";
 import {
   accessiblePropertyIdsForManager,
   APPLICATION_DOCUMENTS_BUCKET,
+  authorizeApplicationPhotoWrite,
   buildApplicationPhotoPath,
   canActorAccessApplicationPhoto,
   contentTypeForApplicationPhotoPath,
+  countApplicationPhotoObjects,
   isPathInApplicationFolder,
-  parseApplicationPhotoDataUrl,
+  MAX_APPLICATION_PHOTO_OBJECTS,
   type ApplicationPhotoActor,
+  type ApplicationPhotoWriteTarget,
   type StoredApplicationOwnership,
 } from "@/lib/rental-application/application-photos.server";
 import type { ApplicationPhotoAttachment, ApplicationPhotoSlot } from "@/lib/rental-application/types";
@@ -20,15 +23,12 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
-
 type ServiceClient = ReturnType<typeof createSupabaseServiceRoleClient>;
 
 type StoredApplicationRow = {
   recordId: string;
   application: Record<string, unknown> | null;
-  ownership: StoredApplicationOwnership;
-  bucket: string | null;
+  target: ApplicationPhotoWriteTarget;
 };
 
 function idVariants(id: string): string[] {
@@ -37,7 +37,7 @@ function idVariants(id: string): string[] {
   return [...new Set([trimmed, trimmed.toUpperCase(), normalized, normalized.toUpperCase()].filter(Boolean))];
 }
 
-/** Load the stored application row (and its ownership facts) by axis id. */
+/** Load the stored application row (and its ownership + token facts) by axis id. */
 async function loadApplicationRow(db: ServiceClient, applicationId: string): Promise<StoredApplicationRow | null> {
   const { data, error } = await db
     .from("manager_application_records")
@@ -52,12 +52,17 @@ async function loadApplicationRow(db: ServiceClient, applicationId: string): Pro
   return {
     recordId: record.id,
     application,
-    bucket: typeof row.bucket === "string" ? row.bucket : null,
-    ownership: {
-      managerUserId: (record.manager_user_id ?? row.managerUserId ?? null) as string | null,
-      propertyId: (record.property_id ?? row.propertyId ?? null) as string | null,
-      assignedPropertyId: (record.assigned_property_id ?? row.assignedPropertyId ?? null) as string | null,
-      residentEmail: (record.resident_email ?? row.email ?? null) as string | null,
+    target: {
+      bucket: typeof row.bucket === "string" ? row.bucket : null,
+      setupTokenHash: typeof row.setupTokenHash === "string" ? row.setupTokenHash : null,
+      setupTokenExpiresAt: typeof row.setupTokenExpiresAt === "string" ? row.setupTokenExpiresAt : null,
+      setupTokenConsumedAt: typeof row.setupTokenConsumedAt === "string" ? row.setupTokenConsumedAt : null,
+      ownership: {
+        managerUserId: (record.manager_user_id ?? row.managerUserId ?? null) as string | null,
+        propertyId: (record.property_id ?? row.propertyId ?? null) as string | null,
+        assignedPropertyId: (record.assigned_property_id ?? row.assignedPropertyId ?? null) as string | null,
+        residentEmail: (record.resident_email ?? row.email ?? null) as string | null,
+      },
     },
   };
 }
@@ -104,11 +109,15 @@ function isApplicantBySessionEmail(session: ResolvedSession, ownership: StoredAp
   return canActorAccessApplicationPhoto({ kind: "resident", email }, ownership);
 }
 
-/** Build the access actor. `allowGuest` is true for writes (uploads/removes) only. */
+/**
+ * Build the access actor. `allowGuest` is true for writes only, and a guest
+ * actor carries no identity — writes authorize a guest exclusively by the row's
+ * resident-setup token (see `authorizeApplicationPhotoWrite`), never a claimed
+ * email.
+ */
 async function buildActor(
   db: ServiceClient,
   session: ResolvedSession,
-  guestEmail: string | null,
   allowGuest: boolean,
 ): Promise<ApplicationPhotoActor | null> {
   if (session.kind === "admin") return { kind: "admin" };
@@ -117,96 +126,120 @@ async function buildActor(
     return { kind: "manager", userId: session.userId, accessiblePropertyIds };
   }
   if (session.kind === "resident") return { kind: "resident", email: session.email };
-  // Unauthenticated. Only WRITES may proceed as a guest. The claimed email is
-  // used to match an EXISTING row; a guest who has not yet typed their email
-  // (the ID-photo capture sits above the email field on step 4) can still start
-  // a NEW application's upload — the bytes are unreferenced until their own
-  // client attaches the returned path, so this never exposes anyone else's data.
-  if (allowGuest) {
-    return { kind: "guest", email: guestEmail && EMAIL_RE.test(guestEmail) ? guestEmail : "" };
-  }
-  return null;
+  return allowGuest ? { kind: "guest", email: "" } : null;
 }
 
 /**
- * Authorize a write (upload/remove). For a NEW application with no stored row
- * yet, the applicant is mid-creation and there is nothing to own — allow it
- * (identical trust to the guest application upsert; unreferenced bytes only).
- * For an EXISTING row, the actor must pass the ownership check; a guest
- * additionally may only touch a still-pending application, and an email-less
- * guest fails the email match, so they can never reach an existing applicant's
- * photos.
+ * Every write denial — missing row, wrong or absent setup token, decided
+ * application, foreign session — returns this identical response, so probing an
+ * application id (with any email or token guess) reveals nothing about whether
+ * it exists or whom it belongs to.
  */
-function authorizeWrite(
-  actor: ApplicationPhotoActor,
-  row: StoredApplicationRow | null,
-  session: ResolvedSession,
-): boolean {
-  // No stored row yet: the applicant is mid-creation. The bytes are unreferenced
-  // until their own client attaches the returned path, so this never exposes
-  // anyone else's data — allow it (matches the guest application-upsert trust).
-  if (!row) return true;
-  if (actor.kind === "guest" && row.bucket && row.bucket !== "pending") return false;
-  return canActorAccessApplicationPhoto(actor, row.ownership) || isApplicantBySessionEmail(session, row.ownership);
+function writeDenied(): NextResponse {
+  return NextResponse.json({ error: "Not allowed." }, { status: 403 });
 }
 
-function sanitizeFileName(name: unknown, slot: ApplicationPhotoSlot, ext: string): string {
+function sanitizeFileName(name: unknown, fallback: string): string {
   if (typeof name === "string" && name.trim()) {
-    return name.trim().replace(/[^\w.\-() ]+/g, "_").slice(0, 120);
+    const cleaned = name.trim().replace(/[^\w.\-() ]+/g, "_").slice(0, 120);
+    if (cleaned) return cleaned;
   }
-  return `${slot}.${ext}`;
+  return fallback;
+}
+
+// Per-IP sliding window on the sign endpoint. In-memory and therefore
+// per-instance — defense-in-depth only; the real bounds are the setup-token
+// gate and the per-application object quota.
+const SIGN_RATE_WINDOW_MS = 60_000;
+const SIGN_RATE_MAX = 20;
+const signRequestsByIp = new Map<string, number[]>();
+
+function isSignRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const cutoff = now - SIGN_RATE_WINDOW_MS;
+  const recent = (signRequestsByIp.get(ip) ?? []).filter((t) => t > cutoff);
+  if (recent.length >= SIGN_RATE_MAX) {
+    signRequestsByIp.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  if (signRequestsByIp.size > 10_000) signRequestsByIp.clear();
+  signRequestsByIp.set(ip, recent);
+  return false;
+}
+
+function clientIp(req: Request): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
 // ---------------------------------------------------------------------------
-// POST — upload a photo, returning the reference the client stores on the form.
+// POST — mint a signed upload URL for a photo. The bytes never pass through
+// this function: the client uploads directly to Storage with the returned
+// token, keeping large phone captures clear of the serverless body limit.
 // ---------------------------------------------------------------------------
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as {
+    const body = (await req.json().catch(() => ({}))) as {
+      action?: string;
       applicationId?: string;
       slot?: string;
-      dataUrl?: string;
       fileName?: string;
-      email?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      setupToken?: string;
     };
+    if (body.action !== "sign") {
+      return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
+    }
     const applicationId = body.applicationId?.trim() ?? "";
     if (!applicationId) return NextResponse.json({ error: "applicationId required." }, { status: 400 });
     if (!isApplicationPhotoSlot(body.slot)) return NextResponse.json({ error: "Invalid slot." }, { status: 400 });
     const slot: ApplicationPhotoSlot = body.slot;
 
-    const parsed = parseApplicationPhotoDataUrl(body.dataUrl, slot);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const validated = validateApplicationPhotoUpload(slot, body.mimeType, body.sizeBytes);
+    if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
+
+    if (isSignRateLimited(clientIp(req))) {
+      return NextResponse.json({ error: "Too many uploads. Try again in a minute." }, { status: 429 });
+    }
 
     const db = createSupabaseServiceRoleClient();
     const session = await resolveSession(db);
-    const guestEmail = (body.email ?? "").trim().toLowerCase() || null;
-    const actor = await buildActor(db, session, guestEmail, true);
-    if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const actor = await buildActor(db, session, true);
+    if (!actor) return writeDenied();
 
     const row = await loadApplicationRow(db, applicationId);
-    if (!authorizeWrite(actor, row, session)) {
-      return NextResponse.json({ error: "You can only attach photos to your own application." }, { status: 403 });
+    if (
+      !authorizeApplicationPhotoWrite({
+        actor,
+        row: row?.target ?? null,
+        setupToken: body.setupToken,
+        sessionEmail: sessionEmail(session),
+      })
+    ) {
+      return writeDenied();
     }
 
-    const storagePath = buildApplicationPhotoPath(applicationId, slot, parsed.ext);
-    const { error: uploadError } = await db.storage
-      .from(APPLICATION_DOCUMENTS_BUCKET)
-      .upload(storagePath, parsed.bytes, { contentType: parsed.mime, upsert: false });
-    if (uploadError) {
+    if ((await countApplicationPhotoObjects(db, applicationId)) >= MAX_APPLICATION_PHOTO_OBJECTS) {
+      return NextResponse.json(
+        { error: "Photo limit reached for this application. Remove one before adding another." },
+        { status: 409 },
+      );
+    }
+
+    const storagePath = buildApplicationPhotoPath(applicationId, slot, validated.ext);
+    const { data, error } = await db.storage.from(APPLICATION_DOCUMENTS_BUCKET).createSignedUploadUrl(storagePath);
+    if (error || !data?.token) {
       return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 502 });
     }
-
-    const attachment: ApplicationPhotoAttachment = {
-      storagePath,
-      fileName: sanitizeFileName(body.fileName, slot, parsed.ext),
-      mimeType: parsed.mime,
-      sizeBytes: parsed.bytes.length,
-      uploadedAt: new Date().toISOString(),
-    };
-    return NextResponse.json({ attachment });
+    return NextResponse.json({
+      path: storagePath,
+      token: data.token,
+      fileName: sanitizeFileName(body.fileName, `${slot}.${validated.ext}`),
+    });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Upload failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("application-photos sign failed", e);
+    return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
   }
 }
 
@@ -230,14 +263,17 @@ export async function GET(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
     const session = await resolveSession(db);
-    const actor = await buildActor(db, session, null, false);
+    const actor = await buildActor(db, session, false);
     if (!actor) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
     const row = await loadApplicationRow(db, applicationId);
     if (
       !row ||
       !row.application ||
-      !(canActorAccessApplicationPhoto(actor, row.ownership) || isApplicantBySessionEmail(session, row.ownership))
+      !(
+        canActorAccessApplicationPhoto(actor, row.target.ownership) ||
+        isApplicantBySessionEmail(session, row.target.ownership)
+      )
     ) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
@@ -251,10 +287,14 @@ export async function GET(req: Request) {
     const { data, error } = await db.storage.from(APPLICATION_DOCUMENTS_BUCKET).download(storagePath);
     if (error || !data) return NextResponse.json({ error: "Not found." }, { status: 404 });
     const bytes = Buffer.from(await data.arrayBuffer());
+    // The stored fileName arrives via the application autosave path, which never
+    // ran this route's sanitizer — re-apply the allowlist at serve time so a
+    // hostile stored name can't break header construction.
+    const safeName = sanitizeFileName(attachment?.fileName, "photo");
     return new NextResponse(bytes, {
       headers: {
         "Content-Type": contentTypeForApplicationPhotoPath(storagePath),
-        "Content-Disposition": `inline; filename="${(attachment?.fileName ?? "photo").replace(/"/g, "")}"`,
+        "Content-Disposition": `inline; filename="${safeName}"`,
         "Cache-Control": "private, no-store",
       },
     });
@@ -264,13 +304,17 @@ export async function GET(req: Request) {
 }
 
 // ---------------------------------------------------------------------------
-// DELETE — remove a stored object (applicant remove / retake). The caller names
-// a storagePath; it must live under the application's own folder and the actor
-// must be authorized to write to that application.
+// DELETE — remove a stored object (applicant remove / retake, pending rows
+// only). The caller names a storagePath; it must live under the application's
+// own folder and the actor must pass the same write authorization as uploads.
 // ---------------------------------------------------------------------------
 export async function DELETE(req: Request) {
   try {
-    const body = (await req.json()) as { applicationId?: string; storagePath?: string; email?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      applicationId?: string;
+      storagePath?: string;
+      setupToken?: string;
+    };
     const applicationId = body.applicationId?.trim() ?? "";
     const storagePath = body.storagePath?.trim() ?? "";
     if (!applicationId || !storagePath) {
@@ -282,21 +326,27 @@ export async function DELETE(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
     const session = await resolveSession(db);
-    const guestEmail = (body.email ?? "").trim().toLowerCase() || null;
-    const actor = await buildActor(db, session, guestEmail, true);
-    if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const actor = await buildActor(db, session, true);
+    if (!actor) return writeDenied();
 
     const row = await loadApplicationRow(db, applicationId);
-    if (!authorizeWrite(actor, row, session)) {
-      return NextResponse.json({ error: "Not allowed." }, { status: 403 });
+    if (
+      !authorizeApplicationPhotoWrite({
+        actor,
+        row: row?.target ?? null,
+        setupToken: body.setupToken,
+        sessionEmail: sessionEmail(session),
+      })
+    ) {
+      return writeDenied();
     }
 
     const { error } = await db.storage.from(APPLICATION_DOCUMENTS_BUCKET).remove([storagePath]);
     if (error) return NextResponse.json({ error: "Could not remove the file." }, { status: 502 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Delete failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("application-photos delete failed", e);
+    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
   }
 }
 

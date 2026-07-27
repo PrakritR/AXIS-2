@@ -11,6 +11,10 @@ import type { ApplicationPhotoSlot } from "@/lib/rental-application/types";
 // 15 MB — must match the `application-documents` bucket file_size_limit.
 export const MAX_APPLICATION_PHOTO_BYTES = 15_728_640;
 
+// Client-safe: the browser uploads directly to this bucket via signed upload
+// URLs minted by `/api/portal/application-photos`, so both sides need the name.
+export const APPLICATION_DOCUMENTS_BUCKET = "application-documents";
+
 /** Accepted MIME types → canonical file extension. */
 export const APPLICATION_PHOTO_MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -48,6 +52,34 @@ export function isAllowedApplicationPhotoMime(mime: string, slot: ApplicationPho
 /** `accept` attribute for the slot's file inputs. */
 export function acceptForSlot(slot: ApplicationPhotoSlot): string {
   return allowedMimeTypesForSlot(slot).join(",");
+}
+
+export type ApplicationPhotoUploadValidation = { ok: true; mime: string; ext: string } | { ok: false; error: string };
+
+/**
+ * Validate the declared MIME type + size for a slot. Shared by the client (after
+ * downscale, before requesting a signed upload URL) and the server's sign
+ * endpoint, so a client that skips its own check cannot mint a URL for a
+ * disallowed or oversized object. The bucket's own file_size_limit is the final
+ * backstop on the actual uploaded bytes.
+ */
+export function validateApplicationPhotoUpload(
+  slot: ApplicationPhotoSlot,
+  mimeType: unknown,
+  sizeBytes: unknown,
+): ApplicationPhotoUploadValidation {
+  const mime = typeof mimeType === "string" ? mimeType.trim().toLowerCase() : "";
+  if (!isAllowedApplicationPhotoMime(mime, slot)) {
+    return { ok: false, error: "That file type isn’t supported. Use a JPG, PNG, or PDF." };
+  }
+  const ext = applicationPhotoExtForMime(mime);
+  if (!ext) return { ok: false, error: "That file type isn’t supported." };
+  const size = typeof sizeBytes === "number" && Number.isFinite(sizeBytes) ? sizeBytes : Number.NaN;
+  if (!Number.isFinite(size) || size <= 0) return { ok: false, error: "The file is empty." };
+  if (size > MAX_APPLICATION_PHOTO_BYTES) {
+    return { ok: false, error: `That file is too large. Keep it under ${MAX_APPLICATION_PHOTO_SIZE_LABEL}.` };
+  }
+  return { ok: true, mime, ext };
 }
 
 export function formatBytes(bytes: number): string {

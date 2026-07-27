@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hashResidentSetupToken } from "@/lib/auth/resident-setup-token";
+import {
+  MAX_APPLICATION_PHOTO_BYTES,
+  validateApplicationPhotoUpload,
+} from "@/lib/rental-application/application-photos";
 import {
   applicationPhotoFolderKey,
+  authorizeApplicationPhotoWrite,
   buildApplicationPhotoPath,
   canActorAccessApplicationPhoto,
   isPathInApplicationFolder,
-  parseApplicationPhotoDataUrl,
   reclaimApplicationPhotos,
   type ApplicationPhotoActor,
+  type ApplicationPhotoWriteTarget,
   type StoredApplicationOwnership,
 } from "@/lib/rental-application/application-photos.server";
 
@@ -131,32 +137,111 @@ describe("path containment + upload validation", () => {
   });
 
   it("enforces the MIME allowlist per slot (ID photos are images only)", () => {
-    const pdfHeader = "data:application/pdf;base64,JVBERi0=";
     // Allowed for income proof …
-    expect(parseApplicationPhotoDataUrl(pdfHeader, "income").ok).toBe(true);
+    expect(validateApplicationPhotoUpload("income", "application/pdf", 1024).ok).toBe(true);
     // … but not for an ID photo slot.
-    const idResult = parseApplicationPhotoDataUrl(pdfHeader, "idFront");
-    expect(idResult.ok).toBe(false);
+    expect(validateApplicationPhotoUpload("idFront", "application/pdf", 1024).ok).toBe(false);
   });
 
   it("rejects a disallowed MIME type", () => {
-    const svg = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=";
-    expect(parseApplicationPhotoDataUrl(svg, "idFront").ok).toBe(false);
+    expect(validateApplicationPhotoUpload("idFront", "image/svg+xml", 1024).ok).toBe(false);
+    expect(validateApplicationPhotoUpload("idFront", null, 1024).ok).toBe(false);
   });
 
-  it("rejects a non-data-url", () => {
-    expect(parseApplicationPhotoDataUrl("https://evil/x.jpg", "idFront").ok).toBe(false);
-    expect(parseApplicationPhotoDataUrl(null, "idFront").ok).toBe(false);
+  it("rejects an empty or oversized declared file", () => {
+    expect(validateApplicationPhotoUpload("idFront", "image/jpeg", 0).ok).toBe(false);
+    expect(validateApplicationPhotoUpload("idFront", "image/jpeg", MAX_APPLICATION_PHOTO_BYTES + 1).ok).toBe(false);
+    expect(validateApplicationPhotoUpload("idFront", "image/jpeg", undefined).ok).toBe(false);
   });
 
-  it("accepts a small valid JPEG data url", () => {
-    const jpeg = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64")}`;
-    const result = parseApplicationPhotoDataUrl(jpeg, "idFront");
+  it("accepts a valid JPEG upload declaration", () => {
+    const result = validateApplicationPhotoUpload("idFront", "image/jpeg", 4096);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.mime).toBe("image/jpeg");
       expect(result.ext).toBe("jpg");
     }
+  });
+});
+
+/**
+ * Write (sign-upload / delete) authorization. Guests hold no session, so their
+ * ONLY credential is the row's unguessable resident-setup token — a claimed
+ * email must never grant a write (no email oracle), a nonexistent row must
+ * never be writable, and a decided application is immutable to everyone but an
+ * admin (retention Option A: the photos are the manager's record).
+ */
+describe("authorizeApplicationPhotoWrite", () => {
+  const validToken = "guest-setup-token-abc123";
+  const pendingRow: ApplicationPhotoWriteTarget = {
+    ownership: appForManagerA,
+    bucket: "pending",
+    setupTokenHash: hashResidentSetupToken(validToken),
+    setupTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    setupTokenConsumedAt: null,
+  };
+  const guest: ApplicationPhotoActor = { kind: "guest", email: "" };
+  const applicant: ApplicationPhotoActor = { kind: "resident", email: "applicant@example.com" };
+
+  it("allows a guest holding the row's valid setup token", () => {
+    expect(authorizeApplicationPhotoWrite({ actor: guest, row: pendingRow, setupToken: validToken })).toBe(true);
+  });
+
+  it("DENIES a guest with a wrong or missing token — even one claiming the matching email", () => {
+    const claiming: ApplicationPhotoActor = { kind: "guest", email: "applicant@example.com" };
+    expect(authorizeApplicationPhotoWrite({ actor: claiming, row: pendingRow, setupToken: "wrong" })).toBe(false);
+    expect(authorizeApplicationPhotoWrite({ actor: claiming, row: pendingRow })).toBe(false);
+  });
+
+  it("DENIES a guest when the token is expired or consumed", () => {
+    const expired = { ...pendingRow, setupTokenExpiresAt: new Date(Date.now() - 1_000).toISOString() };
+    expect(authorizeApplicationPhotoWrite({ actor: guest, row: expired, setupToken: validToken })).toBe(false);
+    const consumed = { ...pendingRow, setupTokenConsumedAt: new Date().toISOString() };
+    expect(authorizeApplicationPhotoWrite({ actor: guest, row: consumed, setupToken: validToken })).toBe(false);
+  });
+
+  it("DENIES every actor when no stored row exists (no unbounded upload path)", () => {
+    expect(authorizeApplicationPhotoWrite({ actor: guest, row: null, setupToken: validToken })).toBe(false);
+    expect(authorizeApplicationPhotoWrite({ actor: applicant, row: null })).toBe(false);
+    expect(authorizeApplicationPhotoWrite({ actor: managerA, row: null })).toBe(false);
+  });
+
+  it("allows the applicant and the owning manager on a pending row", () => {
+    expect(authorizeApplicationPhotoWrite({ actor: applicant, row: pendingRow })).toBe(true);
+    expect(authorizeApplicationPhotoWrite({ actor: managerA, row: pendingRow })).toBe(true);
+  });
+
+  it("allows a multi-role login via the authenticated session email", () => {
+    const otherRoleManager: ApplicationPhotoActor = {
+      kind: "manager",
+      userId: "mgr_other",
+      accessiblePropertyIds: new Set(),
+    };
+    expect(
+      authorizeApplicationPhotoWrite({
+        actor: otherRoleManager,
+        row: pendingRow,
+        sessionEmail: "applicant@example.com",
+      }),
+    ).toBe(true);
+  });
+
+  it("DENIES the applicant a destructive write once the application is decided (retention)", () => {
+    for (const bucket of ["approved", "rejected"]) {
+      expect(authorizeApplicationPhotoWrite({ actor: applicant, row: { ...pendingRow, bucket } })).toBe(false);
+    }
+  });
+
+  it("DENIES the manager on a decided row too — only admin may override", () => {
+    const approved = { ...pendingRow, bucket: "approved" };
+    expect(authorizeApplicationPhotoWrite({ actor: managerA, row: approved })).toBe(false);
+    expect(authorizeApplicationPhotoWrite({ actor: { kind: "admin" }, row: approved })).toBe(true);
+  });
+
+  it("DENIES a foreign manager and a mismatched resident even on a pending row", () => {
+    expect(authorizeApplicationPhotoWrite({ actor: managerB, row: pendingRow })).toBe(false);
+    const other: ApplicationPhotoActor = { kind: "resident", email: "someone-else@example.com" };
+    expect(authorizeApplicationPhotoWrite({ actor: other, row: pendingRow })).toBe(false);
   });
 });
 
