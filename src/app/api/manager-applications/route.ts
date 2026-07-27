@@ -4,6 +4,7 @@ import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upse
 import { buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { managerCanAccessApplicationRecord, managerOwnedPropertyIdSet } from "@/lib/auth/manager-application-access";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
@@ -314,12 +315,13 @@ async function fetchApplicationsForManagerUser(
   // each tab by its own module grant). So a co-manager's linked rows are included
   // when EITHER `applications` OR `residents` is granted on the property — a
   // co-manager with neither grant gets none of the owner's linked rows.
-  const [appIds, resIds, { data: ownedProperties, error: ownedPropertiesError }] = await Promise.all([
+  const [appIds, resIds, ownedPropertyIds] = await Promise.all([
     linkedPropertyIdsForModule(db, userId, "applications"),
     linkedPropertyIdsForModule(db, userId, "residents"),
-    db.from("manager_property_records").select("id").eq("manager_user_id", userId),
+    // Same helper the by-id action guard (`managerCanAccessApplicationRecord`)
+    // uses, so the list and the guards resolve direct ownership identically.
+    managerOwnedPropertyIdSet(db, userId),
   ]);
-  if (ownedPropertiesError) throw ownedPropertiesError;
   // Every property this manager owns TODAY, unioned with co-manager-linked ones,
   // is a second, attribution-INDEPENDENT way in: the primary `manager_user_id ===
   // userId` query below only finds rows whose stored attribution still matches.
@@ -332,7 +334,6 @@ async function fetchApplicationsForManagerUser(
   // the "manager's own empty-state copy promises Incomplete shows up here, and it
   // doesn't" gap. Property ownership (not the frozen attribution stamp) is the
   // source of truth for who should see the row.
-  const ownedPropertyIds = new Set<string>((ownedProperties ?? []).map((p) => p.id).filter(Boolean));
   const propertyScopedIds = new Set<string>([...ownedPropertyIds, ...appIds, ...resIds]);
   const select = "id, row_data, updated_at, manager_user_id, property_id, assigned_property_id";
 
@@ -420,16 +421,19 @@ async function assertCanDeleteApplicationRecords(
   if (role === "manager" || role === "owner" || role === "pro") {
     for (const record of records) {
       const row = normalizeRow(record.row_data as DemoApplicantRow);
-      const managerUserId = record.manager_user_id ?? row.managerUserId ?? null;
-      if (managerUserId === user.id) continue;
-      const propertyId = (record.property_id ?? row.propertyId ?? row.application?.propertyId ?? "").trim();
-      const assignedPropertyId = (record.assigned_property_id ?? row.assignedPropertyId ?? "").trim();
-      // Co-manager deletes require the granular "delete" level on Applications.
-      const canDelete =
-        (propertyId && (await managerHasCoManagerPermissionForProperty(db, user.id, propertyId, "applications", "delete"))) ||
-        (assignedPropertyId &&
-          (await managerHasCoManagerPermissionForProperty(db, user.id, assignedPropertyId, "applications", "delete")));
-      if (canDelete) continue;
+      // Authorize by the application's PROPERTY, through the SAME shared predicate
+      // the Applications list and the other by-id action guards use — not the
+      // frozen `manager_user_id` stamp / co-manager-only check this branch used
+      // before, which refused a direct owner whose stamp was stale (or zero) on
+      // an "Incomplete" draft they could plainly see in their list. Destructive,
+      // so a co-manager needs the granular "delete" level; a direct owner always
+      // passes regardless of the stamp.
+      const accessRecord = {
+        manager_user_id: record.manager_user_id ?? row.managerUserId ?? null,
+        property_id: (record.property_id ?? row.propertyId ?? row.application?.propertyId ?? "").trim() || null,
+        assigned_property_id: (record.assigned_property_id ?? row.assignedPropertyId ?? "").trim() || null,
+      };
+      if (await managerCanAccessApplicationRecord(db, user.id, accessRecord, { level: "delete" })) continue;
       return "You do not have permission to delete this application.";
     }
     return null;
