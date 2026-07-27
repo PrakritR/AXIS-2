@@ -33,6 +33,8 @@ export type RentalWizardFormState = {
   rentalType: "standard" | "short_term";
   shortTermCheckInTime: string;
   shortTermCheckOutTime: string;
+  /** Short-term only: the guest acknowledges the host's house rules for the stay. */
+  shortTermRulesAck: boolean;
   leaseTerm: string;
   leaseStart: string;
   leaseEnd: string;

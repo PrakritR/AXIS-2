@@ -2,9 +2,11 @@ import type { MockProperty } from "@/data/types";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
 import {
+  applicationConfigForVariant,
   isWizardFormFieldEnabled,
   listingDisabledWizardFormKeys,
   resolveListingApplicationFields,
+  type ApplicationFormVariant,
 } from "@/lib/rental-application/application-field-catalog";
 import { IN_PROGRESS_APPLICATION_STAGE } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -34,11 +36,15 @@ export function isInProgressApplicationStage(stage: string | undefined | null): 
   return stage?.trim().toLowerCase() === IN_PROGRESS_APPLICATION_STAGE.toLowerCase();
 }
 
+function variantForForm(form: Partial<RentalWizardFormState> | null | undefined): ApplicationFormVariant {
+  return form?.rentalType === "short_term" ? "short_term" : "standard";
+}
+
 export function findDisabledApplicationFieldViolation(
   application: Partial<RentalWizardFormState>,
   sub: ManagerListingSubmissionV1 | null | undefined,
 ): string | null {
-  const disabled = listingDisabledWizardFormKeys(sub);
+  const disabled = listingDisabledWizardFormKeys(applicationConfigForVariant(sub, variantForForm(application)));
   for (const key of disabled) {
     const value = application[key as keyof RentalWizardFormState];
     if (hasFilledWizardValue(value)) {
@@ -52,7 +58,7 @@ export function sanitizeApplicationFormForListing(
   form: RentalWizardFormState,
   sub: ManagerListingSubmissionV1 | null | undefined,
 ): RentalWizardFormState {
-  const disabled = listingDisabledWizardFormKeys(sub);
+  const disabled = listingDisabledWizardFormKeys(applicationConfigForVariant(sub, variantForForm(form)));
   if (disabled.size === 0) return form;
   const next: RentalWizardFormState = { ...form };
   for (const key of disabled) {
@@ -77,7 +83,10 @@ export function residentApplicationScreeningAllowed(
   sub: ManagerListingSubmissionV1 | null | undefined,
   form: RentalWizardFormState | null | undefined,
 ): boolean {
-  return isWizardFormFieldEnabled(sub, "consentCredit") && form?.consentCredit === true;
+  return (
+    isWizardFormFieldEnabled(applicationConfigForVariant(sub, variantForForm(form)), "consentCredit") &&
+    form?.consentCredit === true
+  );
 }
 
 export type ValidateResidentApplicationSubmitResult =
