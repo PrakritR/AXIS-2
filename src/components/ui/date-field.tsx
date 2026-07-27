@@ -206,13 +206,15 @@ export function DateField({ value, onChange, min, max, disabled, className = "",
       const finalIso = clampIso(parsed, min, max);
       onChange(finalIso);
       setText(formatDateDisplay(finalIso));
-    } else if (text.trim() === "") {
+    } else {
+      // Unparseable (or empty) text must clear the committed value too: a
+      // previously-valid date edited down to a partial ("07/31/2026" → "07/3")
+      // would otherwise silently submit the OLD date while the field shows the
+      // partial — the required-field check on Continue only fires when the
+      // committed value is actually empty.
       onChange("");
-      setText("");
+      if (text.trim() === "") setText("");
     }
-    // Otherwise leave the incomplete/unparseable text exactly as typed — the
-    // step's own required-field check flags it on Continue rather than us
-    // silently discarding what the person typed.
   }
 
   function handlePaste(e: ClipboardEvent<HTMLInputElement>) {

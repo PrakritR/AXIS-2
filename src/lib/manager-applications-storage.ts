@@ -221,6 +221,14 @@ function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: D
  * fed a thundering herd: each remount re-runs the wizard's own
  * force-refetch-on-mount effect, which raced the still-in-flight POST again.
  * Regression coverage: `tests/unit/manager-applications-merge-rows.test.ts`.
+ *
+ * Deliberate tradeoff (accepted): because the union never treats "missing from
+ * a server response" as "deleted", a row deleted server-side (e.g. from
+ * another tab or device) does NOT propagate into a tab that already holds it —
+ * and `writeManagerApplicationRows`'s `action: "replace"` mirror of the whole
+ * cache can then re-upload that row, resurrecting the deletion. Distinguishing
+ * "not yet synced locally" from "deleted remotely" requires a server-side
+ * deletion/tombstone signal, which is tracked as follow-up work.
  */
 export function mergeApplicationRows(existingRows: DemoApplicantRow[], incomingRows: DemoApplicantRow[]): DemoApplicantRow[] {
   const existingById = new Map(normalizeApplicationRows(existingRows).map((row) => [row.id, row] as const));
@@ -338,6 +346,42 @@ type UpsertQueueEntry = {
 const upsertQueues = new Map<string, UpsertQueueEntry>();
 
 /**
+ * Best-effort flush when the page is being hidden or torn down: the debounced
+ * queue can be holding the final edits (including a just-advanced wizardStep)
+ * for up to 400ms — or longer, behind an in-flight write — and a closed tab
+ * loses them, since the local mirror is sessionStorage. `keepalive: true` lets
+ * the request outlive the page. Deliberately leaves `latest` and the timer
+ * untouched: if the page survives (a mere tab switch), the normal serialized
+ * path re-sends the identical snapshot, which also heals any ordering race
+ * this out-of-band send could introduce and keeps save-status events firing.
+ */
+function flushPendingApplicationRowUpserts() {
+  if (typeof window === "undefined" || isDemoModeActive()) return;
+  for (const entry of upsertQueues.values()) {
+    const pending = entry.latest;
+    if (!pending) continue;
+    void fetch("/api/manager-applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      keepalive: true,
+      body: JSON.stringify({ action: "upsert", row: pending }),
+    }).catch(() => undefined);
+  }
+}
+
+let upsertUnloadFlushRegistered = false;
+
+function registerUpsertUnloadFlush() {
+  if (upsertUnloadFlushRegistered || typeof window === "undefined") return;
+  upsertUnloadFlushRegistered = true;
+  window.addEventListener("pagehide", flushPendingApplicationRowUpserts);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingApplicationRowUpserts();
+  });
+}
+
+/**
  * The rental wizard calls this on every form change (a keystroke can fire
  * dozens of times per minute), and the server write is a full replace of
  * `row_data` — never a partial patch. Firing one raw fetch per call let
@@ -352,6 +396,7 @@ const upsertQueues = new Map<string, UpsertQueueEntry>();
 function scheduleApplicationRowUpsert(row: DemoApplicantRow) {
   const id = row.id.trim();
   if (!id) return;
+  registerUpsertUnloadFlush();
   let entry = upsertQueues.get(id);
   if (!entry) {
     entry = { latest: null, timer: null, inFlight: null };
