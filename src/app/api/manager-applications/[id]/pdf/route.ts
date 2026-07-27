@@ -44,13 +44,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const admin = await isAdminUser(user.id);
     let allowed = admin;
     if (!allowed) {
-      const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-      const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+      // The applicant may open their OWN application regardless of primary
+      // role — a multi-role account (profiles.role manager/owner who applied
+      // as a resident) owns any record carrying its own email, the same
+      // email-ownership key the resident applications list and the withdraw
+      // guard use.
+      const { data: profile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
       const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
-      if (role === "resident") {
-        const recordEmail = String(record.resident_email ?? "").trim().toLowerCase();
-        allowed = Boolean(email) && recordEmail === email;
-      } else {
+      const recordEmail = String(record.resident_email ?? "").trim().toLowerCase();
+      allowed = Boolean(email) && recordEmail === email;
+      if (!allowed) {
         // Authorize with the SAME owned-property predicate the applications list
         // uses, so a manager can open a row the list shows them — including an
         // "Incomplete" draft with a stale `manager_user_id` on a property they

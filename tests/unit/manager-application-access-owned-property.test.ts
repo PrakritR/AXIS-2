@@ -6,21 +6,34 @@
  * they own keeps a stale/unattributed stamp.
  *
  * `managerCanAccessApplicationRecord` is the ONE predicate both the list and the
- * by-id actions now share, so they can never disagree again. Driven directly
- * against a stubbed Supabase client.
+ * by-id actions now share, so they can never disagree again. It is also
+ * level-aware: visibility ("read") never implies destruction ("delete") for a
+ * co-manager, while a direct owner always passes. Driven directly against a
+ * stubbed Supabase client.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CoManagerPermissionLevel } from "@/lib/co-manager-permissions";
 
 const OWNER = "mgr-owner-1";
 const STRANGER = "mgr-stranger-2";
+const CO_MANAGER = "mgr-comanager-3";
 const STALE_STAMP = "00000000-0000-0000-0000-000000000000";
 const OWNED_PROPERTY = "mgr-parity-brooklyn";
 
 let OWNED_PROPERTY_IDS: Record<string, string[]> = {}; // userId -> property ids they own
+// userId -> propertyId -> levels the co-manager link grants
+let CO_MANAGER_GRANTS: Record<string, Record<string, CoManagerPermissionLevel[]>> = {};
 
-vi.mock("@/lib/auth/co-manager-module-scope", () => ({
-  // No co-manager grants in these cases — isolates the DIRECT-ownership path.
-  linkedPropertyIdsForModule: vi.fn(async () => new Set<string>()),
+vi.mock("@/lib/auth/manager-lease-scope", () => ({
+  managerHasCoManagerPermissionForProperty: vi.fn(
+    async (
+      _db: unknown,
+      userId: string,
+      propertyId: string,
+      _module: string,
+      level: CoManagerPermissionLevel = "read",
+    ) => (CO_MANAGER_GRANTS[userId]?.[propertyId] ?? []).includes(level),
+  ),
 }));
 
 function makeDb() {
@@ -51,15 +64,20 @@ function makeDb() {
   };
 }
 
-async function canAccess(userId: string, record: Record<string, unknown>) {
+async function canAccess(
+  userId: string,
+  record: Record<string, unknown>,
+  options?: { level?: CoManagerPermissionLevel },
+) {
   const { managerCanAccessApplicationRecord } = await import("@/lib/auth/manager-application-access");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return managerCanAccessApplicationRecord(makeDb() as any, userId, record as any);
+  return managerCanAccessApplicationRecord(makeDb() as any, userId, record as any, options);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   OWNED_PROPERTY_IDS = { [OWNER]: [OWNED_PROPERTY] };
+  CO_MANAGER_GRANTS = {};
 });
 
 describe("managerCanAccessApplicationRecord — property ownership, not the frozen stamp", () => {
@@ -89,5 +107,35 @@ describe("managerCanAccessApplicationRecord — property ownership, not the froz
     expect(
       await canAccess(OWNER, { manager_user_id: STALE_STAMP, property_id: "", assigned_property_id: OWNED_PROPERTY }),
     ).toBe(true);
+  });
+});
+
+describe("managerCanAccessApplicationRecord — co-manager level gating", () => {
+  const record = {
+    manager_user_id: STALE_STAMP,
+    property_id: OWNED_PROPERTY,
+    assigned_property_id: null,
+  };
+
+  it("read-level co-manager may SEE (level 'read') but is REFUSED at level 'delete'", async () => {
+    CO_MANAGER_GRANTS = { [CO_MANAGER]: { [OWNED_PROPERTY]: ["read"] } };
+    expect(await canAccess(CO_MANAGER, record)).toBe(true);
+    expect(await canAccess(CO_MANAGER, record, { level: "read" })).toBe(true);
+    expect(await canAccess(CO_MANAGER, record, { level: "delete" })).toBe(false);
+  });
+
+  it("delete-level co-manager is allowed at level 'delete'", async () => {
+    CO_MANAGER_GRANTS = { [CO_MANAGER]: { [OWNED_PROPERTY]: ["read", "edit", "delete"] } };
+    expect(await canAccess(CO_MANAGER, record, { level: "delete" })).toBe(true);
+  });
+
+  it("direct owner is always allowed, including at level 'delete'", async () => {
+    expect(await canAccess(OWNER, record, { level: "delete" })).toBe(true);
+  });
+
+  it("a matching manager_user_id stamp is always allowed, including at level 'delete'", async () => {
+    expect(await canAccess(OWNER, { manager_user_id: OWNER, property_id: "some-other-prop" }, { level: "delete" })).toBe(
+      true,
+    );
   });
 });

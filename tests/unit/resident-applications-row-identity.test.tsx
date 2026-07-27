@@ -46,7 +46,9 @@ vi.mock("@/lib/resident-public-nav", () => ({
 vi.mock("@/components/portal/manager-applications", () => ({ ApplicationDocumentPreview: () => null }));
 vi.mock("@/components/portal/resident-application-editor", () => ({ ResidentApplicationEditor: () => null }));
 vi.mock("@/components/marketing/rental-application-finish-panel", () => ({ GroupShareCallout: () => null }));
-vi.mock("@/components/marketing/rental-application-wizard", () => ({ RentalApplicationWizard: () => null }));
+vi.mock("@/components/marketing/rental-application-wizard", () => ({
+  RentalApplicationWizard: () => <div data-testid="rental-wizard" />,
+}));
 
 import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
 
@@ -143,5 +145,32 @@ describe("ResidentApplicationsPanel — each row opens its OWN application", () 
       window.dispatchEvent(new Event("manager-applications-changed"));
     });
     expect(expandedRowIds()).toEqual(["PROPLANE-CCCC0003"]);
+  });
+
+  it("mounts the embedded wizard ONLY under the URL-targeted row — another expanded in-progress row gets Continue application instead", async () => {
+    ROWS = [
+      inProgressRow("PROPLANE-AAAA0001", "mgr-test-magnolia", "Magnolia House"),
+      inProgressRow("PROPLANE-BBBB0002", "mgr-test-alder", "Alder Row"),
+    ];
+    searchParams = new URLSearchParams({ propertyId: "mgr-test-magnolia" });
+    await act(async () => {
+      render(<ResidentApplicationsPanel applyMode />);
+    });
+
+    // The URL-targeted application auto-expanded with its wizard inline.
+    expect(expandedRowIds()).toEqual(["PROPLANE-AAAA0001"]);
+    expect(document.querySelectorAll('[data-testid="rental-wizard"]').length).toBeGreaterThan(0);
+
+    // Expanding a DIFFERENT in-progress row must NOT render the target's wizard
+    // under that row's header — it navigates via Continue application instead.
+    await act(async () => {
+      fireEvent.click(desktopRow("PROPLANE-BBBB0002"));
+    });
+    expect(expandedRowIds()).toEqual(["PROPLANE-BBBB0002"]);
+    expect(document.querySelectorAll('[data-testid="rental-wizard"]').length).toBe(0);
+    const continueButtons = [...document.querySelectorAll("button")].filter((button) =>
+      /continue application/i.test(button.textContent ?? ""),
+    );
+    expect(continueButtons.length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,5 @@
-import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
+import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
+import type { CoManagerPermissionLevel } from "@/lib/co-manager-permissions";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ServiceClient = ReturnType<typeof createSupabaseServiceRoleClient>;
@@ -22,12 +23,20 @@ export type ApplicationAccessRecord = {
  * the row via property ownership, and every by-id ACTION (delete, PDF, …) MUST
  * authorize the same way or it 403s on a row the manager can plainly see.
  * Property ownership, not the frozen stamp, is the source of truth for access.
+ *
+ * `level` distinguishes what the caller may DO, not just what they may SEE:
+ * viewing (the list, the PDF) is the default "read", but a destructive route
+ * must pass the level it needs (e.g. "delete") so a co-manager restricted to
+ * read-only Applications/Residents can see a row without being able to destroy
+ * what it points at. Direct owners always pass regardless of level.
  */
 export async function managerCanAccessApplicationRecord(
   db: ServiceClient,
   userId: string,
   record: ApplicationAccessRecord,
+  options?: { level?: CoManagerPermissionLevel },
 ): Promise<boolean> {
+  const level = options?.level ?? "read";
   if (!userId) return false;
   if (record.manager_user_id && record.manager_user_id === userId) return true;
 
@@ -46,11 +55,17 @@ export async function managerCanAccessApplicationRecord(
     .limit(1);
   if ((owned ?? []).length > 0) return true;
 
-  // Co-manager grant on EITHER the applications or residents module — the same
-  // union the list applies (the client then filters each tab by its own grant).
-  const [appIds, resIds] = await Promise.all([
-    linkedPropertyIdsForModule(db, userId, "applications"),
-    linkedPropertyIdsForModule(db, userId, "residents"),
-  ]);
-  return candidateIds.some((id) => appIds.has(id) || resIds.has(id));
+  // Co-manager grant at `level` on EITHER the applications or residents module —
+  // the same union the list applies (the client then filters each tab by its own
+  // grant), via the same level-aware check `assertCanDeleteApplicationRecords`
+  // uses.
+  for (const propertyId of candidateIds) {
+    if (await managerHasCoManagerPermissionForProperty(db, userId, propertyId, "applications", level)) {
+      return true;
+    }
+    if (await managerHasCoManagerPermissionForProperty(db, userId, propertyId, "residents", level)) {
+      return true;
+    }
+  }
+  return false;
 }

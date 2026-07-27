@@ -140,6 +140,13 @@ export function ResidentApplicationsPanel({
   const [tick, setTick] = useState(0);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // The ONE row this apply session's inline wizard is bound to — the row the
+  // auto-expand effect resolved for the URL target (or the sole bare-/apply
+  // draft). `expandedId` is NOT that identity: it follows every manual click,
+  // and the wizard always binds to the URL target, so rendering it under any
+  // other expanded in-progress row would show the WRONG application's wizard
+  // beneath that row's header.
+  const [wizardRowId, setWizardRowId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<DemoApplicantRow | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
@@ -234,17 +241,18 @@ export function ResidentApplicationsPanel({
   // URL named (or clears a bundle choice, etc.), `targetMatchesApplication` stops
   // matching and `inProgressRow` goes from "this row" to `undefined`, even though
   // it's still the exact same in-progress application, just with an updated room.
-  // Once we've already locked onto a row via `expandedId` (the effect below), keep
-  // trusting that lock instead of re-deriving the identity from the stale target —
-  // otherwise the standalone `applyMode && !inProgressRow` branch below thinks
-  // there is suddenly no in-progress application and mounts a SECOND, brand-new
-  // `RentalApplicationWizard` (fresh `step` state, no draft) alongside the one
-  // already embedded in the expanded row: the "glitches back to the start" bug,
-  // and the two instances' un-coordinated syncs are why the room could also land
-  // on the server as blank. See `tests/unit/resident-applications-room-change.test.tsx`.
+  // Once the auto-expand effect below has locked the wizard onto a row
+  // (`wizardRowId`), keep trusting that lock instead of re-deriving the identity
+  // from the stale target — otherwise the standalone `applyMode &&
+  // !inProgressRow` branch below thinks there is suddenly no in-progress
+  // application and mounts a SECOND, brand-new `RentalApplicationWizard` (fresh
+  // `step` state, no draft) alongside the one already embedded in the expanded
+  // row: the "glitches back to the start" bug, and the two instances'
+  // un-coordinated syncs are why the room could also land on the server as
+  // blank. See `tests/unit/resident-applications-room-change.test.tsx`.
   const lockedInProgressRow = useMemo(
-    () => (expandedId ? rows.find((row) => row.id === expandedId && isInProgressApplicationRow(row)) : undefined),
-    [rows, expandedId],
+    () => (wizardRowId ? rows.find((row) => row.id === wizardRowId && isInProgressApplicationRow(row)) : undefined),
+    [rows, wizardRowId],
   );
   const activeInProgressRow = lockedInProgressRow ?? inProgressRow;
 
@@ -307,6 +315,24 @@ export function ResidentApplicationsPanel({
   // list straight to /apply is exactly what hid the entry point the captain
   // reported missing. Starting an application is always an explicit click.
 
+  // The wizard-row lock belongs to ONE apply target. When the resident starts
+  // an application for a DIFFERENT property (the inline picker navigates to a
+  // new ?propertyId), release the lock so the standalone wizard can mount for
+  // the new target instead of staying pinned to the previous application. Keyed
+  // on the target's VALUES, not the `applyTarget` object — the wizard's own
+  // `?wizardStep=` URL writes re-mint `searchParams` (and therefore the memo)
+  // without changing the target.
+  const applyTargetKey = applyTarget
+    ? [applyTarget.propertyId, applyTarget.listingRoomId ?? "", applyTarget.bundleId ?? ""].join("|")
+    : "";
+  const applyTargetKeyRef = useRef(applyTargetKey);
+  useEffect(() => {
+    if (applyTargetKeyRef.current === applyTargetKey) return;
+    applyTargetKeyRef.current = applyTargetKey;
+    autoExpandedApplyIdRef.current = null;
+    setWizardRowId(null);
+  }, [applyTargetKey]);
+
   useEffect(() => {
     if (!applyMode) return;
     // Auto-open ONLY the application this apply session is actually for:
@@ -329,6 +355,7 @@ export function ResidentApplicationsPanel({
     queueMicrotask(() => {
       setBucket("pending");
       setExpandedId(targetRow.id);
+      setWizardRowId(targetRow.id);
     });
   }, [applyMode, applyTarget, rows]);
 
@@ -498,7 +525,12 @@ export function ResidentApplicationsPanel({
     // everything else (row actions + the document summary) is LEFT-ALIGNED and
     // full-width, matching the manager Applications row so the actions sit tight
     // under the applicant instead of floating centered in an empty band.
-    if (isInProgressApplicationRow(row) && applyMode) {
+    // The embedded wizard binds to the URL apply target, so it may render ONLY
+    // under the row the auto-expand resolved for that target. Any OTHER
+    // expanded in-progress row gets its normal detail (Continue application →
+    // that row's OWN apply URL) — never a wizard bound to a different
+    // application under this row's header.
+    if (isInProgressApplicationRow(row) && applyMode && row.id === wizardRowId) {
       return <div className="mx-auto max-w-5xl">{embeddedWizard}</div>;
     }
     if (editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row)) {

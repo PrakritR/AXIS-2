@@ -162,9 +162,23 @@ export function ApplicationDocumentPreview({
   const demo = isDemoModeActive();
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState(false);
+  // Every sync/autosave tick re-mints the row OBJECT (new refs for identical
+  // data), so the fetch must key on the values the PDF actually derives from —
+  // otherwise an open preview re-generates the PDF server-side and remounts the
+  // iframe on every background tick. The ref keeps the latest row for the
+  // fetch body without widening the dependency back to object identity.
+  const rowRef = useRef(row);
+  rowRef.current = row;
+  const previewKey = [
+    row.id,
+    row.bucket,
+    applicationRoomLabel(row),
+    row.application?.hasCosigner === "yes" ? "cosigner" : "",
+  ].join("|");
 
   useEffect(() => {
     let cancelled = false;
+    const row = rowRef.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale error/preview when the row changes
     setPdfError(false);
     if (demo) {
@@ -220,7 +234,8 @@ export function ApplicationDocumentPreview({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [row, demo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- previewKey covers every row field the PDF derives from
+  }, [previewKey, demo]);
 
   const downloadButton = showDownload ? (
     <Button
