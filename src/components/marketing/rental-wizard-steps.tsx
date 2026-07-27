@@ -544,7 +544,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 ? roomSelectOptionsWithNone(pid, { includeUnavailable: true }).filter((o) => o.value !== "")
                 : [];
               const autoRoom = isEntire ? pid : wholeUnit && unitOpts.length <= 1 ? (unitOpts[0]?.value ?? pid) : "";
-              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", rentalType: "standard" });
+              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", leaseTerm: "", rentalType: "standard" });
             }}
             placeholder="Search by address, neighborhood, or property name…"
             emptyMessage="No properties match your search."
@@ -775,10 +775,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             application.
           </p>
         ) : null}
-        {form.rentalType === "short_term" && showWizardField("rentalType") ? (
+        {form.rentalType === "short_term" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shortTermCheckInTime" optional>
+              <Label htmlFor="shortTermCheckInTime" required>
                 Check-in time
               </Label>
               <Input
@@ -786,10 +786,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 type="time"
                 value={form.shortTermCheckInTime}
                 onChange={(e) => patch({ shortTermCheckInTime: e.target.value })}
+                className={errors.shortTermCheckInTime ? "border-red-400 ring-2 ring-red-100" : ""}
               />
+              <FieldError msg={errors.shortTermCheckInTime} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shortTermCheckOutTime" optional>
+              <Label htmlFor="shortTermCheckOutTime" required>
                 Check-out time
               </Label>
               <Input
@@ -797,7 +799,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 type="time"
                 value={form.shortTermCheckOutTime}
                 onChange={(e) => patch({ shortTermCheckOutTime: e.target.value })}
+                className={errors.shortTermCheckOutTime ? "border-red-400 ring-2 ring-red-100" : ""}
               />
+              <FieldError msg={errors.shortTermCheckOutTime} />
             </div>
           </div>
         ) : null}

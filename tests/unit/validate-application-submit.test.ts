@@ -100,6 +100,29 @@ describe("validate-application-submit", () => {
     }
   });
 
+  it("rejects a forged short-term submission when the listing does not permit short-term stays", () => {
+    const sub = {
+      ...createDefaultListingSubmission(),
+      shortTermRentalsAllowed: false,
+      disabledStandardApplicationKeys: ["property-rental-type-standard-or-short-term"],
+    };
+    const application = {
+      ...validSubmittedApplication(),
+      rentalType: "short_term" as const,
+      shortTermCheckInTime: "15:00",
+      shortTermCheckOutTime: "11:00",
+    };
+    const result = validateResidentApplicationSubmit({
+      application,
+      property: { id: "prop-1", listingSubmission: sub },
+      inProgress: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("does not allow short-term stays");
+    }
+  });
+
   it("does not allow screening when credit consent is disabled for the listing", () => {
     const consentDef = STANDARD_APPLICATION_FIELD_CATALOG.find(
       (d) => d.label === "Credit & background check consent",

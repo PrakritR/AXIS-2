@@ -3089,6 +3089,7 @@ export function ManagerAddListingForm({
                         className="h-4 w-4 rounded border-border"
                         checked={Boolean(sub.shortTermRentalsAllowed)}
                         onChange={(e) => {
+                          clearListingFieldError("allowedLeaseTerms");
                           const on = e.target.checked;
                           setSub((s) => {
                             const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
