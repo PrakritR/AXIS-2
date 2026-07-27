@@ -37,9 +37,13 @@ import {
   listingCustomApplicationFields,
   upsertCustomFieldAnswer,
 } from "@/lib/rental-application/custom-fields";
-import type { ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
+import { normalizeCustomApplicationFields, type ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
 import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
-import { isWizardFormFieldEnabled } from "@/lib/rental-application/application-field-catalog";
+import {
+  activeApplicationWizardSteps,
+  applicationConfigForVariant,
+  isWizardFormFieldEnabled,
+} from "@/lib/rental-application/application-field-catalog";
 
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/6";
 const pillActive = "rounded-full px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition min-h-[44px] sm:min-h-0";
@@ -301,14 +305,20 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const prop = getPropertyById(form.propertyId);
     return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
   })();
-  const showWizardField = (key: string) => isWizardFormFieldEnabled(listingSub, key);
+  // Field visibility + manager custom questions resolve for the form the
+  // applicant is on: short-term guests and long-term tenants see different,
+  // independently-configured question sets. `rentalType` is derived from the
+  // step-3 lease-term dropdown (the single listing-permission gate), so the two
+  // can never disagree.
+  const applicationConfig = applicationConfigForVariant(listingSub, form.rentalType);
+  const showWizardField = (key: string) => isWizardFormFieldEnabled(applicationConfig, key);
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
     if (step < 3 || step > 10) return null;
     const stepProp = getPropertyById(form.propertyId);
     const fields = customFieldsForWizardStep(
-      listingCustomApplicationFields(stepProp?.listingSubmission?.v === 1 ? stepProp.listingSubmission : undefined),
+      listingCustomApplicationFields(applicationConfig),
       step,
     );
     if (fields.length === 0) return null;
@@ -818,6 +828,30 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.shortTermCheckOutTime} />
             </div>
           </div>
+        ) : null}
+
+        {form.rentalType === "short_term" ? (
+          <label
+            className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground"
+            htmlFor="shortTermRulesAck"
+          >
+            <input
+              id="shortTermRulesAck"
+              type="checkbox"
+              checked={form.shortTermRulesAck}
+              onChange={(e) => patch({ shortTermRulesAck: e.target.checked })}
+              className="mt-1 h-4 w-4 shrink-0"
+              data-attr="short-term-rules-ack"
+            />
+            <span>
+              {`I have read and agree to follow the host's house rules for this short-term stay${
+                selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? " shown above" : ""
+              }.`}
+              {errors.shortTermRulesAck ? (
+                <span className="mt-1 block text-red-500">{errors.shortTermRulesAck}</span>
+              ) : null}
+            </span>
+          </label>
         ) : null}
 
         {stepManagerQuestions}
@@ -1653,6 +1687,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const reviewBundleLabel = form.bundleId.trim()
       ? getBundleChoiceLabel(form.propertyId, form.bundleId)
       : "";
+    // Only review the sections this form actually asks. The short-term form
+    // skips the screening sections, so the summary (and its "Edit" links) must
+    // not reference steps the applicant never walked through.
+    const activeStepSet = new Set(
+      activeApplicationWizardSteps(applicationConfig, normalizeCustomApplicationFields),
+    );
     return (
       <div className="space-y-8">
         <div>
@@ -1692,6 +1732,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <>
                 <ReviewRow k="Check-in time" v={displayOrDash(form.shortTermCheckInTime)} />
                 <ReviewRow k="Check-out time" v={displayOrDash(form.shortTermCheckOutTime)} />
+                <ReviewRow k="House rules" v={form.shortTermRulesAck ? "Acknowledged" : "—"} />
               </>
             ) : null}
           </ReviewSection>
@@ -1719,6 +1760,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
             <ReviewRow k="Email" v={displayOrDash(form.email)} />
           </ReviewSection>
+          {activeStepSet.has(5) || activeStepSet.has(6) ? (
           <ReviewSection title="Address history" stepTarget={5} onEdit={editFromReview}>
             <ReviewRow
               k="Current address"
@@ -1761,6 +1803,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </>
             )}
           </ReviewSection>
+          ) : null}
+          {activeStepSet.has(7) ? (
           <ReviewSection title="Employment" stepTarget={7} onEdit={editFromReview}>
             <ReviewRow k="Not employed" v={form.notEmployed ? "Yes" : "No"} />
             <ReviewRow k="Employer" v={displayOrDash(form.employer)} />
@@ -1772,10 +1816,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Annual income" v={displayOrDash(form.annualIncome)} />
             <ReviewRow k="Other income" v={displayOrDash(form.otherIncome)} />
           </ReviewSection>
+          ) : null}
+          {activeStepSet.has(8) ? (
           <ReviewSection title="References" stepTarget={8} onEdit={editFromReview}>
             <ReviewRow k="Reference 1" v={displayOrDash(`${form.ref1Name} · ${form.ref1Relationship} · ${form.ref1Phone}`)} />
             <ReviewRow k="Reference 2" v={form.ref2Name.trim() ? displayOrDash(`${form.ref2Name} · ${form.ref2Relationship} · ${form.ref2Phone}`) : displayOrDash("")} />
           </ReviewSection>
+          ) : null}
+          {activeStepSet.has(9) ? (
           <ReviewSection title="Additional details" stepTarget={9} onEdit={editFromReview}>
             <ReviewRow k="Occupants" v={displayOrDash(form.occupancyCount)} />
             <ReviewRow k="Pets" v={displayOrDash(form.pets)} />
@@ -1783,6 +1831,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes: ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
             <ReviewRow k="Criminal history" v={form.criminalHistory === "yes" ? `Yes: ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
           </ReviewSection>
+          ) : null}
           {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
             <ReviewSection title="Manager questions" stepTarget={9} onEdit={editFromReview}>
               {displayableCustomFieldAnswers(form.customFieldAnswers).map((answer) => (
@@ -1791,7 +1840,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </ReviewSection>
           ) : null}
           <ReviewSection title="Consent" stepTarget={10} onEdit={editFromReview}>
-            <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
+            {showWizardField("consentCredit") ? (
+              <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
+            ) : null}
             <ReviewRow k="Accuracy confirmed" v={form.consentTruth ? "Yes" : "Not checked"} />
             <ReviewRow k="Signature" v={displayOrDash(form.digitalSignature)} />
             <ReviewRow k="Date signed" v={displayOrDash(form.dateSigned)} />

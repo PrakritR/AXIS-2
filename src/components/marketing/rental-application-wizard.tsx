@@ -61,8 +61,14 @@ import {
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
+import { normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
+import {
+  activeApplicationWizardSteps,
+  applicationConfigForVariant,
+} from "@/lib/rental-application/application-field-catalog";
 import { digitsOnly, maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
+import { sanitizeApplicationFormForListing } from "@/lib/rental-application/validate-application-submit";
 import {
   RENTAL_WIZARD_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
@@ -339,6 +345,38 @@ function RentalApplicationWizardInner({
   /** True when the most recent background autosave of THIS application failed. */
   const [autosaveFailed, setAutosaveFailed] = useState(false);
   const router = useRouter();
+
+  // The step ids that carry a visible question for the CURRENT form variant.
+  // Section steps (3-10) fall out when the variant has no question in them, so
+  // the short-term form skips the screening sections its curated default turns
+  // off. Short-term correctness rides on `rentalType` alone (curated default),
+  // but custom manager questions and a manager-customized short-term slice come
+  // from the listing submission, which loads asynchronously — so `extrasTick`
+  // (bumped when the public catalog arrives) is a dep, otherwise a resumed draft
+  // whose propertyId is set at mount would compute against a missing submission
+  // and never recompute, disagreeing with the step bodies and `validateAllPrior`.
+  const activeSteps = useMemo(() => {
+    void extrasTick;
+    const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
+    const listingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    return activeApplicationWizardSteps(
+      applicationConfigForVariant(listingSub, form.rentalType),
+      normalizeCustomApplicationFields,
+    );
+  }, [form.propertyId, form.rentalType, extrasTick]);
+  const nextActiveStep = useCallback(
+    (from: number) => activeSteps.find((s) => s > from) ?? from,
+    [activeSteps],
+  );
+  const prevActiveStep = useCallback(
+    (from: number) => {
+      for (let i = activeSteps.length - 1; i >= 0; i -= 1) {
+        if (activeSteps[i] < from) return activeSteps[i];
+      }
+      return from;
+    },
+    [activeSteps],
+  );
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
   const browseHomesHref = residentBrowseFromApplicationHref(wizardApplyPath);
@@ -1046,8 +1084,21 @@ function RentalApplicationWizardInner({
       // joining members keep the id they pasted. Persist it on the stored snapshot so
       // every member's independent application row can be reconciled into one group.
       const resolvedGroupId = resolveSubmitGroupId(form);
-      const submittedForm: RentalWizardFormState =
+      const withGroupId: RentalWizardFormState =
         resolvedGroupId && resolvedGroupId !== form.groupId ? { ...form, groupId: resolvedGroupId } : form;
+      // Sanitize at SUBMIT (only here — never on a mid-form lease-term switch, so
+      // toggling long<->short keeps in-progress answers): the stored snapshot and
+      // the manager view must carry ONLY the questions the CHOSEN form actually
+      // asked. Otherwise an applicant who fills the long-term form (SSN, driver's
+      // license, employment, references, credit consent) and then picks Short-Term
+      // Stay would submit all of that PII for a form that never asked it. Variant
+      // resolved from the submitted form's own `rentalType`; fields the chosen form
+      // did ask are untouched.
+      const submittedListingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+      const submittedForm: RentalWizardFormState = sanitizeApplicationFormForListing(
+        withGroupId,
+        submittedListingSub,
+      );
 
       // A redeemed waiver code means NOTHING is charged: no $0 line, no
       // pending application-fee row — including one created earlier via the
@@ -1485,7 +1536,7 @@ function RentalApplicationWizardInner({
       setStep(11);
       setReviewReturnStep(null);
     } else {
-      const next = step + 1;
+      const next = nextActiveStep(step);
       setStep(next);
       setMaxStepReached((m) => nextWizardMaxReached(m, next));
     }
@@ -1511,14 +1562,25 @@ function RentalApplicationWizardInner({
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    setStep((s) => s - 1);
+    const prev = prevActiveStep(step);
+    setStep(prev);
     setErrors({});
-    if (step - 1 === 3) setShowAvailabilityWarnings(false);
+    if (prev === 3) setShowAvailabilityWarnings(false);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const meta = STEP_META[step - 1];
-  const progressPct = Math.round((step / RENTAL_WIZARD_STEP_COUNT) * 100);
+  // Progress reflects position within the ACTIVE step list for this form, not a
+  // fixed /12 — so it stays honest for the shorter short-term form and never
+  // implies a total step count (see the "do not show how long the application
+  // is" requirement). The numeric "Step N of M" label and numbered pills are
+  // deliberately gone; the bar plus the section title carry the sense of
+  // forward motion instead.
+  const activeStepIndex = activeSteps.indexOf(step);
+  const progressPct =
+    activeSteps.length > 0
+      ? Math.round((((activeStepIndex < 0 ? 0 : activeStepIndex) + 1) / activeSteps.length) * 100)
+      : 0;
   const embedded = layout === "embedded";
 
   return (
@@ -1600,44 +1662,24 @@ function RentalApplicationWizardInner({
             }
           >
             <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
+              {/*
+                Deliberately no "Step N of M" and no numbered 1..N pills: the
+                applicant must never see how long the application is (a total
+                on the first screen is a reason to abandon). The eyebrow names
+                the form (long-term vs short-term), the title names the current
+                section, and the bar below carries forward motion — no total.
+              */}
               <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
-                Step {step} of {RENTAL_WIZARD_STEP_COUNT}
+                {form.rentalType === "short_term" ? "Short-term stay application" : "Rental application"}
               </p>
               <p className="rental-wizard-step-title mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {meta.title}
               </p>
-              <div className="rental-wizard-step-dots -mx-1 mt-3 overflow-x-auto [-webkit-overflow-scrolling:touch] sm:mt-4">
-                <div className="flex min-w-max gap-1 px-1">
-                  {STEP_META.map((s) => {
-                    const reachable = canNavigateToWizardStep(s.n, maxStepReached);
-                    const completed = s.n < step;
-                    return (
-                      <button
-                        key={s.n}
-                        type="button"
-                        disabled={!reachable}
-                        title={s.title}
-                        onClick={() => goToStep(s.n)}
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
-                          s.n === step
-                            ? "bg-primary text-white"
-                            : completed
-                              ? "bg-primary/15 text-primary [html[data-theme=dark]_&]:bg-primary/28 [html[data-theme=dark]_&]:text-white"
-                              : reachable
-                                ? "bg-accent/30 text-muted hover:bg-accent/40 [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/70 [html[data-theme=dark]_&]:hover:bg-white/14"
-                                : "cursor-not-allowed bg-accent/25 text-muted/80 [html[data-theme=dark]_&]:bg-white/8 [html[data-theme=dark]_&]:text-white/42"
-                        }`}
-                      >
-                        {completed ? "✓" : s.n}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
               <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2 [html[data-theme=dark]_&]:bg-white/10">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                   style={{ width: `${progressPct}%` }}
+                  aria-hidden="true"
                 />
               </div>
             </div>

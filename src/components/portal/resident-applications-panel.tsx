@@ -269,12 +269,18 @@ export function ResidentApplicationsPanel({
         body: JSON.stringify({ action: "withdraw", id: row.id }),
       });
       const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-      if (!res.ok || !body?.ok) {
+      // A 404 means the server has no record to stamp yet — a brand-new
+      // in-progress draft whose background snapshot hasn't landed. The resident's
+      // intent is still "remove this from my list", so honor it locally instead
+      // of stranding the row (this is the "withdraw does nothing on my only
+      // application" case). Any other failure is a real error.
+      if ((!res.ok || !body?.ok) && res.status !== 404) {
         showToast(body?.error ?? "Could not withdraw application.");
         return;
       }
-      // Reflect the withdrawal locally (no server mirror) so the row leaves the
-      // active list immediately; the server already persisted `withdrawnAt`.
+      // Reflect the withdrawal locally so the row leaves the active list
+      // immediately; `withdrawnAt` is a sticky stamp in the cache merge, so a
+      // follow-up resync can never resurrect it.
       replaceManagerApplicationRowInCache({ ...row, withdrawnAt: new Date().toISOString() });
       if (expandedId === row.id) setExpandedId(null);
       if (editingId === row.id) setEditingId(null);
@@ -337,72 +343,80 @@ export function ResidentApplicationsPanel({
     />
   );
 
-  const renderRowDetail = (row: DemoApplicantRow) => (
-    <div className="mx-auto max-w-5xl space-y-4">
-      {!isInProgressApplicationRow(row) && applicationHasGroup(row.application) ? (
-        <GroupShareCallout
-          groupId={(row.application?.groupId ?? "").trim()}
-          groupRole={row.application?.groupRole}
-          groupSize={row.application?.groupSize}
-          className="mt-0"
-          shareable={row.bucket !== "rejected"}
-        />
-      ) : null}
-      {isInProgressApplicationRow(row) && applyMode ? (
-        embeddedWizard
-      ) : editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row) ? (
-        <ResidentApplicationEditor
-          row={row}
-          residentEmail={residentEmail}
-          onCancel={() => setEditingId(null)}
-          onSaved={() => {
-            setEditingId(null);
-            setTick((t) => t + 1);
-          }}
-        />
-      ) : (
-        <>
-          <PortalTableDetailActions placement="top">
-            {isInProgressApplicationRow(row) ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => portalNavigate(continueApplicationPath(row))}
-              >
-                Continue application
-              </Button>
-            ) : row.bucket === "pending" && row.application ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => setEditingId(row.id)}
-              >
-                Edit application
-              </Button>
-            ) : null}
-            {canResidentWithdrawApplication(row) ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="resident-application-withdraw"
-                onClick={() => setWithdrawTarget(row)}
-              >
-                Withdraw application
-              </Button>
-            ) : null}
-          </PortalTableDetailActions>
-          {isInProgressApplicationRow(row) ? null : row.application ? (
-            <ApplicationDocumentPreview row={row} collapsible={false} showDownload={false} />
-          ) : (
-            <p className="text-sm text-muted">Application details are not available for this record.</p>
-          )}
-        </>
-      )}
-    </div>
-  );
+  const renderRowDetail = (row: DemoApplicantRow) => {
+    // The embedded wizard / inline editor stay in a centered, readable column;
+    // everything else (row actions + the document summary) is LEFT-ALIGNED and
+    // full-width, matching the manager Applications row so the actions sit tight
+    // under the applicant instead of floating centered in an empty band.
+    if (isInProgressApplicationRow(row) && applyMode) {
+      return <div className="mx-auto max-w-5xl">{embeddedWizard}</div>;
+    }
+    if (editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row)) {
+      return (
+        <div className="mx-auto max-w-5xl">
+          <ResidentApplicationEditor
+            row={row}
+            residentEmail={residentEmail}
+            onCancel={() => setEditingId(null)}
+            onSaved={() => {
+              setEditingId(null);
+              setTick((t) => t + 1);
+            }}
+          />
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-4">
+        {!isInProgressApplicationRow(row) && applicationHasGroup(row.application) ? (
+          <GroupShareCallout
+            groupId={(row.application?.groupId ?? "").trim()}
+            groupRole={row.application?.groupRole}
+            groupSize={row.application?.groupSize}
+            className="mt-0"
+            shareable={row.bucket !== "rejected"}
+          />
+        ) : null}
+        <PortalTableDetailActions placement="top">
+          {isInProgressApplicationRow(row) ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => portalNavigate(continueApplicationPath(row))}
+            >
+              Continue application
+            </Button>
+          ) : row.bucket === "pending" && row.application ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => setEditingId(row.id)}
+            >
+              Edit application
+            </Button>
+          ) : null}
+          {canResidentWithdrawApplication(row) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="resident-application-withdraw"
+              onClick={() => setWithdrawTarget(row)}
+            >
+              Withdraw application
+            </Button>
+          ) : null}
+        </PortalTableDetailActions>
+        {isInProgressApplicationRow(row) ? null : row.application ? (
+          <ApplicationDocumentPreview row={row} collapsible={false} showDownload={false} />
+        ) : (
+          <p className="text-sm text-muted">Application details are not available for this record.</p>
+        )}
+      </div>
+    );
+  };
 
   const filterRow = (
     <ManagerPortalFilterRow>
@@ -411,11 +425,14 @@ export function ResidentApplicationsPanel({
   );
 
   const newApplicationButton =
-    sessionReady && !applyMode ? (
+    sessionReady ? (
+      // Always visible — including while an application is open inline — because
+      // mid-application is exactly when someone decides to apply somewhere else
+      // too. It is the page's primary action, so it renders blue.
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         <Button
           type="button"
-          variant="outline"
+          variant="primary"
           className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
           data-attr="resident-applications-apply"
           onClick={() => {

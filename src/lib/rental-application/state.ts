@@ -19,6 +19,7 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     rentalType: "standard",
     shortTermCheckInTime: "",
     shortTermCheckOutTime: "",
+    shortTermRulesAck: false,
     leaseTerm: "",
     leaseStart: "",
     leaseEnd: "",

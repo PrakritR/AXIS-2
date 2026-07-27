@@ -21,8 +21,11 @@ import {
 } from "@/lib/manager-property-save-target";
 import {
   addListingApplicationField,
+  applicationConfigForVariant,
+  mergeApplicationConfigForVariant,
   patchListingApplicationField,
   resolveListingApplicationFields,
+  type ApplicationFormVariant,
   type ResolvedApplicationField,
 } from "@/lib/rental-application/application-field-catalog";
 
@@ -127,6 +130,7 @@ export function ApplicationQuestionEditModal({
   isNew = false,
   sectionId = "additional",
   sub,
+  variant = "standard",
   saveTarget,
   propertyIds,
   managerUserId,
@@ -139,6 +143,8 @@ export function ApplicationQuestionEditModal({
   isNew?: boolean;
   sectionId?: string;
   sub: ManagerListingSubmissionV1;
+  /** Which application form (long-term vs short-term) this question belongs to. */
+  variant?: ApplicationFormVariant;
   saveTarget?: ManagerPropertySaveTarget;
   /** When set, Save applies the same application config to every id (bulk edit). */
   propertyIds?: string[];
@@ -173,7 +179,8 @@ export function ApplicationQuestionEditModal({
   };
 
   const save = () => {
-    const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
+    const configSlice = applicationConfigForVariant(sub, variant);
+    const applicationFields = resolveListingApplicationFields(configSlice, normalizeCustomApplicationFields);
     const usedKeys = new Set<string>();
     for (const f of applicationFields) {
       if (f.id === draft.id) continue;
@@ -193,19 +200,24 @@ export function ApplicationQuestionEditModal({
 
     let configPatch;
     if (isNew) {
-      configPatch = addListingApplicationField(sub, fieldPatch);
+      configPatch = addListingApplicationField(configSlice, fieldPatch);
     } else {
       const existing = applicationFields.find((f) => f.id === draft.id);
       if (!existing) {
         showToast("Could not find question to update.");
         return;
       }
-      configPatch = patchListingApplicationField(sub, existing, fieldPatch);
+      configPatch = patchListingApplicationField(configSlice, existing, fieldPatch);
     }
 
+    // Editing a short-term question must keep the form marked "custom" even if
+    // the resulting slice is empty (a matches-default override is dropped), or
+    // applicationConfigForVariant would revert it to the curated default.
+    const editedSlice = { ...configSlice, ...configPatch };
+    if (variant === "short_term") editedSlice.applicationConfigMode = "custom";
     const next: ManagerListingSubmissionV1 = {
       ...sub,
-      ...configPatch,
+      ...mergeApplicationConfigForVariant(variant, editedSlice),
     };
 
     const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];

@@ -46,7 +46,12 @@ export type LeaseConfigFields = Pick<
 
 export type ApplicationConfigFields = Pick<
   ManagerListingSubmissionV1,
-  "disabledStandardApplicationKeys" | "customApplicationFields" | "applicationConfigMode"
+  | "disabledStandardApplicationKeys"
+  | "customApplicationFields"
+  | "applicationConfigMode"
+  | "shortTermDisabledStandardApplicationKeys"
+  | "shortTermCustomApplicationFields"
+  | "shortTermApplicationConfigMode"
 >;
 
 export function applicationConfigFieldsFromSubmission(sub: ManagerListingSubmissionV1): ApplicationConfigFields {
@@ -54,6 +59,11 @@ export function applicationConfigFieldsFromSubmission(sub: ManagerListingSubmiss
     disabledStandardApplicationKeys: sub.disabledStandardApplicationKeys ?? [],
     customApplicationFields: sub.customApplicationFields ?? [],
     applicationConfigMode: sub.applicationConfigMode ?? "standard",
+    // The short-term form is configured independently; carry its slice too so a
+    // bulk edit applies BOTH forms' settings to every selected property.
+    shortTermDisabledStandardApplicationKeys: sub.shortTermDisabledStandardApplicationKeys ?? [],
+    shortTermCustomApplicationFields: sub.shortTermCustomApplicationFields ?? [],
+    shortTermApplicationConfigMode: sub.shortTermApplicationConfigMode ?? "standard",
   };
 }
 

@@ -10,6 +10,7 @@ import {
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
 import {
+  CUSTOM_LEASE_TERM,
   LEASE_TERM_OPTIONS,
   LISTING_LEASE_TERM_OPTION_SET,
   SHORT_TERM_LEASE_TERM,
@@ -338,8 +339,28 @@ export type ManagerListingSubmissionV1 = {
    * How the rental application is configured for this property.
    * "standard" = default Axis application only (custom questions kept but inactive);
    * "custom" = custom questions apply. Absent (legacy) = custom questions apply if present.
+   *
+   * NOTE: `customApplicationFields` / `disabledStandardApplicationKeys` /
+   * `applicationConfigMode` configure the LONG-TERM (standard) application only.
+   * The short-term application is configured independently by the
+   * `shortTerm*` triplet below, so turning a question off in one form never
+   * touches the other. See `applicationConfigForVariant` in
+   * `rental-application/application-field-catalog.ts`.
    */
   applicationConfigMode?: "standard" | "custom";
+  /** Manager-defined SHORT-TERM application questions (independent of the long-term form). */
+  shortTermCustomApplicationFields?: ManagerCustomApplicationField[];
+  /** Built-in questions the manager removed from the SHORT-TERM application (independent of the long-term form). */
+  shortTermDisabledStandardApplicationKeys?: string[];
+  /**
+   * How the SHORT-TERM application is configured for this property.
+   * Absent / "standard" = PropLane's curated short-term question set
+   * (guest name, property + room, check-in/out date & time, house-rules
+   * acknowledgement, signature — screening/employment/reference sections
+   * off by default). "custom" = the manager has edited the short-term form,
+   * so the stored `shortTerm*` values apply verbatim.
+   */
+  shortTermApplicationConfigMode?: "standard" | "custom";
   /**
    * How the lease document is produced for this property.
    * "standard"/absent = Axis generated lease (current behavior);
@@ -388,8 +409,10 @@ export function syncShortTermLeaseTermInAllowed(
   shortTermRentalsAllowed: boolean,
 ): string[] {
   const without = terms.filter((t) => t !== SHORT_TERM_LEASE_TERM);
-  if (!shortTermRentalsAllowed) return without;
-  return [...without, SHORT_TERM_LEASE_TERM];
+  const withShortTerm = shortTermRentalsAllowed ? [...without, SHORT_TERM_LEASE_TERM] : without;
+  // "Custom" is the escape hatch — pin it to the very end, after Short-Term Stay.
+  if (!withShortTerm.includes(CUSTOM_LEASE_TERM)) return withShortTerm;
+  return [...withShortTerm.filter((t) => t !== CUSTOM_LEASE_TERM), CUSTOM_LEASE_TERM];
 }
 
 export function resolveAllowedLeaseTerms(
@@ -1154,6 +1177,21 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       sub.applicationConfigMode === "standard" || sub.applicationConfigMode === "custom"
         ? sub.applicationConfigMode
         : undefined,
+    shortTermCustomApplicationFields: normalizeCustomApplicationFields(
+      (sub as { shortTermCustomApplicationFields?: unknown }).shortTermCustomApplicationFields,
+    ),
+    shortTermDisabledStandardApplicationKeys: Array.isArray(
+      (sub as { shortTermDisabledStandardApplicationKeys?: unknown }).shortTermDisabledStandardApplicationKeys,
+    )
+      ? (sub as { shortTermDisabledStandardApplicationKeys: unknown[] }).shortTermDisabledStandardApplicationKeys.filter(
+          (k): k is string => typeof k === "string" && k.trim().length > 0,
+        )
+      : [],
+    shortTermApplicationConfigMode:
+      (sub as { shortTermApplicationConfigMode?: unknown }).shortTermApplicationConfigMode === "standard" ||
+      (sub as { shortTermApplicationConfigMode?: unknown }).shortTermApplicationConfigMode === "custom"
+        ? ((sub as { shortTermApplicationConfigMode: "standard" | "custom" }).shortTermApplicationConfigMode)
+        : undefined,
     leaseConfigMode:
       sub.leaseConfigMode === "standard" || sub.leaseConfigMode === "custom" ? sub.leaseConfigMode : undefined,
     leaseCustomKind: sub.leaseCustomKind === "document" ? "document" : sub.leaseCustomKind === "terms" ? "terms" : undefined,
@@ -1593,6 +1631,9 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     customApplicationFields: [],
     disabledStandardApplicationKeys: [],
     applicationConfigMode: "standard",
+    shortTermCustomApplicationFields: [],
+    shortTermDisabledStandardApplicationKeys: [],
+    shortTermApplicationConfigMode: "standard",
     leaseConfigMode: "standard",
     leaseCustomKind: "terms",
     customLeaseTerms: "",

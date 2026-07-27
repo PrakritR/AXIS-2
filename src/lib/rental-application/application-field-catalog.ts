@@ -3,6 +3,7 @@ import type {
   ManagerCustomApplicationFieldType,
 } from "@/lib/manager-listing-submission";
 import {
+  applicationWizardStepForSection,
   RENTAL_APPLICATION_SECTIONS,
   type RentalApplicationSectionId,
 } from "@/lib/rental-application/application-sections";
@@ -144,6 +145,132 @@ const CATALOG_BY_KEY = new Map(
   STANDARD_APPLICATION_FIELD_CATALOG.map((def) => [def.standardKey, def] as const),
 );
 
+/** The two application products. Mirrors `RentalWizardFormState["rentalType"]`. */
+export type ApplicationFormVariant = "standard" | "short_term";
+
+/**
+ * Sections and individual built-in questions PropLane omits from the SHORT-TERM
+ * application by default. A short-term lodger staying a handful of days is not
+ * asked for rental history, employer/income, references, or a background check;
+ * the short-term stay is defined by who/where/when + house-rules acknowledgement
+ * + signature (see the captain's Short-Term Room Stay Agreement reference).
+ * Derived from the catalog (not hand-slugged) so it survives label/slug changes.
+ */
+const SHORT_TERM_OMITTED_SECTIONS = new Set<RentalApplicationSectionId>([
+  "current_address",
+  "previous_address",
+  "employment",
+  "references",
+  "additional",
+]);
+const SHORT_TERM_OMITTED_STANDARD_LABELS = new Set<string>([
+  "personal:Social Security number",
+  "personal:Driver's license / ID",
+  "consent:Credit & background check consent",
+]);
+
+/** Built-in question keys disabled by default in an unconfigured short-term application. */
+export const SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS: readonly string[] =
+  STANDARD_APPLICATION_FIELD_CATALOG.filter(
+    (def) =>
+      SHORT_TERM_OMITTED_SECTIONS.has(def.section) ||
+      SHORT_TERM_OMITTED_STANDARD_LABELS.has(`${def.section}:${def.label}`),
+  ).map((def) => def.standardKey);
+
+/** The application-config triplet the catalog + validator functions read, for one form variant. */
+export type ApplicationConfigSlice = {
+  disabledStandardApplicationKeys: string[];
+  customApplicationFields: ManagerCustomApplicationField[];
+  applicationConfigMode: "standard" | "custom";
+};
+
+type VariantConfigSource = {
+  disabledStandardApplicationKeys?: unknown;
+  customApplicationFields?: unknown;
+  applicationConfigMode?: unknown;
+  shortTermDisabledStandardApplicationKeys?: unknown;
+  shortTermCustomApplicationFields?: unknown;
+  shortTermApplicationConfigMode?: unknown;
+};
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+    : [];
+}
+
+function asCustomFields(value: unknown): ManagerCustomApplicationField[] {
+  return Array.isArray(value) ? (value as ManagerCustomApplicationField[]) : [];
+}
+
+function asConfigMode(value: unknown): "standard" | "custom" {
+  return value === "custom" ? "custom" : "standard";
+}
+
+/**
+ * Resolve the application-config slice for ONE form variant. The long-term
+ * (standard) form reads the top-level triplet unchanged; the short-term form
+ * reads its own `shortTerm*` triplet, and while it is still "standard"
+ * (unconfigured) it resolves to PropLane's curated short-term default — the
+ * only place the two forms differ out of the box. Pass the result to
+ * `isWizardFormFieldEnabled` / `resolveListingApplicationFields` / the
+ * mutation helpers, which already operate on this exact shape.
+ */
+export function applicationConfigForVariant(
+  sub: VariantConfigSource | null | undefined,
+  variant: ApplicationFormVariant,
+): ApplicationConfigSlice {
+  if (variant !== "short_term") {
+    return {
+      disabledStandardApplicationKeys: asStringArray(sub?.disabledStandardApplicationKeys),
+      customApplicationFields: asCustomFields(sub?.customApplicationFields),
+      applicationConfigMode: asConfigMode(sub?.applicationConfigMode),
+    };
+  }
+  if (sub?.shortTermApplicationConfigMode === "custom") {
+    return {
+      disabledStandardApplicationKeys: asStringArray(sub.shortTermDisabledStandardApplicationKeys),
+      customApplicationFields: asCustomFields(sub.shortTermCustomApplicationFields),
+      applicationConfigMode: "custom",
+    };
+  }
+  // Unconfigured short-term form → curated default question set.
+  return {
+    disabledStandardApplicationKeys: [...SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS],
+    customApplicationFields: asCustomFields(sub?.shortTermCustomApplicationFields),
+    applicationConfigMode: "standard",
+  };
+}
+
+/**
+ * Write a resolved slice back onto the correct set of submission fields for the
+ * variant. Returns a partial submission to spread over the listing submission.
+ */
+export function mergeApplicationConfigForVariant(
+  variant: ApplicationFormVariant,
+  slice: ApplicationConfigSlice,
+): {
+  disabledStandardApplicationKeys?: string[];
+  customApplicationFields?: ManagerCustomApplicationField[];
+  applicationConfigMode?: "standard" | "custom";
+  shortTermDisabledStandardApplicationKeys?: string[];
+  shortTermCustomApplicationFields?: ManagerCustomApplicationField[];
+  shortTermApplicationConfigMode?: "standard" | "custom";
+} {
+  if (variant !== "short_term") {
+    return {
+      disabledStandardApplicationKeys: slice.disabledStandardApplicationKeys,
+      customApplicationFields: slice.customApplicationFields,
+      applicationConfigMode: slice.applicationConfigMode,
+    };
+  }
+  return {
+    shortTermDisabledStandardApplicationKeys: slice.disabledStandardApplicationKeys,
+    shortTermCustomApplicationFields: slice.customApplicationFields,
+    shortTermApplicationConfigMode: slice.applicationConfigMode,
+  };
+}
+
 function defaultRowFromDef(def: StandardApplicationFieldDef): ResolvedApplicationField {
   return {
     id: `std-${def.standardKey}`,
@@ -227,6 +354,15 @@ export function resolveListingApplicationFields(
       isStandard: false,
     })),
   ];
+}
+
+/** Built-in questions currently turned OFF for a listing/variant (for the manager re-add UI). */
+export function resolveDisabledStandardApplicationFields(
+  sub: { disabledStandardApplicationKeys?: unknown } | null | undefined,
+): ResolvedApplicationField[] {
+  const disabled = disabledStandardKeysSet(sub);
+  if (disabled.size === 0) return [];
+  return STANDARD_APPLICATION_FIELD_CATALOG.filter((def) => disabled.has(def.standardKey)).map(defaultRowFromDef);
 }
 
 export function restoreDefaultApplicationConfig(): {
@@ -323,6 +459,29 @@ export function removeListingApplicationField(
   return { disabledStandardApplicationKeys: disabled, customApplicationFields: saved, applicationConfigMode };
 }
 
+/**
+ * Re-enable a built-in question that was turned off (either by the manager or,
+ * for short-term, by PropLane's curated default). Removes its key from the
+ * disabled set; collapses back to "standard" mode when nothing is customized.
+ */
+export function reenableListingApplicationField(
+  sub: {
+    disabledStandardApplicationKeys?: string[];
+    customApplicationFields?: ManagerCustomApplicationField[];
+    applicationConfigMode?: "standard" | "custom";
+  },
+  standardKey: string,
+): {
+  disabledStandardApplicationKeys: string[];
+  customApplicationFields: ManagerCustomApplicationField[];
+  applicationConfigMode: "standard" | "custom";
+} {
+  const disabled = (sub.disabledStandardApplicationKeys ?? []).filter((k) => k !== standardKey);
+  const saved = [...(sub.customApplicationFields ?? [])];
+  const applicationConfigMode = disabled.length > 0 || saved.length > 0 ? "custom" : "standard";
+  return { disabledStandardApplicationKeys: disabled, customApplicationFields: saved, applicationConfigMode };
+}
+
 export function addListingApplicationField(
   sub: {
     customApplicationFields?: ManagerCustomApplicationField[];
@@ -367,4 +526,32 @@ export function isWizardFormFieldEnabled(
   formKey: string,
 ): boolean {
   return !listingDisabledWizardFormKeys(sub).has(formKey);
+}
+
+/**
+ * Wizard steps that carry at least one visible question for a resolved config
+ * slice. Group / co-signer / review / fee (1, 2, 11, 12) are structural and
+ * always present; the section steps (3-10) appear only when they still have an
+ * enabled built-in or custom question. This is what lets the short-term form
+ * quietly skip the screening sections its curated default turns off — and bring
+ * a section back the moment a manager re-enables a question in it. The applicant
+ * never sees a total, so a shorter step list simply reads as a shorter form.
+ */
+const ALWAYS_ACTIVE_WIZARD_STEPS: readonly number[] = [1, 2, 11, 12];
+
+export function activeApplicationWizardSteps(
+  sub:
+    | {
+        disabledStandardApplicationKeys?: unknown;
+        customApplicationFields?: unknown;
+      }
+    | null
+    | undefined,
+  normalizeSaved: (raw: unknown) => ManagerCustomApplicationField[],
+): number[] {
+  const active = new Set<number>(ALWAYS_ACTIVE_WIZARD_STEPS);
+  for (const field of resolveListingApplicationFields(sub, normalizeSaved)) {
+    active.add(applicationWizardStepForSection(field.section));
+  }
+  return [...active].sort((a, b) => a - b);
 }

@@ -222,6 +222,16 @@ describe("listing fee and lease helpers", () => {
     expect(syncShortTermLeaseTermInAllowed(["12-Month", SHORT_TERM_LEASE_TERM], false)).toEqual(["12-Month"]);
   });
 
+  it("always lists Custom last — after Short-Term Stay — wherever lease terms are ordered", () => {
+    // Custom is the escape hatch: never wedged between real terms.
+    expect(syncShortTermLeaseTermInAllowed(["12-Month", "Custom"], true)).toEqual([
+      "12-Month",
+      SHORT_TERM_LEASE_TERM,
+      "Custom",
+    ]);
+    expect(syncShortTermLeaseTermInAllowed(["Custom", "3-Month"], false)).toEqual(["3-Month", "Custom"]);
+  });
+
   it("defaults holding deposit on new listings", () => {
     const sub = createDefaultListingSubmission();
     expect(sub.holdingDeposit).toBe("$100");

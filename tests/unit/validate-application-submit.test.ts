@@ -4,6 +4,7 @@ import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import {
   findDisabledApplicationFieldViolation,
   residentApplicationScreeningAllowed,
+  sanitizeApplicationFormForListing,
   validateResidentApplicationSubmit,
 } from "@/lib/rental-application/validate-application-submit";
 import { STANDARD_APPLICATION_FIELD_CATALOG } from "@/lib/rental-application/application-field-catalog";
@@ -111,6 +112,27 @@ describe("validate-application-submit", () => {
       rentalType: "short_term" as const,
       shortTermCheckInTime: "15:00",
       shortTermCheckOutTime: "11:00",
+      shortTermRulesAck: true,
+      // A real short-term application never carries these — the short-term form
+      // does not ask them — so clear them, otherwise the (correct) field-accept
+      // guard rejects the forgery first and this test would no longer exercise
+      // the short-term PERMISSION gate specifically.
+      ssn: "",
+      driversLicense: "",
+      currentStreet: "",
+      currentCity: "",
+      currentState: "",
+      currentZip: "",
+      employer: "",
+      monthlyIncome: "",
+      ref1Name: "",
+      ref1Relationship: "",
+      ref1Phone: "",
+      occupancyCount: "",
+      evictionHistory: null,
+      bankruptcyHistory: null,
+      criminalHistory: null,
+      consentCredit: false,
     };
     const result = validateResidentApplicationSubmit({
       application,
@@ -143,5 +165,103 @@ describe("validate-application-submit", () => {
     if (!result.ok) {
       expect(result.error).toContain("does not accept");
     }
+  });
+
+  it("sanitizes long-term answers out of a short-term submission but keeps what the short-term form asked", () => {
+    // Someone fills the full long-term form, then switches to a short-term stay.
+    // The submitted snapshot must NOT carry the sensitive fields the short-term
+    // form never asked (privacy), while the fields it DID ask must survive.
+    const sub = {
+      ...createDefaultListingSubmission(),
+      shortTermRentalsAllowed: true,
+      customApplicationFields: [
+        { id: "caf-lt", key: "pet-breed", label: "Pet breed", type: "text" as const, required: false, options: [], section: "additional" },
+      ],
+      shortTermCustomApplicationFields: [
+        { id: "caf-st", key: "arrival-notes", label: "Arrival notes", type: "text" as const, required: false, options: [], section: "property" },
+      ],
+    };
+    const filledLongTerm = {
+      ...validSubmittedApplication(),
+      rentalType: "short_term" as const,
+      shortTermCheckInTime: "15:00",
+      shortTermCheckOutTime: "11:00",
+      shortTermRulesAck: true,
+      customFieldAnswers: [
+        { key: "pet-breed", label: "Pet breed", type: "text" as const, value: "Corgi" },
+        { key: "arrival-notes", label: "Arrival notes", type: "text" as const, value: "Arriving after 9pm" },
+      ],
+    };
+
+    const sanitized = sanitizeApplicationFormForListing(filledLongTerm, sub);
+
+    // Sensitive long-term-only fields the short-term form never asks: cleared.
+    expect(sanitized.ssn).toBe("");
+    expect(sanitized.driversLicense).toBe("");
+    expect(sanitized.employer).toBe("");
+    expect(sanitized.monthlyIncome).toBe("");
+    expect(sanitized.ref1Name).toBe("");
+    expect(sanitized.currentStreet).toBe("");
+    expect(sanitized.consentCredit).toBe(false);
+    // A manager custom question asked only on the long-term form: its answer is dropped.
+    expect(sanitized.customFieldAnswers.some((a) => a.key === "pet-breed")).toBe(false);
+
+    // Fields the short-term form DID ask: retained (losing one would be its own bug).
+    expect(sanitized.fullLegalName).toBe("Jordan Lee");
+    expect(sanitized.email).toBe("jordan@example.com");
+    expect(sanitized.phone).toBe("(206) 555-0100");
+    expect(sanitized.leaseStart).toBe("2026-08-01");
+    expect(sanitized.shortTermCheckInTime).toBe("15:00");
+    expect(sanitized.shortTermCheckOutTime).toBe("11:00");
+    expect(sanitized.shortTermRulesAck).toBe(true);
+    expect(sanitized.digitalSignature).toBe("Jordan Lee");
+    expect(sanitized.consentTruth).toBe(true);
+    // A custom question the short-term form DID ask: its answer survives.
+    expect(sanitized.customFieldAnswers).toEqual([
+      { key: "arrival-notes", label: "Arrival notes", type: "text", value: "Arriving after 9pm" },
+    ]);
+  });
+
+  it("leaves a long-term submission fully intact (nothing sanitized away)", () => {
+    const sub = {
+      ...createDefaultListingSubmission(),
+      customApplicationFields: [
+        { id: "caf-lt", key: "pet-breed", label: "Pet breed", type: "text" as const, required: false, options: [], section: "additional" },
+      ],
+    };
+    const longTerm = {
+      ...validSubmittedApplication(),
+      customFieldAnswers: [{ key: "pet-breed", label: "Pet breed", type: "text" as const, value: "Corgi" }],
+    };
+    const sanitized = sanitizeApplicationFormForListing(longTerm, sub);
+    expect(sanitized.ssn).toBe(longTerm.ssn);
+    expect(sanitized.employer).toBe(longTerm.employer);
+    expect(sanitized.ref1Name).toBe(longTerm.ref1Name);
+    expect(sanitized.consentCredit).toBe(true);
+    expect(sanitized.customFieldAnswers).toEqual(longTerm.customFieldAnswers);
+  });
+
+  it("keeps custom answers when the listing submission cannot be resolved at submit", () => {
+    // The listing may be gone from the extras cache at final submit (e.g. the
+    // manager unlisted it mid-application). The asked-question set is then
+    // unknowable, so no custom answer may be dropped.
+    const form = {
+      ...validSubmittedApplication(),
+      rentalType: "short_term" as const,
+      shortTermCheckInTime: "15:00",
+      shortTermCheckOutTime: "11:00",
+      shortTermRulesAck: true,
+      customFieldAnswers: [
+        { key: "arrival-notes", label: "Arrival notes", type: "text" as const, value: "Arriving after 9pm" },
+      ],
+    };
+    const sanitized = sanitizeApplicationFormForListing(form, undefined);
+    expect(sanitized.customFieldAnswers).toEqual(form.customFieldAnswers);
+
+    const longTerm = {
+      ...validSubmittedApplication(),
+      customFieldAnswers: [{ key: "pet-breed", label: "Pet breed", type: "text" as const, value: "Corgi" }],
+    };
+    expect(sanitizeApplicationFormForListing(longTerm, undefined)).toBe(longTerm);
   });
 });
