@@ -20,12 +20,22 @@ somewhere else.
 
 Entering a portal from here is always an **explicit user click**, on every path:
 
-- **Already signed in?** The full create form still renders, above a notice —
-  "You're signed in as `<email>`. Create a new property account below, or
-  continue to your portal" — whose link goes to `/auth/continue`. Creating a
-  second account with a different email must stay possible. (The old behavior
-  collapsed the form into one button that converted the *current* session and
-  bounced to `/portal/dashboard`; that is the regression the e2e spec covers.)
+- **Already signed in?** What renders depends on whether the session already
+  holds manager access (`useSignedInPortalRoles`, the shared probe all three
+  create-account tabs use):
+  - **Already a manager** → the shared `AuthAlreadyHaveRolePanel`
+    (`src/components/auth/auth-already-have-role-panel.tsx`): "you already have
+    property manager access" with an explicit **Go to your portal** button
+    (`/auth/continue`) and a **Create a different property account** reveal that
+    brings the full form back — so creating a second account with a different
+    email stays possible, and entering a portal is still a click, never a
+    redirect.
+  - **Signed in without manager access** → the full create form renders, above
+    the `AuthSignedInRoleBanner` notice.
+
+  (The old behavior collapsed the form into one button that converted the
+  *current* session and bounced to `/portal/dashboard`; that is the regression
+  the e2e spec covers.)
 - **Partner-pricing OAuth return.** The callback provisions the account as
   before, but its `resolveRedirect` always returns back to
   `/auth/create-account?mode=create&role=manager&…` — including the **free-tier**
