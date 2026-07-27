@@ -2,6 +2,7 @@ import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { purgeCoManagerReferencesToUser } from "@/lib/auth/purge-orphaned-co-manager-links";
 import { MANAGER_DOCUMENTS_BUCKET } from "@/lib/documents/manager-documents";
 import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
+import { reclaimApplicationPhotos } from "@/lib/rental-application/application-photos.server";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -33,6 +34,10 @@ export async function purgeResidentPortalData(
   const applicationId = typeof input.applicationId === "string" ? input.applicationId.trim() : "";
 
   const deleteOps: PromiseLike<{ error: { message: string } | null }>[] = [];
+  // Every application row this purge hard-deletes must also reclaim its private
+  // application-documents uploads (applicant ID / income photos) — retention
+  // Option A: the photos live exactly as long as the row.
+  const photoReclaimIds = new Set<string>();
 
   if (email) {
     // The resident's own screening (background-check) orders and cosigner
@@ -46,6 +51,7 @@ export async function purgeResidentPortalData(
     const applicationIds = (appRows ?? [])
       .map((row) => (row as { id?: unknown }).id)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
+    for (const id of applicationIds) photoReclaimIds.add(id);
     if (applicationIds.length > 0) {
       deleteOps.push(
         db.from("screening_orders").delete().in("application_id", applicationIds),
@@ -93,6 +99,7 @@ export async function purgeResidentPortalData(
   }
 
   if (applicationId) {
+    photoReclaimIds.add(applicationId);
     deleteOps.push(
       db.from("manager_application_records").delete().eq("id", applicationId),
       db.from("portal_household_charge_records").delete().filter("row_data->>applicationId", "eq", applicationId),
@@ -104,6 +111,8 @@ export async function purgeResidentPortalData(
 
   if (deleteOps.length === 0) return;
   assertNoDeleteErrors(await Promise.all(deleteOps));
+  // Only after the rows are really gone: best-effort, never blocks the purge.
+  await Promise.allSettled([...photoReclaimIds].map((id) => reclaimApplicationPhotos(db, id)));
 }
 
 /** Remove properties, resident records, payments, leases, and other portal rows for a manager. */
@@ -114,6 +123,16 @@ export async function purgeManagerPortalData(db: ServiceDb, managerUserId: strin
   const email = normalizeEmail(profileRow?.email);
 
   await purgeCoManagerReferencesToUser(db, managerUserId);
+
+  // Applicant ID / income photos ride with the application rows deleted below —
+  // resolve those ids first so their private uploads are reclaimed too.
+  const { data: managerAppRows } = await db
+    .from("manager_application_records")
+    .select("id")
+    .eq("manager_user_id", managerUserId);
+  const managerApplicationIds = (managerAppRows ?? [])
+    .map((row) => (row as { id?: unknown }).id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
 
   const deleteOps: PromiseLike<{ error: { message: string } | null }>[] = [
     db.from("manager_property_records").delete().eq("manager_user_id", managerUserId),
@@ -161,4 +180,5 @@ export async function purgeManagerPortalData(db: ServiceDb, managerUserId: strin
   }
 
   assertNoDeleteErrors(await Promise.all(deleteOps));
+  await Promise.allSettled(managerApplicationIds.map((id) => reclaimApplicationPhotos(db, id)));
 }

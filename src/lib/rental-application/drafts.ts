@@ -43,6 +43,46 @@ export function saveRentalWizardDraftAxisId(id: string) {
 export function clearRentalWizardDraft() {
   removeItem(RENTAL_WIZARD_DRAFT_KEY);
   removeItem(DRAFT_AXIS_ID_KEY);
+  clearPublicApplyResumeAxisId();
+}
+
+/**
+ * The PUBLIC apply flow's reload-survivable resume reference. The in-memory
+ * draft above is wiped by a real page reload (and by a return from an external
+ * redirect like Stripe checkout), so the axis id — and ONLY the axis id, never
+ * answers/PII/photo bytes — is kept in sessionStorage. Together with the
+ * freshest resident-setup token (already in sessionStorage, see
+ * `rememberApplicationSetupToken`) it lets a guest resume their in-progress
+ * application after a reload; it never outlives the tab.
+ */
+const PUBLIC_APPLY_RESUME_AXIS_ID_KEY = "axis:rental-application:public-resume-axis-id:v1";
+
+export function rememberPublicApplyResumeAxisId(id: string) {
+  const trimmed = id.trim();
+  if (!canUseStorage() || !trimmed) return;
+  try {
+    window.sessionStorage.setItem(PUBLIC_APPLY_RESUME_AXIS_ID_KEY, trimmed);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadPublicApplyResumeAxisId(): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return window.sessionStorage.getItem(PUBLIC_APPLY_RESUME_AXIS_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearPublicApplyResumeAxisId() {
+  if (!canUseStorage()) return;
+  try {
+    window.sessionStorage.removeItem(PUBLIC_APPLY_RESUME_AXIS_ID_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function loadCosignerDraft<T>(): T | null {
