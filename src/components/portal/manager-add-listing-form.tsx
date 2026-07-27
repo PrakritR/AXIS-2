@@ -87,6 +87,7 @@ import {
 import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
+  resolveRoomUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
 import {
@@ -382,15 +383,6 @@ function ListingWizardCollapsibleCard({
   );
 }
 
-const LISTING_CHOICE_CARD =
-  "rounded-2xl border px-3 py-3 text-left transition sm:px-4 sm:py-3.5";
-
-function listingChoiceCardClass(selected: boolean) {
-  return selected
-    ? `${LISTING_CHOICE_CARD} border-primary ring-2 ring-primary/25`
-    : `${LISTING_CHOICE_CARD} border-border hover:border-primary/30`;
-}
-
 function togglePaymentAtSigning(
   current: PaymentAtSigningOptionId[],
   id: PaymentAtSigningOptionId,
@@ -494,9 +486,7 @@ function PlaceCategoryPicker({
       data-wizard-field="listingPlaceCategoryId"
       className={wizardSectionErrorClass(Boolean(hasError))}
     >
-      <FieldLabel hint="We’ll tailor rent, utilities, and proration fields below.">
-        How is this property rented?
-      </FieldLabel>
+      <FieldLabel>How is this property rented?</FieldLabel>
       <Select
         aria-label="Rental model"
         className={wizardFieldErrorClass(Boolean(hasError), selectInputCls)}
@@ -524,24 +514,20 @@ function UtilitiesPaymentModelPicker({
 }) {
   const selected = value ?? "manager_billed";
   return (
-    <div className="space-y-2">
-      <FieldLabel hint="How residents pay for utilities on this listing.">Utilities payment</FieldLabel>
-      <div className="grid gap-2">
-        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => {
-          const on = selected === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => onSelect(opt.id)}
-              className={listingChoiceCardClass(on)}
-            >
-              <span className="text-sm font-semibold text-foreground">{opt.label}</span>
-              <span className="mt-0.5 block text-xs text-muted">{opt.hint}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div>
+      <FieldLabel>Utilities payment</FieldLabel>
+      <Select
+        aria-label="Utilities payment"
+        className={selectInputCls}
+        value={selected}
+        onChange={(e) => onSelect(e.target.value as UtilitiesPaymentModel)}
+      >
+        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </Select>
     </div>
   );
 }
@@ -566,11 +552,11 @@ function ProrationMethodFields({
   onDailyUtilities: (n: number | undefined) => void;
 }) {
   return (
-    <div className="space-y-3">
-      <FieldLabel hint="How first-month rent and utilities are prorated when someone moves in mid-month.">
-        Proration method
+    <div className="space-y-2">
+      <FieldLabel hint="Mid-month move-in: Auto splits by days in the month; Daily rate uses a rate you set.">
+        Proration
       </FieldLabel>
-      <div className="flex gap-3">
+      <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
         {(["auto", "daily_rate"] as const).map((method) => {
           const active = prorateMethod === method;
           return (
@@ -578,56 +564,70 @@ function ProrationMethodFields({
               key={method}
               type="button"
               onClick={() => onMethod(method)}
-              className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-border bg-card text-muted hover:border-border hover:bg-accent/30"}`}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
             >
-              <span className="block font-semibold">
-                {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted">
-                {method === "auto"
-                  ? "Remaining days ÷ days in month × monthly rate"
-                  : "Remaining days × your set daily rate"}
-              </span>
+              {method === "auto" ? "Auto" : "Daily rate"}
             </button>
           );
         })}
       </div>
-      {prorateMethod === "auto" && monthlyRent > 0 ? (
-        <p className="text-xs text-muted">
-          Example: move-in May 14 → 18/31 × ${monthlyRent} ={" "}
-          <span className="font-semibold text-muted">${((18 / 31) * monthlyRent).toFixed(2)}</span> prorated rent
-        </p>
-      ) : null}
       {prorateMethod === "daily_rate" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <GridField>
+        <div className="flex flex-wrap gap-3">
+          <div>
             <FieldLabel>Daily rent rate</FieldLabel>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-              <Input
-                inputMode="decimal"
-                className="pl-8"
-                value={dailyRentRate ?? ""}
-                onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
-                placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
-              />
-            </div>
-          </GridField>
-          <GridField>
+            <MoneyInput
+              value={dailyRentRate ?? ""}
+              onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
+            />
+          </div>
+          <div>
             <FieldLabel>{utilitiesLabel ?? "Daily utilities rate"}</FieldLabel>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-              <Input
-                inputMode="decimal"
-                className="pl-8"
-                value={dailyUtilitiesRate ?? ""}
-                onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
-                placeholder="6"
-              />
-            </div>
-          </GridField>
+            <MoneyInput
+              value={dailyUtilitiesRate ?? ""}
+              onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder="6"
+            />
+          </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Compact dollar-amount input — a short value should look like one. Fixed narrow
+ * width with an inline `$` affix, used across the Pricing step's amount fields.
+ */
+function MoneyInput({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  invalid,
+  ariaLabel,
+  className,
+}: {
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  invalid?: boolean;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`relative w-full max-w-[11rem] ${className ?? ""}`}>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+      <Input
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        disabled={disabled}
+        className={wizardFieldErrorClass(Boolean(invalid), "pl-7")}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
@@ -2892,13 +2892,7 @@ export function ManagerAddListingForm({
 
           {/* ── Step 4: Pricing ── */}
           {stepIndex === 4 ? (
-          <FormSection
-            id="edit-lease"
-            title="Pricing"
-            description={
-              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount — enter 0 when you do not charge it, and it stays off the public listing.</>
-            }
-          >
+          <FormSection id="edit-lease" title="Pricing">
             <div className="space-y-5">
               <PlaceCategoryPicker
                 hasError={Boolean(stepFieldErrors.listingPlaceCategoryId)}
@@ -2920,24 +2914,18 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
-                description={
-                  isEntireHome
-                    ? "One monthly lease for the full unit — utilities and proration apply to the whole home."
-                    : "Set rent, utilities estimate, and proration for each bedroom you are listing."
-                }
               >
                 {isEntireHome ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <GridField>
-                      <div data-wizard-field="monthlyRent">
-                        <FieldLabel>Monthly rent for entire home *</FieldLabel>
-                      </div>
-                      <div>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            inputMode="decimal"
-                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.monthlyRent), "pl-8")}
+                  <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <GridField>
+                        <div data-wizard-field="monthlyRent">
+                          <FieldLabel>Monthly rent for entire home *</FieldLabel>
+                        </div>
+                        <div>
+                          <MoneyInput
+                            invalid={Boolean(stepFieldErrors.monthlyRent)}
+                            ariaLabel="Monthly rent for entire home"
                             value={
                               typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0
                                 ? String(sub.entireHomeMonthlyRent)
@@ -2951,84 +2939,87 @@ export function ManagerAddListingForm({
                             }}
                             placeholder="4500"
                           />
+                          <StepFieldError msg={stepFieldErrors.monthlyRent} />
                         </div>
-                        <StepFieldError msg={stepFieldErrors.monthlyRent} />
-                      </div>
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <UtilitiesPaymentModelPicker
-                        value={sub.entireHomeUtilitiesPaymentModel}
-                        onSelect={(model) =>
-                          setSub((s) =>
-                            applyEntireHomeListingPricing(s, {
-                              entireHomeUtilitiesPaymentModel: model,
-                              ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
-                            }),
-                          )
-                        }
-                      />
-                    </div>
-                    <GridField>
-                      <FieldLabel
-                        hint={
-                          (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
-                            ? "Not billed separately when included in rent."
-                            : (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                              ? "Optional — typical monthly cost shown on the listing."
-                              : "Monthly estimate used in signing totals."
-                        }
-                      >
-                        Utilities estimate (whole home)
-                      </FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          inputMode="decimal"
-                          className="pl-8"
+                      </GridField>
+                      <GridField>
+                        <UtilitiesPaymentModelPicker
+                          value={sub.entireHomeUtilitiesPaymentModel}
+                          onSelect={(model) =>
+                            setSub((s) =>
+                              applyEntireHomeListingPricing(s, {
+                                entireHomeUtilitiesPaymentModel: model,
+                                ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                              }),
+                            )
+                          }
+                        />
+                      </GridField>
+                      <GridField>
+                        <FieldLabel>Utilities estimate (whole home)</FieldLabel>
+                        <MoneyInput
                           disabled={(sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
+                          ariaLabel="Utilities estimate (whole home)"
                           value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
                           onChange={(e) =>
                             setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
                           }
                           placeholder="175"
                         />
+                      </GridField>
+                      <div className="sm:col-span-2">
+                        <ProrationMethodFields
+                          prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
+                          monthlyRent={entireHomeRent}
+                          dailyRentRate={sub.entireHomeDailyRentRate}
+                          dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
+                          utilitiesLabel="Daily utilities rate (whole home)"
+                          onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
+                          onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+                          onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
+                        />
                       </div>
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <ProrationMethodFields
-                        prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
-                        monthlyRent={entireHomeRent}
-                        dailyRentRate={sub.entireHomeDailyRentRate}
-                        dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
-                        utilitiesLabel="Daily utilities rate (whole home)"
-                        onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
-                        onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
-                        onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
-                      />
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4" data-wizard-field="monthlyRent">
+                  <div className="space-y-3" data-wizard-field="monthlyRent">
                     {stepFieldErrors.monthlyRent ? (
                       <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
                     ) : null}
                     {sub.rooms.map((room, i) => {
                       const roomRentKey = listingRoomRentKey(room.id);
                       const roomRentErr = stepFieldErrors[roomRentKey];
+                      const roomLabel = room.name.trim() || `Room ${i + 1}`;
+                      const priced = room.monthlyRent > 0;
+                      const utilModel = resolveRoomUtilitiesPaymentModel(room);
+                      const utilShort =
+                        utilModel === "manager_billed"
+                          ? "Utilities billed by manager"
+                          : utilModel === "tenant_direct"
+                            ? "Tenant pays utilities"
+                            : "Utilities in rent";
+                      const priceKey = listingItemKey("roomPrice", room.id);
+                      // A room whose rent is still unset can never be collapsed away — the
+                      // required field must stay on screen. Priced rooms collapse to a
+                      // one-line summary; an errored one force-expands so it can be fixed.
+                      const expanded = priced ? isListingItemExpanded(priceKey) || Boolean(roomRentErr) : true;
                       return (
-                      <div
-                        key={room.id}
-                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
-                      >
-                        <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <ListingWizardCollapsibleCard
+                          key={room.id}
+                          expanded={expanded}
+                          onToggle={() => toggleListingItem(priceKey)}
+                          title={roomLabel}
+                          subtitle={`${priced ? `$${room.monthlyRent}/mo` : "Rent not set"} · ${utilShort}`}
+                          hasError={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
+                          bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5"
+                          toggleDataAttr={`listing-room-price-toggle-${room.id}`}
+                        >
                           <GridField>
                             <FieldLabel>Monthly rent *</FieldLabel>
-                            <div className="relative" data-wizard-field={roomRentKey}>
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                              <Input
-                                inputMode="decimal"
-                                className={wizardFieldErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "pl-8")}
+                            <div data-wizard-field={roomRentKey}>
+                              <MoneyInput
+                                invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
+                                ariaLabel={`Monthly rent for ${roomLabel}`}
                                 value={room.monthlyRent || ""}
                                 onChange={(e) => {
                                   clearListingFieldError("monthlyRent");
@@ -3041,30 +3032,6 @@ export function ManagerAddListingForm({
                             </div>
                           </GridField>
                           <GridField>
-                            <FieldLabel
-                              hint={
-                                (room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
-                                  ? "Not billed separately when included in rent."
-                                  : (room.utilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                                    ? "Optional — typical monthly cost shown on the listing."
-                                    : "Monthly estimate billed with rent through the portal."
-                              }
-                            >
-                              Utilities estimate
-                            </FieldLabel>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                              <Input
-                                inputMode="decimal"
-                                className="pl-8"
-                                disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                                value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                                onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                                placeholder="175"
-                              />
-                            </div>
-                          </GridField>
-                          <div className="sm:col-span-2">
                             <UtilitiesPaymentModelPicker
                               value={room.utilitiesPaymentModel}
                               onSelect={(model) =>
@@ -3074,7 +3041,17 @@ export function ManagerAddListingForm({
                                 })
                               }
                             />
-                          </div>
+                          </GridField>
+                          <GridField>
+                            <FieldLabel>Utilities estimate</FieldLabel>
+                            <MoneyInput
+                              disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
+                              ariaLabel={`Utilities estimate for ${roomLabel}`}
+                              value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                              onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                              placeholder="175"
+                            />
+                          </GridField>
                           <div className="sm:col-span-2">
                             <ProrationMethodFields
                               prorateMethod={room.prorateMethod ?? "auto"}
@@ -3086,8 +3063,7 @@ export function ManagerAddListingForm({
                               onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
                             />
                           </div>
-                        </div>
-                      </div>
+                        </ListingWizardCollapsibleCard>
                       );
                     })}
                   </div>
@@ -3415,7 +3391,7 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Fees & deposits"
-                description="Application charges are one-time. Monthly amounts repeat on the resident ledger."
+                description="Enter 0 for anything you don't charge — it stays off the public listing."
               >
                 <div className="space-y-6">
                   <div className="space-y-3">
