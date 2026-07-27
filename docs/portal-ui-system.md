@@ -190,3 +190,30 @@ WKWebView — see `computeFlyerFit` + `useFlyerFit` in
 | Collapsible section primitive | `portal-collapsible-section.tsx` |
 | Table primitives | `portal-data-table.tsx` |
 | Mobile summary card | `PortalMobileSummaryCard` in `portal-data-table.tsx` |
+| In-modal assistant side panel | `modal-assistant-strip.tsx` + `modal.tsx` / `manager-add-listing-form.tsx` |
+
+## In-modal PropLane Assistant: side panel, not a bottom band
+
+`ModalAssistantStrip` (embedded via the shared `Modal` component, and directly
+in the listing wizard `manager-add-listing-form.tsx` — the only two embed
+points) opens beside the modal's content once the modal is wide enough,
+instead of always stacking below it. The switch is a CSS container query, not
+a viewport breakpoint: modal widths vary hugely across embed points (`max-w-md`
+at 448px up to the listing wizard's `max-w-6xl` at 1152px), so a single
+viewport breakpoint would force many already-narrow modals into an unusable
+side-by-side squeeze. The row layout engages at the Tailwind `@2xl` container
+breakpoint (42rem / 672px of available panel width) — below that (every phone
+viewport, and any modal capped at `max-w-lg`/`max-w-md` or narrower even on a
+wide screen) it stays the original stacked layout. The strip owns its own
+open/closed state and reports it via `onExpandedChange` so the ancestor can
+flip `flex-col` → `@2xl:flex-row`; the row layout itself is gated on that JS
+"open" state too, so a *collapsed* strip is always the original thin bottom
+bar regardless of width.
+
+**Gotcha:** a CSS container cannot query its own size for its own layout —
+`@container` must sit on an ancestor (the modal panel / wizard `<form>`) of the
+element whose `@2xl:flex-row` reacts to it, one level up. Putting `@container`
+and `@2xl:flex-row` on the same element silently no-ops (it stays column no
+matter how wide the container gets). Cost real debugging time once; verify any
+new container-query layout with a computed-style check
+(`getComputedStyle(el).flexDirection`), not just a class-list read.

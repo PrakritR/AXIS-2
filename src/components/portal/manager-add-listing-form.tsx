@@ -13,6 +13,7 @@ import {
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
+import { cn } from "@/lib/utils";
 import { buildListingModalAssistantContext } from "@/lib/listing-assistant-context";
 import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -1097,6 +1098,9 @@ export function ManagerAddListingForm({
    */
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
+  /** Mirrors the assistant strip's own open/closed state so the wizard body can
+   * lay out beside it (wide screens) instead of always stacking above it. */
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const resumedStepIndex = clampWizardStep(initialStepIndex);
   const resumedMaxStepReached = Math.max(clampWizardStep(initialMaxStepReached), resumedStepIndex);
   const [stepIndex, setStepIndex] = useState(resumedStepIndex);
@@ -2427,7 +2431,7 @@ export function ManagerAddListingForm({
         id="manager-add-listing-form"
         onSubmit={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className="modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
+        className="modal-panel @container relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
@@ -2500,7 +2504,16 @@ export function ManagerAddListingForm({
           </p>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
+        {/* `@container` lives on the panel <form> above (a container cannot query
+            its own size for its own layout), so this row/column switch can react
+            to how much space the panel actually has. */}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1",
+            assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
+          )}
+        >
+        <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
           {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
@@ -4820,11 +4833,13 @@ export function ManagerAddListingForm({
           ) : null}
         </div>
 
-        <ModalAssistantStrip
-          contextHint={listingAssistantContext}
-          storageScopeKey={wizardTitlePrefix}
-          className="z-10 shrink-0 px-5 sm:px-6"
-        />
+          <ModalAssistantStrip
+            contextHint={listingAssistantContext}
+            storageScopeKey={wizardTitlePrefix}
+            onExpandedChange={setAssistantExpanded}
+            className="z-10 px-5 sm:px-6"
+          />
+        </div>
 
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
           {draftSaveError ? (
