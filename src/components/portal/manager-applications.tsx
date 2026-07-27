@@ -168,7 +168,11 @@ export function ApplicationDocumentPreview({
   // iframe on every background tick. The ref keeps the latest row for the
   // fetch body without widening the dependency back to object identity.
   const rowRef = useRef(row);
-  rowRef.current = row;
+  // Updated in an effect (never during render); declared BEFORE the fetch
+  // effect so it always sees this commit's row.
+  useEffect(() => {
+    rowRef.current = row;
+  });
   const previewKey = [
     row.id,
     row.bucket,
@@ -234,7 +238,6 @@ export function ApplicationDocumentPreview({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- previewKey covers every row field the PDF derives from
   }, [previewKey, demo]);
 
   const downloadButton = showDownload ? (
