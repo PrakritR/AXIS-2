@@ -1822,10 +1822,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
       channels.venmo ? ("venmo" as const) : null,
       channels.other ? ("other" as const) : null,
     ].filter((channel): channel is "ach" | "zelle" | "venmo" | "other" => Boolean(channel));
-    const showChannelPick = applicationFeeGate.needsFee && enabledChannels.length > 1;
-    const showZelleInstructions = applicationFeeGate.needsFee && payChannel === "zelle" && sub?.zelleContact?.trim();
-    const showVenmoInstructions = applicationFeeGate.needsFee && payChannel === "venmo" && sub?.venmoContact?.trim();
-    const showOtherInstructions = applicationFeeGate.needsFee && payChannel === "other" && sub?.applicationFeeOtherInstructions?.trim();
+    const feeStillDue = applicationFeeGate.needsFee && !applicationFeeGate.paid;
+    const showChannelPick = feeStillDue && enabledChannels.length > 1;
+    const showZelleInstructions = feeStillDue && payChannel === "zelle" && sub?.zelleContact?.trim();
+    const showVenmoInstructions = feeStillDue && payChannel === "venmo" && sub?.venmoContact?.trim();
+    const showOtherInstructions = feeStillDue && payChannel === "other" && sub?.applicationFeeOtherInstructions?.trim();
     const singleChannelLabel =
       enabledChannels.length === 1
         ? enabledChannels[0] === "ach"
@@ -1981,12 +1982,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ) : null}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && singleChannelLabel ? (
+        {feeStillDue && singleChannelLabel ? (
           <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm text-foreground">
             <span className="font-semibold text-foreground">Payment method:</span> {singleChannelLabel}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && !applicationFeeGate.paid && isAchApplicationFeeChannel(payChannel) ? (
+        {feeStillDue && isAchApplicationFeeChannel(payChannel) ? (
           applicationFeeGate.pending ? (
             <div className="flex min-h-[80px] items-center justify-center rounded-2xl border border-border bg-card text-sm text-muted">
               Confirming the application fee…
@@ -2044,7 +2045,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </p>
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && !isAchApplicationFeeChannel(payChannel) ? (
+        {feeStillDue && !isAchApplicationFeeChannel(payChannel) ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
             {applicationFeePaymentVerified ? (
               <p className="text-sm font-medium text-[var(--status-confirmed-fg)]">Payment verified.</p>

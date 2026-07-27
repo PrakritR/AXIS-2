@@ -27,10 +27,11 @@ import type { MockProperty } from "@/data/types";
 
 const PID = "prop-mode-gate";
 
-function seedListing(): void {
+function seedListing(overrides: Partial<ReturnType<typeof createDefaultListingSubmission>> = {}): void {
   const sub = createDefaultListingSubmission();
   sub.applicationFee = "$50";
   sub.axisPaymentsEnabled = true;
+  Object.assign(sub, overrides);
   const property: MockProperty = {
     id: PID,
     title: "Mode Gate Flat",
@@ -56,14 +57,18 @@ function seedListing(): void {
 function renderFeeStep(
   mode: "public" | "portal" | "editor",
   gate?: Partial<WizardStepsProps["applicationFeeGate"] & { pending?: boolean }>,
+  opts: {
+    payChannel?: "ach" | "zelle" | "venmo" | "other";
+    subOverrides?: Partial<ReturnType<typeof createDefaultListingSubmission>>;
+  } = {},
 ) {
-  seedListing();
+  seedListing(opts.subOverrides);
   const form = {
     ...createInitialRentalWizardState(),
     propertyId: PID,
     email: "dana@example.com",
     fullLegalName: "Dana Tenant",
-    applicationFeePayChannel: "ach" as const,
+    applicationFeePayChannel: opts.payChannel ?? ("ach" as const),
   };
   const noop = () => {};
   return render(
@@ -120,6 +125,28 @@ describe("fee step — inline payment mode gate", () => {
     renderFeeStep("public", { paid: true });
     expect(screen.queryByTestId("inline-payment")).toBeNull();
     expect(screen.queryByText("Paid")).toBeTruthy();
+  });
+
+  it("hides the manual-channel payment UI (instructions, channel picker, Check payment) once paid", () => {
+    renderFeeStep(
+      "public",
+      { paid: true },
+      { payChannel: "zelle", subOverrides: { zellePaymentsEnabled: true, zelleContact: "pay@zelle.example" } },
+    );
+    expect(screen.queryByText(/Send by Zelle/)).toBeNull();
+    expect(screen.queryByText(/Check payment|Payment received/)).toBeNull();
+    expect(screen.queryByText("Payment method")).toBeNull();
+    expect(screen.queryByText("Paid")).toBeTruthy();
+  });
+
+  it("still shows the manual-channel instructions and Check payment while the fee is unpaid", () => {
+    renderFeeStep(
+      "public",
+      {},
+      { payChannel: "zelle", subOverrides: { zellePaymentsEnabled: true, zelleContact: "pay@zelle.example" } },
+    );
+    expect(screen.queryByText(/Send by Zelle/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Check payment" })).toBeTruthy();
   });
 
   it("shows no payment UI (not even the resolving placeholder) when paid, even mid-resolve", () => {
