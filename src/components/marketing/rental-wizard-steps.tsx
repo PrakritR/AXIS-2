@@ -975,6 +975,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   getApplicationId={getApplicationId}
                   setupTokenRequired={p.photoSetupTokenRequired}
                   getSetupToken={p.getPhotoSetupToken}
+                  hasApplicantEmail={Boolean(form.email.trim())}
                   readOnly={photosReadOnly}
                   dataAttr="application-id-photo-front"
                 />
@@ -986,6 +987,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   getApplicationId={getApplicationId}
                   setupTokenRequired={p.photoSetupTokenRequired}
                   getSetupToken={p.getPhotoSetupToken}
+                  hasApplicantEmail={Boolean(form.email.trim())}
                   readOnly={photosReadOnly}
                   dataAttr="application-id-photo-back"
                 />
@@ -1460,6 +1462,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               getApplicationId={getApplicationId}
               setupTokenRequired={p.photoSetupTokenRequired}
               getSetupToken={p.getPhotoSetupToken}
+              hasApplicantEmail={Boolean(form.email.trim())}
               readOnly={photosReadOnly}
             />
           </div>

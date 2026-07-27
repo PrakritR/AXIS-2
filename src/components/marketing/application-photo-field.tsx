@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { APPLICATION_SAVE_STATUS_EVENT } from "@/lib/manager-applications-storage";
+import {
+  APPLICATION_SAVE_STATUS_EVENT,
+  settlePendingApplicationRowUpserts,
+} from "@/lib/manager-applications-storage";
 import {
   acceptForSlot,
   APPLICATION_DOCUMENTS_BUCKET,
@@ -189,6 +192,8 @@ type SinglePhotoFieldProps = {
    */
   setupTokenRequired?: boolean;
   getSetupToken?: () => string | null;
+  /** Whether the form already carries the applicant's email — drives the gate hint copy. */
+  hasApplicantEmail?: boolean;
   readOnly?: boolean;
   dataAttr?: string;
 };
@@ -204,6 +209,7 @@ export function ApplicationPhotoField({
   getApplicationId,
   setupTokenRequired,
   getSetupToken,
+  hasApplicantEmail,
   readOnly,
   dataAttr,
 }: SinglePhotoFieldProps) {
@@ -244,6 +250,9 @@ export function ApplicationPhotoField({
       setBusy(true);
       const applicationId = getApplicationId();
       const previous = attachment;
+      // A guest's token rotates with every autosave — drain the queue first so
+      // the credential read below is the one the server currently holds.
+      if (setupTokenRequired) await settlePendingApplicationRowUpserts(applicationId);
       const setupToken = getSetupToken?.() ?? null;
       const result = await uploadApplicationPhoto({ applicationId, slot, file, setupToken });
       if (!result.ok) {
@@ -267,7 +276,7 @@ export function ApplicationPhotoField({
         void deleteApplicationPhoto({ applicationId, storagePath: previous.storagePath, setupToken });
       }
     },
-    [attachment, getApplicationId, getSetupToken, onChange, slot],
+    [attachment, getApplicationId, getSetupToken, onChange, setupTokenRequired, slot],
   );
 
   const handleRemove = useCallback(async () => {
@@ -282,6 +291,7 @@ export function ApplicationPhotoField({
     });
     onChange(null); // remove from the form immediately so it is never submitted
     if (removed.storagePath) {
+      if (setupTokenRequired) await settlePendingApplicationRowUpserts(applicationId);
       await deleteApplicationPhoto({
         applicationId,
         storagePath: removed.storagePath,
@@ -289,7 +299,7 @@ export function ApplicationPhotoField({
       });
     }
     setBusy(false);
-  }, [attachment, getApplicationId, getSetupToken, onChange]);
+  }, [attachment, getApplicationId, getSetupToken, onChange, setupTokenRequired]);
 
   // Only resolves (never mints) an id here — an attachment already implies one exists.
   const readUrl = attachment ? readUrlFor(getApplicationId(), slot, index) : "";
@@ -331,7 +341,9 @@ export function ApplicationPhotoField({
         <p className="text-sm text-muted">Not provided</p>
       ) : !setupTokenReady ? (
         <p className="text-sm text-muted">
-          Add your email above first — once your application saves, you can attach photos here.
+          {hasApplicantEmail
+            ? "Preparing photo uploads — this unlocks as soon as your application saves."
+            : "Add your email above first — once your application saves, you can attach photos here."}
         </p>
       ) : (
         <div className="space-y-2">
@@ -413,6 +425,7 @@ type IncomeProofPhotosProps = {
   getApplicationId: () => string;
   setupTokenRequired?: boolean;
   getSetupToken?: () => string | null;
+  hasApplicantEmail?: boolean;
   readOnly?: boolean;
   max?: number;
 };
@@ -424,6 +437,7 @@ export function IncomeProofPhotos({
   getApplicationId,
   setupTokenRequired,
   getSetupToken,
+  hasApplicantEmail,
   readOnly,
   max = 3,
 }: IncomeProofPhotosProps) {
@@ -450,6 +464,7 @@ export function IncomeProofPhotos({
           getApplicationId={getApplicationId}
           setupTokenRequired={setupTokenRequired}
           getSetupToken={getSetupToken}
+          hasApplicantEmail={hasApplicantEmail}
           readOnly={readOnly}
           dataAttr="application-income-proof"
         />
@@ -467,6 +482,7 @@ export function IncomeProofPhotos({
           getApplicationId={getApplicationId}
           setupTokenRequired={setupTokenRequired}
           getSetupToken={getSetupToken}
+          hasApplicantEmail={hasApplicantEmail}
           dataAttr="application-income-proof-add"
         />
       ) : null}

@@ -51,7 +51,13 @@ and no vehicle field exists. Add more slots only where a photo genuinely helps.
   object quota (`MAX_APPLICATION_PHOTO_OBJECTS`), and a per-IP in-memory rate
   limit (per-instance, defense-in-depth). A **failed mint/upload surfaces a
   field-level error with Retry and never a reference** — a failure can never
-  look like success.
+  look like success. Two deliberate tradeoffs: `createSignedUploadUrl` carries
+  Supabase's **fixed ~2h token validity** (the API exposes no shorter
+  `expiresIn`), acceptable because the token is single-path, unguessable and
+  write-only; and the object quota **fails OPEN when the storage `list` errors**
+  (`countApplicationPhotoObjects` returns 0) — availability over strictness for
+  a defense-in-depth bound that sits behind the token gate. Do not "fix" either
+  without a new decision.
 - **GET** streams a stored photo. The storage path is resolved from the STORED
   row (never the client), guarded with `isPathInApplicationFolder`, served
   `Cache-Control: private, no-store` (never a 302 to storage), with the
