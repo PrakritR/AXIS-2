@@ -91,9 +91,31 @@ describe("POST /api/auth/register-resident-oauth — email mismatch relink", () 
     expect(body.relinkedEmail).toBeUndefined();
   });
 
-  it("still 403s without a setup token (generic OAuth signup stays gated)", async () => {
-    const res = await POST(post({ axisId: "PROPLANE-OAUTH01" }));
-    expect(res.status).toBe(403);
-    expect(getUserMock).not.toHaveBeenCalled();
+  it("without a setup token, provisions a clean default-deny profile instead of 403ing (first-class OAuth signup)", async () => {
+    getUserMock.mockResolvedValue({
+      data: { user: { id: "user-2", email: "brand.new@example.com", user_metadata: { full_name: "Brand New" } } },
+    });
+    provisionMock.mockResolvedValueOnce({ ok: true, axisId: "AX-NEW", linkedApplication: false });
+
+    const res = await POST(post({}));
+    const responseBody = (await res.json()) as { ok?: boolean; linkedApplication?: boolean; error?: string };
+    expect(res.status).toBe(200);
+    expect(responseBody.ok).toBe(true);
+    expect(responseBody.linkedApplication).toBe(false);
+    // Never looks up or relinks an application without a token — no path to
+    // inheriting a stranger's application from OAuth identity alone.
+    expect(findLookup).not.toHaveBeenCalled();
+    expect(relinkMock).not.toHaveBeenCalled();
+    expect(provisionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ email: "brand.new@example.com", inheritFromApplication: false }),
+    );
+  });
+
+  it("without a setup token, still requires a signed-in OAuth user", async () => {
+    getUserMock.mockResolvedValue({ data: { user: null } });
+    const res = await POST(post({}));
+    expect(res.status).toBe(401);
+    expect(provisionMock).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,5 @@
+import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
+
 const STORAGE_KEY = "axis:resident-signup-axis-id";
 const NEXT_STORAGE_KEY = "axis:resident-signup-next";
 const SETUP_TOKEN_KEY = "axis:resident-signup-setup-token";
@@ -61,7 +63,10 @@ export function clearResidentSignupSetupToken(): void {
 export function persistResidentSignupNext(nextPath: string): void {
   if (typeof window === "undefined") return;
   const trimmed = nextPath.trim();
-  if (!trimmed.startsWith("/")) return;
+  // This value is read back and handed straight to `window.location.replace`
+  // after OAuth completes, so it is validated at BOTH write and read time —
+  // never trust that every future caller pre-sanitized it.
+  if (isUnsafeRedirectPath(trimmed)) return;
   try {
     window.sessionStorage.setItem(NEXT_STORAGE_KEY, trimmed);
   } catch {
@@ -72,8 +77,8 @@ export function persistResidentSignupNext(nextPath: string): void {
 export function readResidentSignupNext(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(NEXT_STORAGE_KEY);
-    return raw?.trim().startsWith("/") ? raw.trim() : null;
+    const raw = window.sessionStorage.getItem(NEXT_STORAGE_KEY)?.trim() ?? "";
+    return raw && !isUnsafeRedirectPath(raw) ? raw : null;
   } catch {
     return null;
   }
