@@ -61,9 +61,9 @@ export function sanitizeApplicationFormForListing(
 ): RentalWizardFormState {
   const slice = applicationConfigForVariant(sub, variantForForm(form));
   const disabled = listingDisabledWizardFormKeys(slice);
-  const askedCustomKeys = new Set(listingCustomApplicationFields(slice).map((f) => f.key));
+  const askedCustomKeys = sub ? new Set(listingCustomApplicationFields(slice).map((f) => f.key)) : null;
   const answers = Array.isArray(form.customFieldAnswers) ? form.customFieldAnswers : [];
-  const keptAnswers = answers.filter((a) => askedCustomKeys.has(a.key));
+  const keptAnswers = askedCustomKeys ? answers.filter((a) => askedCustomKeys.has(a.key)) : answers;
   if (disabled.size === 0 && keptAnswers.length === answers.length) return form;
   const next: RentalWizardFormState = { ...form, customFieldAnswers: keptAnswers };
   for (const key of disabled) {

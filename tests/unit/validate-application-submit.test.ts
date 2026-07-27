@@ -240,4 +240,28 @@ describe("validate-application-submit", () => {
     expect(sanitized.consentCredit).toBe(true);
     expect(sanitized.customFieldAnswers).toEqual(longTerm.customFieldAnswers);
   });
+
+  it("keeps custom answers when the listing submission cannot be resolved at submit", () => {
+    // The listing may be gone from the extras cache at final submit (e.g. the
+    // manager unlisted it mid-application). The asked-question set is then
+    // unknowable, so no custom answer may be dropped.
+    const form = {
+      ...validSubmittedApplication(),
+      rentalType: "short_term" as const,
+      shortTermCheckInTime: "15:00",
+      shortTermCheckOutTime: "11:00",
+      shortTermRulesAck: true,
+      customFieldAnswers: [
+        { key: "arrival-notes", label: "Arrival notes", type: "text" as const, value: "Arriving after 9pm" },
+      ],
+    };
+    const sanitized = sanitizeApplicationFormForListing(form, undefined);
+    expect(sanitized.customFieldAnswers).toEqual(form.customFieldAnswers);
+
+    const longTerm = {
+      ...validSubmittedApplication(),
+      customFieldAnswers: [{ key: "pet-breed", label: "Pet breed", type: "text" as const, value: "Corgi" }],
+    };
+    expect(sanitizeApplicationFormForListing(longTerm, undefined)).toBe(longTerm);
+  });
 });

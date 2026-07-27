@@ -6,6 +6,10 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { RentalWizardStepBody } from "@/components/marketing/rental-wizard-steps";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
+  loadPublicExtraListingsFromServer,
+  PROPERTY_PIPELINE_EVENT,
+} from "@/lib/demo-property-pipeline";
+import {
   replaceManagerApplicationRowInCache,
   upsertApplicationRowToServerAwait,
 } from "@/lib/manager-applications-storage";
@@ -69,6 +73,14 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
   const [saving, setSaving] = useState(false);
   const [occupancySyncEpoch] = useState(0);
   const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
+  const [extrasTick, setExtrasTick] = useState(0);
+
+  useEffect(() => {
+    const on = () => setExtrasTick((n) => n + 1);
+    void loadPublicExtraListingsFromServer().then(() => on());
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, []);
 
   const propertyOptions = useMemo(() => {
     const pid = form.propertyId.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
@@ -79,6 +91,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
   }, [form.propertyId, row.application?.propertyId, row.property, row.propertyId]);
 
   const activeSteps = useMemo(() => {
+    void extrasTick;
     const pid = form.propertyId.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
     const prop = pid ? getPropertyById(pid) : undefined;
     const listingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
@@ -86,7 +99,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
       applicationConfigForVariant(listingSub, form.rentalType),
       normalizeCustomApplicationFields,
     ).filter((s) => s <= EDIT_STEP_COUNT);
-  }, [form.propertyId, form.rentalType, row.application?.propertyId, row.propertyId]);
+  }, [extrasTick, form.propertyId, form.rentalType, row.application?.propertyId, row.propertyId]);
   const firstActiveStep = activeSteps[0] ?? 1;
   const lastActiveStep = activeSteps[activeSteps.length - 1] ?? EDIT_STEP_COUNT;
   const nextActiveStep = useCallback(
