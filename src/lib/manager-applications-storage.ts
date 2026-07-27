@@ -193,12 +193,16 @@ function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: D
     manuallyAdded: incoming.manuallyAdded ?? existing.manuallyAdded,
     application: incoming.application ?? existing.application,
     manualResidentDetails: incoming.manualResidentDetails ?? existing.manualResidentDetails,
-    // A withdrawal is a monotonic stamp — once set on EITHER side it sticks, so a
-    // force-resync whose server response is missing/lagging `withdrawnAt` (id-variant
-    // mismatch, replication lag, an in-progress row withdrawn before its snapshot
-    // synced) can never un-withdraw the row and resurrect it into the active list.
-    // There is no client-side un-withdraw, so this only ever removes, never revives.
-    withdrawnAt: incoming.withdrawnAt ?? existing.withdrawnAt,
+    // `withdrawnAt` intentionally follows the server (`...incoming` above), NOT a
+    // sticky local stamp: withdrawal is FINAL for the applicant (reapplying to
+    // the same property starts a brand-new application — see `confirmWithdraw`
+    // and the withdrawn-row exclusion in `findInProgressRowForTarget`), so no
+    // un-withdraw path exists to revive a row. Removal is already durable
+    // without stickiness — the withdraw route persists `withdrawnAt` server-side
+    // (GET returns it via `normalizeRow`), the union merge keeps a local-only
+    // (404, not-yet-synced) row it can't see on the server, and `confirmWithdraw`
+    // marks the cache immediately. A sticky stamp would instead permanently hide
+    // any future row that reused the id, which is exactly the reapply we want.
   };
 }
 

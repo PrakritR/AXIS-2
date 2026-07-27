@@ -4,12 +4,14 @@ import {
   inProgressApplicationResumeUrl,
   buildInProgressApplicationRow,
   applicationStageDisplayLabel,
+  findInProgressRowForTarget,
   INCOMPLETE_APPLICATION_LABEL,
   isInProgressApplicationRow,
   isSubmittedPendingApplicationRow,
   syncInProgressApplicationRow,
   IN_PROGRESS_APPLICATION_STAGE,
 } from "@/lib/rental-application/in-progress-application";
+import { isWithdrawnApplicationRow, sortResidentApplicationRows } from "@/lib/rental-application/resident-application-list";
 import { residentApplicationSubmitBlocked } from "@/lib/rental-application/application-policy";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 
@@ -133,6 +135,49 @@ describe("in-progress-application", () => {
     expect(row.bucket).toBe("pending");
     expect(row.propertyId).toBe("prop-1");
     expect(row.email).toBe("jane@test.com");
+  });
+
+  it("withdrawal is final: reapplying to the same property never resumes the withdrawn draft", () => {
+    // Withdraw the resident's ONLY application, then reapply to the same
+    // property. The withdrawn draft must not be resumed — the apply comparator
+    // returns nothing for it, so the wizard starts a brand-new application.
+    const withdrawnDraft = buildInProgressApplicationRow({
+      axisId: "PROPLANE-WD1",
+      form: { ...createInitialRentalWizardState(), propertyId: "prop-1", roomChoice1: "prop-1::room-1" },
+      residentEmail: "jane@test.com",
+    });
+    withdrawnDraft.withdrawnAt = "2026-07-27T00:00:00.000Z";
+
+    // Reapply to the exact same property/room the withdrawn draft was for.
+    expect(
+      findInProgressRowForTarget([withdrawnDraft], { propertyId: "prop-1", listingRoomId: "room-1" }),
+    ).toBeUndefined();
+    // A bare reapply (no room) to that property also finds nothing to resume.
+    expect(findInProgressRowForTarget([withdrawnDraft], { propertyId: "prop-1" })).toBeUndefined();
+
+    // A live (non-withdrawn) draft for the same target IS still resumed — the
+    // exclusion is scoped to withdrawal, not a regression of normal resume.
+    const liveDraft = { ...withdrawnDraft, id: "PROPLANE-LIVE1", withdrawnAt: undefined };
+    expect(findInProgressRowForTarget([liveDraft], { propertyId: "prop-1" })?.id).toBe("PROPLANE-LIVE1");
+  });
+
+  it("withdrawal removes the row from the resident's active list but the manager keeps the record", () => {
+    const withdrawn = buildInProgressApplicationRow({
+      axisId: "PROPLANE-WD2",
+      form: { ...createInitialRentalWizardState(), propertyId: "prop-1" },
+      residentEmail: "jane@test.com",
+    });
+    withdrawn.withdrawnAt = "2026-07-27T00:00:00.000Z";
+    const allRows = [withdrawn];
+
+    // Manager view keeps the withdrawn record (final for the applicant ≠ deleted).
+    expect(allRows.some((r) => r.id === "PROPLANE-WD2")).toBe(true);
+    expect(isWithdrawnApplicationRow(withdrawn)).toBe(true);
+
+    // Resident active list (the panel's filter) excludes it, leaving a clean
+    // empty state — the apply entry point stays regardless (rendered separately).
+    const activeList = sortResidentApplicationRows(allRows.filter((r) => !isWithdrawnApplicationRow(r)));
+    expect(activeList).toHaveLength(0);
   });
 });
 

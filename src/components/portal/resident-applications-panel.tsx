@@ -48,6 +48,7 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { clearRentalWizardDraft, loadRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import { getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import {
   applicationStageDisplayLabel,
@@ -279,9 +280,19 @@ export function ResidentApplicationsPanel({
         return;
       }
       // Reflect the withdrawal locally so the row leaves the active list
-      // immediately; `withdrawnAt` is a sticky stamp in the cache merge, so a
-      // follow-up resync can never resurrect it.
+      // immediately. Removal is durable without a sticky merge: the withdraw
+      // route persisted `withdrawnAt` (GET returns it), the union merge keeps a
+      // local-only 404 row, and withdrawn rows are excluded from the apply
+      // resume comparator.
       replaceManagerApplicationRowInCache({ ...row, withdrawnAt: new Date().toISOString() });
+      // Withdrawal is FINAL for the applicant: if the local wizard draft belongs
+      // to this application, drop it (and its axis id) so a later reapply to the
+      // same property starts genuinely fresh — no revived row, no leftover
+      // answers. The manager keeps the withdrawn record on their side.
+      const draftAxisId = loadRentalWizardDraftAxisId();
+      if (draftAxisId && normalizeApplicationAxisId(draftAxisId) === normalizeApplicationAxisId(row.id)) {
+        clearRentalWizardDraft();
+      }
       if (expandedId === row.id) setExpandedId(null);
       if (editingId === row.id) setEditingId(null);
       setWithdrawTarget(null);

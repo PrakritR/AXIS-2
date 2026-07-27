@@ -71,12 +71,16 @@ export function targetMatchesApplication(target: ApplicationRequestTarget, candi
  * `target === null` means the request named no property at all (a bare, legacy
  * `/apply` entry) — the only case where falling back to "any in-progress row"
  * is still correct, because there is nothing more specific to match against.
+ *
+ * Withdrawn rows are excluded: withdrawal is FINAL for the applicant, so
+ * reapplying to the same property must start a brand-new application rather
+ * than resume the withdrawn draft (no revived row, no leftover answers).
  */
 export function findInProgressRowForTarget(
   rows: DemoApplicantRow[],
   target: ApplicationRequestTarget | null,
 ): DemoApplicantRow | undefined {
-  const inProgress = rows.filter(isInProgressApplicationRow);
+  const inProgress = rows.filter((row) => isInProgressApplicationRow(row) && !isWithdrawnApplicationRow(row));
   if (!target?.propertyId.trim()) return inProgress[0];
   return inProgress.find((row) => targetMatchesApplication(target, row));
 }
