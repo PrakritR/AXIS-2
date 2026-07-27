@@ -4,6 +4,7 @@ import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import {
   findDisabledApplicationFieldViolation,
   residentApplicationScreeningAllowed,
+  sanitizeApplicationFormForListing,
   validateResidentApplicationSubmit,
 } from "@/lib/rental-application/validate-application-submit";
 import { STANDARD_APPLICATION_FIELD_CATALOG } from "@/lib/rental-application/application-field-catalog";
@@ -164,5 +165,51 @@ describe("validate-application-submit", () => {
     if (!result.ok) {
       expect(result.error).toContain("does not accept");
     }
+  });
+
+  it("sanitizes long-term answers out of a short-term submission but keeps what the short-term form asked", () => {
+    // Someone fills the full long-term form, then switches to a short-term stay.
+    // The submitted snapshot must NOT carry the sensitive fields the short-term
+    // form never asked (privacy), while the fields it DID ask must survive.
+    const sub = { ...createDefaultListingSubmission(), shortTermRentalsAllowed: true };
+    const filledLongTerm = {
+      ...validSubmittedApplication(),
+      rentalType: "short_term" as const,
+      shortTermCheckInTime: "15:00",
+      shortTermCheckOutTime: "11:00",
+      shortTermRulesAck: true,
+    };
+
+    const sanitized = sanitizeApplicationFormForListing(filledLongTerm, sub);
+
+    // Sensitive long-term-only fields the short-term form never asks: cleared.
+    expect(sanitized.ssn).toBe("");
+    expect(sanitized.driversLicense).toBe("");
+    expect(sanitized.employer).toBe("");
+    expect(sanitized.monthlyIncome).toBe("");
+    expect(sanitized.ref1Name).toBe("");
+    expect(sanitized.currentStreet).toBe("");
+    expect(sanitized.consentCredit).toBe(false);
+
+    // Fields the short-term form DID ask: retained (losing one would be its own bug).
+    expect(sanitized.fullLegalName).toBe("Jordan Lee");
+    expect(sanitized.email).toBe("jordan@example.com");
+    expect(sanitized.phone).toBe("(206) 555-0100");
+    expect(sanitized.leaseStart).toBe("2026-08-01");
+    expect(sanitized.shortTermCheckInTime).toBe("15:00");
+    expect(sanitized.shortTermCheckOutTime).toBe("11:00");
+    expect(sanitized.shortTermRulesAck).toBe(true);
+    expect(sanitized.digitalSignature).toBe("Jordan Lee");
+    expect(sanitized.consentTruth).toBe(true);
+  });
+
+  it("leaves a long-term submission fully intact (nothing sanitized away)", () => {
+    const sub = createDefaultListingSubmission();
+    const longTerm = validSubmittedApplication();
+    const sanitized = sanitizeApplicationFormForListing(longTerm, sub);
+    expect(sanitized.ssn).toBe(longTerm.ssn);
+    expect(sanitized.employer).toBe(longTerm.employer);
+    expect(sanitized.ref1Name).toBe(longTerm.ref1Name);
+    expect(sanitized.consentCredit).toBe(true);
   });
 });

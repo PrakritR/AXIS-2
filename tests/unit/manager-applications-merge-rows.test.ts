@@ -56,4 +56,27 @@ describe("mergeApplicationRows", () => {
     const merged = mergeApplicationRows([], []);
     expect(merged).toEqual([]);
   });
+
+  it("keeps a local withdrawal even when the server response omits withdrawnAt", () => {
+    // A resident withdrew their (only) application; the local cache carries
+    // `withdrawnAt`, but a lagging/variant-mismatched server response for the
+    // same id does not. The withdrawal must stick so the row cannot resurrect
+    // into the active list.
+    const local = [row({ id: "PROPLANE-W1", withdrawnAt: "2026-07-27T00:00:00.000Z" })];
+    const serverResponse = [row({ id: "PROPLANE-W1" })]; // no withdrawnAt
+
+    const merged = mergeApplicationRows(local, serverResponse);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].withdrawnAt).toBe("2026-07-27T00:00:00.000Z");
+  });
+
+  it("propagates a server-side withdrawal onto a local row that lacks it", () => {
+    const local = [row({ id: "PROPLANE-W2" })];
+    const serverResponse = [row({ id: "PROPLANE-W2", withdrawnAt: "2026-07-27T01:00:00.000Z" })];
+
+    const merged = mergeApplicationRows(local, serverResponse);
+
+    expect(merged[0].withdrawnAt).toBe("2026-07-27T01:00:00.000Z");
+  });
 });

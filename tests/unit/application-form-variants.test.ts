@@ -97,6 +97,26 @@ describe("active wizard steps derive from the variant's enabled questions", () =
     expect(steps).toEqual([1, 2, 3, 4, 10, 11, 12]);
   });
 
+  it("a short-term form with every built-in re-enabled stays fully enabled (does not revert to the curated default)", () => {
+    // Reproduces the manager clicking "Add back" on every off-by-default
+    // short-term built-in. The editor pins mode "custom" on edits so the now-empty
+    // disabled set does NOT collapse to "standard" — which applicationConfigForVariant
+    // would otherwise read as the curated default and silently re-disable everything.
+    let slice = applicationConfigForVariant({}, "short_term");
+    for (const key of SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS) {
+      slice = reenableListingApplicationField(slice, key);
+    }
+    const pinned = { ...slice, applicationConfigMode: "custom" as const }; // what persistEditedSlice does
+    const sub = mergeApplicationConfigForVariant("short_term", pinned);
+    const resolved = applicationConfigForVariant(sub, "short_term");
+    expect(resolved.applicationConfigMode).toBe("custom");
+    expect(resolved.disabledStandardApplicationKeys).toEqual([]);
+    expect(isWizardFormFieldEnabled(resolved, "employer")).toBe(true);
+    expect(isWizardFormFieldEnabled(resolved, "ssn")).toBe(true);
+    // The long-term form is untouched by short-term edits.
+    expect(sub.disabledStandardApplicationKeys).toBeUndefined();
+  });
+
   it("re-enabling a question brings its step back for that form only", () => {
     const shortDefault = applicationConfigForVariant({}, "short_term");
     const reenabled = reenableListingApplicationField(shortDefault, employmentKey);
