@@ -955,9 +955,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   <span className="pl-1 font-normal text-muted/70">(optional)</span>
                 </Label>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Add a clear photo of the front and back. On a phone you can take the photo directly. Only you and the
-                  property manager reviewing your application can see these images — they are stored privately and
-                  encrypted in transit, never shown publicly.
+                  Add a clear photo of the front and back. On a phone you can take the photo directly. These images are
+                  shared only with the property manager for this application and are kept with your application record.
+                  They are stored privately and encrypted in transit, never shown publicly.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1442,8 +1442,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </Label>
               <p className="mt-1 text-xs leading-relaxed text-muted">
                 Attach a recent pay stub, an offer letter, or a bank statement to back up the amounts above. Photos or
-                PDFs are fine. Only you and the property manager reviewing your application can see them — stored
-                privately, never public.
+                PDFs are fine. These are shared only with the property manager for this application and are kept with
+                your application record — stored privately, never public.
               </p>
             </div>
             <IncomeProofPhotos

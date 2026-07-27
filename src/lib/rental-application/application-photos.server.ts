@@ -89,10 +89,18 @@ export async function accessiblePropertyIdsForManager(db: ServiceClient, userId:
   return ids;
 }
 
-/** Storage folder key for an application — normalized axis id, filesystem-safe. */
+/**
+ * Storage folder key for an application — normalized axis id, filesystem-safe.
+ * Uppercased so it is CASE-CANONICAL: `normalizeApplicationAxisId` preserves the
+ * case of an already-prefixed id, so the id captured at upload time and the
+ * stored `row.id` used at delete time could otherwise differ by case and point
+ * at two folders — which, given deletion is the only thing that reclaims bytes,
+ * would orphan the photos forever. Two spellings of one axis id map here to one
+ * folder.
+ */
 export function applicationPhotoFolderKey(applicationId: string): string {
   const normalized = normalizeApplicationAxisId(applicationId) || applicationId.trim();
-  return normalized.replace(/[^A-Za-z0-9_-]/g, "_") || "unknown";
+  return normalized.toUpperCase().replace(/[^A-Za-z0-9_-]/g, "_") || "unknown";
 }
 
 /** Unguessable object path: `application/<folder>/<slot>-<ts>-<uuid>.<ext>`. */

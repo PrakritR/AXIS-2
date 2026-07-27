@@ -78,11 +78,26 @@ attachment shapes (single → `null`, list → `[]`), and `hasFilledWizardValue`
 treats an empty list / null slot as unfilled. Coverage:
 `tests/unit/validate-application-submit.test.ts`.
 
-## Lifecycle deletion
+## Retention & deletion — Option A (captain decision, deliberate)
 
-Bytes are reclaimed when the applicant removes/retakes a photo and when an
-application row is **hard-deleted** (`reclaimApplicationPhotos`, wired into the
-manager-applications `delete` action). Photos are **retained** while the
-application row exists — including after reject / soft-withdraw — because the
-manager needs them to screen. Any purge-on-decision or time-based retention is a
-deliberate product/legal decision, not assumed here.
+Photos are **retained while the application row exists**, including after
+**Reject** and after resident self-**Withdraw** (both keep the row). There is
+**no** auto-purge on a decision and **no** time-based purge — a rejected
+applicant can raise a fair-housing / discrimination complaint months later and
+the manager needs the record they actually decided on. Do not add a purge sweep
+without a new captain decision.
+
+Two invariants follow from that choice and MUST hold:
+
+- **Deleting an application removes the BYTES, not just the row.** A hard delete
+  is now the only thing that removes these images, so it calls
+  `reclaimApplicationPhotos` (wired into the manager-applications `delete`
+  action) to list + remove every object under the application's folder. The
+  folder key is uppercased (`applicationPhotoFolderKey`) so upload-time and
+  delete-time ids can't drift by case and orphan the files. Coverage:
+  `tests/unit/application-photo-access.test.ts` (“an application delete removes
+  the bytes”). Applicant remove/retake also deletes the replaced object.
+- **The applicant-facing copy is honest about retention.** Step 4 / step 7 say
+  the photo is shared with the property manager for this application and **kept
+  with the application record** — it does NOT imply deletion after a decision,
+  because there is none.

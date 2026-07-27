@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  applicationPhotoFolderKey,
   buildApplicationPhotoPath,
   canActorAccessApplicationPhoto,
   isPathInApplicationFolder,
   parseApplicationPhotoDataUrl,
+  reclaimApplicationPhotos,
   type ApplicationPhotoActor,
   type StoredApplicationOwnership,
 } from "@/lib/rental-application/application-photos.server";
@@ -154,5 +157,65 @@ describe("path containment + upload validation", () => {
       expect(result.mime).toBe("image/jpeg");
       expect(result.ext).toBe("jpg");
     }
+  });
+});
+
+/**
+ * Retention is Option A (captain): photos live only as long as the application
+ * row, and deleting the application is the ONLY thing that removes them — so a
+ * delete MUST take the real storage bytes, not just the DB row, or ID photos of
+ * rejected applicants accumulate forever with nothing pointing at them. This
+ * proves the reclaim removes exactly the application's own objects and never
+ * another application's folder.
+ */
+describe("reclaimApplicationPhotos — an application delete removes the bytes", () => {
+  function makeFakeStorage(filesByFolder: Record<string, string[]>) {
+    const listedFolders: string[] = [];
+    const removedPaths: string[] = [];
+    const db = {
+      storage: {
+        from() {
+          return {
+            async list(folder: string) {
+              listedFolders.push(folder);
+              const names = filesByFolder[folder] ?? [];
+              return { data: names.map((name) => ({ name })), error: null };
+            },
+            async remove(paths: string[]) {
+              removedPaths.push(...paths);
+              return { data: null, error: null };
+            },
+          };
+        },
+      },
+    } as unknown as SupabaseClient;
+    return { db, listedFolders, removedPaths };
+  }
+
+  it("removes every object under the application's own folder", async () => {
+    const appId = "PROPLANE-ABC123";
+    const folder = `application/${applicationPhotoFolderKey(appId)}`;
+    const { db, listedFolders, removedPaths } = makeFakeStorage({
+      [folder]: ["idFront-1-uuid.jpg", "idBack-2-uuid.jpg", "income-3-uuid.pdf"],
+      "application/PROPLANE-OTHER": ["idFront-9-uuid.jpg"], // a different applicant's photos
+    });
+
+    await reclaimApplicationPhotos(db, appId);
+
+    expect(listedFolders).toContain(folder);
+    expect(removedPaths).toEqual([
+      `${folder}/idFront-1-uuid.jpg`,
+      `${folder}/idBack-2-uuid.jpg`,
+      `${folder}/income-3-uuid.pdf`,
+    ]);
+    // Never touches another application's folder.
+    expect(removedPaths.every((p) => p.startsWith(`${folder}/`))).toBe(true);
+    expect(removedPaths.some((p) => p.includes("PROPLANE-OTHER"))).toBe(false);
+  });
+
+  it("no-ops cleanly when the application has no photos", async () => {
+    const { db, removedPaths } = makeFakeStorage({});
+    await reclaimApplicationPhotos(db, "PROPLANE-EMPTY");
+    expect(removedPaths).toEqual([]);
   });
 });
