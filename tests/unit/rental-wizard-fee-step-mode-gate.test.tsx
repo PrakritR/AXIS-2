@@ -116,6 +116,18 @@ describe("fee step — inline payment mode gate", () => {
     expect(screen.queryByTestId("inline-payment")).toBeNull();
   });
 
+  it("never renders the inline payment once the fee is paid — the double-charge guard", () => {
+    renderFeeStep("public", { paid: true });
+    expect(screen.queryByTestId("inline-payment")).toBeNull();
+    expect(screen.queryByText("Paid")).toBeTruthy();
+  });
+
+  it("shows no payment UI (not even the resolving placeholder) when paid, even mid-resolve", () => {
+    renderFeeStep("public", { paid: true, pending: true });
+    expect(screen.queryByTestId("inline-payment")).toBeNull();
+    expect(screen.queryByText(/Confirming the application fee/)).toBeNull();
+  });
+
   it("holds payment UI while the server fee is still resolving", () => {
     renderFeeStep("public", { pending: true, displayLabel: "…" });
     expect(screen.queryByTestId("inline-payment")).toBeNull();

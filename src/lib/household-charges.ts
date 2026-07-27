@@ -1431,11 +1431,11 @@ export function findHoldingDepositCharge(
 /**
  * @deprecated The holding deposit is no longer collected during the
  * application (captain decision, 2026-07: deposits move under Payments,
- * after approval — see `docs/agents/resident-payments.md`). Every
- * application-submission call site has been removed
- * (`recordApplicationCharges`, `recordSubmittedApplicationFeeCharge`); the
- * remaining callers are the rental wizard's own submit-time calls, pending a
- * coordinated edit (tracked separately — do not add new call sites here).
+ * after approval — see `docs/agents/resident-payments.md`). NO callers
+ * remain anywhere in src/ or tests/ — every application-submission call site
+ * (`recordApplicationCharges`, `recordSubmittedApplicationFeeCharge`) and the
+ * rental wizard's submit-time calls have all been removed, so this helper is
+ * inert. Do not add new call sites.
  * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
  */
 export function ensurePendingHoldingDepositCharge(input: {

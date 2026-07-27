@@ -6,6 +6,7 @@ import {
   LEGACY_DEFAULT_APPLICATION_FEE_CENTS,
   effectiveApplicationFeeCents,
   normalizeManagerApplicationSettings,
+  validateManagerApplicationFeeCents,
 } from "@/lib/manager-application-settings";
 
 vi.mock("@/lib/stripe-axis-ach-checkout", async () => {
@@ -15,7 +16,27 @@ vi.mock("@/lib/stripe-axis-ach-checkout", async () => {
   return { ...actual, createAxisAchCheckoutSession: vi.fn() };
 });
 
+vi.mock("@/lib/manager-route-guard.server", () => ({
+  requireManagerRouteUser: vi.fn().mockResolvedValue({ db: {} as SupabaseClient, userId: "mgr_A" }),
+}));
+
+vi.mock("@/lib/manager-application-settings.server", () => ({
+  suggestedManagerApplicationFeeCents: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/manager-application-settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/manager-application-settings")>();
+  return {
+    ...actual,
+    saveManagerApplicationSettings: vi.fn(
+      async (_db: SupabaseClient, _userId: string, settings: { applicationFeeCents: number | null }) =>
+        actual.normalizeManagerApplicationSettings(settings),
+    ),
+  };
+});
+
 import { resolveApplicationFeeProperty } from "@/lib/application-fee-checkout.server";
+import { PATCH } from "@/app/api/portal/manager-application-settings/route";
 
 describe("normalizeManagerApplicationSettings", () => {
   it("keeps a valid cents value", () => {
@@ -29,11 +50,82 @@ describe("normalizeManagerApplicationSettings", () => {
   it("preserves an explicit 0 (free applications) distinct from null", () => {
     expect(normalizeManagerApplicationSettings({ applicationFeeCents: 0 })).toEqual({ applicationFeeCents: 0 });
   });
-  it("clamps out-of-range values", () => {
-    expect(normalizeManagerApplicationSettings({ applicationFeeCents: -5 })).toEqual({ applicationFeeCents: 0 });
+  it("treats a stored un-chargeable value (negative or non-zero sub-$1) as unconfigured, never free", () => {
+    expect(normalizeManagerApplicationSettings({ applicationFeeCents: -5 })).toEqual({ applicationFeeCents: null });
+    expect(normalizeManagerApplicationSettings({ applicationFeeCents: 50 })).toEqual({ applicationFeeCents: null });
+  });
+  it("clamps an over-cap value", () => {
     expect(normalizeManagerApplicationSettings({ applicationFeeCents: 5_000_000 })).toEqual({
       applicationFeeCents: 100_000,
     });
+  });
+});
+
+describe("validateManagerApplicationFeeCents — write-path rejection, never silent coercion", () => {
+  it("rejects a non-zero sub-$1 fee with a clear message", () => {
+    const res = validateManagerApplicationFeeCents(50);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/at least \$1/);
+  });
+  it("rejects a negative fee", () => {
+    const res = validateManagerApplicationFeeCents(-100);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/negative/);
+  });
+  it("accepts $0 as the explicit free-applications value", () => {
+    expect(validateManagerApplicationFeeCents(0)).toEqual({ ok: true, applicationFeeCents: 0 });
+  });
+  it("accepts a valid >= $1 fee", () => {
+    expect(validateManagerApplicationFeeCents(7500)).toEqual({ ok: true, applicationFeeCents: 7500 });
+  });
+  it("accepts null as clearing the setting", () => {
+    expect(validateManagerApplicationFeeCents(null)).toEqual({ ok: true, applicationFeeCents: null });
+  });
+  it("rejects a non-numeric value", () => {
+    expect(validateManagerApplicationFeeCents("50").ok).toBe(false);
+    expect(validateManagerApplicationFeeCents(Number.NaN).ok).toBe(false);
+  });
+  it("rejects an over-cap fee", () => {
+    expect(validateManagerApplicationFeeCents(5_000_000).ok).toBe(false);
+  });
+});
+
+function patchRequest(body: unknown): Request {
+  return new Request("http://localhost/api/portal/manager-application-settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("PATCH /api/portal/manager-application-settings — invalid fees 400, never save as free", () => {
+  it("rejects a non-zero sub-$1 fee with 400", async () => {
+    const res = await PATCH(patchRequest({ applicationFeeCents: 50 }));
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error?: string };
+    expect(data.error).toMatch(/at least \$1/);
+  });
+  it("rejects a negative fee with 400", async () => {
+    const res = await PATCH(patchRequest({ applicationFeeCents: -100 }));
+    expect(res.status).toBe(400);
+  });
+  it("accepts an explicit $0 (free applications)", async () => {
+    const res = await PATCH(patchRequest({ applicationFeeCents: 0 }));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { settings?: { applicationFeeCents: number | null } };
+    expect(data.settings).toEqual({ applicationFeeCents: 0 });
+  });
+  it("accepts a valid >= $1 fee", async () => {
+    const res = await PATCH(patchRequest({ applicationFeeCents: 7500 }));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { settings?: { applicationFeeCents: number | null } };
+    expect(data.settings).toEqual({ applicationFeeCents: 7500 });
+  });
+  it("clears the setting when applicationFeeCents is null", async () => {
+    const res = await PATCH(patchRequest({ applicationFeeCents: null }));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { settings?: { applicationFeeCents: number | null } };
+    expect(data.settings).toEqual({ applicationFeeCents: null });
   });
 });
 

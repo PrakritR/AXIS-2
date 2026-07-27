@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 
 import {
-  DEFAULT_MANAGER_APPLICATION_SETTINGS,
   loadManagerApplicationSettings,
-  normalizeManagerApplicationSettings,
   saveManagerApplicationSettings,
+  validateManagerApplicationFeeCents,
 } from "@/lib/manager-application-settings";
 import { suggestedManagerApplicationFeeCents } from "@/lib/manager-application-settings.server";
 import { requireManagerRouteUser } from "@/lib/manager-route-guard.server";
@@ -33,13 +32,18 @@ export async function PATCH(req: Request) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     // Only `applicationFeeCents` is writable. A `null` clears it back to the
-    // legacy/listing fallback; a number sets the whole-account fee.
-    const next = normalizeManagerApplicationSettings(
-      "applicationFeeCents" in body
-        ? { applicationFeeCents: body.applicationFeeCents }
-        : DEFAULT_MANAGER_APPLICATION_SETTINGS,
+    // legacy/listing fallback; a number sets the whole-account fee. Invalid
+    // input (negative, non-zero under $1, over-cap, non-numeric) is rejected
+    // rather than coerced.
+    const validated = validateManagerApplicationFeeCents(
+      "applicationFeeCents" in body ? body.applicationFeeCents : null,
     );
-    const saved = await saveManagerApplicationSettings(ctx.db, ctx.userId, next);
+    if (!validated.ok) {
+      return NextResponse.json({ error: validated.error }, { status: 400 });
+    }
+    const saved = await saveManagerApplicationSettings(ctx.db, ctx.userId, {
+      applicationFeeCents: validated.applicationFeeCents,
+    });
     return NextResponse.json({ settings: saved });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

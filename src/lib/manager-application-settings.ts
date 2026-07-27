@@ -36,6 +36,17 @@ export const LEGACY_DEFAULT_APPLICATION_FEE_CENTS = 5000;
 
 export const MANAGER_APPLICATION_SETTINGS_EVENT = "axis:manager-application-settings";
 
+/**
+ * Stripe's checkout minimum is $1, and the fee resolver floors any sub-$1
+ * amount to 0 — so a saved fee of 1–99 cents would show as configured in the
+ * settings modal while every applicant passes through free. Writes reject
+ * such values outright (`validateManagerApplicationFeeCents`); `0` stays the
+ * one explicit "applications are free" value.
+ */
+export const MIN_MANAGER_APPLICATION_FEE_CENTS = 100;
+/** Cap at $1,000 so a fat-fingered value can never propose an absurd charge. */
+export const MAX_MANAGER_APPLICATION_FEE_CENTS = 100_000;
+
 const ROW_DATA_KEY = "applicationSettings";
 
 export function normalizeManagerApplicationSettings(raw: unknown): ManagerApplicationSettings {
@@ -44,12 +55,47 @@ export function normalizeManagerApplicationSettings(raw: unknown): ManagerApplic
   if (typeof rawFee !== "number" || !Number.isFinite(rawFee)) {
     return { applicationFeeCents: null };
   }
-  // Clamp to a sane range: a non-negative whole number of cents, capped at
-  // $1,000 so a fat-fingered value can never propose an absurd charge.
   const cents = Math.round(rawFee);
-  if (cents < 0) return { applicationFeeCents: 0 };
-  if (cents > 100_000) return { applicationFeeCents: 100_000 };
+  if (cents === 0) return { applicationFeeCents: 0 };
+  // A stored value below the chargeable minimum (including a negative) reads
+  // as unconfigured — the grandfathered listing fallback — never as "free":
+  // silently zeroing a fee the manager believes they charge is the exact
+  // revenue-loss bug this module exists to close. Writes can no longer store
+  // such a value; this guards only legacy rows.
+  if (cents < MIN_MANAGER_APPLICATION_FEE_CENTS) return { applicationFeeCents: null };
+  if (cents > MAX_MANAGER_APPLICATION_FEE_CENTS) return { applicationFeeCents: MAX_MANAGER_APPLICATION_FEE_CENTS };
   return { applicationFeeCents: cents };
+}
+
+export type ManagerApplicationFeeValidation =
+  | { ok: true; applicationFeeCents: number | null }
+  | { ok: false; error: string };
+
+/**
+ * Write-path validation for the manager-level application fee. Unlike
+ * `normalizeManagerApplicationSettings` (which tolerantly reads whatever is
+ * stored), this REJECTS un-savable input with a user-facing message instead of
+ * coercing it: a negative fee, a non-zero fee under $1 (un-chargeable — see
+ * `MIN_MANAGER_APPLICATION_FEE_CENTS`), an over-cap fee, or a non-numeric
+ * value. `null`/absent clears the setting; `0` makes applications free.
+ */
+export function validateManagerApplicationFeeCents(raw: unknown): ManagerApplicationFeeValidation {
+  if (raw == null) return { ok: true, applicationFeeCents: null };
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return { ok: false, error: "Enter a valid application fee." };
+  }
+  const cents = Math.round(raw);
+  if (cents < 0) {
+    return { ok: false, error: "The application fee cannot be negative." };
+  }
+  if (cents === 0) return { ok: true, applicationFeeCents: 0 };
+  if (cents < MIN_MANAGER_APPLICATION_FEE_CENTS) {
+    return { ok: false, error: "The application fee must be at least $1 — or $0 to make applications free." };
+  }
+  if (cents > MAX_MANAGER_APPLICATION_FEE_CENTS) {
+    return { ok: false, error: "The application fee cannot exceed $1,000." };
+  }
+  return { ok: true, applicationFeeCents: cents };
 }
 
 /**

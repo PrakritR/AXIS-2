@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerApplicationFeeWaiverCodesModal } from "@/components/portal/manager-application-fee-waiver-codes-modal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { validateManagerApplicationFeeCents } from "@/lib/manager-application-settings";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 function centsToDollarInput(cents: number | null): string {
@@ -72,11 +73,18 @@ export function ManagerApplicationSettingsModal({ open, onClose }: { open: boole
 
   async function save() {
     const trimmed = feeInput.trim();
-    const applicationFeeCents = trimmed === "" ? null : Math.round(parseMoneyAmount(trimmed) * 100);
-    if (applicationFeeCents != null && (!Number.isFinite(applicationFeeCents) || applicationFeeCents < 0)) {
+    if (trimmed !== "" && !/\d/.test(trimmed)) {
       showToast("Enter a valid application fee.");
       return;
     }
+    const validated = validateManagerApplicationFeeCents(
+      trimmed === "" ? null : Math.round(parseMoneyAmount(trimmed) * 100),
+    );
+    if (!validated.ok) {
+      showToast(validated.error);
+      return;
+    }
+    const applicationFeeCents = validated.applicationFeeCents;
     if (demo) {
       setConfigured(applicationFeeCents != null);
       showToast("Application fee saved (demo).");

@@ -1986,7 +1986,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <span className="font-semibold text-foreground">Payment method:</span> {singleChannelLabel}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
+        {applicationFeeGate.needsFee && !applicationFeeGate.paid && isAchApplicationFeeChannel(payChannel) ? (
           applicationFeeGate.pending ? (
             <div className="flex min-h-[80px] items-center justify-center rounded-2xl border border-border bg-card text-sm text-muted">
               Confirming the application fee…
