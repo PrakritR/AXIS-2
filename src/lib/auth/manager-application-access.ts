@@ -73,8 +73,8 @@ export async function managerCanAccessApplicationRecord(
 
   // Co-manager grant at `level` on EITHER the applications or residents module —
   // the same union the list applies (the client then filters each tab by its own
-  // grant), via the same level-aware check `assertCanDeleteApplicationRecords`
-  // uses.
+  // grant). This is the ONE level-aware check: `assertCanDeleteApplicationRecords`
+  // delegates here at level "delete" rather than running its own.
   for (const propertyId of candidateIds) {
     if (await managerHasCoManagerPermissionForProperty(db, userId, propertyId, "applications", level)) {
       return true;
