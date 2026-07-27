@@ -3,9 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Route-level coverage for POST /api/public/application-fee-preview — the
- * itemization the applicant sees BEFORE paying, so it must correctly reflect
- * the manager's per-listing `holdingDepositTiming` choice (combined charge
- * vs fee-only) and a fee already waived by a redeemed manager code.
+ * itemization the applicant sees BEFORE paying. The application collects the
+ * application fee ONLY (the holding deposit is billed under Payments after
+ * approval, never during the application), so this route returns the fee, any
+ * plan-based service fee the applicant bears, and the total — no deposit line.
+ * It can also preview a waiver code without redeeming it.
  */
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -56,15 +58,13 @@ function post(body: unknown) {
   });
 }
 
-function resolvedListing(overrides: Partial<{ applicationFeeCents: number; holdingDepositCents: number; holdingDepositTiming: "at_application" | "after_approval" }> = {}) {
+function resolvedListing(overrides: Partial<{ applicationFeeCents: number }> = {}) {
   return {
     ok: true as const,
     value: {
       managerUserId: "mgr_A",
       listing: null,
       applicationFeeCents: 5000,
-      holdingDepositCents: 0,
-      holdingDepositTiming: "after_approval" as const,
       ...overrides,
     },
   };
@@ -76,56 +76,36 @@ describe("POST /api/public/application-fee-preview", () => {
     vi.mocked(previewApplicationFeeWaiverCode).mockReset();
   });
 
-  it("previews a fee-only listing (after_approval — the default) with a $0 deposit", async () => {
+  it("previews the application fee only — no deposit line", async () => {
     vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(resolvedListing());
     const { POST } = await import("@/app/api/public/application-fee-preview/route");
 
-    // "manual" channel never carries a Stripe service fee, isolating the
-    // fee/deposit itemization math this test is actually about.
+    // "manual" channel never carries a Stripe service fee, isolating the fee math.
     const res = await POST(post({ propertyId: "prop_1", managerUserId: "mgr_A", channel: "manual" }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(json.applicationFeeCents).toBe(5000);
-    expect(json.holdingDepositCents).toBe(0);
+    expect(json.serviceFeeCents).toBe(0);
     expect(json.totalCents).toBe(5000);
+    // The deposit is never part of the application preview.
+    expect(json.holdingDepositCents).toBeUndefined();
   });
 
-  it("combines the fee + deposit into one total when the listing opted into at_application", async () => {
-    vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(
-      resolvedListing({ holdingDepositCents: 10000, holdingDepositTiming: "at_application" }),
-    );
+  it("returns a normal zero itemization for an explicit $0 (free) application fee — no dead-end", async () => {
+    vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(resolvedListing({ applicationFeeCents: 0 }));
     const { POST } = await import("@/app/api/public/application-fee-preview/route");
 
     const res = await POST(post({ propertyId: "prop_1", managerUserId: "mgr_A", channel: "manual" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.applicationFeeCents).toBe(5000);
-    expect(json.holdingDepositCents).toBe(10000);
-    expect(json.totalCents).toBe(15000);
-  });
-
-  it("zeroes the fee but keeps the deposit when feeWaived is already true", async () => {
-    vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(
-      resolvedListing({ holdingDepositCents: 10000, holdingDepositTiming: "at_application" }),
-    );
-    const { POST } = await import("@/app/api/public/application-fee-preview/route");
-
-    const res = await POST(post({ propertyId: "prop_1", managerUserId: "mgr_A", feeWaived: true, channel: "manual" }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(json.applicationFeeCents).toBe(0);
-    expect(json.applicationFeeWaivedByCode).toBe(true);
-    expect(json.holdingDepositCents).toBe(10000);
-    expect(json.totalCents).toBe(10000);
+    expect(json.totalCents).toBe(0);
   });
 
-  it("zeroes the fee via a freshly-validated waiver code, without re-consuming feeWaived", async () => {
-    vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(
-      resolvedListing({ holdingDepositCents: 10000, holdingDepositTiming: "at_application" }),
-    );
+  it("previews a valid waiver code without redeeming it", async () => {
+    vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(resolvedListing());
     vi.mocked(previewApplicationFeeWaiverCode).mockResolvedValue({ ok: true });
     const { POST } = await import("@/app/api/public/application-fee-preview/route");
 
@@ -135,10 +115,25 @@ describe("POST /api/public/application-fee-preview", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.applicationFeeCents).toBe(0);
-    expect(json.applicationFeeWaivedByCode).toBe(true);
-    expect(json.holdingDepositCents).toBe(10000);
     expect(json.waiver).toEqual({ valid: true, error: undefined });
+  });
+
+  it("reports an invalid waiver code in the preview", async () => {
+    vi.mocked(resolveApplicationFeeProperty).mockResolvedValue(resolvedListing());
+    vi.mocked(previewApplicationFeeWaiverCode).mockResolvedValue({
+      ok: false,
+      reason: "NOT_FOUND",
+      error: "That code isn't valid.",
+    });
+    const { POST } = await import("@/app/api/public/application-fee-preview/route");
+
+    const res = await POST(
+      post({ propertyId: "prop_1", managerUserId: "mgr_A", waiverCode: "NOPE", channel: "manual" }),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.waiver).toEqual({ valid: false, error: "That code isn't valid." });
   });
 
   it("requires propertyId and managerUserId", async () => {

@@ -16,20 +16,21 @@ type Body = {
   managerUserId?: string;
   /** Checkout return path (defaults to public apply). Must start with `/`. */
   returnPath?: string;
-  /** True once a manager waiver code has already been redeemed for this fee. */
-  feeWaived?: boolean;
+  /**
+   * `embedded` (default) renders the card form INLINE in the application;
+   * `hosted` redirects to Stripe. Kept configurable so the wizard can request
+   * inline while any legacy caller can still opt into a redirect.
+   */
+  mode?: "embedded" | "hosted";
 };
 
 /**
  * Creates a Stripe Checkout Session (card / Apple Pay / Google Pay) with
- * Connect destination charges for the rental application fee, and — only on
- * listings where the manager opted `holdingDepositTiming` into
- * "at_application" — the holding deposit combined into the SAME session as a
- * second line item (see `createApplicationFeeCheckout`). On the default
- * "after_approval" listings the deposit is never collected here; it is
- * charged under Payments after approval. A fee fully waived by a manager
- * waiver code with no deposit due never reaches this route at all (nothing
- * to charge) — see `/api/public/application-fee-waiver`.
+ * Connect destination charges for the rental application fee when Axis
+ * payments are enabled on the listing. This charges the application fee only
+ * — the holding/security deposit is never collected here; it is charged
+ * under Payments after approval. A waived fee (manager waiver code) never
+ * reaches this route at all — see `/api/public/application-fee-waiver`.
  */
 export async function POST(req: Request) {
   try {
@@ -54,13 +55,17 @@ export async function POST(req: Request) {
       typeof body.returnPath === "string" && body.returnPath.startsWith("/")
         ? body.returnPath.split("?")[0] ?? "/rent/apply"
         : "/rent/apply";
+    const mode = body.mode === "hosted" ? "hosted" : "embedded";
 
     const result = await createApplicationFeeCheckout(db, stripe, {
       propertyId,
       residentEmail,
       residentName: residentName || undefined,
       managerUserId,
-      feeWaived: body.feeWaived === true,
+      mode,
+      // Embedded returns the applicant to the same apply step after paying; the
+      // wizard verifies the session server-side before treating the fee as paid.
+      returnUrl: `${appUrl}${returnPath}?fee_checkout=return&session_id={CHECKOUT_SESSION_ID}`,
       successUrl: `${appUrl}${returnPath}?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}${returnPath}?fee_checkout=cancel`,
     });
@@ -70,12 +75,14 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      url: result.url,
+      // `clientSecret` drives the inline embedded form; `url` is present only on
+      // the legacy hosted path. Itemized so the caller shows "application fee +
+      // service fee = total" before paying — never a surprise amount.
+      mode: result.mode,
+      clientSecret: result.mode === "embedded" ? result.clientSecret : undefined,
+      url: result.mode === "hosted" ? result.url : undefined,
       sessionId: result.sessionId,
-      // Itemized so the caller can show "application fee + service fee = total"
-      // before redirecting — never a surprise amount on Stripe's page.
       applicationFeeCents: result.itemization.applicationFeeCents,
-      holdingDepositCents: result.itemization.holdingDepositCents,
       serviceFeeCents: result.itemization.serviceFeeCents,
       totalCents: result.itemization.totalCents,
       platformFeeCents: 0,

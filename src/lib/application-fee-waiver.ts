@@ -310,7 +310,10 @@ export async function redeemApplicationFeeWaiverCode(
     p_application_id: input.applicationId?.trim() || null,
   });
   if (redeemError) {
-    return { ok: false, reason: "NOT_FOUND", error: redeemError.message };
+    // Never echo raw database errors to the (public, unauthenticated) waiver
+    // route — log server-side and answer with the generic invalid-code message.
+    console.error("[application-fee-waiver] redeem RPC failed:", redeemError.message);
+    return { ok: false, reason: "NOT_FOUND", error: WAIVER_REDEEM_FAILURE_MESSAGES.NOT_FOUND };
   }
   const rows = (redeemed as { id: string }[] | null) ?? [];
   if (rows.length === 0 || !rows[0]?.id) {

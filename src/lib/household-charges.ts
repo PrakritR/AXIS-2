@@ -1302,6 +1302,13 @@ export function ensurePendingApplicationFeeCharge(input: {
   managerUserId?: string | null;
   /** Match an existing fee created under another id on the row (e.g. `application.propertyId` vs `assignedPropertyId`). */
   propertyIdAliases?: string[] | null;
+  /**
+   * SERVER-authoritative fee in dollars (from `/api/public/application-fee-preview`,
+   * which applies the manager-level fee). When provided it replaces the listing's
+   * grandfathered `applicationFee` so the booked charge always equals what the
+   * server actually charges — an explicit 0 books nothing at all.
+   */
+  feeAmountOverride?: number | null;
 }): HouseholdCharge | null {
   const email = input.residentEmail.trim();
   if (!email || !email.includes("@")) return null;
@@ -1312,6 +1319,10 @@ export function ensurePendingApplicationFeeCharge(input: {
   if (!sub && amt <= 0) {
     raw = "$50";
     amt = 50;
+  }
+  if (input.feeAmountOverride != null && Number.isFinite(input.feeAmountOverride)) {
+    amt = input.feeAmountOverride;
+    raw = amt > 0 ? `$${amt.toFixed(2)}` : "";
   }
   if (amt <= 0) return null;
 
@@ -1377,10 +1388,11 @@ function holdingDepositFallbackChargeId(residentEmail: string, propertyId: strin
 }
 
 /**
- * Dollar amount + display label for the listing's configured holding deposit.
- * Whether it is actually collected during the application depends on the
- * listing's `holdingDepositTiming` (default "after_approval" — see
- * `docs/agents/resident-payments.md`); this function just reads the amount.
+ * @deprecated No longer shown or collected during the application (captain
+ * decision, 2026-07 — see `ensurePendingHoldingDepositCharge` above and
+ * `docs/agents/resident-payments.md`). Kept only in case a future Payments
+ * surface wants the listing's configured holding-deposit amount; no
+ * production call site remains.
  */
 export function listingHoldingDepositAmount(propertyId: string): { amount: number; displayLabel: string } {
   if (!propertyId.trim()) {
@@ -1417,12 +1429,14 @@ export function findHoldingDepositCharge(
 }
 
 /**
- * Ensures a pending holding-deposit line exists for an applicant, mirroring
- * `ensurePendingApplicationFeeCharge`. Called ONLY when the listing's
- * `holdingDepositTiming` is `"at_application"` (manager's choice — default is
- * `"after_approval"`, where the deposit is instead generated at approval by
- * `recordApprovedApplicationCharges`, unchanged from the prior fixed
- * behavior). See `docs/agents/resident-payments.md`.
+ * @deprecated The holding deposit is no longer collected during the
+ * application (captain decision, 2026-07: deposits move under Payments,
+ * after approval — see `docs/agents/resident-payments.md`). Every
+ * application-submission call site has been removed
+ * (`recordApplicationCharges`, `recordSubmittedApplicationFeeCharge`); the
+ * remaining callers are the rental wizard's own submit-time calls, pending a
+ * coordinated edit (tracked separately — do not add new call sites here).
+ * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
  */
 export function ensurePendingHoldingDepositCharge(input: {
   residentEmail: string;
@@ -2174,7 +2188,11 @@ export function recordApplicationCharges(
     applicationId?: string | null;
     managerUserId?: string | null;
   },
-  opts?: { skipApplicationFee?: boolean }
+  opts?: {
+    skipApplicationFee?: boolean;
+    /** Server-authoritative fee in dollars — see `ensurePendingApplicationFeeCharge.feeAmountOverride`. */
+    applicationFeeAmount?: number | null;
+  }
 ): void {
   const existingAppFee = findApplicationFeeCharge(
     input.residentEmail,
@@ -2182,10 +2200,21 @@ export function recordApplicationCharges(
     input.residentUserId,
   );
 
+  const serverAmount =
+    opts?.applicationFeeAmount != null && Number.isFinite(opts.applicationFeeAmount)
+      ? opts.applicationFeeAmount
+      : null;
+
   const prop = getPropertyById(input.propertyId);
   const sub = prop?.listingSubmission;
   if (!sub) {
     if (opts?.skipApplicationFee || existingAppFee) return;
+    if (serverAmount != null) {
+      // The server told us the effective fee — book exactly that (nothing for 0)
+      // instead of the legacy $50 fallback.
+      ensurePendingApplicationFeeCharge({ ...input, feeAmountOverride: serverAmount });
+      return;
+    }
     /* still record a generic application fee line using defaults */
     const fallback: HouseholdCharge = {
       id: input.residentEmail.trim() && input.propertyId.trim()
@@ -2209,17 +2238,10 @@ export function recordApplicationCharges(
     return;
   }
 
-  if (!opts?.skipApplicationFee && !existingAppFee) {
-    ensurePendingApplicationFeeCharge(input);
+  if (opts?.skipApplicationFee || existingAppFee) {
+    return;
   }
-  // Manager's choice — see `holdingDepositTiming` on the listing. Combined
-  // with the fee into one Stripe/manual charge earlier in the wizard; this is
-  // the same "ensure it exists" safety net the fee gets, so a resident who
-  // reaches this point without one somehow (e.g. resumed a stale draft) still
-  // gets a correct pending line rather than silently owing nothing.
-  if (sub.holdingDepositTiming === "at_application") {
-    ensurePendingHoldingDepositCharge(input);
-  }
+  ensurePendingApplicationFeeCharge({ ...input, feeAmountOverride: serverAmount });
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {

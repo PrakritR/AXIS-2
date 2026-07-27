@@ -3344,13 +3344,12 @@ export function ManagerAddListingForm({
                     <div className="space-y-1">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application & holding</p>
                       <p className="text-xs leading-relaxed text-muted">
-                        Collected when someone applies. The holding deposit secures the application and credits toward the security deposit when they are approved (defaults to $100 if left blank).
+                        The application fee is set once for your whole account in Applications → Application fee, so it isn&apos;t configured per listing. The holding deposit credits toward the security deposit when the resident is approved (defaults to $100 if left blank).
                       </p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       {(
                         [
-                          ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim(), true],
                           [
                             "holdingDeposit",
                             "Holding deposit",
@@ -3422,32 +3421,6 @@ export function ManagerAddListingForm({
                           <span className="font-medium">Application fee only for first application</span>
                           <span className="mt-0.5 block text-xs text-muted">
                             Charge the application fee once per resident; skip payment on later applications.
-                          </span>
-                        </span>
-                      </label>
-                      <label className="flex cursor-pointer items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                          checked={sub.holdingDepositTiming === "at_application"}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              holdingDepositTiming: e.target.checked ? "at_application" : "after_approval",
-                            }))
-                          }
-                        />
-                        <span className="text-sm text-foreground">
-                          <span className="font-medium">Collect holding deposit at application</span>
-                          <span className="mt-0.5 block text-xs text-muted">
-                            {(() => {
-                              const feeAmt = parseSanitizedMoneyNumber(sub.applicationFee);
-                              const depAmt = parseSanitizedMoneyNumber((sub.holdingDeposit ?? "").trim() || "100");
-                              const total = feeAmt + depAmt;
-                              return feeAmt > 0
-                                ? `On: the applicant pays one combined charge before submitting — e.g. $${feeAmt.toFixed(0)} fee + $${depAmt.toFixed(0)} deposit = $${total.toFixed(0)} — itemized so they see exactly what it covers. Off (default): only the application fee is due now; the deposit appears under Payments once you approve.`
-                                : "On: the applicant pays the holding deposit before submitting, combined with the application fee into one charge if both are set. Off (default): the deposit appears under Payments once you approve.";
-                            })()}
                           </span>
                         </span>
                       </label>

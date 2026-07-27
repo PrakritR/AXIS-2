@@ -59,119 +59,52 @@ manager's choice, Business is absorbed by PropLane. The listing page itself
 still shows only the application fee (no plan tier leaks there); the itemized
 service fee only appears once an applicant reaches the payment step
 (`/api/public/application-fee-preview` returns the same breakdown the checkout
-route will charge, so the wizard can itemize before redirecting to Stripe).
+route will charge, so the wizard itemizes it before the applicant pays).
+**Payment is INLINE (embedded), not a redirect** — `application-fee-checkout`
+defaults to `mode: "embedded"` and returns a `clientSecret`; the wizard renders
+Stripe's embedded card form in-step (`ApplicationFeeInlinePayment` →
+`StripeEmbeddedCheckout`). On success Stripe returns the applicant to
+`…?fee_checkout=return&session_id=…` which the wizard verifies before treating
+the fee as paid; an abandoned/failed payment leaves the applicant on the step
+with a clear error and their answers intact. A legacy `mode: "hosted"` redirect
+path is still supported for callers that ask for it.
 **A manager-owned waiver code (`src/lib/application-fee-waiver.ts`,
 `/api/public/application-fee-waiver`) can waive the application fee entirely**
 — a redeemed code skips Stripe altogether (no $0 charge, no session).
 
-## When the holding deposit is collected is the MANAGER'S CHOICE, per listing
+**The application fee is configured ONCE per manager, in Application settings —
+NOT per listing** (captain decision, 2026-07-26: "manager sets cost of
+application in application rather than in the property listing"). The
+manager-level value lives on `manager_automation_settings.row_data.applicationSettings`
+(`src/lib/manager-application-settings.ts`, `GET/PATCH
+/api/portal/manager-application-settings`) and is surfaced under the manager's
+**Applications** section ("Application fee" → `ManagerApplicationSettingsModal`,
+alongside the fee-waiver codes so fee + waiver live together). Source-of-truth
+rule (`effectiveApplicationFeeCents`): a configured manager-level fee is
+authoritative for EVERY listing (including an explicit `0` = free); until the
+manager saves one it is `null` and the resolver GRANDFATHERS each listing's
+stored `applicationFee`, so no live listing silently changes what it charges on
+deploy. The settings modal pre-fills a non-persisted *suggestion* (the mode of
+the manager's existing per-listing fees, `suggestedManagerApplicationFeeCents`)
+so the first save is an explicit, previewed consolidation — never a silent bulk
+change. New listings no longer carry a per-listing fee field. There is
+deliberately NO data migration moving fees off listings (avoids a second prod
+migration and any silent charge change); the move is a resolver + config change.
+Coverage: `tests/unit/manager-application-settings.test.ts` (the money-critical
+override + grandfather + free-fee cases) and
+`tests/unit/application-fee-inline-checkout.test.ts` (embedded-by-default).
 
-(Captain decision, phase 2, 2026-07-26 — supersedes the phase-1 "holding
-deposit is never collected during the application" rule below it. That
-unconditional removal is NOT reverted in code — `at_application` re-enables
-exactly what phase 1 turned off, `after_approval` is the phase-1 behavior
-verbatim, and it is the default.)
-
-`ManagerListingSubmissionV1.holdingDepositTiming: "at_application" |
-"after_approval"` (`src/lib/manager-listing-submission.ts`), edited per-listing
-in the manager Add/Edit listing form's Application & Holding card
-(`manager-add-listing-form.tsx`). **Default `"after_approval"` for every
-listing that has never set it** — normalization
-(`normalizeManagerListingSubmissionV1`) coerces anything other than the literal
-string `"at_application"` to `"after_approval"`, so a legacy listing, a typo,
-or a stripped field all fail safe to the old behavior rather than surprising a
-manager with a new upfront charge they never opted into.
-
-| Timing | Behavior |
-| --- | --- |
-| `after_approval` (default) | Identical to phase 1: nothing deposit-related during the application. The applicant pays only the application fee (if any, subject to plan + waiver). The deposit is generated under Payments at approval, same as security deposits already were. |
-| `at_application` | The holding deposit is folded into the SAME application-fee payment as ONE combined charge — e.g. $50 fee + $100 deposit = $150 — itemized for the applicant before they pay. |
-
-**The combined charge is one Stripe Checkout session with two line items**
-(`createApplicationFeeCheckout` in `application-fee-checkout.server.ts`), never
-two separate charges: `Rental application fee` + `Holding deposit`, with
-`metadata.includes_holding_deposit = "true"` / `holding_deposit_cents` so the
-webhook (`/api/stripe/webhook`) and the ACH-return route
-(`/api/stripe/application-fee-verify`) both mark the FEE charge paid via
-`markApplicationFeePaidFromStripeSession` AND the DEPOSIT charge paid via the
-sibling `markApplicationDepositPaidFromStripeSession` (a no-op — returns
-`{ok:false}` — on any session that did not combine a deposit, so it is always
-safe to call unconditionally after the fee marker). The plan-based service fee
-(see the table above) is computed on the COMBINED base
-(`resolveApplicationFeeItemization(..., holdingDepositCents)`), never on the
-fee alone while a deposit rides for free. The manual (Zelle/Venmo/other)
-channel gets the same combined requirement —
-`checkApplicationFeeManualPayment` (`resident-check-manual-payment.server.ts`)
-ensures AND requires both the fee and deposit charge rows paid before
-reporting success, sharing one listing fetch (`loadListingForProperty`)
-between the two ensure paths.
-
-**A manager waiver code waives ONLY the fee, never the deposit** — it is an
-"application fee waiver code" by name and by table
-(`application_fee_waiver_codes`). On an `at_application` listing, a redeemed
-code drops the fee line item entirely and the applicant still pays the
-deposit alone in the SAME Stripe session
-(`createApplicationFeeCheckout({ feeWaived: true, ... })`); on manual, the fee
-ensure/require calls are skipped (`feeOwed = !feeWaived`) but the deposit
-ensure/require calls still run. If there is truly nothing left to charge (fee
-waived, listing is `after_approval` or has no deposit configured), checkout is
-refused with `code: "NOTHING_DUE"` rather than opening a $0 session. The
-applicant-facing waiver UI is a named **"Fee waive promotion"** card in the
-wizard (not a buried field), gated on `amount > 0 && !codeWaived && !feePaid`
-so it disappears once the fee itself is satisfied even if a deposit still
-stands.
-
-**`residentApplicationFeeGate` (`src/lib/rental-application/application-policy.ts`)
-is the single deposit-aware gate** both the wizard and the checkout call sites
-key off: `depositAmount` / `depositAtApplication` / `totalDue` describe the
-deposit leg, `feePaid` is true once the FEE specifically no longer needs
-paying (not owed, waived, or already paid) independent of the deposit, and
-`paid`/`needsFee` require BOTH legs settled. A `feeWaivedByCode` param lets a
-redeemed code zero the fee in the gate without the deposit ever reading as
-satisfied by proxy.
-
-**Flagged for the captain, not decided in code** — a `holding_deposit` charge
-already paid at application is NEVER auto-refunded when the application is
-later rejected or withdrawn. Whether it should be refunded (and under what
-terms) is a legal/lease-terms question, not an engineering one, so no refund
-flow was built. The manager Applications detail view shows a read-only reminder
-banner ("Holding deposit already paid ($X)... PropLane does not automatically
-refund it") on a rejected/withdrawn row with a paid deposit charge
-(`manager-applications.tsx`, `data-attr="application-paid-deposit-note"`) so
-the obligation is visible, but resolving it is manual and outside PropLane.
-
-**"Implement a quality system" (captain's phase-2 instruction) was read as a
-general bar for polish/clarity/robustness on this feature** — itemized
-disclosure before every payment, no silent state (a `NOTHING_DUE` refusal
-instead of a $0 Stripe session), fail-safe defaults on bad/legacy data, and
-test coverage for the new combined-charge and waiver-scoped-to-fee paths —
-NOT a specific new feature (e.g. no "application quality score" was built).
-Flagged here in case the captain meant something more specific.
-
-Coverage: `tests/unit/manager-listing-submission.test.ts` (`holdingDepositTiming`
-default + normalization), `tests/unit/application-policy.test.ts` (deposit-aware
-gate: combined `totalDue`, fee-waived-but-deposit-still-owed, `feePaid` vs
-`paid`), `tests/unit/application-fee-checkout-fee-payer.test.ts` (combined
-Stripe line items, `feeWaived`-drops-fee-not-deposit, `NOTHING_DUE` refusal),
-`tests/unit/stripe-application-fee.test.ts` (`markApplicationDepositPaidFromStripeSession`),
-`tests/unit/application-fee-verify-route.test.ts` (ACH-return path marks both
-legs), `tests/unit/application-fee-preview-route.test.ts` (itemized preview
-reflects combined/waived state), and
-`tests/unit/resident-check-manual-payment.test.ts` (manual channel requires
-both legs paid, skips the fee when waived).
-
-### Phase 1 behavior (superseded above, kept here for the historical default)
-
-The holding deposit used to be tracked as a pending `holding_deposit`
-household charge the moment an applicant paid (or submitted) the application
-fee, credited later against the security deposit at approval. That
-pre-approval tracking was removed (`recordApplicationCharges` /
-`recordSubmittedApplicationFeeCharge` no longer called
-`ensurePendingHoldingDepositCharge` unconditionally) — any deposit money was
-charged under Payments, after approval, same as security deposits already
-were. Phase 2 re-adds a conditional call site
-(`sub.holdingDepositTiming === "at_application"`) rather than reverting this —
-`after_approval` listings still never call it during the application.
+**The holding deposit is never collected during the application.** It used to
+be tracked as a pending `holding_deposit` household charge the moment an
+applicant paid (or submitted) the application fee, credited later against the
+security deposit at approval. That pre-approval tracking was removed
+(`recordApplicationCharges` / `recordSubmittedApplicationFeeCharge` no longer
+call `ensurePendingHoldingDepositCharge`) — any deposit money is charged under
+Payments, after approval, same as security deposits already were. The
+`holding_deposit` charge kind, `ensurePendingHoldingDepositCharge`, and the
+approval-time holding-deposit credit (`paidHoldingDepositCreditCents`) are kept
+for now as `@deprecated`/back-compat only; do not add new pre-approval call
+sites.
 
 Coverage (application fee + waiver codes): `tests/unit/application-fee-checkout-fee-payer.test.ts`
 (Connect destination, ownership guard, server-stored fee amount, plan-based

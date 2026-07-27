@@ -250,6 +250,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
           step={step}
           form={form}
           errors={errors}
+          mode="editor"
           propertyOptions={propertyOptions}
           propertyLocked={false}
           patch={patchForm}

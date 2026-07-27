@@ -179,64 +179,12 @@ describe("application-policy", () => {
     expect(block.blocked).toBe(true);
   });
 
-  it("defaults to no deposit due at application for a listing without holdingDepositTiming set", () => {
-    const gate = residentApplicationFeeGate({
-      propertyId: "prop-single",
-      residentEmail: "a@test.com",
-    });
-    expect(gate.depositAtApplication).toBe(false);
-    expect(gate.depositAmount).toBe(0);
-    expect(gate.totalDue).toBe(50);
-  });
-
-  it("combines fee + deposit into totalDue when the listing opts into holdingDepositTiming=at_application", () => {
-    vi.mocked(findApplicationFeeCharge).mockReturnValueOnce(undefined);
-    vi.mocked(findHoldingDepositCharge).mockReturnValueOnce(undefined);
-    const gate = residentApplicationFeeGate({
-      propertyId: "prop-deposit-at-application",
-      residentEmail: "a@test.com",
-    });
-    expect(gate.depositAtApplication).toBe(true);
-    expect(gate.depositAmount).toBe(100);
-    expect(gate.amount).toBe(50);
-    expect(gate.totalDue).toBe(150);
-    expect(gate.needsFee).toBe(true);
-    expect(gate.feePaid).toBe(false);
-  });
-
-  it("still requires the deposit when the fee is waived by a redeemed code", () => {
-    const gate = residentApplicationFeeGate({
-      propertyId: "prop-deposit-at-application",
-      residentEmail: "a@test.com",
-      feeWaivedByCode: true,
-    });
-    expect(gate.amount).toBe(0);
-    expect(gate.feePaid).toBe(true);
-    expect(gate.depositAmount).toBe(100);
-    expect(gate.totalDue).toBe(100);
-    expect(gate.needsFee).toBe(true);
-  });
-
-  it("is fully paid only once both the fee and the deposit charges are paid", () => {
-    vi.mocked(findApplicationFeeCharge).mockReturnValueOnce({ status: "paid" } as never);
-    vi.mocked(findHoldingDepositCharge).mockReturnValueOnce(undefined);
-    const partial = residentApplicationFeeGate({
-      propertyId: "prop-deposit-at-application",
-      residentEmail: "a@test.com",
-    });
-    expect(partial.feePaid).toBe(true);
-    expect(partial.paid).toBe(false);
-    expect(partial.needsFee).toBe(true);
-
-    vi.mocked(findApplicationFeeCharge).mockReturnValueOnce({ status: "paid" } as never);
-    vi.mocked(findHoldingDepositCharge).mockReturnValueOnce({ status: "paid" } as never);
-    const full = residentApplicationFeeGate({
-      propertyId: "prop-deposit-at-application",
-      residentEmail: "a@test.com",
-    });
-    expect(full.paid).toBe(true);
-    expect(full.needsFee).toBe(false);
-  });
+  // NOTE: the "holding deposit collected at application" toggle (and its
+  // deposit-aware gate fields depositAtApplication/depositAmount/totalDue/feePaid)
+  // was REVERSED by captain decision — the application collects the application
+  // fee ONLY, and the deposit is billed under Payments after approval. The
+  // fee-only gate + server-authoritative fee are covered by
+  // `application-fee-server-truth.test.ts`.
 
   it("does not waive fee for in-progress-only prior application", () => {
     vi.mocked(readManagerApplicationRows).mockReturnValue([
