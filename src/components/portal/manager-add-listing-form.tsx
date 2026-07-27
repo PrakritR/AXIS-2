@@ -144,7 +144,7 @@ import {
   wizardSectionErrorClass,
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
-import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
+import { CUSTOM_LEASE_TERM, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
@@ -3037,7 +3037,48 @@ export function ManagerAddListingForm({
                 <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
                   <FieldLabel required>Lease lengths offered</FieldLabel>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {LEASE_TERM_OPTIONS.map((term) => {
+                    {/*
+                      Display order: named terms, then Short-Term Stay, then
+                      Custom last (the escape hatch). Short-term is offered as one
+                      more lease option, not a separate walled-off section, and
+                      Custom follows it so it never wedges between real terms.
+                    */}
+                    {[
+                      ...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM),
+                      SHORT_TERM_LEASE_TERM,
+                      CUSTOM_LEASE_TERM,
+                    ].map((term) => {
+                      if (term === SHORT_TERM_LEASE_TERM) {
+                        return (
+                          <label
+                            key={SHORT_TERM_LEASE_TERM}
+                            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
+                              sub.shortTermRentalsAllowed ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border"
+                              checked={Boolean(sub.shortTermRentalsAllowed)}
+                              onChange={(e) => {
+                                clearListingFieldError("allowedLeaseTerms");
+                                const on = e.target.checked;
+                                setSub((s) => {
+                                  const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                                  const next = syncShortTermLeaseTermInAllowed(standard, on);
+                                  return syncPropertyLeaseTemplatesFromListing({
+                                    ...s,
+                                    shortTermRentalsAllowed: on,
+                                    allowedLeaseTerms: next,
+                                    leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                                  });
+                                });
+                              }}
+                            />
+                            <span className="font-medium text-foreground">{SHORT_TERM_LEASE_TERM}</span>
+                          </label>
+                        );
+                      }
                       const selected = resolveAllowedLeaseTerms(sub).includes(term);
                       return (
                         <label
@@ -3074,33 +3115,6 @@ export function ManagerAddListingForm({
                         </label>
                       );
                     })}
-                    {/* Short-term stays are offered as one more lease option, not a separate walled-off section. */}
-                    <label
-                      className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
-                        sub.shortTermRentalsAllowed ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.shortTermRentalsAllowed)}
-                        onChange={(e) => {
-                          clearListingFieldError("allowedLeaseTerms");
-                          const on = e.target.checked;
-                          setSub((s) => {
-                            const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
-                            const next = syncShortTermLeaseTermInAllowed(standard, on);
-                            return syncPropertyLeaseTemplatesFromListing({
-                              ...s,
-                              shortTermRentalsAllowed: on,
-                              allowedLeaseTerms: next,
-                              leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                            });
-                          });
-                        }}
-                      />
-                      <span className="font-medium text-foreground">{SHORT_TERM_LEASE_TERM}</span>
-                    </label>
                   </div>
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>

@@ -25,7 +25,7 @@ import {
 import type { RentalWizardErrors, RentalWizardFormState } from "./types";
 import { digitsOnly, parseMoneyInput } from "./masks";
 import { customFieldsForWizardStep, listingCustomApplicationFields, validateCustomFieldAnswers } from "./custom-fields";
-import { isWizardFormFieldEnabled } from "./application-field-catalog";
+import { applicationConfigForVariant, isWizardFormFieldEnabled } from "./application-field-catalog";
 
 function startOfTodayUTC(): Date {
   const n = new Date();
@@ -107,11 +107,15 @@ export function validateRentalWizardStep(
 ): RentalWizardErrors {
   const prop = resolveWizardProperty(f, opts);
   const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
-  const fieldEnabled = (key: string) => isWizardFormFieldEnabled(sub, key);
+  // Field visibility + custom questions are resolved for the form variant the
+  // applicant is on (short-term vs long-term), so each form validates only its
+  // own questions.
+  const configSlice = applicationConfigForVariant(sub, f.rentalType);
+  const fieldEnabled = (key: string) => isWizardFormFieldEnabled(configSlice, key);
   const e = validateStandardWizardStep(step, f, fieldEnabled, prop);
   // Manager custom questions are asked inside their configured section's step (untagged → step 9).
   const stepCustomFields = customFieldsForWizardStep(
-    listingCustomApplicationFields(sub),
+    listingCustomApplicationFields(configSlice),
     step,
   );
   if (stepCustomFields.length > 0) {
@@ -192,6 +196,7 @@ export function validateStandardWizardStep(
     if (f.rentalType === "short_term") {
       if (!f.shortTermCheckInTime.trim()) e.shortTermCheckInTime = "Check-in time is required.";
       if (!f.shortTermCheckOutTime.trim()) e.shortTermCheckOutTime = "Check-out time is required.";
+      if (!f.shortTermRulesAck) e.shortTermRulesAck = "Please acknowledge the host's house rules to continue.";
     }
     const start = f.leaseStart.trim();
     const end = f.leaseEnd.trim();

@@ -132,9 +132,11 @@ describe("rental-application validate", () => {
     expect(missing.shortTermCheckInTime).toContain("Check-in time");
     expect(missing.shortTermCheckOutTime).toContain("Check-out time");
 
+    expect(missing.shortTermRulesAck).toContain("house rules");
+
     const filled = validateRentalWizardStep(
       3,
-      { ...state, shortTermCheckInTime: "15:00", shortTermCheckOutTime: "11:00" },
+      { ...state, shortTermCheckInTime: "15:00", shortTermCheckOutTime: "11:00", shortTermRulesAck: true },
       { property: { id: "prop-short-term", listingSubmission: sub } },
     );
     expect(filled).toEqual({});

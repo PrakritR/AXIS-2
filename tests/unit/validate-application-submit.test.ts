@@ -111,6 +111,27 @@ describe("validate-application-submit", () => {
       rentalType: "short_term" as const,
       shortTermCheckInTime: "15:00",
       shortTermCheckOutTime: "11:00",
+      shortTermRulesAck: true,
+      // A real short-term application never carries these — the short-term form
+      // does not ask them — so clear them, otherwise the (correct) field-accept
+      // guard rejects the forgery first and this test would no longer exercise
+      // the short-term PERMISSION gate specifically.
+      ssn: "",
+      driversLicense: "",
+      currentStreet: "",
+      currentCity: "",
+      currentState: "",
+      currentZip: "",
+      employer: "",
+      monthlyIncome: "",
+      ref1Name: "",
+      ref1Relationship: "",
+      ref1Phone: "",
+      occupancyCount: "",
+      evictionHistory: null,
+      bankruptcyHistory: null,
+      criminalHistory: null,
+      consentCredit: false,
     };
     const result = validateResidentApplicationSubmit({
       application,
