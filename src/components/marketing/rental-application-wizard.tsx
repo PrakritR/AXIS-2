@@ -67,6 +67,7 @@ import {
   scrollToFirstWizardFieldError,
 } from "@/lib/wizard-field-errors";
 import {
+  APPLICATION_SAVE_STATUS_EVENT,
   replaceManagerApplicationRowInCache,
   syncManagerApplicationsFromServer,
   syncPublicApprovedApplicationsFromServer,
@@ -173,6 +174,19 @@ function parseBoundedWizardStep(raw: string | null): number | null {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1 || parsed > 3) return null;
   return parsed;
+}
+
+/**
+ * The step persisted on the SERVER application record can be any real step
+ * (1..RENTAL_WIZARD_STEP_COUNT), unlike the URL param which is capped at 3. This
+ * is what resumes a resident at step 12 after they return from an external
+ * redirect (a Stripe checkout) or reload deep in the form, instead of dumping
+ * them back at step 1.
+ */
+export function parsePersistedWizardStep(raw: unknown): number | null {
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > RENTAL_WIZARD_STEP_COUNT) return null;
+  return Math.floor(parsed);
 }
 
 /**
@@ -318,6 +332,8 @@ function RentalApplicationWizardInner({
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const [applicationFeeCheckBusy, setApplicationFeeCheckBusy] = useState(false);
   const [applicationFeeCheckError, setApplicationFeeCheckError] = useState<string | null>(null);
+  /** True when the most recent background autosave of THIS application failed. */
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
   const router = useRouter();
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
@@ -405,6 +421,22 @@ function RentalApplicationWizardInner({
     const on = () => setChargeTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  // Surface autosave failures for THIS application. A background save that fails
+  // must never disappear silently — raise a banner so the resident knows their
+  // latest changes are not yet saved, and clear it the moment a save lands.
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    const on = (e: Event) => {
+      const detail = (e as CustomEvent<{ ok?: boolean; id?: string }>).detail;
+      if (!detail?.id) return;
+      const mine = loadRentalWizardDraftAxisId()?.trim();
+      if (!mine || detail.id.trim() !== mine) return;
+      setAutosaveFailed(!detail.ok);
+    };
+    window.addEventListener(APPLICATION_SAVE_STATUS_EVENT, on as EventListener);
+    return () => window.removeEventListener(APPLICATION_SAVE_STATUS_EVENT, on as EventListener);
   }, []);
 
   useEffect(() => {
@@ -515,7 +547,16 @@ function RentalApplicationWizardInner({
     const pid = form.propertyId.trim();
     if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
     const axisId = ensureRentalWizardAxisId();
-    syncInProgressApplicationRow({ axisId, form, residentEmail: email });
+    // Persist the live step alongside the answers so a reload / return from an
+    // external redirect resumes exactly here (the debounced, serialized upsert
+    // in `scheduleApplicationRowUpsert` coalesces these writes).
+    syncInProgressApplicationRow({
+      axisId,
+      form,
+      residentEmail: email,
+      wizardStep: step,
+      wizardMaxStepReached: maxStepReached,
+    });
 
     if (mode !== "public" || isDemoModeActive()) return;
     if (startedSetupEmailAxisRef.current === axisId) return;
@@ -545,7 +586,7 @@ function RentalApplicationWizardInner({
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, [draftReady, form, mode, sessionEmail, isReconcilingTarget, isOnScreen]);
+  }, [draftReady, form, mode, sessionEmail, isReconcilingTarget, isOnScreen, step, maxStepReached]);
 
   useEffect(() => {
     if (!draftReady || mode !== "portal") return;
@@ -589,19 +630,25 @@ function RentalApplicationWizardInner({
         saveRentalWizardDraftAxisId(hit.id);
         saveRentalWizardDraft({ ...createInitialRentalWizardState(), ...hit.application, email });
         setForm({ ...createInitialRentalWizardState(), ...hit.application, email });
-        // The server confirmed this target IS an existing application, so the
-        // URL's `wizardStep` (if any) can now be trusted even though the
-        // synchronous local-draft fast path in `initialWizardStepFromRequest`
-        // couldn't (a full page reload wipes the in-memory draft before this
-        // effect ever runs) — this is what actually resumes progress past a
-        // real browser refresh, not just an in-tab remount. Read the FROZEN
-        // ref, not a live `searchParams` lookup — the step-tracking effect
-        // already overwrote the live URL param to match `step`'s initial
-        // value of 1 long before this async fetch resolved.
-        const resumedStep = parseBoundedWizardStep(initialWizardStepParamRef.current);
+        // The server confirmed this target IS an existing application, so we can
+        // resume the resident's exact position even though the synchronous
+        // local-draft fast path in `initialWizardStepFromRequest` couldn't (a
+        // full page reload — or a return from a Stripe redirect — wipes the
+        // in-memory draft before this effect ever runs). Prefer the step
+        // PERSISTED ON THE RECORD (any step 1..12) so returning from an external
+        // redirect at step 12 lands back at step 12, not step 1. Fall back to the
+        // URL param (steps 1-3) read from the FROZEN ref — never a live
+        // `searchParams` lookup, which the step-tracking effect already
+        // overwrote to match `step`'s initial value of 1 before this async fetch
+        // resolved.
+        const persistedStep = parsePersistedWizardStep(hit.application.wizardStep);
+        const resumedStep = persistedStep ?? parseBoundedWizardStep(initialWizardStepParamRef.current);
+        const persistedMax = parsePersistedWizardStep(hit.application.wizardMaxStepReached);
         if (resumedStep) {
           setStep(resumedStep);
-          setMaxStepReached((prev) => Math.max(prev, resumedStep));
+          setMaxStepReached((prev) => Math.max(prev, persistedMax ?? 0, resumedStep));
+        } else if (persistedMax) {
+          setMaxStepReached((prev) => Math.max(prev, persistedMax));
         }
         setReconciledSignature(signature);
         return;
@@ -1514,6 +1561,16 @@ function RentalApplicationWizardInner({
                 editFromReview={editFromReview}
               />
             </div>
+
+            {autosaveFailed ? (
+              <p
+                role="status"
+                className="rental-wizard-autosave-error mt-6 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
+                data-attr="rental-wizard-autosave-error"
+              >
+                We couldn&apos;t save your latest changes. Your progress is kept on this device — keep this tab open and continue; we&apos;ll retry as you edit. If this keeps happening, check your connection.
+              </p>
+            ) : null}
 
             <div className="rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8">
               <Button

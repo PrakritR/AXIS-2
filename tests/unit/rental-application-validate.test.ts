@@ -41,6 +41,48 @@ describe("rental-application validate", () => {
     expect(errors.applicationFeeZelleSentConfirmed).toContain("Check payment");
   });
 
+  it("rejects a future date of birth on its own terms, not as an age error", () => {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    const iso = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, "0")}-${String(future.getDate()).padStart(2, "0")}`;
+    const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
+    const errors = validateRentalWizardStep(4, state);
+    expect(errors.dateOfBirth).toBe("Date of birth cannot be in the future.");
+    expect(errors.dateOfBirth).not.toContain("18 years");
+  });
+
+  it("still rejects an under-18 date of birth with the age message", () => {
+    const child = new Date();
+    child.setFullYear(child.getFullYear() - 5);
+    const iso = `${child.getFullYear()}-${String(child.getMonth() + 1).padStart(2, "0")}-${String(child.getDate()).padStart(2, "0")}`;
+    const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
+    const errors = validateRentalWizardStep(4, state);
+    expect(errors.dateOfBirth).toContain("at least 18 years old");
+  });
+
+  it("accepts an adult date of birth", () => {
+    const adult = new Date();
+    adult.setFullYear(adult.getFullYear() - 30);
+    const iso = `${adult.getFullYear()}-${String(adult.getMonth() + 1).padStart(2, "0")}-${String(adult.getDate()).padStart(2, "0")}`;
+    const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
+    const errors = validateRentalWizardStep(4, state);
+    expect(errors.dateOfBirth).toBeUndefined();
+  });
+
+  it("rejects a short-term lease term on a listing that does not allow short-term stays", () => {
+    const sub = { ...createDefaultListingSubmission(), shortTermRentalsAllowed: false };
+    const state = {
+      ...createInitialRentalWizardState(),
+      propertyId: "prop-no-short",
+      rentalType: "short_term" as const,
+      leaseTerm: "Short-Term Stay",
+    };
+    const errors = validateRentalWizardStep(3, state, {
+      property: { id: "prop-no-short", listingSubmission: sub },
+    });
+    expect(errors.leaseTerm).toContain("short-term");
+  });
+
   it("passes step 12 when manual application fee is verified", () => {
     const sub = {
       ...createDefaultListingSubmission(),

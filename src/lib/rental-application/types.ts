@@ -106,6 +106,15 @@ export type RentalWizardFormState = {
   applicationFeeZelleSentConfirmed: boolean;
   /** Step 9 — answers to the listing's manager-defined application questions. */
   customFieldAnswers: RentalCustomFieldAnswer[];
+  /**
+   * Wizard resume metadata — the step the applicant last reached and the
+   * furthest step they unlocked. Persisted with the in-progress application so a
+   * full page reload OR a return from an external redirect (e.g. Stripe
+   * checkout) resumes exactly where they left off, not back at step 1. NOT an
+   * application answer — validation, charges, and the manager view ignore it.
+   */
+  wizardStep?: number;
+  wizardMaxStepReached?: number;
 };
 
 /** Field and step-level messages (string keys so consent booleans can still surface errors). */

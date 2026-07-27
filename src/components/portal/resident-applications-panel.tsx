@@ -225,10 +225,12 @@ export function ResidentApplicationsPanel({
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
 
-  useEffect(() => {
-    if (applyMode || demoMode || !sessionReady || rows.length > 0) return;
-    portalNavigate("/resident/applications/apply");
-  }, [applyMode, demoMode, sessionReady, rows.length, portalNavigate]);
+  // A resident with zero applications is deliberately NOT auto-redirected into
+  // the apply flow. The list page — with its always-visible "Apply to a property"
+  // header action and the "No applications yet" empty state — must render
+  // regardless of how many applications exist or their status; bouncing an empty
+  // list straight to /apply is exactly what hid the entry point the captain
+  // reported missing. Starting an application is always an explicit click.
 
   useEffect(() => {
     if (!applyMode || !inProgressRow) return;

@@ -301,6 +301,20 @@ function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
   }).catch(() => undefined);
 }
 
+/**
+ * Fired after each background in-progress save attempt so a surface can tell the
+ * user their work is (or is not) being persisted. `detail.ok` is false when the
+ * write failed; `detail.id` is the application id it was for. The rental wizard
+ * listens for this to raise a "couldn't save" banner instead of silently losing
+ * a resident's typing — a failed autosave must surface, never disappear.
+ */
+export const APPLICATION_SAVE_STATUS_EVENT = "axis:application-save-status";
+
+function emitApplicationSaveStatus(ok: boolean, id: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(APPLICATION_SAVE_STATUS_EVENT, { detail: { ok, id } }));
+}
+
 function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
   if (typeof window === "undefined" || isDemoModeActive()) return Promise.resolve();
   return fetch("/api/manager-applications", {
@@ -309,8 +323,10 @@ function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   })
-    .then(() => undefined)
-    .catch(() => undefined);
+    .then((res) => {
+      emitApplicationSaveStatus(res.ok, row.id);
+    })
+    .catch(() => emitApplicationSaveStatus(false, row.id));
 }
 
 const UPSERT_DEBOUNCE_MS = 400;
