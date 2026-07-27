@@ -57,13 +57,15 @@ describe("mergeApplicationRows", () => {
     expect(merged).toEqual([]);
   });
 
-  it("keeps a local withdrawal even when the server response omits withdrawnAt", () => {
+  it("keeps a local withdrawal when a server response for the same id omits withdrawnAt", () => {
     // A resident withdrew their (only) application; the local cache carries
-    // `withdrawnAt`, but a lagging/variant-mismatched server response for the
-    // same id does not. The withdrawal must stick so the row cannot resurrect
-    // into the active list.
+    // `withdrawnAt`. A server response for the same id that simply lacks the key
+    // must not wipe the local withdrawal (the union/base-spread preserves it), so
+    // the row stays out of the active list. Withdrawal is final for the applicant
+    // — a genuine reapply mints a NEW application id, never revives this row — so
+    // no sticky stamp is needed and none is used.
     const local = [row({ id: "PROPLANE-W1", withdrawnAt: "2026-07-27T00:00:00.000Z" })];
-    const serverResponse = [row({ id: "PROPLANE-W1" })]; // no withdrawnAt
+    const serverResponse = [row({ id: "PROPLANE-W1" })]; // no withdrawnAt key
 
     const merged = mergeApplicationRows(local, serverResponse);
 

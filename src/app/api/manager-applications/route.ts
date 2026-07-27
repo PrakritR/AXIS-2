@@ -57,9 +57,12 @@ const DRAFT_STAGE = "in progress";
  * pre-submit state and only commits after the submit write landed. Read-then-write
  * cannot close that window no matter where the check sits — the check and the
  * write must be ONE statement. So the draft goes out as a conditional UPDATE the
- * database itself refuses unless the stored row is still a draft. Only when no row
- * exists at all do we insert, and a unique violation there means a row appeared
- * concurrently, so we re-run the same conditional update rather than clobbering it.
+ * database itself refuses unless the stored row is still a LIVE draft — a
+ * withdrawn one (bucket stays `pending`, stage stays "In progress") refuses too,
+ * so a debounced autosave landing after the resident withdrew can never clear
+ * `withdrawnAt` or revive the row. Only when no row exists at all do we insert,
+ * and a unique violation there means a row appeared concurrently, so we re-run
+ * the same conditional update rather than clobbering it.
  */
 async function persistDraftRow(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
@@ -73,6 +76,7 @@ async function persistDraftRow(
       .in("id", ids)
       .eq("row_data->>bucket", "pending")
       .ilike("row_data->>stage", DRAFT_STAGE)
+      .is("row_data->>withdrawnAt", null)
       .select("id");
     return (data?.length ?? 0) > 0;
   };
@@ -721,6 +725,7 @@ export async function POST(req: Request) {
       row = {
         ...row,
         bucket: "pending",
+        withdrawnAt: existing?.withdrawnAt ?? row.withdrawnAt,
         assignedPropertyId: existing?.assignedPropertyId ?? row.assignedPropertyId,
         assignedRoomChoice: existing?.assignedRoomChoice ?? row.assignedRoomChoice,
         signedMonthlyRent: existing?.signedMonthlyRent ?? row.signedMonthlyRent,

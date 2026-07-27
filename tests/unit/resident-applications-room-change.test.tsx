@@ -48,6 +48,7 @@ vi.mock("@/lib/manager-applications-storage", () => ({
   syncManagerApplicationsFromServer: () => Promise.resolve(),
   readManagerApplicationRows: () => ROWS,
   replaceManagerApplicationRowInCache: () => {},
+  cancelPendingApplicationRowUpsert: () => {},
   normalizeApplicationAxisId: (id: string) => id,
 }));
 vi.mock("@/lib/demo/demo-session", () => ({
