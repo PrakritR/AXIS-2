@@ -149,6 +149,12 @@ export function ResidentApplicationsPanel({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickedPropertyId, setPickedPropertyId] = useState<string | null>(null);
   const openHandled = useRef(false);
+  // Which application the apply-mode auto-expand has already opened. Guards the
+  // effect so it fires ONCE per resolved id and never re-snaps: a background
+  // sync tick rebuilds `rows` (new object refs), and without this guard the
+  // effect re-fired and dragged the expansion back onto its target — hijacking
+  // clicks on every OTHER row (the "clicking row 2/3 opens row 1" bug).
+  const autoExpandedApplyIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!sessionReady) return;
@@ -302,15 +308,29 @@ export function ResidentApplicationsPanel({
   // reported missing. Starting an application is always an explicit click.
 
   useEffect(() => {
-    if (!applyMode || !inProgressRow) return;
+    if (!applyMode) return;
+    // Auto-open ONLY the application this apply session is actually for:
+    //  - a propertyId in the apply URL -> the in-progress row matching it
+    //    (Continue / the inline "Apply to a property" flow);
+    //  - a bare /apply with exactly ONE in-progress draft -> resume that draft.
+    // With several in-progress drafts and no target we open NONE — picking an
+    // arbitrary "first" is exactly what hijacked clicks on every other row and
+    // let withdraw/edit hit the WRONG application. The ref makes it fire once
+    // per resolved id so a sync tick can never re-snap over a row the resident
+    // opened by hand.
+    const inProgress = rows.filter(isInProgressApplicationRow);
+    const targetRow = applyTarget?.propertyId.trim()
+      ? findInProgressRowForTarget(rows, applyTarget)
+      : inProgress.length === 1
+        ? inProgress[0]
+        : undefined;
+    if (!targetRow || autoExpandedApplyIdRef.current === targetRow.id) return;
+    autoExpandedApplyIdRef.current = targetRow.id;
     queueMicrotask(() => {
       setBucket("pending");
-      setExpandedId(inProgressRow.id);
+      setExpandedId(targetRow.id);
     });
-    // Only re-runs when a target-matched row newly appears/changes id — deliberately
-    // NOT on `activeInProgressRow`, so a later room change (which only affects
-    // `inProgressRow`'s target match, not this effect's own lock) can't re-fire.
-  }, [applyMode, inProgressRow]);
+  }, [applyMode, applyTarget, rows]);
 
   useEffect(() => {
     if (openHandled.current || rows.length === 0) return;

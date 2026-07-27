@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { deleteResidentAccount } from "@/lib/auth/delete-portal-account";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
+import { managerCanAccessApplicationRecord } from "@/lib/auth/manager-application-access";
 import { managerOwnsResident } from "@/lib/auth/resident-relationship";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -58,12 +59,20 @@ export async function POST(req: Request) {
     if (!isAdmin) {
       let related = email ? await managerOwnsResident(svc, user.id, { email }) : false;
       if (!related && applicationId) {
+        // Authorize deletion the SAME way the Applications list decides
+        // visibility: not just the frozen `manager_user_id` stamp, but DIRECT
+        // ownership / co-management of the application's property. An
+        // "Incomplete" draft keeps a stale (or unattributed) stamp, so the owner
+        // saw it in their list yet got "resident is not in your portfolio" on
+        // Delete — the list and the guard disagreeing about the same row.
         const { data: appRow } = await svc
           .from("manager_application_records")
-          .select("manager_user_id")
+          .select("manager_user_id, property_id, assigned_property_id")
           .eq("id", applicationId)
           .maybeSingle();
-        if (appRow && appRow.manager_user_id === user.id) related = true;
+        if (appRow && (await managerCanAccessApplicationRecord(svc, user.id, appRow))) {
+          related = true;
+        }
       }
       if (!related) {
         return NextResponse.json(
