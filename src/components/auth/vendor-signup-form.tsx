@@ -57,7 +57,7 @@ export function VendorSignupForm({
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [localDevConfirmHint, setLocalDevConfirmHint] = useState(false);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
-  const { email: signedInEmail, roles: portalRoles } = useSignedInPortalRoles();
+  const { email: signedInEmail, roles: portalRoles, loading: rolesLoading } = useSignedInPortalRoles();
   // A signed-in account that already holds the vendor role gets the shared
   // "go to your portal" panel instead of a signup form it can't sensibly use;
   // "Create a different vendor account" reveals the form again so the ability to
@@ -210,12 +210,24 @@ export function VendorSignupForm({
     </>
   );
 
-  if (compact && alreadyVendor && !creatingAnother) {
+  const tagline = (
+    <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
+      Free vendor account · work orders &amp; payouts through PropLane.
+    </p>
+  );
+
+  if (rolesLoading) {
     return (
-      <div className="vendor-signup-form space-y-2.5 sm:space-y-3">
-        <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
-          Free vendor account · work orders &amp; payouts through PropLane.
-        </p>
+      <div className={compact ? "vendor-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
+        {compact ? tagline : null}
+      </div>
+    );
+  }
+
+  if (alreadyVendor && !creatingAnother) {
+    return (
+      <div className={compact ? "vendor-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
+        {compact ? tagline : null}
         <AuthAlreadyHaveRolePanel
           role="vendor"
           email={signedInEmail}
@@ -230,9 +242,7 @@ export function VendorSignupForm({
   if (compact) {
     return (
       <div className="vendor-signup-form space-y-2.5 sm:space-y-3">
-        <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
-          Free vendor account · work orders &amp; payouts through PropLane.
-        </p>
+        {tagline}
 
         {showAddRoleBanner ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
 
@@ -260,20 +270,6 @@ export function VendorSignupForm({
           </p>
         ) : null}
 
-        {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
-      </div>
-    );
-  }
-
-  if (alreadyVendor && !creatingAnother) {
-    return (
-      <div className="space-y-4">
-        <AuthAlreadyHaveRolePanel
-          role="vendor"
-          email={signedInEmail}
-          onCreateAnother={() => setCreatingAnother(true)}
-          createAnotherLabel="Create a different vendor account"
-        />
         {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
       </div>
     );

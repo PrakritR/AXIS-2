@@ -74,7 +74,7 @@ export function ManagerTrialSignupForm({
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
   const [accountReady, setAccountReady] = useState(false);
   const [creatingAnother, setCreatingAnother] = useState(false);
-  const { roles: portalRoles } = useSignedInPortalRoles();
+  const { roles: portalRoles, loading: rolesLoading } = useSignedInPortalRoles();
   // A signed-in account that already manages property gets the shared "go to
   // your portal" panel instead of a signup form for access it already holds.
   // "Create a different property account" reveals the form again — managers can
@@ -272,7 +272,7 @@ export function ManagerTrialSignupForm({
             Create a different property account
           </button>
         </div>
-      ) : alreadyManager && !creatingAnother ? (
+      ) : rolesLoading ? null : alreadyManager && !creatingAnother ? (
         <AuthAlreadyHaveRolePanel
           role="manager"
           email={signedInUser?.email ?? null}

@@ -60,7 +60,7 @@ export function ResidentSignupForm({
   // (the additive path owned by the multi-role lane). Only anonymous visitors
   // see the self-serve form. When they ALREADY hold the resident role, the form
   // makes no sense either — they get the shared "go to your portal" panel.
-  const { email: signedInEmail, roles: portalRoles } = useSignedInPortalRoles();
+  const { email: signedInEmail, roles: portalRoles, loading: rolesLoading } = useSignedInPortalRoles();
   const alreadyResident = Boolean(signedInEmail) && portalRoles.includes("resident");
 
   const compact = variant === "compact";
@@ -257,14 +257,26 @@ export function ResidentSignupForm({
     </>
   );
 
+  const tagline = (
+    <p className="text-center text-[11px] leading-tight text-muted sm:text-xs">
+      Free resident account · track and apply from your portal.
+    </p>
+  );
+
+  if (rolesLoading) {
+    return (
+      <div className={compact ? "resident-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
+        {compact ? tagline : null}
+      </div>
+    );
+  }
+
   // Signed in AND already a resident: the signup form makes no sense — send them
   // in, matching the manager/vendor "already have access" state.
   if (alreadyResident) {
     return (
       <div className={compact ? "resident-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
-        <p className="text-center text-[11px] leading-tight text-muted sm:text-xs">
-          Free resident account · track and apply from your portal.
-        </p>
+        {tagline}
         <AuthAlreadyHaveRolePanel role="resident" email={signedInEmail} />
         {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
       </div>
@@ -277,9 +289,7 @@ export function ResidentSignupForm({
   if (signedInEmail) {
     return (
       <div className={compact ? "resident-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
-        <p className="text-center text-[11px] leading-tight text-muted sm:text-xs">
-          Free resident account · track and apply from your portal.
-        </p>
+        {tagline}
         <div className="rounded-2xl border border-border bg-card/50 px-3 py-3 text-center text-[13px] leading-snug text-muted">
           You&apos;re signed in as <span className="font-semibold text-foreground">{signedInEmail}</span>. Add resident
           access to your existing login: same email, no new password, its own resident portal. Switch back anytime
@@ -303,9 +313,7 @@ export function ResidentSignupForm({
   if (compact) {
     return (
       <div className="resident-signup-form space-y-2.5 sm:space-y-3">
-        <p className="text-center text-[11px] leading-tight text-muted sm:text-xs">
-          Free resident account · track and apply from your portal.
-        </p>
+        {tagline}
 
         {socialBlock}
 
