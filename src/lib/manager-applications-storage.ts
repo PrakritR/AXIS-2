@@ -435,6 +435,24 @@ export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
   scheduleApplicationRowUpsert(row);
 }
 
+/**
+ * Drop any queued (debounced, not-yet-sent) upsert for an application id so a
+ * pre-withdraw snapshot is neither flushed by the timer nor beaconed by the
+ * unload flush. A write already in flight cannot be recalled from here — the
+ * server refuses to overwrite a withdrawn row instead. The queue entry itself
+ * stays, keeping the in-flight serialization intact for any later schedule.
+ */
+export function cancelPendingApplicationRowUpsert(id: string): void {
+  const target = normalizeApplicationAxisId(id).toUpperCase();
+  if (!target) return;
+  for (const [key, entry] of upsertQueues) {
+    if (normalizeApplicationAxisId(key).toUpperCase() !== target) continue;
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = null;
+    entry.latest = null;
+  }
+}
+
 /** Await server persistence before showing post-submit UI or create-account links. */
 export async function upsertApplicationRowToServerAwait(
   row: DemoApplicantRow,

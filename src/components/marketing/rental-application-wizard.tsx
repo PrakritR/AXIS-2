@@ -83,7 +83,13 @@ import {
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { RentalApplicationFinishPanel } from "@/components/marketing/rental-application-finish-panel";
-import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import {
+  activeWizardProgressPct,
+  canNavigateToWizardStep,
+  nextActiveWizardStep,
+  nextWizardMaxReached,
+  prevActiveWizardStep,
+} from "@/lib/wizard-step-nav";
 import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
 import { isDemoModeActive, DEMO_GUIDED_USER_ID } from "@/lib/demo/demo-session";
 import { isElementOnScreen } from "@/lib/dom-visibility";
@@ -365,16 +371,11 @@ function RentalApplicationWizardInner({
     );
   }, [form.propertyId, form.rentalType, extrasTick]);
   const nextActiveStep = useCallback(
-    (from: number) => activeSteps.find((s) => s > from) ?? from,
+    (from: number) => nextActiveWizardStep(activeSteps, from),
     [activeSteps],
   );
   const prevActiveStep = useCallback(
-    (from: number) => {
-      for (let i = activeSteps.length - 1; i >= 0; i -= 1) {
-        if (activeSteps[i] < from) return activeSteps[i];
-      }
-      return from;
-    },
+    (from: number) => prevActiveWizardStep(activeSteps, from),
     [activeSteps],
   );
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
@@ -1576,11 +1577,7 @@ function RentalApplicationWizardInner({
   // is" requirement). The numeric "Step N of M" label and numbered pills are
   // deliberately gone; the bar plus the section title carry the sense of
   // forward motion instead.
-  const activeStepIndex = activeSteps.indexOf(step);
-  const progressPct =
-    activeSteps.length > 0
-      ? Math.round((((activeStepIndex < 0 ? 0 : activeStepIndex) + 1) / activeSteps.length) * 100)
-      : 0;
+  const progressPct = activeWizardProgressPct(activeSteps, step);
   const embedded = layout === "embedded";
 
   return (

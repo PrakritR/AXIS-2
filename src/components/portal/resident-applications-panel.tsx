@@ -42,6 +42,7 @@ import {
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   MANAGER_APPLICATIONS_EVENT,
+  cancelPendingApplicationRowUpsert,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
   replaceManagerApplicationRowInCache,
@@ -283,7 +284,9 @@ export function ResidentApplicationsPanel({
       // immediately. Removal is durable without a sticky merge: the withdraw
       // route persisted `withdrawnAt` (GET returns it), the union merge keeps a
       // local-only 404 row, and withdrawn rows are excluded from the apply
-      // resume comparator.
+      // resume comparator. Drop any queued autosave for this id first so a
+      // pre-withdraw snapshot can't land after the stamp and revive the row.
+      cancelPendingApplicationRowUpsert(row.id);
       replaceManagerApplicationRowInCache({ ...row, withdrawnAt: new Date().toISOString() });
       // Withdrawal is FINAL for the applicant: if the local wizard draft belongs
       // to this application, drop it (and its axis id) so a later reapply to the

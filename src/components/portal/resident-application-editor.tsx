@@ -33,7 +33,13 @@ import {
   RENTAL_WIZARD_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
 } from "@/lib/wizard-field-errors";
-import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import {
+  activeWizardProgressPct,
+  canNavigateToWizardStep,
+  nextActiveWizardStep,
+  nextWizardMaxReached,
+  prevActiveWizardStep,
+} from "@/lib/wizard-step-nav";
 
 const EDIT_STEP_META = [
   { n: 1, title: "Group Application" },
@@ -103,16 +109,11 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
   const firstActiveStep = activeSteps[0] ?? 1;
   const lastActiveStep = activeSteps[activeSteps.length - 1] ?? EDIT_STEP_COUNT;
   const nextActiveStep = useCallback(
-    (from: number) => activeSteps.find((s) => s > from) ?? from,
+    (from: number) => nextActiveWizardStep(activeSteps, from),
     [activeSteps],
   );
   const prevActiveStep = useCallback(
-    (from: number) => {
-      for (let i = activeSteps.length - 1; i >= 0; i -= 1) {
-        if (activeSteps[i] < from) return activeSteps[i];
-      }
-      return from;
-    },
+    (from: number) => prevActiveWizardStep(activeSteps, from),
     [activeSteps],
   );
 
@@ -278,11 +279,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
 
   const meta = EDIT_STEP_META[step - 1] ?? EDIT_STEP_META[0];
   const applicationFeeGate = { needsFee: false, paid: true, displayLabel: "", amount: 0 };
-  const activeStepIndex = activeSteps.indexOf(step);
-  const progressPct =
-    activeSteps.length > 0
-      ? Math.round((((activeStepIndex < 0 ? 0 : activeStepIndex) + 1) / activeSteps.length) * 100)
-      : 0;
+  const progressPct = activeWizardProgressPct(activeSteps, step);
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">

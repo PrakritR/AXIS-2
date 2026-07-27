@@ -96,6 +96,7 @@ export async function prepareGuestApplicationUpsert(
     propertyId,
     managerUserId,
     // Guests cannot escalate manager-controlled fields.
+    withdrawnAt: params.existing?.withdrawnAt ?? params.row.withdrawnAt,
     assignedPropertyId: params.existing?.assignedPropertyId ?? params.row.assignedPropertyId,
     assignedRoomChoice: params.existing?.assignedRoomChoice ?? params.row.assignedRoomChoice,
     signedMonthlyRent: params.existing?.signedMonthlyRent ?? params.row.signedMonthlyRent,

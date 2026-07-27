@@ -75,6 +75,10 @@ function makeFakeDb() {
         filters.push((row) => String(readColumn(row, col) ?? "").toLowerCase() === want);
         return api;
       },
+      is(col: string, val: unknown) {
+        filters.push((row) => (val === null ? readColumn(row, col) == null : readColumn(row, col) === val));
+        return api;
+      },
       in(col: string, vals: unknown[]) {
         filters.push((row) => vals.includes(readColumn(row, col)));
         return api;
@@ -237,6 +241,30 @@ describe("submitted applications survive a trailing in-progress draft write", ()
     expect(second.status).toBe(200);
     expect(storedRow()?.stage).toBe("In progress");
     expect(storedRow()?.name).toBe("Jane A. Applicant");
+  });
+
+  it("a draft autosave landing after withdrawal never clears withdrawnAt", async () => {
+    await postUpsert(applicationRow("In progress"));
+    const stored = state.records.find((r) => r.id === AXIS_ID)!;
+    stored.row_data = { ...(stored.row_data as Row), withdrawnAt: "2026-07-27T00:00:00.000Z" };
+
+    // The debounced snapshot the wizard queued before the resident withdrew.
+    const trailing = await postUpsert({ ...applicationRow("In progress"), detail: "Late autosave" });
+    expect(trailing.status).toBe(200);
+
+    expect(storedRow()?.withdrawnAt).toBe("2026-07-27T00:00:00.000Z");
+    expect(storedRow()?.detail).toBe("Started now");
+  });
+
+  it("a resident upsert onto a submitted-but-withdrawn row keeps the withdrawal stamp", async () => {
+    await postUpsert(applicationRow("Submitted"));
+    const stored = state.records.find((r) => r.id === AXIS_ID)!;
+    stored.row_data = { ...(stored.row_data as Row), withdrawnAt: "2026-07-27T00:00:00.000Z" };
+
+    const res = await postUpsert({ ...applicationRow("Submitted"), detail: "Edited later" });
+    expect(res.status).toBe(200);
+
+    expect(storedRow()?.withdrawnAt).toBe("2026-07-27T00:00:00.000Z");
   });
 
   it("still lets the manager move a submitted application forward", async () => {
