@@ -6,6 +6,31 @@ export type YesNo = "yes" | "no" | null;
 export type GroupRole = "first" | "joining" | null;
 
 /**
+ * A photo/document an applicant attaches to their application — an image of a
+ * driver's license / ID card, or proof of income. The image BYTES live in the
+ * PRIVATE `application-documents` Supabase Storage bucket; only this reference
+ * (an unguessable object path plus display metadata) is persisted on the
+ * application answers. That keeps the reference flowing through the existing
+ * autosave/resume path like any other answer WITHOUT inlining base64 into the
+ * row_data JSON (which is re-uploaded on every keystroke). Retrieval is always
+ * re-authorized per request — only the applicant and the manager who received
+ * the application may fetch the bytes (see `/api/portal/application-photos`).
+ */
+export type ApplicationPhotoAttachment = {
+  /** Object path inside the private `application-documents` bucket. */
+  storagePath: string;
+  /** Original file name (sanitized) for display only. */
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** ISO timestamp the object was stored. */
+  uploadedAt: string;
+};
+
+/** Slots that accept an {@link ApplicationPhotoAttachment}. Used to scope uploads/reads. */
+export type ApplicationPhotoSlot = "idFront" | "idBack" | "income";
+
+/**
  * Applicant answer to one manager-defined application question. Label and type are
  * snapshotted at answer time so stored applications stay readable (review + PDF)
  * even if the manager later edits or removes the question on the listing.
@@ -48,6 +73,14 @@ export type RentalWizardFormState = {
   dateOfBirth: string;
   ssn: string;
   driversLicense: string;
+  /**
+   * Step 4 — photo of the front / back of the applicant's driver's license or
+   * ID card. Optional evidence attached alongside the ID number; gated on the
+   * same "Driver's license / ID" question, so a listing that disables that
+   * question (and the short-term form by default) never shows or keeps them.
+   */
+  idPhotoFront: ApplicationPhotoAttachment | null;
+  idPhotoBack: ApplicationPhotoAttachment | null;
   phone: string;
   email: string;
   currentStreet: string;
@@ -79,6 +112,14 @@ export type RentalWizardFormState = {
   annualIncome: string;
   employmentStart: string;
   otherIncome: string;
+  /**
+   * Step 7 — proof-of-income documents (pay stub, offer letter, bank statement).
+   * Optional evidence for the self-reported income figures; gated on the income
+   * question, so the short-term form (which omits employment) never keeps them.
+   * These images can themselves carry sensitive data, so they share the private
+   * bucket + per-request authorization used for the ID photos.
+   */
+  incomeProofPhotos: ApplicationPhotoAttachment[];
   ref1Name: string;
   ref1Relationship: string;
   ref1Phone: string;

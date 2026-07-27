@@ -26,6 +26,7 @@ import {
 import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
@@ -787,6 +788,8 @@ export function ManagerApplications() {
       {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
 
       <ApplicationDocumentPreview row={row} />
+
+      <ApplicationVerificationPhotos row={row} />
 
       <ApplicationScreeningPanel
         row={row}

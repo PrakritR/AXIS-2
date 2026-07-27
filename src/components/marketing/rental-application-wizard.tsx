@@ -1715,6 +1715,7 @@ function RentalApplicationWizardInner({
                 setSsn={setSsn}
                 goToStep={goToStep}
                 editFromReview={editFromReview}
+                getApplicationId={ensureRentalWizardAxisId}
               />
             </div>
 

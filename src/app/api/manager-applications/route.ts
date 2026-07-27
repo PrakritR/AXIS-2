@@ -9,6 +9,7 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { reclaimApplicationPhotos } from "@/lib/rental-application/application-photos.server";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
@@ -616,6 +617,17 @@ export async function POST(req: Request) {
 
         const { error } = await db.from("manager_application_records").delete().in("id", [...idsToDelete]);
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+        // Reclaim the applicant's ID / income photos — a hard delete of the
+        // application takes its private uploads with it. Best-effort; never
+        // blocks the delete response.
+        const photoIds = new Set<string>();
+        for (const record of recordsToDelete ?? []) {
+          const row = record.row_data as Partial<DemoApplicantRow> | null;
+          const axisId = typeof row?.id === "string" ? row.id : record.id;
+          if (axisId) photoIds.add(axisId);
+        }
+        await Promise.allSettled([...photoIds].map((axisId) => reclaimApplicationPhotos(db, axisId)));
       }
       return NextResponse.json({ ok: true, deleted: idsToDelete.size });
     }
