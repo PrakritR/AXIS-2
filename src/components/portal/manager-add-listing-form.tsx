@@ -3414,6 +3414,32 @@ export function ManagerAddListingForm({
                           </span>
                         </span>
                       </label>
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                          checked={sub.holdingDepositTiming === "at_application"}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              holdingDepositTiming: e.target.checked ? "at_application" : "after_approval",
+                            }))
+                          }
+                        />
+                        <span className="text-sm text-foreground">
+                          <span className="font-medium">Collect holding deposit at application</span>
+                          <span className="mt-0.5 block text-xs text-muted">
+                            {(() => {
+                              const feeAmt = parseSanitizedMoneyNumber(sub.applicationFee);
+                              const depAmt = parseSanitizedMoneyNumber((sub.holdingDeposit ?? "").trim() || "100");
+                              const total = feeAmt + depAmt;
+                              return feeAmt > 0
+                                ? `On: the applicant pays one combined charge before submitting — e.g. $${feeAmt.toFixed(0)} fee + $${depAmt.toFixed(0)} deposit = $${total.toFixed(0)} — itemized so they see exactly what it covers. Off (default): only the application fee is due now; the deposit appears under Payments once you approve.`
+                                : "On: the applicant pays the holding deposit before submitting, combined with the application fee into one charge if both are set. Off (default): the deposit appears under Payments once you approve.";
+                            })()}
+                          </span>
+                        </span>
+                      </label>
                     </div>
                   </div>
 

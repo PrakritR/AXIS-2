@@ -17,9 +17,12 @@ import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 import { isProductionPublicSite } from "@/lib/public-demo-access";
 import {
   ensurePendingApplicationFeeCharge,
+  ensurePendingHoldingDepositCharge,
   findApplicationFeeCharge,
+  findHoldingDepositCharge,
   HOUSEHOLD_CHARGES_EVENT,
   markApplicationFeePaidAfterStripe,
+  markHoldingDepositPaidAfterStripe,
   recordApplicationCharges,
 } from "@/lib/household-charges";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -38,6 +41,7 @@ import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/l
 import { clearRentalWizardDraft, loadRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraft, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import {
   applicationsForResidentEmail,
+  listingCollectsHoldingDepositAtApplication,
   residentApplicationFeeGate,
   residentApplicationSubmitBlocked,
 } from "@/lib/rental-application/application-policy";
@@ -186,6 +190,7 @@ function RentalApplicationWizardInner({
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [feeItemization, setFeeItemization] = useState<{
     applicationFeeCents: number;
+    holdingDepositCents: number;
     serviceFeeCents: number;
     totalCents: number;
   } | null>(null);
@@ -602,23 +607,27 @@ function RentalApplicationWizardInner({
     void chargeTick;
     const pid = form.propertyId.trim();
     const email = form.email.trim();
+    // A manager waiver code redeemed server-side (`applicationFeeWaived`) waives
+    // ONLY the fee — passed through so the gate correctly still requires a
+    // holding deposit collected at application, if this listing has one.
+    const codeWaived = form.applicationFeeWaived;
     const gate = residentApplicationFeeGate({
       propertyId: pid,
       residentEmail: email,
       residentUserId: feeStepUserId,
+      feeWaivedByCode: codeWaived,
     });
-    // A manager waiver code redeemed server-side (`applicationFeeWaived`) is a
-    // SECOND, independent reason the fee is not owed — distinct from `gate.waived`
-    // (the "first application fee covers additional applications" policy).
-    // Either one fully satisfies the gate; no Stripe checkout is ever created.
-    const codeWaived = form.applicationFeeWaived;
     return {
-      needsFee: gate.needsFee && !codeWaived,
-      paid: gate.paid || codeWaived,
+      needsFee: gate.needsFee,
+      paid: gate.paid,
       displayLabel: gate.displayLabel,
       amount: gate.amount,
       waived: gate.waived,
       codeWaived,
+      depositAmount: gate.depositAmount,
+      depositAtApplication: gate.depositAtApplication,
+      totalDue: gate.totalDue,
+      feePaid: gate.feePaid,
     };
   }, [form.propertyId, form.email, form.applicationFeeWaived, feeStepUserId, chargeTick]);
 
@@ -717,10 +726,11 @@ function RentalApplicationWizardInner({
         const res = await fetch("/api/public/application-fee-preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ propertyId: pid, managerUserId, channel }),
+          body: JSON.stringify({ propertyId: pid, managerUserId, channel, feeWaived: form.applicationFeeWaived }),
         });
         const data = (await res.json().catch(() => ({}))) as {
           applicationFeeCents?: number;
+          holdingDepositCents?: number;
           serviceFeeCents?: number;
           totalCents?: number;
         };
@@ -728,6 +738,7 @@ function RentalApplicationWizardInner({
         if (res.ok && typeof data.totalCents === "number") {
           setFeeItemization({
             applicationFeeCents: data.applicationFeeCents ?? 0,
+            holdingDepositCents: data.holdingDepositCents ?? 0,
             serviceFeeCents: data.serviceFeeCents ?? 0,
             totalCents: data.totalCents,
           });
@@ -743,7 +754,7 @@ function RentalApplicationWizardInner({
     return () => {
       cancelled = true;
     };
-  }, [step, applicationFeeGate.needsFee, form.propertyId, form.applicationFeePayChannel]);
+  }, [step, applicationFeeGate.needsFee, form.propertyId, form.applicationFeePayChannel, form.applicationFeeWaived]);
 
   const applyWaiverCode = useCallback(async () => {
     const pid = form.propertyId.trim();
@@ -812,14 +823,19 @@ function RentalApplicationWizardInner({
       const submittedForm: RentalWizardFormState =
         resolvedGroupId && resolvedGroupId !== form.groupId ? { ...form, groupId: resolvedGroupId } : form;
 
-      recordApplicationCharges({
-        residentEmail: form.email,
-        residentName: form.fullLegalName,
-        residentUserId,
-        propertyId: form.propertyId,
-        applicationId: axisId,
-        managerUserId: listing?.managerUserId ?? prop?.managerUserId ?? null,
-      });
+      recordApplicationCharges(
+        {
+          residentEmail: form.email,
+          residentName: form.fullLegalName,
+          residentUserId,
+          propertyId: form.propertyId,
+          applicationId: axisId,
+          managerUserId: listing?.managerUserId ?? prop?.managerUserId ?? null,
+        },
+        // A code-redeemed waiver already satisfies the fee — skip re-creating a
+        // pending application-fee line that would show as unpaid to the manager.
+        { skipApplicationFee: form.applicationFeeWaived },
+      );
 
       const feeCharge = findApplicationFeeCharge(form.email, pid, residentUserId);
       const applicationRow = {
@@ -991,6 +1007,7 @@ function RentalApplicationWizardInner({
         error?: string;
         propertyId?: string | null;
         emailMatches?: boolean;
+        depositChargeId?: string | null;
       };
       if (!res.ok) {
         showToast(typeof data.error === "string" ? data.error : "Could not verify payment.");
@@ -1003,12 +1020,22 @@ function RentalApplicationWizardInner({
         // complete-but-unpaid while the bank transfer clears. New sessions are
         // card, so they come back paid.
         if (data.processing) {
-          ensurePendingApplicationFeeCharge({
-            residentEmail: form.email,
-            residentName: form.fullLegalName,
-            residentUserId: feeStepUserId,
-            propertyId: pid,
-          });
+          if (!form.applicationFeeWaived) {
+            ensurePendingApplicationFeeCharge({
+              residentEmail: form.email,
+              residentName: form.fullLegalName,
+              residentUserId: feeStepUserId,
+              propertyId: pid,
+            });
+          }
+          if (listingCollectsHoldingDepositAtApplication(pid)) {
+            ensurePendingHoldingDepositCharge({
+              residentEmail: form.email,
+              residentName: form.fullLegalName,
+              residentUserId: feeStepUserId,
+              propertyId: pid,
+            });
+          }
           processedApplicationFeeSessions.add(sessionId);
           showToast("Bank transfer submitted. Your application fee will be marked paid when the transfer clears.");
           finalizeApplicationSubmit(feeStepUserId);
@@ -1029,15 +1056,35 @@ function RentalApplicationWizardInner({
         router.replace(wizardApplyPath);
         return;
       }
-      ensurePendingApplicationFeeCharge({
-        residentEmail: form.email,
-        residentName: form.fullLegalName,
-        residentUserId: feeStepUserId,
-        propertyId: pid,
-      });
-      const marked = markApplicationFeePaidAfterStripe(form.email, pid, feeStepUserId);
-      if (!marked) {
-        showToast("Payment succeeded, but the application fee line could not be updated.");
+      // A fee-waived-by-code checkout never created a pending fee charge (and
+      // never should — the code already satisfied it), so only ensure/mark the
+      // fee leg when it was actually part of this Stripe session.
+      let marked = true;
+      if (!form.applicationFeeWaived) {
+        ensurePendingApplicationFeeCharge({
+          residentEmail: form.email,
+          residentName: form.fullLegalName,
+          residentUserId: feeStepUserId,
+          propertyId: pid,
+        });
+        marked = markApplicationFeePaidAfterStripe(form.email, pid, feeStepUserId);
+      }
+      // `markHoldingDepositPaidAfterStripe` is a no-op (returns true) on any
+      // listing that does not collect its deposit at application, but the
+      // ensure call below would wrongly CREATE a pending deposit line on such
+      // a listing, so it is gated on the listing's own timing setting rather
+      // than called unconditionally.
+      if (listingCollectsHoldingDepositAtApplication(pid)) {
+        ensurePendingHoldingDepositCharge({
+          residentEmail: form.email,
+          residentName: form.fullLegalName,
+          residentUserId: feeStepUserId,
+          propertyId: pid,
+        });
+      }
+      const depositMarked = markHoldingDepositPaidAfterStripe(form.email, pid, feeStepUserId);
+      if (!marked || !depositMarked) {
+        showToast("Payment succeeded, but the application charge could not be updated.");
         router.replace(wizardApplyPath);
         return;
       }
@@ -1046,7 +1093,7 @@ function RentalApplicationWizardInner({
       finalizeApplicationSubmit(feeStepUserId);
       router.replace(wizardApplyPath);
     })();
-  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, feeStepUserId, router, showToast, finalizeApplicationSubmit, wizardApplyPath]);
+  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, form.applicationFeeWaived, feeStepUserId, router, showToast, finalizeApplicationSubmit, wizardApplyPath]);
 
   const handleContinue = () => {
     if (step === 12) {
@@ -1075,14 +1122,25 @@ function RentalApplicationWizardInner({
           propertyId: pid,
           residentEmail: emailTrim,
           residentUserId,
+          feeWaivedByCode: form.applicationFeeWaived,
         });
-        // A redeemed manager waiver code fully satisfies the fee — never open a
-        // Stripe session (not even for $0) and never require a manual-channel check.
-        const needsFee = feeGate.needsFee && !form.applicationFeeWaived;
+        // A redeemed manager waiver code fully satisfies the FEE only — a
+        // holding deposit due at application (the manager's per-listing
+        // choice) still stands, so `feeGate.needsFee` (fee-or-deposit owed)
+        // already reflects that; it is never forced false just because the
+        // code was applied.
+        const needsFee = feeGate.needsFee;
 
         if (needsFee && isAchApplicationFeeChannel(payChannel)) {
-          const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
-          if (charge?.status === "paid") {
+          const feeCharge = form.applicationFeeWaived
+            ? null
+            : findApplicationFeeCharge(form.email, pid, residentUserId);
+          const depositCharge = feeGate.depositAtApplication
+            ? findHoldingDepositCharge(form.email, pid, residentUserId)
+            : null;
+          const feeAlreadyPaid = form.applicationFeeWaived || feeCharge?.status === "paid";
+          const depositAlreadyPaid = !feeGate.depositAtApplication || depositCharge?.status === "paid";
+          if (feeAlreadyPaid && depositAlreadyPaid) {
             finalizeApplicationSubmit(residentUserId);
             return;
           }
@@ -1094,7 +1152,6 @@ function RentalApplicationWizardInner({
             return;
           }
 
-          const amountCents = Math.round(feeGate.amount * 100);
           setCheckoutBusy(true);
           track("application_fee_payment_started", { property_id: pid || undefined });
           try {
@@ -1105,8 +1162,8 @@ function RentalApplicationWizardInner({
                 propertyId: pid,
                 residentEmail: form.email.trim(),
                 residentName: form.fullLegalName.trim(),
-                amountCents,
                 managerUserId,
+                feeWaived: form.applicationFeeWaived,
                 returnPath: wizardApplyPath,
               }),
             });
@@ -1133,12 +1190,22 @@ function RentalApplicationWizardInner({
         }
 
         if (needsFee && (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other")) {
-          ensurePendingApplicationFeeCharge({
-            residentEmail: form.email,
-            residentName: form.fullLegalName,
-            residentUserId,
-            propertyId: pid,
-          });
+          if (!form.applicationFeeWaived) {
+            ensurePendingApplicationFeeCharge({
+              residentEmail: form.email,
+              residentName: form.fullLegalName,
+              residentUserId,
+              propertyId: pid,
+            });
+          }
+          if (feeGate.depositAtApplication) {
+            ensurePendingHoldingDepositCharge({
+              residentEmail: form.email,
+              residentName: form.fullLegalName,
+              residentUserId,
+              propertyId: pid,
+            });
+          }
 
           const checkRes = await fetch("/api/public/application-fee-check-payment", {
             method: "POST",
@@ -1147,6 +1214,7 @@ function RentalApplicationWizardInner({
               propertyId: pid,
               residentEmail: emailTrim,
               channel: payChannel,
+              feeWaived: form.applicationFeeWaived,
             }),
           });
           const checkData = (await checkRes.json().catch(() => ({}))) as {

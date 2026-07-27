@@ -11,6 +11,8 @@ type Body = {
   managerUserId?: string;
   /** Optional — when present, also reports whether the code currently looks redeemable. */
   waiverCode?: string;
+  /** True once a waiver code has already been redeemed server-side — skips re-validating it, just zeroes the fee. */
+  feeWaived?: boolean;
   /** "manual" (Zelle/Venmo/other) never carries a Stripe service fee; defaults to "card". */
   channel?: "card" | "manual";
 };
@@ -40,13 +42,33 @@ export async function POST(req: Request) {
     }
 
     const channel = body.channel === "manual" ? "manual" : "card";
-    const itemization = await resolveApplicationFeeItemization(db, managerUserId, resolved.value.applicationFeeCents, channel);
+    // The deposit rides along in the SAME charge only when the manager opted
+    // into `holdingDepositTiming: "at_application"` for this listing — the
+    // default ("after_approval") shows fee-only here, unchanged.
+    const combined = resolved.value.holdingDepositTiming === "at_application" && resolved.value.holdingDepositCents > 0;
+    const holdingDepositCents = combined ? resolved.value.holdingDepositCents : 0;
 
     const waiverCode = typeof body.waiverCode === "string" ? body.waiverCode.trim() : "";
     const waiver = waiverCode ? await previewApplicationFeeWaiverCode(db, managerUserId, waiverCode) : null;
+    // A redeemed waiver code only ever waives the FEE (it is an "application fee
+    // waiver code" by name and by table) — any holding deposit due at
+    // application still stands, itemized on its own. `body.feeWaived` covers
+    // the case where the code was already consumed earlier in this session, so
+    // this call does not need to re-validate it against the (now incremented)
+    // usage count.
+    const feeWaivedForPreview = body.feeWaived === true || waiver?.ok === true;
+    const itemization = await resolveApplicationFeeItemization(
+      db,
+      managerUserId,
+      feeWaivedForPreview ? 0 : resolved.value.applicationFeeCents,
+      channel,
+      holdingDepositCents,
+    );
 
     return NextResponse.json({
-      applicationFeeCents: itemization.applicationFeeCents,
+      applicationFeeCents: feeWaivedForPreview ? 0 : itemization.applicationFeeCents,
+      applicationFeeWaivedByCode: feeWaivedForPreview,
+      holdingDepositCents: itemization.holdingDepositCents,
       serviceFeeCents: itemization.serviceFeeCents,
       totalCents: itemization.totalCents,
       feePayer: itemization.feePayer,

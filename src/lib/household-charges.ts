@@ -1377,11 +1377,10 @@ function holdingDepositFallbackChargeId(residentEmail: string, propertyId: strin
 }
 
 /**
- * @deprecated No longer shown or collected during the application (captain
- * decision, 2026-07 — see `ensurePendingHoldingDepositCharge` above and
- * `docs/agents/resident-payments.md`). Kept only in case a future Payments
- * surface wants the listing's configured holding-deposit amount; no
- * production call site remains.
+ * Dollar amount + display label for the listing's configured holding deposit.
+ * Whether it is actually collected during the application depends on the
+ * listing's `holdingDepositTiming` (default "after_approval" — see
+ * `docs/agents/resident-payments.md`); this function just reads the amount.
  */
 export function listingHoldingDepositAmount(propertyId: string): { amount: number; displayLabel: string } {
   if (!propertyId.trim()) {
@@ -1398,7 +1397,7 @@ export function listingHoldingDepositAmount(propertyId: string): { amount: numbe
   return { amount, displayLabel };
 }
 
-function findHoldingDepositCharge(
+export function findHoldingDepositCharge(
   residentEmail: string,
   propertyId: string,
   residentUserId: string | null,
@@ -1418,14 +1417,12 @@ function findHoldingDepositCharge(
 }
 
 /**
- * @deprecated The holding deposit is no longer collected during the
- * application (captain decision, 2026-07: deposits move under Payments,
- * after approval — see `docs/agents/resident-payments.md`). Every
- * application-submission call site has been removed
- * (`recordApplicationCharges`, `recordSubmittedApplicationFeeCharge`); the
- * remaining callers are the rental wizard's own submit-time calls, pending a
- * coordinated edit (tracked separately — do not add new call sites here).
- * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
+ * Ensures a pending holding-deposit line exists for an applicant, mirroring
+ * `ensurePendingApplicationFeeCharge`. Called ONLY when the listing's
+ * `holdingDepositTiming` is `"at_application"` (manager's choice — default is
+ * `"after_approval"`, where the deposit is instead generated at approval by
+ * `recordApprovedApplicationCharges`, unchanged from the prior fixed
+ * behavior). See `docs/agents/resident-payments.md`.
  */
 export function ensurePendingHoldingDepositCharge(input: {
   residentEmail: string;
@@ -2143,6 +2140,28 @@ export function markApplicationFeePaidAfterStripe(residentEmail: string, propert
 }
 
 /**
+ * Sibling of `markApplicationFeePaidAfterStripe` for the holding-deposit leg
+ * of a combined at-application charge (`holdingDepositTiming: "at_application"`).
+ * A no-op (returns true) when the listing does not collect a deposit at
+ * application — there is nothing to mark. Marking this paid is what makes
+ * `paidHoldingDepositCreditCents` automatically credit it toward the security
+ * deposit at approval, exactly like a deposit paid manually pre-PR139.
+ */
+export function markHoldingDepositPaidAfterStripe(residentEmail: string, propertyId: string, residentUserId: string | null): boolean {
+  const charge = findHoldingDepositCharge(residentEmail, propertyId, residentUserId);
+  if (!charge) return true;
+  if (charge.status === "paid") return true;
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === charge.id);
+  if (i === -1) return false;
+  const now = new Date().toISOString();
+  const next = [...rows];
+  next[i] = { ...next[i]!, status: "paid", paidAt: now, balanceLabel: "$0.00" };
+  writeAll(next);
+  return true;
+}
+
+/**
  * Called when an applicant completes the rental wizard (step 12).
  * Creates/tracks the application fee only. Lease/payment lines are created once the application is approved.
  */
@@ -2190,10 +2209,17 @@ export function recordApplicationCharges(
     return;
   }
 
-  if (opts?.skipApplicationFee || existingAppFee) {
-    return;
+  if (!opts?.skipApplicationFee && !existingAppFee) {
+    ensurePendingApplicationFeeCharge(input);
   }
-  ensurePendingApplicationFeeCharge(input);
+  // Manager's choice — see `holdingDepositTiming` on the listing. Combined
+  // with the fee into one Stripe/manual charge earlier in the wizard; this is
+  // the same "ensure it exists" safety net the fee gets, so a resident who
+  // reaches this point without one somehow (e.g. resumed a stale draft) still
+  // gets a correct pending line rather than silently owing nothing.
+  if (sub.holdingDepositTiming === "at_application") {
+    ensurePendingHoldingDepositCharge(input);
+  }
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {

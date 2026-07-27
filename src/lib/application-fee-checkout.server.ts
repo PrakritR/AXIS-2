@@ -60,6 +60,10 @@ export type ResolvedApplicationFeeProperty = {
   managerUserId: string;
   listing: ManagerListingSubmissionV1 | null;
   applicationFeeCents: number;
+  /** 0 when the listing has no holding deposit configured. */
+  holdingDepositCents: number;
+  /** Manager's choice of when the deposit is collected; default "after_approval" for legacy listings. */
+  holdingDepositTiming: "at_application" | "after_approval";
 };
 
 /**
@@ -93,12 +97,30 @@ export async function resolveApplicationFeeProperty(
   if (applicationFeeCents <= 0) {
     return { ok: false, status: 422, code: "NO_APPLICATION_FEE", error: "This listing has no application fee configured." };
   }
+  // Deposit amount is looked up regardless of timing — the caller decides whether
+  // it applies (waiver/preview routes want it even when after_approval, so the
+  // preview can say "no deposit due now"; the checkout below gates on timing).
+  const holdingDepositCents = clampAmountCents(parseMoneyAmount(listing?.holdingDeposit ?? "") * 100);
+  const holdingDepositTiming: "at_application" | "after_approval" =
+    listing?.holdingDepositTiming === "at_application" ? "at_application" : "after_approval";
 
-  return { ok: true, value: { managerUserId: ownerUserId, listing, applicationFeeCents } };
+  return {
+    ok: true,
+    value: { managerUserId: ownerUserId, listing, applicationFeeCents, holdingDepositCents, holdingDepositTiming },
+  };
 }
 
 export type ApplicationFeeItemization = {
   applicationFeeCents: number;
+  /**
+   * Non-zero ONLY when the listing's `holdingDepositTiming` is
+   * "at_application" — the manager's per-listing choice. Combined with
+   * `applicationFeeCents` into ONE charge (one Stripe line item each, one
+   * payment) rather than two separate charges. 0 for the default
+   * "after_approval" listings, where the deposit is generated under Payments
+   * at approval instead (unchanged legacy behavior).
+   */
+  holdingDepositCents: number;
   /** Added on top when the applicant bears it (Free tier, or Pro w/ resident choice); 0 otherwise. */
   serviceFeeCents: number;
   totalCents: number;
@@ -116,23 +138,32 @@ export type ApplicationFeeItemization = {
  * cost — the service fee line is always $0 on that channel, regardless of
  * plan or manager setting. Only the "card" (Stripe Checkout) channel can ever
  * carry a non-zero service fee.
+ *
+ * `holdingDepositCents` (0 by default) folds the deposit into the SAME base
+ * Stripe charges its processing cost on, so the service-fee math is computed
+ * on the combined amount when the manager has opted into
+ * `holdingDepositTiming: "at_application"` — never on the fee alone while a
+ * deposit rides along for free.
  */
 export async function resolveApplicationFeeItemization(
   db: SupabaseClient,
   managerUserId: string,
   applicationFeeCents: number,
   channel: "card" | "manual" = "card",
+  holdingDepositCents = 0,
 ): Promise<ApplicationFeeItemization> {
   const { tier: managerTierRaw } = await getManagerPurchaseSku(managerUserId);
   const managerTier = normalizeManagerSkuTier(managerTierRaw) ?? "free";
   const managerSettings = await loadManagerManualPaymentSettings(db, managerUserId);
   const feePayer = resolveServiceFeePayer(managerTier, managerSettings.serviceFeePayer);
+  const baseCents = applicationFeeCents + Math.max(0, holdingDepositCents);
   const fee =
     channel === "manual"
-      ? { residentAddedFeeCents: 0, totalCents: applicationFeeCents }
-      : residentServiceFeeBreakdown(applicationFeeCents, "card", feePayer);
+      ? { residentAddedFeeCents: 0, totalCents: baseCents }
+      : residentServiceFeeBreakdown(baseCents, "card", feePayer);
   return {
     applicationFeeCents,
+    holdingDepositCents: Math.max(0, holdingDepositCents),
     serviceFeeCents: fee.residentAddedFeeCents,
     totalCents: fee.totalCents,
     feePayer,
@@ -147,6 +178,14 @@ export type ApplicationFeeCheckoutInput = {
   managerUserId: string;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * True once a manager waiver code has already been redeemed for this fee —
+   * a redeemed code waives ONLY the application fee, so this route still runs
+   * (and still opens a Stripe session) when a holding deposit is due at
+   * application; it just charges $0 for the fee line and drops it from the
+   * Stripe line items entirely.
+   */
+  feeWaived?: boolean;
 };
 
 export type ApplicationFeeCheckoutSuccess = {
@@ -163,7 +202,7 @@ export async function createApplicationFeeCheckout(
 ): Promise<ApplicationFeeCheckoutSuccess | ApplicationFeeCheckoutFailure> {
   const resolved = await resolveApplicationFeeProperty(db, input);
   if (!resolved.ok) return resolved;
-  const { managerUserId, applicationFeeCents, listing } = resolved.value;
+  const { managerUserId, applicationFeeCents, listing, holdingDepositCents, holdingDepositTiming } = resolved.value;
 
   if (!listingApplicationFeeChannels(listing ?? undefined).ach) {
     return {
@@ -184,7 +223,25 @@ export async function createApplicationFeeCheckout(
     };
   }
 
-  const itemization = await resolveApplicationFeeItemization(db, managerUserId, applicationFeeCents);
+  // Combine the holding deposit into this SAME charge only when the manager
+  // opted into `holdingDepositTiming: "at_application"` for this listing —
+  // the default ("after_approval") keeps the fee-only checkout unchanged.
+  const includeDeposit = holdingDepositTiming === "at_application" && holdingDepositCents > 0;
+  // A redeemed waiver code zeroes the fee but never the deposit (waiver codes
+  // are application-fee-only by name and by table) — so a fee-waived
+  // applicant on an "at_application" listing still opens this same Stripe
+  // session, just for the deposit alone.
+  const chargeableFeeCents = input.feeWaived ? 0 : applicationFeeCents;
+  if (chargeableFeeCents <= 0 && !includeDeposit) {
+    return { ok: false, status: 422, code: "NOTHING_DUE", error: "Nothing is due for this application right now." };
+  }
+  const itemization = await resolveApplicationFeeItemization(
+    db,
+    managerUserId,
+    chargeableFeeCents,
+    "card",
+    includeDeposit ? holdingDepositCents : 0,
+  );
 
   const metadata: Record<string, string> = {
     purpose: APPLICATION_FEE_CHECKOUT_PURPOSE,
@@ -193,12 +250,31 @@ export async function createApplicationFeeCheckout(
     manager_user_id: managerUserId,
   };
   if (input.residentName) metadata.resident_name = input.residentName.slice(0, 450);
+  if (includeDeposit) {
+    metadata.includes_holding_deposit = "true";
+    metadata.holding_deposit_cents = String(holdingDepositCents);
+  }
+
+  const feeLineItem = {
+    amountCents: chargeableFeeCents,
+    productName: "Rental application fee",
+    productDescription: `Listing ${input.propertyId.slice(0, 120)}`,
+  };
+  const depositLineItem = {
+    amountCents: holdingDepositCents,
+    productName: "Holding deposit",
+    productDescription: "Credited toward your security deposit if your application is approved.",
+  };
+  const lineItems =
+    chargeableFeeCents > 0 && includeDeposit
+      ? [feeLineItem, depositLineItem]
+      : includeDeposit
+        ? [depositLineItem]
+        : [feeLineItem];
 
   const result = await createAxisAchCheckoutSession(stripe, {
     residentEmail: input.residentEmail,
-    amountCents: applicationFeeCents,
-    productName: "Rental application fee",
-    productDescription: `Listing ${input.propertyId.slice(0, 120)}`,
+    lineItems,
     metadata,
     mode: "hosted",
     destinationAccountId: connect.accountId,

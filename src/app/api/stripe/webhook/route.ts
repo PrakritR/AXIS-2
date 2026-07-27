@@ -19,7 +19,10 @@ import {
   stripeInvoiceSubscriptionId,
 } from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
+import {
+  markApplicationDepositPaidFromStripeSession,
+  markApplicationFeePaidFromStripeSession,
+} from "@/lib/stripe-application-fee";
 import {
   householdChargeCheckoutProcessing,
   markHouseholdChargePaidFromStripeSession,
@@ -158,6 +161,10 @@ export async function POST(req: Request) {
       if (session.metadata?.purpose === "rental_application_fee") {
         try {
           await markApplicationFeePaidFromStripeSession(db, session);
+          // No-op on any session that did not combine a holding deposit
+          // (`metadata.includes_holding_deposit`, set only when the listing's
+          // `holdingDepositTiming` is "at_application").
+          await markApplicationDepositPaidFromStripeSession(db, session);
           await enrichCheckoutLedgerFees(stripe, session);
           const distinctId = session.client_reference_id ?? session.id;
           track("application_fee_paid", distinctId, { session_id: session.id });

@@ -10,6 +10,8 @@ type Body = {
   propertyId?: string;
   residentEmail?: string;
   channel?: "zelle" | "venmo" | "other";
+  /** True when a manager waiver code already covered the application fee — only the holding deposit (if any) is checked. */
+  feeWaived?: boolean;
 };
 
 export async function POST(req: Request) {
@@ -41,6 +43,7 @@ export async function POST(req: Request) {
       propertyId,
       residentEmail,
       residentUserId,
+      feeWaived: body.feeWaived === true,
     });
 
     if (!result.ok) {

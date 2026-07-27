@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { axisAchCheckoutPaid, axisAchCheckoutProcessing } from "@/lib/stripe-axis-ach-checkout";
-import { isApplicationFeeCheckoutSession, markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
+import {
+  includesHoldingDeposit,
+  isApplicationFeeCheckoutSession,
+  markApplicationDepositPaidFromStripeSession,
+  markApplicationFeePaidFromStripeSession,
+} from "@/lib/stripe-application-fee";
 
 export const runtime = "nodejs";
 
@@ -57,11 +62,20 @@ export async function POST(req: Request) {
 
     let chargeId: string | null = null;
     let alreadyPaid = false;
+    let depositChargeId: string | null = null;
     if (paid) {
       const db = createSupabaseServiceRoleClient();
       const result = await markApplicationFeePaidFromStripeSession(db, session);
       chargeId = result.chargeId ?? null;
       alreadyPaid = result.alreadyPaid ?? false;
+      // A combined checkout (application fee + holding deposit) is ONE Stripe
+      // session but TWO charge rows server-side — this route is the ACH/redirect
+      // return path, so it must mark both, same as the webhook does for the
+      // synchronous card path.
+      if (includesHoldingDeposit(session)) {
+        const depositResult = await markApplicationDepositPaidFromStripeSession(db, session);
+        depositChargeId = depositResult.chargeId ?? null;
+      }
     }
 
     return NextResponse.json({
@@ -75,6 +89,7 @@ export async function POST(req: Request) {
         expectedEmail === normalizedEmail(session.metadata?.resident_email ?? session.customer_email),
       chargeId,
       alreadyPaid,
+      depositChargeId,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to verify session";

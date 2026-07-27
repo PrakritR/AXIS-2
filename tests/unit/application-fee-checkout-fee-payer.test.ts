@@ -40,7 +40,13 @@ function makeStripe(account: Partial<Stripe.Account>): Stripe {
   } as unknown as Stripe;
 }
 
-function makeDb(opts: { managerUserId: string; managerAccountId: string | null; applicationFee?: string }): SupabaseClient {
+function makeDb(opts: {
+  managerUserId: string;
+  managerAccountId: string | null;
+  applicationFee?: string;
+  holdingDeposit?: string;
+  holdingDepositTiming?: "at_application" | "after_approval";
+}): SupabaseClient {
   const from = (table: string) => {
     const chain: Record<string, unknown> = {};
     chain.select = () => chain;
@@ -54,6 +60,8 @@ function makeDb(opts: { managerUserId: string; managerAccountId: string | null; 
               listingSubmission: {
                 v: 1,
                 applicationFee: opts.applicationFee ?? "$50",
+                holdingDeposit: opts.holdingDeposit ?? "",
+                holdingDepositTiming: opts.holdingDepositTiming ?? "after_approval",
                 axisPaymentsEnabled: true,
                 rooms: [],
                 bathrooms: [],
@@ -151,8 +159,13 @@ describe("createApplicationFeeCheckout — destination + ownership", () => {
 
     await createApplicationFeeCheckout(db, stripe, baseInput);
 
-    const passed = vi.mocked(createAxisAchCheckoutSession).mock.calls[0]?.[1] as { amountCents?: number };
-    expect(passed.amountCents).toBe(7500);
+    const passed = vi.mocked(createAxisAchCheckoutSession).mock.calls[0]?.[1] as {
+      lineItems?: { amountCents: number }[];
+    };
+    // Fee-only checkout (no holding deposit configured on this listing) is a
+    // single line item for the application fee.
+    expect(passed.lineItems).toHaveLength(1);
+    expect(passed.lineItems?.[0]?.amountCents).toBe(7500);
   });
 
   it("BLOCKS Stripe checkout when the listing has card/ACH payments disabled", async () => {
@@ -191,6 +204,134 @@ describe("createApplicationFeeCheckout — destination + ownership", () => {
     const result = await createApplicationFeeCheckout(db, stripe, baseInput);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("AXIS_PAYMENTS_DISABLED");
+  });
+});
+
+describe("createApplicationFeeCheckout — manager's per-listing pay-at-application deposit choice", () => {
+  beforeEach(() => {
+    vi.mocked(createAxisAchCheckoutSession).mockReset();
+    vi.mocked(createAxisAchCheckoutSession).mockResolvedValue({
+      mode: "hosted",
+      url: "https://checkout.stripe.com/session",
+      sessionId: "cs_1",
+      subtotalCents: 15000,
+      processingFeeCents: 0,
+      axisFeeCents: 0,
+      totalCents: 15000,
+      platformFeeCents: 0,
+      paymentMethod: "card",
+    });
+    vi.mocked(getManagerPurchaseSku).mockResolvedValue({
+      tier: "business",
+      billing: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      appleOriginalTransactionId: null,
+    });
+    vi.mocked(loadManagerManualPaymentSettings).mockResolvedValue({
+      zellePaymentsEnabled: false,
+      zelleContact: "",
+      venmoPaymentsEnabled: false,
+      venmoContact: "",
+      receiptAutoMarkEnabled: true,
+      serviceFeePayer: "resident",
+    });
+  });
+
+  it("defaults to after_approval — a $100 deposit is never folded into the fee-only checkout", async () => {
+    const stripe = makeStripe({ id: "acct_manager_A", capabilities: { transfers: "active" }, payouts_enabled: true });
+    const db = makeDb({
+      managerUserId: "mgr_A",
+      managerAccountId: "acct_manager_A",
+      applicationFee: "$50",
+      holdingDeposit: "$100",
+      // holdingDepositTiming intentionally omitted from makeDb's default (after_approval)
+    });
+
+    const result = await createApplicationFeeCheckout(db, stripe, baseInput);
+
+    expect(result.ok).toBe(true);
+    const passed = vi.mocked(createAxisAchCheckoutSession).mock.calls[0]?.[1] as {
+      lineItems?: { amountCents: number }[];
+    };
+    expect(passed.lineItems).toHaveLength(1);
+    expect(passed.lineItems?.[0]?.amountCents).toBe(5000);
+    if (result.ok) {
+      expect(result.itemization.holdingDepositCents).toBe(0);
+      expect(result.itemization.totalCents).toBe(5000);
+    }
+  });
+
+  it("combines $50 fee + $100 deposit into ONE session (two line items) when the manager opts into at_application", async () => {
+    const stripe = makeStripe({ id: "acct_manager_A", capabilities: { transfers: "active" }, payouts_enabled: true });
+    const db = makeDb({
+      managerUserId: "mgr_A",
+      managerAccountId: "acct_manager_A",
+      applicationFee: "$50",
+      holdingDeposit: "$100",
+      holdingDepositTiming: "at_application",
+    });
+
+    const result = await createApplicationFeeCheckout(db, stripe, baseInput);
+
+    expect(result.ok).toBe(true);
+    expect(createAxisAchCheckoutSession).toHaveBeenCalledTimes(1);
+    const passed = vi.mocked(createAxisAchCheckoutSession).mock.calls[0]?.[1] as {
+      lineItems?: { amountCents: number; productName: string }[];
+      metadata?: Record<string, string>;
+    };
+    expect(passed.lineItems).toEqual([
+      expect.objectContaining({ amountCents: 5000, productName: "Rental application fee" }),
+      expect.objectContaining({ amountCents: 10000, productName: "Holding deposit" }),
+    ]);
+    expect(passed.metadata?.includes_holding_deposit).toBe("true");
+    expect(passed.metadata?.holding_deposit_cents).toBe("10000");
+    if (result.ok) {
+      expect(result.itemization.applicationFeeCents).toBe(5000);
+      expect(result.itemization.holdingDepositCents).toBe(10000);
+      // Business tier: PropLane absorbs the service fee, so total = fee + deposit face value.
+      expect(result.itemization.totalCents).toBe(15000);
+    }
+  });
+
+  it("charges the deposit ALONE (fee dropped from the session) when the fee was already waived by a redeemed code", async () => {
+    const stripe = makeStripe({ id: "acct_manager_A", capabilities: { transfers: "active" }, payouts_enabled: true });
+    const db = makeDb({
+      managerUserId: "mgr_A",
+      managerAccountId: "acct_manager_A",
+      applicationFee: "$50",
+      holdingDeposit: "$100",
+      holdingDepositTiming: "at_application",
+    });
+
+    const result = await createApplicationFeeCheckout(db, stripe, { ...baseInput, feeWaived: true });
+
+    expect(result.ok).toBe(true);
+    const passed = vi.mocked(createAxisAchCheckoutSession).mock.calls[0]?.[1] as {
+      lineItems?: { amountCents: number; productName: string }[];
+    };
+    expect(passed.lineItems).toEqual([expect.objectContaining({ amountCents: 10000, productName: "Holding deposit" })]);
+    if (result.ok) {
+      expect(result.itemization.applicationFeeCents).toBe(0);
+      expect(result.itemization.holdingDepositCents).toBe(10000);
+    }
+  });
+
+  it("refuses checkout when there is nothing left to charge (fee waived, no deposit at application)", async () => {
+    const stripe = makeStripe({ id: "acct_manager_A", capabilities: { transfers: "active" }, payouts_enabled: true });
+    const db = makeDb({
+      managerUserId: "mgr_A",
+      managerAccountId: "acct_manager_A",
+      applicationFee: "$50",
+      holdingDeposit: "$100",
+      holdingDepositTiming: "after_approval",
+    });
+
+    const result = await createApplicationFeeCheckout(db, stripe, { ...baseInput, feeWaived: true });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("NOTHING_DUE");
+    expect(createAxisAchCheckoutSession).not.toHaveBeenCalled();
   });
 });
 

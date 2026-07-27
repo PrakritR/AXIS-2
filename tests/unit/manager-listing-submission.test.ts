@@ -92,4 +92,33 @@ describe("manager-listing-submission", () => {
     sub.leaseTermsBody = "Available lease lengths: 12-Month, Month-to-Month.";
     expect(resolveAllowedLeaseTerms(sub)).toEqual(expect.arrayContaining(["12-Month", "Month-to-Month"]));
   });
+
+  describe("holdingDepositTiming — manager's per-listing pay-at-application choice", () => {
+    it("defaults new listings to after_approval (unchanged legacy behavior)", () => {
+      expect(createDefaultListingSubmission().holdingDepositTiming).toBe("after_approval");
+    });
+
+    it("defaults an existing listing with no setting stored to after_approval", () => {
+      const sub = normalizeManagerListingSubmissionV1({
+        ...createDefaultListingSubmission(),
+      } as never);
+      expect(sub.holdingDepositTiming).toBe("after_approval");
+    });
+
+    it("preserves an explicit at_application choice through normalization", () => {
+      const sub = normalizeManagerListingSubmissionV1({
+        ...createDefaultListingSubmission(),
+        holdingDepositTiming: "at_application",
+      } as never);
+      expect(sub.holdingDepositTiming).toBe("at_application");
+    });
+
+    it("rejects an invalid value and falls back to after_approval", () => {
+      const sub = normalizeManagerListingSubmissionV1({
+        ...createDefaultListingSubmission(),
+        holdingDepositTiming: "sometime-later",
+      } as never);
+      expect(sub.holdingDepositTiming).toBe("after_approval");
+    });
+  });
 });

@@ -23,9 +23,12 @@ vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: () => ({}),
 }));
 
+const markDeposit = vi.fn(async () => ({ chargeId: "hc-deposit-1", alreadyPaid: false }));
+
 vi.mock("@/lib/stripe-application-fee", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/stripe-application-fee")>()),
   markApplicationFeePaidFromStripeSession: async () => ({ chargeId: "hc-app-fee-1", alreadyPaid: false }),
+  markApplicationDepositPaidFromStripeSession: markDeposit,
 }));
 
 const APPLICANT = "Applicant@Example.com";
@@ -57,6 +60,31 @@ describe("POST /api/stripe/application-fee-verify", () => {
   beforeEach(() => {
     retrieve.mockReset();
     retrieve.mockResolvedValue(paidSession());
+    markDeposit.mockClear();
+  });
+
+  it("also marks the holding deposit paid — and returns its charge id — on a combined session", async () => {
+    retrieve.mockResolvedValue(
+      paidSession({ metadata: { purpose: "rental_application_fee", property_id: "mgr-demo-pioneer", resident_email: APPLICANT, includes_holding_deposit: "true" } }),
+    );
+    const { POST } = await import("@/app/api/stripe/application-fee-verify/route");
+    const res = await POST(post({ sessionId: "cs_test_app_fee", expectedEmail: APPLICANT }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.chargeId).toBe("hc-app-fee-1");
+    expect(json.depositChargeId).toBe("hc-deposit-1");
+    expect(markDeposit).toHaveBeenCalledTimes(1);
+  });
+
+  it("never calls the deposit-marking path for a plain (non-combined) session", async () => {
+    const { POST } = await import("@/app/api/stripe/application-fee-verify/route");
+    const res = await POST(post({ sessionId: "cs_test_app_fee", expectedEmail: APPLICANT }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.depositChargeId ?? null).toBeNull();
+    expect(markDeposit).not.toHaveBeenCalled();
   });
 
   it("confirms the payment and reports a match without ever echoing the applicant email", async () => {
