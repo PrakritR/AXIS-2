@@ -310,11 +310,26 @@ async function fetchApplicationsForManagerUser(
   // each tab by its own module grant). So a co-manager's linked rows are included
   // when EITHER `applications` OR `residents` is granted on the property — a
   // co-manager with neither grant gets none of the owner's linked rows.
-  const [appIds, resIds] = await Promise.all([
+  const [appIds, resIds, { data: ownedProperties, error: ownedPropertiesError }] = await Promise.all([
     linkedPropertyIdsForModule(db, userId, "applications"),
     linkedPropertyIdsForModule(db, userId, "residents"),
+    db.from("manager_property_records").select("id").eq("manager_user_id", userId),
   ]);
-  const linkedPropertyIds = new Set<string>([...appIds, ...resIds]);
+  if (ownedPropertiesError) throw ownedPropertiesError;
+  // Every property this manager owns TODAY, unioned with co-manager-linked ones,
+  // is a second, attribution-INDEPENDENT way in: the primary `manager_user_id ===
+  // userId` query below only finds rows whose stored attribution still matches.
+  // An application's `manager_user_id` is resolved once at submit time and never
+  // re-resolved once the resident stops touching the draft (nothing re-runs
+  // `linkResidentOnApplicationSubmit` for an abandoned "Incomplete" application),
+  // so a property that changed hands (ownership transfer, a re-assigned
+  // co-manager grant, or a historical resolution bug) would otherwise permanently
+  // hide that resident's application from the property's CURRENT owner — exactly
+  // the "manager's own empty-state copy promises Incomplete shows up here, and it
+  // doesn't" gap. Property ownership (not the frozen attribution stamp) is the
+  // source of truth for who should see the row.
+  const ownedPropertyIds = new Set<string>((ownedProperties ?? []).map((p) => p.id).filter(Boolean));
+  const propertyScopedIds = new Set<string>([...ownedPropertyIds, ...appIds, ...resIds]);
   const select = "id, row_data, updated_at, manager_user_id, property_id, assigned_property_id";
 
   const { data: ownedRows, error: ownedError } = await db
@@ -330,8 +345,8 @@ async function fetchApplicationsForManagerUser(
     if (row.id) byId.set(row.id, row);
   }
 
-  if (linkedPropertyIds.size > 0) {
-    const propertyIds = [...linkedPropertyIds];
+  if (propertyScopedIds.size > 0) {
+    const propertyIds = [...propertyScopedIds];
     const [{ data: byProperty, error: propertyError }, { data: byAssigned, error: assignedError }] = await Promise.all([
       db
         .from("manager_application_records")

@@ -12,6 +12,7 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
+  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
@@ -47,10 +48,12 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import {
   applicationStageDisplayLabel,
+  findInProgressRowForTarget,
   isInProgressApplicationRow,
+  type ApplicationRequestTarget,
 } from "@/lib/rental-application/in-progress-application";
 import {
   canResidentWithdrawApplication,
@@ -59,6 +62,7 @@ import {
 } from "@/lib/rental-application/resident-application-list";
 import { applicationHasGroup } from "@/lib/rental-application/application-groups";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
+import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   return rows.reduce(
@@ -86,9 +90,19 @@ function rowStatusLabel(row: DemoApplicantRow): string {
 
 function continueApplicationPath(row: DemoApplicantRow): string {
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
-  return pid
-    ? `${RESIDENT_PORTAL_BASE_PATH}/applications/apply?propertyId=${encodeURIComponent(pid)}`
-    : `${RESIDENT_PORTAL_BASE_PATH}/applications/apply`;
+  if (!pid) return `${RESIDENT_PORTAL_BASE_PATH}/applications/apply`;
+  const params = new URLSearchParams({ propertyId: pid });
+  // Carry the row's own room/bundle so re-entering the wizard resolves back to
+  // THIS specific in-progress application, not a different draft on the same property.
+  const bundleId = row.application?.bundleId?.trim();
+  if (bundleId) {
+    params.set("bundle", bundleId);
+  } else {
+    const roomChoice = row.application?.roomChoice1?.trim();
+    const listingRoomId = roomChoice ? parseRoomChoiceValue(roomChoice).listingRoomId : undefined;
+    if (listingRoomId) params.set("listingRoomId", listingRoomId);
+  }
+  return `${RESIDENT_PORTAL_BASE_PATH}/applications/apply?${params.toString()}`;
 }
 
 export function ResidentApplicationsPanel({
@@ -160,7 +174,23 @@ export function ResidentApplicationsPanel({
     );
   }, [residentEmail, tick]);
 
-  const inProgressRow = useMemo(() => rows.find(isInProgressApplicationRow), [rows]);
+  // What this /apply request is actually asking for, so an in-progress
+  // application for a DIFFERENT property (or a different room in the same
+  // property) never hijacks the view meant for this one.
+  const applyTarget = useMemo<ApplicationRequestTarget | null>(() => {
+    const propertyId = (searchParams.get("propertyId") ?? "").trim();
+    if (!propertyId) return null;
+    return {
+      propertyId,
+      listingRoomId: (searchParams.get("listingRoomId") ?? "").trim() || undefined,
+      bundleId: (searchParams.get("bundle") ?? "").trim() || undefined,
+    };
+  }, [searchParams]);
+
+  const inProgressRow = useMemo(
+    () => findInProgressRowForTarget(rows, applyTarget),
+    [rows, applyTarget],
+  );
 
   const counts = useMemo(() => countByBucket(rows), [rows]);
   const tabs = useMemo(
@@ -357,21 +387,26 @@ export function ResidentApplicationsPanel({
 
   const newApplicationButton =
     sessionReady && !applyMode ? (
-      <Button
-        type="button"
-        className="rounded-full"
-        data-attr="resident-applications-new"
-        onClick={() => {
-          if (demoMode) {
-            setDemoApplyPropertyId(undefined);
-            setDemoApplyOpen(true);
-            return;
-          }
-          portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`);
-        }}
-      >
-        Start application
-      </Button>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="resident-applications-apply"
+          onClick={() => {
+            if (demoMode) {
+              setDemoApplyPropertyId(undefined);
+              setDemoApplyOpen(true);
+              return;
+            }
+            // No property chosen yet — send them to browse listings and pick
+            // one, then straight into a fresh application for it.
+            portalNavigate(residentBrowseFromApplicationHref());
+          }}
+        >
+          Apply to a property
+        </Button>
+      </div>
     ) : null;
 
   const titleAside = newApplicationButton;

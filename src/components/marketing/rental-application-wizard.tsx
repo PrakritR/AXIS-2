@@ -43,10 +43,13 @@ import {
   residentApplicationSubmitBlocked,
 } from "@/lib/rental-application/application-policy";
 import {
+  findInProgressRowForTarget,
   isInProgressApplicationRow,
   markApplicationSubmitInitiated,
   shouldSyncInProgressDraft,
   syncInProgressApplicationRow,
+  targetMatchesApplication,
+  type ApplicationRequestTarget,
 } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { GroupRole, RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -136,6 +139,23 @@ function rentalApplicationApplyPath(mode: RentalApplicationWizardMode): string {
   return mode === "portal" ? "/resident/applications/apply" : "/rent/apply";
 }
 
+function wizardTargetFromParam(
+  searchParams: { get: (key: string) => string | null },
+): ApplicationRequestTarget | null {
+  const propertyId = searchParams.get("propertyId")?.trim() || "";
+  if (!propertyId) return null;
+  return {
+    propertyId,
+    listingRoomId: searchParams.get("listingRoomId")?.trim() || undefined,
+    bundleId: searchParams.get("bundle")?.trim() || undefined,
+  };
+}
+
+function wizardTargetSignature(target: ApplicationRequestTarget | null): string {
+  if (!target) return "";
+  return [target.propertyId, target.listingRoomId ?? "", target.bundleId ?? ""].join("::");
+}
+
 export function RentalApplicationWizard({
   showToast,
   mode = "public",
@@ -171,13 +191,46 @@ function RentalApplicationWizardInner({
   linkedPropertyId: linkedPropertyIdProp,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
+  const requestedTarget = mode === "portal" ? wizardTargetFromParam(searchParams) : null;
+  const requestedTargetSignature = wizardTargetSignature(requestedTarget);
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
   const [maxStepReached, setMaxStepReached] = useState(1);
   const [form, setForm] = useState<RentalWizardFormState>(() => {
     const draft = loadRentalWizardDraft();
-    return draft ? { ...createInitialRentalWizardState(), ...draft } : createInitialRentalWizardState();
+    if (!draft) return createInitialRentalWizardState();
+    // A draft still loaded (same tab, no reload) for a DIFFERENT property/room
+    // than this request must never flash onto a fresh apply — start blank and
+    // let the reconciliation effect resolve the real target (an existing
+    // in-progress application for it, or a clean new one).
+    if (requestedTarget && !targetMatchesApplication(requestedTarget, { application: draft })) {
+      return createInitialRentalWizardState();
+    }
+    return { ...createInitialRentalWizardState(), ...draft };
   });
+  // Tracks which target signature has been confirmed (matched to an existing
+  // in-progress application, or confirmed fresh) by the reconciliation effect.
+  // While it disagrees with the CURRENT requested target, no other effect may
+  // mint a new axis id or sync/create an application row — otherwise a reload
+  // can create a duplicate before the async server lookup below has a chance
+  // to find the real match. Mirrors the `form` initializer's own draft-match
+  // check (rather than sharing it via a ref, which render may not read/write).
+  //
+  // A local draft ALONE is not proof this target was already reconciled: on a
+  // fresh navigation, the listing-prefill effect can populate a brand-new
+  // draft's propertyId/room from the SAME URL before this ever runs, which
+  // would coincidentally "match" a target it has never actually checked
+  // against the server. Only an already-saved axis id proves this exact
+  // session already resolved (found-or-created) a real application for it.
+  const [reconciledSignature, setReconciledSignature] = useState<string>(() => {
+    if (!loadRentalWizardDraftAxisId()?.trim()) return "";
+    const draft = loadRentalWizardDraft();
+    const matchedTarget = !draft
+      ? !requestedTarget
+      : !requestedTarget || targetMatchesApplication(requestedTarget, { application: draft });
+    return matchedTarget ? requestedTargetSignature : "";
+  });
+  const isReconcilingTarget = Boolean(requestedTargetSignature) && reconciledSignature !== requestedTargetSignature;
   const [errors, setErrors] = useState<RentalWizardErrors>({});
   const [draftReady] = useState(true);
   const [extrasTick, setExtrasTick] = useState(0);
@@ -373,6 +426,10 @@ function RentalApplicationWizardInner({
 
   useEffect(() => {
     if (!draftReady) return;
+    // Wait for reconciliation to confirm this target before minting an axis id
+    // or writing anything to the server — otherwise a fresh page load can sync
+    // a brand-new row before the async lookup below finds the real match.
+    if (mode === "portal" && isReconcilingTarget) return;
     const email = (mode === "portal" ? sessionEmail ?? form.email : form.email).trim();
     const pid = form.propertyId.trim();
     if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
@@ -407,29 +464,65 @@ function RentalApplicationWizardInner({
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, [draftReady, form, mode, sessionEmail]);
+  }, [draftReady, form, mode, sessionEmail, isReconcilingTarget]);
 
   useEffect(() => {
     if (!draftReady || mode !== "portal") return;
     const email = (sessionEmail ?? form.email).trim().toLowerCase();
-    if (!email.includes("@")) return;
-    if (loadRentalWizardDraft()) return;
+    if (!email.includes("@")) return; // resolved once email is known — effect reruns.
+
+    // Derived fresh from searchParams (not the render-scoped `requestedTarget`
+    // object, which is a new reference every render and would make this a
+    // dependency that never stabilizes).
+    const target = wizardTargetFromParam(searchParams);
+    const signature = wizardTargetSignature(target);
+
+    // A local draft is only trustworthy as "already reconciled" if it also
+    // carries a saved axis id — proof this exact session already resolved
+    // (found-or-created) a real application for it. Without one, a draft can
+    // just be the listing-prefill effect's freshly populated propertyId/room
+    // for THIS target, which would otherwise look like a false match and skip
+    // the one server check that finds the real existing application.
+    const existingAxisId = loadRentalWizardDraftAxisId()?.trim();
+    const existingDraft = existingAxisId ? loadRentalWizardDraft() : null;
+    if (existingDraft) {
+      // Bare entry (no explicit property/room in the URL) — keep whatever is
+      // already loaded; there's nothing more specific to reconcile against.
+      // The loaded draft already IS this exact application — nothing to do.
+      if (!target || targetMatchesApplication(target, { application: existingDraft })) {
+        setReconciledSignature(signature);
+        return;
+      }
+      // Otherwise the loaded draft belongs to a DIFFERENT property/room than
+      // this request. Fall through and resolve the real target below instead
+      // of letting an unrelated application's data silently carry over.
+    }
 
     let cancelled = false;
     void syncManagerApplicationsFromServer({ force: true }).then(() => {
-      if (cancelled || loadRentalWizardDraft()) return;
+      if (cancelled) return;
       const inProgress = applicationsForResidentEmail(email).filter(isInProgressApplicationRow);
-      if (inProgress.length === 0) return;
-      const linkedPid = searchParams.get("propertyId")?.trim();
-      const hit =
-        (linkedPid ? inProgress.find((row) => (row.propertyId?.trim() || row.application?.propertyId?.trim()) === linkedPid) : undefined) ??
-        inProgress[0];
-      if (!hit?.application) return;
-      saveRentalWizardDraftAxisId(hit.id);
-      saveRentalWizardDraft({ ...createInitialRentalWizardState(), ...hit.application, email });
-      queueMicrotask(() => {
+      const hit = findInProgressRowForTarget(inProgress, target);
+      if (hit?.application) {
+        // An in-progress application already exists for this exact target — resume it.
+        saveRentalWizardDraftAxisId(hit.id);
+        saveRentalWizardDraft({ ...createInitialRentalWizardState(), ...hit.application, email });
         setForm({ ...createInitialRentalWizardState(), ...hit.application, email });
-      });
+        setReconciledSignature(signature);
+        return;
+      }
+      // No in-progress application matches this target. If a stale draft for
+      // a different property/room is still loaded (same browser tab, no
+      // reload), it must not bleed into a fresh application — clear it so a
+      // new draft (and a new axis id, minted on next save) starts clean.
+      if (target && existingDraft) {
+        clearRentalWizardDraft();
+        setForm({ ...createInitialRentalWizardState(), email });
+      }
+      // Either a match was found and loaded above, or none exists and this is
+      // confirmed to be a genuinely fresh target — either way, it is now safe
+      // for the sync/create effect to mint an axis id and write to the server.
+      setReconciledSignature(signature);
     });
     return () => {
       cancelled = true;
@@ -589,7 +682,7 @@ function RentalApplicationWizardInner({
       }
     }
     return true;
-  }, [form, showToast]);
+  }, [form, setStep, showToast]);
 
   const applicationFeeGate = useMemo(() => {
     void chargeTick;
@@ -810,7 +903,7 @@ function RentalApplicationWizardInner({
         showToast(sync.error ?? "Application saved locally but could not sync to server. Try again.");
       }
     },
-    [form, mode, router, showToast, submitting],
+    [form, mode, router, setStep, showToast, submitting],
   );
 
   useEffect(() => {

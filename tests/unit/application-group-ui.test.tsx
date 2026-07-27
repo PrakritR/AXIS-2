@@ -171,12 +171,21 @@ describe("group application — manager reconciliation", () => {
     ROWS = HOUSEHOLD_ROWS;
     const { container } = render(<ManagerApplications />);
 
-    // Row badge on the default (Pending) tab: 2 of the 3 declared members have
-    // actually submitted — the count reconciles across buckets, so the approved
-    // organizer sitting on another tab still counts toward the 2.
+    // Row badge on the default (Pending) tab: Priya has actually submitted, so
+    // she is the only member visible there — Sam is still a draft and now
+    // lives on the separate Incomplete tab, and Jordan (approved) is on a
+    // third tab entirely. The "2/3" ratio still reconciles across ALL of
+    // those buckets, it just no longer renders twice on one screen.
     const rowBadges = await screen.findAllByText("Group 2/3");
-    expect(rowBadges.length).toBe(2);
+    expect(rowBadges.length).toBe(1);
     dumpHtml("manager-rows", container.innerHTML);
+
+    // Switching to the Incomplete tab surfaces Sam's own "Group 2/3" badge.
+    fireEvent.click(screen.getByText("Incomplete"));
+    expect(await screen.findByText("Sam Okafor")).toBeTruthy();
+    expect(screen.getByText("Group 2/3")).toBeTruthy();
+    fireEvent.click(screen.getByText("Pending"));
+    await screen.findByText("Priya Nair");
 
     // Expand a joining member's application → roster of the whole household.
     fireEvent.click(screen.getByText("Priya Nair").closest("button")!);
