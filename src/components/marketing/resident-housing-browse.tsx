@@ -16,7 +16,7 @@ import {
 } from "@/components/marketing/resident-listing-search";
 import { usePublicListings } from "@/hooks/use-public-listings";
 import { HousingBrowseSwipeStack } from "@/components/marketing/housing-browse-swipe-stack";
-import { HousingBrowseCardOverlay } from "@/components/marketing/housing-browse-card-overlay";
+import { browseCardNeighborhoodLine } from "@/components/marketing/housing-browse-card-overlay";
 import {
   buildPropertyBrowseCards,
   demoOnlyBrowseCardPlaceholderImage,
@@ -63,13 +63,13 @@ function BrowseSkeleton() {
         <div className="mx-auto h-[min(62dvh,520px)] w-full max-w-[min(100%,22rem)] animate-pulse rounded-3xl bg-gradient-to-br from-accent/40 to-accent/10" />
       </div>
       <div
-        className="hidden gap-4 pb-2 lg:grid lg:grid-cols-3"
+        className="mx-auto hidden max-w-5xl gap-4 pb-2 sm:gap-5 lg:grid lg:grid-cols-3"
         aria-hidden
       >
         {Array.from({ length: 3 }, (_, i) => (
           <div
             key={i}
-            className="aspect-[3/4] animate-pulse rounded-2xl bg-gradient-to-br from-accent/40 to-accent/10"
+            className="aspect-[4/5] animate-pulse rounded-2xl bg-gradient-to-br from-accent/40 to-accent/10"
           />
         ))}
       </div>
@@ -77,15 +77,8 @@ function BrowseSkeleton() {
   );
 }
 
-function HousingBrowseCard({
-  card,
-  variant = "compact",
-}: {
-  card: PropertyBrowseCard;
-  variant?: "compact" | "carousel";
-}) {
+function HousingBrowseCard({ card }: { card: PropertyBrowseCard }) {
   const rent = formatRent(card);
-  const isCarousel = variant === "carousel";
   const resolvedImageUrl =
     card.imageUrl || (isDemoModeActive() ? demoOnlyBrowseCardPlaceholderImage(card.propertyId) : "");
   const isDataUrl = resolvedImageUrl.startsWith("data:");
@@ -95,37 +88,42 @@ function HousingBrowseCard({
     <Link
       href={`/rent/listings/${encodeURIComponent(card.propertyId)}`}
       data-attr="resident-browse-listing-card"
-      className={`group relative block overflow-hidden rounded-2xl bg-accent/20 shadow-sm ring-1 ring-border/40 transition duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:ring-primary/30 ${
-        isCarousel ? "w-full" : "w-[min(42vw,220px)] shrink-0 snap-start sm:w-[220px]"
-      }`}
+      className="group flex w-full flex-col overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
     >
-      <div className="relative aspect-[3/4] w-full overflow-hidden">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-accent/20">
         {hasPhoto ? (
-          <Image
-            src={resolvedImageUrl}
-            alt=""
-            fill
-            className="object-cover transition duration-500 group-hover:scale-[1.03]"
-            sizes={isCarousel ? "(max-width: 1280px) 30vw, 360px" : "220px"}
-            unoptimized={isDataUrl}
-          />
+          <>
+            <Image
+              src={resolvedImageUrl}
+              alt=""
+              fill
+              className="object-cover transition duration-500 group-hover:scale-[1.03]"
+              sizes="(max-width: 1280px) 30vw, 340px"
+              unoptimized={isDataUrl}
+            />
+            {/* Legibility scrim only — kept subtle since text now sits below the image. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-black/15 to-transparent" />
+          </>
         ) : (
-          <NoImagePlaceholder className="bg-gradient-to-br from-muted/15 to-accent/25" />
+          <NoImagePlaceholder variant="branded" />
         )}
-        {hasPhoto ? (
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
-        ) : null}
-        <HousingBrowseCardOverlay
-          card={card}
-          rent={rent}
-          periodLabel={periodSuffix(card)}
-          layout={isCarousel ? "carousel" : "compact"}
-        />
         {card.petFriendly ? (
           <span className="absolute left-2.5 top-2.5 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
             Pets OK
           </span>
         ) : null}
+      </div>
+      <div className="flex flex-1 flex-col gap-0.5 p-3.5">
+        <p className="line-clamp-1 text-xs font-medium text-muted">
+          {browseCardNeighborhoodLine(card)}
+        </p>
+        <p className="line-clamp-1 text-sm font-semibold text-foreground">
+          {card.headlineAddress}
+        </p>
+        <p className="mt-1 text-lg font-bold tracking-tight text-foreground">
+          {rent}
+          <span className="text-xs font-medium text-muted">{periodSuffix(card)}</span>
+        </p>
       </div>
       <div className="sr-only">
         {card.headlineAddress}, {card.neighborhood}, {rent}{card.pricePeriod === "day" ? " per day" : " per month"}
@@ -179,27 +177,32 @@ function HousingBrowseCarousel({ cards }: { cards: PropertyBrowseCard[] }) {
 
   const visible = cards.slice(startIndex, startIndex + visibleCount);
   const placeholders = Math.max(0, visibleCount - visible.length);
+  const canScroll = maxStart > 0;
 
   return (
-    <div className="flex items-center gap-3 sm:gap-4">
-      <CarouselArrow
-        direction="left"
-        disabled={startIndex <= 0}
-        onClick={() => setStartIndex((i) => Math.max(0, i - 1))}
-      />
-      <div className="grid min-w-0 flex-1 grid-cols-3 gap-4" aria-label="Available rental homes">
+    <div className="mx-auto flex max-w-5xl items-center gap-3 sm:gap-4">
+      {canScroll ? (
+        <CarouselArrow
+          direction="left"
+          disabled={startIndex <= 0}
+          onClick={() => setStartIndex((i) => Math.max(0, i - 1))}
+        />
+      ) : null}
+      <div className="grid min-w-0 flex-1 grid-cols-3 gap-4 sm:gap-5" aria-label="Available rental homes">
         {visible.map((card) => (
-          <HousingBrowseCard key={card.propertyId} card={card} variant="carousel" />
+          <HousingBrowseCard key={card.propertyId} card={card} />
         ))}
         {Array.from({ length: placeholders }, (_, i) => (
-          <div key={`pad-${i}`} aria-hidden className="hidden sm:block" />
+          <div key={`pad-${i}`} aria-hidden />
         ))}
       </div>
-      <CarouselArrow
-        direction="right"
-        disabled={startIndex >= maxStart}
-        onClick={() => setStartIndex((i) => Math.min(maxStart, i + 1))}
-      />
+      {canScroll ? (
+        <CarouselArrow
+          direction="right"
+          disabled={startIndex >= maxStart}
+          onClick={() => setStartIndex((i) => Math.min(maxStart, i + 1))}
+        />
+      ) : null}
     </div>
   );
 }
