@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   claimPendingAction,
   createPendingActionForUser,
@@ -132,6 +132,38 @@ describe("pending actions", () => {
     expect(rows[0]!.user_id).toBe("user_a");
     expect(rows[0]!.status).toBe("proposed");
     expect(rows[0]!.tool_name).toBe("do_thing");
+  });
+
+  it("returns null AND logs when the insert fails, so the failure is diagnosable", async () => {
+    // Regression: production once lacked the `portal` column, so this insert
+    // failed with a PostgREST unknown-column error that was silently swallowed —
+    // the user saw only "could not show the confirmation card" and no server log
+    // explained why. The null must still surface (callers show the fallback), but
+    // the reason must be logged.
+    const failingDb = {
+      from: () => ({
+        insert: () => ({
+          select: () => ({
+            single: async () => ({
+              data: null,
+              error: { message: "Could not find the 'portal' column of 'agent_pending_actions'", code: "PGRST204" },
+            }),
+          }),
+        }),
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const id = await propose(failingDb);
+      expect(id).toBeNull();
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [msg, detail] = spy.mock.calls[0]!;
+      expect(String(msg)).toContain("pending action insert failed");
+      expect(detail).toMatchObject({ tool: "do_thing", code: "PGRST204" });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("keeps every open proposal — a newer one never supersedes an older one", async () => {
