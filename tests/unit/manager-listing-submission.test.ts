@@ -7,7 +7,44 @@ import {
   isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
+  syncShortTermLeaseTermInAllowed,
 } from "@/lib/manager-listing-submission";
+import { sortLeaseTermsCanonical } from "@/lib/rental-application/lease-terms";
+
+describe("lease term ordering — ascending length, Short-Term Stay, Custom last", () => {
+  it("un-transposes 9-Month and 12-Month regardless of stored order", () => {
+    // The exact production defect: a listing stored 12-Month before 9-Month.
+    expect(sortLeaseTermsCanonical(["3-Month", "12-Month", "9-Month", "Month-to-Month", "Custom"])).toEqual([
+      "3-Month",
+      "9-Month",
+      "12-Month",
+      "Month-to-Month",
+      "Custom",
+    ]);
+  });
+
+  it("keeps Custom last and Short-Term Stay just before it", () => {
+    expect(
+      sortLeaseTermsCanonical(["Custom", "Short-Term Stay", "12-Month", "3-Month", "9-Month", "Month-to-Month"]),
+    ).toEqual(["3-Month", "9-Month", "12-Month", "Month-to-Month", "Short-Term Stay", "Custom"]);
+  });
+
+  it("resolveAllowedLeaseTerms canonicalizes a listing's stored (mis)ordered terms", () => {
+    const terms = resolveAllowedLeaseTerms({
+      allowedLeaseTerms: ["12-Month", "3-Month", "Custom", "9-Month"],
+      leaseTermsBody: "",
+      shortTermRentalsAllowed: false,
+    });
+    expect(terms).toEqual(["3-Month", "9-Month", "12-Month", "Custom"]);
+  });
+
+  it("adds Short-Term Stay before Custom only when the listing permits it", () => {
+    const withShort = syncShortTermLeaseTermInAllowed(["12-Month", "9-Month", "3-Month", "Custom"], true);
+    expect(withShort).toEqual(["3-Month", "9-Month", "12-Month", "Short-Term Stay", "Custom"]);
+    const withoutShort = syncShortTermLeaseTermInAllowed(["12-Month", "9-Month", "Short-Term Stay", "3-Month"], false);
+    expect(withoutShort).toEqual(["3-Month", "9-Month", "12-Month"]);
+  });
+});
 
 describe("manager-listing-submission", () => {
   it("normalizes minimal submission", () => {

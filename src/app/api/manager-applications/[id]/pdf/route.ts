@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
+import { managerCanAccessApplicationRecord } from "@/lib/auth/manager-application-access";
 import { applicationPdfFilename, buildApplicationPdf } from "@/lib/manager-application-pdf";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -44,23 +44,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const admin = await isAdminUser(user.id);
     let allowed = admin;
     if (!allowed) {
-      const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-      const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+      // The applicant may open their OWN application regardless of primary
+      // role — a multi-role account (profiles.role manager/owner who applied
+      // as a resident) owns any record carrying its own email, the same
+      // email-ownership key the resident applications list and the withdraw
+      // guard use.
+      const { data: profile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
       const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
-      if (role === "resident") {
-        const recordEmail = String(record.resident_email ?? "").trim().toLowerCase();
-        allowed = Boolean(email) && recordEmail === email;
-      } else {
-        if (record.manager_user_id && record.manager_user_id === user.id) {
-          allowed = true;
-        } else {
-          const linked = await collectLinkedPropertyIdsForUser(db, user.id);
-          const propertyId = String(record.property_id ?? "").trim();
-          const assignedPropertyId = String(record.assigned_property_id ?? "").trim();
-          allowed = Boolean(
-            (propertyId && linked.has(propertyId)) || (assignedPropertyId && linked.has(assignedPropertyId)),
-          );
-        }
+      const recordEmail = String(record.resident_email ?? "").trim().toLowerCase();
+      allowed = Boolean(email) && recordEmail === email;
+      if (!allowed) {
+        // Authorize with the SAME owned-property predicate the applications list
+        // uses, so a manager can open a row the list shows them — including an
+        // "Incomplete" draft with a stale `manager_user_id` on a property they
+        // own. The old check only accepted the frozen stamp + co-manager links,
+        // never DIRECT ownership, so the owner got a 403 (rendered as raw JSON
+        // in the preview frame) for their own applicant.
+        allowed = await managerCanAccessApplicationRecord(db, user.id, record);
       }
     }
     if (!allowed) return NextResponse.json({ error: "Not authorized for this application." }, { status: 403 });

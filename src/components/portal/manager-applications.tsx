@@ -161,9 +161,30 @@ export function ApplicationDocumentPreview({
 }) {
   const demo = isDemoModeActive();
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState(false);
+  // Every sync/autosave tick re-mints the row OBJECT (new refs for identical
+  // data), so the fetch must key on the values the PDF actually derives from —
+  // otherwise an open preview re-generates the PDF server-side and remounts the
+  // iframe on every background tick. The ref keeps the latest row for the
+  // fetch body without widening the dependency back to object identity.
+  const rowRef = useRef(row);
+  // Updated in an effect (never during render); declared BEFORE the fetch
+  // effect so it always sees this commit's row.
+  useEffect(() => {
+    rowRef.current = row;
+  });
+  const previewKey = [
+    row.id,
+    row.bucket,
+    applicationRoomLabel(row),
+    row.application?.hasCosigner === "yes" ? "cosigner" : "",
+  ].join("|");
 
   useEffect(() => {
     let cancelled = false;
+    const row = rowRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale error/preview when the row changes
+    setPdfError(false);
     if (demo) {
       void (async () => {
         const cosignerSubmissions =
@@ -180,11 +201,44 @@ export function ApplicationDocumentPreview({
         cancelled = true;
       };
     }
-    setPdfSrc(`${applicationPdfHref(row, { inline: true })}#toolbar=0&navpanes=0`);
+    // Fetch the PDF ourselves rather than pointing the frame at the API URL: an
+    // error response (403/404) is a JSON body, and an <iframe> would render that
+    // raw JSON straight into the UI. Validate it's really a PDF, embed it via a
+    // blob URL, and on any failure show a plain message + log the detail.
+    let objectUrl: string | null = null;
+    setPdfSrc(null);
+    void (async () => {
+      try {
+        const res = await fetch(applicationPdfHref(row, { inline: true }), { credentials: "include" });
+        const contentType = res.headers.get("content-type") ?? "";
+        if (!res.ok || !contentType.includes("application/pdf")) {
+          let detail = `HTTP ${res.status}`;
+          try {
+            detail = (await res.clone().text()).slice(0, 300) || detail;
+          } catch {
+            /* body already consumed / unavailable */
+          }
+          console.error("Application document preview failed", { applicationId: row.id, status: res.status, detail });
+          if (!cancelled) setPdfError(true);
+          return;
+        }
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setPdfSrc(`${objectUrl}#toolbar=0&navpanes=0`);
+      } catch (e) {
+        console.error("Application document preview error", e);
+        if (!cancelled) setPdfError(true);
+      }
+    })();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [row, demo]);
+  }, [previewKey, demo]);
 
   const downloadButton = showDownload ? (
     <Button
@@ -200,7 +254,11 @@ export function ApplicationDocumentPreview({
 
   const previewBody = (
     <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-      {pdfSrc ? (
+      {pdfError ? (
+        <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
+          Couldn&apos;t load this application document. Refresh and try again.
+        </div>
+      ) : pdfSrc ? (
         <iframe
           key={pdfSrc}
           src={pdfSrc}

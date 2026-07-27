@@ -32,6 +32,16 @@ import {
 } from "@/components/portal/portal-data-table";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
+import { PropertySearchPicker, type PropertySearchOption } from "@/components/marketing/property-search-picker";
+import {
+  isPropertyActiveForLeads,
+  loadPublicExtraListingsFromServer,
+  readExtraListingsPublic,
+} from "@/lib/demo-property-pipeline";
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
+import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
+import { isProductionPublicSite } from "@/lib/public-demo-access";
+import { getPropertyById } from "@/lib/rental-application/data";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -130,10 +140,28 @@ export function ResidentApplicationsPanel({
   const [tick, setTick] = useState(0);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // The ONE row this apply session's inline wizard is bound to — the row the
+  // auto-expand effect resolved for the URL target (or the sole bare-/apply
+  // draft). `expandedId` is NOT that identity: it follows every manual click,
+  // and the wizard always binds to the URL target, so rendering it under any
+  // other expanded in-progress row would show the WRONG application's wizard
+  // beneath that row's header.
+  const [wizardRowId, setWizardRowId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<DemoApplicantRow | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
+  // Inline "Apply to a property" picker: choosing which property to apply for
+  // happens in place (a searchable modal), then the wizard opens INLINE under
+  // its own row in this same list — no round-trip out to the browse page.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickedPropertyId, setPickedPropertyId] = useState<string | null>(null);
   const openHandled = useRef(false);
+  // Which application the apply-mode auto-expand has already opened. Guards the
+  // effect so it fires ONCE per resolved id and never re-snaps: a background
+  // sync tick rebuilds `rows` (new object refs), and without this guard the
+  // effect re-fired and dragged the expansion back onto its target — hijacking
+  // clicks on every OTHER row (the "clicking row 2/3 opens row 1" bug).
+  const autoExpandedApplyIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!sessionReady) return;
@@ -164,6 +192,19 @@ export function ResidentApplicationsPanel({
       window.removeEventListener(DEMO_APPLICATION_SUBMITTED_EVENT, closeApply);
     };
   }, [demoMode]);
+
+  // Hydrate the public listing catalog the inline picker reads. The resident
+  // portal doesn't otherwise load it (that used to be the browse page's job),
+  // so without this the "Apply to a property" picker would be empty. The loader
+  // is in-flight-guarded + CDN-cached, and re-renders options via the pipeline
+  // event once listings land.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    void loadPublicExtraListingsFromServer();
+    const on = () => setTick((t) => t + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, [pickerOpen]);
 
   const rows = useMemo(() => {
     void tick;
@@ -200,17 +241,18 @@ export function ResidentApplicationsPanel({
   // URL named (or clears a bundle choice, etc.), `targetMatchesApplication` stops
   // matching and `inProgressRow` goes from "this row" to `undefined`, even though
   // it's still the exact same in-progress application, just with an updated room.
-  // Once we've already locked onto a row via `expandedId` (the effect below), keep
-  // trusting that lock instead of re-deriving the identity from the stale target —
-  // otherwise the standalone `applyMode && !inProgressRow` branch below thinks
-  // there is suddenly no in-progress application and mounts a SECOND, brand-new
-  // `RentalApplicationWizard` (fresh `step` state, no draft) alongside the one
-  // already embedded in the expanded row: the "glitches back to the start" bug,
-  // and the two instances' un-coordinated syncs are why the room could also land
-  // on the server as blank. See `tests/unit/resident-applications-room-change.test.tsx`.
+  // Once the auto-expand effect below has locked the wizard onto a row
+  // (`wizardRowId`), keep trusting that lock instead of re-deriving the identity
+  // from the stale target — otherwise the standalone `applyMode &&
+  // !inProgressRow` branch below thinks there is suddenly no in-progress
+  // application and mounts a SECOND, brand-new `RentalApplicationWizard` (fresh
+  // `step` state, no draft) alongside the one already embedded in the expanded
+  // row: the "glitches back to the start" bug, and the two instances'
+  // un-coordinated syncs are why the room could also land on the server as
+  // blank. See `tests/unit/resident-applications-room-change.test.tsx`.
   const lockedInProgressRow = useMemo(
-    () => (expandedId ? rows.find((row) => row.id === expandedId && isInProgressApplicationRow(row)) : undefined),
-    [rows, expandedId],
+    () => (wizardRowId ? rows.find((row) => row.id === wizardRowId && isInProgressApplicationRow(row)) : undefined),
+    [rows, wizardRowId],
   );
   const activeInProgressRow = lockedInProgressRow ?? inProgressRow;
 
@@ -227,6 +269,45 @@ export function ResidentApplicationsPanel({
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
 
+  // Active public listings the resident can apply for — the same catalog the
+  // wizard's own property picker reads, surfaced up here so property choice can
+  // happen inline instead of on the separate browse page.
+  const propertyPickerOptions = useMemo<PropertySearchOption[]>(() => {
+    void tick;
+    if (!pickerOpen) return [];
+    return filterSandboxFromPublicCatalog(readExtraListingsPublic(), { production: isProductionPublicSite() })
+      .filter(isPropertyActiveForLeads)
+      .map((property) => {
+        const prop = getPropertyById(property.id);
+        return {
+          id: property.id,
+          title: property.title,
+          subtitle: prop?.address,
+          tags: prop ? [prop.neighborhood, prop.rentLabel].filter(Boolean) : undefined,
+          searchText: prop
+            ? `${prop.title} ${prop.address} ${prop.neighborhood} ${prop.buildingName} ${prop.zip}`
+            : property.title,
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [pickerOpen, tick]);
+
+  const startApplicationForProperty = (propertyId: string) => {
+    const pid = propertyId.trim();
+    if (!pid) return;
+    setPickerOpen(false);
+    setPickedPropertyId(null);
+    if (demoMode) {
+      setDemoApplyPropertyId(pid);
+      setDemoApplyOpen(true);
+      return;
+    }
+    // Stay inside the portal: /resident/applications/apply renders THIS same
+    // panel in apply mode, so the wizard opens inline under a new row here
+    // (the wizard's draft-sync mints the row once property + email are set).
+    portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply?propertyId=${encodeURIComponent(pid)}`);
+  };
+
   // A resident with zero applications is deliberately NOT auto-redirected into
   // the apply flow. The list page — with its always-visible "Apply to a property"
   // header action and the "No applications yet" empty state — must render
@@ -234,16 +315,49 @@ export function ResidentApplicationsPanel({
   // list straight to /apply is exactly what hid the entry point the captain
   // reported missing. Starting an application is always an explicit click.
 
+  // The wizard-row lock belongs to ONE apply target. When the resident starts
+  // an application for a DIFFERENT property (the inline picker navigates to a
+  // new ?propertyId), release the lock so the standalone wizard can mount for
+  // the new target instead of staying pinned to the previous application. Keyed
+  // on the target's VALUES, not the `applyTarget` object — the wizard's own
+  // `?wizardStep=` URL writes re-mint `searchParams` (and therefore the memo)
+  // without changing the target.
+  const applyTargetKey = applyTarget
+    ? [applyTarget.propertyId, applyTarget.listingRoomId ?? "", applyTarget.bundleId ?? ""].join("|")
+    : "";
+  const applyTargetKeyRef = useRef(applyTargetKey);
   useEffect(() => {
-    if (!applyMode || !inProgressRow) return;
+    if (applyTargetKeyRef.current === applyTargetKey) return;
+    applyTargetKeyRef.current = applyTargetKey;
+    autoExpandedApplyIdRef.current = null;
+    setWizardRowId(null);
+  }, [applyTargetKey]);
+
+  useEffect(() => {
+    if (!applyMode) return;
+    // Auto-open ONLY the application this apply session is actually for:
+    //  - a propertyId in the apply URL -> the in-progress row matching it
+    //    (Continue / the inline "Apply to a property" flow);
+    //  - a bare /apply with exactly ONE in-progress draft -> resume that draft.
+    // With several in-progress drafts and no target we open NONE — picking an
+    // arbitrary "first" is exactly what hijacked clicks on every other row and
+    // let withdraw/edit hit the WRONG application. The ref makes it fire once
+    // per resolved id so a sync tick can never re-snap over a row the resident
+    // opened by hand.
+    const inProgress = rows.filter(isInProgressApplicationRow);
+    const targetRow = applyTarget?.propertyId.trim()
+      ? findInProgressRowForTarget(rows, applyTarget)
+      : inProgress.length === 1
+        ? inProgress[0]
+        : undefined;
+    if (!targetRow || autoExpandedApplyIdRef.current === targetRow.id) return;
+    autoExpandedApplyIdRef.current = targetRow.id;
     queueMicrotask(() => {
       setBucket("pending");
-      setExpandedId(inProgressRow.id);
+      setExpandedId(targetRow.id);
+      setWizardRowId(targetRow.id);
     });
-    // Only re-runs when a target-matched row newly appears/changes id — deliberately
-    // NOT on `activeInProgressRow`, so a later room change (which only affects
-    // `inProgressRow`'s target match, not this effect's own lock) can't re-fire.
-  }, [applyMode, inProgressRow]);
+  }, [applyMode, applyTarget, rows]);
 
   useEffect(() => {
     if (openHandled.current || rows.length === 0) return;
@@ -317,9 +431,9 @@ export function ResidentApplicationsPanel({
     >
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Withdrawing removes this application from your active list. It is not deleted; your property
-          manager keeps the record{withdrawTarget?.property ? ` for ${withdrawTarget.property}` : ""} and its
-          history, and you can reapply later if you change your mind.
+          Withdrawing removes this application from your list. Your property manager keeps the record
+          {withdrawTarget?.property ? ` for ${withdrawTarget.property}` : ""} and its history. Withdrawal is
+          final for this application: applying to the same home again starts a brand-new application.
         </p>
         <div className="flex justify-start gap-2">
           <Button
@@ -346,6 +460,55 @@ export function ResidentApplicationsPanel({
     </Modal>
   );
 
+  const propertyPickerModal = (
+    <Modal
+      open={pickerOpen}
+      title="Apply to a property"
+      onClose={() => setPickerOpen(false)}
+      panelClassName="max-w-lg"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Choose the home you want to apply for. Your application opens right here in your list — you can add
+          another property anytime.
+        </p>
+        <PropertySearchPicker
+          options={propertyPickerOptions}
+          value={pickedPropertyId}
+          onChange={setPickedPropertyId}
+          placeholder="Search by address, neighborhood, or property name…"
+          emptyMessage="No properties match your search."
+          listEmptyMessage="No properties are available to apply for right now."
+          ariaLabel="Search properties to apply for"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full px-4 text-[13px]"
+            data-attr="resident-applications-browse-homes"
+            onClick={() => {
+              setPickerOpen(false);
+              portalNavigate(residentBrowseFromApplicationHref());
+            }}
+          >
+            Browse homes
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            data-attr="resident-applications-start"
+            disabled={!pickedPropertyId}
+            onClick={() => pickedPropertyId && startApplicationForProperty(pickedPropertyId)}
+          >
+            Start application
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+
   const embeddedWizard = (
     <RentalApplicationWizard
       showToast={showToast}
@@ -362,7 +525,12 @@ export function ResidentApplicationsPanel({
     // everything else (row actions + the document summary) is LEFT-ALIGNED and
     // full-width, matching the manager Applications row so the actions sit tight
     // under the applicant instead of floating centered in an empty band.
-    if (isInProgressApplicationRow(row) && applyMode) {
+    // The embedded wizard binds to the URL apply target, so it may render ONLY
+    // under the row the auto-expand resolved for that target. Any OTHER
+    // expanded in-progress row gets its normal detail (Continue application →
+    // that row's OWN apply URL) — never a wizard bound to a different
+    // application under this row's header.
+    if (isInProgressApplicationRow(row) && applyMode && row.id === wizardRowId) {
       return <div className="mx-auto max-w-5xl">{embeddedWizard}</div>;
     }
     if (editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row)) {
@@ -450,14 +618,10 @@ export function ResidentApplicationsPanel({
           className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
           data-attr="resident-applications-apply"
           onClick={() => {
-            if (demoMode) {
-              setDemoApplyPropertyId(undefined);
-              setDemoApplyOpen(true);
-              return;
-            }
-            // No property chosen yet — send them to browse listings and pick
-            // one, then straight into a fresh application for it.
-            portalNavigate(residentBrowseFromApplicationHref());
+            // Pick the property IN PLACE (searchable modal), then open the
+            // wizard inline under a new row here — no round-trip to browse.
+            setPickedPropertyId(null);
+            setPickerOpen(true);
           }}
         >
           Apply to a property
@@ -568,6 +732,7 @@ export function ResidentApplicationsPanel({
         renderApplicationsTable()
       ) : null}
       {withdrawModal}
+      {propertyPickerModal}
     </>
   );
 

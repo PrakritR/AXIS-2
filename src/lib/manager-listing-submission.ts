@@ -10,10 +10,10 @@ import {
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
 import {
-  CUSTOM_LEASE_TERM,
   LEASE_TERM_OPTIONS,
   LISTING_LEASE_TERM_OPTION_SET,
   SHORT_TERM_LEASE_TERM,
+  sortLeaseTermsCanonical,
 } from "@/lib/rental-application/lease-terms";
 import { roomIsDailyPriced } from "@/lib/room-pricing";
 import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
@@ -410,9 +410,11 @@ export function syncShortTermLeaseTermInAllowed(
 ): string[] {
   const without = terms.filter((t) => t !== SHORT_TERM_LEASE_TERM);
   const withShortTerm = shortTermRentalsAllowed ? [...without, SHORT_TERM_LEASE_TERM] : without;
-  // "Custom" is the escape hatch — pin it to the very end, after Short-Term Stay.
-  if (!withShortTerm.includes(CUSTOM_LEASE_TERM)) return withShortTerm;
-  return [...withShortTerm.filter((t) => t !== CUSTOM_LEASE_TERM), CUSTOM_LEASE_TERM];
+  // Canonical order does the rest: ascending length → Short-Term Stay → Custom
+  // last. Sorting here (rather than only appending Short-Term/Custom) also fixes
+  // a stored listing whose terms were persisted out of order — e.g. 12-Month
+  // before 9-Month, which is what shipped the transposed production dropdown.
+  return sortLeaseTermsCanonical(withShortTerm);
 }
 
 export function resolveAllowedLeaseTerms(
