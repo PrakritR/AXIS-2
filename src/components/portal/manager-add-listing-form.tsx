@@ -3395,12 +3395,7 @@ export function ManagerAddListingForm({
               >
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application & holding</p>
-                      <p className="text-xs leading-relaxed text-muted">
-                        The application fee is set once for your whole account in Applications → Application fee, so it isn&apos;t configured per listing. The holding deposit credits toward the security deposit when the resident is approved (defaults to $100 if left blank).
-                      </p>
-                    </div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Holding deposit</p>
                     <div className="grid gap-4 sm:grid-cols-2">
                       {(
                         [
@@ -3414,7 +3409,7 @@ export function ManagerAddListingForm({
                       ).map(([key, label, value, required]) => (
                         <GridField key={key}>
                           <div data-wizard-field={key}>
-                            <FieldLabel required={required} hint={key === "holdingDeposit" ? "One-time — not monthly." : undefined}>
+                            <FieldLabel required={required} hint={key === "holdingDeposit" ? "One-time — credits toward the security deposit; defaults to $100 if blank." : undefined}>
                               {label}
                             </FieldLabel>
                           </div>
@@ -3438,46 +3433,6 @@ export function ManagerAddListingForm({
                           </div>
                         </GridField>
                       ))}
-                    </div>
-                    <div className="mt-4 space-y-3 border-t border-border pt-4">
-                      <label className="flex cursor-pointer items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                          checked={Boolean(sub.allowMultiplePropertyApplications)}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              allowMultiplePropertyApplications: e.target.checked,
-                            }))
-                          }
-                        />
-                        <span className="text-sm text-foreground">
-                          <span className="font-medium">Allow multiple applications</span>
-                          <span className="mt-0.5 block text-xs text-muted">
-                            Residents can apply to more than one property or room on this listing.
-                          </span>
-                        </span>
-                      </label>
-                      <label className="flex cursor-pointer items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                          checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              applicationFeeOnlyFirstApplication: e.target.checked,
-                            }))
-                          }
-                        />
-                        <span className="text-sm text-foreground">
-                          <span className="font-medium">Application fee only for first application</span>
-                          <span className="mt-0.5 block text-xs text-muted">
-                            Charge the application fee once per resident; skip payment on later applications.
-                          </span>
-                        </span>
-                      </label>
                     </div>
                   </div>
 
