@@ -7,10 +7,7 @@ import {
   resolvePlacementLeaseDates,
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
-import {
-  enrichApplicationForLease,
-  resolveApplicationPersonalFields,
-} from "@/lib/application-personal-fields";
+import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 import {
   defaultBackgroundCheckStatusForRow,
   normalizeBackgroundCheckStatus,
