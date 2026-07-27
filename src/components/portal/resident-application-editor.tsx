@@ -9,6 +9,11 @@ import {
   replaceManagerApplicationRowInCache,
   upsertApplicationRowToServerAwait,
 } from "@/lib/manager-applications-storage";
+import { normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
+import {
+  activeApplicationWizardSteps,
+  applicationConfigForVariant,
+} from "@/lib/rental-application/application-field-catalog";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import {
@@ -72,6 +77,31 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
     if (!prop) return [{ value: pid, label: row.property || pid }];
     return [{ value: prop.id, label: prop.title }];
   }, [form.propertyId, row.application?.propertyId, row.property, row.propertyId]);
+
+  const activeSteps = useMemo(() => {
+    const pid = form.propertyId.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+    const prop = pid ? getPropertyById(pid) : undefined;
+    const listingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    return activeApplicationWizardSteps(
+      applicationConfigForVariant(listingSub, form.rentalType),
+      normalizeCustomApplicationFields,
+    ).filter((s) => s <= EDIT_STEP_COUNT);
+  }, [form.propertyId, form.rentalType, row.application?.propertyId, row.propertyId]);
+  const firstActiveStep = activeSteps[0] ?? 1;
+  const lastActiveStep = activeSteps[activeSteps.length - 1] ?? EDIT_STEP_COUNT;
+  const nextActiveStep = useCallback(
+    (from: number) => activeSteps.find((s) => s > from) ?? from,
+    [activeSteps],
+  );
+  const prevActiveStep = useCallback(
+    (from: number) => {
+      for (let i = activeSteps.length - 1; i >= 0; i -= 1) {
+        if (activeSteps[i] < from) return activeSteps[i];
+      }
+      return from;
+    },
+    [activeSteps],
+  );
 
   const patchForm = useCallback(
     (p: Partial<RentalWizardFormState>) => {
@@ -174,9 +204,9 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
   }, [form, showToast]);
 
   const handleContinue = useCallback(() => {
-    if (step < EDIT_STEP_COUNT) {
+    if (step < lastActiveStep) {
       if (!validateCurrentStep()) return;
-      const next = step + 1;
+      const next = nextActiveStep(step);
       setStep(next);
       setMaxStepReached((m) => nextWizardMaxReached(m, next));
       setErrors({});
@@ -209,16 +239,16 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
       showToast("Application saved.");
       onSaved();
     })();
-  }, [form, onSaved, preserveReviewStatus, residentEmail, row, showToast, step, validateAllPrior, validateCurrentStep]);
+  }, [form, lastActiveStep, nextActiveStep, onSaved, preserveReviewStatus, residentEmail, row, showToast, step, validateAllPrior, validateCurrentStep]);
 
   const handleBack = useCallback(() => {
-    if (step <= 1) {
+    if (step <= firstActiveStep) {
       onCancel();
       return;
     }
-    setStep((s) => s - 1);
+    setStep(prevActiveStep(step));
     setErrors({});
-  }, [onCancel, step]);
+  }, [firstActiveStep, onCancel, prevActiveStep, step]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -235,14 +265,26 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
 
   const meta = EDIT_STEP_META[step - 1] ?? EDIT_STEP_META[0];
   const applicationFeeGate = { needsFee: false, paid: true, displayLabel: "", amount: 0 };
+  const activeStepIndex = activeSteps.indexOf(step);
+  const progressPct =
+    activeSteps.length > 0
+      ? Math.round((((activeStepIndex < 0 ? 0 : activeStepIndex) + 1) / activeSteps.length) * 100)
+      : 0;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
       <div className="border-b border-border pb-5">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
-          Step {step} of {EDIT_STEP_COUNT}
+          {form.rentalType === "short_term" ? "Short-term stay application" : "Rental application"}
         </p>
         <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{meta.title}</p>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 [html[data-theme=dark]_&]:bg-white/10">
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+            style={{ width: `${progressPct}%` }}
+            aria-hidden="true"
+          />
+        </div>
       </div>
 
       <div className="mt-6">
@@ -270,10 +312,10 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
 
       <div className="mt-8 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
         <Button type="button" variant="outline" onClick={handleBack} disabled={saving}>
-          {step <= 1 ? "Cancel" : "Back"}
+          {step <= firstActiveStep ? "Cancel" : "Back"}
         </Button>
         <Button type="button" onClick={handleContinue} disabled={saving}>
-          {saving ? "Saving…" : step === EDIT_STEP_COUNT ? "Save application" : "Continue"}
+          {saving ? "Saving…" : step >= lastActiveStep ? "Save application" : "Continue"}
         </Button>
       </div>
     </div>
