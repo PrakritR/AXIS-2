@@ -184,11 +184,14 @@ export function validateStandardWizardStep(
       }
     }
     if (
-      fieldEnabled("rentalType") &&
       f.rentalType === "short_term" &&
       !shortTermAllowedForProperty(f.propertyId, prop)
     ) {
       e.leaseTerm = "This listing does not allow short-term stays.";
+    }
+    if (f.rentalType === "short_term") {
+      if (!f.shortTermCheckInTime.trim()) e.shortTermCheckInTime = "Check-in time is required.";
+      if (!f.shortTermCheckOutTime.trim()) e.shortTermCheckOutTime = "Check-out time is required.";
     }
     const start = f.leaseStart.trim();
     const end = f.leaseEnd.trim();

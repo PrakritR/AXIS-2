@@ -18,7 +18,6 @@ import {
   isRoomApprovedConflict,
   isRoomPendingConflict,
   listingAllowedLeaseTerms,
-  propertyAllowsShortTermRental,
   roomSelectOptionsWithNone,
 } from "@/lib/rental-application/data";
 import {
@@ -461,16 +460,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 3) {
     void occupancySyncEpoch;
     const selectedProperty = getPropertyById(form.propertyId);
-    const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
-    // Short-term is now a lease-term option rather than a separate toggle, so it
-    // is only offered where the listing permits it (and where the manager hasn't
-    // hidden the rentalType field). The standard terms are always the listing's
-    // allowed set.
-    const shortTermOfferable = shortTermAllowed && showWizardField("rentalType");
+    // A single lease-term dropdown carries short-term too: listingAllowedLeaseTerms
+    // includes "Short-Term Stay" exactly when the listing permits it, so there is no
+    // separate "Application type" toggle that could contradict the term.
     const leaseTermOptions = form.propertyId.trim()
       ? listingAllowedLeaseTerms(form.propertyId)
       : [...LEASE_TERM_OPTIONS];
-    const isShortTermSelected = form.rentalType === "short_term";
     const rooms = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true }).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true });
     // Whole-unit listings (leased as one place, not room-by-room) don't ask for
@@ -549,7 +544,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 ? roomSelectOptionsWithNone(pid, { includeUnavailable: true }).filter((o) => o.value !== "")
                 : [];
               const autoRoom = isEntire ? pid : wholeUnit && unitOpts.length <= 1 ? (unitOpts[0]?.value ?? pid) : "";
-              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", rentalType: "standard" });
+              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", leaseTerm: "", rentalType: "standard" });
             }}
             placeholder="Search by address, neighborhood, or property name…"
             emptyMessage="No properties match your search."
@@ -695,18 +690,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             value={form.leaseTerm}
             onChange={(e) => {
               const v = e.target.value;
-              // The dropdown is the single control for the lease term AND whether
-              // this is a short-term stay — no separate "Application type" toggle
-              // to contradict it. Keep `rentalType` in lock-step with the choice
-              // so every downstream consumer (charges, lease dates, validation)
-              // stays consistent.
-              if (v === SHORT_TERM_LEASE_TERM) {
-                patch({ leaseTerm: v, rentalType: "short_term" });
-              } else if (v === "Month-to-Month") {
-                patch({ leaseTerm: v, rentalType: "standard", leaseEnd: "" });
-              } else {
-                patch({ leaseTerm: v, rentalType: "standard" });
-              }
+              // The single dropdown carries short-term as one option; rentalType is
+              // derived from the choice so the two can never contradict each other.
+              const rentalType = v === SHORT_TERM_LEASE_TERM ? "short_term" : "standard";
+              patch(
+                v === "Month-to-Month"
+                  ? { leaseTerm: v, leaseEnd: "", rentalType }
+                  : { leaseTerm: v, rentalType },
+              );
             }}
             className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
           >
@@ -716,17 +707,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 {t}
               </option>
             ))}
-            {shortTermOfferable ? (
-              <option value={SHORT_TERM_LEASE_TERM}>{SHORT_TERM_LEASE_TERM}</option>
-            ) : null}
           </Select>
           <FieldError msg={errors.leaseTerm} />
-          {form.leaseTerm === "Month-to-Month" ? (
-            <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
-              Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
-            </p>
-          ) : null}
-          {isShortTermSelected ? (
+          {form.rentalType === "short_term" ? (
             <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
               <p>
                 Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
@@ -737,6 +720,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
               ) : null}
             </div>
+          ) : null}
+          {form.leaseTerm === "Month-to-Month" ? (
+            <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
+              Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
+            </p>
           ) : null}
         </div>
         </WizardFieldGate>
@@ -787,10 +775,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             application.
           </p>
         ) : null}
-        {form.rentalType === "short_term" && showWizardField("rentalType") ? (
+        {form.rentalType === "short_term" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shortTermCheckInTime" optional>
+              <Label htmlFor="shortTermCheckInTime" required>
                 Check-in time
               </Label>
               <Input
@@ -798,10 +786,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 type="time"
                 value={form.shortTermCheckInTime}
                 onChange={(e) => patch({ shortTermCheckInTime: e.target.value })}
+                className={errors.shortTermCheckInTime ? "border-red-400 ring-2 ring-red-100" : ""}
               />
+              <FieldError msg={errors.shortTermCheckInTime} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shortTermCheckOutTime" optional>
+              <Label htmlFor="shortTermCheckOutTime" required>
                 Check-out time
               </Label>
               <Input
@@ -809,7 +799,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 type="time"
                 value={form.shortTermCheckOutTime}
                 onChange={(e) => patch({ shortTermCheckOutTime: e.target.value })}
+                className={errors.shortTermCheckOutTime ? "border-red-400 ring-2 ring-red-100" : ""}
               />
+              <FieldError msg={errors.shortTermCheckOutTime} />
             </div>
           </div>
         ) : null}
