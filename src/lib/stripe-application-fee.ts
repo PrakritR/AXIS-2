@@ -95,11 +95,11 @@ export async function markApplicationFeePaidFromStripeSession(
 /**
  * Marks the pending holding-deposit household charge paid alongside the
  * application fee, when this session combined both into one Checkout
- * (`metadata.includes_holding_deposit`, set only when the listing's
- * `holdingDepositTiming` is "at_application"). A no-op on any session that
- * did not combine a deposit — most sessions, and every "after_approval"
- * listing — so this is always safe to call unconditionally after
- * `markApplicationFeePaidFromStripeSession`.
+ * (`metadata.includes_holding_deposit`). Nothing creates combined sessions
+ * anymore — the application collects only the fee, so this survives solely to
+ * settle legacy in-flight sessions and is a no-op on any session without that
+ * metadata (i.e. every new session), making it always safe to call
+ * unconditionally after `markApplicationFeePaidFromStripeSession`.
  */
 export async function markApplicationDepositPaidFromStripeSession(
   db: SupabaseClient,

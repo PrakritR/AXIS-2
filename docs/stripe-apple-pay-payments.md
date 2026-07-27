@@ -16,14 +16,13 @@ builder, `createAxisAchCheckoutSession()` (`src/lib/stripe-axis-ach-checkout.ts`
 | Flow | Route | Checkout | Method-class |
 | --- | --- | --- | --- |
 | Rent (household charges) | `/api/stripe/household-charge-checkout` | Embedded (`StripeEmbeddedCheckout`) | resident picks Bank / **Card** / Link |
-| Application fee | `/api/stripe/application-fee-checkout` | Hosted redirect | **Card** (was ACH) |
+| Application fee | `/api/stripe/application-fee-checkout` | Embedded (`ApplicationFeeInlinePayment` → `StripeEmbeddedCheckout`), default `mode: "embedded"`; legacy `mode: "hosted"` redirect retained | **Card** (was ACH) |
 
 Apple Pay and Google Pay are **card wallets** — they only ride on the **card**
-method-class, never on the bank/ACH session. The payer is charged **face value on
-every method** (PropLane absorbs Stripe's processing cost), so the total is the
-same whether the buyer taps Apple Pay, Google Pay, or types a card, and the
-manager's Connect payout stays the full subtotal on every method (see
-[`docs/agents/resident-payments.md`](agents/resident-payments.md)).
+method-class, never on the bank/ACH session. The total is the same whether the
+buyer taps Apple Pay, Google Pay, or types a card; who bears Stripe's
+processing cost is the plan-based fee model owned by
+[`docs/agents/resident-payments.md`](agents/resident-payments.md).
 
 **Surfacing the wallets.** Stripe only shows Apple Pay/Google Pay when the session
 uses **dynamic payment methods** scoped to card. `paymentMethodStripeConfig()`:
@@ -74,10 +73,11 @@ registered with Stripe and the domain-association file hosted:
   site and app WebView load), plus the legacy `www.axis-seattle-housing.com`
   while that host stays live.
 
-The **hosted** application-fee redirect renders on `checkout.stripe.com`, which
-Stripe verifies itself — so Apple Pay there works even before our own domain is
-registered. Our-domain registration is what unlocks the **embedded** rent
-checkout wallet.
+Our-domain registration is what unlocks the wallets on **embedded** Checkout —
+both the rent checkout and the (now default) embedded application-fee step. The
+legacy **hosted** application-fee redirect renders on `checkout.stripe.com`,
+which Stripe verifies itself, so Apple Pay there works even before our own
+domain is registered.
 
 ## Account-owner setup (one time, Stripe Dashboard — cannot be scripted here)
 
@@ -97,8 +97,8 @@ The iOS app loads the production site in a WKWebView. Apple Pay on the **web**
 works in Safari immediately once the above is done. Apple Pay **inside the
 WKWebView** can require the native shell to be entitled for Apple Pay on the web —
 that is native build config and is **out of scope** for this change (a separate
-iOS task owns native config). The hosted application-fee redirect and Safari web
-paths are unaffected.
+iOS task owns native config). The legacy hosted application-fee redirect and
+Safari web paths are unaffected.
 
 ## Testing
 
@@ -111,8 +111,8 @@ paths are unaffected.
 1. Rent: `/resident/payments` → select a pending charge → **Card** method → the
    embedded Checkout shows the Apple Pay button above the card fields on eligible
    Safari/devices.
-2. Application fee: `/rent/apply` → final fee step → the hosted Checkout shows
-   Apple Pay for the card method.
+2. Application fee: `/rent/apply` → final fee step → the embedded card form
+   rendered in-step shows Apple Pay for the card method.
 
 ## Related
 

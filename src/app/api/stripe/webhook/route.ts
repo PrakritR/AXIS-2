@@ -162,8 +162,8 @@ export async function POST(req: Request) {
         try {
           await markApplicationFeePaidFromStripeSession(db, session);
           // No-op on any session that did not combine a holding deposit
-          // (`metadata.includes_holding_deposit`, set only when the listing's
-          // `holdingDepositTiming` is "at_application").
+          // (`metadata.includes_holding_deposit` — legacy-only; nothing
+          // creates combined fee+deposit sessions anymore).
           await markApplicationDepositPaidFromStripeSession(db, session);
           await enrichCheckoutLedgerFees(stripe, session);
           const distinctId = session.client_reference_id ?? session.id;

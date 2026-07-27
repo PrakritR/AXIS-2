@@ -238,19 +238,19 @@ export type ManagerListingSubmissionV1 = {
   shortTermMoveInFee?: string;
   applicationFee: string;
   /**
-   * One-time holding deposit collected with the application (defaults to $100 when blank).
-   * Not a recurring charge — see `holding_deposit` household charge kind.
+   * Refundable deposit securing the application; credited toward the security
+   * deposit on approval (defaults to $100 when blank). Billed under Payments
+   * after approval — never collected during the application. Not a recurring
+   * charge — see `holding_deposit` household charge kind.
    */
-  /** Refundable deposit securing the application; credited toward security deposit on approval. */
   holdingDeposit?: string;
   /**
-   * Manager's choice for WHEN the holding deposit is collected. "at_application"
-   * combines it with the application fee into one charge, paid before the
-   * applicant can submit; "after_approval" (default, incl. every listing that
-   * predates this setting) defers it to Payments once the manager approves —
-   * unchanged from the prior fixed behavior. Never affects the application fee
-   * itself, which is always collected at application regardless of this
-   * setting. See `docs/agents/resident-payments.md`.
+   * @deprecated The at-application collection this once selected was removed
+   * (captain decision, 2026-07-26): the application collects ONLY the
+   * application fee, and the deposit always bills under Payments after
+   * approval. Kept so stored submissions still normalize; no UI sets it and
+   * nothing creates a combined fee+deposit charge anymore.
+   * See `docs/agents/resident-payments.md`.
    */
   holdingDepositTiming?: "at_application" | "after_approval";
   /** When true, residents may apply to additional properties or rooms beyond their first application. */

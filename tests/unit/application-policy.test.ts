@@ -6,7 +6,6 @@ import {
   shouldWaiveApplicationFeeForResident,
 } from "@/lib/rental-application/application-policy";
 import { IN_PROGRESS_APPLICATION_STAGE } from "@/lib/rental-application/in-progress-application";
-import { findApplicationFeeCharge, findHoldingDepositCharge } from "@/lib/household-charges";
 
 vi.mock("@/lib/manager-applications-storage", () => ({
   readManagerApplicationRows: vi.fn(() => []),

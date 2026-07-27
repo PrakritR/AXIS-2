@@ -1207,9 +1207,6 @@ function RentalApplicationWizardInner({
   }, [
     step,
     form,
-    form.propertyId,
-    form.email,
-    form.applicationFeePayChannel,
     applicationFeeGate.paid,
     applicationFeeGate.needsFee,
     applicationFeePaymentVerified,

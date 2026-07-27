@@ -657,8 +657,8 @@ export function ManagerApplications() {
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
-    // A holding deposit collected AT APPLICATION (the manager's per-listing
-    // choice — see `holdingDepositTiming`) is never auto-refunded when the
+    // A holding deposit collected AT APPLICATION (a since-removed per-listing
+    // choice, `holdingDepositTiming`) is never auto-refunded when the
     // application is later rejected or withdrawn: PropLane has no automated
     // refund flow, and whether the deposit is even refundable is a
     // legal/lease-terms question the manager must resolve directly with the

@@ -2155,10 +2155,11 @@ export function markApplicationFeePaidAfterStripe(residentEmail: string, propert
 
 /**
  * Sibling of `markApplicationFeePaidAfterStripe` for the holding-deposit leg
- * of a combined at-application charge (`holdingDepositTiming: "at_application"`).
- * A no-op (returns true) when the listing does not collect a deposit at
- * application — there is nothing to mark. Marking this paid is what makes
- * `paidHoldingDepositCreditCents` automatically credit it toward the security
+ * of a combined at-application charge. Legacy-only: combined fee+deposit
+ * collection was removed (nothing creates such a charge anymore — see
+ * `ensurePendingHoldingDepositCharge` above), so this is a no-op (returns
+ * true) unless a pre-removal deposit charge row exists. Marking one paid is
+ * what makes `paidHoldingDepositCreditCents` credit it toward the security
  * deposit at approval, exactly like a deposit paid manually pre-PR139.
  */
 export function markHoldingDepositPaidAfterStripe(residentEmail: string, propertyId: string, residentUserId: string | null): boolean {
