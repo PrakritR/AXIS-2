@@ -116,6 +116,10 @@ export function assistantTurnErrorResponse(error: unknown): {
   return { body: { error: message }, status: httpStatus };
 }
 
-/** Shown in-thread when a proposal could not be persisted for confirm. */
+/**
+ * Shown in-thread when a proposal could not be persisted for confirm. It must
+ * be unambiguous that NOTHING was changed — the whole failure mode this guards
+ * against is the assistant sounding like it completed work it never did.
+ */
 export const PENDING_ACTION_SAVE_FAILED_NOTE =
-  "I drafted an action but could not show the confirmation card. Try sending the request again, or complete it from the main portal.";
+  "I couldn't save that action for you to confirm, so nothing has been changed. Please try again in a moment, or make the change from the main portal.";

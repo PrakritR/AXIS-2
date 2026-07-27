@@ -1,5 +1,10 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { LineCapStyle, PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import {
+  PROPLANE_MARK_PATHS,
+  PROPLANE_MARK_STROKE_WIDTH,
+  PROPLANE_MARK_VIEWBOX_SIZE,
+} from "@/lib/brand/proplane-mark";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -156,29 +161,33 @@ function truncateToWidth(text: string, font: PDFFont, size: number, maxWidth: nu
 }
 
 /**
- * Draw the PropLane paper-plane mark inside a rounded brand tile. Vector
- * reproduction of the app's <AxisLogoMark> glyph so the document header
- * carries real branding.
+ * Draw the PropLane mark (canonical geometry: {@link PROPLANE_MARK_PATHS})
+ * inside a white brand tile. Vector reproduction of the app's <AxisLogoMark>
+ * glyph so the document header carries real branding — pdf-lib's
+ * `drawSvgPath` natively supports the mark's arc segments, so the same path
+ * strings the app renders are drawn here unchanged.
  */
 function drawAxisMark(page: PDFPage, x: number, topY: number, tile: number) {
-  // Brand tile.
-  page.drawRectangle({ x, y: topY - tile, width: tile, height: tile, color: BRAND });
-  // Glyph is authored in a 26×26 viewBox; center it within the tile.
-  const glyphW = tile * 0.6;
-  const s = glyphW / 26;
-  const gx = x + (tile - glyphW) / 2;
-  const gTop = topY - (tile - 26 * s) / 2;
-  const P = (vx: number, vy: number) => ({ x: gx + vx * s, y: gTop - vy * s });
-  const stroke = Math.max(1.4, 2.15 * s);
-  const line = (a: [number, number], b: [number, number], color = WHITE, thickness = stroke) =>
-    page.drawLine({ start: P(a[0], a[1]), end: P(b[0], b[1]), thickness, color, lineCap: 1 });
-  // Paper-plane body.
-  line([3.5, 11.9], [22.5, 3.9]);
-  line([22.5, 3.9], [15.4, 22.4]);
-  line([15.4, 22.4], [11.3, 14.6]);
-  line([11.3, 14.6], [3.5, 11.9]);
-  // Fold line.
-  line([11.3, 14.6], [22.5, 3.9], STEEL);
+  // Brand tile — white so the blue line-art mark has contrast (the header
+  // band behind it is dark navy).
+  page.drawRectangle({ x, y: topY - tile, width: tile, height: tile, color: WHITE });
+  // Glyph is authored in a 512×512 viewBox, centred near its own middle;
+  // scale it to fill ~62% of the tile and centre that within the tile.
+  const s = (tile * 0.62) / PROPLANE_MARK_VIEWBOX_SIZE;
+  const cx = x + tile / 2;
+  const cy = topY - tile / 2;
+  const originX = cx - s * (PROPLANE_MARK_VIEWBOX_SIZE / 2);
+  const originY = cy + s * (PROPLANE_MARK_VIEWBOX_SIZE / 2);
+  for (const d of PROPLANE_MARK_PATHS) {
+    page.drawSvgPath(d, {
+      x: originX,
+      y: originY,
+      scale: s,
+      borderColor: BRAND,
+      borderWidth: PROPLANE_MARK_STROKE_WIDTH,
+      borderLineCap: LineCapStyle.Round,
+    });
+  }
 }
 
 export type ApplicationPdfOptions = {

@@ -9,7 +9,7 @@ import {
 } from "@/components/auth/auth-mobile-primitives";
 import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
 import { ManagerTrialSignupForm } from "@/components/auth/manager-trial-signup-form";
-import { ResidentSignupBlocked } from "@/components/auth/resident-signup-blocked";
+import { ResidentSignupForm } from "@/components/auth/resident-signup-form";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -25,6 +25,7 @@ import {
   resolveSignInNextPath,
 } from "@/lib/auth/post-oauth-routing";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
 import { AUTH_PORTAL_PICKER_OPTIONS } from "@/lib/auth/auth-portal-picker-options";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
@@ -428,7 +429,13 @@ function NativeAuthHubInner({
 
             {isCreate ? (
               role === "resident" ? (
-                <ResidentSignupBlocked compact />
+                <ResidentSignupForm
+                  variant="compact"
+                  disabled={locked}
+                  hideLegalFooter
+                  initialEmail={email}
+                  nextPath={nextFromUrl && !isUnsafeRedirectPath(nextFromUrl) ? nextFromUrl : "/resident/applications"}
+                />
               ) : role === "vendor" ? (
                 <VendorSignupForm
                   variant="compact"

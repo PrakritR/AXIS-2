@@ -51,7 +51,7 @@ Google’s account picker shows **“to continue to {domain}”** based on your 
 **In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → OAuth consent screen:**
 
 1. Set **App name** to `PropLane`.
-2. Upload your **App logo** (square, at least 120×120 px — use the PropLane paper-plane mark).
+2. Upload your **App logo** (square, at least 120×120 px — use the PropLane mark, `public/brand/proplane-mark.svg`).
 3. Set **User support email** and **Developer contact** to your team address.
 4. Under **Authorized domains**, add `prop-lane.space` (and `supabase.co` if not already present).
 5. Add **Application home page**: `https://prop-lane.space`

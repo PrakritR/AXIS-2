@@ -13,7 +13,7 @@ Visual design reference for the Axis Housing platform. This document synthesizes
 - A rotating **chrome substrate** (conic gradients, gloss, legibility wash) on marquee moments
 - **Frosted glass** cards, nav, and inputs with hairline borders and inset highlights
 - A single **cobalt accent** (`#2f6bff` → `#5a8cff`) — never a second hue for role or surface differentiation
-- The **PropLane mark**: a paper-plane glyph in a solid foreground stroke with the fold line picked out in primary (light) / steel-light (dark) — no gradient or glow. The legacy “AX” letters are retired everywhere, including the browser tab icon.
+- The **PropLane mark**: a rounded house/chevron outline with a crossing X inside — single-colour line art, round caps and joins, no fill or glow. In-app it strokes with the `primary` theme accent (blue light theme / purple dark theme); fixed contexts (favicon, app icon, exports) use the literal PropLane blue `#2f6bff`. The legacy paper-plane glyph and the older “AX” letters are both retired everywhere, including the browser tab icon.
 
 **Logo tile:** 40–56px rounded square (14–20px radius), frosted gradient fill, white hairline border, inset top highlight. Wordmark: **PropLane** (17px semibold, −0.035em tracking; 15px in the `compact` size).
 

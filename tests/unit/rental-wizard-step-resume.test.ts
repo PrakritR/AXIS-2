@@ -25,7 +25,11 @@ vi.mock("@/lib/rental-application/drafts", () => ({
   clearRentalWizardDraft: () => {},
 }));
 
-import { initialWizardStepFromRequest, isElementOnScreen } from "@/components/marketing/rental-application-wizard";
+import {
+  initialWizardStepFromRequest,
+  isElementOnScreen,
+  parsePersistedWizardStep,
+} from "@/components/marketing/rental-application-wizard";
 
 function params(query: Record<string, string>): URLSearchParams {
   return new URLSearchParams(query);
@@ -85,6 +89,28 @@ describe("initialWizardStepFromRequest", () => {
   it("resumes at the persisted step when the request names no target at all (legacy bare /apply)", () => {
     mocks.draft = { propertyId: "mgr-alder" };
     expect(initialWizardStepFromRequest("portal", null, params({ wizardStep: "2" }))).toBe(2);
+  });
+});
+
+// The URL param (`initialWizardStepFromRequest`) only ever carries steps 1-3, so
+// it can never resume a resident at step 12 after they return from an external
+// redirect (a Stripe checkout) — that reload wipes the in-memory draft entirely.
+// The step PERSISTED on the server application record covers the full range and
+// is what the reconciliation effect uses to land them back where they were.
+describe("parsePersistedWizardStep", () => {
+  it("accepts any real step 1..12 (covers the return-from-payment step 12 case)", () => {
+    expect(parsePersistedWizardStep(1)).toBe(1);
+    expect(parsePersistedWizardStep(4)).toBe(4);
+    expect(parsePersistedWizardStep(12)).toBe(12);
+    expect(parsePersistedWizardStep("12")).toBe(12);
+  });
+
+  it("rejects out-of-range, missing, or malformed values", () => {
+    expect(parsePersistedWizardStep(0)).toBeNull();
+    expect(parsePersistedWizardStep(13)).toBeNull();
+    expect(parsePersistedWizardStep(undefined)).toBeNull();
+    expect(parsePersistedWizardStep(null)).toBeNull();
+    expect(parsePersistedWizardStep("abc")).toBeNull();
   });
 });
 

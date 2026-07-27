@@ -25,9 +25,12 @@ function formatRent(card: PropertyBrowseCard): string {
 function SwipeCardFace({
   card,
   style,
+  asPeek = false,
 }: {
   card: PropertyBrowseCard;
   style?: CSSProperties;
+  /** The card stacked behind the active one — render bare (no badge/overlay) so its text/badge doesn't ghost through. */
+  asPeek?: boolean;
 }) {
   const rent = formatRent(card);
   const resolvedImageUrl =
@@ -51,23 +54,30 @@ function SwipeCardFace({
             unoptimized={isDataUrl}
             draggable={false}
           />
+        ) : asPeek ? (
+          // Bare branded wash — no icon/label, so the stacked peek card never ghosts text through the active card.
+          <div
+            className="absolute inset-0 bg-gradient-to-br from-accent/25 via-accent/15 to-primary/10"
+            aria-hidden
+          />
         ) : (
-          <NoImagePlaceholder className="bg-gradient-to-br from-muted/15 to-accent/25" />
+          <NoImagePlaceholder variant="branded" />
         )}
-        {hasPhoto ? (
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
-        ) : null}
-        <HousingBrowseCardOverlay
-          card={card}
-          rent={rent}
-          periodLabel={card.pricePeriod === "day" ? " / day" : " / month"}
-          layout="swipe"
-        />
-        {card.petFriendly ? (
-          <span className="absolute left-2.5 top-2.5 rounded-full bg-black/45 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
-            Pets OK
-          </span>
-        ) : null}
+        {asPeek ? null : (
+          <>
+            <HousingBrowseCardOverlay
+              card={card}
+              rent={rent}
+              periodLabel={card.pricePeriod === "day" ? " / day" : " / month"}
+              layout="swipe"
+            />
+            {card.petFriendly ? (
+              <span className="absolute left-2.5 top-2.5 rounded-full bg-black/45 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                Pets OK
+              </span>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
@@ -224,7 +234,7 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
       >
         {peekCard ? (
           <div className="absolute inset-0 scale-[0.96] opacity-90" aria-hidden>
-            <SwipeCardFace card={peekCard} />
+            <SwipeCardFace card={peekCard} asPeek />
           </div>
         ) : null}
 

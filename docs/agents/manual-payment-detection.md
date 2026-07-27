@@ -65,7 +65,9 @@ applied to at most one charge.
 2. **Turn on payment-received email notifications** in Zelle/your bank app or
    the Venmo app.
 3. **Link Gmail** (read-only receipt scope) *or* set up a **forwarding filter**
-   to `payments+<token>@prop-lane.space` for instant detection.
+   to `payments+<token>@prop-lane.space` for instant detection. If Google shows
+   **“This app is blocked”** on Link Gmail (`gmail.readonly` is a restricted
+   scope), skip Step 3 and use forwarding — it uses the same matching pipeline.
 4. **Auto-mark charges paid** toggle — on by default.
 
 ### Resident (shown on the charge, resident Payments)

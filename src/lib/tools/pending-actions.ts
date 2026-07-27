@@ -66,7 +66,19 @@ export async function createPendingActionForUser(
     row.expires_at = new Date(Date.now() + args.expiresInMs).toISOString();
   }
   const { data, error } = await db.from("agent_pending_actions").insert(row).select("id").single();
-  if (error || !data?.id) return null;
+  if (error || !data?.id) {
+    // Never swallow this silently: a null here becomes the user-facing "could not
+    // show the confirmation card" fallback, so the real reason (a schema drift, an
+    // FK violation, RLS) must be diagnosable from the logs. Input/preview are
+    // deliberately omitted — they can carry resident/applicant PII.
+    console.error("[agent] pending action insert failed", {
+      tool: args.toolName,
+      portal: args.portal ?? "manager",
+      error: error?.message ?? "no row returned",
+      code: (error as { code?: string } | null)?.code,
+    });
+    return null;
+  }
   return String(data.id);
 }
 

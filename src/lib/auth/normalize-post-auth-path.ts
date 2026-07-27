@@ -6,6 +6,8 @@ export function isBareDashboardPath(path: string): boolean {
   return p === "/dashboard" || p === "dashboard";
 }
 
+const REDIRECT_CHECK_ORIGIN = "https://axis-internal.invalid";
+
 /** Protocol-relative, scheme, or backslash paths must never be used as post-auth redirects. */
 export function isUnsafeRedirectPath(path: string): boolean {
   const trimmed = path.trim();
@@ -23,6 +25,22 @@ export function isUnsafeRedirectPath(path: string): boolean {
     } catch {
       return true;
     }
+  }
+
+  // Authoritative check: resolve the path exactly the way a browser resolves
+  // `location.replace()` / `<a href>` and require it to stay on the SAME
+  // origin. This is what actually catches obfuscated protocol-relative
+  // bypasses that slip past the string checks above — e.g. a tab, newline, or
+  // carriage return between the two slashes (`"/\t/evil.com"`) is stripped by
+  // the URL spec's parser before resolution, so the string never literally
+  // starts with `//`, yet the browser still navigates cross-origin. `new URL`
+  // implements the same stripping, so comparing the resolved origin closes
+  // every such variant in one check instead of enumerating each obfuscation.
+  try {
+    const resolved = new URL(trimmed, REDIRECT_CHECK_ORIGIN);
+    if (resolved.origin !== REDIRECT_CHECK_ORIGIN) return true;
+  } catch {
+    return true;
   }
 
   return false;

@@ -17,6 +17,7 @@ import {
 import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import { VendorPaymentMethodsModal } from "@/components/portal/vendor-payment-methods-modal";
 import { GmailPaymentAutoTrackPanel } from "@/components/portal/gmail-payment-auto-track-panel";
+import { formatGmailPaymentsConnectError } from "@/lib/gmail-payments/connect-errors";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts";
@@ -295,7 +296,7 @@ export function VendorPaymentsPanel() {
       showToast("Gmail linked for payment tracking.");
     } else if (gmailPay === "error") {
       const reason = params.get("reason");
-      showToast(reason ? decodeURIComponent(reason) : "Gmail connect failed.");
+      showToast(formatGmailPaymentsConnectError(reason));
     }
     if (connect || gmailPay) {
       const url = new URL(window.location.href);

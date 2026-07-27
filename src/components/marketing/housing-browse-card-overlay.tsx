@@ -23,7 +23,7 @@ export function HousingBrowseCardOverlay({
   const showMeta = isCarousel || isSwipe;
 
   const padding = isSwipe
-    ? "px-5 pb-5 pt-14"
+    ? "px-5 pb-5 pt-10"
     : isCarousel
       ? "px-4 pb-4 pt-10 sm:px-5 sm:pb-5 sm:pt-12"
       : "p-3 sm:p-3.5";
@@ -38,7 +38,7 @@ export function HousingBrowseCardOverlay({
   }
 
   return (
-    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent">
       <div className={padding}>
         {showMeta ? (
           <>

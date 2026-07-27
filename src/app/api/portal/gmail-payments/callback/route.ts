@@ -14,7 +14,12 @@ export async function GET(req: Request) {
   const callbackOrigin = url.origin;
 
   if (oauthError) {
-    const reason = encodeURIComponent(oauthErrorDescription ?? oauthError);
+    const raw =
+      oauthErrorDescription?.trim() ||
+      (oauthError === "access_denied"
+        ? "access_denied"
+        : oauthError);
+    const reason = encodeURIComponent(raw);
     return NextResponse.redirect(`${callbackOrigin}/portal/payments?gmail-pay=error&reason=${reason}`);
   }
 

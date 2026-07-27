@@ -15,6 +15,10 @@ import {
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import type { ProServiceFeeChoice } from "@/lib/payment-policy";
 import { useGmailPaymentTrack } from "@/components/portal/gmail-payment-auto-track-panel";
+import {
+  formatGmailPaymentsConnectError,
+  isGmailPaymentsOAuthBlocked,
+} from "@/lib/gmail-payments/connect-errors";
 import { stripeSetupStateFromStatus, type StripeSetupState } from "@/lib/stripe-setup-state";
 
 const DEMO_INBOX = "payments+demo-token@prop-lane.space";
@@ -99,6 +103,7 @@ function ChannelPaymentSetupModal({
   onLinkGmail,
   onSyncGmail,
   showToast,
+  gmailConnectErrorReason,
 }: {
   channel: PaymentChannel;
   open: boolean;
@@ -116,8 +121,12 @@ function ChannelPaymentSetupModal({
   onLinkGmail: () => void;
   onSyncGmail: () => void;
   showToast: (message: string) => void;
+  gmailConnectErrorReason?: string | null;
 }) {
   const label = channel === "zelle" ? "Zelle" : "Venmo";
+  const gmailConnectError = gmailConnectErrorReason
+    ? formatGmailPaymentsConnectError(gmailConnectErrorReason)
+    : null;
   const placeholder = channel === "zelle" ? "email or phone" : "@username or phone";
   const filterFrom = channel === "zelle" ? "zellepay.com" : "venmo.com";
   const contact = channel === "zelle" ? draft.zelleContact : draft.venmoContact;
@@ -178,15 +187,26 @@ function ChannelPaymentSetupModal({
         </div>
 
         <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
-          <p className="text-sm font-semibold text-foreground">Step 3 — Link Gmail</p>
+          <p className="text-sm font-semibold text-foreground">Step 3 — Link Gmail (optional)</p>
           <p className="text-xs text-muted">
             We read {label} notification emails and match the <span className="font-mono">PL-</span> code and amount. If
             a resident forgets the code, we still match on the amount plus their name and property; anything we
             can&apos;t confidently match is never auto-marked — the charge stays pending for you to mark paid manually.
             Linked-Gmail receipts are checked when you tap{" "}
-            <span className="font-medium">Sync now</span>; set up forwarding in Step 4 to have them matched the moment
-            they arrive.
+            <span className="font-medium">Sync now</span>. If Google blocks Link Gmail, skip to Step 4 — forwarding works
+            without Google approval.
           </p>
+          {gmailConnectError ? (
+            <p
+              className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${
+                isGmailPaymentsOAuthBlocked(gmailConnectErrorReason ?? null)
+                  ? "border-amber-300/80 bg-amber-50 text-amber-950 [html[data-theme=dark]_&]:border-amber-500/40 [html[data-theme=dark]_&]:bg-amber-950/40 [html[data-theme=dark]_&]:text-amber-100"
+                  : "border-red-300/80 bg-red-50 text-red-900 [html[data-theme=dark]_&]:border-red-500/40 [html[data-theme=dark]_&]:bg-red-950/40 [html[data-theme=dark]_&]:text-red-100"
+              }`}
+            >
+              {gmailConnectError}
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {gmailStatus?.connected ? (
               <span className="text-sm font-medium text-[var(--status-confirmed-fg)]">
@@ -224,10 +244,13 @@ function ChannelPaymentSetupModal({
         {paymentInboxAddress ? (
           <div className="space-y-3 rounded-xl border border-border bg-card px-4 py-4">
             <div>
-              <p className="text-sm font-semibold text-foreground">Step 4 — Gmail filter (optional)</p>
+              <p className="text-sm font-semibold text-foreground">
+                Step 4 — Forward {label} receipts {gmailStatus?.connected ? "(optional)" : "(recommended)"}
+              </p>
               <p className="mt-1 text-sm leading-relaxed text-muted">
-                Skip this if Step 3 (Link Gmail) is connected. Otherwise set up a filter to forward {label} emails to
-                PropLane.
+                {gmailStatus?.connected
+                  ? "Optional backup: also forward receipts so they are matched the moment they arrive."
+                  : "Set up a Gmail filter to forward receipt emails to PropLane. This works even when Google blocks Link Gmail."}
               </p>
             </div>
             <ol className="space-y-3 text-sm leading-relaxed text-foreground">
@@ -319,10 +342,14 @@ function ChannelPaymentSetupModal({
 export function ManagerPaymentSetupModal({
   open,
   onClose,
+  initialChannel = null,
+  gmailConnectErrorReason = null,
 }: {
   open: boolean;
   onClose: () => void;
   portalBase: string;
+  initialChannel?: PaymentChannel | null;
+  gmailConnectErrorReason?: string | null;
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
@@ -427,7 +454,8 @@ export function ManagerPaymentSetupModal({
     void loadStripeStatus();
     void loadSettings();
     void loadTier();
-  }, [open, loadStripeStatus, loadSettings, loadTier]);
+    if (initialChannel) setActiveChannel(initialChannel);
+  }, [open, initialChannel, loadStripeStatus, loadSettings, loadTier]);
 
   useEffect(() => {
     if (!open) return;
@@ -510,8 +538,11 @@ export function ManagerPaymentSetupModal({
   const venmoContactConnected = draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
   const gmailLinked = Boolean(gmailStatus?.connected);
   const autoMarkOn = draft.receiptAutoMarkEnabled !== false;
-  const zelleTrackingReady = zelleContactConnected && gmailLinked && autoMarkOn;
-  const venmoTrackingReady = venmoContactConnected && gmailLinked && autoMarkOn;
+  const hasForwardingInbox = Boolean(draft.paymentInboxAddress?.trim());
+  const manualTrackingReady = (contactConnected: boolean) =>
+    contactConnected && autoMarkOn && (gmailLinked || hasForwardingInbox);
+  const zelleTrackingReady = manualTrackingReady(zelleContactConnected);
+  const venmoTrackingReady = manualTrackingReady(venmoContactConnected);
 
   const channelModalProps = {
     draft,
@@ -637,6 +668,7 @@ export function ManagerPaymentSetupModal({
             )
           }
           {...channelModalProps}
+          gmailConnectErrorReason={gmailConnectErrorReason}
         />
       ) : null}
     </>

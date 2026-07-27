@@ -1,16 +1,38 @@
-# Resident account creation (after a rental application)
+# Resident account creation
 
-Residents never self-serve a generic account. A NEW auth user is only created
-once an application exists and the person proves they control the application's
-email — either by holding the one-time **setup token** (emailed, or handed to
-the guest in-session right after applying) or by an **OAuth** email match.
-There is no password path without a token.
+> **Model (captain decision, Jul 2026).** A prospective resident CREATES AN
+> ACCOUNT and then APPLIES FROM INSIDE THEIR PORTAL. There are three entry
+> points, routed by who the person is — the apply surface's single decision
+> point is `resolvePublicApplyView` in `public-apply-session.ts`:
+>
+> 1. **Anonymous visitor** → self-serve signup, `POST /api/auth/resident-register`
+>    (ENABLED). The anonymous apply gate (`public-apply-account-prompt.tsx`)
+>    offers **Create account (primary) + Sign in + guest**; Create account
+>    carries `next=/rent/apply?propertyId=…` so signup lands the renter ON that
+>    application (`ResidentSignupForm` navigates straight to `next`, not through
+>    the post-auth resolver). **Default-deny inheritance:** at signup the route
+>    mints a CLEAN resident profile — `application_approved=false`, no application
+>    PII copied, no link to a prior guest application — regardless of any matching
+>    application. A verification email proves email control; only once it completes
+>    does any pre-existing guest application link/inherit. Signup and applying are
+>    NOT blocked on the inbox round-trip. `provisionResidentAccountByEmail` keeps
+>    its inheriting behavior ONLY for the token/OAuth callers (which already prove
+>    control); resident-register uses the no-inherit path.
+> 2. **Signed-in manager/vendor** → `POST /api/auth/create-resident-account`
+>    (additive role on the SAME login, no second auth user). Their separate prompt
+>    is `signed-in-resident-account-prompt.tsx` — do NOT fold it into the anonymous
+>    gate. Owned by the "Multi-role accounts" section of `AGENTS.md`.
+> 3. **Guest** (applies without an account) → the emailed **setup token** / OAuth
+>    fallback described below. This is now the guest fallback only.
+>
+> The legacy `register-resident` endpoint and the `resident-setup` **token** POST
+> stay gated (token/session proves control). What follows describes the guest
+> fallback (path 3).
 
-Scope note: an already-signed-in manager/vendor adding the resident ROLE to
-their existing login (`POST /api/auth/create-resident-account`, no application
-or token needed — the session already proves email control) is a separate
-mechanism owned by the "Multi-role accounts" section of `AGENTS.md`, not this
-flow. It never creates a second auth user.
+Guests who apply without an account still get an account only once an
+application exists and the person proves they control the application's email —
+either by holding the one-time **setup token** (emailed, or handed to the guest
+in-session right after applying) or by an **OAuth** email match.
 
 ## The one canonical flow
 
@@ -41,9 +63,15 @@ POST /api/auth/resident-setup   (password)      POST /api/auth/register-resident
 
 ## Invariants (do not regress)
 
-- **`POST /api/auth/resident-register` is permanently disabled (403).** It is the
-  dead generic path. Nothing may call it; the generic
-  `/auth/create-account?role=resident` renders `ResidentSignupBlocked`, not a form.
+- **`POST /api/auth/resident-register` is the ENABLED anonymous self-serve path
+  (captain decision, Jul 2026), and it is DEFAULT-DENY on inheritance.** It mints
+  a clean resident profile (`application_approved=false`, no application PII, no
+  link to a prior guest application) and only links/inherits after email
+  verification proves control — a failure to verify must never grant inheritance.
+  The generic `/auth/create-account?role=resident` renders `ResidentSignupForm`
+  (via `NativeAuthHub`) for an anonymous visitor; a signed-in manager/vendor uses
+  the additive `POST /api/auth/create-resident-account` instead. The LEGACY
+  `POST /api/auth/register-resident` stays disabled (403).
 - **Phone is required** on `/auth/resident-setup` (both password and — via the
   application snapshot — the Google path). `provisionResidentAccountByEmail`
   prefers the caller-confirmed phone over the application's.
@@ -80,7 +108,9 @@ POST /api/auth/resident-setup   (password)      POST /api/auth/register-resident
 - Unit: `tests/unit/resident-setup-token-relink.test.ts`,
   `resident-setup-route.test.ts`, `send-application-submitted-handoff-route.test.ts`,
   `register-resident-oauth-relink-route.test.ts`,
-  `resident-register-disabled-route.test.ts`, plus existing
+  `resident-register-route.test.ts` (self-serve input validation),
+  `provision-resident-default-deny.test.ts` (unverified signup inherits nothing),
+  `public-apply-account-prompt.test.tsx` (3-action gate), plus existing
   `resident-setup-token.test.ts` / `guest-application-upsert.test.ts`.
 - E2E (gated `RESIDENT_SETUP_E2E_ENABLED=1`, dev/test only):
   `tests/e2e/resident-account-setup.spec.ts`.

@@ -42,7 +42,6 @@ export const RENTAL_APPLICATION_SECTIONS: readonly RentalApplicationSection[] = 
     standardFields: [
       "Property",
       "Room choices (1st – 3rd)",
-      "Rental type (standard or short-term)",
       "Lease term",
       "Lease start & end dates",
     ],

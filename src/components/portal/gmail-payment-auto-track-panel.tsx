@@ -171,6 +171,10 @@ export function GmailPaymentTrackSteps({
         </div>
         {gmailStatus?.configured === false ? (
           <p className="mt-1 text-muted">Google sign-in is not configured on this server.</p>
+        ) : !gmailStatus?.connected ? (
+          <p className="mt-1 text-muted">
+            If Google shows &quot;This app is blocked,&quot; skip Link Gmail and set up the Gmail filter below instead.
+          </p>
         ) : null}
         {gmailStatus?.connected && gmailStatus.lastSyncAt ? (
           <p className="mt-1 text-muted">Last sync {new Date(gmailStatus.lastSyncAt).toLocaleString()}</p>

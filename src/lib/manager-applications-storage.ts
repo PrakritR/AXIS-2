@@ -7,10 +7,7 @@ import {
   resolvePlacementLeaseDates,
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
-import {
-  enrichApplicationForLease,
-  resolveApplicationPersonalFields,
-} from "@/lib/application-personal-fields";
+import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 import {
   defaultBackgroundCheckStatusForRow,
   normalizeBackgroundCheckStatus,
@@ -221,6 +218,14 @@ function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: D
  * fed a thundering herd: each remount re-runs the wizard's own
  * force-refetch-on-mount effect, which raced the still-in-flight POST again.
  * Regression coverage: `tests/unit/manager-applications-merge-rows.test.ts`.
+ *
+ * Deliberate tradeoff (accepted): because the union never treats "missing from
+ * a server response" as "deleted", a row deleted server-side (e.g. from
+ * another tab or device) does NOT propagate into a tab that already holds it —
+ * and `writeManagerApplicationRows`'s `action: "replace"` mirror of the whole
+ * cache can then re-upload that row, resurrecting the deletion. Distinguishing
+ * "not yet synced locally" from "deleted remotely" requires a server-side
+ * deletion/tombstone signal, which is tracked as follow-up work.
  */
 export function mergeApplicationRows(existingRows: DemoApplicantRow[], incomingRows: DemoApplicantRow[]): DemoApplicantRow[] {
   const existingById = new Map(normalizeApplicationRows(existingRows).map((row) => [row.id, row] as const));
@@ -301,6 +306,20 @@ function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
   }).catch(() => undefined);
 }
 
+/**
+ * Fired after each background in-progress save attempt so a surface can tell the
+ * user their work is (or is not) being persisted. `detail.ok` is false when the
+ * write failed; `detail.id` is the application id it was for. The rental wizard
+ * listens for this to raise a "couldn't save" banner instead of silently losing
+ * a resident's typing — a failed autosave must surface, never disappear.
+ */
+export const APPLICATION_SAVE_STATUS_EVENT = "axis:application-save-status";
+
+function emitApplicationSaveStatus(ok: boolean, id: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(APPLICATION_SAVE_STATUS_EVENT, { detail: { ok, id } }));
+}
+
 function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
   if (typeof window === "undefined" || isDemoModeActive()) return Promise.resolve();
   return fetch("/api/manager-applications", {
@@ -309,8 +328,10 @@ function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   })
-    .then(() => undefined)
-    .catch(() => undefined);
+    .then((res) => {
+      emitApplicationSaveStatus(res.ok, row.id);
+    })
+    .catch(() => emitApplicationSaveStatus(false, row.id));
 }
 
 const UPSERT_DEBOUNCE_MS = 400;
@@ -320,6 +341,42 @@ type UpsertQueueEntry = {
   inFlight: Promise<void> | null;
 };
 const upsertQueues = new Map<string, UpsertQueueEntry>();
+
+/**
+ * Best-effort flush when the page is being hidden or torn down: the debounced
+ * queue can be holding the final edits (including a just-advanced wizardStep)
+ * for up to 400ms — or longer, behind an in-flight write — and a closed tab
+ * loses them, since the local mirror is sessionStorage. `keepalive: true` lets
+ * the request outlive the page. Deliberately leaves `latest` and the timer
+ * untouched: if the page survives (a mere tab switch), the normal serialized
+ * path re-sends the identical snapshot, which also heals any ordering race
+ * this out-of-band send could introduce and keeps save-status events firing.
+ */
+function flushPendingApplicationRowUpserts() {
+  if (typeof window === "undefined" || isDemoModeActive()) return;
+  for (const entry of upsertQueues.values()) {
+    const pending = entry.latest;
+    if (!pending) continue;
+    void fetch("/api/manager-applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      keepalive: true,
+      body: JSON.stringify({ action: "upsert", row: pending }),
+    }).catch(() => undefined);
+  }
+}
+
+let upsertUnloadFlushRegistered = false;
+
+function registerUpsertUnloadFlush() {
+  if (upsertUnloadFlushRegistered || typeof window === "undefined") return;
+  upsertUnloadFlushRegistered = true;
+  window.addEventListener("pagehide", flushPendingApplicationRowUpserts);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingApplicationRowUpserts();
+  });
+}
 
 /**
  * The rental wizard calls this on every form change (a keystroke can fire
@@ -336,6 +393,7 @@ const upsertQueues = new Map<string, UpsertQueueEntry>();
 function scheduleApplicationRowUpsert(row: DemoApplicantRow) {
   const id = row.id.trim();
   if (!id) return;
+  registerUpsertUnloadFlush();
   let entry = upsertQueues.get(id);
   if (!entry) {
     entry = { latest: null, timer: null, inFlight: null };

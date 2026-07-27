@@ -121,11 +121,24 @@ export function buildInProgressApplicationRow(input: {
   axisId: string;
   form: RentalWizardFormState;
   residentEmail: string;
+  /** Live wizard position, persisted so a reload / redirect return resumes here. */
+  wizardStep?: number;
+  wizardMaxStepReached?: number;
 }): DemoApplicantRow {
   const pid = input.form.propertyId.trim();
   const prop = pid ? getPropertyById(pid) : undefined;
   const email = input.residentEmail.trim();
   const name = input.form.fullLegalName.trim() || "Applicant";
+
+  // The live step wins over whatever the form snapshot happened to carry — step
+  // lives in wizard state, not the form, so it is injected fresh on every sync.
+  const application: RentalWizardFormState = {
+    ...structuredClone(input.form),
+    ...(typeof input.wizardStep === "number" ? { wizardStep: input.wizardStep } : {}),
+    ...(typeof input.wizardMaxStepReached === "number"
+      ? { wizardMaxStepReached: input.wizardMaxStepReached }
+      : {}),
+  };
 
   return {
     id: input.axisId,
@@ -138,7 +151,7 @@ export function buildInProgressApplicationRow(input: {
     backgroundCheckStatus: "pending_review",
     detail: `Started ${new Date().toLocaleString()}`,
     email,
-    application: structuredClone(input.form),
+    application,
   };
 }
 
@@ -159,6 +172,8 @@ export function syncInProgressApplicationRow(input: {
   axisId: string;
   form: RentalWizardFormState;
   residentEmail: string;
+  wizardStep?: number;
+  wizardMaxStepReached?: number;
 }): void {
   const row = buildInProgressApplicationRow(input);
   if (submitInitiatedAxisIds.has(row.id.trim())) return;

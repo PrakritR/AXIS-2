@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  formatGmailPaymentsConnectError,
+  isGmailPaymentsOAuthBlocked,
+} from "@/lib/gmail-payments/connect-errors";
 import { buildPaymentReceiptGmailQuery } from "@/lib/gmail-payments/gmail-query";
 import { normalizeGmailPaymentsConnection } from "@/lib/gmail-payments/settings";
 
@@ -14,6 +18,19 @@ describe("buildPaymentReceiptGmailQuery", () => {
   it("clamps days between 1 and 90", () => {
     expect(buildPaymentReceiptGmailQuery(0)).toContain("newer_than:1d");
     expect(buildPaymentReceiptGmailQuery(200)).toContain("newer_than:90d");
+  });
+});
+
+describe("formatGmailPaymentsConnectError", () => {
+  it("explains Google blocked access and points to forwarding", () => {
+    const msg = formatGmailPaymentsConnectError("access_denied");
+    expect(msg).toContain("Google blocked Gmail access");
+    expect(msg).toContain("Step 4");
+  });
+
+  it("detects blocked OAuth reasons", () => {
+    expect(isGmailPaymentsOAuthBlocked("This%20app%20is%20blocked")).toBe(true);
+    expect(isGmailPaymentsOAuthBlocked("network error")).toBe(false);
   });
 });
 
