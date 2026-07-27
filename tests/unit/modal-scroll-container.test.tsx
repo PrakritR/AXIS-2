@@ -14,8 +14,11 @@ afterEach(cleanup);
 
 function modalBody(): HTMLElement {
   const dialog = screen.getByRole("dialog");
-  // Panel children: header, body, (footer?)
-  return dialog.children[1] as HTMLElement;
+  // Panel children: header, [row/column switch wrapper], (footer?). The actual
+  // scroll container sits one level inside that wrapper (see modal.tsx) so the
+  // assistant strip can sit beside it once the panel is wide enough.
+  const rowWrapper = dialog.children[1] as HTMLElement;
+  return rowWrapper.children[0] as HTMLElement;
 }
 
 describe("Modal scroll container", () => {

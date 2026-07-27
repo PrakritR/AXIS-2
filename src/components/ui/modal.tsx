@@ -89,6 +89,9 @@ export function Modal({
     "Portal modal";
 
   const [assistantConversationInstance, setAssistantConversationInstance] = useState(0);
+  /** Mirrors the assistant strip's own open/closed state so the body can lay
+   * out beside it (wide enough modals) instead of always stacking above it. */
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const wasOpenRef = useRef(false);
   useLayoutEffect(() => {
     if (open && !wasOpenRef.current) {
@@ -110,7 +113,7 @@ export function Modal({
       <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]">
         <div
           ref={panelRef}
-          className={cn(MODAL_PANEL_CLASS, "min-h-0", panelClassName)}
+          className={cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
@@ -139,28 +142,39 @@ export function Modal({
               <X className="h-5 w-5" aria-hidden />
             </button>
           </div>
+          {/* `@container` lives on the dialog panel above (a container cannot query
+              its own size for its own layout), so this row/column switch below it
+              can react to how much space the panel actually has. */}
           <div
             className={cn(
-              // The body is the modal's one scroll container. Children may still
-              // pin an inner region (`min-h-0 flex-1 overflow-y-auto`) so only e.g.
-              // a message body scrolls, but plain content must never be clipped —
-              // `overflow-hidden` here made every below-the-fold field unreachable
-              // on phones.
-              "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-              footer && "flex flex-col",
-              dense ? "pt-2" : "pt-4",
+              "flex min-h-0 flex-1",
+              showAssistantStrip && assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
             )}
           >
-            {children}
+            <div
+              className={cn(
+                // The body is the modal's one scroll container. Children may still
+                // pin an inner region (`min-h-0 flex-1 overflow-y-auto`) so only e.g.
+                // a message body scrolls, but plain content must never be clipped —
+                // `overflow-hidden` here made every below-the-fold field unreachable
+                // on phones.
+                "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+                footer && "flex flex-col",
+                dense ? "pt-2" : "pt-4",
+              )}
+            >
+              {children}
+            </div>
+            {showAssistantStrip && assistantConversationInstance > 0 ? (
+              <ModalAssistantStrip
+                contextHint={assistantHint}
+                storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
+                conversationInstance={assistantConversationInstance}
+                onExpandedChange={setAssistantExpanded}
+                className={cn(dense ? "px-0" : undefined)}
+              />
+            ) : null}
           </div>
-          {showAssistantStrip && assistantConversationInstance > 0 ? (
-            <ModalAssistantStrip
-              contextHint={assistantHint}
-              storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
-              conversationInstance={assistantConversationInstance}
-              className={cn(dense ? "px-0" : undefined)}
-            />
-          ) : null}
           {footer ? (
             <div
               className={cn(
