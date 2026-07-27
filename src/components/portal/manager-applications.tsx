@@ -30,6 +30,7 @@ import { ApplicationScreeningPanel } from "@/components/portal/application-scree
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
+import { ManagerApplicationSettingsModal } from "@/components/portal/manager-application-settings-modal";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -301,6 +302,7 @@ export function ManagerApplications() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
+  const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
   useEffect(() => {
     if (!authReady) return;
@@ -655,8 +657,8 @@ export function ManagerApplications() {
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
-    // A holding deposit collected AT APPLICATION (the manager's per-listing
-    // choice — see `holdingDepositTiming`) is never auto-refunded when the
+    // A holding deposit collected AT APPLICATION (a since-removed per-listing
+    // choice, `holdingDepositTiming`) is never auto-refunded when the
     // application is later rejected or withdrawn: PropLane has no automated
     // refund flow, and whether the deposit is even refundable is a
     // legal/lease-terms question the manager must resolve directly with the
@@ -748,6 +750,15 @@ export function ManagerApplications() {
             type="button"
             variant="outline"
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="application-settings-open"
+            onClick={() => setApplicationSettingsOpen(true)}
+          >
+            Application fee
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             data-attr="edit-application-open"
             onClick={() => setEditApplicationOpen(true)}
             disabled={propertyOptions.length === 0}
@@ -780,6 +791,10 @@ export function ManagerApplications() {
       }
     >
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
+      <ManagerApplicationSettingsModal
+        open={applicationSettingsOpen}
+        onClose={() => setApplicationSettingsOpen(false)}
+      />
       <CheckrScreeningModal
         key={checkrScreeningRowId ?? "none"}
         row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}

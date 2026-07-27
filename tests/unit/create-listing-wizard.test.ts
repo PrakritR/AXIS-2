@@ -101,10 +101,17 @@ describe("create listing wizard", () => {
   it("requires lease terms and fee fields on pricing step", () => {
     const sub = filledPricingSubmission();
     sub.allowedLeaseTerms = [];
-    sub.applicationFee = "";
+    sub.securityDeposit = "";
     const errs = validateListingWizardStep(4, sub);
     expect(errs.allowedLeaseTerms).toMatch(/lease term/i);
-    expect(errs.applicationFee).toMatch(/application fee/i);
+    expect(errs.securityDeposit).toMatch(/security deposit/i);
+  });
+
+  it("does NOT require an application fee on the pricing step (it is set per-manager in Application settings)", () => {
+    const sub = filledPricingSubmission();
+    sub.applicationFee = "";
+    const errs = validateListingWizardStep(4, sub);
+    expect(errs.applicationFee).toBeUndefined();
   });
 
   it("requires a resident payment method when application fee is charged", () => {

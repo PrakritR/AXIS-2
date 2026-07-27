@@ -102,7 +102,8 @@ export function validateListingWizardStep(
     const allowedTerms = resolveAllowedLeaseTerms(sub);
     if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term.";
     const feeFields: { key: keyof ManagerListingSubmissionV1; label: string }[] = [
-      { key: "applicationFee", label: "Application fee" },
+      // The application fee is no longer set per listing — it's configured once
+      // per manager in Applications → Application fee — so it is not required here.
       { key: "securityDeposit", label: "Security deposit" },
       { key: "moveInFee", label: "Move-in fee" },
       { key: "parkingMonthly", label: "Parking (monthly)" },

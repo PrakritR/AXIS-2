@@ -348,7 +348,8 @@ describe("ACH checkout routes", () => {
     });
 
     it("creates hosted checkout session for valid application fee", async () => {
-      // Application fee uses hosted mode (no embedded)
+      // Application-fee payment defaults to inline (embedded); this case pins
+      // the still-supported hosted-redirect path via an explicit mode override.
       vi.mocked(createAxisAchCheckoutSession).mockResolvedValue({
         mode: "hosted",
         url: "https://checkout.stripe.test/fee",
@@ -383,6 +384,7 @@ describe("ACH checkout routes", () => {
           residentEmail: "resident@example.com",
           residentName: "Test Resident",
           managerUserId: "mgr_1",
+          mode: "hosted",
         },
       });
       const res = await applicationFeeCheckout(req);

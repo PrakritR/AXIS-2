@@ -2,9 +2,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   readChargesForResident,
   findApplicationFeeCharge,
-  findHoldingDepositCharge,
   listingApplicationFeeAmount,
-  listingHoldingDepositAmount,
 } from "@/lib/household-charges";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
@@ -57,86 +55,36 @@ export function shouldWaiveApplicationFeeForResident(input: {
   return residentHasPriorApplication(email) || residentHasPaidApplicationFee(email, input.residentUserId);
 }
 
-/** True only when this listing's manager opted into collecting the holding deposit at application (default is after approval, under Payments). */
-export function listingCollectsHoldingDepositAtApplication(propertyId: string): boolean {
-  const sub = getPropertyById(propertyId)?.listingSubmission;
-  return sub?.holdingDepositTiming === "at_application";
-}
-
-export type ApplicationMoneyGate = {
-  /** True while ANY amount (fee and/or deposit) is still owed before the applicant may submit. */
-  needsFee: boolean;
-  /** True once everything currently owed has been paid (or waived). */
-  paid: boolean;
-  displayLabel: string;
-  /** Application fee dollars (0 if the listing has none, or it is waived). */
-  amount: number;
-  /** Fee waived via the "first application fee covers additional applications" policy (distinct from a manager waiver code, which the wizard applies separately). */
-  waived: boolean;
-  /** Holding deposit dollars due AT APPLICATION — 0 unless the listing opted into `holdingDepositTiming: "at_application"`. Never includes a deposit deferred to post-approval Payments. */
-  depositAmount: number;
-  /** Whether this listing collects its deposit at application at all (informational — `depositAmount` already reflects it). */
-  depositAtApplication: boolean;
-  /** Fee (if owed) + deposit (if owed), before any service fee — what the combined charge should total. */
-  totalDue: number;
-  /** True once the FEE leg specifically no longer needs paying (not owed at all, waived, or already paid) — independent of any deposit still due. Use this (not `paid`) to decide whether to still offer a waiver code. */
-  feePaid: boolean;
-};
-
 export function residentApplicationFeeGate(input: {
   propertyId: string;
   residentEmail: string;
   residentUserId?: string | null;
   /**
-   * A manager waiver code has already been redeemed server-side for the fee
-   * (the wizard sets this after `/api/public/application-fee-waiver`
-   * succeeds). Waives ONLY the fee — a holding deposit collected at
-   * application still stands, since the waiver is an "application fee
-   * waiver code" by name and by table, not a deposit waiver.
+   * SERVER-authoritative fee in cents from `/api/public/application-fee-preview`
+   * (which applies the manager-level fee). When provided it overrides the
+   * browser catalog's per-listing amount entirely — including an explicit 0
+   * ("applications are free"), which passes the applicant through with no
+   * payment step. Omit only where no server is reachable (demo sandbox).
    */
-  feeWaivedByCode?: boolean;
-}): ApplicationMoneyGate {
+  serverFeeCents?: number | null;
+}): { needsFee: boolean; paid: boolean; displayLabel: string; amount: number; waived: boolean } {
   const pid = input.propertyId.trim();
   const email = input.residentEmail.trim();
-  const { amount, displayLabel } = listingApplicationFeeAmount(pid);
+  const listingFee = listingApplicationFeeAmount(pid);
+  const amount = input.serverFeeCents != null ? input.serverFeeCents / 100 : listingFee.amount;
+  const displayLabel =
+    input.serverFeeCents != null
+      ? amount > 0
+        ? `$${amount.toFixed(2)}`
+        : "—"
+      : listingFee.displayLabel;
   const waived = shouldWaiveApplicationFeeForResident(input);
-  const depositAtApplication = listingCollectsHoldingDepositAtApplication(pid);
-  const depositAmount = depositAtApplication ? listingHoldingDepositAmount(pid).amount : 0;
-
-  const feeOwed = Boolean(pid) && email.includes("@") && amount > 0 && !waived && !input.feeWaivedByCode;
-  const depositOwed = Boolean(pid) && email.includes("@") && depositAmount > 0;
-
-  if (!feeOwed && !depositOwed) {
-    return {
-      needsFee: false,
-      paid: true,
-      displayLabel,
-      amount,
-      waived,
-      depositAmount: 0,
-      depositAtApplication,
-      totalDue: 0,
-      feePaid: true,
-    };
+  if (!pid || !email.includes("@") || amount <= 0 || waived) {
+    return { needsFee: false, paid: true, displayLabel, amount, waived };
   }
-
-  const feeCharge = feeOwed ? findApplicationFeeCharge(email, pid, input.residentUserId ?? null) : null;
-  const feePaid = !feeOwed || feeCharge?.status === "paid";
-  const depositCharge = depositOwed ? findHoldingDepositCharge(email, pid, input.residentUserId ?? null) : null;
-  const depositPaid = !depositOwed || depositCharge?.status === "paid";
-  const paid = feePaid && depositPaid;
-
-  return {
-    needsFee: !paid,
-    paid,
-    displayLabel,
-    amount: feeOwed ? amount : 0,
-    waived,
-    depositAmount: depositOwed ? depositAmount : 0,
-    depositAtApplication,
-    totalDue: (feeOwed ? amount : 0) + (depositOwed ? depositAmount : 0),
-    feePaid,
-  };
+  const charge = findApplicationFeeCharge(email, pid, input.residentUserId ?? null);
+  const paid = charge?.status === "paid";
+  return { needsFee: true, paid, displayLabel, amount, waived: false };
 }
 
 export function residentApplicationSubmitBlocked(input: {
