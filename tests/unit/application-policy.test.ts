@@ -19,18 +19,26 @@ vi.mock("@/lib/household-charges", () => ({
   readChargesForResident: vi.fn(() => []),
 }));
 
+vi.mock("@/lib/rental-application/data", () => ({
+  getPropertyById: vi.fn((id: string) => ({ id, managerUserId: "mgr-1" })),
+}));
+
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readChargesForResident } from "@/lib/household-charges";
+import { getPropertyById } from "@/lib/rental-application/data";
 
 describe("application-policy", () => {
   beforeEach(() => {
     vi.mocked(readManagerApplicationRows).mockReturnValue([]);
     vi.mocked(readChargesForResident).mockReturnValue([]);
+    vi.mocked(getPropertyById).mockImplementation(
+      (id: string) => ({ id, managerUserId: "mgr-1" }) as never,
+    );
   });
 
-  // ── Application fee is one account-level charge, collected ONCE per resident ──
-  // (No longer gated on a per-listing toggle: a repeat applicant is always
-  // waived, on ANY listing, so nobody pays the fee twice.)
+  // ── Application fee is one account-level charge, collected ONCE per resident
+  // PER MANAGER ── (No per-listing toggle: a repeat applicant is waived on any
+  // of the SAME manager's listings, never across managers.)
 
   it("charges the fee for a genuine first-time applicant", () => {
     // No prior application, no paid fee anywhere.
@@ -48,8 +56,8 @@ describe("application-policy", () => {
     expect(gate.waived).toBe(false);
   });
 
-  it("waives the fee for a repeat applicant on any listing (charged once, not per property)", () => {
-    // A prior SUBMITTED application on a different property.
+  it("waives the fee for a repeat applicant on any of the same manager's listings", () => {
+    // A prior SUBMITTED application on a different property of the SAME manager.
     vi.mocked(readManagerApplicationRows).mockReturnValue([
       {
         id: "AXIS-1",
@@ -58,10 +66,11 @@ describe("application-policy", () => {
         name: "A",
         property: "P",
         propertyId: "prop-a",
+        managerUserId: "mgr-1",
         stage: "Approved",
       },
     ]);
-    // New application to a DIFFERENT listing is still waived.
+    // New application to a DIFFERENT listing of the same manager is still waived.
     expect(
       shouldWaiveApplicationFeeForResident({
         propertyId: "prop-b",
@@ -76,9 +85,36 @@ describe("application-policy", () => {
     expect(gate.waived).toBe(true);
   });
 
-  it("waives the fee once the resident has already paid an application fee", () => {
+  it("does not waive the fee when the prior application is under a DIFFERENT manager", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: "AXIS-1",
+        email: "a@test.com",
+        bucket: "approved",
+        name: "A",
+        property: "P",
+        propertyId: "prop-other",
+        managerUserId: "mgr-2",
+        stage: "Approved",
+      },
+    ]);
+    expect(
+      shouldWaiveApplicationFeeForResident({
+        propertyId: "prop-b",
+        residentEmail: "a@test.com",
+      }),
+    ).toBe(false);
+    const gate = residentApplicationFeeGate({
+      propertyId: "prop-b",
+      residentEmail: "a@test.com",
+    });
+    expect(gate.needsFee).toBe(true);
+    expect(gate.waived).toBe(false);
+  });
+
+  it("waives the fee once the resident has paid an application fee to the same manager", () => {
     vi.mocked(readChargesForResident).mockReturnValue([
-      { kind: "application_fee", status: "paid" } as never,
+      { kind: "application_fee", status: "paid", managerUserId: "mgr-1" } as never,
     ]);
     expect(
       shouldWaiveApplicationFeeForResident({
@@ -86,6 +122,40 @@ describe("application-policy", () => {
         residentEmail: "paid@test.com",
       }),
     ).toBe(true);
+  });
+
+  it("does not waive the fee for an application fee paid to a DIFFERENT manager", () => {
+    vi.mocked(readChargesForResident).mockReturnValue([
+      { kind: "application_fee", status: "paid", managerUserId: "mgr-2" } as never,
+    ]);
+    expect(
+      shouldWaiveApplicationFeeForResident({
+        propertyId: "prop-b",
+        residentEmail: "paid@test.com",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not waive the fee when the property's manager cannot be resolved", () => {
+    vi.mocked(getPropertyById).mockReturnValue(undefined);
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: "AXIS-1",
+        email: "a@test.com",
+        bucket: "approved",
+        name: "A",
+        property: "P",
+        propertyId: "prop-a",
+        managerUserId: "mgr-1",
+        stage: "Approved",
+      },
+    ]);
+    expect(
+      shouldWaiveApplicationFeeForResident({
+        propertyId: "prop-b",
+        residentEmail: "a@test.com",
+      }),
+    ).toBe(false);
   });
 
   it("does not waive the fee for an in-progress-only prior application", () => {
@@ -96,6 +166,7 @@ describe("application-policy", () => {
         bucket: "pending",
         name: "A",
         property: "P",
+        managerUserId: "mgr-1",
         stage: IN_PROGRESS_APPLICATION_STAGE,
       },
     ]);

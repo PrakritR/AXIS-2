@@ -5,6 +5,7 @@ import {
   listingApplicationFeeAmount,
 } from "@/lib/household-charges";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 function normalizeEmail(email: string): string {
@@ -17,27 +18,48 @@ export function applicationsForResidentEmail(email: string): DemoApplicantRow[] 
   return readManagerApplicationRows().filter((row) => normalizeEmail(row.email ?? "") === e);
 }
 
-/** Resident already has a submitted application (any property) before this new one. */
-export function residentHasPriorApplication(email: string): boolean {
-  return applicationsForResidentEmail(email).some((row) => !isInProgressApplicationRow(row));
+/**
+ * Resident already has a submitted application before this new one. When
+ * `managerUserId` is provided, only applications attributed to that manager
+ * count.
+ */
+export function residentHasPriorApplication(email: string, managerUserId?: string | null): boolean {
+  return applicationsForResidentEmail(email).some(
+    (row) =>
+      !isInProgressApplicationRow(row) &&
+      (managerUserId == null || row.managerUserId === managerUserId),
+  );
 }
 
-/** Resident has a paid application-fee charge on any property. */
-export function residentHasPaidApplicationFee(email: string, residentUserId?: string | null): boolean {
+/**
+ * Resident has a paid application-fee charge. When `managerUserId` is provided,
+ * only charges billed by that manager count.
+ */
+export function residentHasPaidApplicationFee(
+  email: string,
+  residentUserId?: string | null,
+  managerUserId?: string | null,
+): boolean {
   const e = normalizeEmail(email);
   if (!e) return false;
   return readChargesForResident(e, residentUserId ?? null).some(
-    (c) => c.kind === "application_fee" && c.status === "paid",
+    (c) =>
+      c.kind === "application_fee" &&
+      c.status === "paid" &&
+      (managerUserId == null || c.managerUserId === managerUserId),
   );
 }
 
 /**
  * The application fee is a single account-level charge collected ONCE per
- * resident, never re-charged per property. So a resident who already submitted
- * an application or already paid an application fee is always waived on any
- * subsequent listing; only a genuine first-timer pays. (This used to be gated
- * on a per-listing `applicationFeeOnlyFirstApplication` toggle, removed once the
- * fee moved to manager-level settings.)
+ * resident PER MANAGER, never re-charged per property. So a resident who
+ * already submitted an application to — or already paid an application fee
+ * billed by — this property's manager is waived on any of that manager's
+ * listings; a first-timer with that manager pays, and history with a DIFFERENT
+ * manager never waives another manager's fee. If the property's manager cannot
+ * be resolved, the fee is charged. (This used to be gated on a per-listing
+ * `applicationFeeOnlyFirstApplication` toggle, removed once the fee moved to
+ * manager-level settings.)
  */
 export function shouldWaiveApplicationFeeForResident(input: {
   propertyId: string;
@@ -47,7 +69,12 @@ export function shouldWaiveApplicationFeeForResident(input: {
   const pid = input.propertyId.trim();
   const email = normalizeEmail(input.residentEmail);
   if (!pid || !email) return false;
-  return residentHasPriorApplication(email) || residentHasPaidApplicationFee(email, input.residentUserId);
+  const managerUserId = getPropertyById(pid)?.managerUserId?.trim() || null;
+  if (!managerUserId) return false;
+  return (
+    residentHasPriorApplication(email, managerUserId) ||
+    residentHasPaidApplicationFee(email, input.residentUserId, managerUserId)
+  );
 }
 
 export function residentApplicationFeeGate(input: {
