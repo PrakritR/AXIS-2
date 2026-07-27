@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import {
@@ -265,7 +266,7 @@ function CustomQuestionField({
           ))}
         </Select>
       ) : field.type === "date" ? (
-        <Input id={inputId} type="date" value={value} onChange={(e) => onChange(e.target.value)} className={errorClass} />
+        <DateField id={inputId} value={value} onChange={onChange} className={errorClass} />
       ) : (
         <Input
           id={inputId}
@@ -461,10 +462,15 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     void occupancySyncEpoch;
     const selectedProperty = getPropertyById(form.propertyId);
     const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
-    const leaseTermOptions =
-      form.propertyId.trim() && form.rentalType !== "short_term"
-        ? listingAllowedLeaseTerms(form.propertyId)
-        : [...LEASE_TERM_OPTIONS];
+    // Short-term is now a lease-term option rather than a separate toggle, so it
+    // is only offered where the listing permits it (and where the manager hasn't
+    // hidden the rentalType field). The standard terms are always the listing's
+    // allowed set.
+    const shortTermOfferable = shortTermAllowed && showWizardField("rentalType");
+    const leaseTermOptions = form.propertyId.trim()
+      ? listingAllowedLeaseTerms(form.propertyId)
+      : [...LEASE_TERM_OPTIONS];
+    const isShortTermSelected = form.rentalType === "short_term";
     const rooms = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true }).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true });
     // Whole-unit listings (leased as one place, not room-by-room) don't ask for
@@ -679,76 +685,58 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         )}
         </WizardFieldGate>
 
-        {shortTermAllowed && showWizardField("rentalType") ? (
-          <div className="space-y-3 rounded-2xl border border-border bg-accent/30 p-5">
-            <Label required>Application type</Label>
-            <div className={pillWrap}>
-              {[
-                { id: "standard" as const, label: "Standard lease" },
-                { id: "short_term" as const, label: "Short-term stay" },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={form.rentalType === opt.id ? pillActive : pillIdle}
-                  onClick={() =>
-                    patch(
-                      opt.id === "short_term"
-                        ? { rentalType: opt.id, leaseTerm: SHORT_TERM_LEASE_TERM }
-                        : { rentalType: opt.id, leaseTerm: "" },
-                    )
-                  }
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {form.rentalType === "short_term" ? (
-              <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
-                <p>
-                  Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
-                  {" · "}
-                  Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
-                </p>
-                {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
-                  <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
         <WizardFieldGate fieldKey="leaseTerm" enabled={showWizardField}>
         <div className="space-y-2" data-wizard-field="leaseTerm">
           <Label htmlFor="leaseTerm" required>
-            {form.rentalType === "short_term" ? "Stay type" : "Lease term"}
+            Lease term
           </Label>
           <Select
             id="leaseTerm"
             value={form.leaseTerm}
-            disabled={form.rentalType === "short_term"}
             onChange={(e) => {
               const v = e.target.value;
-              patch(v === "Month-to-Month" ? { leaseTerm: v, leaseEnd: "" } : { leaseTerm: v });
+              // The dropdown is the single control for the lease term AND whether
+              // this is a short-term stay — no separate "Application type" toggle
+              // to contradict it. Keep `rentalType` in lock-step with the choice
+              // so every downstream consumer (charges, lease dates, validation)
+              // stays consistent.
+              if (v === SHORT_TERM_LEASE_TERM) {
+                patch({ leaseTerm: v, rentalType: "short_term" });
+              } else if (v === "Month-to-Month") {
+                patch({ leaseTerm: v, rentalType: "standard", leaseEnd: "" });
+              } else {
+                patch({ leaseTerm: v, rentalType: "standard" });
+              }
             }}
             className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
           >
             <option value="">Select lease length</option>
-            {form.rentalType === "short_term" ? (
+            {leaseTermOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+            {shortTermOfferable ? (
               <option value={SHORT_TERM_LEASE_TERM}>{SHORT_TERM_LEASE_TERM}</option>
-            ) : (
-              leaseTermOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))
-            )}
+            ) : null}
           </Select>
           <FieldError msg={errors.leaseTerm} />
           {form.leaseTerm === "Month-to-Month" ? (
             <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
               Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
             </p>
+          ) : null}
+          {isShortTermSelected ? (
+            <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
+              <p>
+                Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
+                {" · "}
+                Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
+              </p>
+              {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
+                <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
         </WizardFieldGate>
@@ -759,20 +747,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Label htmlFor="leaseStart" required>
               {form.rentalType === "short_term" ? "Check-in date" : "Lease start date"}
             </Label>
-            <Input
+            <DateField
               id="leaseStart"
-              type="date"
               min="2020-01-01"
               max="2035-12-31"
               value={form.leaseStart}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (!raw) { patch({ leaseStart: "" }); return; }
-                const [y, m, d] = raw.split("-");
-                const year = parseInt(y ?? "0", 10);
-                const clamped = year > 2035 ? "2035" : year < 2020 ? "2020" : y!;
-                patch({ leaseStart: `${clamped}-${m}-${d}` });
-              }}
+              onChange={(next) => patch({ leaseStart: next })}
               className={errors.leaseStart ? "border-red-400 ring-2 ring-red-100" : ""}
             />
             <FieldError msg={errors.leaseStart} />
@@ -782,20 +762,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Label htmlFor="leaseEnd" required>
                 {form.rentalType === "short_term" ? "Check-out date" : "Lease end date"}
               </Label>
-              <Input
+              <DateField
                 id="leaseEnd"
-                type="date"
                 min="2020-01-01"
                 max="2040-12-31"
                 value={form.leaseEnd}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (!raw) { patch({ leaseEnd: "" }); return; }
-                  const [y, m, d] = raw.split("-");
-                  const year = parseInt(y ?? "0", 10);
-                  const clamped = year > 2040 ? "2040" : year < 2020 ? "2020" : y!;
-                  patch({ leaseEnd: `${clamped}-${m}-${d}` });
-                }}
+                onChange={(next) => patch({ leaseEnd: next })}
                 className={errors.leaseEnd ? "border-red-400 ring-2 ring-red-100" : ""}
               />
               <FieldError msg={errors.leaseEnd} />
@@ -882,11 +854,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Label htmlFor="dateOfBirth" required>
                 Date of birth
               </Label>
-              <Input
+              <DateField
                 id="dateOfBirth"
-                type="date"
                 value={form.dateOfBirth}
-                onChange={(e) => patch({ dateOfBirth: e.target.value })}
+                onChange={(next) => patch({ dateOfBirth: next })}
                 className={errors.dateOfBirth ? "border-red-400 ring-2 ring-red-100" : ""}
               />
               <FieldError msg={errors.dateOfBirth} />
@@ -1065,13 +1036,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Label htmlFor="currentMoveIn" optional>
               Current move-in date
             </Label>
-            <Input id="currentMoveIn" type="date" value={form.currentMoveIn} onChange={(e) => patch({ currentMoveIn: e.target.value })} />
+            <DateField id="currentMoveIn" value={form.currentMoveIn} onChange={(next) => patch({ currentMoveIn: next })} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="currentMoveOut" optional>
               Current move-out date
             </Label>
-            <Input id="currentMoveOut" type="date" value={form.currentMoveOut} onChange={(e) => patch({ currentMoveOut: e.target.value })} />
+            <DateField id="currentMoveOut" value={form.currentMoveOut} onChange={(next) => patch({ currentMoveOut: next })} />
           </div>
         </div>
         </WizardFieldGate>
@@ -1198,13 +1169,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <Label htmlFor="prevMoveIn" optional>
                   Move-in date
                 </Label>
-                <Input id="prevMoveIn" type="date" value={form.prevMoveIn} onChange={(e) => patch({ prevMoveIn: e.target.value })} />
+                <DateField id="prevMoveIn" value={form.prevMoveIn} onChange={(next) => patch({ prevMoveIn: next })} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="prevMoveOut" optional>
                   Move-out date
                 </Label>
-                <Input id="prevMoveOut" type="date" value={form.prevMoveOut} onChange={(e) => patch({ prevMoveOut: e.target.value })} />
+                <DateField id="prevMoveOut" value={form.prevMoveOut} onChange={(next) => patch({ prevMoveOut: next })} />
               </div>
             </div>
             </WizardFieldGate>
@@ -1311,7 +1282,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Label htmlFor="employmentStart" optional>
                 Employment start date
               </Label>
-              <Input id="employmentStart" type="date" value={form.employmentStart} disabled={form.notEmployed} onChange={(e) => patch({ employmentStart: e.target.value })} />
+              <DateField id="employmentStart" value={form.employmentStart} disabled={form.notEmployed} onChange={(next) => patch({ employmentStart: next })} />
             </div>
             </WizardFieldGate>
           </div>
@@ -1658,7 +1629,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Label htmlFor="dateSigned" required>
               Date signed
             </Label>
-            <Input id="dateSigned" type="date" value={form.dateSigned} onChange={(e) => patch({ dateSigned: e.target.value })} className={errors.dateSigned ? "border-red-400 ring-2 ring-red-100" : ""} />
+            <DateField id="dateSigned" value={form.dateSigned} onChange={(next) => patch({ dateSigned: next })} className={errors.dateSigned ? "border-red-400 ring-2 ring-red-100" : ""} />
             <FieldError msg={errors.dateSigned} />
           </div>
         </div>
@@ -1708,7 +1679,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ) : (
               <ReviewRow k="Unit" v={displayOrDash(roomLabel(form.roomChoice1))} />
             )}
-            <ReviewRow k="Application type" v={form.rentalType === "short_term" ? "Short-term stay" : "Standard lease"} />
             <ReviewRow k="Lease term" v={displayOrDash(form.leaseTerm)} />
             <ReviewRow k={form.rentalType === "short_term" ? "Check-in date" : "Lease start"} v={displayOrDash(form.leaseStart)} />
             {form.leaseTerm !== "Month-to-Month" ? <ReviewRow k={form.rentalType === "short_term" ? "Check-out date" : "Lease end"} v={displayOrDash(form.leaseEnd)} /> : null}

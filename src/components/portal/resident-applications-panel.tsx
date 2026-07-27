@@ -192,6 +192,26 @@ export function ResidentApplicationsPanel({
     [rows, applyTarget],
   );
 
+  // `applyTarget` is a snapshot of the URL at load time and never changes as the
+  // resident edits the wizard, but `inProgressRow` is recomputed from it on every
+  // render — so the moment the resident picks a DIFFERENT room than the one the
+  // URL named (or clears a bundle choice, etc.), `targetMatchesApplication` stops
+  // matching and `inProgressRow` goes from "this row" to `undefined`, even though
+  // it's still the exact same in-progress application, just with an updated room.
+  // Once we've already locked onto a row via `expandedId` (the effect below), keep
+  // trusting that lock instead of re-deriving the identity from the stale target —
+  // otherwise the standalone `applyMode && !inProgressRow` branch below thinks
+  // there is suddenly no in-progress application and mounts a SECOND, brand-new
+  // `RentalApplicationWizard` (fresh `step` state, no draft) alongside the one
+  // already embedded in the expanded row: the "glitches back to the start" bug,
+  // and the two instances' un-coordinated syncs are why the room could also land
+  // on the server as blank. See `tests/unit/resident-applications-room-change.test.tsx`.
+  const lockedInProgressRow = useMemo(
+    () => (expandedId ? rows.find((row) => row.id === expandedId && isInProgressApplicationRow(row)) : undefined),
+    [rows, expandedId],
+  );
+  const activeInProgressRow = lockedInProgressRow ?? inProgressRow;
+
   const counts = useMemo(() => countByBucket(rows), [rows]);
   const tabs = useMemo(
     () =>
@@ -205,10 +225,12 @@ export function ResidentApplicationsPanel({
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
 
-  useEffect(() => {
-    if (applyMode || demoMode || !sessionReady || rows.length > 0) return;
-    portalNavigate("/resident/applications/apply");
-  }, [applyMode, demoMode, sessionReady, rows.length, portalNavigate]);
+  // A resident with zero applications is deliberately NOT auto-redirected into
+  // the apply flow. The list page — with its always-visible "Apply to a property"
+  // header action and the "No applications yet" empty state — must render
+  // regardless of how many applications exist or their status; bouncing an empty
+  // list straight to /apply is exactly what hid the entry point the captain
+  // reported missing. Starting an application is always an explicit click.
 
   useEffect(() => {
     if (!applyMode || !inProgressRow) return;
@@ -216,6 +238,9 @@ export function ResidentApplicationsPanel({
       setBucket("pending");
       setExpandedId(inProgressRow.id);
     });
+    // Only re-runs when a target-matched row newly appears/changes id — deliberately
+    // NOT on `activeInProgressRow`, so a later room change (which only affects
+    // `inProgressRow`'s target match, not this effect's own lock) can't re-fire.
   }, [applyMode, inProgressRow]);
 
   useEffect(() => {
@@ -500,13 +525,13 @@ export function ResidentApplicationsPanel({
     <>
       {embedded ? filterRow : null}
 
-      {applyMode && !inProgressRow ? (
+      {applyMode && !activeInProgressRow ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>{embeddedWizard}</div>
       ) : null}
 
       {rows.length === 0 && !applyMode ? (
         <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
-      ) : rowsForBucket.length === 0 && !(applyMode && !inProgressRow) ? (
+      ) : rowsForBucket.length === 0 && !(applyMode && !activeInProgressRow) ? (
         <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
       ) : rowsForBucket.length > 0 ? (
         renderApplicationsTable()

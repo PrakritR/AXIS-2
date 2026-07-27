@@ -39,6 +39,16 @@ function parseLocalDate(iso: string): Date | null {
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
+/** True when `iso` (yyyy-mm-dd) parses to a real date strictly after today. */
+function isFutureLocalDate(iso: string): boolean {
+  const dt = parseLocalDate(iso);
+  if (!dt) return false;
+  const today = new Date();
+  const dtMid = Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const todayMid = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return dtMid > todayMid;
+}
+
 function isAtLeastAge(dobIso: string, minAge: number): boolean {
   const dob = parseLocalDate(dobIso);
   if (!dob) return false;
@@ -211,6 +221,10 @@ export function validateStandardWizardStep(
     }
     if (fieldEnabled("dateOfBirth")) {
       if (!f.dateOfBirth.trim()) e.dateOfBirth = "Date of birth is required.";
+      // A future date is not an age problem — reject it on its own terms before
+      // the age check, whose "must be at least 18" message would otherwise be
+      // shown for a date that simply hasn't happened yet.
+      else if (isFutureLocalDate(f.dateOfBirth)) e.dateOfBirth = "Date of birth cannot be in the future.";
       else if (!isAtLeastAge(f.dateOfBirth, 18)) e.dateOfBirth = "You must be at least 18 years old to apply.";
     }
     if (fieldEnabled("ssn")) {

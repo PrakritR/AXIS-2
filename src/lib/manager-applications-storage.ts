@@ -7,10 +7,7 @@ import {
   resolvePlacementLeaseDates,
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
-import {
-  enrichApplicationForLease,
-  resolveApplicationPersonalFields,
-} from "@/lib/application-personal-fields";
+import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 import {
   defaultBackgroundCheckStatusForRow,
   normalizeBackgroundCheckStatus,
@@ -199,14 +196,52 @@ function mergeApplicationRow(existing: DemoApplicantRow | undefined, incoming: D
   };
 }
 
-function mergeApplicationRows(existingRows: DemoApplicantRow[], incomingRows: DemoApplicantRow[]): DemoApplicantRow[] {
+/**
+ * Union merge: every id from EITHER side survives — `incomingRows` (the
+ * server's response) wins per-field on ids present in both, via
+ * `mergeApplicationRow`; an id present ONLY in `existingRows` is kept as-is.
+ *
+ * This is load-bearing, not cosmetic. The wizard's per-keystroke sync effect
+ * writes a freshly-created in-progress row to the LOCAL cache immediately,
+ * then fires an async, un-awaited POST to persist it — there is always a
+ * window where the row exists locally but not yet on the server. A caller
+ * that force-refetches during that window (`syncManagerApplicationsFromServer`
+ * on mount, `syncPublicApprovedApplicationsFromServer`'s approved-only
+ * snapshot) must never treat "missing from this response" as "deleted", or it
+ * erases the row the user is actively filling out. Losing it from
+ * `memoryRows` doesn't just blank a field — `ResidentApplicationsPanel`
+ * relocates the SAME wizard to a different JSX position depending on whether
+ * a matching in-progress row exists (top-level standalone vs. embedded in an
+ * expanded table row), so the row vanishing and reappearing unmounts and
+ * remounts `RentalApplicationWizard`, resetting `step` back to 1 — the
+ * "glitches back to the start of the application" bug. Losing rows here also
+ * fed a thundering herd: each remount re-runs the wizard's own
+ * force-refetch-on-mount effect, which raced the still-in-flight POST again.
+ * Regression coverage: `tests/unit/manager-applications-merge-rows.test.ts`.
+ *
+ * Deliberate tradeoff (accepted): because the union never treats "missing from
+ * a server response" as "deleted", a row deleted server-side (e.g. from
+ * another tab or device) does NOT propagate into a tab that already holds it —
+ * and `writeManagerApplicationRows`'s `action: "replace"` mirror of the whole
+ * cache can then re-upload that row, resurrecting the deletion. Distinguishing
+ * "not yet synced locally" from "deleted remotely" requires a server-side
+ * deletion/tombstone signal, which is tracked as follow-up work.
+ */
+export function mergeApplicationRows(existingRows: DemoApplicantRow[], incomingRows: DemoApplicantRow[]): DemoApplicantRow[] {
   const existingById = new Map(normalizeApplicationRows(existingRows).map((row) => [row.id, row] as const));
-  return normalizeApplicationRows(
-    incomingRows.map((row) => {
-      const normalized = normalizeApplicationRow(row);
-      return mergeApplicationRow(existingById.get(normalized.id), normalized);
-    }),
-  );
+  const incomingById = new Map(incomingRows.map((row) => [normalizeApplicationRow(row).id, row] as const));
+  const mergedIds = new Set<string>([...existingById.keys(), ...incomingById.keys()]);
+  const merged: DemoApplicantRow[] = [];
+  for (const id of mergedIds) {
+    const incoming = incomingById.get(id);
+    if (incoming) {
+      merged.push(mergeApplicationRow(existingById.get(id), normalizeApplicationRow(incoming)));
+    } else {
+      const existingOnly = existingById.get(id);
+      if (existingOnly) merged.push(existingOnly);
+    }
+  }
+  return normalizeApplicationRows(merged);
 }
 
 function canUseStorage() {
@@ -271,18 +306,123 @@ function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
   }).catch(() => undefined);
 }
 
-function mirrorApplicationRowToServer(row: DemoApplicantRow) {
-  if (typeof window === "undefined" || isDemoModeActive()) return;
-  void fetch("/api/manager-applications", {
+/**
+ * Fired after each background in-progress save attempt so a surface can tell the
+ * user their work is (or is not) being persisted. `detail.ok` is false when the
+ * write failed; `detail.id` is the application id it was for. The rental wizard
+ * listens for this to raise a "couldn't save" banner instead of silently losing
+ * a resident's typing — a failed autosave must surface, never disappear.
+ */
+export const APPLICATION_SAVE_STATUS_EVENT = "axis:application-save-status";
+
+function emitApplicationSaveStatus(ok: boolean, id: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(APPLICATION_SAVE_STATUS_EVENT, { detail: { ok, id } }));
+}
+
+function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
+  if (typeof window === "undefined" || isDemoModeActive()) return Promise.resolve();
+  return fetch("/api/manager-applications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
-  }).catch(() => undefined);
+  })
+    .then((res) => {
+      emitApplicationSaveStatus(res.ok, row.id);
+    })
+    .catch(() => emitApplicationSaveStatus(false, row.id));
+}
+
+const UPSERT_DEBOUNCE_MS = 400;
+type UpsertQueueEntry = {
+  latest: DemoApplicantRow | null;
+  timer: ReturnType<typeof setTimeout> | null;
+  inFlight: Promise<void> | null;
+};
+const upsertQueues = new Map<string, UpsertQueueEntry>();
+
+/**
+ * Best-effort flush when the page is being hidden or torn down: the debounced
+ * queue can be holding the final edits (including a just-advanced wizardStep)
+ * for up to 400ms — or longer, behind an in-flight write — and a closed tab
+ * loses them, since the local mirror is sessionStorage. `keepalive: true` lets
+ * the request outlive the page. Deliberately leaves `latest` and the timer
+ * untouched: if the page survives (a mere tab switch), the normal serialized
+ * path re-sends the identical snapshot, which also heals any ordering race
+ * this out-of-band send could introduce and keeps save-status events firing.
+ */
+function flushPendingApplicationRowUpserts() {
+  if (typeof window === "undefined" || isDemoModeActive()) return;
+  for (const entry of upsertQueues.values()) {
+    const pending = entry.latest;
+    if (!pending) continue;
+    void fetch("/api/manager-applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      keepalive: true,
+      body: JSON.stringify({ action: "upsert", row: pending }),
+    }).catch(() => undefined);
+  }
+}
+
+let upsertUnloadFlushRegistered = false;
+
+function registerUpsertUnloadFlush() {
+  if (upsertUnloadFlushRegistered || typeof window === "undefined") return;
+  upsertUnloadFlushRegistered = true;
+  window.addEventListener("pagehide", flushPendingApplicationRowUpserts);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingApplicationRowUpserts();
+  });
+}
+
+/**
+ * The rental wizard calls this on every form change (a keystroke can fire
+ * dozens of times per minute), and the server write is a full replace of
+ * `row_data` — never a partial patch. Firing one raw fetch per call let
+ * requests overlap in flight; because network completion order is not
+ * guaranteed to match send order, a STALE snapshot (e.g. from before a room
+ * was picked) could land on the server AFTER a newer one, silently reverting
+ * the field the user just set. Coalescing to the latest snapshot after a
+ * short quiet period, and never starting the next write for the same row id
+ * until the previous one's request has actually landed, makes the server's
+ * view monotonic with the user's edits again.
+ */
+function scheduleApplicationRowUpsert(row: DemoApplicantRow) {
+  const id = row.id.trim();
+  if (!id) return;
+  registerUpsertUnloadFlush();
+  let entry = upsertQueues.get(id);
+  if (!entry) {
+    entry = { latest: null, timer: null, inFlight: null };
+    upsertQueues.set(id, entry);
+  }
+  entry.latest = row;
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => {
+    entry!.timer = null;
+    const runNext = () => {
+      const pending = entry!.latest;
+      entry!.latest = null;
+      if (!pending) return;
+      entry!.inFlight = mirrorApplicationRowToServer(pending).finally(() => {
+        entry!.inFlight = null;
+        // A newer edit may have queued while this write was in flight.
+        if (entry!.latest) runNext();
+      });
+    };
+    // Never overlap two writes for the same row — wait out any write already
+    // in flight (e.g. from the trailing edge of the previous debounce) so
+    // send order and landing order stay identical.
+    if (entry!.inFlight) void entry!.inFlight.then(runNext);
+    else runNext();
+  }, UPSERT_DEBOUNCE_MS);
 }
 
 export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
-  mirrorApplicationRowToServer(row);
+  scheduleApplicationRowUpsert(row);
 }
 
 /** Await server persistence before showing post-submit UI or create-account links. */
@@ -388,7 +528,10 @@ export async function syncManagerApplicationsFromServer(opts?: {
       const res = await fetch("/api/manager-applications", { credentials: "include" });
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
-      const rows = mergeApplicationRows([], Array.isArray(body.rows) ? body.rows : []);
+      // Union with the CURRENT cache, not `[]` — a locally-created row whose
+      // upsert POST hasn't landed yet must survive this force refetch (see
+      // `mergeApplicationRows`'s doc comment).
+      const rows = mergeApplicationRows(memoryRows, Array.isArray(body.rows) ? body.rows : []);
       const changed = applicationRowsChanged(memoryRows, rows);
       memoryRows = rows;
       persistManagerApplicationsToSession(rows, managerUserId);
