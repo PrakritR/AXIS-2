@@ -403,6 +403,15 @@ with `sharp` (16/32/48 as 32-bit BMP entries plus a 256 PNG entry). Regenerate
 it whenever `icon.svg` changes — a stale `.ico` wins in the tab on browsers
 that prefer it, so editing only the SVG leaves the old mark visible.
 
+**Google OAuth consent-screen branding needs `public/googled830824c3903ffb3.html`
+to stay forever.** It is a Google Search Console domain-ownership proof for
+`prop-lane.space` (served verbatim at the site root, no rewrite/redirect
+touches it — `public/` files are static passthrough). Google's OAuth consent
+screen only shows the "PropLane" app name + logo instead of the raw Supabase
+hostname while that domain stays verified; deleting the file revokes
+verification and the sign-in screen reverts to showing the database hostname.
+Never delete it during a "clean up unused public files" pass.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
