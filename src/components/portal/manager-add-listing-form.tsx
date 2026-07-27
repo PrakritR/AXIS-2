@@ -3078,96 +3078,95 @@ export function ManagerAddListingForm({
                         </label>
                       );
                     })}
+                    {/* Short-term stays are offered as one more lease option, not a separate walled-off section. */}
+                    <label
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
+                        sub.shortTermRentalsAllowed ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        checked={Boolean(sub.shortTermRentalsAllowed)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSub((s) => {
+                            const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                            const next = syncShortTermLeaseTermInAllowed(standard, on);
+                            return syncPropertyLeaseTemplatesFromListing({
+                              ...s,
+                              shortTermRentalsAllowed: on,
+                              allowedLeaseTerms: next,
+                              leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                            });
+                          });
+                        }}
+                      />
+                      <span className="font-medium text-foreground">{SHORT_TERM_LEASE_TERM}</span>
+                    </label>
                   </div>
-                  {sub.shortTermRentalsAllowed ? (
-                    <p className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-foreground">
-                      <span className="font-semibold">{SHORT_TERM_LEASE_TERM}</span>
-                      <span className="text-muted">— included because short-term stays are enabled</span>
-                    </p>
-                  ) : null}
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>
-              </ListingSubsection>
 
-              <ListingSubsection
-                title="Short-term stays"
-                description="Temporary guest / lodger stays with nightly pricing. Applicants choose “Short-term stay” when this is on."
-              >
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-border"
-                    checked={Boolean(sub.shortTermRentalsAllowed)}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setSub((s) => {
-                        const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
-                        const next = syncShortTermLeaseTermInAllowed(standard, on);
-                        return syncPropertyLeaseTemplatesFromListing({
-                          ...s,
-                          shortTermRentalsAllowed: on,
-                          allowedLeaseTerms: next,
-                          leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                        });
-                      });
-                    }}
-                  />
-                  <span className="text-sm font-medium text-foreground">This property allows short-term room stays</span>
-                </label>
+                {/* Short-term pricing only appears once short-term stays are offered above. */}
                 {sub.shortTermRentalsAllowed ? (
-                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Short-term pricing</p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <GridField>
-                      <FieldLabel hint="Nightly rate shown on the listing and application.">Daily cost</FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          className="pl-8"
-                          inputMode="decimal"
-                          value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
-                          placeholder="40"
-                        />
-                      </div>
-                    </GridField>
-                    <GridField>
-                      <FieldLabel>Short-term deposit</FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          className="pl-8"
-                          inputMode="decimal"
-                          value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
-                          placeholder="100"
-                        />
-                      </div>
-                    </GridField>
-                    <GridField>
-                      <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          className="pl-8"
-                          inputMode="decimal"
-                          value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
-                          placeholder="50"
-                        />
-                      </div>
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
-                        Requirements / house rules for short-term stays
-                      </FieldLabel>
-                      <Textarea
-                        className=""
-                        value={sub.shortTermRequirements ?? ""}
-                        onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
-                        placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
-                      />
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Short-term pricing</p>
+                      <p className="text-xs leading-relaxed text-muted">
+                        Temporary guest or lodger stays with nightly pricing. Applicants pick “{SHORT_TERM_LEASE_TERM}” as their lease term when this is on.
+                      </p>
                     </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <GridField>
+                        <FieldLabel hint="Nightly rate shown on the listing and application.">Daily cost</FieldLabel>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                          <Input
+                            className="pl-8"
+                            inputMode="decimal"
+                            value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
+                            onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
+                            placeholder="40"
+                          />
+                        </div>
+                      </GridField>
+                      <GridField>
+                        <FieldLabel>Short-term deposit</FieldLabel>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                          <Input
+                            className="pl-8"
+                            inputMode="decimal"
+                            value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                            onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
+                            placeholder="100"
+                          />
+                        </div>
+                      </GridField>
+                      <GridField>
+                        <FieldLabel hint="Move-in fee for short-term stays, used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                          <Input
+                            className="pl-8"
+                            inputMode="decimal"
+                            value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                            onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
+                            placeholder="50"
+                          />
+                        </div>
+                      </GridField>
+                      <div className="sm:col-span-2">
+                        <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
+                          Requirements / house rules for short-term stays
+                        </FieldLabel>
+                        <Textarea
+                          value={sub.shortTermRequirements ?? ""}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
+                          placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
+                        />
+                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -3343,13 +3342,15 @@ export function ManagerAddListingForm({
                 title="Fees & deposits"
                 description="Application charges are one-time. Monthly amounts repeat on the resident ledger."
               >
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application & holding</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted">
-                      Collected when someone applies. Holding deposit secures the application and credits toward the security deposit when they are approved (defaults to $100 if left blank).
-                    </p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application & holding</p>
+                      <p className="text-xs leading-relaxed text-muted">
+                        Collected when someone applies. The holding deposit secures the application and credits toward the security deposit when they are approved (defaults to $100 if left blank).
+                      </p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
                       {(
                         [
                           ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim(), true],
@@ -3430,9 +3431,9 @@ export function ManagerAddListingForm({
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                  <div className="space-y-3">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Move-in & security</p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       {(
                         [
                           ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
@@ -3466,9 +3467,9 @@ export function ManagerAddListingForm({
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                  <div className="space-y-3">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Monthly add-ons</p>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       {(
                         [
                           ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
@@ -3507,10 +3508,16 @@ export function ManagerAddListingForm({
                       ))}
                     </div>
                   </div>
-                </div>
-                {(sub.customFees ?? []).length > 0 ? (
-                  <div className="mt-4 space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Other fees</p>
+                      <p className="text-xs leading-relaxed text-muted">
+                        Anything not already captured above, like a pet or cleaning fee. The holding deposit and security deposit have their own fields above, so enter them there, not here.
+                      </p>
+                    </div>
+                    {(sub.customFees ?? []).length > 0 ? (
+                      <div className="space-y-3">
                     {(sub.customFees ?? []).map((fee, i) => (
                       <ListingWizardCollapsibleCard
                         key={fee.id}
@@ -3567,11 +3574,13 @@ export function ManagerAddListingForm({
                         </div>
                       </ListingWizardCollapsibleCard>
                     ))}
+                      </div>
+                    ) : null}
+                    <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addCustomFee}>
+                      + Add fee
+                    </Button>
                   </div>
-                ) : null}
-                <Button type="button" variant="outline" className={`mt-4 ${LISTING_WIZARD_ACTION_BTN}`} onClick={addCustomFee}>
-                  + Add fee
-                </Button>
+                </div>
               </ListingSubsection>
 
               <ListingSubsection
