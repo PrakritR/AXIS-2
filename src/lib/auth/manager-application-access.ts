@@ -23,7 +23,10 @@ export type ApplicationAccessRecord = {
  */
 export async function managerOwnedPropertyIdSet(db: ServiceClient, userId: string): Promise<Set<string>> {
   if (!userId) return new Set();
-  const { data } = await db.from("manager_property_records").select("id").eq("manager_user_id", userId);
+  const { data, error } = await db.from("manager_property_records").select("id").eq("manager_user_id", userId);
+  if (error) {
+    throw new Error(`Failed to load owned properties for manager ${userId}: ${error.message}`);
+  }
   return new Set<string>((data ?? []).map((row) => String(row.id ?? "").trim()).filter(Boolean));
 }
 
