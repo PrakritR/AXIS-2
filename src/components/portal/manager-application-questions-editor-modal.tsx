@@ -183,6 +183,19 @@ export function ManagerApplicationQuestionsEditorModal({
     return true;
   };
 
+  // An EDIT to the short-term form must STICK even when it leaves the slice
+  // empty — e.g. re-enabling every off-by-default built-in, or deleting the last
+  // custom question after doing so. `applicationConfigForVariant` treats a
+  // non-"custom" short-term slice as the curated DEFAULT, so a mode that
+  // collapsed to "standard" would silently revert the manager's choices. Pin
+  // "custom" on edits; only "Restore PropLane defaults" (plain `persistSlice`
+  // with a fresh default) intentionally returns short-term to the curated set.
+  const persistEditedSlice = (nextSlice: ApplicationConfigSlice, singleSuccessMessage: string): boolean =>
+    persistSlice(
+      variant === "short_term" ? { ...nextSlice, applicationConfigMode: "custom" } : nextSlice,
+      singleSuccessMessage,
+    );
+
   const openEdit = (field: ResolvedApplicationField) => {
     setEditingField(field);
     setIsNewField(false);
@@ -204,20 +217,20 @@ export function ManagerApplicationQuestionsEditorModal({
   };
 
   const removeField = (field: ResolvedApplicationField) => {
-    if (!persistSlice(removeListingApplicationField(configSlice, field), "Question removed.")) return;
+    if (!persistEditedSlice(removeListingApplicationField(configSlice, field), "Question removed.")) return;
     onSaved();
   };
 
   const reenableField = (field: ResolvedApplicationField) => {
     if (!field.standardKey) return;
-    if (!persistSlice(reenableListingApplicationField(configSlice, field.standardKey), "Question added back.")) return;
+    if (!persistEditedSlice(reenableListingApplicationField(configSlice, field.standardKey), "Question added back.")) return;
     onSaved();
   };
 
   const removeSection = (sectionId: string) => {
     const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === sectionId);
     if (sectionQuestions.length === 0) return;
-    if (!persistSlice(applyFieldRemovals(configSlice, sectionQuestions), "Section questions removed.")) return;
+    if (!persistEditedSlice(applyFieldRemovals(configSlice, sectionQuestions), "Section questions removed.")) return;
     if (expandedSectionId === sectionId) setExpandedSectionId(null);
     onSaved();
   };

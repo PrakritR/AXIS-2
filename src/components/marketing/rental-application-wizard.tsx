@@ -70,6 +70,7 @@ import {
 } from "@/lib/rental-application/application-field-catalog";
 import { digitsOnly, maskPhoneInput, maskSsnInput } from "@/lib/rental-application/masks";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
+import { sanitizeApplicationFormForListing } from "@/lib/rental-application/validate-application-submit";
 import {
   RENTAL_WIZARD_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
@@ -289,33 +290,6 @@ function RentalApplicationWizardInner({
     }
     return { ...createInitialRentalWizardState(), ...draft };
   });
-  // The step ids that carry a visible question for the CURRENT form variant.
-  // Section steps (3-10) fall out when the variant has no question in them, so
-  // the short-term form skips the screening sections its curated default turns
-  // off. Keyed on the property + variant (the only inputs that change which
-  // sections are asked); short-term correctness rides on `rentalType` alone, so
-  // this is right even before the client property store hydrates.
-  const activeSteps = useMemo(() => {
-    const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
-    const listingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
-    return activeApplicationWizardSteps(
-      applicationConfigForVariant(listingSub, form.rentalType),
-      normalizeCustomApplicationFields,
-    );
-  }, [form.propertyId, form.rentalType]);
-  const nextActiveStep = useCallback(
-    (from: number) => activeSteps.find((s) => s > from) ?? from,
-    [activeSteps],
-  );
-  const prevActiveStep = useCallback(
-    (from: number) => {
-      for (let i = activeSteps.length - 1; i >= 0; i -= 1) {
-        if (activeSteps[i] < from) return activeSteps[i];
-      }
-      return from;
-    },
-    [activeSteps],
-  );
   // Tracks which target signature has been confirmed (matched to an existing
   // in-progress application, or confirmed fresh) by the reconciliation effect.
   // While it disagrees with the CURRENT requested target, no other effect may
@@ -379,6 +353,38 @@ function RentalApplicationWizardInner({
   /** True when the most recent background autosave of THIS application failed. */
   const [autosaveFailed, setAutosaveFailed] = useState(false);
   const router = useRouter();
+
+  // The step ids that carry a visible question for the CURRENT form variant.
+  // Section steps (3-10) fall out when the variant has no question in them, so
+  // the short-term form skips the screening sections its curated default turns
+  // off. Short-term correctness rides on `rentalType` alone (curated default),
+  // but custom manager questions and a manager-customized short-term slice come
+  // from the listing submission, which loads asynchronously — so `extrasTick`
+  // (bumped when the public catalog arrives) is a dep, otherwise a resumed draft
+  // whose propertyId is set at mount would compute against a missing submission
+  // and never recompute, disagreeing with the step bodies and `validateAllPrior`.
+  const activeSteps = useMemo(() => {
+    void extrasTick;
+    const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
+    const listingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    return activeApplicationWizardSteps(
+      applicationConfigForVariant(listingSub, form.rentalType),
+      normalizeCustomApplicationFields,
+    );
+  }, [form.propertyId, form.rentalType, extrasTick]);
+  const nextActiveStep = useCallback(
+    (from: number) => activeSteps.find((s) => s > from) ?? from,
+    [activeSteps],
+  );
+  const prevActiveStep = useCallback(
+    (from: number) => {
+      for (let i = activeSteps.length - 1; i >= 0; i -= 1) {
+        if (activeSteps[i] < from) return activeSteps[i];
+      }
+      return from;
+    },
+    [activeSteps],
+  );
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
   const browseHomesHref = residentBrowseFromApplicationHref(wizardApplyPath);
@@ -1087,8 +1093,21 @@ function RentalApplicationWizardInner({
       // joining members keep the id they pasted. Persist it on the stored snapshot so
       // every member's independent application row can be reconciled into one group.
       const resolvedGroupId = resolveSubmitGroupId(form);
-      const submittedForm: RentalWizardFormState =
+      const withGroupId: RentalWizardFormState =
         resolvedGroupId && resolvedGroupId !== form.groupId ? { ...form, groupId: resolvedGroupId } : form;
+      // Sanitize at SUBMIT (only here — never on a mid-form lease-term switch, so
+      // toggling long<->short keeps in-progress answers): the stored snapshot and
+      // the manager view must carry ONLY the questions the CHOSEN form actually
+      // asked. Otherwise an applicant who fills the long-term form (SSN, driver's
+      // license, employment, references, credit consent) and then picks Short-Term
+      // Stay would submit all of that PII for a form that never asked it. Variant
+      // resolved from the submitted form's own `rentalType`; fields the chosen form
+      // did ask are untouched.
+      const submittedListingSub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+      const submittedForm: RentalWizardFormState = sanitizeApplicationFormForListing(
+        withGroupId,
+        submittedListingSub,
+      );
 
       recordApplicationCharges(
         {
