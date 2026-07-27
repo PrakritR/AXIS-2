@@ -210,8 +210,21 @@ flip `flex-col` → `@2xl:flex-row`; the row layout itself is gated on that JS
 "open" state too, so a *collapsed* strip is always the original thin bottom
 bar regardless of width.
 
+**Which side, and open by default.** Two opt-in props tune this per surface,
+both defaulting to the shared-`Modal` behavior so only the listing wizard
+changes: `side` (`"right"` default) picks whether the expanded chat docks left
+or right (it swaps the `@2xl` divider between `border-l`/`border-r` and the inner
+padding), and `defaultExpanded` (`false` default) is the initial + per-open state.
+The listing wizard passes `side="left"` and `defaultExpanded={prefersAssistantOpenBeside()}`
+(true only at ≥1024px viewport) so managers see the assistant to the *left* of the
+form on desktop, collapsed on phones/tablets. Because content stays first in the
+DOM (so the collapsed strip and the whole narrow-screen stack sit *below* the
+fields), the wizard floats the expanded chat left with `@2xl:order-first`, applied
+only while open. `prefersAssistantOpenBeside()` guards `window.matchMedia` for SSR
+and jsdom.
+
 **Gotcha:** a CSS container cannot query its own size for its own layout —
-`@container` must sit on an ancestor (the modal panel / wizard `<form>`) of the
+`@container` must sit on an ancestor (the modal panel / wizard panel `<div>`) of the
 element whose `@2xl:flex-row` reacts to it, one level up. Putting `@container`
 and `@2xl:flex-row` on the same element silently no-ops (it stays column no
 matter how wide the container gets). Cost real debugging time once; verify any

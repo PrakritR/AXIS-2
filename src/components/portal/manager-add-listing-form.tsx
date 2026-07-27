@@ -950,12 +950,50 @@ async function uploadVideoFile(file: File): Promise<string> {
   return uploadToBucket(file);
 }
 
-function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
+/**
+ * Desktop widths open the PropLane Assistant beside the form by default, so the
+ * manager sees it "to the left" without hunting for the collapsed strip; phones
+ * and tablets start collapsed so the fields keep the full width (a two-column
+ * split is worse than the original on a narrow screen). SSR-guarded — the wizard
+ * only mounts on the client, but a `useState` initializer still runs during any
+ * server render of the tree.
+ */
+function prefersAssistantOpenBeside(): boolean {
+  // `matchMedia` is missing under SSR and in jsdom; fall back to collapsed there
+  // (a safe default — the real browser opens it beside the form on desktop).
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
+/**
+ * One field's label. `required` marks a must-fill with a red asterisk;
+ * `optional` prints a muted "Optional" tag so the two are never the same visual
+ * weight (a plain optional input used to look identical to a required select).
+ * Pass at most one of the two.
+ */
+function FieldLabel({
+  children,
+  hint,
+  required,
+  optional,
+}: {
+  children: React.ReactNode;
+  hint?: string;
+  required?: boolean;
+  optional?: boolean;
+}) {
   return (
     <div className="mb-1.5">
-      <p className="text-xs font-semibold text-foreground">
-        {children}
-        {required ? <span className="text-red-600"> *</span> : null}
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+        <span>
+          {children}
+          {required ? <span className="text-red-600"> *</span> : null}
+        </span>
+        {optional && !required ? (
+          <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+            Optional
+          </span>
+        ) : null}
       </p>
       {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
@@ -1096,8 +1134,9 @@ export function ManagerAddListingForm({
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
   /** Mirrors the assistant strip's own open/closed state so the wizard body can
-   * lay out beside it (wide screens) instead of always stacking above it. */
-  const [assistantExpanded, setAssistantExpanded] = useState(false);
+   * lay out beside it (wide screens) instead of always stacking above it. Opens
+   * to the left by default on desktop; collapsed on narrow screens. */
+  const [assistantExpanded, setAssistantExpanded] = useState(prefersAssistantOpenBeside);
   const resumedStepIndex = clampWizardStep(initialStepIndex);
   const resumedMaxStepReached = Math.max(clampWizardStep(initialMaxStepReached), resumedStepIndex);
   const [stepIndex, setStepIndex] = useState(resumedStepIndex);
@@ -2423,20 +2462,21 @@ export function ManagerAddListingForm({
       className="modal-overlay fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onClick={(e) => { if (e.target === e.currentTarget) closeWizard(); }}
     >
-      <form
+      {/* A plain container, not a <form>: the PropLane Assistant embedded in the
+          body has its own <form> for the chat composer, and a form-in-form is
+          invalid HTML that throws a hydration error whenever the assistant is
+          open (now the default on desktop). Continue / Submit are onClick buttons,
+          so nothing here relied on form submission. */}
+      <div
         id="manager-add-listing-form"
-        onSubmit={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
         className="modal-panel @container relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-                Step {visibleStepPosition + 1} of {visibleStepCount}
-              </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
@@ -2451,48 +2491,55 @@ export function ManagerAddListingForm({
             </button>
           </div>
 
-          {/* Step pills — jump only to steps already reached via Continue */}
-          <div className="-mx-0 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-            <div className="flex min-w-max gap-1.5">
+          {/* The single progress + navigation signal (replaces the old
+              "STEP X OF 6" line + duplicate progress bar). A completed step
+              shows a ✓ and stays clickable; the current step is filled; a step
+              not yet reached is visible but disabled, so the wizard never styles
+              a jump the manager cannot actually make. */}
+          <nav aria-label="Listing steps" className="mt-3 -mx-1 overflow-x-auto px-1 [-webkit-overflow-scrolling:touch]">
+            <ol className="flex min-w-max items-center gap-1">
               {wizardSteps.map((i, pillPos) => {
                 const step = LISTING_FORM_STEPS[i]!;
                 const reachable = canNavigateToWizardStep(i, maxStepReached);
+                const isCurrent = i === stepIndex;
                 const completed = pillPos < visibleStepPosition;
                 return (
-                <button
-                  key={step.id}
-                  type="button"
-                  disabled={!reachable}
-                  onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                    i === stepIndex
-                      ? "bg-primary/10 text-primary"
-                      : completed
-                        ? "text-muted hover:bg-accent/30"
-                        : reachable
-                          ? "text-muted hover:bg-accent/30"
-                          : "cursor-not-allowed text-slate-300"
-                  }`}
-                >
-                  <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
-                    completed ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-accent/30 text-muted" : "bg-accent/30 text-muted"
-                  }`}>
-                    {completed ? "✓" : pillPos + 1}
-                  </span>
-                  {step.label}
-                </button>
-              );
+                  <li key={step.id} className="flex items-center">
+                    <button
+                      type="button"
+                      disabled={!reachable}
+                      aria-current={isCurrent ? "step" : undefined}
+                      onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
+                      className={cn(
+                        "flex shrink-0 items-center gap-1.5 rounded-full py-1.5 pl-1.5 pr-3 text-xs font-semibold transition",
+                        isCurrent
+                          ? "bg-primary/10 text-primary"
+                          : completed
+                            ? "text-foreground hover:bg-accent/40"
+                            : reachable
+                              ? "text-muted hover:bg-accent/40"
+                              : "cursor-default text-muted/45",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                          completed
+                            ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]"
+                            : isCurrent
+                              ? "bg-primary text-white"
+                              : "border border-border text-muted/60",
+                        )}
+                      >
+                        {completed ? "✓" : pillPos + 1}
+                      </span>
+                      {step.label}
+                    </button>
+                  </li>
+                );
               })}
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-              style={{ width: `${((visibleStepPosition + 1) / visibleStepCount) * 100}%` }}
-            />
-          </div>
+            </ol>
+          </nav>
 
           {/* Step blurb */}
           <p className="mt-3 text-[12px] leading-relaxed text-muted">
@@ -2500,7 +2547,7 @@ export function ManagerAddListingForm({
           </p>
         </div>
 
-        {/* `@container` lives on the panel <form> above (a container cannot query
+        {/* `@container` lives on the panel <div> above (a container cannot query
             its own size for its own layout), so this row/column switch can react
             to how much space the panel actually has. */}
         <div
@@ -2515,12 +2562,16 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-building"
             title="Tell us about your place"
-            description="Type the address to autofill ZIP and neighborhood. Everything can be changed later."
+            description="The essentials for your listing, grouped into a few short sections. You can change anything here later."
             compact
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <ListingSubsection
+              title="Address & property type"
+              description="Where the place is and what kind of home it is. Choosing an address result fills in ZIP and neighborhood for you."
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
               <div data-wizard-field="listingPropertyTypeId" className={wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId))}>
-                <FieldLabel>Property type *</FieldLabel>
+                <FieldLabel required>Property type</FieldLabel>
                 <Select
                   aria-label="Property type"
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId), selectInputCls)}
@@ -2541,7 +2592,7 @@ export function ManagerAddListingForm({
               </div>
 
               <div data-wizard-field="buildingName">
-                <FieldLabel>Building name</FieldLabel>
+                <FieldLabel optional>Building name</FieldLabel>
                 <Input
                   value={sub.buildingName}
                   onChange={(e) => {
@@ -2549,13 +2600,13 @@ export function ManagerAddListingForm({
                     setSub((s) => ({ ...s, buildingName: sanitizeBuildingNameInput(e.target.value) }));
                   }}
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.buildingName), listingTextInputCls)}
-                  placeholder="Optional"
+                  placeholder="e.g. Maple Court"
                 />
                 <StepFieldError msg={stepFieldErrors.buildingName} />
               </div>
 
               <div className="relative z-20 sm:col-span-2" data-wizard-field="address">
-                <FieldLabel>Street address *</FieldLabel>
+                <FieldLabel required hint="Start typing to search. Choosing a result fills in ZIP and neighborhood below.">Street address</FieldLabel>
                 <ListingAddressAutocomplete
                   value={sub.address}
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.address), listingTextInputCls)}
@@ -2582,7 +2633,7 @@ export function ManagerAddListingForm({
               </div>
 
               <GridField>
-                <FieldLabel>ZIP *</FieldLabel>
+                <FieldLabel required hint="Fills in from the address. Edit if it is off.">ZIP</FieldLabel>
                 <div data-wizard-field="zip">
                   <Input
                     value={sub.zip}
@@ -2599,7 +2650,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel>Neighborhood</FieldLabel>
+                <FieldLabel optional hint="Fills in from the address. Edit if it is off.">Neighborhood</FieldLabel>
                 <div data-wizard-field="neighborhood">
                   <Input
                     value={sub.neighborhood}
@@ -2613,9 +2664,16 @@ export function ManagerAddListingForm({
                   <StepFieldError msg={stepFieldErrors.neighborhood} />
                 </div>
               </GridField>
+              </div>
+            </ListingSubsection>
 
+            <ListingSubsection
+              title="Size & layout"
+              description="How big the home is and how it is laid out."
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
               <GridField>
-                <FieldLabel>Floors *</FieldLabel>
+                <FieldLabel required>Floors</FieldLabel>
                 <div data-wizard-field="listingStoriesId">
                   <Select
                     aria-label="Number of floors"
@@ -2637,7 +2695,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel>Bathrooms *</FieldLabel>
+                <FieldLabel required>Bathrooms</FieldLabel>
                 <div data-wizard-field="listingTotalBathroomsId">
                   <Select
                     aria-label="Total bathrooms"
@@ -2659,7 +2717,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel>Bedrooms *</FieldLabel>
+                <FieldLabel required>Bedrooms</FieldLabel>
                 <div data-wizard-field="listingBedroomSlots">
                   <Select
                     aria-label="Bedrooms for rent"
@@ -2690,9 +2748,16 @@ export function ManagerAddListingForm({
                   Pet-friendly
                 </label>
               </div>
+              </div>
+            </ListingSubsection>
 
+            <ListingSubsection
+              title="Description & move-in"
+              description="What a renter reads on the listing, plus how they get in on move-in day."
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <FieldLabel>Listing tagline</FieldLabel>
+                <FieldLabel optional>Listing tagline</FieldLabel>
                 <Input
                   value={sub.tagline}
                   onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))}
@@ -2701,7 +2766,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel>House overview</FieldLabel>
+                <FieldLabel optional>House overview</FieldLabel>
                 <Textarea
                   rows={3}
                   value={sub.houseOverview}
@@ -2711,7 +2776,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Optional — only if the layout is unusual.">Extra layout note</FieldLabel>
+                <FieldLabel optional hint="Only if the layout is unusual.">Extra layout note</FieldLabel>
                 <Input
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
@@ -2720,7 +2785,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                <FieldLabel optional hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
                 <Textarea
                   rows={4}
                   value={sub.houseMoveInInstructions ?? ""}
@@ -2729,9 +2794,9 @@ export function ManagerAddListingForm({
                   placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
                 />
               </div>
-            </div>
+              </div>
+            </ListingSubsection>
 
-            <div className="mt-4">
             <ListingSubsection
               title="Full-house photos & video"
               description="Up to 12 photos for the public listing gallery."
@@ -2822,7 +2887,6 @@ export function ManagerAddListingForm({
                 />
               </div>
             </ListingSubsection>
-            </div>
           </FormSection>
           ) : null}
 
@@ -4869,7 +4933,12 @@ export function ManagerAddListingForm({
             contextHint={listingAssistantContext}
             storageScopeKey={wizardTitlePrefix}
             onExpandedChange={setAssistantExpanded}
-            className="z-10 px-5 sm:px-6"
+            side="left"
+            defaultExpanded={prefersAssistantOpenBeside()}
+            // Content is first in the DOM so the collapsed strip (and the whole
+            // narrow-screen stack) sits below the fields; when expanded on a wide
+            // panel, `order-first` floats the chat to the left of the form.
+            className={cn("z-10 px-5 sm:px-6", assistantExpanded && "@2xl:order-first")}
           />
         </div>
 
@@ -4936,7 +5005,7 @@ export function ManagerAddListingForm({
             </div>
           </div>
         </div>
-      </form>
+      </div>
 
     </div>,
     portalContainer ?? document.body,

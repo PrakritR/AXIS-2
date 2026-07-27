@@ -29,6 +29,19 @@ export type ModalAssistantStripProps = {
    * component still owns the expand/collapse state itself.
    */
   onExpandedChange?: (expanded: boolean) => void;
+  /**
+   * Which side the expanded chat docks to once the container is wide enough
+   * (the `@2xl` breakpoint). Defaults to `"right"` — the shared-`Modal` layout —
+   * so only surfaces that opt in (the listing wizard) move it left.
+   */
+  side?: "left" | "right";
+  /**
+   * Initial expanded state, re-applied whenever a new `conversationInstance`
+   * starts. Defaults to `false` (collapsed) so the general portal modals keep
+   * the field area free until a manager asks for help; a surface can pass
+   * `true` (e.g. on desktop widths) to open the assistant beside the form.
+   */
+  defaultExpanded?: boolean;
 };
 
 /**
@@ -47,9 +60,11 @@ export function ModalAssistantStrip({
   conversationInstance = 0,
   className,
   onExpandedChange,
+  side = "right",
+  defaultExpanded = false,
 }: ModalAssistantStripProps) {
   const config = usePortalAssistantConfig();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const toggle = (next: boolean) => {
     setExpanded(next);
@@ -57,11 +72,12 @@ export function ModalAssistantStrip({
   };
 
   useEffect(() => {
-    setExpanded(false);
-    onExpandedChange?.(false);
-    // onExpandedChange intentionally excluded: callers commonly pass a fresh
-    // inline setter each render, and this effect should only fire when a new
-    // conversation instance starts, not on every parent re-render.
+    setExpanded(defaultExpanded);
+    onExpandedChange?.(defaultExpanded);
+    // onExpandedChange + defaultExpanded intentionally excluded: callers commonly
+    // pass a fresh inline setter each render, and this reset should only fire when
+    // a new conversation instance starts (a fresh modal open), not on every parent
+    // re-render — it re-reads defaultExpanded at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationInstance]);
 
@@ -75,14 +91,20 @@ export function ModalAssistantStrip({
       <div
         className={cn(
           "flex min-w-0 shrink-0 flex-col border-t border-border bg-card",
-          expanded && "@2xl:min-h-0 @2xl:w-80 @2xl:shrink-0 @2xl:border-l @2xl:border-t-0",
+          expanded && "@2xl:min-h-0 @2xl:w-80 @2xl:shrink-0 @2xl:border-t-0",
+          expanded && (side === "left" ? "@2xl:border-r" : "@2xl:border-l"),
           className,
         )}
         data-attr="modal-assistant-strip"
         data-expanded={expanded ? "true" : "false"}
       >
         {expanded ? (
-          <div className="flex min-h-0 flex-1 flex-col px-0 pt-3 @2xl:pl-4 @2xl:pt-4">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col px-0 pt-3 @2xl:pt-4",
+              side === "left" ? "@2xl:pr-4" : "@2xl:pl-4",
+            )}
+          >
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-primary">
                 <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
