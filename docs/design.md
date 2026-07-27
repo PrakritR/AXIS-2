@@ -249,12 +249,17 @@ User preference in localStorage wins over surface defaults.
 
 ### Wizard shell
 
-Shared pattern for rental apply (12 steps), tours/contact, new-listing (8 steps), manager-id onboarding:
+Shared pattern for rental apply (12 steps), tours/contact, manager-id onboarding:
 
 - **Left rail** (desktop): numbered circles — active = cobalt fill + glass pill; done = green tint
 - **Top progress bar**: cobalt→sky gradient fill
 - **Footer dots**: active elongated cobalt pill
 - **Compact strip** (`WizardProgressStrip`): 3-step auth onboarding
+
+The manager add-listing wizard (6 steps, `manager-add-listing-form.tsx`)
+deliberately diverges: its clickable step-pill row is the **single** progress
+signal (✓ completed steps stay clickable, current filled, unreached visibly
+disabled) — no separate "Step X of N" line or progress bar alongside it.
 
 Wizards use **quiet substrate** — no chrome behind fields.
 
