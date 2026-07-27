@@ -493,7 +493,10 @@ describe("resuming a saved draft", () => {
   it("reopens on the step the draft was saved at", () => {
     renderWizard({ initialStepIndex: 2, initialMaxStepReached: 3, editDraftId: "mgr-listing-abc123" });
 
-    // Step 2 of the six-step wizard is Bathrooms.
-    expect(screen.getByText(/Step 3 of 6/i)).toBeTruthy();
+    // Step index 2 of the six-step wizard is Bathrooms. The header now carries a
+    // single stepper signal (the redundant "Step 3 of 6" text + progress bar were
+    // removed), so the resumed step is the one the stepper marks as current.
+    const currentStep = screen.getByRole("button", { current: "step" });
+    expect(currentStep.textContent).toMatch(/Bathrooms/);
   });
 });
