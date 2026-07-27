@@ -46,10 +46,13 @@ import {
   residentApplicationSubmitBlocked,
 } from "@/lib/rental-application/application-policy";
 import {
+  findInProgressRowForTarget,
   isInProgressApplicationRow,
   markApplicationSubmitInitiated,
   shouldSyncInProgressDraft,
   syncInProgressApplicationRow,
+  targetMatchesApplication,
+  type ApplicationRequestTarget,
 } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { GroupRole, RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -67,6 +70,7 @@ import {
   scrollToFirstWizardFieldError,
 } from "@/lib/wizard-field-errors";
 import {
+  APPLICATION_SAVE_STATUS_EVENT,
   replaceManagerApplicationRowInCache,
   syncManagerApplicationsFromServer,
   syncPublicApprovedApplicationsFromServer,
@@ -139,6 +143,86 @@ function rentalApplicationApplyPath(mode: RentalApplicationWizardMode): string {
   return mode === "portal" ? "/resident/applications/apply" : "/rent/apply";
 }
 
+function wizardTargetFromParam(
+  searchParams: { get: (key: string) => string | null },
+): ApplicationRequestTarget | null {
+  const propertyId = searchParams.get("propertyId")?.trim() || "";
+  if (!propertyId) return null;
+  return {
+    propertyId,
+    listingRoomId: searchParams.get("listingRoomId")?.trim() || undefined,
+    bundleId: searchParams.get("bundle")?.trim() || undefined,
+  };
+}
+
+function wizardTargetSignature(target: ApplicationRequestTarget | null): string {
+  if (!target) return "";
+  return [target.propertyId, target.listingRoomId ?? "", target.bundleId ?? ""].join("::");
+}
+
+/**
+ * True when `el` is actually rendered on screen (has a layout box), as
+ * opposed to a CSS-hidden (`display:none`) duplicate. `offsetParent` is null
+ * for `display:none` elements AND their descendants, which is exactly the
+ * signal needed to tell a `lg:hidden` / `hidden lg:block` duplicate mount
+ * apart from the one the resident is actually looking at.
+ */
+export function isElementOnScreen(el: HTMLElement | null): boolean {
+  return Boolean(el?.offsetParent);
+}
+
+/** `wizardStep` is only ever written for steps 1-3 (see the step-tracking effect below), so a value outside that range is never trustworthy. */
+function parseBoundedWizardStep(raw: string | null): number | null {
+  if (!raw) return null;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 3) return null;
+  return parsed;
+}
+
+/**
+ * The step persisted on the SERVER application record can be any real step
+ * (1..RENTAL_WIZARD_STEP_COUNT), unlike the URL param which is capped at 3. This
+ * is what resumes a resident at step 12 after they return from an external
+ * redirect (a Stripe checkout) or reload deep in the form, instead of dumping
+ * them back at step 1.
+ */
+export function parsePersistedWizardStep(raw: unknown): number | null {
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > RENTAL_WIZARD_STEP_COUNT) return null;
+  return Math.floor(parsed);
+}
+
+/**
+ * The portal-mode step effect below writes `?wizardStep=N` to the URL for
+ * steps 1-3 (removing it above step 3) so a resumed session can land back
+ * where it left off — but nothing ever READ it back on mount, so `step`
+ * always started at `useState(1)` regardless of the URL. Any remount while
+ * on steps 1-3 (a real page reload, or the browser restoring a tab) therefore
+ * silently threw the resident back to "Group Application" even though their
+ * draft — property, room, everything — was intact. Only trust the param when
+ * the locally-loaded draft still matches THIS request's target; otherwise a
+ * stale `wizardStep` left over from a different property/room must not skip
+ * a fresh application ahead. This covers the fast path where the in-memory
+ * draft (module-level, not persisted to disk) survived — e.g. a remount
+ * within the same tab. A genuine full-page reload wipes that draft entirely,
+ * so the reconciliation effect below ALSO restores `step` once it confirms
+ * (via a server fetch) that this target really does match an existing
+ * in-progress application. See `tests/unit/rental-wizard-step-resume.test.tsx`.
+ */
+export function initialWizardStepFromRequest(
+  mode: RentalApplicationWizardMode,
+  target: ApplicationRequestTarget | null,
+  searchParams: { get: (key: string) => string | null },
+): number {
+  if (mode !== "portal") return 1;
+  const parsed = parseBoundedWizardStep(searchParams.get("wizardStep"));
+  if (!parsed) return 1;
+  const draft = loadRentalWizardDraft();
+  if (!draft) return 1;
+  if (target && !targetMatchesApplication(target, { application: draft })) return 1;
+  return parsed;
+}
+
 export function RentalApplicationWizard({
   showToast,
   mode = "public",
@@ -174,13 +258,55 @@ function RentalApplicationWizardInner({
   linkedPropertyId: linkedPropertyIdProp,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
+  const requestedTarget = mode === "portal" ? wizardTargetFromParam(searchParams) : null;
+  const requestedTargetSignature = wizardTargetSignature(requestedTarget);
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
-  const [step, setStep] = useState(1);
-  const [maxStepReached, setMaxStepReached] = useState(1);
+  const [step, setStep] = useState(() => initialWizardStepFromRequest(mode, requestedTarget, searchParams));
+  const [maxStepReached, setMaxStepReached] = useState(() => initialWizardStepFromRequest(mode, requestedTarget, searchParams));
+  // Frozen at mount, from the URL as it arrived — NOT re-read later. The
+  // step-tracking effect below fires on the very first render (since `step`
+  // starts at 1 whenever the local draft fast path above didn't apply) and
+  // immediately overwrites `?wizardStep=` to match, so by the time the async
+  // reconciliation effect's server fetch resolves, `searchParams.get(
+  // "wizardStep")` would already read back that clobbered "1" instead of the
+  // real value the resident's browser actually requested — losing the resume
+  // step in exactly the full-reload case this exists to fix.
+  const initialWizardStepParamRef = useRef(searchParams.get("wizardStep"));
   const [form, setForm] = useState<RentalWizardFormState>(() => {
     const draft = loadRentalWizardDraft();
-    return draft ? { ...createInitialRentalWizardState(), ...draft } : createInitialRentalWizardState();
+    if (!draft) return createInitialRentalWizardState();
+    // A draft still loaded (same tab, no reload) for a DIFFERENT property/room
+    // than this request must never flash onto a fresh apply — start blank and
+    // let the reconciliation effect resolve the real target (an existing
+    // in-progress application for it, or a clean new one).
+    if (requestedTarget && !targetMatchesApplication(requestedTarget, { application: draft })) {
+      return createInitialRentalWizardState();
+    }
+    return { ...createInitialRentalWizardState(), ...draft };
   });
+  // Tracks which target signature has been confirmed (matched to an existing
+  // in-progress application, or confirmed fresh) by the reconciliation effect.
+  // While it disagrees with the CURRENT requested target, no other effect may
+  // mint a new axis id or sync/create an application row — otherwise a reload
+  // can create a duplicate before the async server lookup below has a chance
+  // to find the real match. Mirrors the `form` initializer's own draft-match
+  // check (rather than sharing it via a ref, which render may not read/write).
+  //
+  // A local draft ALONE is not proof this target was already reconciled: on a
+  // fresh navigation, the listing-prefill effect can populate a brand-new
+  // draft's propertyId/room from the SAME URL before this ever runs, which
+  // would coincidentally "match" a target it has never actually checked
+  // against the server. Only an already-saved axis id proves this exact
+  // session already resolved (found-or-created) a real application for it.
+  const [reconciledSignature, setReconciledSignature] = useState<string>(() => {
+    if (!loadRentalWizardDraftAxisId()?.trim()) return "";
+    const draft = loadRentalWizardDraft();
+    const matchedTarget = !draft
+      ? !requestedTarget
+      : !requestedTarget || targetMatchesApplication(requestedTarget, { application: draft });
+    return matchedTarget ? requestedTargetSignature : "";
+  });
+  const isReconcilingTarget = Boolean(requestedTargetSignature) && reconciledSignature !== requestedTargetSignature;
   const [errors, setErrors] = useState<RentalWizardErrors>({});
   const [draftReady] = useState(true);
   const [extrasTick, setExtrasTick] = useState(0);
@@ -218,13 +344,31 @@ function RentalApplicationWizardInner({
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const [applicationFeeCheckBusy, setApplicationFeeCheckBusy] = useState(false);
   const [applicationFeeCheckError, setApplicationFeeCheckError] = useState<string | null>(null);
+  /** True when the most recent background autosave of THIS application failed. */
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
   const router = useRouter();
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
   const browseHomesHref = residentBrowseFromApplicationHref(wizardApplyPath);
+  /**
+   * `ResidentApplicationsPanel` renders an expanded in-progress row's detail
+   * TWICE per row — once inside the `lg:hidden` mobile card list, once inside
+   * the `hidden lg:block` desktop table — so CSS, not React, decides which
+   * is on screen. Both mounts are fully live `RentalApplicationWizardInner`
+   * instances with independent `step` state. Without this guard, the
+   * off-screen instance's `step` never advances (it receives no clicks), so
+   * its copy of THIS effect kept firing on every `searchParams` change and
+   * rewriting `?wizardStep=` back down to whatever ITS stale `step` was —
+   * fighting the on-screen instance's own writes in an unthrottled
+   * `router.replace` loop, hundreds of times per second. That is the actual
+   * "glitches and goes back to start of application" the captain saw: only
+   * the ON-SCREEN instance may own the URL's step bookkeeping.
+   */
+  const rootRef = useRef<HTMLDivElement>(null);
+  const isOnScreen = useCallback(() => isElementOnScreen(rootRef.current), []);
 
   useEffect(() => {
-    if (mode !== "portal" || postSubmit || isDemoModeActive()) return;
+    if (mode !== "portal" || postSubmit || isDemoModeActive() || !isOnScreen()) return;
     const params = new URLSearchParams(searchParams.toString());
     const prev = params.get("wizardStep");
     if (step <= 3) {
@@ -238,7 +382,7 @@ function RentalApplicationWizardInner({
     }
     const qs = params.toString();
     router.replace(qs ? `${wizardApplyPath}?${qs}` : wizardApplyPath, { scroll: false });
-  }, [mode, postSubmit, router, searchParams, step, wizardApplyPath]);
+  }, [mode, postSubmit, router, searchParams, step, wizardApplyPath, isOnScreen]);
 
   const exitApplication = useCallback(() => {
     if (isDemoModeActive()) {
@@ -289,6 +433,22 @@ function RentalApplicationWizardInner({
     const on = () => setChargeTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  // Surface autosave failures for THIS application. A background save that fails
+  // must never disappear silently — raise a banner so the resident knows their
+  // latest changes are not yet saved, and clear it the moment a save lands.
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    const on = (e: Event) => {
+      const detail = (e as CustomEvent<{ ok?: boolean; id?: string }>).detail;
+      if (!detail?.id) return;
+      const mine = loadRentalWizardDraftAxisId()?.trim();
+      if (!mine || detail.id.trim() !== mine) return;
+      setAutosaveFailed(!detail.ok);
+    };
+    window.addEventListener(APPLICATION_SAVE_STATUS_EVENT, on as EventListener);
+    return () => window.removeEventListener(APPLICATION_SAVE_STATUS_EVENT, on as EventListener);
   }, []);
 
   useEffect(() => {
@@ -379,17 +539,36 @@ function RentalApplicationWizardInner({
   }, [mode, sessionEmail]);
 
   useEffect(() => {
-    if (!draftReady) return;
+    // The off-screen duplicate mount (see the `isOnScreen` doc comment above)
+    // must never write the shared, module-level draft: its `form` only holds
+    // whatever it last reconciled and never receives the resident's actual
+    // edits, so a later write from it would silently revert the on-screen
+    // instance's fresher data the next time either instance reloads that
+    // draft — the "room never lands on the application row" half of the bug.
+    if (!draftReady || !isOnScreen()) return;
     saveRentalWizardDraft(form);
-  }, [draftReady, form]);
+  }, [draftReady, form, isOnScreen]);
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (!draftReady || !isOnScreen()) return;
+    // Wait for reconciliation to confirm this target before minting an axis id
+    // or writing anything to the server — otherwise a fresh page load can sync
+    // a brand-new row before the async lookup below finds the real match.
+    if (mode === "portal" && isReconcilingTarget) return;
     const email = (mode === "portal" ? sessionEmail ?? form.email : form.email).trim();
     const pid = form.propertyId.trim();
     if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
     const axisId = ensureRentalWizardAxisId();
-    syncInProgressApplicationRow({ axisId, form, residentEmail: email });
+    // Persist the live step alongside the answers so a reload / return from an
+    // external redirect resumes exactly here (the debounced, serialized upsert
+    // in `scheduleApplicationRowUpsert` coalesces these writes).
+    syncInProgressApplicationRow({
+      axisId,
+      form,
+      residentEmail: email,
+      wizardStep: step,
+      wizardMaxStepReached: maxStepReached,
+    });
 
     if (mode !== "public" || isDemoModeActive()) return;
     if (startedSetupEmailAxisRef.current === axisId) return;
@@ -419,29 +598,85 @@ function RentalApplicationWizardInner({
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, [draftReady, form, mode, sessionEmail]);
+  }, [draftReady, form, mode, sessionEmail, isReconcilingTarget, isOnScreen, step, maxStepReached]);
 
   useEffect(() => {
     if (!draftReady || mode !== "portal") return;
     const email = (sessionEmail ?? form.email).trim().toLowerCase();
-    if (!email.includes("@")) return;
-    if (loadRentalWizardDraft()) return;
+    if (!email.includes("@")) return; // resolved once email is known — effect reruns.
+
+    // Derived fresh from searchParams (not the render-scoped `requestedTarget`
+    // object, which is a new reference every render and would make this a
+    // dependency that never stabilizes).
+    const target = wizardTargetFromParam(searchParams);
+    const signature = wizardTargetSignature(target);
+
+    // A local draft is only trustworthy as "already reconciled" if it also
+    // carries a saved axis id — proof this exact session already resolved
+    // (found-or-created) a real application for it. Without one, a draft can
+    // just be the listing-prefill effect's freshly populated propertyId/room
+    // for THIS target, which would otherwise look like a false match and skip
+    // the one server check that finds the real existing application.
+    const existingAxisId = loadRentalWizardDraftAxisId()?.trim();
+    const existingDraft = existingAxisId ? loadRentalWizardDraft() : null;
+    if (existingDraft) {
+      // Bare entry (no explicit property/room in the URL) — keep whatever is
+      // already loaded; there's nothing more specific to reconcile against.
+      // The loaded draft already IS this exact application — nothing to do.
+      if (!target || targetMatchesApplication(target, { application: existingDraft })) {
+        setReconciledSignature(signature);
+        return;
+      }
+      // Otherwise the loaded draft belongs to a DIFFERENT property/room than
+      // this request. Fall through and resolve the real target below instead
+      // of letting an unrelated application's data silently carry over.
+    }
 
     let cancelled = false;
     void syncManagerApplicationsFromServer({ force: true }).then(() => {
-      if (cancelled || loadRentalWizardDraft()) return;
+      if (cancelled) return;
       const inProgress = applicationsForResidentEmail(email).filter(isInProgressApplicationRow);
-      if (inProgress.length === 0) return;
-      const linkedPid = searchParams.get("propertyId")?.trim();
-      const hit =
-        (linkedPid ? inProgress.find((row) => (row.propertyId?.trim() || row.application?.propertyId?.trim()) === linkedPid) : undefined) ??
-        inProgress[0];
-      if (!hit?.application) return;
-      saveRentalWizardDraftAxisId(hit.id);
-      saveRentalWizardDraft({ ...createInitialRentalWizardState(), ...hit.application, email });
-      queueMicrotask(() => {
+      const hit = findInProgressRowForTarget(inProgress, target);
+      if (hit?.application) {
+        // An in-progress application already exists for this exact target — resume it.
+        saveRentalWizardDraftAxisId(hit.id);
+        saveRentalWizardDraft({ ...createInitialRentalWizardState(), ...hit.application, email });
         setForm({ ...createInitialRentalWizardState(), ...hit.application, email });
-      });
+        // The server confirmed this target IS an existing application, so we can
+        // resume the resident's exact position even though the synchronous
+        // local-draft fast path in `initialWizardStepFromRequest` couldn't (a
+        // full page reload — or a return from a Stripe redirect — wipes the
+        // in-memory draft before this effect ever runs). Prefer the step
+        // PERSISTED ON THE RECORD (any step 1..12) so returning from an external
+        // redirect at step 12 lands back at step 12, not step 1. Fall back to the
+        // URL param (steps 1-3) read from the FROZEN ref — never a live
+        // `searchParams` lookup, which the step-tracking effect already
+        // overwrote to match `step`'s initial value of 1 before this async fetch
+        // resolved.
+        const persistedStep = parsePersistedWizardStep(hit.application.wizardStep);
+        const resumedStep = persistedStep ?? parseBoundedWizardStep(initialWizardStepParamRef.current);
+        const persistedMax = parsePersistedWizardStep(hit.application.wizardMaxStepReached);
+        if (resumedStep) {
+          setStep(resumedStep);
+          setMaxStepReached((prev) => Math.max(prev, persistedMax ?? 0, resumedStep));
+        } else if (persistedMax) {
+          setMaxStepReached((prev) => Math.max(prev, persistedMax));
+        }
+        setReconciledSignature(signature);
+        return;
+      }
+      // No in-progress application matches this target. If a stale draft for
+      // a different property/room is still loaded (same browser tab, no
+      // reload), it must not bleed into a fresh application — clear it so a
+      // new draft (and a new axis id, minted on next save) starts clean.
+      if (target && existingDraft) {
+        clearRentalWizardDraft();
+        setForm({ ...createInitialRentalWizardState(), email });
+      }
+      // Either a match was found and loaded above, or none exists and this is
+      // confirmed to be a genuinely fresh target — either way, it is now safe
+      // for the sync/create effect to mint an axis id and write to the server.
+      setReconciledSignature(signature);
     });
     return () => {
       cancelled = true;
@@ -601,7 +836,7 @@ function RentalApplicationWizardInner({
       }
     }
     return true;
-  }, [form, showToast]);
+  }, [form, setStep, showToast]);
 
   const applicationFeeGate = useMemo(() => {
     void chargeTick;
@@ -935,7 +1170,7 @@ function RentalApplicationWizardInner({
         showToast(sync.error ?? "Application saved locally but could not sync to server. Try again.");
       }
     },
-    [form, mode, router, showToast, submitting],
+    [form, mode, router, setStep, showToast, submitting],
   );
 
   useEffect(() => {
@@ -1339,6 +1574,7 @@ function RentalApplicationWizardInner({
 
   return (
     <div
+      ref={rootRef}
       className={
         embedded
           ? "rental-wizard rental-wizard--embedded"
@@ -1493,6 +1729,16 @@ function RentalApplicationWizardInner({
                 editFromReview={editFromReview}
               />
             </div>
+
+            {autosaveFailed ? (
+              <p
+                role="status"
+                className="rental-wizard-autosave-error mt-6 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
+                data-attr="rental-wizard-autosave-error"
+              >
+                We couldn&apos;t save your latest changes. Your progress is kept on this device — keep this tab open and continue; we&apos;ll retry as you edit. If this keeps happening, check your connection.
+              </p>
+            ) : null}
 
             <div className="rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8">
               <Button

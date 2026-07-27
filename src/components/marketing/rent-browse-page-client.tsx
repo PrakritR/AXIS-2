@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { ResidentHousingBrowse } from "@/components/marketing/resident-housing-browse";
-import { PublicPageAuthFooter } from "@/components/marketing/public-page-auth-footer";
+import { Button } from "@/components/ui/button";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalNavClick } from "@/lib/portal-nav-client";
 import { BROWSE_IDS_PARAM, parseBrowseIdsParam } from "@/lib/manager-property-links";
@@ -64,13 +64,31 @@ export function RentBrowsePageClient() {
         </div>
 
         {isNative !== true ? (
-          <PublicPageAuthFooter
-            getStartedHref={residentCreateAccountHref()}
-            signInHref={residentSignInHref()}
-            getStartedDataAttr="resident-browse-get-started"
-            signInDataAttr="resident-browse-sign-in"
-            showSecondary={false}
-          />
+          <section className="mx-auto mt-10 max-w-2xl rounded-3xl border border-border/50 bg-card px-6 py-10 text-center shadow-sm sm:mt-14 sm:px-10">
+            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              Ready to make one of these home?
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+              Create a free account to save the homes you like and apply in minutes.
+            </p>
+            <div className="mt-6">
+              <Button asChild className="w-full sm:w-auto sm:px-8">
+                <Link href={residentCreateAccountHref()} data-attr="resident-browse-get-started">
+                  Get started
+                </Link>
+              </Button>
+            </div>
+            <p className="mt-5 text-sm text-muted">
+              Already have an account?{" "}
+              <Link
+                href={residentSignInHref()}
+                data-attr="resident-browse-sign-in"
+                className="font-semibold text-primary hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+          </section>
         ) : null}
       </div>
     </div>

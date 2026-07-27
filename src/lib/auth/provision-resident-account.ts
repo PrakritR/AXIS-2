@@ -62,10 +62,27 @@ export type ProvisionResidentResult =
   | { ok: true; axisId: string; linkedApplication: boolean }
   | { ok: false; status: number; error: string };
 
-/** Resident signup without typing an Axis ID — links by email when an application exists. */
+/**
+ * Resident account provisioning — links by email when an application exists.
+ *
+ * **Default-deny inheritance.** Inheriting a matching application's identity and
+ * approval requires PROVEN email control, so a caller must OPT IN with
+ * `inheritFromApplication: true`. Only the setup-token and OAuth flows (which
+ * prove control) pass it. The default — and anything that forgets the flag,
+ * including the anonymous self-serve `resident-register` path — inherits NOTHING:
+ * a clean profile (`application_approved=false`, no application PII, no link),
+ * so a failure to prove control can never accidentally claim a prior applicant's
+ * application.
+ */
 export async function provisionResidentAccountByEmail(
   supabase: SupabaseClient,
-  opts: { userId: string; email: string; fullName?: string | null; phone?: string | null },
+  opts: {
+    userId: string;
+    email: string;
+    fullName?: string | null;
+    phone?: string | null;
+    inheritFromApplication?: boolean;
+  },
 ): Promise<ProvisionResidentResult> {
   const normalEmail = opts.email.trim().toLowerCase();
   if (!normalEmail.includes("@")) {
@@ -75,7 +92,11 @@ export async function provisionResidentAccountByEmail(
   // application snapshot — it is the most recent value they vouched for.
   const explicitPhone = opts.phone?.trim() ? normalizeE164(opts.phone.trim()) : null;
 
-  const matchingApplication = await findApplicationByEmail(supabase, normalEmail);
+  // Default-deny: only an explicit opt-in (proven email control) looks up the
+  // application at all. Otherwise `matchingApplication` stays null and every
+  // downstream field treats it as a clean, un-inheriting profile.
+  const matchingApplication =
+    opts.inheritFromApplication === true ? await findApplicationByEmail(supabase, normalEmail) : null;
   const linkedApplication = Boolean(matchingApplication);
 
   const existingAuthId = await findAuthUserIdByEmail(supabase, normalEmail);

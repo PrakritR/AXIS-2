@@ -5,7 +5,7 @@ import {
   upsertApplicationRowToServer,
   wouldDowngradeSubmittedApplication,
 } from "@/lib/manager-applications-storage";
-import { getPropertyById } from "@/lib/rental-application/data";
+import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
@@ -16,6 +16,69 @@ export const INCOMPLETE_APPLICATION_LABEL = "Incomplete";
 
 export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
   return row.bucket === "pending" && row.stage.trim().toLowerCase() === IN_PROGRESS_APPLICATION_STAGE.toLowerCase();
+}
+
+/**
+ * A resident may hold several in-progress applications at once — different
+ * properties, or different rooms in the same property. This identifies WHICH
+ * one (if any) a fresh apply request is really asking to resume: same
+ * property, and (when either side names one) the same room or bundle.
+ * Nothing broader — a different property, or an explicitly different room in
+ * the same property, must always start a new application, never hijack this one.
+ */
+export type ApplicationRequestTarget = {
+  propertyId: string;
+  listingRoomId?: string;
+  bundleId?: string;
+};
+
+type ApplicationSnapshot = {
+  propertyId?: string | null;
+  application?: Partial<Pick<RentalWizardFormState, "propertyId" | "roomChoice1" | "bundleId">> | null;
+};
+
+/**
+ * True when `candidate` (an existing in-progress application, or a locally
+ * loaded draft) IS the application `target` is asking for. Matching is
+ * intentionally asymmetric: a request that names no room/bundle at all is
+ * compatible with any draft for that property (so re-clicking "Apply" on a
+ * listing without picking a room keeps resuming the same draft instead of
+ * spawning a new one every time); a request that DOES name a specific room
+ * or bundle only matches a candidate with that exact room/bundle (or one that
+ * hasn't committed to one yet) — never a candidate committed to a different one.
+ */
+export function targetMatchesApplication(target: ApplicationRequestTarget, candidate: ApplicationSnapshot): boolean {
+  const targetPid = target.propertyId.trim();
+  if (!targetPid) return false;
+  const candidatePid = candidate.propertyId?.trim() || candidate.application?.propertyId?.trim() || "";
+  if (candidatePid !== targetPid) return false;
+
+  const targetBundle = target.bundleId?.trim();
+  const candidateBundle = candidate.application?.bundleId?.trim() || "";
+  if (targetBundle) return targetBundle === candidateBundle;
+  if (candidateBundle) return false; // request wants a per-room/plain application; this candidate is a bundle application.
+
+  const targetRoom = target.listingRoomId?.trim();
+  if (!targetRoom) return true; // no room named — any draft for this property matches.
+  const candidateRoomChoice = candidate.application?.roomChoice1?.trim() || "";
+  const candidateRoom = candidateRoomChoice ? parseRoomChoiceValue(candidateRoomChoice).listingRoomId : undefined;
+  if (!candidateRoom) return true; // candidate hasn't committed to a room either — compatible.
+  return candidateRoom === targetRoom;
+}
+
+/**
+ * Finds the resident's in-progress row (if any) that matches an apply target.
+ * `target === null` means the request named no property at all (a bare, legacy
+ * `/apply` entry) — the only case where falling back to "any in-progress row"
+ * is still correct, because there is nothing more specific to match against.
+ */
+export function findInProgressRowForTarget(
+  rows: DemoApplicantRow[],
+  target: ApplicationRequestTarget | null,
+): DemoApplicantRow | undefined {
+  const inProgress = rows.filter(isInProgressApplicationRow);
+  if (!target?.propertyId.trim()) return inProgress[0];
+  return inProgress.find((row) => targetMatchesApplication(target, row));
 }
 
 /** Display label for application stage everywhere in the product UI, PDFs, and assistant tools. */
@@ -58,11 +121,24 @@ export function buildInProgressApplicationRow(input: {
   axisId: string;
   form: RentalWizardFormState;
   residentEmail: string;
+  /** Live wizard position, persisted so a reload / redirect return resumes here. */
+  wizardStep?: number;
+  wizardMaxStepReached?: number;
 }): DemoApplicantRow {
   const pid = input.form.propertyId.trim();
   const prop = pid ? getPropertyById(pid) : undefined;
   const email = input.residentEmail.trim();
   const name = input.form.fullLegalName.trim() || "Applicant";
+
+  // The live step wins over whatever the form snapshot happened to carry — step
+  // lives in wizard state, not the form, so it is injected fresh on every sync.
+  const application: RentalWizardFormState = {
+    ...structuredClone(input.form),
+    ...(typeof input.wizardStep === "number" ? { wizardStep: input.wizardStep } : {}),
+    ...(typeof input.wizardMaxStepReached === "number"
+      ? { wizardMaxStepReached: input.wizardMaxStepReached }
+      : {}),
+  };
 
   return {
     id: input.axisId,
@@ -75,7 +151,7 @@ export function buildInProgressApplicationRow(input: {
     backgroundCheckStatus: "pending_review",
     detail: `Started ${new Date().toLocaleString()}`,
     email,
-    application: structuredClone(input.form),
+    application,
   };
 }
 
@@ -96,6 +172,8 @@ export function syncInProgressApplicationRow(input: {
   axisId: string;
   form: RentalWizardFormState;
   residentEmail: string;
+  wizardStep?: number;
+  wizardMaxStepReached?: number;
 }): void {
   const row = buildInProgressApplicationRow(input);
   if (submitInitiatedAxisIds.has(row.id.trim())) return;

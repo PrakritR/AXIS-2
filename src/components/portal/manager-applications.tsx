@@ -97,6 +97,23 @@ function countByBucket(rows: DemoApplicantRow[]) {
   return c;
 }
 
+/**
+ * UI-only tab id. The stored data model only ever has three buckets
+ * (`ManagerApplicationBucket`) — "Incomplete" is not one of them, it is the
+ * subset of the "pending" bucket whose `stage` is still "In progress"
+ * (`isInProgressApplicationRow`). Splitting it into its own TAB (rather than
+ * leaving it mixed into Pending with just an annotated label) is a display
+ * concern only; every row keeps `bucket: "pending"` in storage, so Approve /
+ * Reject / delete and the underlying query are unaffected.
+ */
+type ManagerApplicationTabId = "pending" | "incomplete" | "approved" | "rejected";
+
+/** Which tab a row belongs to for DISPLAY — never confuse with `row.bucket`. */
+function tabForRow(row: DemoApplicantRow): ManagerApplicationTabId {
+  if (row.bucket !== "pending") return row.bucket;
+  return isInProgressApplicationRow(row) ? "incomplete" : "pending";
+}
+
 /** Client-resolved room label used by both the PDF download and the inline document view. */
 function applicationRoomLabel(row: DemoApplicantRow): string {
   const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
@@ -265,7 +282,7 @@ export function ManagerApplications() {
   const pathname = usePathname();
   const router = useRouter();
   const openHandled = useRef(false);
-  const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
+  const [bucket, setBucket] = useState<ManagerApplicationTabId>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
@@ -382,26 +399,29 @@ export function ManagerApplications() {
     () => scopedRows.filter((r) => r.bucket === "pending" && isInProgressApplicationRow(r)).length,
     [scopedRows],
   );
+  // "Pending" now means submitted and awaiting review — Incomplete (still a
+  // draft) is its own tab, so it is subtracted out here rather than shown as
+  // an annotation on top of the combined bucket count.
+  const pendingReviewCount = counts.pending - incompleteCount;
   const tabs = useMemo(
     () =>
       [
-        {
-          id: "pending" as const,
-          label: incompleteCount > 0 ? `Pending · ${incompleteCount} incomplete` : "Pending",
-          count: counts.pending,
-        },
+        { id: "pending" as const, label: "Pending", count: pendingReviewCount },
+        { id: "incomplete" as const, label: "Incomplete", count: incompleteCount },
         { id: "approved" as const, label: "Approved", count: counts.approved },
         { id: "rejected" as const, label: "Rejected", count: counts.rejected },
       ] as const,
-    [counts, incompleteCount],
+    [counts, incompleteCount, pendingReviewCount],
   );
 
   const rowsForBucket = useMemo(() => {
-    const inBucket = scopedRows.filter((r) => r.bucket === bucket);
+    const inBucket = scopedRows.filter((r) => tabForRow(r) === bucket);
     const filtered = !propertyFilter.trim()
       ? inBucket
       : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
-    return sortApplicationRows(filtered, bucket);
+    // Sorting only special-cases "approved" today; every other tab (including
+    // the new "incomplete") falls through to the same name/id sort as "pending".
+    return sortApplicationRows(filtered, bucket === "approved" ? "approved" : "pending");
   }, [scopedRows, bucket, propertyFilter]);
 
   useEffect(() => {
@@ -414,7 +434,7 @@ export function ManagerApplications() {
     if (!hit) return;
     openHandled.current = true;
     queueMicrotask(() => {
-      setBucket(hit.bucket);
+      setBucket(tabForRow(hit));
       setExpandedId(hit.id);
     });
     requestAnimationFrame(() => {
@@ -742,15 +762,15 @@ export function ManagerApplications() {
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => setInviteModalOpen(true)}
             disabled={shareableProperties.length === 0}
-            title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
+            title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
           >
-            Invite
+            Send
           </Button>
         </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
@@ -776,12 +796,14 @@ export function ManagerApplications() {
           icon="application"
           message={
             scopedRows.length === 0
-              ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete (under Pending) as soon as they enter their email."
+              ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
               : propertyFilter.trim()
                 ? "No applications for this property yet."
                 : bucket === "pending"
-                  ? "No pending applications. Incomplete drafts from your apply link also appear in this tab."
-                  : "No applications in this tab yet."
+                  ? "No pending applications. Submitted applications awaiting your review will appear here."
+                  : bucket === "incomplete"
+                    ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
+                    : "No applications in this tab yet."
           }
         />
       ) : (

@@ -23,6 +23,12 @@ export type ModalAssistantStripProps = {
    */
   conversationInstance?: number;
   className?: string;
+  /**
+   * Reports open/closed changes so an ancestor can lay out a side-by-side panel
+   * (content + chat) while this strip is open. Purely informational — this
+   * component still owns the expand/collapse state itself.
+   */
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 /**
@@ -30,19 +36,33 @@ export type ModalAssistantStripProps = {
  * so the agent knows what surface the manager is working in.
  *
  * Collapsed by default so form fields keep the full scroll area; managers expand
- * when they want help.
+ * when they want help. Once open, it renders as a side panel (chat to the right
+ * of the modal content) whenever the surrounding container is wide enough —
+ * see the `@2xl` container-query breakpoint below — and otherwise stays a
+ * stacked band beneath the content, matching the pre-existing collapsed layout.
  */
 export function ModalAssistantStrip({
   contextHint,
   storageScopeKey,
   conversationInstance = 0,
   className,
+  onExpandedChange,
 }: ModalAssistantStripProps) {
   const config = usePortalAssistantConfig();
   const [expanded, setExpanded] = useState(false);
 
+  const toggle = (next: boolean) => {
+    setExpanded(next);
+    onExpandedChange?.(next);
+  };
+
   useEffect(() => {
     setExpanded(false);
+    onExpandedChange?.(false);
+    // onExpandedChange intentionally excluded: callers commonly pass a fresh
+    // inline setter each render, and this effect should only fire when a new
+    // conversation instance starts, not on every parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationInstance]);
 
   if (!config) return null;
@@ -53,12 +73,16 @@ export function ModalAssistantStrip({
   return (
     <AssistantConversationProvider endpoint={config.endpoint} storageScope={storageScope}>
       <div
-        className={cn("shrink-0 border-t border-border bg-card", className)}
+        className={cn(
+          "flex min-w-0 shrink-0 flex-col border-t border-border bg-card",
+          expanded && "@2xl:min-h-0 @2xl:w-80 @2xl:shrink-0 @2xl:border-l @2xl:border-t-0",
+          className,
+        )}
         data-attr="modal-assistant-strip"
         data-expanded={expanded ? "true" : "false"}
       >
         {expanded ? (
-          <div className="px-0 pt-3">
+          <div className="flex min-h-0 flex-1 flex-col px-0 pt-3 @2xl:pl-4 @2xl:pt-4">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-primary">
                 <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
@@ -66,7 +90,7 @@ export function ModalAssistantStrip({
               </p>
               <button
                 type="button"
-                onClick={() => setExpanded(false)}
+                onClick={() => toggle(false)}
                 className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition hover:bg-foreground/5 hover:text-foreground"
                 data-attr="modal-assistant-collapse"
                 aria-expanded
@@ -80,13 +104,13 @@ export function ModalAssistantStrip({
               endpoint={config.endpoint}
               contextHint={contextHint}
               compact
-              className="max-h-[min(36vh,17rem)]"
+              className="max-h-[min(36vh,17rem)] @2xl:min-h-0 @2xl:max-h-none @2xl:flex-1"
             />
           </div>
         ) : (
           <button
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={() => toggle(true)}
             className="flex w-full items-center justify-between gap-2 py-3 text-left text-sm transition hover:bg-foreground/[0.02]"
             data-attr="modal-assistant-expand"
             aria-expanded={false}

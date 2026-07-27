@@ -11,7 +11,6 @@ import {
 const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
   "property:Property": ["propertyId"],
   "property:Room choices (1st – 3rd)": ["roomChoice1", "roomChoice2", "roomChoice3"],
-  "property:Rental type (standard or short-term)": ["rentalType", "shortTermCheckInTime", "shortTermCheckOutTime"],
   "property:Lease term": ["leaseTerm"],
   "property:Lease start & end dates": ["leaseStart", "leaseEnd"],
   "personal:Full legal name": ["fullLegalName"],
@@ -73,7 +72,6 @@ type StandardFieldConfig = {
 const STANDARD_FIELD_TYPE_MAP: Record<string, StandardFieldConfig> = {
   "property:Property": { type: "select" },
   "property:Room choices (1st – 3rd)": { type: "select" },
-  "property:Rental type (standard or short-term)": { type: "select" },
   "property:Lease term": { type: "select" },
   "property:Lease start & end dates": { type: "date" },
   "personal:Full legal name": { type: "text" },

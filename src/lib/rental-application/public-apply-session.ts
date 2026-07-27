@@ -23,9 +23,20 @@ export function hasPublicApplyGuestContinue(propertyId: string): boolean {
   }
 }
 
+function publicApplyNext(propertyId: string): string {
+  return `/rent/apply?propertyId=${encodeURIComponent(propertyId.trim())}`;
+}
+
 export function publicApplySignInHref(propertyId: string): string {
-  const next = `/rent/apply?propertyId=${encodeURIComponent(propertyId.trim())}`;
-  return `/auth/sign-in?intent=resident&next=${encodeURIComponent(next)}`;
+  return `/auth/sign-in?intent=resident&next=${encodeURIComponent(publicApplyNext(propertyId))}`;
+}
+
+/**
+ * Create-account entry for a prospective resident. Carries the listing context so
+ * signup lands them back on this application (in-portal apply), not a bare portal.
+ */
+export function publicApplyCreateAccountHref(propertyId: string): string {
+  return `/auth/create-account?role=resident&next=${encodeURIComponent(publicApplyNext(propertyId))}`;
 }
 
 export type PublicApplyView = "account-prompt" | "signed-in-create-resident" | "wizard";

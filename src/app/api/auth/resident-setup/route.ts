@@ -136,6 +136,9 @@ export async function POST(req: Request) {
       email,
       fullName: fullName || lookup.name,
       phone,
+      // The one-time setup token proves email control — safe to inherit the
+      // matching application's identity/approval (default-deny opt-in).
+      inheritFromApplication: true,
     });
     if (!provisioned.ok) {
       return NextResponse.json({ error: provisioned.error }, { status: provisioned.status });

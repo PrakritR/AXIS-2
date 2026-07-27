@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
+import { createDefaultListingSubmission, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { validateRentalWizardStep } from "@/lib/rental-application/validate";
 
@@ -41,6 +42,48 @@ describe("rental-application validate", () => {
     expect(errors.applicationFeeZelleSentConfirmed).toContain("Check payment");
   });
 
+  it("rejects a future date of birth on its own terms, not as an age error", () => {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    const iso = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, "0")}-${String(future.getDate()).padStart(2, "0")}`;
+    const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
+    const errors = validateRentalWizardStep(4, state);
+    expect(errors.dateOfBirth).toBe("Date of birth cannot be in the future.");
+    expect(errors.dateOfBirth).not.toContain("18 years");
+  });
+
+  it("still rejects an under-18 date of birth with the age message", () => {
+    const child = new Date();
+    child.setFullYear(child.getFullYear() - 5);
+    const iso = `${child.getFullYear()}-${String(child.getMonth() + 1).padStart(2, "0")}-${String(child.getDate()).padStart(2, "0")}`;
+    const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
+    const errors = validateRentalWizardStep(4, state);
+    expect(errors.dateOfBirth).toContain("at least 18 years old");
+  });
+
+  it("accepts an adult date of birth", () => {
+    const adult = new Date();
+    adult.setFullYear(adult.getFullYear() - 30);
+    const iso = `${adult.getFullYear()}-${String(adult.getMonth() + 1).padStart(2, "0")}-${String(adult.getDate()).padStart(2, "0")}`;
+    const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
+    const errors = validateRentalWizardStep(4, state);
+    expect(errors.dateOfBirth).toBeUndefined();
+  });
+
+  it("rejects a short-term lease term on a listing that does not allow short-term stays", () => {
+    const sub = { ...createDefaultListingSubmission(), shortTermRentalsAllowed: false };
+    const state = {
+      ...createInitialRentalWizardState(),
+      propertyId: "prop-no-short",
+      rentalType: "short_term" as const,
+      leaseTerm: "Short-Term Stay",
+    };
+    const errors = validateRentalWizardStep(3, state, {
+      property: { id: "prop-no-short", listingSubmission: sub },
+    });
+    expect(errors.leaseTerm).toContain("short-term");
+  });
+
   it("passes step 12 when manual application fee is verified", () => {
     const sub = {
       ...createDefaultListingSubmission(),
@@ -59,5 +102,60 @@ describe("rental-application validate", () => {
       property: { id: "prop-venmo", listingSubmission: sub },
     });
     expect(errors.applicationFeeZelleSentConfirmed).toBeUndefined();
+  });
+
+  it("offers Short-Term Stay as a lease term exactly when the listing permits it", () => {
+    const base = createDefaultListingSubmission();
+    expect(
+      resolveAllowedLeaseTerms({ ...base, shortTermRentalsAllowed: true }),
+    ).toContain(SHORT_TERM_LEASE_TERM);
+    expect(
+      resolveAllowedLeaseTerms({ ...base, shortTermRentalsAllowed: false }),
+    ).not.toContain(SHORT_TERM_LEASE_TERM);
+  });
+
+  it("requires check-in and check-out times for a short-term application on a permitting listing", () => {
+    const sub = { ...createDefaultListingSubmission(), shortTermRentalsAllowed: true };
+    const state = {
+      ...createInitialRentalWizardState(),
+      propertyId: "prop-short-term",
+      roomChoice1: "prop-short-term::room-1",
+      rentalType: "short_term" as const,
+      leaseTerm: SHORT_TERM_LEASE_TERM,
+      leaseStart: "2026-08-01",
+      leaseEnd: "2026-08-15",
+    };
+    const missing = validateRentalWizardStep(3, state, {
+      property: { id: "prop-short-term", listingSubmission: sub },
+    });
+    expect(missing.leaseTerm).toBeUndefined();
+    expect(missing.shortTermCheckInTime).toContain("Check-in time");
+    expect(missing.shortTermCheckOutTime).toContain("Check-out time");
+
+    const filled = validateRentalWizardStep(
+      3,
+      { ...state, shortTermCheckInTime: "15:00", shortTermCheckOutTime: "11:00" },
+      { property: { id: "prop-short-term", listingSubmission: sub } },
+    );
+    expect(filled).toEqual({});
+  });
+
+  it("rejects a short-term application when the listing does not permit short-term stays", () => {
+    const sub = { ...createDefaultListingSubmission(), shortTermRentalsAllowed: false };
+    const state = {
+      ...createInitialRentalWizardState(),
+      propertyId: "prop-no-short-term",
+      roomChoice1: "prop-no-short-term::room-1",
+      rentalType: "short_term" as const,
+      leaseTerm: SHORT_TERM_LEASE_TERM,
+      leaseStart: "2026-08-01",
+      leaseEnd: "2026-08-15",
+      shortTermCheckInTime: "15:00",
+      shortTermCheckOutTime: "11:00",
+    };
+    const errors = validateRentalWizardStep(3, state, {
+      property: { id: "prop-no-short-term", listingSubmission: sub },
+    });
+    expect(errors.leaseTerm).toContain("does not allow short-term stays");
   });
 });

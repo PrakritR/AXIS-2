@@ -15,6 +15,11 @@
  */
 
 import type { PromotionTextCopy, PromotionTextEntry } from "@/lib/promotion-text";
+import {
+  PROPLANE_MARK_PATHS,
+  PROPLANE_MARK_STROKE_WIDTH,
+  PROPLANE_MARK_VIEWBOX_SIZE,
+} from "@/lib/brand/proplane-mark";
 
 export type PromotionTheme = "cobalt" | "sunset" | "forest" | "slate";
 
@@ -441,11 +446,13 @@ const FONT_STACK =
 const SERIF_STACK = 'Georgia, "Times New Roman", "Iowan Old Style", serif';
 const MUTED = "#64748b";
 
-/** Inline paper-plane glyph — same strokes as {@link AxisLogoMark}, redrawn as a static SVG string for standalone flyer HTML (no React/Tailwind available there). */
+/** Inline PropLane mark — canonical geometry ({@link PROPLANE_MARK_PATHS}), redrawn as a static SVG string for standalone flyer HTML (no React/Tailwind available there). */
 function axisMarkSvg(color: string): string {
-  return `<svg viewBox="0 0 26 26" width="13" height="13" fill="none" aria-hidden="true">
-    <path d="M3.5 11.9L22.5 3.9L15.4 22.4L11.3 14.6L3.5 11.9Z" stroke="${color}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M11.3 14.6L22.5 3.9" stroke="${color}" stroke-width="2.3" stroke-linecap="round"/>
+  const paths = PROPLANE_MARK_PATHS.map(
+    (d) => `<path d="${d}" stroke="${color}" stroke-width="${PROPLANE_MARK_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`,
+  ).join("\n    ");
+  return `<svg viewBox="0 0 ${PROPLANE_MARK_VIEWBOX_SIZE} ${PROPLANE_MARK_VIEWBOX_SIZE}" width="13" height="13" fill="none" aria-hidden="true">
+    ${paths}
   </svg>`;
 }
 

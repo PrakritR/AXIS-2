@@ -155,7 +155,7 @@ export function CheckboxMultiSelect({
         id={listId}
         role="listbox"
         aria-multiselectable="true"
-        className={`fixed z-[200] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
@@ -338,7 +338,11 @@ export function FieldSingleSelect({
       <div
         id={listId}
         role="listbox"
-        className={`fixed z-[200] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        // z-index must clear modal overlays (the listing wizard's is z-[9999]); this
+        // menu is portaled to document.body as a sibling of the modal, so a lower
+        // value renders it *behind* the modal and every option click lands on the
+        // modal instead — the dropdowns then silently refuse selections.
+        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,

@@ -12,6 +12,7 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
+  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
@@ -47,10 +48,12 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import {
   applicationStageDisplayLabel,
+  findInProgressRowForTarget,
   isInProgressApplicationRow,
+  type ApplicationRequestTarget,
 } from "@/lib/rental-application/in-progress-application";
 import {
   canResidentWithdrawApplication,
@@ -59,6 +62,7 @@ import {
 } from "@/lib/rental-application/resident-application-list";
 import { applicationHasGroup } from "@/lib/rental-application/application-groups";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
+import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   return rows.reduce(
@@ -86,9 +90,19 @@ function rowStatusLabel(row: DemoApplicantRow): string {
 
 function continueApplicationPath(row: DemoApplicantRow): string {
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
-  return pid
-    ? `${RESIDENT_PORTAL_BASE_PATH}/applications/apply?propertyId=${encodeURIComponent(pid)}`
-    : `${RESIDENT_PORTAL_BASE_PATH}/applications/apply`;
+  if (!pid) return `${RESIDENT_PORTAL_BASE_PATH}/applications/apply`;
+  const params = new URLSearchParams({ propertyId: pid });
+  // Carry the row's own room/bundle so re-entering the wizard resolves back to
+  // THIS specific in-progress application, not a different draft on the same property.
+  const bundleId = row.application?.bundleId?.trim();
+  if (bundleId) {
+    params.set("bundle", bundleId);
+  } else {
+    const roomChoice = row.application?.roomChoice1?.trim();
+    const listingRoomId = roomChoice ? parseRoomChoiceValue(roomChoice).listingRoomId : undefined;
+    if (listingRoomId) params.set("listingRoomId", listingRoomId);
+  }
+  return `${RESIDENT_PORTAL_BASE_PATH}/applications/apply?${params.toString()}`;
 }
 
 export function ResidentApplicationsPanel({
@@ -160,7 +174,43 @@ export function ResidentApplicationsPanel({
     );
   }, [residentEmail, tick]);
 
-  const inProgressRow = useMemo(() => rows.find(isInProgressApplicationRow), [rows]);
+  // What this /apply request is actually asking for, so an in-progress
+  // application for a DIFFERENT property (or a different room in the same
+  // property) never hijacks the view meant for this one.
+  const applyTarget = useMemo<ApplicationRequestTarget | null>(() => {
+    const propertyId = (searchParams.get("propertyId") ?? "").trim();
+    if (!propertyId) return null;
+    return {
+      propertyId,
+      listingRoomId: (searchParams.get("listingRoomId") ?? "").trim() || undefined,
+      bundleId: (searchParams.get("bundle") ?? "").trim() || undefined,
+    };
+  }, [searchParams]);
+
+  const inProgressRow = useMemo(
+    () => findInProgressRowForTarget(rows, applyTarget),
+    [rows, applyTarget],
+  );
+
+  // `applyTarget` is a snapshot of the URL at load time and never changes as the
+  // resident edits the wizard, but `inProgressRow` is recomputed from it on every
+  // render — so the moment the resident picks a DIFFERENT room than the one the
+  // URL named (or clears a bundle choice, etc.), `targetMatchesApplication` stops
+  // matching and `inProgressRow` goes from "this row" to `undefined`, even though
+  // it's still the exact same in-progress application, just with an updated room.
+  // Once we've already locked onto a row via `expandedId` (the effect below), keep
+  // trusting that lock instead of re-deriving the identity from the stale target —
+  // otherwise the standalone `applyMode && !inProgressRow` branch below thinks
+  // there is suddenly no in-progress application and mounts a SECOND, brand-new
+  // `RentalApplicationWizard` (fresh `step` state, no draft) alongside the one
+  // already embedded in the expanded row: the "glitches back to the start" bug,
+  // and the two instances' un-coordinated syncs are why the room could also land
+  // on the server as blank. See `tests/unit/resident-applications-room-change.test.tsx`.
+  const lockedInProgressRow = useMemo(
+    () => (expandedId ? rows.find((row) => row.id === expandedId && isInProgressApplicationRow(row)) : undefined),
+    [rows, expandedId],
+  );
+  const activeInProgressRow = lockedInProgressRow ?? inProgressRow;
 
   const counts = useMemo(() => countByBucket(rows), [rows]);
   const tabs = useMemo(
@@ -175,10 +225,12 @@ export function ResidentApplicationsPanel({
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
 
-  useEffect(() => {
-    if (applyMode || demoMode || !sessionReady || rows.length > 0) return;
-    portalNavigate("/resident/applications/apply");
-  }, [applyMode, demoMode, sessionReady, rows.length, portalNavigate]);
+  // A resident with zero applications is deliberately NOT auto-redirected into
+  // the apply flow. The list page — with its always-visible "Apply to a property"
+  // header action and the "No applications yet" empty state — must render
+  // regardless of how many applications exist or their status; bouncing an empty
+  // list straight to /apply is exactly what hid the entry point the captain
+  // reported missing. Starting an application is always an explicit click.
 
   useEffect(() => {
     if (!applyMode || !inProgressRow) return;
@@ -186,6 +238,9 @@ export function ResidentApplicationsPanel({
       setBucket("pending");
       setExpandedId(inProgressRow.id);
     });
+    // Only re-runs when a target-matched row newly appears/changes id — deliberately
+    // NOT on `activeInProgressRow`, so a later room change (which only affects
+    // `inProgressRow`'s target match, not this effect's own lock) can't re-fire.
   }, [applyMode, inProgressRow]);
 
   useEffect(() => {
@@ -357,21 +412,26 @@ export function ResidentApplicationsPanel({
 
   const newApplicationButton =
     sessionReady && !applyMode ? (
-      <Button
-        type="button"
-        className="rounded-full"
-        data-attr="resident-applications-new"
-        onClick={() => {
-          if (demoMode) {
-            setDemoApplyPropertyId(undefined);
-            setDemoApplyOpen(true);
-            return;
-          }
-          portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`);
-        }}
-      >
-        Start application
-      </Button>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="resident-applications-apply"
+          onClick={() => {
+            if (demoMode) {
+              setDemoApplyPropertyId(undefined);
+              setDemoApplyOpen(true);
+              return;
+            }
+            // No property chosen yet — send them to browse listings and pick
+            // one, then straight into a fresh application for it.
+            portalNavigate(residentBrowseFromApplicationHref());
+          }}
+        >
+          Apply to a property
+        </Button>
+      </div>
     ) : null;
 
   const titleAside = newApplicationButton;
@@ -465,13 +525,13 @@ export function ResidentApplicationsPanel({
     <>
       {embedded ? filterRow : null}
 
-      {applyMode && !inProgressRow ? (
+      {applyMode && !activeInProgressRow ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>{embeddedWizard}</div>
       ) : null}
 
       {rows.length === 0 && !applyMode ? (
         <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
-      ) : rowsForBucket.length === 0 && !(applyMode && !inProgressRow) ? (
+      ) : rowsForBucket.length === 0 && !(applyMode && !activeInProgressRow) ? (
         <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
       ) : rowsForBucket.length > 0 ? (
         renderApplicationsTable()
