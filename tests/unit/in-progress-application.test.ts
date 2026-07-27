@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
-  shouldSyncInProgressDraft,
   inProgressApplicationResumeUrl,
   buildInProgressApplicationRow,
   applicationStageDisplayLabel,
