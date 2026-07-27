@@ -15,6 +15,7 @@ import {
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import type { ProServiceFeeChoice } from "@/lib/payment-policy";
 import { useGmailPaymentTrack } from "@/components/portal/gmail-payment-auto-track-panel";
+import { ManagerApplicationFeeWaiverCodesModal } from "@/components/portal/manager-application-fee-waiver-codes-modal";
 import { stripeSetupStateFromStatus, type StripeSetupState } from "@/lib/stripe-setup-state";
 
 const DEMO_INBOX = "payments+demo-token@prop-lane.space";
@@ -335,6 +336,7 @@ export function ManagerPaymentSetupModal({
   const [activeChannel, setActiveChannel] = useState<PaymentChannel | null>(null);
   const [skuTier, setSkuTier] = useState<ManagerSkuTier | null>(null);
   const [savingFeePayer, setSavingFeePayer] = useState(false);
+  const [waiverCodesOpen, setWaiverCodesOpen] = useState(false);
 
   const { gmailStatus, gmailBusy, gmailSyncBusy, linkGmail, syncGmail } = useGmailPaymentTrack({
     role: "manager",
@@ -613,8 +615,24 @@ export function ManagerPaymentSetupModal({
             dataAttr="manager-payment-venmo-link"
             linkLabel="Link Venmo"
           />
+          <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+            <div>
+              <span className="text-sm font-semibold text-foreground">Application fee waiver codes</span>
+              <p className="text-xs text-muted">Let specific applicants skip the application fee entirely.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWaiverCodesOpen(true)}
+              data-attr="manager-payment-waiver-codes-link"
+              className="shrink-0 text-sm font-medium text-primary hover:underline"
+            >
+              Manage
+            </button>
+          </div>
         </div>
       </Modal>
+
+      <ManagerApplicationFeeWaiverCodesModal open={waiverCodesOpen} onClose={() => setWaiverCodesOpen(false)} />
 
       {activeChannel ? (
         <ChannelPaymentSetupModal

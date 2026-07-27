@@ -24,7 +24,6 @@ import {
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
-import { listingHoldingDepositAmount } from "@/lib/household-charges";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
@@ -148,11 +147,19 @@ export type WizardStepsProps = {
     displayLabel: string;
     amount: number;
     waived?: boolean;
+    /** True when a manager waiver code has been redeemed for this application. */
+    codeWaived?: boolean;
   };
   applicationFeeCheckBusy?: boolean;
   applicationFeeCheckError?: string | null;
   applicationFeePaymentVerified?: boolean;
   onCheckApplicationFeePayment?: () => void;
+  /** Server-computed application fee + service fee + total; null while loading or unavailable. */
+  feeItemization?: { applicationFeeCents: number; serviceFeeCents: number; totalCents: number } | null;
+  feeItemizationLoading?: boolean;
+  waiverCodeBusy?: boolean;
+  waiverCodeError?: string | null;
+  onApplyWaiverCode?: () => void;
   /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
   occupancySyncEpoch: number;
   showAvailabilityWarnings: boolean;
@@ -281,7 +288,28 @@ function CustomQuestionField({
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings, applicationFeeCheckBusy, applicationFeeCheckError, applicationFeePaymentVerified, onCheckApplicationFeePayment } = p;
+  const {
+    step,
+    form,
+    errors,
+    mode = "public",
+    propertyOptions,
+    propertyLocked,
+    patch,
+    editFromReview,
+    applicationFeeGate,
+    occupancySyncEpoch,
+    showAvailabilityWarnings,
+    applicationFeeCheckBusy,
+    applicationFeeCheckError,
+    applicationFeePaymentVerified,
+    onCheckApplicationFeePayment,
+    feeItemization,
+    feeItemizationLoading,
+    waiverCodeBusy,
+    waiverCodeError,
+    onApplyWaiverCode,
+  } = p;
 
   const listingSub = (() => {
     const prop = getPropertyById(form.propertyId);
@@ -1832,14 +1860,15 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
-    // The plan-based service fee applies to RESIDENT charges, not the rental
-    // application fee. An applicant always pays the application fee at face value
-    // (PropLane absorbs Stripe's cost) — the application-fee checkout passes
-    // `feePayer: "proplane"` — so no processing fee is ever added here.
-    const appFeeProcessingCents = 0;
+    // Who bears the Stripe service fee (Free = applicant, Pro = manager's
+    // setting, Business = PropLane absorbs) is resolved server-side and
+    // fetched via `feeItemization` — never re-derived here, so the number
+    // shown can never drift from what checkout actually charges.
+    const appFeeProcessingCents = feeItemization?.serviceFeeCents ?? 0;
+    const appFeeTotalCents = feeItemization?.totalCents ?? appFeeSubtotalCents;
     const appFeeLabel =
       appFeeProcessingCents > 0
-        ? `$${((appFeeSubtotalCents + appFeeProcessingCents) / 100).toFixed(2)}`
+        ? `$${(appFeeTotalCents / 100).toFixed(2)}`
         : sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
     const enabledChannels = [
       channels.ach ? ("ach" as const) : null,
@@ -1872,13 +1901,26 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
               {appFeeProcessingCents > 0 ? "Total due" : "Application fee"}
             </p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">
+              {feeItemizationLoading ? "…" : appFeeLabel}
+            </p>
             {appFeeProcessingCents > 0 ? (
-              <p className="mt-1 text-xs text-muted">
-                Includes ${(appFeeProcessingCents / 100).toFixed(2)} card processing fee.
-              </p>
+              <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted">
+                <div className="flex items-center justify-between">
+                  <dt>Application fee</dt>
+                  <dd className="tabular-nums text-foreground">${(appFeeSubtotalCents / 100).toFixed(2)}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt>Card processing fee</dt>
+                  <dd className="tabular-nums text-foreground">${(appFeeProcessingCents / 100).toFixed(2)}</dd>
+                </div>
+                <div className="flex items-center justify-between font-semibold text-foreground">
+                  <dt>Total</dt>
+                  <dd className="tabular-nums">${(appFeeTotalCents / 100).toFixed(2)}</dd>
+                </div>
+              </dl>
             ) : applicationFeeGate.needsFee && !applicationFeeGate.paid ? (
-              <p className="mt-1 text-xs text-muted">No added fees — PropLane covers payment processing.</p>
+              <p className="mt-1 text-xs text-muted">No added fees.</p>
             ) : null}
             {applicationFeeGate.paid ? (
               <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
@@ -1888,25 +1930,41 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-            {applicationFeeGate.waived
-              ? "No application fee is required. Your first application fee already covers additional applications."
-              : "No application fee is required for this listing."}
+            {applicationFeeGate.codeWaived
+              ? "No application fee is required — your waiver code covers it in full."
+              : applicationFeeGate.waived
+                ? "No application fee is required. Your first application fee already covers additional applications."
+                : "No application fee is required for this listing."}
           </div>
         )}
-        {(() => {
-          const holding = form.propertyId ? listingHoldingDepositAmount(form.propertyId) : { amount: 0, displayLabel: "—" };
-          if (!(holding.amount > 0)) return null;
-          return (
-            <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Holding deposit</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{holding.displayLabel}</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                Secures your application while it is reviewed. When you are approved, this amount is credited toward your
-                security deposit.
-              </p>
+        {applicationFeeGate.needsFee && !applicationFeeGate.paid ? (
+          <div className="space-y-2 rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <p className="text-sm font-semibold text-foreground">Have a waiver code?</p>
+            <p className="text-xs text-muted">
+              A code from the property manager waives the application fee entirely — nothing is charged.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={form.applicationFeeWaiverCode}
+                onChange={(e) => patch({ applicationFeeWaiverCode: e.target.value })}
+                placeholder="Enter code"
+                data-attr="rental-application-waiver-code-input"
+                className="sm:max-w-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full px-4 text-[13px]"
+                disabled={waiverCodeBusy || !form.applicationFeeWaiverCode.trim()}
+                data-attr="rental-application-waiver-code-apply"
+                onClick={() => onApplyWaiverCode?.()}
+              >
+                {waiverCodeBusy ? "Applying…" : "Apply code"}
+              </Button>
             </div>
-          );
-        })()}
+            {waiverCodeError ? <p className="text-xs font-medium text-red-600">{waiverCodeError}</p> : null}
+          </div>
+        ) : null}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
             <p className="text-sm font-semibold text-foreground">Payment method</p>

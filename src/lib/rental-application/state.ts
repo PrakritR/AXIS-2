@@ -84,6 +84,8 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     applicationFeeAcknowledged: false,
     applicationFeePayChannel: "ach",
     applicationFeeZelleSentConfirmed: false,
+    applicationFeeWaiverCode: "",
+    applicationFeeWaived: false,
     customFieldAnswers: [],
   };
 }

@@ -49,10 +49,38 @@ manager's fee-payer for pre-checkout disclosure via
 (`getManagerServiceFeePayerByManagerId`, scoped to their own
 `profiles.manager_id`).
 
-**The rental application fee is out of scope and stays face-value** (PropLane
-absorbs on every plan): an applicant is not yet a resident, and plan-pricing one
-would leak the manager's plan tier onto public listing pages. The
-application-fee checkout passes `feePayer: "proplane"` explicitly.
+**The rental application fee follows the SAME plan-based rule** (captain
+decision, 2026-07-26, superseding the earlier "out of scope, always face
+value" carve-out): `/api/stripe/application-fee-checkout`
+(`src/lib/application-fee-checkout.server.ts`) resolves `feePayer` from
+`resolveServiceFeePayer` + the manager's `loadManagerManualPaymentSettings`,
+exactly like a household charge — Free applicants pay the fee, Pro follows the
+manager's choice, Business is absorbed by PropLane. The listing page itself
+still shows only the application fee (no plan tier leaks there); the itemized
+service fee only appears once an applicant reaches the payment step
+(`/api/public/application-fee-preview` returns the same breakdown the checkout
+route will charge, so the wizard can itemize before redirecting to Stripe).
+**A manager-owned waiver code (`src/lib/application-fee-waiver.ts`,
+`/api/public/application-fee-waiver`) can waive the application fee entirely**
+— a redeemed code skips Stripe altogether (no $0 charge, no session).
+
+**The holding deposit is never collected during the application.** It used to
+be tracked as a pending `holding_deposit` household charge the moment an
+applicant paid (or submitted) the application fee, credited later against the
+security deposit at approval. That pre-approval tracking was removed
+(`recordApplicationCharges` / `recordSubmittedApplicationFeeCharge` no longer
+call `ensurePendingHoldingDepositCharge`) — any deposit money is charged under
+Payments, after approval, same as security deposits already were. The
+`holding_deposit` charge kind, `ensurePendingHoldingDepositCharge`, and the
+approval-time holding-deposit credit (`paidHoldingDepositCreditCents`) are kept
+for now as `@deprecated`/back-compat only; do not add new pre-approval call
+sites.
+
+Coverage (application fee + waiver codes): `tests/unit/application-fee-checkout-fee-payer.test.ts`
+(Connect destination, ownership guard, server-stored fee amount, plan-based
+itemization) and `tests/unit/application-fee-waiver.test.ts` (code CRUD,
+manager scoping, and the cross-manager-isolation + expiry/usage-cap redemption
+guards).
 
 Coverage: `tests/unit/resident-processing-fees.test.ts` (fee amounts, resolver,
 breakdown, acceptance table), `tests/unit/service-fee-by-plan.test.ts` (settings

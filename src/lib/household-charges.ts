@@ -1376,6 +1376,13 @@ function holdingDepositFallbackChargeId(residentEmail: string, propertyId: strin
   return `hc_holding_${chargeKeyPart(residentEmail)}_${chargeKeyPart(propertyId)}`;
 }
 
+/**
+ * @deprecated No longer shown or collected during the application (captain
+ * decision, 2026-07 — see `ensurePendingHoldingDepositCharge` above and
+ * `docs/agents/resident-payments.md`). Kept only in case a future Payments
+ * surface wants the listing's configured holding-deposit amount; no
+ * production call site remains.
+ */
 export function listingHoldingDepositAmount(propertyId: string): { amount: number; displayLabel: string } {
   if (!propertyId.trim()) {
     return { amount: 0, displayLabel: "—" };
@@ -1411,6 +1418,13 @@ function findHoldingDepositCharge(
 }
 
 /**
+ * @deprecated The holding deposit is no longer collected during the
+ * application (captain decision, 2026-07: deposits move under Payments,
+ * after approval — see `docs/agents/resident-payments.md`). Every
+ * application-submission call site has been removed
+ * (`recordApplicationCharges`, `recordSubmittedApplicationFeeCharge`); the
+ * remaining callers are the rental wizard's own submit-time calls, pending a
+ * coordinated edit (tracked separately — do not add new call sites here).
  * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
  */
 export function ensurePendingHoldingDepositCharge(input: {
@@ -2177,11 +2191,9 @@ export function recordApplicationCharges(
   }
 
   if (opts?.skipApplicationFee || existingAppFee) {
-    ensurePendingHoldingDepositCharge(input);
     return;
   }
   ensurePendingApplicationFeeCharge(input);
-  ensurePendingHoldingDepositCharge(input);
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
@@ -2199,15 +2211,6 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   if (!propertyId) return false;
   const beforeIds = new Set(readAll().map((charge) => charge.id));
   const charge = ensurePendingApplicationFeeCharge({
-    residentEmail,
-    residentName: row.name || row.application?.fullLegalName || "Applicant",
-    residentUserId: null,
-    propertyId,
-    applicationId: row.id,
-    managerUserId: managerUserId ?? row.managerUserId ?? null,
-    propertyIdAliases,
-  });
-  ensurePendingHoldingDepositCharge({
     residentEmail,
     residentName: row.name || row.application?.fullLegalName || "Applicant",
     residentUserId: null,
