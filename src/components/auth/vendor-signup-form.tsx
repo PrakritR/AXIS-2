@@ -1,10 +1,12 @@
 "use client";
 
 import posthog from "posthog-js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthAlreadyHaveRolePanel } from "@/components/auth/auth-already-have-role-panel";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
 import { AuthSignedInRoleBanner } from "@/components/auth/auth-signed-in-role-banner";
+import { useSignedInPortalRoles } from "@/components/auth/use-signed-in-portal-roles";
 import { VendorAppleSignUpButton } from "@/components/auth/vendor-apple-sign-up-button";
 import { VendorGoogleSignUpButton } from "@/components/auth/vendor-google-sign-up-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -55,19 +57,14 @@ export function VendorSignupForm({
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [localDevConfirmHint, setLocalDevConfirmHint] = useState(false);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const supabase = createSupabaseBrowserClient();
-      const { data } = await supabase.auth.getSession();
-      if (!cancelled) setSignedInEmail(data.session?.user?.email ?? null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { email: signedInEmail, roles: portalRoles } = useSignedInPortalRoles();
+  // A signed-in account that already holds the vendor role gets the shared
+  // "go to your portal" panel instead of a signup form it can't sensibly use;
+  // "Create a different vendor account" reveals the form again so the ability to
+  // spin up a separate vendor account is preserved.
+  const alreadyVendor = Boolean(signedInEmail) && portalRoles.includes("vendor");
+  const [creatingAnother, setCreatingAnother] = useState(false);
+  const showAddRoleBanner = Boolean(signedInEmail) && !alreadyVendor;
 
   const compact = variant === "compact";
   const locked = disabled || busy;
@@ -213,6 +210,23 @@ export function VendorSignupForm({
     </>
   );
 
+  if (compact && alreadyVendor && !creatingAnother) {
+    return (
+      <div className="vendor-signup-form space-y-2.5 sm:space-y-3">
+        <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
+          Free vendor account · work orders &amp; payouts through PropLane.
+        </p>
+        <AuthAlreadyHaveRolePanel
+          role="vendor"
+          email={signedInEmail}
+          onCreateAnother={() => setCreatingAnother(true)}
+          createAnotherLabel="Create a different vendor account"
+        />
+        {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
+      </div>
+    );
+  }
+
   if (compact) {
     return (
       <div className="vendor-signup-form space-y-2.5 sm:space-y-3">
@@ -220,7 +234,7 @@ export function VendorSignupForm({
           Free vendor account · work orders &amp; payouts through PropLane.
         </p>
 
-        {signedInEmail ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
+        {showAddRoleBanner ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
 
         {socialBlock}
 
@@ -251,9 +265,23 @@ export function VendorSignupForm({
     );
   }
 
+  if (alreadyVendor && !creatingAnother) {
+    return (
+      <div className="space-y-4">
+        <AuthAlreadyHaveRolePanel
+          role="vendor"
+          email={signedInEmail}
+          onCreateAnother={() => setCreatingAnother(true)}
+          createAnotherLabel="Create a different vendor account"
+        />
+        {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {signedInEmail ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
+      {showAddRoleBanner ? <AuthSignedInRoleBanner role="vendor" email={signedInEmail} /> : null}
       {socialBlock}
       <AuthDivider label="or enter your details" />
       {passwordFieldsDefault}

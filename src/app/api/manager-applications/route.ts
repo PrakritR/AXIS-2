@@ -637,11 +637,18 @@ export async function POST(req: Request) {
       }
 
       const admin = await isAdminUser(user.id);
-      const { role, email } = await resolvePortalRole(db, user);
-      // Withdraw is a resident self-service action; managers use Reject.
-      if (!admin && role !== "resident") {
-        return NextResponse.json({ error: "Only the applicant can withdraw this application." }, { status: 403 });
-      }
+      const { email } = await resolvePortalRole(db, user);
+      // Ownership here is by EMAIL, never by active/primary portal role. A
+      // multi-role account (a manager or vendor who ALSO applied as a resident)
+      // keeps its legacy `profiles.role` = manager/owner even while acting in
+      // its resident portal, yet it still owns any application carrying its own
+      // email — and the resident applications list shows the row on exactly that
+      // email match. Gating on `role === "resident"` contradicted the list: it
+      // rejected the genuine applicant with "Only the applicant can withdraw"
+      // whenever their primary role wasn't resident (the self-contradictory
+      // "it's in my list but I can't withdraw it" bug). The authoritative gate
+      // is the per-record `rowEmail === email` check below — a manager
+      // withdrawing SOMEONE ELSE's application still fails there and uses Reject.
 
       const withdrawnAt = new Date().toISOString();
       let withdrawn = 0;

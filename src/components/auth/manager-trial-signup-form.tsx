@@ -1,11 +1,12 @@
 "use client";
 
 import posthog from "posthog-js";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { AuthAlreadyHaveRolePanel } from "@/components/auth/auth-already-have-role-panel";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
 import { AuthSignedInRoleBanner } from "@/components/auth/auth-signed-in-role-banner";
+import { useSignedInPortalRoles } from "@/components/auth/use-signed-in-portal-roles";
 import { PricingAppleContinueButton } from "@/components/auth/pricing-apple-continue-button";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -73,6 +74,12 @@ export function ManagerTrialSignupForm({
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
   const [accountReady, setAccountReady] = useState(false);
   const [creatingAnother, setCreatingAnother] = useState(false);
+  const { roles: portalRoles } = useSignedInPortalRoles();
+  // A signed-in account that already manages property gets the shared "go to
+  // your portal" panel instead of a signup form for access it already holds.
+  // "Create a different property account" reveals the form again — managers can
+  // legitimately run more than one property account, so no capability is lost.
+  const alreadyManager = Boolean(signedInUser) && portalRoles.includes("manager");
 
   const locked = disabled || busy || finishingOAuth;
 
@@ -265,9 +272,16 @@ export function ManagerTrialSignupForm({
             Create a different property account
           </button>
         </div>
+      ) : alreadyManager && !creatingAnother ? (
+        <AuthAlreadyHaveRolePanel
+          role="manager"
+          email={signedInUser?.email ?? null}
+          onCreateAnother={() => setCreatingAnother(true)}
+          createAnotherLabel="Create a different property account"
+        />
       ) : (
         <>
-          {signedInUser || accountReady ? (
+          {signedInUser && !alreadyManager ? (
             <AuthSignedInRoleBanner role="manager" email={signedInUser?.email ?? null} />
           ) : null}
           <div className="space-y-3">

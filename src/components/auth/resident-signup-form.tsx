@@ -1,11 +1,13 @@
 "use client";
 
 import posthog from "posthog-js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthAlreadyHaveRolePanel } from "@/components/auth/auth-already-have-role-panel";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
 import { ResidentAppleSignUpButton } from "@/components/auth/resident-apple-sign-up-button";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
+import { useSignedInPortalRoles } from "@/components/auth/use-signed-in-portal-roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -56,24 +58,10 @@ export function ResidentSignupForm({
   // A signed-in manager/vendor who lands here must NOT mint a second auth user
   // via self-serve signup — they add the resident role to their existing login
   // (the additive path owned by the multi-role lane). Only anonymous visitors
-  // see the self-serve form.
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const { data } = await supabase.auth.getSession();
-        if (!cancelled) setSignedInEmail(data.session?.user?.email ?? null);
-      } catch {
-        if (!cancelled) setSignedInEmail(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // see the self-serve form. When they ALREADY hold the resident role, the form
+  // makes no sense either — they get the shared "go to your portal" panel.
+  const { email: signedInEmail, roles: portalRoles } = useSignedInPortalRoles();
+  const alreadyResident = Boolean(signedInEmail) && portalRoles.includes("resident");
 
   const compact = variant === "compact";
   const locked = disabled || busy;
@@ -269,17 +257,33 @@ export function ResidentSignupForm({
     </>
   );
 
-  // Signed-in manager/vendor: no second auth user. Offer the additive path
-  // (resident role on the same login) instead of the self-serve form.
+  // Signed in AND already a resident: the signup form makes no sense — send them
+  // in, matching the manager/vendor "already have access" state.
+  if (alreadyResident) {
+    return (
+      <div className={compact ? "resident-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
+        <p className="text-center text-[11px] leading-tight text-muted sm:text-xs">
+          Free resident account · track and apply from your portal.
+        </p>
+        <AuthAlreadyHaveRolePanel role="resident" email={signedInEmail} />
+        {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
+      </div>
+    );
+  }
+
+  // Signed-in manager/vendor without the resident role: no second auth user.
+  // Offer the additive path (resident role on the same login) instead of the
+  // self-serve form.
   if (signedInEmail) {
     return (
-      <div className={compact ? "resident-signup-form space-y-3" : "space-y-4"}>
-        <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
-          <p className="text-[13px] font-semibold text-foreground">You&apos;re signed in as {signedInEmail}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-muted">
-            Add resident access to your existing login — same email, no new password, its own resident portal. Switch
-            back anytime without signing out.
-          </p>
+      <div className={compact ? "resident-signup-form space-y-2.5 sm:space-y-3" : "space-y-4"}>
+        <p className="text-center text-[11px] leading-tight text-muted sm:text-xs">
+          Free resident account · track and apply from your portal.
+        </p>
+        <div className="rounded-2xl border border-border bg-card/50 px-3 py-3 text-center text-[13px] leading-snug text-muted">
+          You&apos;re signed in as <span className="font-semibold text-foreground">{signedInEmail}</span>. Add resident
+          access to your existing login: same email, no new password, its own resident portal. Switch back anytime
+          without signing out.
         </div>
         <Button
           type="button"
@@ -291,6 +295,7 @@ export function ResidentSignupForm({
           {busy ? "Setting up…" : "Add resident access & apply"}
         </Button>
         {error ? <p className="text-center text-xs text-rose-600">{error}</p> : null}
+        {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
       </div>
     );
   }

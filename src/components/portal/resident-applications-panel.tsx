@@ -32,6 +32,16 @@ import {
 } from "@/components/portal/portal-data-table";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
+import { PropertySearchPicker, type PropertySearchOption } from "@/components/marketing/property-search-picker";
+import {
+  isPropertyActiveForLeads,
+  loadPublicExtraListingsFromServer,
+  readExtraListingsPublic,
+} from "@/lib/demo-property-pipeline";
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
+import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
+import { isProductionPublicSite } from "@/lib/public-demo-access";
+import { getPropertyById } from "@/lib/rental-application/data";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -133,6 +143,11 @@ export function ResidentApplicationsPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<DemoApplicantRow | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
+  // Inline "Apply to a property" picker: choosing which property to apply for
+  // happens in place (a searchable modal), then the wizard opens INLINE under
+  // its own row in this same list — no round-trip out to the browse page.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickedPropertyId, setPickedPropertyId] = useState<string | null>(null);
   const openHandled = useRef(false);
 
   useEffect(() => {
@@ -164,6 +179,19 @@ export function ResidentApplicationsPanel({
       window.removeEventListener(DEMO_APPLICATION_SUBMITTED_EVENT, closeApply);
     };
   }, [demoMode]);
+
+  // Hydrate the public listing catalog the inline picker reads. The resident
+  // portal doesn't otherwise load it (that used to be the browse page's job),
+  // so without this the "Apply to a property" picker would be empty. The loader
+  // is in-flight-guarded + CDN-cached, and re-renders options via the pipeline
+  // event once listings land.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    void loadPublicExtraListingsFromServer();
+    const on = () => setTick((t) => t + 1);
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, [pickerOpen]);
 
   const rows = useMemo(() => {
     void tick;
@@ -226,6 +254,45 @@ export function ResidentApplicationsPanel({
   );
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
+
+  // Active public listings the resident can apply for — the same catalog the
+  // wizard's own property picker reads, surfaced up here so property choice can
+  // happen inline instead of on the separate browse page.
+  const propertyPickerOptions = useMemo<PropertySearchOption[]>(() => {
+    void tick;
+    if (!pickerOpen) return [];
+    return filterSandboxFromPublicCatalog(readExtraListingsPublic(), { production: isProductionPublicSite() })
+      .filter(isPropertyActiveForLeads)
+      .map((property) => {
+        const prop = getPropertyById(property.id);
+        return {
+          id: property.id,
+          title: property.title,
+          subtitle: prop?.address,
+          tags: prop ? [prop.neighborhood, prop.rentLabel].filter(Boolean) : undefined,
+          searchText: prop
+            ? `${prop.title} ${prop.address} ${prop.neighborhood} ${prop.buildingName} ${prop.zip}`
+            : property.title,
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [pickerOpen, tick]);
+
+  const startApplicationForProperty = (propertyId: string) => {
+    const pid = propertyId.trim();
+    if (!pid) return;
+    setPickerOpen(false);
+    setPickedPropertyId(null);
+    if (demoMode) {
+      setDemoApplyPropertyId(pid);
+      setDemoApplyOpen(true);
+      return;
+    }
+    // Stay inside the portal: /resident/applications/apply renders THIS same
+    // panel in apply mode, so the wizard opens inline under a new row here
+    // (the wizard's draft-sync mints the row once property + email are set).
+    portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply?propertyId=${encodeURIComponent(pid)}`);
+  };
 
   // A resident with zero applications is deliberately NOT auto-redirected into
   // the apply flow. The list page — with its always-visible "Apply to a property"
@@ -317,9 +384,9 @@ export function ResidentApplicationsPanel({
     >
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Withdrawing removes this application from your active list. It is not deleted; your property
-          manager keeps the record{withdrawTarget?.property ? ` for ${withdrawTarget.property}` : ""} and its
-          history, and you can reapply later if you change your mind.
+          Withdrawing removes this application from your list. Your property manager keeps the record
+          {withdrawTarget?.property ? ` for ${withdrawTarget.property}` : ""} and its history. Withdrawal is
+          final for this application: applying to the same home again starts a brand-new application.
         </p>
         <div className="flex justify-start gap-2">
           <Button
@@ -340,6 +407,55 @@ export function ResidentApplicationsPanel({
             disabled={withdrawBusy}
           >
             {withdrawBusy ? "Withdrawing…" : "Withdraw application"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+
+  const propertyPickerModal = (
+    <Modal
+      open={pickerOpen}
+      title="Apply to a property"
+      onClose={() => setPickerOpen(false)}
+      panelClassName="max-w-lg"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Choose the home you want to apply for. Your application opens right here in your list — you can add
+          another property anytime.
+        </p>
+        <PropertySearchPicker
+          options={propertyPickerOptions}
+          value={pickedPropertyId}
+          onChange={setPickedPropertyId}
+          placeholder="Search by address, neighborhood, or property name…"
+          emptyMessage="No properties match your search."
+          listEmptyMessage="No properties are available to apply for right now."
+          ariaLabel="Search properties to apply for"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full px-4 text-[13px]"
+            data-attr="resident-applications-browse-homes"
+            onClick={() => {
+              setPickerOpen(false);
+              portalNavigate(residentBrowseFromApplicationHref());
+            }}
+          >
+            Browse homes
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            data-attr="resident-applications-start"
+            disabled={!pickedPropertyId}
+            onClick={() => pickedPropertyId && startApplicationForProperty(pickedPropertyId)}
+          >
+            Start application
           </Button>
         </div>
       </div>
@@ -450,14 +566,10 @@ export function ResidentApplicationsPanel({
           className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
           data-attr="resident-applications-apply"
           onClick={() => {
-            if (demoMode) {
-              setDemoApplyPropertyId(undefined);
-              setDemoApplyOpen(true);
-              return;
-            }
-            // No property chosen yet — send them to browse listings and pick
-            // one, then straight into a fresh application for it.
-            portalNavigate(residentBrowseFromApplicationHref());
+            // Pick the property IN PLACE (searchable modal), then open the
+            // wizard inline under a new row here — no round-trip to browse.
+            setPickedPropertyId(null);
+            setPickerOpen(true);
           }}
         >
           Apply to a property
@@ -568,6 +680,7 @@ export function ResidentApplicationsPanel({
         renderApplicationsTable()
       ) : null}
       {withdrawModal}
+      {propertyPickerModal}
     </>
   );
 
