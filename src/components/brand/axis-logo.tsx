@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import {
+  PROPLANE_MARK_PATHS,
+  PROPLANE_MARK_STROKE_WIDTH,
+  PROPLANE_MARK_VIEWBOX_SIZE,
+} from "@/lib/brand/proplane-mark";
 
 const markTileBase =
   "flex shrink-0 items-center justify-center border border-white/35 bg-[linear-gradient(150deg,rgba(255,255,255,0.34),rgba(255,255,255,0.1))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] [html[data-theme=light]_&]:border-border/80 [html[data-theme=light]_&]:bg-[linear-gradient(150deg,#ffffff,#e9eefb)] [html[data-theme=light]_&]:shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(15,23,42,0.05)]";
@@ -20,7 +25,15 @@ export type AxisLogoSize = keyof typeof markTileSizes;
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
-/** Inline PropLane paper-plane mark — solid strokes, no glow or gradient blur. */
+/**
+ * Inline PropLane mark — rounded house/chevron outline with a crossing X,
+ * single-colour line art (no fill). Geometry is the canonical
+ * {@link PROPLANE_MARK_PATHS} (see src/lib/brand/proplane-mark.ts); the
+ * stroke uses the `primary` theme variable (blue in light theme, purple in
+ * dark theme — src/app/globals.css) rather than a hardcoded hex, so the mark
+ * always matches the rest of the UI's brand accent instead of showing a
+ * fixed blue in a dark-mode context.
+ */
 function AxisLogoGlyph({
   className = "",
   size = "default",
@@ -31,25 +44,23 @@ function AxisLogoGlyph({
   return (
     <svg
       className={`block shrink-0 ${glyphSizes[size]} ${className}`}
-      viewBox="0 0 26 26"
+      viewBox={`0 0 ${PROPLANE_MARK_VIEWBOX_SIZE} ${PROPLANE_MARK_VIEWBOX_SIZE}`}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       shapeRendering="geometricPrecision"
       aria-hidden
     >
-      <path
-        d="M3.5 11.9L22.5 3.9L15.4 22.4L11.3 14.6L3.5 11.9Z"
-        className="stroke-white [html[data-theme=light]_&]:stroke-foreground"
-        strokeWidth="2.15"
+      <g
+        className="stroke-primary"
+        fill="none"
+        strokeWidth={PROPLANE_MARK_STROKE_WIDTH}
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-      <path
-        d="M11.3 14.6L22.5 3.9"
-        className="stroke-steel-light [html[data-theme=light]_&]:stroke-primary"
-        strokeWidth="2.15"
-        strokeLinecap="round"
-      />
+      >
+        {PROPLANE_MARK_PATHS.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
     </svg>
   );
 }

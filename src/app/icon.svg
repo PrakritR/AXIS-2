@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="PropLane">
-  <!-- Matches the header brand tile: rounded square + PropLane paper-plane mark.
-       Same glyph geometry as AxisLogoGlyph in src/components/brand/axis-logo.tsx
-       (26-unit glyph space, scaled and centred into the 32-unit tile). -->
+  <!-- Rounded tile + the canonical PropLane mark (public/brand/proplane-mark.svg /
+       src/lib/brand/proplane-mark.ts), scaled from its native 512-unit space into
+       this 32-unit favicon tile via one transform group so the path data below is
+       copied verbatim from the canonical source, never hand-recomputed. Fixed blue
+       (a browser tab icon can't inherit the app's theme variable). -->
   <rect width="32" height="32" rx="9" fill="#ffffff"/>
-  <g transform="translate(5.2 5.2) scale(0.83)" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6">
-    <path d="M3.5 11.9L22.5 3.9L15.4 22.4L11.3 14.6L3.5 11.9Z" stroke="#0f172a"/>
-    <path d="M11.3 14.6L22.5 3.9" stroke="#2f6bff"/>
+  <g transform="translate(3.2 2.6) scale(0.05)" fill="none" stroke="#2F6BFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 84 452 L 84 218 a 54 54 0 0 1 21 -43 L 233 79 a 38 38 0 0 1 46 0 L 407 175 a 54 54 0 0 1 21 43 L 428 452" />
+    <path d="M 170 288 L 342 452" />
+    <path d="M 342 288 L 170 452" />
   </g>
 </svg>
