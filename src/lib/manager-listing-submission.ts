@@ -888,16 +888,23 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
           : "",
       prorateMethod: (legacyRoom.prorateMethod === "daily_rate" ? "daily_rate" : "auto") as "auto" | "daily_rate",
+      // MONEY PATH — the daily rate is now a single ALL-IN number. Any stored separate
+      // `dailyUtilitiesRate` is FOLDED into `dailyRentRate` (rent += utilities) and the
+      // source is cleared, so the daily rent rate here SILENTLY INCLUDES utilities for
+      // migrated listings — do not treat it as pure rent. The fold is idempotent: once
+      // `dailyUtilitiesRate` is undefined a re-normalize adds 0. Charge generation is the
+      // matching half: it does NOT bill prorated utilities on top of a daily-rate month.
       dailyRentRate: (() => {
-        const v = legacyRoom.dailyRentRate;
-        const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
-        return Number.isFinite(n) && n > 0 ? n : undefined;
+        const parse = (v: unknown): number => {
+          const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+          return Number.isFinite(n) && n > 0 ? n : 0;
+        };
+        const folded = parse(legacyRoom.dailyRentRate) + parse(legacyRoom.dailyUtilitiesRate);
+        return folded > 0 ? folded : undefined;
       })(),
-      dailyUtilitiesRate: (() => {
-        const v = legacyRoom.dailyUtilitiesRate;
-        const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
-        return Number.isFinite(n) && n > 0 ? n : undefined;
-      })(),
+      // Consumed by the fold above; kept undefined so nothing re-adds it and no
+      // separate daily-utilities line is ever billed.
+      dailyUtilitiesRate: undefined,
       dailyRentPrice: (() => {
         const v = (legacyRoom as ManagerRoomSubmission).dailyRentPrice;
         const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
@@ -1204,8 +1211,15 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   );
   const entireHomeProrateMethod: "auto" | "daily_rate" =
     sub.entireHomeProrateMethod === "daily_rate" ? "daily_rate" : (primaryRoom?.prorateMethod === "daily_rate" ? "daily_rate" : "auto");
-  const entireHomeDailyRentRate = sub.entireHomeDailyRentRate ?? primaryRoom?.dailyRentRate;
-  const entireHomeDailyUtilitiesRate = sub.entireHomeDailyUtilitiesRate ?? primaryRoom?.dailyUtilitiesRate;
+  // Same all-in fold as per-room (see the room map): the whole-home daily rate absorbs
+  // any stored separate daily utilities rate, and the source is cleared for idempotency.
+  const entireHomeDailyRentRate = (() => {
+    const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+    const rent = num(sub.entireHomeDailyRentRate) || num(primaryRoom?.dailyRentRate);
+    const folded = rent + num(sub.entireHomeDailyUtilitiesRate);
+    return folded > 0 ? folded : undefined;
+  })();
+  const entireHomeDailyUtilitiesRate = undefined;
 
   let normalizedRooms = rooms;
   if (isEntireHomeListing({ listingPlaceCategoryId })) {

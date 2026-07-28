@@ -2569,8 +2569,10 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     return null;
   })();
   const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
+  // The daily rent rate is ALL-IN (utilities were folded into it at normalization), so a
+  // daily-rate-prorated month bills no separate prorated utilities — there is deliberately
+  // no `dailyUtilitiesRate` here anymore.
   const dailyRentRate = room?.dailyRentRate;
-  const dailyUtilitiesRate = room?.dailyUtilitiesRate;
   // When the room is priced by the day, rent (not utilities) bills per-day every period —
   // unless this resident has their own negotiated monthly rent, which wins exactly as it
   // does over the room's listing monthly rent.
@@ -2592,22 +2594,21 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const utilities = selectedRoomUtilities(row);
   if (utilities.amount > 0) {
     const proration = leaseFirstPeriodProration(leaseStart, leaseEnd, endsInsideFirstMonth);
-    let utilAmount: number;
-    let utilTitle: string;
-    if (proration.prorated && prorateMethod === "daily_rate" && dailyUtilitiesRate && dailyUtilitiesRate > 0) {
-      utilAmount = Number((proration.billableDays * dailyUtilitiesRate).toFixed(2));
-      utilTitle = `Prorated utilities (${proration.billableDays} days × ${formatRoomPriceAmount(dailyUtilitiesRate)}/day)`;
-    } else {
-      utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
-      utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+    // A daily-rate-prorated partial month already includes utilities inside its all-in
+    // daily rent line, so DO NOT also bill a prorated utilities line — that is the
+    // double-bill. A full first month (not prorated) still bills monthly utilities.
+    const utilitiesInDailyRate = proration.prorated && prorateMethod === "daily_rate";
+    if (!utilitiesInDailyRate) {
+      const utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
+      const utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+      pushCharge(
+        proration.prorated ? "prorated_utilities" : "utilities",
+        utilAmount,
+        utilTitle,
+        false,
+        moveInDue,
+      );
     }
-    pushCharge(
-      proration.prorated ? "prorated_utilities" : "utilities",
-      utilAmount,
-      utilTitle,
-      false,
-      moveInDue,
-    );
   }
 
   const lastMonthRentCharge = !endsInsideFirstMonth && (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0))
@@ -2622,8 +2623,10 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       lastMonthRentCharge.dueDateLabel,
     );
   }
-  const lastMonthUtilitiesCharge = !endsInsideFirstMonth && utilities.amount > 0
-    ? lastMonthChargeForLeaseEnd(utilities.amount, leaseEnd, "utilities", prorateMethod, dailyUtilitiesRate)
+  // A daily-rate last month is all-in (utilities folded into the daily rent), so skip the
+  // separate last-month utilities line for daily_rate; auto proration bills it as before.
+  const lastMonthUtilitiesCharge = !endsInsideFirstMonth && utilities.amount > 0 && prorateMethod !== "daily_rate"
+    ? lastMonthChargeForLeaseEnd(utilities.amount, leaseEnd, "utilities", prorateMethod)
     : null;
   if (lastMonthUtilitiesCharge) {
     pushCharge(
