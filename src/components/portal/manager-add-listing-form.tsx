@@ -1476,9 +1476,6 @@ export function ManagerAddListingForm({
     }),
     [listingPresets],
   );
-  const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
-  const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
-  const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
   // RRIO is a Seattle-only registration, so hide it once the address says this is
   // somewhere else. Still shown while the address is blank (nothing to resolve yet)
   // and whenever a value is already stored, so an entered number can never be
