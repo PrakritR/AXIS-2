@@ -10,6 +10,7 @@ import {
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
 import {
+  CUSTOM_LEASE_TERM,
   LEASE_TERM_OPTIONS,
   LISTING_LEASE_TERM_OPTION_SET,
   SHORT_TERM_LEASE_TERM,
