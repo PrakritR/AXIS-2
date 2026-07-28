@@ -376,7 +376,11 @@ describe("stay pricing: document and ledger agree", () => {
     expect(documentTotalDue(leaseHtml(app))).toBe(expected);
   });
 
-  it("12. a paid holding deposit is credited on the document exactly as the ledger credits it", () => {
+  it("12. the deposit the document states is the OBLIGATION, unmoved by a holding-deposit payment", () => {
+    // The document is generated once and cannot be rebuilt after it carries a signature, while
+    // the holding deposit can be paid on either side of that moment. Quoting the resident's
+    // running net would therefore be permanently wrong in one direction or the other, so the
+    // lease states the fixed obligation and points at the ledger for the balance.
     const email = "holding@example.com";
     removeResidentHouseholdPaymentData(email);
     const propertyId = "prop-stay-holding";
@@ -390,11 +394,10 @@ describe("stay pricing: document and ledger agree", () => {
     const app = application(propertyId);
     const row = applicantRow(propertyId, email, app);
 
-    // ABSENT credit means UNKNOWN, never "zero credit": the gross deposit is quoted, as before.
-    const gross = leaseHtml(app);
-    expect(gross).toContain("$900.00");
-    expect(gross).not.toContain("Less holding deposit paid");
-    expect(documentTotalDue(gross)).toBe(605 + 900);
+    const before = leaseHtml(app);
+    expect(before).toContain("$900.00");
+    expect(before).toContain("credited against the security deposit");
+    expect(documentTotalDue(before)).toBe(605 + 900);
 
     ensurePendingHoldingDepositCharge({
       residentEmail: email,
@@ -407,36 +410,30 @@ describe("stay pricing: document and ledger agree", () => {
     markHoldingDepositPaidAfterStripe(email, propertyId, null);
     recordApprovedApplicationCharges(row, MANAGER_ID, true);
 
-    // The ledger charges the NET deposit, so the document has to state the same net.
+    // The ledger — the authority for the balance — nets the credit off.
     const securityCharge = readHouseholdCharges().find(
       (c) => c.residentEmail.toLowerCase() === email && c.kind === "security_deposit",
     );
     expect(securityCharge?.amountLabel).toBe("$650.00");
 
-    const credited = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app, { applicationId: row.id }));
-    expect(credited).toContain("Less holding deposit paid");
-    expect(credited).toContain("-$250.00");
-    expect(documentTotalDue(credited)).toBe(605 + 650);
+    // The document does not move: same deposit, same total, same standing sentence.
+    const after = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+    expect(after.replace(/Generated [^<]*/, "")).toBe(before.replace(/Generated [^<]*/, ""));
+    expect(documentTotalDue(after)).toBe(605 + 900);
   });
 
-  it("13. a holding deposit larger than the security deposit floors the credit, never goes negative", () => {
-    const propertyId = "prop-stay-holding-big";
-    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
-      shortTermRentalsAllowed: true,
+  it("13. the residential lease carries the same holding-deposit credit sentence", () => {
+    const propertyId = "prop-stay-holding-long";
+    seedListing(propertyId, room({ monthlyRent: 1200 }), {
       securityDeposit: "900",
       moveInFee: "",
       applicationFee: "",
     });
-    const app = application(propertyId);
 
-    const html = buildAiGeneratedLeaseHtml({
-      ...leaseContextFromApplication(app),
-      holdingDepositCreditUsd: 5000,
-    });
-    // Credit is capped at the deposit, mirroring the ledger's Math.max(0, deposit - credit).
-    expect(html).toContain("-$900.00");
-    // 11 nights × $55, deposit fully covered, nothing else configured.
-    expect(documentTotalDue(html)).toBe(605);
+    const html = leaseHtml(application(propertyId));
+    expect(html).toContain("RESIDENTIAL ROOM RENTAL AGREEMENT");
+    expect(html).toContain("credited against the security deposit");
+    expect(html).not.toContain("Less holding deposit paid");
   });
 
   it("14. a non-ISO intra-month lease collapses to ONE charge, like its ISO twin", () => {
@@ -459,6 +456,98 @@ describe("stay pricing: document and ledger agree", () => {
     const charges = rentCharges(email);
     expect(charges).toHaveLength(1);
     expect(charges[0]?.amount).toBe("$605.00");
+  });
+
+  it("15. a daily-basis long lease discloses the SAME prorated first-month utilities the ledger bills", () => {
+    // Rent needs no proration on a daily basis, but utilities are still a monthly estimate and
+    // the ledger still prorates them. Suppressing the whole section left that undisclosed.
+    const email = "dailylongutils@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-stay-dailylongutils";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55, utilitiesEstimate: "200" }), {
+      shortTermRentalsAllowed: false,
+      applicationFee: "",
+    });
+    const app = application(propertyId, { leaseStart: "2026-03-10", leaseEnd: "2026-06-30" });
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, email, app), MANAGER_ID, true);
+    const proratedUtilities = readHouseholdCharges().find(
+      (c) => c.residentEmail.toLowerCase() === email && c.kind === "prorated_utilities",
+    );
+    // $200 × 22/31 days from a Mar 10 start.
+    expect(proratedUtilities?.amountLabel).toBe("$141.94");
+
+    const html = leaseHtml(app);
+    expect(html).toContain("RESIDENTIAL ROOM RENTAL AGREEMENT");
+    expect(html).toContain("Prorated Utilities");
+    expect(html).toContain("$141.94");
+    // Rent is never prorated on a daily basis; only the utilities half of the section renders.
+    expect(html).not.toContain("Prorated First Month");
+    expect(html).not.toContain("Prorated total due first month");
+    // The Section 4 prose must not assert the full monthly estimate applies to a partial month.
+    expect(html).toContain("prorated for any partial month");
+  });
+
+  it("16. document and ledger resolve the SAME room when a signed rent and a unit label disagree", () => {
+    // roomChoice1 carries no listingRoomId (legacy / manual assignment). The property's unit
+    // label matches room A, the signed rent exactly matches room B. An exact figure outranks a
+    // fuzzy label, and both sides feed the shared chain the same inputs — so both pick B.
+    const email = "tworooms@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-stay-tworooms";
+
+    const sub = { ...createDefaultListingSubmission() };
+    sub.rooms = [
+      room({ id: "room-a", name: "Unit 2", monthlyRent: 0, rentBasis: "daily", dailyRentPrice: 55, prorateMethod: "daily_rate", dailyRentRate: 90 }),
+      room({ id: "room-b", name: "Unit 7", monthlyRent: 1200 }),
+    ];
+    sub.securityDeposit = "900";
+    sub.applicationFee = "";
+    cachePublicExtraListings(
+      [
+        {
+          id: propertyId,
+          title: "Walnut Ave House",
+          tagline: "Two rooms",
+          ...FREMONT,
+          beds: 2,
+          baths: 1,
+          rentLabel: "$1200/mo",
+          available: "Now",
+          petFriendly: false,
+          buildingId: "b1",
+          buildingName: "Walnut Ave House",
+          unitLabel: "Unit 2",
+          adminPublishLive: true,
+          managerUserId: MANAGER_ID,
+          listingSubmission: normalizeManagerListingSubmissionV1(sub),
+        } as MockProperty,
+      ],
+      { silent: true },
+    );
+
+    // No listingRoomId on either choice, and both sides know the signed rent.
+    const app = {
+      ...application(propertyId, { leaseStart: "2026-03-10", leaseEnd: "2026-08-31" }),
+      roomChoice1: propertyId,
+      __signedRentLabel: "$1,200.00 / month",
+    } as Partial<RentalWizardFormState>;
+    const row = {
+      ...applicantRow(propertyId, email, app),
+      assignedRoomChoice: propertyId,
+      signedMonthlyRent: 1200,
+    } as DemoApplicantRow;
+
+    recordApprovedApplicationCharges(row, MANAGER_ID, true);
+
+    // Room B's monthly proration, NOT room A's $90/day proration rate (which would be $1,980).
+    expect(rentCharges(email).map((c) => c.amount)).toContain("$851.61");
+    expect(rentCharges(email).map((c) => c.amount)).not.toContain("$1980.00");
+
+    const html = leaseHtml(app);
+    expect(html).toContain("$851.61");
+    expect(html).not.toContain("$1,980.00");
+    expect(html).not.toContain("/day");
   });
 
   it("7. a California property outside San Francisco does not claim San Francisco", () => {

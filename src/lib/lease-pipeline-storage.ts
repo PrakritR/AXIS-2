@@ -1366,7 +1366,7 @@ function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWi
 function leaseGenerationContextForRow(row: LeasePipelineRow) {
   const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) return null;
-  let ctx = leaseContextFromApplication(app as RentalWizardFormState, { applicationId: row.axisId });
+  let ctx = leaseContextFromApplication(app as RentalWizardFormState);
   if (!ctx.listingProperty?.address?.trim() && row.propertyId?.trim()) {
     const prop = getPropertyById(row.propertyId.trim());
     if (prop) {

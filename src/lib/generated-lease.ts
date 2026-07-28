@@ -21,7 +21,6 @@ import {
 import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
 import { leaseCss } from "@/lib/lease-templates/types";
 import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
-import { paidHoldingDepositCreditUsd } from "@/lib/household-charges";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveLeaseJurisdiction, unsupportedJurisdictionMessage } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
@@ -74,17 +73,10 @@ export type LeaseGenerationContext = {
   listingProperty: MockProperty | undefined;
   submission: ManagerListingSubmissionV1 | undefined;
   generatedAtIso: string;
-  /**
-   * Holding deposit already paid and credited against the security deposit, in dollars.
-   * Populate ONLY from a call path that can really resolve it; `undefined` means unknown and
-   * the document quotes the gross deposit, exactly as it always has.
-   */
-  holdingDepositCreditUsd?: number;
 };
 
 export function leaseContextFromApplication(
   application: Partial<RentalWizardFormState>,
-  options?: { applicationId?: string | null },
 ): LeaseGenerationContext {
   const dates = resolvePlacementLeaseDates({
     leaseTerm: application.leaseTerm,
@@ -118,7 +110,6 @@ export function leaseContextFromApplication(
     listingProperty,
     submission,
     generatedAtIso: new Date().toISOString(),
-    holdingDepositCreditUsd: paidHoldingDepositCreditUsd(options?.applicationId),
   };
 }
 

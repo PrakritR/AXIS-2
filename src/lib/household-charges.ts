@@ -1497,19 +1497,6 @@ function paidHoldingDepositCreditCents(applicationId: string): number {
 }
 
 /**
- * Holding deposit already paid for this application, in dollars, which the approval charges
- * credit against the security deposit. `undefined` means UNKNOWN (no charge store to read, or
- * no application id) — never "no credit". The lease document quotes the gross deposit when it
- * is undefined and nets it when it is a number, so it can never silently assert a zero credit.
- */
-export function paidHoldingDepositCreditUsd(applicationId: string | null | undefined): number | undefined {
-  if (!isBrowser()) return undefined;
-  const appId = applicationId?.trim();
-  if (!appId) return undefined;
-  return paidHoldingDepositCreditCents(appId) / 100;
-}
-
-/**
  * "The Pioneer" + "12A" -> "The Pioneer · 12A", but never "The Pioneer · 12A · 12A".
  * Callers pass the property name and unit separately, yet some sources already
  * fold the unit into the name, which produced a doubled unit on every surface
@@ -2392,6 +2379,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const room = sub
     ? resolveSubmissionRoom(sub, {
         roomChoices: [row.assignedRoomChoice, row.application?.roomChoice1],
+        // The document passes its own listing property's unit label. Withholding it here
+        // would let the shared chain fall through to a different room on this side.
+        unitLabel: prop?.unitLabel,
         signedMonthlyRent: row.signedMonthlyRent,
       }) ?? null
     : selectedRoom(row);

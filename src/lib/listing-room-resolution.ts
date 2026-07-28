@@ -7,9 +7,12 @@
  * to remove. Callers pass primitives (their own room-choice values, an optional
  * unit label, an optional signed rent) and share this fallback chain.
  *
- * Order is the ledger's original precedence, with the document's unit-label match
- * inserted after the id lookups. The ledger passes no `unitLabel`, so that step is
- * inert for it and its behavior is unchanged.
+ * Order: room-choice ids → unique signed-rent match → unit-label name match → the only
+ * room → the only `daily_rate` room. The signed-rent match is an exact figure and the
+ * unit-label match is a fuzzy substring heuristic, so the exact one outranks it.
+ *
+ * BOTH consumers must pass every field they can resolve, `unitLabel` included. One shared
+ * implementation fed two different argument sets still returns two answers.
  */
 
 import type { ManagerListingSubmissionV1, ManagerRoomSubmission } from "@/lib/manager-listing-submission";
@@ -42,6 +45,12 @@ export function resolveSubmissionRoom(
     if (byId) return byId;
   }
 
+  const signedRent = Number(lookup.signedMonthlyRent ?? 0);
+  if (Number.isFinite(signedRent) && signedRent > 0) {
+    const byRent = rooms.filter((r) => r.monthlyRent === signedRent);
+    if (byRent.length === 1) return byRent[0];
+  }
+
   const label = lookup.unitLabel?.trim().toLowerCase();
   if (label) {
     const named = rooms.filter((r) => r.name.trim());
@@ -54,11 +63,6 @@ export function resolveSubmissionRoom(
     if (partial) return partial;
   }
 
-  const signedRent = Number(lookup.signedMonthlyRent ?? 0);
-  if (Number.isFinite(signedRent) && signedRent > 0) {
-    const byRent = rooms.filter((r) => r.monthlyRent === signedRent);
-    if (byRent.length === 1) return byRent[0];
-  }
   if (rooms.length === 1) return rooms[0];
   // Last resort: only one room is configured with daily_rate → it must be the right room.
   const dailyRateRooms = rooms.filter(

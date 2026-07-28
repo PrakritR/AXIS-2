@@ -217,9 +217,12 @@ function negotiatedMonthlyRent(application: StayPricingInput["application"]): nu
  * reaches the short-term DOCUMENT is therefore still quoted the standard `securityDeposit`,
  * which is what the resident is really charged.
  *
- * `leaseStart` / `leaseEnd` are accepted for call-site convenience and intentionally unused:
- * night counting stays in `shortTermStayNightCount`, the one implementation the ledger bills
- * from.
+ * `leaseStart` / `leaseEnd` are REQUIRED for a correct short/long decision — they feed
+ * `isIntraMonthStay`, which is half the gate in clause 3 above. Omitting them makes that gate
+ * fail, so the placement resolves `"long"` and the resident signs the full residential lease.
+ * That is the deliberate fail-safe direction, but it is still the WRONG document for a real
+ * short stay, so always pass them. Night counting stays in `shortTermStayNightCount`, the one
+ * implementation the ledger bills from.
  */
 export function resolveStayPricing(input: StayPricingInput): StayPricing {
   const { room, submission: sub, application: app } = input;

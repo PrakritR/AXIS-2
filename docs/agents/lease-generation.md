@@ -734,9 +734,18 @@ consumes `stay` too. When `stay.basis === "daily"`:
 - the **Total monthly payment** row is omitted. Adding a per-day rate to a monthly utilities
   figure is meaningless, and `DAILY_RENT_MONTH_ESTIMATE_DAYS` is display/sort-only and must
   never reach a lease. A prose sentence states the real rule instead: each month bills the
-  actual days of the term in that month × the daily rate, plus utilities;
-- Section 5 **Prorated First Month** is suppressed — it prorates a MONTHLY rent (it would read
-  `55` as a monthly figure) and every month already bills by real days;
+  actual days of the term in that month × the daily rate, and utilities are prorated for a
+  partial month;
+- Section 5 renders as **Prorated Utilities**, not **Prorated First Month**. Only the RENT half
+  is suppressed (prorating a monthly rent would read `55` as a monthly figure, and every month
+  already bills by real days). Utilities are still a monthly estimate that the ledger prorates,
+  so suppressing the whole section left that undisclosed while the Section 4 prose asserted the
+  opposite. `proratedBlock` has one implementation with two modes (`utilitiesOnly`), and the
+  utilities mode mirrors `leaseFirstPeriodProration` exactly — including the intra-month
+  collapse (an intra-month daily lease prorates across the WHOLE term, not from lease start to
+  month end) and the `daily_rate` / `dailyUtilitiesRate` branch. The amount is passed in as the
+  ledger's billable monthly utilities, never parsed back out of the display label.
+  Coverage: `stay-pricing-repro.test.ts` case 15;
 - a month-to-month surcharge is NOT folded into the rate (that would print a daily rate $25 too
   high); it stays its own monthly line.
 
@@ -753,7 +762,11 @@ to zero (`overrideMoney`, mirroring the ledger's `savedAmount`). Treating "0" as
 waived deposit fall back to the listing default, so the document printed a deposit the ledger
 never charged.
 
-`leaseStart` / `leaseEnd` are accepted for call-site convenience and intentionally unused.
+**`leaseStart` / `leaseEnd` are REQUIRED, not decorative.** They feed `isIntraMonthStay`, which
+is half the gate in clause 3, so a new call site that omits them silently resolves `"long"` and
+renders the full residential lease for a real short stay — with no test failure, since every
+existing test passes dates. Failing to `"long"` is the safe direction, not a correct one.
+
 Night counting stays in `shortTermStayNightCount` (`short-term-stay-pricing.ts`), the one
 implementation the ledger bills from. `build-lease-html.ts` used to re-implement it inline with
 bare `new Date("YYYY-MM-DD")`, which parses as UTC and could land a day away from the charges.
@@ -772,11 +785,17 @@ the inputs are shared too. Never re-add a second copy of any of these.
 | Which room of the submission is this application on? | `resolveSubmissionRoom` (`listing-room-resolution.ts`) | inline chains in `household-charges.ts` and `build-lease-html.ts` |
 | What is this room's rent line? | `submissionRoomRentLabel` (same module) | `findSubmissionRoomRent` / `submissionRoomRentFromChoice`, once in `generated-lease.ts` (daily-aware) and again in `build-lease-html.ts` (monthly-only) |
 
-**`resolveSubmissionRoom` precedence** is the ledger's original chain with the document's
-unit-label match inserted after the id lookups: room-choice ids in the order given → unit-label
-name match (exact, then partial) → unique `signedMonthlyRent` match → the only room → the only
-`daily_rate` room. The ledger passes no `unitLabel`, so that step is inert for it and its
-precedence is unchanged. Callers pass an ALREADY-NORMALIZED submission.
+**`resolveSubmissionRoom` precedence**: room-choice ids in the order given → unique
+`signedMonthlyRent` match → unit-label name match (exact, then partial) → the only room → the
+only `daily_rate` room. The exact rent figure deliberately outranks the fuzzy label substring
+match. Callers pass an ALREADY-NORMALIZED submission.
+
+**Both consumers must pass the SAME inputs, including `unitLabel`.** One shared implementation
+fed two different argument sets is still two answers: while the ledger passed no label and the
+label outranked the signed rent, an application whose `roomChoice1` carried no `listingRoomId`
+resolved to the label-matching room in the document and the rent-matching room in the ledger —
+two rooms, two rates, the original bug. The ledger now passes its listing property's
+`unitLabel`. Coverage: `stay-pricing-repro.test.ts` case 16.
 
 Two knock-on notes in `build-lease-html.ts`: `wholeHome` is now derived from the LISTING
 (`isEntireHomeListing` / no named rooms) rather than from "no room record resolved", because the
@@ -790,6 +809,15 @@ first-month AND a last-month charge for the same days. Both sides now parse thro
 `parseFlexibleLocalDate`, so such a lease collapses to one charge. Coverage:
 `stay-pricing-repro.test.ts` case 14.
 
+**Money-path behavior change from the DST-safe night count:** `shortTermStayNightCount` is what
+the ledger bills `stay_total` from, and it used to be
+`Math.ceil((end - start) / 86_400_000) + 1` on raw local timestamps. A span crossing a
+daylight-saving fall-back gains an hour, which pushed the `ceil` up a whole day and billed an
+extra night. `calendarDaysBetween` now normalizes both ends to UTC midnight before dividing, so
+a 2026-11-01 → 2026-11-10 stay at $80/night in US/Pacific bills **10 nights / $800** where it
+previously billed 11 / $880. The new count is the correct one, but it reprices existing
+fall-back-crossing stays on regeneration.
+
 ### Utilities on a stay follow the ledger's two branches
 
 `rentBasis: "daily"` and `prorateMethod: "daily_rate"` are independent per-room fields that
@@ -800,25 +828,30 @@ The short-term document's `Utilities estimate` row implements the same two branc
 `Total due` disagrees with the charges for any room carrying both fields.
 Coverage: `stay-pricing-repro.test.ts` case 11.
 
-### The holding-deposit credit is threaded in, never guessed
+### The lease states the deposit OBLIGATION, never the running balance
 
-The approval charges bill `Math.max(0, securityDeposit - paidHoldingDepositCredit)`, so a
-document quoting the gross deposit overstates what the resident owes. `buildLeaseHtml` is pure
-and cannot read the charge store, so the credit arrives as an OPTIONAL
-`LeaseGenerationContext.holdingDepositCreditUsd`:
+The approval charges bill `Math.max(0, securityDeposit - paidHoldingDepositCredit)`, which is a
+different number from the deposit the lease agrees to. **Do not try to close that gap by
+printing the net on the document.** An earlier pass did, by threading a
+`LeaseGenerationContext.holdingDepositCreditUsd` read from the charge store, and that re-created
+the exact mismatch class this whole change exists to remove: the credit was snapshotted at
+document-generation time and again at charge-generation time, and the two orderings disagree.
+Generate the lease before the holding deposit is paid and it permanently overstates the deposit
+(`generateLeaseHtmlForRow` refuses to rebuild once the lease carries a signature); generate it
+after and the reverse. Persisting a snapshot on the pipeline row does not fix it either — it
+adds a persisted field, couples lease generation to the charge store, and keeps the ordering
+window.
 
-- `leaseContextFromApplication(app, { applicationId })` populates it via
-  `paidHoldingDepositCreditUsd` (`household-charges.ts`), which returns `undefined` off-browser.
-  Wired at the call paths that know the id — `lease-pipeline-storage.ts` (`row.axisId`),
-  `resident-lease-panel.tsx`, `lease-document-preview.tsx`.
-- Server-side callers (`lease-amendment.server.ts`) and `property-lease-preview.ts` leave it
-  undefined on purpose.
-- **`undefined` means UNKNOWN, never "zero credit".** Absent → the gross deposit is quoted,
-  byte-identical to before. Present and > 0 → a `Less holding deposit paid` row renders and the
-  total nets it, capped at the deposit so it can never go negative.
-- It applies on both branches, but never to an explicit `short_term` application, whose ledger
-  branch does not apply the credit either.
-Coverage: `stay-pricing-repro.test.ts` cases 12 and 13.
+The document therefore quotes the **gross deposit**, which is fixed at signing, plus a standing
+sentence (`HOLDING_DEPOSIT_CREDIT_NOTE` in `build-lease-html.ts`) stating that any holding
+deposit already paid is credited against it on the resident's ledger. That sentence is true
+whether or not a credit exists, so no ordering can falsify it. It renders on both branches,
+beside the deposit table.
+
+**The charge ledger and the Payments surface remain the sole authority for the net balance**, and
+they were already correct. Coverage: `stay-pricing-repro.test.ts` cases 12 and 13 — 12 generates
+the same lease before and after a holding-deposit payment and asserts the documents are
+byte-identical while the ledger's `security_deposit` charge drops to the net.
 
 ### Executed short-term clauses added in this change (user-approved)
 
@@ -944,7 +977,7 @@ without the city-ordinance clause. Every statute reference carried over is alrea
 | Test | What it pins |
 | --- | --- |
 | `tests/unit/stay-pricing.test.ts` | the resolver in isolation: all four precedence rules, both `stayKind` gates, both deposit branches, monthly no-ops |
-| `tests/unit/stay-pricing-repro.test.ts` | document and ledger agree, end to end, on one fixture. This is the reproduction, flipped. Also the daily long form (8), daily utilities (11), the holding credit (12, 13), and the non-ISO span (14) |
+| `tests/unit/stay-pricing-repro.test.ts` | document and ledger agree, end to end, on one fixture. This is the reproduction, flipped. Also the daily long form (8), stay utilities (11), the deposit obligation being unmoved by a holding-deposit payment (12, 13), the non-ISO span (14), daily long-form prorated utilities (15), and shared room resolution (16) |
 | `tests/unit/daily-rent-charges.test.ts` | the monthly charge path is unmoved (`$851.61`, `Rent — April 2026`, no `/day`) |
 | `tests/unit/lease-jurisdiction.test.ts` | address to jurisdiction, including the statewide fallbacks |
 | `tests/unit/generated-lease.test.ts` | long-form document content |

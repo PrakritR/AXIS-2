@@ -30,6 +30,17 @@ type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
 
 const MONTH_TO_MONTH_RENT_SURCHARGE = 25;
 
+/**
+ * The document states the DEPOSIT OBLIGATION, which is fixed at signing, never the resident's
+ * running balance, which is not. A holding deposit can be paid before or after the lease is
+ * generated, and an executed lease cannot be rebuilt once it carries a signature, so quoting a
+ * net figure would permanently over- or understate the deposit depending on that ordering. This
+ * sentence is true whether or not a credit exists; the charge ledger and the Payments surface
+ * remain the authority for what is actually owed.
+ */
+const HOLDING_DEPOSIT_CREDIT_NOTE =
+  "Any holding deposit already paid for this placement is credited against the security deposit stated above. The charge ledger in the PropLane portal reflects the resulting balance.";
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -169,44 +180,81 @@ type ProrateOptions = {
   method?: "auto" | "daily_rate";
   dailyRentRate?: number;
   dailyUtilitiesRate?: number;
+  /**
+   * Daily-basis mode. Rent already bills each month by its real day count, so prorating it
+   * would misread the day rate as a monthly figure — but utilities are still a monthly
+   * estimate and the ledger still prorates them, so the section renders utilities only.
+   * The amount is passed explicitly (the ledger's billable monthly utilities), never parsed
+   * back out of the display label.
+   */
+  utilitiesOnly?: boolean;
+  utilitiesAmount?: number;
 };
 
-function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartStr: string, prorate?: ProrateOptions): string {
+function proratedBlock(
+  monthlyRentStr: string,
+  utilitiesStr: string,
+  leaseStartStr: string,
+  leaseEndStr: string,
+  prorate?: ProrateOptions,
+): string {
+  const utilitiesOnly = prorate?.utilitiesOnly === true;
   const rent = parseAmount(monthlyRentStr);
-  if (!rent || !leaseStartStr || leaseStartStr === "—") return "";
+  if ((!rent && !utilitiesOnly) || !leaseStartStr || leaseStartStr === "—") return "";
   try {
     const start = parseFlexibleLocalDate(leaseStartStr);
     if (!start || isNaN(start.getTime())) return "";
+    const utils = utilitiesOnly ? (prorate?.utilitiesAmount ?? 0) : parseAmount(utilitiesStr);
+    if (utilitiesOnly && !(utils && utils > 0)) return "";
+    // Mirrors the ledger's `leaseFirstPeriodProration`: a daily-basis lease that starts AND
+    // ends inside one calendar month is billed as ONE span, so its utilities prorate across
+    // the whole term rather than from the lease start to month end.
+    const span = utilitiesOnly ? intraMonthStaySpan(leaseStartStr, leaseEndStr) : null;
     const day = start.getDate();
-    if (day === 1) return "";
-    const year = start.getFullYear();
-    const month = start.getMonth();
-    const dim = new Date(year, month + 1, 0).getDate();
-    const remaining = dim - day + 1;
+    if (!span && day === 1) return "";
+    const dim = span ? span.daysInMonth : new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    const remaining = span ? span.billableDays : dim - day + 1;
     const useManual = prorate?.method === "daily_rate" && prorate.dailyRentRate && prorate.dailyRentRate > 0;
-    const proratedRent = useManual
-      ? Math.round(prorate!.dailyRentRate! * remaining * 100) / 100
-      : Math.round((rent / dim) * remaining * 100) / 100;
-    const utils = parseAmount(utilitiesStr);
-    const proratedUtils = useManual && prorate!.dailyUtilitiesRate && prorate!.dailyUtilitiesRate > 0
-      ? Math.round(prorate!.dailyUtilitiesRate * remaining * 100) / 100
+    const useManualUtils =
+      (useManual || utilitiesOnly) && prorate?.dailyUtilitiesRate && prorate.dailyUtilitiesRate > 0;
+    const proratedRent =
+      utilitiesOnly || !rent
+        ? 0
+        : useManual
+          ? Math.round(prorate!.dailyRentRate! * remaining * 100) / 100
+          : Math.round((rent / dim) * remaining * 100) / 100;
+    const proratedUtils = useManualUtils
+      ? Math.round(prorate!.dailyUtilitiesRate! * remaining * 100) / 100
       : utils ? Math.round((utils / dim) * remaining * 100) / 100 : null;
     const total = proratedRent + (proratedUtils ?? 0);
-    const rateCol = useManual ? "Daily rate" : "Monthly rate";
-    const rentRateDisplay = useManual ? fmtUsd(prorate!.dailyRentRate!) + "/day" : fmtUsd(rent);
-    const utilRateDisplay = useManual && prorate!.dailyUtilitiesRate && prorate!.dailyUtilitiesRate > 0
-      ? fmtUsd(prorate!.dailyUtilitiesRate) + "/day"
+    // The header must describe the figure actually printed in the column: a room with no
+    // dailyUtilitiesRate shows its MONTHLY estimate even in utilities-only mode.
+    const rateCol = (utilitiesOnly ? useManualUtils : useManual) ? "Daily rate" : "Monthly rate";
+    const rentRateDisplay = useManual ? fmtUsd(prorate!.dailyRentRate!) + "/day" : rent ? fmtUsd(rent) : "—";
+    const utilRateDisplay = useManualUtils
+      ? fmtUsd(prorate!.dailyUtilitiesRate!) + "/day"
       : utils ? fmtUsd(utils) : null;
+    const heading = utilitiesOnly ? "Prorated Utilities" : "Prorated First Month";
+    const intro = utilitiesOnly
+      ? span
+        ? `Because the term begins and ends within one calendar month, the utilities estimate is prorated across the term as follows (${remaining} of ${dim} days). Rent is not prorated: it is billed by the day, as stated in Section 4.`
+        : `Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month's utilities estimate is prorated as follows (${remaining} of ${dim} days). Rent is not prorated: it is billed by the day, as stated in Section 4.`
+      : `Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month is prorated as follows (${remaining} of ${dim} days):`;
+    const closing = utilitiesOnly
+      ? span
+        ? ""
+        : `<p>Beginning the first full month, the full monthly utilities estimate stated in Section 4 applies.</p>`
+      : `<p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>`;
     return `
-<h2>5. Prorated First Month</h2>
-<p>Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month is prorated as follows (${remaining} of ${dim} days):</p>
+<h2>5. ${heading}</h2>
+<p>${intro}</p>
 <table>
-  <tr><th>Item</th><th>${rateCol}</th><th>Days remaining</th><th>Prorated amount</th></tr>
-  <tr><td>Rent</td><td>${rentRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedRent)}</td></tr>
+  <tr><th>Item</th><th>${rateCol}</th><th>${utilitiesOnly ? "Days billed" : "Days remaining"}</th><th>Prorated amount</th></tr>
+  ${utilitiesOnly ? "" : `<tr><td>Rent</td><td>${rentRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedRent)}</td></tr>`}
   ${proratedUtils != null && utilRateDisplay != null ? `<tr><td>Utilities estimate</td><td>${utilRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedUtils)}</td></tr>` : ""}
-  <tr class="total-row"><td colspan="3"><strong>Prorated total due first month</strong></td><td><strong>${fmtUsd(total)}</strong></td></tr>
+  <tr class="total-row"><td colspan="3"><strong>${utilitiesOnly ? "Prorated utilities due" : "Prorated total due first month"}</strong></td><td><strong>${fmtUsd(total)}</strong></td></tr>
 </table>
-<p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>
+${closing}
 `;
   } catch {
     return "";
@@ -363,20 +411,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const otherCostAmount = escapeHtml(overrideFeeLabel(a.managerOtherCostAmount, "—"));
   const otherCostNum = otherCostIsMonthToMonth ? 0 : parseAmount(a.managerOtherCostAmount);
   const showOtherSigningCost = !otherCostIsMonthToMonth && Boolean(otherCostNum && otherCostNum > 0);
-  // A holding deposit already paid is credited against the security deposit by the ledger
-  // (`Math.max(0, securityDeposit - credit)`), so the signed document must state the same net.
-  // An UNDEFINED credit means unknown, not zero: the gross deposit is quoted, as before.
-  // The ledger's explicit short-term branch does not apply the credit, so neither does this.
-  const holdingCreditUsd = a.rentalType === "short_term" ? 0 : Math.max(0, ctx.holdingDepositCreditUsd ?? 0);
-  const depositGrossNum = parseAmount(secDep) ?? 0;
-  const depositCreditNum = Math.min(holdingCreditUsd, depositGrossNum);
-  const depositNetNum = depositGrossNum - depositCreditNum;
   const paySigningBase = sub ? paymentAtSigningPriceLabel(sub) : "—";
-  const paySigningNum = depositNetNum + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0);
+  const paySigningNum = (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0);
   const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
-  const depositCreditRow = depositCreditNum > 0
-    ? `<tr><th>Less holding deposit paid</th><td>-${fmtUsd(depositCreditNum)}</td></tr>`
-    : "";
 
   // ── Dates ─────────────────────────────────────────────────────────────────
   const leaseTerm = dash(a.leaseTerm);
@@ -413,15 +450,16 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the PropLane portal or by a method agreed in writing with Landlord.";
 
-  // "Prorated First Month" prorates a MONTHLY rent; on a daily basis every month already
-  // bills its real day count, so the section would misread the day rate as a monthly one.
-  const proratedSection = isDailyBasis
-    ? ""
-    : proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", {
-        method: specificRoom?.prorateMethod,
-        dailyRentRate: specificRoom?.dailyRentRate,
-        dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
-      });
+  // A daily basis suppresses only the RENT half: rent already bills each month by its real day
+  // count. Utilities stay a monthly estimate that the ledger prorates for a partial first month
+  // (or across the whole term for an intra-month lease), so that half must still be disclosed.
+  const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", a.leaseEnd ?? "", {
+    method: specificRoom?.prorateMethod,
+    dailyRentRate: specificRoom?.dailyRentRate,
+    dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
+    utilitiesOnly: isDailyBasis,
+    utilitiesAmount: utilitiesNum ?? 0,
+  });
 
   if (stay.stayKind === "short") {
     const dailyCost = stay.dailyRate;
@@ -431,9 +469,6 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     const dailyCostRaw = dailyCost !== undefined ? fmtUsd(dailyCost) : "—";
     const depositAmount = stay.deposit;
     const shortDepositRaw = depositAmount !== undefined ? fmtUsd(depositAmount) : "—";
-    // Same holding-deposit credit the ledger nets off the security deposit, floored at zero.
-    const stayDepositCredit = Math.min(holdingCreditUsd, depositAmount ?? 0);
-    const stayDepositNet = (depositAmount ?? 0) - stayDepositCredit;
     const totalRent = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays) : "—";
     // The ledger bills more than rent + deposit on a stay, so the document has to list the
     // rest or its "Total due" understates what the guest owes. Which move-in field applies
@@ -466,7 +501,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       dailyCost && durationDays
         ? fmtUsd(
             dailyCost * durationDays +
-              stayDepositNet +
+              (depositAmount ?? 0) +
               stayMoveInNum +
               stayOtherNum +
               stayUtilitiesNum,
@@ -509,12 +544,12 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
   <tr><th>Total rent for ${durationDays ? `${durationDays} day${durationDays === 1 ? "" : "s"}` : "the stay"}</th><td>${totalRent}</td></tr>
   <tr><th>Security deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
-  ${stayDepositCredit > 0 ? `<tr><th>Less holding deposit paid</th><td>-${fmtUsd(stayDepositCredit)}</td></tr>` : ""}
   ${stayUtilitiesNum > 0 && stayUtilitiesSpan ? `<tr><th>Utilities estimate (${stayUtilitiesSpan.billableDays}/${stayUtilitiesSpan.daysInMonth} days)</th><td>${fmtUsd(stayUtilitiesNum)}</td></tr>` : ""}
   ${stayMoveInNum > 0 ? `<tr><th>Move-in fee</th><td>${fmtUsd(stayMoveInNum)}</td></tr>` : ""}
   ${stayOtherNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${fmtUsd(stayOtherNum)}</td></tr>` : ""}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>
+<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>
 
 <h2>5. Lodger Status</h2>
 <p>${config.shortTermPurposeParagraph}</p>
@@ -583,7 +618,7 @@ ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplia
   <tr><th>Utilities / services (monthly estimate)</th><td><strong>${utilitiesStr}</strong></td></tr>
   ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
 </table>
-${isDailyBasis ? `<p>Rent for this Premises is charged <strong>by the day</strong>. Each month's rent is the actual number of days of the term falling in that month multiplied by the daily base rent above, plus the utilities estimate. No fixed monthly rent total applies.</p>` : ""}
+${isDailyBasis ? `<p>Rent for this Premises is charged <strong>by the day</strong>. Each month's rent is the actual number of days of the term falling in that month multiplied by the daily base rent above. No fixed monthly rent total applies. The utilities estimate is billed monthly and is prorated for any partial month.</p>` : ""}
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
 <p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of $50.00 shall be assessed and is immediately due. Additional late fees of $10.00 per day may accrue after the 10th of the month, not to exceed amounts permitted under ${config.lateFeeStatuteRef}.</p>
 
@@ -593,12 +628,11 @@ ${proratedSection || ""}
 <table>
   <tr><th width="50%">Application fee</th><td>${appFee}</td></tr>
   <tr><th>Security deposit</th><td><strong>${secDep}</strong></td></tr>
-  ${depositCreditRow}
   <tr><th>Move-in fee (non-refundable)</th><td>${moveInFee}</td></tr>
   ${showOtherSigningCost ? `<tr><th>${otherCostLabel}</th><td>${otherCostAmount}</td></tr>` : ""}
   <tr><th>Total due at signing</th><td><strong>${paySigning}</strong></td></tr>
 </table>
-${depositCreditNum > 0 ? `<p>Resident has already paid <strong>${fmtUsd(depositCreditNum)}</strong> as a holding deposit. That amount is credited against the security deposit, leaving <strong>${fmtUsd(depositNetNum)}</strong> of the deposit due at signing.</p>` : ""}
+<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>
 <p>Resident shall pay a security deposit of <strong>${secDep}</strong> at lease signing. The deposit shall be held in accordance with ${config.depositStatuteRef} and secures Resident&apos;s full performance under this Agreement. Resident&apos;s liability is not limited to the deposit amount, and the deposit may not be applied toward rent or other charges during the tenancy.</p>
 <p>Within 30 days after termination of the tenancy and vacancy of the Premises, Landlord shall return any refundable portion of the deposit or provide a written itemized statement of deductions, as required by law. Resident shall provide a forwarding address for delivery of the deposit accounting and any refund. Any refund may be issued as a single check payable to all Residents.</p>
 <p>Deductions from the deposit may include, to the extent permitted by law:</p>
@@ -731,7 +765,6 @@ ${houseRules
   ${totalMonthly ? `<tr class="total-row"><td><strong>Total monthly payment</strong></td><td><strong>${totalMonthly}</strong></td><td>Monthly</td></tr>` : ""}
   <tr><td>Application fee</td><td>${appFee}</td><td>One-time</td></tr>
   <tr><td>Security deposit</td><td>${secDep}</td><td>One-time (refundable)</td></tr>
-  ${depositCreditNum > 0 ? `<tr><td>Less holding deposit paid</td><td>-${fmtUsd(depositCreditNum)}</td><td>Already paid</td></tr>` : ""}
   <tr><td>Move-in fee</td><td>${moveInFee}</td><td>One-time (non-refundable)</td></tr>
   ${showOtherSigningCost ? `<tr><td>${otherCostLabel}</td><td>${otherCostAmount}</td><td>One-time</td></tr>` : ""}
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
