@@ -3477,104 +3477,27 @@ export function ManagerAddListingForm({
               </ListingSubsection>
 
               <ListingSubsection title="Fees">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {(
-                    [
-                      ["holdingDeposit", "Holding deposit", (sub.holdingDeposit ?? "").replace(/^\$/, "").trim(), false],
-                      ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim(), true],
-                      ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim(), true],
-                      ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim(), true],
-                      ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim(), true],
-                      ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim(), true],
-                      ["monthToMonthSurcharge", "Month-to-month surcharge", (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim(), true],
-                    ] as const
-                  ).map(([key, label, value, required]) => (
-                    <GridField key={key}>
-                      <div data-wizard-field={key}>
-                        <FieldLabel required={required}>{label}</FieldLabel>
-                      </div>
-                      <div>
-                        <MoneyInput
-                          invalid={Boolean(stepFieldErrors[key])}
-                          ariaLabel={label}
-                          value={value}
-                          onChange={(e) => {
-                            clearListingFieldError(key);
-                            setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
-                          }}
-                          placeholder={key === "holdingDeposit" ? "100" : "0"}
-                        />
-                        <StepFieldError msg={stepFieldErrors[key]} />
-                      </div>
-                    </GridField>
-                  ))}
-                </div>
-
-                <div className="mt-4 space-y-3 border-t border-border pt-4">
-                  {(sub.customFees ?? []).length > 0 ? (
-                    <div className="space-y-3">
-                    {(sub.customFees ?? []).map((fee, i) => (
-                      <ListingWizardCollapsibleCard
-                        key={fee.id}
-                        expanded={isListingItemExpanded(listingItemKey("fee", fee.id))}
-                        onToggle={() => toggleListingItem(listingItemKey("fee", fee.id))}
-                        title={fee.label.trim() || `Fee ${i + 1}`}
-                        subtitle={`$${fee.amount.replace(/^\$/, "").trim() || "0"} · ${fee.frequency === "one-time" ? "One-time" : "Monthly"}`}
-                        bodyClassName="grid gap-3 sm:grid-cols-2"
-                        toggleDataAttr={`listing-fee-toggle-${fee.id}`}
-                        headerActions={
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeCustomFee(i)}>
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <div className="sm:col-span-2 sm:grid sm:grid-cols-2 sm:gap-3">
-                        <div>
-                          <FieldLabel>Fee name</FieldLabel>
-                          <Input
-                            value={fee.label}
-                            onChange={(e) => setCustomFee(i, { label: sanitizePlaceNameInput(e.target.value) })}
-                            placeholder="e.g. Pet fee, Cleaning fee"
-                          />
-                        </div>
-                        <div>
-                          <FieldLabel>Amount</FieldLabel>
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                            <Input
-                              className="pl-8"
-                              inputMode="decimal"
-                              value={fee.amount.replace(/^\$/, "").trim()}
-                              onChange={(e) => setCustomFee(i, { amount: sanitizeMoneyInput(e.target.value) })}
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel>Type</FieldLabel>
-                          <div className="relative">
-                            <Select
-                              aria-label={`Additional fee ${i + 1} type`}
-                              className={`${selectInputCls}`}
-                              value={fee.frequency ?? "monthly"}
-                              onChange={(e) =>
-                                setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
-                              }
-                            >
-                              <option value="monthly">Monthly</option>
-                              <option value="one-time">One-time</option>
-                            </Select>
-                          </div>
-                        </div>
-                        </div>
-                      </ListingWizardCollapsibleCard>
-                    ))}
-                      </div>
-                    ) : null}
-                    <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addCustomFee}>
-                      + Add fee
-                    </Button>
-                </div>
+                <ListingUnifiedFeesTable
+                  sub={sub}
+                  isEntireHome={isEntireHome}
+                  shortTermEnabled={Boolean(sub.shortTermRentalsAllowed)}
+                  longTermEnabled={longTermLeaseEnabled}
+                  stFeeToggles={stFeeToggles}
+                  onStToggle={handleStFeeToggle}
+                  onStAmount={handleStFeeAmount}
+                  onLtAmount={handleLtFeeAmount}
+                  stepFieldErrors={stepFieldErrors}
+                  customFees={sub.customFees ?? []}
+                  onAddCustomFee={addCustomFee}
+                  onRemoveCustomFee={removeCustomFee}
+                  onCustomFeeChange={(i, patch) => {
+                    if (patch.label !== undefined) {
+                      setCustomFee(i, { label: sanitizePlaceNameInput(patch.label) });
+                      return;
+                    }
+                    setCustomFee(i, patch);
+                  }}
+                />
 
                 <div className="mt-4 space-y-3 border-t border-border pt-4">
                   <FieldLabel optional>Payment at signing</FieldLabel>

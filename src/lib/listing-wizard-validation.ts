@@ -1,8 +1,12 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
+import {
+  listingLtFeeFieldsRequired,
+  validateListingStFeeToggles,
+  type ListingStFeeToggles,
+} from "@/lib/listing-fee-term-toggles";
 import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
 import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
-import { shortTermNightlyRate } from "@/lib/short-term-stay-pricing";
 
 export function listingRoomNameKey(roomId: string): string {
   return `room-${roomId}-name`;
@@ -41,6 +45,8 @@ export function listingCustomQuestionErrorKey(fieldId: string): string {
 export type ListingWizardValidateOptions = {
   isEditMode?: boolean;
   entireHomeRent?: number;
+  /** ST fee checkbox state from the unified Fees table (defaults derived from submission). */
+  stFeeToggles?: ListingStFeeToggles;
 };
 
 export function validateListingWizardStep(
@@ -106,15 +112,16 @@ export function validateListingWizardStep(
           }
         }
       }
-      const feeFields: { key: keyof ManagerListingSubmissionV1; label: string }[] = [
-        { key: "securityDeposit", label: "Security deposit" },
-        { key: "moveInFee", label: "Move-in fee" },
-        { key: "parkingMonthly", label: "Parking (monthly)" },
-        { key: "hoaMonthly", label: "HOA / community" },
-        { key: "otherMonthlyFees", label: "Other monthly fees" },
-        { key: "monthToMonthSurcharge", label: "Month-to-month surcharge" },
-      ];
-      for (const { key, label } of feeFields) {
+      for (const key of listingLtFeeFieldsRequired(true)) {
+        const row = [
+          { key: "securityDeposit" as const, label: "Security deposit" },
+          { key: "moveInFee" as const, label: "Move-in fee" },
+          { key: "parkingMonthly" as const, label: "Parking (monthly)" },
+          { key: "hoaMonthly" as const, label: "HOA / community" },
+          { key: "otherMonthlyFees" as const, label: "Other monthly fees" },
+          { key: "monthToMonthSurcharge" as const, label: "Month-to-month surcharge" },
+        ].find((r) => r.key === key);
+        const label = row?.label ?? String(key);
         const raw = String(sub[key] ?? "");
         if (!isListingFeeAmountFilled(raw)) {
           errs[String(key)] = `${label} is required — enter 0 if there is no fee.`;
@@ -122,8 +129,8 @@ export function validateListingWizardStep(
       }
     }
 
-    if (hasShortTerm && !(shortTermNightlyRate(sub.shortTermDailyCost) > 0)) {
-      errs.shortTermDailyCost = "Enter a nightly rate for short-term stays.";
+    if (hasShortTerm && opts.stFeeToggles) {
+      Object.assign(errs, validateListingStFeeToggles(sub, opts.stFeeToggles, true));
     }
     // Resident payment methods (Stripe ACH / Zelle / Venmo) are configured once
     // in Payment setup and synced onto listings — not validated on the Pricing step.
