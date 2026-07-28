@@ -54,4 +54,14 @@ describe("resident-setup-token", () => {
       "https://prop-lane.space/auth/resident-setup?token=tok_abc&proplane_id=AXIS-1",
     );
   });
+
+  it("reads proplane_id from URL params with legacy axis_id fallback", () => {
+    const params = new URLSearchParams("proplane_id=AXIS-NEW&axis_id=AXIS-OLD");
+    expect(residentSetupIdFromUrlParams(params)).toBe("AXIS-NEW");
+
+    const legacy = new URLSearchParams("axis_id=axis-legacy");
+    expect(residentSetupIdFromUrlParams(legacy)).toBe("PROPLANE-LEGACY");
+
+    expect(residentSetupIdFromUrlParams(new URLSearchParams())).toBe("");
+  });
 });
