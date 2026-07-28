@@ -59,8 +59,8 @@ describe("resident-setup-token", () => {
     const params = new URLSearchParams("proplane_id=AXIS-NEW&axis_id=AXIS-OLD");
     expect(residentSetupIdFromUrlParams(params)).toBe("AXIS-NEW");
 
-    const legacy = new URLSearchParams("axis_id=axis-legacy");
-    expect(residentSetupIdFromUrlParams(legacy)).toBe("PROPLANE-LEGACY");
+    const legacy = new URLSearchParams("axis_id=AXIS-LEGACY");
+    expect(residentSetupIdFromUrlParams(legacy)).toBe("AXIS-LEGACY");
 
     expect(residentSetupIdFromUrlParams(new URLSearchParams())).toBe("");
   });
