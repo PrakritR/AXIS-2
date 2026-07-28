@@ -84,3 +84,6 @@ playwright.config.ts
 /ios/App/fastlane/.keys/
 /env.local
 .env*
+
+# E2E get-started test screenshots (local evidence output)
+.get-started-evidence/
