@@ -125,15 +125,15 @@ export function ManagerApplicationSettingsModal({ open, onClose }: { open: boole
   return (
     <Modal open={open} onClose={onClose} title="Application settings">
       <div className="space-y-5">
-        <div className="space-y-2">
-          <label htmlFor="manager-application-fee" className="text-sm font-semibold text-foreground">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="manager-application-fee"
+            className="flex flex-wrap items-baseline gap-x-1.5 text-sm font-semibold text-foreground"
+          >
             Application fee
+            <span className="text-[11px] font-normal text-muted">applies to every listing · $0 free, blank clears</span>
           </label>
-          <p className="text-xs text-muted">
-            Set once for every property you list. This is the only fee collected during the application — the security
-            deposit is billed later under Payments, after approval.
-          </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-sm text-muted">$</span>
             <Input
               id="manager-application-fee"
@@ -143,49 +143,39 @@ export function ManagerApplicationSettingsModal({ open, onClose }: { open: boole
               onChange={(e) => setFeeInput(e.target.value)}
               data-attr="manager-application-fee-input"
               disabled={loading || saving}
-              className="max-w-[140px]"
+              className="max-w-[110px]"
             />
           </div>
           {!configured && suggested != null ? (
             <p className="text-xs text-muted">
-              Suggested from your current listings: ${(suggested / 100).toFixed(2).replace(/\.00$/, "")}. Save to apply
-              it to every property.
+              Suggested from your listings: ${(suggested / 100).toFixed(2).replace(/\.00$/, "")} — save to apply.
             </p>
           ) : null}
-          <p className="text-xs text-muted">Enter $0 to make applications free. Leave blank to clear.</p>
         </div>
 
-        <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3.5">
-          <label className="flex cursor-pointer items-start gap-2">
+        <div className="space-y-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-border"
+              className="h-4 w-4 rounded border-border"
               checked={allowWaiver}
               onChange={(e) => setAllowWaiver(e.target.checked)}
               data-attr="manager-application-waiver-enabled"
               disabled={loading || saving}
             />
-            <span>
-              <span className="text-sm font-semibold text-foreground">Allow waiver code</span>
-              <p className="text-xs text-muted">Let applicants skip the application fee with one account-wide code.</p>
-            </span>
+            Allow a waiver code
           </label>
           {allowWaiver ? (
-            <div className="space-y-1 pl-6">
-              <label htmlFor="manager-application-waiver-code" className="text-xs font-medium text-muted">
-                Waiver code
-              </label>
-              <Input
-                id="manager-application-waiver-code"
-                value={waiverCode}
-                onChange={(e) => setWaiverCode(e.target.value)}
-                placeholder="e.g. WELCOME50"
-                data-attr="manager-application-waiver-code-input"
-                disabled={loading || saving}
-                className="max-w-[220px] font-mono uppercase"
-              />
-              <p className="text-xs text-muted">4–32 letters, numbers, or hyphens. Leave blank and save to clear.</p>
-            </div>
+            <Input
+              id="manager-application-waiver-code"
+              aria-label="Waiver code"
+              value={waiverCode}
+              onChange={(e) => setWaiverCode(e.target.value)}
+              placeholder="e.g. WELCOME50"
+              data-attr="manager-application-waiver-code-input"
+              disabled={loading || saving}
+              className="ml-6 max-w-[200px] font-mono uppercase"
+            />
           ) : null}
         </div>
 
