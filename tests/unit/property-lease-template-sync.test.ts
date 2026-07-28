@@ -15,8 +15,8 @@ describe("property lease template sync", () => {
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const templates = readPropertyLeaseTemplates(synced);
     expect(templates).toHaveLength(2);
-    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(["fixed-term", "month-to-month"]);
-    expect(templates.find((t) => t.listingSeedKey === "fixed-term")?.applicationLeaseTerms).toEqual([
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(["fixed-12-month", "month-to-month"]);
+    expect(templates.find((t) => t.listingSeedKey === "fixed-12-month")?.applicationLeaseTerms).toEqual([
       "12-Month",
     ]);
   });
@@ -40,12 +40,40 @@ describe("property lease template sync", () => {
     expect(picked?.listingSeedKey).toBe("month-to-month");
   });
 
+  it("resolves fixed-term template for legacy 12 months resident labels", () => {
+    const sub = createDefaultListingSubmission();
+    sub.allowedLeaseTerms = ["12-Month", "Month-to-Month"];
+    const synced = syncPropertyLeaseTemplatesFromListing(sub);
+    const picked = resolvePropertyLeaseTemplateForApplication(synced, { leaseTerm: "12 months" });
+    expect(picked?.listingSeedKey).toBe("fixed-12-month");
+  });
+
   it("resolves fixed-term template for 12-month applicants", () => {
     const sub = createDefaultListingSubmission();
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month"];
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const picked = resolvePropertyLeaseTemplateForApplication(synced, { leaseTerm: "12-Month" });
-    expect(picked?.listingSeedKey).toBe("fixed-term");
+    expect(picked?.listingSeedKey).toBe("fixed-12-month");
+  });
+
+  it("seeds a dedicated 3-month lease template when 3-month is offered", () => {
+    const sub = createDefaultListingSubmission();
+    sub.allowedLeaseTerms = ["3-Month", "Month-to-Month", "Custom"];
+    sub.shortTermRentalsAllowed = true;
+    const synced = syncPropertyLeaseTemplatesFromListing(sub);
+    const templates = readPropertyLeaseTemplates(synced);
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(
+      ["custom-term", "fixed-3-month", "month-to-month", "short-term"].sort(),
+    );
+    const three = resolvePropertyLeaseTemplateForApplication(synced, { leaseTerm: "3-Month" });
+    expect(three?.listingSeedKey).toBe("fixed-3-month");
+    const custom = resolvePropertyLeaseTemplateForApplication(synced, { leaseTerm: "Custom" });
+    expect(custom?.listingSeedKey).toBe("custom-term");
+    const short = resolvePropertyLeaseTemplateForApplication(synced, {
+      leaseTerm: SHORT_TERM_LEASE_TERM,
+      rentalType: "short_term",
+    });
+    expect(short?.listingSeedKey).toBe("short-term");
   });
 
   it("preserves manager edits on re-sync", () => {

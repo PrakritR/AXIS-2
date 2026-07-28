@@ -20,6 +20,9 @@ export type StoredPropertyLeaseTemplateKind = PropertyLeaseTemplateKind | Legacy
 
 export type PropertyLeaseListingSeedKey =
   | "fixed-term"
+  | "fixed-3-month"
+  | "fixed-9-month"
+  | "fixed-12-month"
   | "month-to-month"
   | "short-term"
   | "custom-term"

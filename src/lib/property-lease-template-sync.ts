@@ -4,6 +4,7 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
+import { normalizeApplicationLeaseTerm } from "@/lib/resident-manual-lease-terms";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
   createPropertyLeaseTemplate,
@@ -22,6 +23,34 @@ type LeaseTemplateSeed = {
   label: string;
   applicationLeaseTerms: string[];
 };
+
+
+function listingSeedKeyForFixedLeaseTerm(term: (typeof FIXED_LEASE_TERMS)[number]): PropertyLeaseListingSeedKey {
+  if (term === "3-Month") return "fixed-3-month";
+  if (term === "9-Month") return "fixed-9-month";
+  if (term === "12-Month") return "fixed-12-month";
+  return "fixed-term";
+}
+
+function adoptLegacyCombinedFixedTermTemplate(
+  existing: PropertyLeaseTemplate[],
+  seed: LeaseTemplateSeed,
+): PropertyLeaseTemplate | null {
+  if (!seed.seedKey.startsWith("fixed-") || seed.seedKey === "fixed-term") return null;
+  const term = seed.applicationLeaseTerms[0];
+  if (!term) return null;
+  const legacy = existing.find((t) => t.listingSeedKey === "fixed-term");
+  if (!legacy) return null;
+  if (!(legacy.applicationLeaseTerms ?? []).includes(term)) return null;
+  return {
+    ...legacy,
+    id: legacy.id,
+    listingSeedKey: seed.seedKey,
+    applicationLeaseTerms: [term],
+    label: seed.label,
+    updatedAt: nowIso(),
+  };
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -45,12 +74,13 @@ export function buildLeaseTemplateSeeds(
   const fixed = allowed.filter((t): t is (typeof FIXED_LEASE_TERMS)[number] =>
     (FIXED_LEASE_TERMS as readonly string[]).includes(t),
   );
-  if (fixed.length > 0) {
+  const fixedKind = isEntireHomeListing(sub) ? "corporate-furnished" : "room-rental";
+  for (const term of fixed) {
     seeds.push({
-      seedKey: "fixed-term",
-      kind: isEntireHomeListing(sub) ? "corporate-furnished" : "room-rental",
-      label: fixed.length === 1 ? `${fixed[0]} lease` : "Fixed-term lease",
-      applicationLeaseTerms: [...fixed],
+      seedKey: listingSeedKeyForFixedLeaseTerm(term),
+      kind: fixedKind,
+      label: `${term} lease`,
+      applicationLeaseTerms: [term],
     });
   }
 
@@ -134,7 +164,10 @@ export function syncPropertyLeaseTemplatesFromListing(
       seededExisting.length === 0 && adoptedLegacyIds.size === 0
         ? adoptLegacyDefaultTemplate(existing, seed)
         : null;
-    const prev = seededExisting.find((t) => t.listingSeedKey === seed.seedKey) ?? legacyAdopted;
+    const prev =
+      seededExisting.find((t) => t.listingSeedKey === seed.seedKey) ??
+      adoptLegacyCombinedFixedTermTemplate(existing, seed) ??
+      legacyAdopted;
 
     if (prev) {
       if (legacyAdopted) adoptedLegacyIds.add(legacyAdopted.id);
@@ -183,7 +216,7 @@ export function resolvePropertyLeaseTemplateForApplication(
   const term =
     application.rentalType === "short_term"
       ? SHORT_TERM_LEASE_TERM
-      : application.leaseTerm?.trim() || "";
+      : normalizeApplicationLeaseTerm(application.leaseTerm ?? "");
   if (!term) return templates[0] ?? null;
 
   const explicit = templates.filter((t) => (t.applicationLeaseTerms ?? []).includes(term));
@@ -203,8 +236,11 @@ export function resolvePropertyLeaseTemplateForApplication(
     );
   }
   if ((FIXED_LEASE_TERMS as readonly string[]).includes(term)) {
+    const fixedKey = listingSeedKeyForFixedLeaseTerm(term as (typeof FIXED_LEASE_TERMS)[number]);
     return (
-      templates.find((t) => t.listingSeedKey === "fixed-term") ??
+      templates.find((t) => t.listingSeedKey === fixedKey) ??
+      templates.find((t) => (t.applicationLeaseTerms ?? []).includes(term)) ??
+      templates.find((t) => t.listingSeedKey === "fixed-term" && (t.applicationLeaseTerms ?? []).includes(term)) ??
       templates.find((t) => t.kind === "room-rental" || t.kind === "corporate-furnished") ??
       templates[0]!
     );
@@ -217,7 +253,11 @@ export function resolvePropertyLeaseTemplateForApplication(
     );
   }
 
-  return templates[0] ?? null;
+  const customTemplate =
+    templates.find((t) => t.listingSeedKey === "custom-term") ??
+    templates.find((t) => t.kind === "custom");
+
+  return customTemplate ?? templates[0] ?? null;
 }
 
 /** Overlay the matched lease template onto legacy top-level lease fields for generation. */

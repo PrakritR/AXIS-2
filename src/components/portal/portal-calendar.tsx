@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
-import { Modal, ModalFooter } from "@/components/ui/modal";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "./portal-metrics";
+import {
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  PORTAL_HEADER_ACTION_BTN,
+} from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -16,7 +18,6 @@ import {
   syncScheduleRecordsFromServer,
   writeAvailabilityDateSetForStorageKeyToServer,
   writeCalendarShareAvailability,
-  toLocalDateStr,
   startOfWeekMonday,
 } from "@/lib/demo-admin-scheduling";
 import {
@@ -37,17 +38,29 @@ import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
 import { GoogleCalendarConnectDialog } from "@/components/portal/google-calendar-connect-dialog";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
+import { listManagerServiceCalendarMeetings } from "@/lib/manager-service-calendar";
+import {
+  MANAGER_WORK_ORDERS_EVENT,
+  syncManagerWorkOrdersFromServer,
+} from "@/lib/manager-work-orders-storage";
+import {
+  readPartnerInquiries,
+  readPlannedEvents,
+  getPartnerInquiryWindows,
+} from "@/lib/demo-admin-scheduling";
 
-type CopyRange = "week" | "future" | "all";
+type ManagerCalendarView = "all" | "tours" | "services";
 
 function ManagerCalendarPropertyFilter({
   properties,
   value,
   onChange,
+  emptyLabel = "All properties",
 }: {
   properties: { id: string; name: string }[];
   value: string;
   onChange: (propertyId: string) => void;
+  emptyLabel?: string;
 }) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -59,7 +72,7 @@ function ManagerCalendarPropertyFilter({
         value={value}
         onChange={onChange}
         options={[
-          { value: "", label: "Select a house" },
+          { value: "", label: emptyLabel },
           ...properties.map((p) => ({ value: p.id, label: p.name })),
         ]}
         dataAttr="portal-calendar-property"
@@ -86,15 +99,22 @@ export function PortalCalendar({
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
-  const [copyModalOpen, setCopyModalOpen] = useState(false);
-  const [copySourceId, setCopySourceId] = useState<string>("");
-  const [copyDestId, setCopyDestId] = useState<string>("");
-  const [copyRange, setCopyRange] = useState<CopyRange>("all");
   const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
   const [coManagerPeers, setCoManagerPeers] = useState<CoManagerCalendarPeerDto[]>([]);
   const [shareAvailability, setShareAvailability] = useState(false);
   const [googleExternalMeetings, setGoogleExternalMeetings] = useState<DemoMeeting[]>([]);
   const [googleCalendarTick, setGoogleCalendarTick] = useState(0);
+  const [calendarView, setCalendarView] = useState<ManagerCalendarView>("all");
+  const [workOrderTick, setWorkOrderTick] = useState(0);
+
+
+  useEffect(() => {
+    if (portal !== "manager") return;
+    const bump = () => setWorkOrderTick((n) => n + 1);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    void syncManagerWorkOrdersFromServer().then(() => bump());
+    return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+  }, [portal]);
 
   useEffect(() => {
     if (portal !== "manager") return;
@@ -274,49 +294,6 @@ export function PortalCalendar({
     registerManagerForProperty(userId, activeCalendarPropertyId, label);
   }, [portal, userId, email, activeCalendarPropertyId]);
 
-  const openCopyModal = useCallback(() => {
-    setCopySourceId(activeCalendarPropertyId);
-    setCopyDestId("");
-    setCopyRange("all");
-    setCopyModalOpen(true);
-  }, [activeCalendarPropertyId]);
-
-  const executeCopy = useCallback(() => {
-    if (!userId || !copySourceId || !copyDestId || copySourceId === copyDestId) return;
-    const srcKey = managerPropertyAvailabilityStorageKey(userId, copySourceId);
-    const dstKey = managerPropertyAvailabilityStorageKey(userId, copyDestId);
-    const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
-    const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
-
-    const todayStr = toLocalDateStr(new Date());
-    const weekMonday = startOfWeekMonday(new Date());
-    const weekStrs = new Set(
-      Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(weekMonday);
-        d.setDate(d.getDate() + i);
-        return toLocalDateStr(d);
-      }),
-    );
-
-    for (const key of srcSlots) {
-      const dateStr = key.split(":")[0] ?? "";
-      if (copyRange === "week" && !weekStrs.has(dateStr)) continue;
-      if (copyRange === "future" && dateStr < todayStr) continue;
-      dstSlots.add(key);
-    }
-
-    setCopyModalOpen(false);
-    void writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey)
-      .then((ok) => {
-        if (!ok) showToast("Could not save copied schedule to backend.");
-        return syncScheduleRecordsFromServer({ force: true });
-      })
-      .finally(() => setCalendarRefreshSignal((n) => n + 1));
-    const srcName = managerProperties.find((p) => p.id === copySourceId)?.name ?? copySourceId;
-    const dstName = managerProperties.find((p) => p.id === copyDestId)?.name ?? copyDestId;
-    showToast(`Copied schedule from ${srcName} to ${dstName}.`);
-  }, [userId, copySourceId, copyDestId, copyRange, managerProperties, showToast]);
-
   const storageKey = useMemo(() => {
     if (portal === "admin") return ADMIN_AVAILABILITY_STORAGE_KEY;
     if (!userId) return null;
@@ -331,6 +308,77 @@ export function PortalCalendar({
     return name ? `Calendar · ${name}` : undefined;
   }, [portal, activeCalendarPropertyId, managerProperties]);
 
+
+  const serviceCalendarMeetings = useMemo(() => {
+    if (portal !== "manager" || !userId) return [] as DemoMeeting[];
+    void workOrderTick;
+    return listManagerServiceCalendarMeetings(userId, activeCalendarPropertyId || null);
+  }, [portal, userId, activeCalendarPropertyId, workOrderTick]);
+
+  const calendarTabCounts = useMemo(() => {
+    if (portal !== "manager" || !userId) {
+      return { all: 0, tours: 0, services: serviceCalendarMeetings.length };
+    }
+    void calendarRefreshSignal;
+    void workOrderTick;
+    const tourFilter = {
+      viewerUserId: userId,
+      propertyId: activeCalendarPropertyId || null,
+      peers: calendarPeers,
+    };
+    const plannedTours = readPlannedEvents().filter(
+      (event) => event.kind === "tour" && plannedTourVisibleToViewer(event, tourFilter),
+    ).length;
+    const pendingTours = readPartnerInquiries()
+      .filter((row) => row.kind === "tour" && row.status === "pending")
+      .filter((row) => tourInquiryVisibleToViewer(row, tourFilter))
+      .flatMap((row) => getPartnerInquiryWindows(row)).length;
+    const services = serviceCalendarMeetings.length;
+    const tours = plannedTours + pendingTours;
+    return { all: tours + services, tours, services };
+  }, [
+    portal,
+    userId,
+    activeCalendarPropertyId,
+    calendarPeers,
+    calendarRefreshSignal,
+    workOrderTick,
+    serviceCalendarMeetings.length,
+  ]);
+
+  const calendarTabs = useMemo(
+    () => [
+      { id: "all", label: "All", count: calendarTabCounts.all, dataAttr: "calendar-tab-all" },
+      { id: "tours", label: "Tours", count: calendarTabCounts.tours, dataAttr: "calendar-tab-tours" },
+      {
+        id: "services",
+        label: "Service orders",
+        count: calendarTabCounts.services,
+        dataAttr: "calendar-tab-services",
+      },
+    ],
+    [calendarTabCounts],
+  );
+
+  const showTourAvailability = calendarView === "tours" || calendarView === "all";
+  const showServiceVisits = calendarView === "services" || calendarView === "all";
+  const servicesOnlyView = calendarView === "services";
+
+  const mergedExternalMeetings = useMemo(() => {
+    const base = portal === "manager" ? [...googleExternalMeetings] : [];
+    if (showServiceVisits) base.push(...serviceCalendarMeetings);
+    return base;
+  }, [portal, googleExternalMeetings, serviceCalendarMeetings, showServiceVisits]);
+
+  const calendarPanelsReadOnly = servicesOnlyView || (calendarView === "all" && !activeCalendarPropertyId);
+  const calendarStorageKey = showTourAvailability && !servicesOnlyView ? storageKey : servicesOnlyView ? null : storageKey;
+  const calendarUnavailableMessage = servicesOnlyView
+    ? "No scheduled service visits yet. Vendor visits and your own assigned work appear here once a visit time is set."
+    : calendarView === "all" && !activeCalendarPropertyId
+      ? "Select a house to edit tour availability, or stay on this view to see service visits across your portfolio."
+      : "Select a house before creating tour windows.";
+
+
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";
 
   if (portal === "manager" && !authReady) {
@@ -338,7 +386,7 @@ export function PortalCalendar({
       <ManagerPortalPageShell
         title={pageTitle}
         filterRow={
-          <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} />
+          <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} emptyLabel={calendarView === "tours" ? "Select a house" : "All properties"} />
         }
       >
         <p className="text-sm text-muted">{propertiesLoading ? "Loading houses…" : "Loading calendar…"}</p>
@@ -350,118 +398,13 @@ export function PortalCalendar({
       <ManagerPortalPageShell
         title={pageTitle}
         filterRow={
-          <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} />
+          <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} emptyLabel={calendarView === "tours" ? "Select a house" : "All properties"} />
         }
       >
         <p className="text-sm text-muted">Sign in to manage your availability.</p>
       </ManagerPortalPageShell>
     );
   }
-
-  const copyModal = portal === "manager" && managerProperties.length > 1 ? (
-    <Modal
-      open={copyModalOpen}
-      title="Copy schedule between houses"
-      onClose={() => setCopyModalOpen(false)}
-      footer={
-        <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setCopyModalOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={!copySourceId || !copyDestId}
-            onClick={executeCopy}
-          >
-            Copy schedule
-          </Button>
-        </ModalFooter>
-      }
-    >
-      <div className="space-y-5">
-        <p className="text-sm text-muted">
-          Copy availability from one house to another inside this manager account. Existing slots on the destination house are kept.
-        </p>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Copy from</label>
-          <Select
-            value={copySourceId}
-            onChange={(e) => {
-              setCopySourceId(e.target.value);
-              if (e.target.value === copyDestId) setCopyDestId("");
-            }}
-          >
-            <option value="">Select source house</option>
-            {managerProperties.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Copy to</label>
-          <Select
-            value={copyDestId}
-            onChange={(e) => setCopyDestId(e.target.value)}
-          >
-            <option value="">Select destination house</option>
-            {managerProperties
-              .filter((p) => p.id !== copySourceId)
-              .map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-foreground">Date range</p>
-          <div className="space-y-2">
-            {(
-              [
-                { id: "all", label: "Entire schedule", desc: "Copy all stored availability slots" },
-                { id: "future", label: "Future dates only", desc: "Copy only slots from today onwards" },
-                { id: "week", label: "This week only", desc: "Copy only slots in the current calendar week" },
-              ] as const
-            ).map(({ id, label, desc }) => (
-              <label
-                key={id}
-                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition ${
-                  copyRange === id
-                    ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
-                    : "border-border bg-card hover:border-primary/30"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="copy-range"
-                  value={id}
-                  checked={copyRange === id}
-                  onChange={() => setCopyRange(id)}
-                  className="mt-0.5 accent-primary"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{label}</p>
-                  <p className="text-xs text-muted">{desc}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {copySourceId && copyDestId ? (
-          <div className="rounded-xl border border-border bg-accent/40 px-4 py-3 text-xs text-muted">
-            Copying <span className="font-semibold text-foreground">{managerProperties.find((p) => p.id === copySourceId)?.name}</span>
-            {" to "}
-            <span className="font-semibold text-foreground">{managerProperties.find((p) => p.id === copyDestId)?.name}</span>
-            {copyRange === "week" ? " - this week" : copyRange === "future" ? " - future dates" : " - all dates"}
-          </div>
-        ) : null}
-      </div>
-    </Modal>
-  ) : null;
 
   return (
     <>
@@ -472,24 +415,19 @@ export function PortalCalendar({
             {portal === "manager" ? (
               <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
             ) : null}
-            {portal === "manager" && managerProperties.length > 1 ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                onClick={openCopyModal}
-                title="Copy availability schedule from one house to another"
-              >
-                Copy
-              </Button>
-            ) : null}
             {portal === "manager" ? (
               <Button
                 type="button"
                 variant="outline"
                 className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                disabled={!activeCalendarPropertyId}
-                title={!activeCalendarPropertyId ? "Select a house first" : "Share tour link"}
+                disabled={!activeCalendarPropertyId || calendarView === "services"}
+                title={
+                  calendarView === "services"
+                    ? "Switch to Tours or All to share a tour link"
+                    : !activeCalendarPropertyId
+                      ? "Select a house first"
+                      : "Share tour link"
+                }
                 onClick={() => setShareTourModalOpen(true)}
               >
                 Share tour
@@ -500,10 +438,17 @@ export function PortalCalendar({
         filterRow={
           portal === "manager" ? (
             <div className="flex w-full min-w-0 flex-col gap-3">
+              <ManagerPortalStatusPills
+                tabs={calendarTabs}
+                activeId={calendarView}
+                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+                compact
+              />
               <ManagerCalendarPropertyFilter
                 properties={managerProperties}
                 value={activeCalendarPropertyId}
                 onChange={setCalendarPropertyId}
+                emptyLabel={calendarView === "tours" ? "Select a house" : "All properties"}
               />
               {showCoManagerCoordination ? (
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
@@ -525,28 +470,33 @@ export function PortalCalendar({
           ) : undefined
         }
       >
-        {portal === "manager" ? (
+        {portal === "manager" && calendarView !== "services" ? (
           <div className="mb-4">
             <TourProposalsPanel />
           </div>
+        ) : null}
+        {portal === "manager" && servicesOnlyView ? (
+          <p className="mb-3 text-sm text-muted">
+            Scheduled vendor visits and work you assigned to yourself. Filter by house or leave all properties selected to see your full service schedule.
+          </p>
         ) : null}
         {propertiesLoading && managerProperties.length === 0 ? (
           <p className="text-sm text-muted">Loading houses from the backend…</p>
         ) : (
           <PortalCalendarPanels
-            key={storageKey ?? "calendar-unavailable"}
-            storageKey={storageKey}
+            key={`${calendarStorageKey ?? "calendar-unavailable"}-${calendarView}`}
+            storageKey={calendarStorageKey}
             calendarRefreshSignal={calendarRefreshSignal}
             tourScopeLabel={tourScopeLabel}
             unavailableMessage={
               portal === "manager" && managerProperties.length === 0
                 ? "No houses found for this manager account yet."
-                : "Select a house before creating tour windows."
+                : calendarUnavailableMessage
             }
             compactAvailability
             availabilityHeading={portal === "manager" ? "Your availability" : "Schedule meeting"}
             scheduledTourFilter={
-              portal === "manager" && userId
+              portal === "manager" && userId && showTourAvailability
                 ? {
                     viewerUserId: userId,
                     propertyId: activeCalendarPropertyId || null,
@@ -555,7 +505,9 @@ export function PortalCalendar({
                 : undefined
             }
             coManagerAvailabilityOverlays={showCoManagerCoordination ? coManagerAvailabilityOverlays : undefined}
-            externalMeetings={portal === "manager" ? googleExternalMeetings : undefined}
+            externalMeetings={portal === "manager" ? mergedExternalMeetings : undefined}
+            readOnly={portal === "manager" ? calendarPanelsReadOnly : false}
+            eventSummaryLabel={servicesOnlyView ? "visit" : calendarView === "all" ? "event" : "tour"}
             otherProperties={
               portal === "manager" && activeCalendarPropertyId
                 ? managerProperties.filter((p) => p.id !== activeCalendarPropertyId)
@@ -563,17 +515,20 @@ export function PortalCalendar({
             }
             onCopyWeekToHouses={
               portal === "manager" && userId && activeCalendarPropertyId
-                ? (propertyIds, weekDateStrs) => {
+                ? (propertyIds, weekDateStrs, scope) => {
                     if (!userId || !activeCalendarPropertyId) return;
                     const srcKey = managerPropertyAvailabilityStorageKey(userId, activeCalendarPropertyId);
                     const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
                     const weekStrs = new Set(weekDateStrs);
-                    const weekSrcSlots = [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
+                    const slotsToCopy =
+                      scope === "entire"
+                        ? [...srcSlots]
+                        : [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
                     void Promise.all(
                       propertyIds.map((pid) => {
                         const dstKey = managerPropertyAvailabilityStorageKey(userId, pid);
                         const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
-                        for (const slot of weekSrcSlots) dstSlots.add(slot);
+                        for (const slot of slotsToCopy) dstSlots.add(slot);
                         return writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey);
                       }),
                     )
@@ -585,14 +540,17 @@ export function PortalCalendar({
                     const destNames = propertyIds
                       .map((id) => managerProperties.find((p) => p.id === id)?.name ?? id)
                       .join(", ");
-                    showToast(`Week schedule pushed to: ${destNames}.`);
+                    showToast(
+                      scope === "entire"
+                        ? `Full schedule copied to: ${destNames}.`
+                        : `This week's schedule copied to: ${destNames}.`,
+                    );
                   }
                 : undefined
             }
           />
         )}
       </ManagerPortalPageShell>
-      {copyModal}
       {portal === "manager" ? (
         <ShareLeadLinkModal
           open={shareTourModalOpen}
