@@ -83,7 +83,7 @@ function buildReminderBody(p: RentReminderPreview): string {
   const lines = [`Hi ${p.residentName},`, "", `This is a reminder that your ${p.chargeTitle} payment is outstanding.`];
   if (p.balanceDue) lines.push(`Amount due: ${p.balanceDue}`);
   if (p.propertyLabel) lines.push(`Property: ${p.propertyLabel}`);
-  lines.push("", "Please log in to your Axis resident portal to make your payment.", "", "Axis Portal");
+  lines.push("", "Please log in to your PropLane resident portal to make your payment.", "", "PropLane");
   return lines.join("\n");
 }
 
@@ -132,7 +132,7 @@ async function sendReminderForCharge(
     delivery = "portal_only";
   } else {
     try {
-      const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+      const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -166,7 +166,7 @@ async function sendReminderForCharge(
         participantEmail: null,
         otherPartyEmail: preview.residentEmail,
         fallbackId: `payment_sent_${ctx.userId}_${ts}_${rand}`,
-        fromName: "Axis Assistant",
+        fromName: "PropLane Assistant",
         subject,
         body,
         preview: body.slice(0, 100).replace(/\n/g, " "),

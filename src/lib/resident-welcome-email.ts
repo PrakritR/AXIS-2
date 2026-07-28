@@ -18,10 +18,7 @@ export function residentAccountCreationUrl(_origin: string, axisId: string, setu
     return residentSetupAccountUrl(base, setupToken, axisId);
   }
   const id = axisId.trim();
-  const params = new URLSearchParams({
-    proplane_id: id,
-    axis_id: id,
-  });
+  const params = new URLSearchParams({ proplane_id: id });
   return `${base}/auth/resident-setup?${params.toString()}`;
 }
 

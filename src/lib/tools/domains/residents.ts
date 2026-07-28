@@ -264,7 +264,7 @@ export const sendResidentWelcomeTool = defineWriteTool({
     await updateAuditResult(ctx, dedupeKey, { residentEmail: target.to, delivery });
     return { reply: result.skipped
         ? `Recorded the welcome message for ${target.to} in the portal (demo/self address — no external email sent).`
-        : `Sent the welcome email with Axis ID ${target.axisId} to ${target.to}.`, resultSummary: { applicationId: target.applicationId, delivery } };
+        : `Sent the welcome email with PropLane ID ${target.axisId} to ${target.to}.`, resultSummary: { applicationId: target.applicationId, delivery } };
   },
 });
 

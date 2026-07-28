@@ -88,7 +88,7 @@ describe("POST /api/portal/send-application-submitted — setup handoff", () => 
 
     expect(res.status).toBe(503);
     const body = (await res.json()) as { setupHref?: string; error?: string };
-    expect(body.setupHref).toBe(`/auth/resident-setup?token=${token}&proplane_id=${row.id}&axis_id=${row.id}`);
+    expect(body.setupHref).toBe(`/auth/resident-setup?token=${token}&proplane_id=${row.id}`);
     // Reused the caller's valid token → never minted a fresh one.
     expect(ensureMock).not.toHaveBeenCalled();
   });
@@ -103,6 +103,6 @@ describe("POST /api/portal/send-application-submitted — setup handoff", () => 
     expect(res.status).toBe(503);
     const body = (await res.json()) as { setupHref?: string };
     expect(ensureMock).toHaveBeenCalledOnce();
-    expect(body.setupHref).toBe(`/auth/resident-setup?token=rotated-token&proplane_id=${row.id}&axis_id=${row.id}`);
+    expect(body.setupHref).toBe(`/auth/resident-setup?token=rotated-token&proplane_id=${row.id}`);
   });
 });

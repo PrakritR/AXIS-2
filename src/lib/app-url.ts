@@ -11,6 +11,16 @@ function isVercelDeploymentHost(hostname: string): boolean {
   return hostname.toLowerCase().endsWith(".vercel.app");
 }
 
+/** Legacy Axis Seattle domains — never emit in outbound email or shareable links. */
+function isLegacyAxisProductionHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "axis-seattle-housing.com" || host === "www.axis-seattle-housing.com";
+}
+
+function isUsableEmailLinkHost(hostname: string): boolean {
+  return !isVercelDeploymentHost(hostname) && !isLegacyAxisProductionHost(hostname);
+}
+
 /** Canonical, user-facing production domain — the only host outbound emails link to. */
 export const PRODUCTION_APP_ORIGIN = "https://prop-lane.space";
 
@@ -27,7 +37,7 @@ export function resolveEmailLinkBaseUrl(): string {
     const trimmed = trimOrigin(raw);
     if (!trimmed) continue;
     try {
-      if (!isVercelDeploymentHost(new URL(trimmed).hostname)) return trimmed;
+      if (isUsableEmailLinkHost(new URL(trimmed).hostname)) return trimmed;
     } catch {
       /* ignore malformed env value */
     }

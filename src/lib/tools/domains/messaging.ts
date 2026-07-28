@@ -234,7 +234,7 @@ export const sendMessageTool = defineWriteTool({
       .select("full_name")
       .eq("id", ctx.userId)
       .maybeSingle();
-    const fromName = String(senderProfile?.full_name ?? "").trim() || ctx.email || "Axis Portal";
+    const fromName = String(senderProfile?.full_name ?? "").trim() || ctx.email || "PropLane Portal";
 
     // Recipients with accounts go by user id (correct portal scope); emails
     // without a profile go by address. deliverPortalInboxMessage re-applies the

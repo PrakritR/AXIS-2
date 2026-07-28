@@ -6,6 +6,7 @@
  * not two).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { track } from "@/lib/analytics/posthog";
 import {
   buildLeadInviteEmailBody,
@@ -34,13 +35,9 @@ export function leadInviteEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim());
 }
 
-/** App origin for invite links: env override, then the caller's request origin, then production. */
-export function leadInviteAppOrigin(requestOrigin?: string | null): string {
-  const env = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
-  const fromRequest = requestOrigin?.trim();
-  if (fromRequest) return fromRequest.replace(/\/$/, "");
-  return "https://www.axis-seattle-housing.com";
+/** App origin for invite links — same canonical base as outbound emails. */
+export function leadInviteAppOrigin(_requestOrigin?: string | null): string {
+  return resolveEmailLinkBaseUrl();
 }
 
 /** The link a given invite kind sends the prospect to (apply/listing → apply URL, tour → tour URL). */
@@ -151,7 +148,7 @@ export async function sendLeadInvite(
     };
   }
 
-  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

@@ -164,7 +164,7 @@ export async function approveAndPayWorkOrder(
     await deliverPortalInboxMessage(db, {
       senderUserId: actor.userId,
       senderEmail: actor.email,
-      fromName: "Axis Portal",
+      fromName: "PropLane Portal",
       subject: `${title} completed`,
       text: `Your work order "${title}"${propertyLabel ? ` at ${propertyLabel}` : ""} has been completed.`,
       toEmails: [residentEmail],
@@ -177,7 +177,7 @@ export async function approveAndPayWorkOrder(
     await deliverPortalInboxMessage(db, {
       senderUserId: actor.userId,
       senderEmail: actor.email,
-      fromName: "Axis Portal",
+      fromName: "PropLane Portal",
       subject: `${title} approved and paid`,
       text: `"${title}"${propertyLabel ? ` at ${propertyLabel}` : ""} has been approved and marked paid. Thanks for the work.`,
       toUserIds: [existing.vendor_user_id],
