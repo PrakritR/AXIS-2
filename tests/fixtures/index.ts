@@ -26,6 +26,10 @@ export const E2E_ACCOUNTS = {
     email: process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.axis.local",
     password: process.env.E2E_VENDOR_PASSWORD?.trim() || "TestVendor123!",
   },
+  manager2: {
+    email: process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.axis.local",
+    password: process.env.E2E_MANAGER2_PASSWORD?.trim() || "TestManager123!",
+  },
 };
 
 // Must match the axis id seeded by tests/helpers/seed-test-db.mjs (same env var +

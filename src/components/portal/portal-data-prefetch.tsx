@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { notifyManagerApplicationsSynced, prefetchPortalData } from "@/lib/portal-data-store";
+import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
 import type { PortalKind } from "@/lib/portal-types";
 
 export function PortalDataPrefetch({ kind }: { kind: PortalKind }) {
@@ -16,6 +17,7 @@ export function PortalDataPrefetch({ kind }: { kind: PortalKind }) {
       .then(() => {
         if (kind === "manager" || kind === "pro") {
           notifyManagerApplicationsSynced();
+          void loadManagerSubscriptionTierClient();
         }
       })
       .catch(() => {

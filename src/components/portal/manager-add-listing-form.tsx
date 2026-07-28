@@ -4701,7 +4701,7 @@ export function ManagerAddListingForm({
                 onClick={closeWizard}
                 disabled={busy || closingDraft}
               >
-                {closingDraft ? "Saving progress…" : "Close"}
+                {closingDraft ? "Saving progress…" : draftAutoSaveEligible ? "Save & close" : "Close"}
               </Button>
               {visibleStepPosition > 0 ? (
                 <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>

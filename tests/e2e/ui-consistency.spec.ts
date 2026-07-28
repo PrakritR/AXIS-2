@@ -6,7 +6,8 @@ const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 test.describe("UI consistency — portal shell", () => {
   test("skip link targets main content on sign-in page (public baseline)", async ({ page }) => {
     await page.goto("/auth/sign-in");
-    await expect(page.getByRole("heading", { name: /portal sign-in/i })).toBeVisible();
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
   });
 
   test.skip(!portalTestsEnabled, "Set E2E_TESTS_ENABLED=1 after running npm run test:seed");
@@ -27,7 +28,7 @@ test.describe("UI consistency — portal shell", () => {
   test("portal inbox section uses canonical page shell heading", async ({ page }) => {
     await signInAsManager(page);
     await page.goto("/portal/communication/inbox/unopened");
-    await expect(page.getByRole("heading", { name: /^inbox$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^communication$/i })).toBeVisible();
   });
 
   test("portal payments section renders without legacy empty state", async ({ page }) => {

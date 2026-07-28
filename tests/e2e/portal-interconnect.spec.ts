@@ -26,16 +26,23 @@ test.describe("Cross-portal interconnect", () => {
     const composeBtn = page.getByRole("button", { name: /new message|compose/i }).first();
     if (await composeBtn.count() > 0) {
       await composeBtn.click();
-      const subjectField = page.getByLabel(/subject/i).first();
+      const subjectField = page
+        .locator("#communication-compose-subject")
+        .or(page.getByPlaceholder("Subject"))
+        .first();
       if (await subjectField.count() > 0) {
         await subjectField.fill("Interconnect test message");
-        const bodyField = page.getByLabel(/message|body|text/i).or(page.getByRole("textbox").nth(1)).first();
+        const bodyField = page.locator("#communication-compose-body, #inbox-compose-message").first();
         if (await bodyField.count() > 0) {
           await bodyField.fill("This is a test message for interconnect.");
         }
         // Close/cancel without sending to avoid polluting inbox
-        const cancelBtn = page.getByRole("button", { name: /cancel|close/i }).first();
-        if (await cancelBtn.count() > 0) await cancelBtn.click();
+        const cancelBtn = page.getByRole("button", { name: "Cancel", exact: true });
+        if (await cancelBtn.count() > 0) {
+          await cancelBtn.click();
+        } else {
+          await page.keyboard.press("Escape");
+        }
       }
     }
   });

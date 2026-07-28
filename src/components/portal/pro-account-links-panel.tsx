@@ -1290,8 +1290,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   }, [activeRemote, remoteLoaded, useRemote, userId]);
 
   const activeCards = useRemote ? activeRemote : localRows;
-  const hasAnyTeamData =
-    managedPropertyCount > 0 ||
+  const hasCoManagerLinks =
     activeCards.length > 0 ||
     (useRemote && (incomingPending.length > 0 || outgoingPending.length > 0));
   const hasVisibleTeamRows =
@@ -1445,8 +1444,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </p>
         ) : null}
 
-        {!hasAnyTeamData ? (
-          <PortalDataTableEmpty message="No team members yet." icon="data" />
+        {!hasCoManagerLinks ? (
+          <PortalDataTableEmpty message="No co-managers yet." icon="data" />
         ) : !hasVisibleTeamRows ? (
           <PortalDataTableEmpty message="No links match these filters." icon="data" />
         ) : (

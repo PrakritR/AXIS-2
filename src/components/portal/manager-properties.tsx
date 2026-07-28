@@ -44,6 +44,7 @@ import {
   normalizeManagerSkuTier,
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
+import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
 
 export function ManagerProperties() {
   const { showToast } = useAppUi();
@@ -103,11 +104,8 @@ export function ManagerProperties() {
       return;
     }
     try {
-      const res = await fetch("/api/manager/subscription", { credentials: "include" });
-      const body = (await res.json()) as { tier?: string | null };
-      if (res.ok) {
-        setSkuTier(body.tier ?? null);
-      }
+      const tier = await loadManagerSubscriptionTierClient();
+      setSkuTier(tier);
     } catch {
       /* ignore */
     } finally {
@@ -220,8 +218,16 @@ export function ManagerProperties() {
       >
         Share
       </Button>
-      <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="manager-properties-create" onClick={tryOpenAdd}>
-        Create
+      <Button
+        type="button"
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="manager-properties-create"
+        onClick={tryOpenAdd}
+        disabled={!skuLoaded}
+        aria-busy={!skuLoaded}
+      >
+        {!skuLoaded ? "Loading…" : "Create"}
       </Button>
     </>
   );

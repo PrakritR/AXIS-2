@@ -201,7 +201,9 @@ export function PortalProfileClient({
       {variant === "manager" ? <AssistantDisplaySetting /> : null}
       <NotificationsToggle />
       <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-      <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      {variant === "manager" ? (
+        <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      ) : null}
       <PortalSettingsExtras currentKind={portalKind} />
     </PortalSettingsSections>
   );

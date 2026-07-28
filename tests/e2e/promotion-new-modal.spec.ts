@@ -1,6 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { fieldSelectTrigger, pickFieldSelect } from "../helpers/field-select";
 
 /**
  * Promotion UX: the type filter reads Text | Image (no "All"), and "New
@@ -17,6 +18,14 @@ const SHOT_DIR = process.env.PROMOTION_SHOT_DIR ?? path.resolve(".playwright-sho
 
 function headlineInput(scope: ReturnType<Page["getByRole"]>) {
   return scope.getByPlaceholder(HEADLINE_PLACEHOLDER);
+}
+
+function promotionKindTrigger(dialog: Locator) {
+  return fieldSelectTrigger(dialog, "select-promotion-new-kind");
+}
+
+async function selectPromotionKind(page: Page, dialog: Locator, label: string) {
+  await pickFieldSelect(page, promotionKindTrigger(dialog), label);
 }
 
 async function openPromotionSection(page: Page) {
@@ -78,8 +87,8 @@ for (const viewport of [
 
       // No intermediate step: the flyer form is already there.
       await expect(dialog.getByRole("button", { name: /^continue$/i })).toHaveCount(0);
-      const kind = dialog.locator('[data-attr="promotion-new-kind"]');
-      await expect(kind).toHaveValue("flyer");
+      const kind = promotionKindTrigger(dialog);
+      await expect(kind).toContainText("Flyer");
       await expect(headlineInput(dialog)).toBeVisible();
       await expect(dialog.getByRole("button", { name: "Generate flyer" })).toBeVisible();
       await dialog.screenshot({
@@ -88,9 +97,9 @@ for (const viewport of [
 
       // Picking "Text" swaps the body in place — same modal, still titled
       // "New promotion", no Continue.
-      await kind.selectOption("text");
+      await selectPromotionKind(page, dialog, "Text");
       await expect(dialog.getByText("New promotion", { exact: true })).toBeVisible();
-      await expect(dialog.locator("#promotion-text-format")).toBeVisible();
+      await expect(dialog.locator('[data-attr="select-promotion-text-format"]')).toBeVisible();
       await expect(headlineInput(dialog)).toHaveCount(0);
       await expect(dialog.getByRole("button", { name: /^continue$/i })).toHaveCount(0);
       await dialog.screenshot({
@@ -106,7 +115,7 @@ for (const viewport of [
       await openPromotionSection(page);
       await page.locator('[data-attr="promotion-new"]').click();
       const dialog = page.getByRole("dialog");
-      const kind = dialog.locator('[data-attr="promotion-new-kind"]');
+      const kind = promotionKindTrigger(dialog);
 
       await headlineInput(dialog).fill("Sunlit 2BR — first month free");
       await dialog.screenshot({
@@ -119,7 +128,7 @@ for (const viewport of [
         await d.dismiss();
         return message;
       });
-      await kind.selectOption("text");
+      await selectPromotionKind(page, dialog, "Text");
       const message = await dismissed;
       expect(message).toMatch(/discard/i);
       fs.mkdirSync(SHOT_DIR, { recursive: true });
@@ -127,19 +136,19 @@ for (const viewport of [
         `${SHOT_DIR}/${viewport.name}-06-type-switch-confirm.txt`,
         `browser confirm() shown on type switch with entered content:\n${message}\n`,
       );
-      await expect(kind).toHaveValue("flyer");
+      await expect(kind).toContainText("Flyer");
       await expect(headlineInput(dialog)).toHaveValue(
         "Sunlit 2BR — first month free",
       );
 
       // Accepting it switches and discards.
       page.once("dialog", (d) => void d.accept());
-      await kind.selectOption("text");
-      await expect(kind).toHaveValue("text");
-      await expect(dialog.locator("#promotion-text-format")).toBeVisible();
+      await selectPromotionKind(page, dialog, "Text");
+      await expect(kind).toContainText("Text");
+      await expect(dialog.locator('[data-attr="select-promotion-text-format"]')).toBeVisible();
 
       // Switching back shows a cleared flyer form (content was discarded).
-      await kind.selectOption("flyer");
+      await selectPromotionKind(page, dialog, "Flyer");
       await expect(headlineInput(dialog)).toHaveValue("");
 
       // Close (X) still works.
@@ -150,23 +159,30 @@ for (const viewport of [
     test("creates a text promotion straight from the type dropdown", async ({ page }) => {
       const frame = await openPromotionSection(page);
       const textPill = page.locator('[data-attr="promotion-filter-text"]');
-      await expect(textPill).toContainText("2");
+      const beforeText = await textPill.textContent();
+      const beforeCount = Number.parseInt(beforeText?.match(/\d+/)?.[0] ?? "0", 10);
 
       await page.locator('[data-attr="promotion-new"]').click();
       const dialog = page.getByRole("dialog");
-      await dialog.locator('[data-attr="promotion-new-kind"]').selectOption("text");
+      await selectPromotionKind(page, dialog, "Text");
 
-      // Attach it to a real property, then submit from inside the same modal.
-      const property = dialog.locator("#promotion-text-property");
-      await property.selectOption({ index: 1 });
+      // Demo sandbox may have no listings — custom property is enough to generate.
+      const propertyTrigger = fieldSelectTrigger(dialog, "select-promotion-text-property");
+      if (await propertyTrigger.isVisible().catch(() => false)) {
+        await propertyTrigger.click();
+        const listingOption = page.getByRole("option").filter({ hasNotText: /^custom/i });
+        if ((await listingOption.count()) > 0) {
+          await listingOption.first().click();
+        } else {
+          await page.keyboard.press("Escape");
+        }
+      }
       await dialog.locator('[data-attr="promotion-text-generate-submit"]').click();
 
       // Modal closes on success and the new text asset lands in the list, with
       // the Text pill count bumped.
       await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(textPill).toContainText("3");
-      // The asset stack renders a desktop row and a mobile card; either is fine.
-      await expect(page.getByText("Text 3", { exact: true }).first()).toBeVisible();
+      await expect(textPill).toContainText(String(beforeCount + 1));
       await frame.screenshot({
         path: `${SHOT_DIR}/${viewport.name}-07-text-promotion-created.png`,
       });

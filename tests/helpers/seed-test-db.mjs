@@ -1317,6 +1317,50 @@ try {
     "portal_lease_pipeline_records(catalog)",
   );
 
+  // Canonical auth inboxes must never be auto-provisioned as residents — a stray
+  // application row keyed by a manager business id (e.g. PROPLANE-…) can list
+  // manager@test.axis.local as resident_email and would otherwise reset the E2E
+  // manager password to AUTO_RESIDENT_PASSWORD during repair.
+  const canonicalAuthEmails = new Set([
+    adminEmail,
+    managerEmail,
+    manager2Email,
+    residentEmail,
+    vendorEmail,
+    everythingEmail,
+  ]);
+
+  async function relockCanonicalAuthAccounts() {
+    await ensureUser(adminEmail, adminPassword, "admin");
+    await ensureUser(managerEmail, managerPassword, "manager", {
+      managerId,
+      onlyRole: true,
+      fullName: CANONICAL_DEMO_MANAGER_NAME,
+    });
+    await ensureUser(manager2Email, manager2Password, "manager", { managerId: manager2Id, onlyRole: true });
+    await ensureUser(residentEmail, residentPassword, "resident", {
+      onlyRole: true,
+      metadata: { axis_id: residentAxisId },
+      fullName: PRIMARY_RESIDENT_NAME,
+    });
+    await ensureUser(vendorEmail, vendorPassword, "vendor", {
+      onlyRole: true,
+      fullName: CANONICAL_DEMO_VENDOR_NAME,
+    });
+    await ensureUser(everythingEmail, everythingPassword, "manager", {
+      managerId: everythingManagerId,
+      fullName: EVERYTHING_NAME,
+    });
+    for (const extraRole of ["admin", "resident", "vendor"]) {
+      await must(
+        supabase
+          .from("profile_roles")
+          .upsert({ user_id: everythingUserId, role: extraRole }, { onConflict: "user_id,role" }),
+        `profile_roles(relock ${everythingEmail}:${extraRole})`,
+      );
+    }
+  }
+
   // Repair: any lease/application on test managers whose resident email lacks a
   // resident profile gets provisioned (covers legacy rows or manual approvals).
   async function repairResidentAccountsForTestManagers() {
@@ -1371,6 +1415,7 @@ try {
 
     let repaired = 0;
     for (const [email, info] of byEmail) {
+      if (canonicalAuthEmails.has(email)) continue;
       const existing = profileByEmail.get(email);
       if (existing?.role === "resident") continue;
       const claimedAt = NOW.toISOString();
@@ -1434,6 +1479,7 @@ try {
   }
 
   await repairResidentAccountsForTestManagers();
+  await relockCanonicalAuthAccounts();
 
   // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
   const demoPortfolioPropertyIds = [
@@ -1574,6 +1620,17 @@ try {
     supabase.from("profiles").update({ application_approved: false }).in("manager_id", nonApprovedAxisIds),
     "reset non-approved resident profiles",
   );
+
+  // Stray application rows must not list canonical manager inboxes as residents.
+  for (const email of [managerEmail, manager2Email, everythingEmail]) {
+    await must(
+      supabase
+        .from("manager_application_records")
+        .delete()
+        .eq("resident_email", email),
+      `manager_application_records(cleanup canonical resident_email ${email})`,
+    );
+  }
 
   // 6. Account prune: the test DB contains ONLY canonical test accounts — the
   //    E2E accounts this seed creates plus the demo-workflow residents

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs";
+import { E2E_ACCOUNTS } from "../fixtures";
 
 /**
  * Headed Chrome walkthrough for bundle+group joint lease UI.
@@ -8,14 +9,12 @@ import fs from "node:fs";
  *   PLAYWRIGHT_SKIP_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://localhost:3011 \
  *     npx playwright test tests/e2e/bundle-group-manual-chrome.spec.ts --headed --workers=1
  */
+
 const PROPERTY_ID = "mgr-test-magnolia";
 const BUNDLE_ID = `${PROPERTY_ID}-bundle-multi`;
 const EVIDENCE_DIR = path.join(process.cwd(), "test-evidence", "bundle-group-manual");
 
-const MANAGER = {
-  email: process.env.E2E_MANAGER_EMAIL ?? "manager@test.axis.local",
-  password: process.env.E2E_MANAGER_PASSWORD ?? "TestManager123!",
-};
+const MANAGER = E2E_ACCOUNTS.manager2;
 
 function shot(page: Page, name: string) {
   fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
