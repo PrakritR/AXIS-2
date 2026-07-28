@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
 
@@ -44,6 +46,7 @@ export function ManagerLeases() {
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [clientReady, setClientReady] = useState(false);
   const [editLeasesOpen, setEditLeasesOpen] = useState(false);
+  const [shareLeasesOpen, setShareLeasesOpen] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => setClientReady(true));
@@ -157,23 +160,41 @@ export function ManagerLeases() {
     return buildManagerPropertyFilterOptions(userId);
   }, [userId, propertyTick]);
 
+  const shareableProperties = useMemo(() => {
+    void propertyTick;
+    return buildManagerShareablePropertyOptions(userId);
+  }, [userId, propertyTick]);
+
   return (
     <>
     <ManagerPortalPageShell
       title="Leases"
       titleAside={
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="leases-edit-properties"
-          disabled={editablePropertyOptions.length === 0}
-          title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
-          onClick={() => setEditLeasesOpen(true)}
-        >
-          Edit
-          <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="leases-share"
+            disabled={shareableProperties.length === 0}
+            title={shareableProperties.length === 0 ? "List a property as active before sharing" : "Share listing links"}
+            onClick={() => setShareLeasesOpen(true)}
+          >
+            Share
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="leases-edit-properties"
+            disabled={editablePropertyOptions.length === 0}
+            title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
+            onClick={() => setEditLeasesOpen(true)}
+          >
+            Edit
+            <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+          </Button>
+        </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -209,6 +230,12 @@ export function ManagerLeases() {
       managerUserId={userId}
       onSaved={() => setPropertyTick((n) => n + 1)}
       showToast={showToast}
+    />
+    <ShareLeadLinkModal
+      open={shareLeasesOpen}
+      onClose={() => setShareLeasesOpen(false)}
+      kind="listing"
+      properties={shareableProperties}
     />
     </>
   );

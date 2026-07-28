@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
+  buildManagerPortfolioTourUrl,
   buildManagerTourUrl,
+  buildPortfolioTourContactHref,
   buildPropertyMessageHref,
   buildTourContactHref,
   parseBrowseIdsParam,
@@ -71,5 +73,15 @@ describe("manager-property-links", () => {
     expect(parseBrowseIdsParam("mgr-1,mgr-2,mgr-1, ,mgr-3")).toEqual(["mgr-1", "mgr-2", "mgr-3"]);
     expect(parseBrowseIdsParam("")).toEqual([]);
     expect(parseBrowseIdsParam(null)).toEqual([]);
+  });
+
+  it("builds a portfolio tour link so prospects can choose a property", () => {
+    expect(buildPortfolioTourContactHref(["mgr-1", "mgr-2"])).toBe("/rent/tours-contact?ids=mgr-1%2Cmgr-2");
+    const url = buildManagerPortfolioTourUrl(origin, ["mgr-1", "mgr-2"]);
+    expect(url).toBe("https://app.example.com/rent/tours-contact?ids=mgr-1%2Cmgr-2");
+  });
+
+  it("falls back to the plain tours page when no ids are given", () => {
+    expect(buildPortfolioTourContactHref([])).toBe("/rent/tours-contact");
   });
 });
