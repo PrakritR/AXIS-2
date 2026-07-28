@@ -2863,7 +2863,7 @@ export function ManagerAddListingForm({
                   Year built
                 </FieldLabel>
                 <Input
-                  value={sub.yearBuilt ? String(sub.yearBuilt) : ""}
+                  value={sub.yearBuilt === undefined ? "" : String(sub.yearBuilt)}
                   onChange={(e) => {
                     const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
                     setSub((s) => ({ ...s, yearBuilt: digits ? Number(digits) : undefined }));
