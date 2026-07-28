@@ -1,19 +1,43 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
+import { normalizeProServiceFeeChoice, type ProServiceFeeChoice } from "@/lib/payment-policy";
 
 export type ManagerManualPaymentSettings = {
+  /**
+   * Allow residents/applicants to pay via Stripe ACH (bank). Defaults on —
+   * managers turn it off from Payment setup when they only want Zelle/Venmo.
+   */
+  axisPaymentsEnabled: boolean;
   zellePaymentsEnabled: boolean;
   zelleContact: string;
   venmoPaymentsEnabled: boolean;
   venmoContact: string;
+  /** Secret token for payments+<token>@ inbound receipt matching. */
+  paymentInboxToken?: string;
+  /** When false, receipt emails are ignored even if forwarded to the inbox. */
+  receiptAutoMarkEnabled?: boolean;
+  /**
+   * The Pro manager's choice for who pays the online payment service fee on
+   * resident charges. Only consulted on the Pro plan (Free forces resident,
+   * Business forces PropLane) — see `resolveServiceFeePayer`. Defaults to
+   * `resident` so upgrading to Pro never silently starts charging the manager.
+   */
+  serviceFeePayer: ProServiceFeeChoice;
+};
+
+export type ManagerManualPaymentSettingsView = ManagerManualPaymentSettings & {
+  paymentInboxAddress?: string;
 };
 
 export const DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS: ManagerManualPaymentSettings = {
+  axisPaymentsEnabled: true,
   zellePaymentsEnabled: false,
   zelleContact: "",
   venmoPaymentsEnabled: false,
   venmoContact: "",
+  receiptAutoMarkEnabled: true,
+  serviceFeePayer: "resident",
 };
 
 export const MANAGER_MANUAL_PAYMENT_SETTINGS_EVENT = "axis:manager-manual-payment-settings";
@@ -22,21 +46,33 @@ export function normalizeManagerManualPaymentSettings(raw: unknown): ManagerManu
   const row = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const zelleContact = sanitizePaymentContactInput(String(row.zelleContact ?? "")).trim();
   const venmoContact = sanitizePaymentContactInput(String(row.venmoContact ?? "")).trim();
+  // Allowed only when a contact is present — keep the contact when the method is
+  // toggled off so re-enabling does not force the manager to re-link.
   const zellePaymentsEnabled = row.zellePaymentsEnabled === true && zelleContact.length > 0;
   const venmoPaymentsEnabled = row.venmoPaymentsEnabled === true && venmoContact.length > 0;
+  const paymentInboxTokenRaw = String(row.paymentInboxToken ?? "").trim();
+  const paymentInboxToken = /^[a-zA-Z0-9_-]{8,24}$/.test(paymentInboxTokenRaw) ? paymentInboxTokenRaw : undefined;
   return {
+    axisPaymentsEnabled: row.axisPaymentsEnabled !== false,
     zellePaymentsEnabled,
-    zelleContact: zellePaymentsEnabled ? zelleContact : "",
+    zelleContact,
     venmoPaymentsEnabled,
-    venmoContact: venmoPaymentsEnabled ? venmoContact : "",
+    venmoContact,
+    ...(paymentInboxToken ? { paymentInboxToken } : {}),
+    receiptAutoMarkEnabled: row.receiptAutoMarkEnabled === false ? false : true,
+    serviceFeePayer: normalizeProServiceFeeChoice(row.serviceFeePayer),
   };
 }
 
 /** Browser-safe projection — same shape; contacts only when enabled. */
 export function managerManualPaymentSettingsPublic(
   settings: ManagerManualPaymentSettings,
-): ManagerManualPaymentSettings {
-  return normalizeManagerManualPaymentSettings(settings);
+  extras?: Pick<ManagerManualPaymentSettingsView, "paymentInboxAddress">,
+): ManagerManualPaymentSettingsView {
+  return {
+    ...normalizeManagerManualPaymentSettings(settings),
+    ...(extras?.paymentInboxAddress ? { paymentInboxAddress: extras.paymentInboxAddress } : {}),
+  };
 }
 
 type StorageMode = "column" | "row_data";
@@ -67,17 +103,26 @@ export async function loadManagerManualPaymentSettings(
   managerUserId: string,
 ): Promise<ManagerManualPaymentSettings> {
   const mode = await resolveStorageMode(db);
+  // A conditional select string is a union of literals the typed client's
+  // parser rejects — branch so each `.select()` gets a single literal.
+  if (mode === "column") {
+    const { data, error } = await db
+      .from("manager_automation_settings")
+      .select("manual_payments, row_data")
+      .eq("manager_user_id", managerUserId)
+      .maybeSingle();
+    if (error) throw error;
+    return normalizeManagerManualPaymentSettings(data?.manual_payments);
+  }
   const { data, error } = await db
     .from("manager_automation_settings")
-    .select(mode === "column" ? "manual_payments, row_data" : "row_data")
+    .select("row_data")
     .eq("manager_user_id", managerUserId)
     .maybeSingle();
   if (error) throw error;
-  const raw =
-    mode === "column"
-      ? data?.manual_payments
-      : (data?.row_data as Record<string, unknown> | null)?.manualPayments;
-  return normalizeManagerManualPaymentSettings(raw);
+  return normalizeManagerManualPaymentSettings(
+    (data?.row_data as Record<string, unknown> | null)?.manualPayments,
+  );
 }
 
 export async function saveManagerManualPaymentSettings(

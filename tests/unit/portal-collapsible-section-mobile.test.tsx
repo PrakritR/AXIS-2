@@ -26,7 +26,9 @@ describe("PortalCollapsibleSection mobile inline headers", () => {
       </PortalCollapsibleSection>,
     );
 
-    const header = container.querySelector('[data-attr="portal-section-toggle"]')?.parentElement;
+    // The toggle attribute sits on the header row itself (it is the clickable
+    // element), so assert on that node — not its parent, which is the section card.
+    const header = container.querySelector('[data-attr="portal-section-toggle"]');
     expect(header?.className).toContain("flex-col");
     expect(header?.className).toContain("sm:flex-row");
     expect(screen.getByRole("button", { name: "Send listing" })).toBeTruthy();

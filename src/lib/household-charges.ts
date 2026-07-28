@@ -24,6 +24,12 @@ import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/d
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
+import {
+  shortTermNightlyRate,
+  shortTermStayChargeTitle,
+  shortTermStayNightCount,
+  shortTermStayTotalAmount,
+} from "@/lib/short-term-stay-pricing";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
@@ -66,6 +72,7 @@ export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__"
 export type HouseholdChargeKind =
   | "application_fee"
   | "holding_deposit"
+  | "stay_total"
   | "first_month_rent"
   | "prorated_rent"
   | "prorated_last_month_rent"
@@ -110,6 +117,8 @@ export type HouseholdCharge = {
   manualPaymentReportedAt?: string;
   /** Short memo code residents include in Zelle/Venmo payments for manager matching. */
   paymentReference?: string;
+  /** Gmail API message id when auto-marked from linked Gmail sync. */
+  paidViaGmailMessageId?: string;
   /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
   axisPaymentsEnabledSnapshot?: boolean;
   /** Payment methods the property currently accepts, refreshed from the listing on each server sync. */
@@ -824,6 +833,8 @@ export function chargeDueLabel(charge: HouseholdCharge): string {
     case "security_deposit":
     case "move_in_fee":
       return "Before lease signing";
+    case "stay_total":
+      return "Before check-in";
     case "first_month_rent":
     case "prorated_rent":
     case "utilities":
@@ -843,6 +854,8 @@ function chargeTitle(kind: HouseholdChargeKind): string {
       return "Application fee";
     case "holding_deposit":
       return "Holding deposit";
+    case "stay_total":
+      return "Stay total";
     case "first_month_rent":
       return "First month's rent";
     case "prorated_rent":
@@ -880,6 +893,8 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
       return sub.applicationFee;
     case "holding_deposit":
       return normalizeHoldingDepositLabel(sub.holdingDeposit);
+    case "stay_total":
+      return "$0";
     case "first_month_rent":
     case "prorated_rent":
     case "prorated_last_month_rent":
@@ -1300,6 +1315,13 @@ export function ensurePendingApplicationFeeCharge(input: {
   managerUserId?: string | null;
   /** Match an existing fee created under another id on the row (e.g. `application.propertyId` vs `assignedPropertyId`). */
   propertyIdAliases?: string[] | null;
+  /**
+   * SERVER-authoritative fee in dollars (from `/api/public/application-fee-preview`,
+   * which applies the manager-level fee). When provided it replaces the listing's
+   * grandfathered `applicationFee` so the booked charge always equals what the
+   * server actually charges — an explicit 0 books nothing at all.
+   */
+  feeAmountOverride?: number | null;
 }): HouseholdCharge | null {
   const email = input.residentEmail.trim();
   if (!email || !email.includes("@")) return null;
@@ -1310,6 +1332,10 @@ export function ensurePendingApplicationFeeCharge(input: {
   if (!sub && amt <= 0) {
     raw = "$50";
     amt = 50;
+  }
+  if (input.feeAmountOverride != null && Number.isFinite(input.feeAmountOverride)) {
+    amt = input.feeAmountOverride;
+    raw = amt > 0 ? `$${amt.toFixed(2)}` : "";
   }
   if (amt <= 0) return null;
 
@@ -1374,6 +1400,13 @@ function holdingDepositFallbackChargeId(residentEmail: string, propertyId: strin
   return `hc_holding_${chargeKeyPart(residentEmail)}_${chargeKeyPart(propertyId)}`;
 }
 
+/**
+ * @deprecated No longer shown or collected during the application (captain
+ * decision, 2026-07 — see `ensurePendingHoldingDepositCharge` above and
+ * `docs/agents/resident-payments.md`). Kept only in case a future Payments
+ * surface wants the listing's configured holding-deposit amount; no
+ * production call site remains.
+ */
 export function listingHoldingDepositAmount(propertyId: string): { amount: number; displayLabel: string } {
   if (!propertyId.trim()) {
     return { amount: 0, displayLabel: "—" };
@@ -1389,7 +1422,7 @@ export function listingHoldingDepositAmount(propertyId: string): { amount: numbe
   return { amount, displayLabel };
 }
 
-function findHoldingDepositCharge(
+export function findHoldingDepositCharge(
   residentEmail: string,
   propertyId: string,
   residentUserId: string | null,
@@ -1409,7 +1442,14 @@ function findHoldingDepositCharge(
 }
 
 /**
- * Ensures a pending holding-deposit line exists when the listing requires one.
+ * @deprecated The holding deposit is no longer collected during the
+ * application (captain decision, 2026-07: deposits move under Payments,
+ * after approval — see `docs/agents/resident-payments.md`). NO callers
+ * remain anywhere in src/ or tests/ — every application-submission call site
+ * (`recordApplicationCharges`, `recordSubmittedApplicationFeeCharge`) and the
+ * rental wizard's submit-time calls have all been removed, so this helper is
+ * inert. Do not add new call sites.
+ * Ensures a pending holding-deposit line exists when the listing requires one (one-time at application).
  */
 export function ensurePendingHoldingDepositCharge(input: {
   residentEmail: string;
@@ -2127,6 +2167,29 @@ export function markApplicationFeePaidAfterStripe(residentEmail: string, propert
 }
 
 /**
+ * Sibling of `markApplicationFeePaidAfterStripe` for the holding-deposit leg
+ * of a combined at-application charge. Legacy-only: combined fee+deposit
+ * collection was removed (nothing creates such a charge anymore — see
+ * `ensurePendingHoldingDepositCharge` above), so this is a no-op (returns
+ * true) unless a pre-removal deposit charge row exists. Marking one paid is
+ * what makes `paidHoldingDepositCreditCents` credit it toward the security
+ * deposit at approval, exactly like a deposit paid manually pre-PR139.
+ */
+export function markHoldingDepositPaidAfterStripe(residentEmail: string, propertyId: string, residentUserId: string | null): boolean {
+  const charge = findHoldingDepositCharge(residentEmail, propertyId, residentUserId);
+  if (!charge) return true;
+  if (charge.status === "paid") return true;
+  const rows = readAll();
+  const i = rows.findIndex((r) => r.id === charge.id);
+  if (i === -1) return false;
+  const now = new Date().toISOString();
+  const next = [...rows];
+  next[i] = { ...next[i]!, status: "paid", paidAt: now, balanceLabel: "$0.00" };
+  writeAll(next);
+  return true;
+}
+
+/**
  * Called when an applicant completes the rental wizard (step 12).
  * Creates/tracks the application fee only. Lease/payment lines are created once the application is approved.
  */
@@ -2139,7 +2202,11 @@ export function recordApplicationCharges(
     applicationId?: string | null;
     managerUserId?: string | null;
   },
-  opts?: { skipApplicationFee?: boolean }
+  opts?: {
+    skipApplicationFee?: boolean;
+    /** Server-authoritative fee in dollars — see `ensurePendingApplicationFeeCharge.feeAmountOverride`. */
+    applicationFeeAmount?: number | null;
+  }
 ): void {
   const existingAppFee = findApplicationFeeCharge(
     input.residentEmail,
@@ -2147,10 +2214,21 @@ export function recordApplicationCharges(
     input.residentUserId,
   );
 
+  const serverAmount =
+    opts?.applicationFeeAmount != null && Number.isFinite(opts.applicationFeeAmount)
+      ? opts.applicationFeeAmount
+      : null;
+
   const prop = getPropertyById(input.propertyId);
   const sub = prop?.listingSubmission;
   if (!sub) {
     if (opts?.skipApplicationFee || existingAppFee) return;
+    if (serverAmount != null) {
+      // The server told us the effective fee — book exactly that (nothing for 0)
+      // instead of the legacy $50 fallback.
+      ensurePendingApplicationFeeCharge({ ...input, feeAmountOverride: serverAmount });
+      return;
+    }
     /* still record a generic application fee line using defaults */
     const fallback: HouseholdCharge = {
       id: input.residentEmail.trim() && input.propertyId.trim()
@@ -2175,11 +2253,9 @@ export function recordApplicationCharges(
   }
 
   if (opts?.skipApplicationFee || existingAppFee) {
-    ensurePendingHoldingDepositCharge(input);
     return;
   }
-  ensurePendingApplicationFeeCharge(input);
-  ensurePendingHoldingDepositCharge(input);
+  ensurePendingApplicationFeeCharge({ ...input, feeAmountOverride: serverAmount });
 }
 
 export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, managerUserId: string | null): boolean {
@@ -2234,6 +2310,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const zelleSnap = sub?.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
   const venmoSnap = sub?.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
   const leaseStart = row.application?.leaseStart?.trim() || row.manualResidentDetails?.moveInDate?.trim() || undefined;
+  const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
   const moveInDue = dueLabelForLeaseStart(leaseStart);
   const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
     const value = raw?.trim();
@@ -2309,6 +2386,55 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
+  const isShortTermStay = row.application?.rentalType === "short_term";
+
+  if (isShortTermStay) {
+    const nightlyRate = shortTermNightlyRate(sub?.shortTermDailyCost);
+    const nights = shortTermStayNightCount(leaseStart, leaseEnd);
+    if (nightlyRate > 0 && nights) {
+      pushCharge(
+        "stay_total",
+        shortTermStayTotalAmount(nightlyRate, nights),
+        shortTermStayChargeTitle(nights, nightlyRate),
+        true,
+        "Before check-in",
+      );
+    }
+
+    const shortDeposit = savedAmount(
+      row.application?.managerSecurityDepositOverride,
+      row.manualResidentDetails?.securityDeposit != null
+        ? String(row.manualResidentDetails.securityDeposit)
+        : allowListingDefaults
+          ? sub?.shortTermDeposit
+          : undefined,
+    );
+    if (shortDeposit > 0) {
+      pushCharge("security_deposit", shortDeposit, chargeTitle("security_deposit"), true, "Before check-in");
+    }
+
+    const shortMoveIn = savedAmount(
+      row.application?.managerMoveInFeeOverride,
+      row.manualResidentDetails?.moveInFee != null
+        ? String(row.manualResidentDetails.moveInFee)
+        : allowListingDefaults
+          ? sub?.shortTermMoveInFee
+          : undefined,
+    );
+    pushCharge("move_in_fee", shortMoveIn, chargeTitle("move_in_fee"), false, "Before check-in");
+
+    const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+    if (otherCostAmount > 0) {
+      const otherCostTitle = row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost");
+      pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before check-in");
+    }
+
+    const next = dedupeCharges([...rows, ...created]);
+    const changed = chargesChanged(before, next);
+    if (changed) writeAll(next);
+    return changed;
+  }
+
   // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
   // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
   // a second property lookup and to catch stale room IDs in assignedRoomChoice.
@@ -2343,7 +2469,6 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const dailyBasisRate =
     residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
 
-  const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
   // A DAILY-priced lease that starts and ends in one calendar month is billed once, by the
   // first-period charges below; its last-month charges would re-bill the same days. Monthly
   // rooms are left on their legacy two-charge path so their billing is unchanged.
@@ -2945,6 +3070,8 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     manualPaymentChannel: c.manualPaymentChannel,
     manualPaymentReportedAt: c.manualPaymentReportedAt,
     paymentReference: c.paymentReference ?? generatePaymentReference(c.id),
+    zelleContactSnapshot: c.zelleContactSnapshot,
+    venmoContactSnapshot: c.venmoContactSnapshot,
     notes:
       c.kind === "rent"
         ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1, c.dueDayMode)}.`

@@ -148,8 +148,8 @@ function rid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function normalizeListingFeeRow(raw: ManagerCustomFeeRow): ListingFeeRow {
-  const row = raw as ListingFeeRow;
+export function normalizeListingFeeRow(raw: ListingFeeRow): ListingFeeRow {
+  const row = raw;
   const cadence = listingFeeCadence(row);
   const preset = row.presetId && row.presetId !== "custom" ? PRESET_BY_ID.get(row.presetId) : undefined;
   return {

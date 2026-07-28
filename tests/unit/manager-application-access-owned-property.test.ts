@@ -39,24 +39,30 @@ vi.mock("@/lib/auth/manager-lease-scope", () => ({
 function makeDb() {
   return {
     from(table: string) {
-      const state: { eqManager: string | null; inIds: string[] | null } = { eqManager: null, inIds: null };
+      const state: { eqManager: string | null } = { eqManager: null };
+      // `managerOwnedPropertyIdSet` fetches EVERY property the manager owns
+      // (`.select("id").eq("manager_user_id", userId)`) and the predicate filters
+      // by candidate id in memory — so the stub returns the full owned set.
+      const ownedRows = (): { data: { id: string }[]; error: null } => {
+        if (table === "manager_property_records") {
+          return { data: (OWNED_PROPERTY_IDS[state.eqManager ?? ""] ?? []).map((id) => ({ id })), error: null };
+        }
+        return { data: [], error: null };
+      };
       const builder: Record<string, unknown> = {
         select: () => builder,
         eq(column: string, value: string) {
           if (column === "manager_user_id") state.eqManager = value;
           return builder;
         },
-        in(column: string, values: string[]) {
-          if (column === "id") state.inIds = values;
+        in() {
           return builder;
         },
         limit() {
-          if (table === "manager_property_records") {
-            const owned = OWNED_PROPERTY_IDS[state.eqManager ?? ""] ?? [];
-            const match = (state.inIds ?? []).filter((id) => owned.includes(id)).map((id) => ({ id }));
-            return Promise.resolve({ data: match, error: null });
-          }
-          return Promise.resolve({ data: [], error: null });
+          return Promise.resolve(ownedRows());
+        },
+        then(resolve: (v: { data: { id: string }[]; error: null }) => unknown) {
+          return Promise.resolve(ownedRows()).then(resolve);
         },
       };
       return builder;
