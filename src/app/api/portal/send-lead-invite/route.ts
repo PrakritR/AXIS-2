@@ -130,6 +130,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You cannot share links for one or more of these properties." }, { status: 403 });
     }
 
+    if (kind === "apply" && rentalType === "short_term") {
+      const shortTermBlocked = authorized.some(
+        (entry) => !entry.listing?.listingSubmission?.shortTermRentalsAllowed,
+      );
+      if (shortTermBlocked) {
+        return NextResponse.json(
+          { error: "Short-term applications are not enabled for one or more selected properties." },
+          { status: 400 },
+        );
+      }
+    }
+
     const isMultiListing = kind === "listing" && authorized.length > 1;
     const isMultiApply = kind === "apply" && authorized.length > 1;
     const isPortfolioTour = kind === "tour" && authorized.length > 1;

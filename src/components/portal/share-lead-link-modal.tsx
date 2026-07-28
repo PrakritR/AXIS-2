@@ -24,10 +24,24 @@ import {
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue, propertyAllowsShortTermRental } from "@/lib/rental-application/data";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
 
 const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
+
+const APPLY_RENTAL_TYPE_OPTIONS = [
+  { value: "standard", label: "Long-term lease" },
+  { value: "short_term", label: "Short-term stay" },
+] as const;
+
+/** Omit `rentalType` when both products are allowed or only long-term is selected. */
+function applyLinkRentalType(types: string[]): "short_term" | undefined {
+  const hasStandard = types.includes("standard");
+  const hasShort = types.includes("short_term");
+  if (hasStandard && hasShort) return undefined;
+  if (hasShort && !hasStandard) return "short_term";
+  return undefined;
+}
 
 function ShareLinkCopyRow({
   label,
@@ -82,7 +96,7 @@ export function ShareLeadLinkModal({
   const multiEnabled = properties.length > 1;
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
-  const [applyRentalType, setApplyRentalType] = useState<"standard" | "short_term">("standard");
+  const [applyRentalTypes, setApplyRentalTypes] = useState<string[]>(["standard"]);
   const [prospectName, setProspectName] = useState("");
   const [prospectEmail, setProspectEmail] = useState("");
   const [note, setNote] = useState("");
@@ -98,7 +112,7 @@ export function ShareLeadLinkModal({
           : properties[0]?.id ?? "";
       setPropertyIds(initialId ? [initialId] : []);
       setRoomChoice("");
-      setApplyRentalType("standard");
+      setApplyRentalTypes(["standard"]);
       setProspectName("");
       setProspectEmail("");
       setNote("");
@@ -144,6 +158,28 @@ export function ShareLeadLinkModal({
     return getRoomOptionsForProperty(singlePropertyId, { includeUnavailable: true }).filter((o) => o.value);
   }, [kind, singlePropertyId]);
 
+  const shortTermApplyAvailable = useMemo(() => {
+    if (kind !== "apply" || propertyIds.length === 0) return false;
+    return propertyIds.every((id) => propertyAllowsShortTermRental(id));
+  }, [kind, propertyIds]);
+
+  const effectiveApplyRentalTypes = useMemo(
+    () =>
+      shortTermApplyAvailable
+        ? applyRentalTypes
+        : applyRentalTypes.filter((type) => type !== "short_term"),
+    [applyRentalTypes, shortTermApplyAvailable],
+  );
+
+  useEffect(() => {
+    if (!shortTermApplyAvailable) {
+      setApplyRentalTypes((prev) => {
+        const next = prev.filter((type) => type !== "short_term");
+        return next.length > 0 ? next : ["standard"];
+      });
+    }
+  }, [shortTermApplyAvailable]);
+
   const linkUrl = useMemo(() => {
     if (propertyIds.length === 0 || typeof window === "undefined") return "";
     const origin = window.location.origin;
@@ -151,7 +187,7 @@ export function ShareLeadLinkModal({
     if (isMultiListing) return buildManagerBrowseUrl(origin, propertyIds);
     if (isMultiApply) {
       return buildManagerPortfolioApplyUrl(origin, propertyIds, {
-        rentalType: applyRentalType === "short_term" ? "short_term" : undefined,
+        rentalType: applyLinkRentalType(effectiveApplyRentalTypes),
       });
     }
     if (!singlePropertyId) return "";
@@ -163,9 +199,14 @@ export function ShareLeadLinkModal({
       propertyId: singlePropertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
-      rentalType: applyRentalType,
+      rentalType: applyLinkRentalType(effectiveApplyRentalTypes),
     });
-  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions, applyRentalType]);
+  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions, effectiveApplyRentalTypes]);
+
+  const applyAllowsBothRentalTypes =
+    kind === "apply" &&
+    applyRentalTypes.includes("standard") &&
+    applyRentalTypes.includes("short_term");
 
   const listingSummary = useMemo(() => {
     if (kind !== "listing" || isMultiListing || !singlePropertyId) return null;
@@ -265,7 +306,7 @@ export function ShareLeadLinkModal({
           listingRoomId: listingRoomId || undefined,
           roomName: roomName || undefined,
           note: note.trim() || undefined,
-          rentalType: kind === "apply" && applyRentalType === "short_term" ? "short_term" : undefined,
+          rentalType: kind === "apply" ? applyLinkRentalType(effectiveApplyRentalTypes) : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
@@ -400,15 +441,31 @@ export function ShareLeadLinkModal({
                 </div>
               )}
 
-              {kind === "apply" && !isMultiApply ? (
+              {kind === "apply" && multiEnabled && shortTermApplyAvailable ? (
+                <CheckboxMultiSelect
+                  label="Application"
+                  dataAttr="share-lead-application-multi"
+                  emptyLabel="Select application type"
+                  emptyMenuText="No options"
+                  options={[...APPLY_RENTAL_TYPE_OPTIONS]}
+                  selected={applyRentalTypes}
+                  onChange={(next) => {
+                    setApplyRentalTypes(next.length > 0 ? next : ["standard"]);
+                  }}
+                />
+              ) : null}
+
+              {kind === "apply" && !multiEnabled && shortTermApplyAvailable ? (
                 <div>
                   <label htmlFor="share-lead-application-type" className={FIELD_LABEL_CLASS}>
                     Application
                   </label>
                   <Select
                     id="share-lead-application-type"
-                    value={applyRentalType}
-                    onChange={(e) => setApplyRentalType(e.target.value === "short_term" ? "short_term" : "standard")}
+                    value={applyRentalTypes[0] === "short_term" ? "short_term" : "standard"}
+                    onChange={(e) =>
+                      setApplyRentalTypes([e.target.value === "short_term" ? "short_term" : "standard"])
+                    }
                   >
                     <option value="standard">Long-term lease</option>
                     <option value="short_term">Short-term stay</option>
@@ -489,8 +546,12 @@ export function ShareLeadLinkModal({
                   }
                   hint={
                     isMultiApply
-                      ? `Opens the application flow so the prospect can choose one of the ${propertyIds.length} homes you selected.`
-                      : "Applicants create a resident account first, then complete the application in their portal."
+                      ? applyAllowsBothRentalTypes
+                        ? `Opens the application flow so the prospect can choose one of the ${propertyIds.length} homes you selected, then long-term or short-term.`
+                        : `Opens the application flow so the prospect can choose one of the ${propertyIds.length} homes you selected.`
+                      : applyAllowsBothRentalTypes
+                        ? "Applicants choose long-term or short-term in the application after signing in or continuing as a guest."
+                        : "Applicants create a resident account first, then complete the application in their portal."
                   }
                 />
               ) : null}
