@@ -2669,12 +2669,16 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
+  // Per-room move-in fee wins over the shared listing move-in fee (same room-first
+  // precedence as the deposit), so a room with its own move-in and a property with a
+  // shared one never both bill for the same move-in.
+  const roomMoveInFee = room?.moveInFee?.trim() ? room.moveInFee : undefined;
   const moveInFee = savedAmount(
     row.application?.managerMoveInFeeOverride,
     row.manualResidentDetails?.moveInFee != null
       ? String(row.manualResidentDetails.moveInFee)
       : allowListingDefaults
-        ? sub?.moveInFee
+        ? (roomMoveInFee ?? sub?.moveInFee)
         : undefined,
   );
   pushCharge("move_in_fee", moveInFee, chargeTitle("move_in_fee"), false, "Before move-in");

@@ -48,10 +48,12 @@ function seedListing(
   propertyId: string,
   r: ManagerRoomSubmission,
   sharedSecurityDeposit: string,
+  sharedMoveInFee = "",
 ): MockProperty {
   const sub = createDefaultListingSubmission();
   sub.rooms = [r];
   sub.securityDeposit = sharedSecurityDeposit;
+  sub.moveInFee = sharedMoveInFee;
   const property: MockProperty = {
     id: propertyId,
     title: "Deposit Test House",
@@ -107,6 +109,12 @@ function depositCharge(email: string) {
     .find((c) => c.kind === "security_deposit");
 }
 
+function moveInCharge(email: string) {
+  return readHouseholdCharges()
+    .filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase())
+    .find((c) => c.kind === "move_in_fee");
+}
+
 beforeEach(() => {
   window.sessionStorage.clear();
 });
@@ -148,5 +156,34 @@ describe("per-room security deposit — approved-application charges", () => {
     );
 
     expect(depositCharge(email)?.amountLabel).toBe("$2,000.00");
+  });
+});
+
+describe("per-room move-in fee — room wins over the shared move-in, never both", () => {
+  it("bills the room's own move-in fee when set", () => {
+    const email = "room-movein@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-room-movein";
+    seedListing(propertyId, room({ moveInFee: "300" }), "1000", "150");
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, "room-1", email), MANAGER_ID, true);
+
+    // Exactly ONE move-in charge, at the room's amount — the shared $150 does not also bill.
+    const all = readHouseholdCharges().filter(
+      (c) => c.residentEmail.toLowerCase() === email && c.kind === "move_in_fee",
+    );
+    expect(all).toHaveLength(1);
+    expect(moveInCharge(email)?.amountLabel).toBe("$300.00");
+  });
+
+  it("falls back to the shared move-in fee when the room has none", () => {
+    const email = "shared-movein@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-shared-movein";
+    seedListing(propertyId, room({ moveInFee: undefined }), "1000", "150");
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, "room-1", email), MANAGER_ID, true);
+
+    expect(moveInCharge(email)?.amountLabel).toBe("$150.00");
   });
 });

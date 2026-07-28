@@ -2477,8 +2477,11 @@ export function ManagerAddListingForm({
   // screen reads as one sectioned table (Rooms | Bundles + Other fees) instead of the old
   // separate floating blocks. Each room and each bundle carries its own dropdown with rent
   // (rooms) / price (bundles), security deposit, and utilities (fixed cost vs resident pays).
+  // Rent by room ON (shared-home) ALWAYS lists every room as its own rent row — the primary
+  // content of this view. (Previously gated on longTermLeaseEnabled, which hid the rows on a
+  // listing with no long-term term and left only the grouped-leases affordance showing.)
   const roomsFeeSection: FeeExpandableSection | null =
-    longTermLeaseEnabled && !isEntireHome
+    rentByRoom
       ? {
           key: "rooms",
           title: "Rooms",
@@ -2534,6 +2537,15 @@ export function ManagerAddListingForm({
                       value={(room.securityDeposit ?? "").replace(/^\$/, "").trim()}
                       onChange={(e) => setRoom(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
                       placeholder="1000"
+                    />
+                  </GridField>
+                  <GridField>
+                    <FieldLabel hint="Optional — falls back to the shared move-in fee.">Move-in fee</FieldLabel>
+                    <MoneyInput
+                      ariaLabel={`Move-in fee for ${roomLabel}`}
+                      value={(room.moveInFee ?? "").replace(/^\$/, "").trim()}
+                      onChange={(e) => setRoom(i, { moveInFee: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="250"
                     />
                   </GridField>
                   <GridField>
@@ -2668,6 +2680,15 @@ export function ManagerAddListingForm({
                   />
                 </GridField>
                 <GridField>
+                  <FieldLabel hint="Optional — falls back to the shared move-in fee.">Move-in fee</FieldLabel>
+                  <MoneyInput
+                    ariaLabel={`Move-in fee for ${bundle.label.trim() || "bundle"}`}
+                    value={(bundle.moveInFee ?? "").replace(/^\$/, "").trim()}
+                    onChange={(e) => setBundle(i, { moveInFee: sanitizeMoneyInput(e.target.value) })}
+                    placeholder="250"
+                  />
+                </GridField>
+                <GridField>
                   <LongTermUtilitiesPaymentPicker
                     value={bundle.utilitiesPaymentModel}
                     onSelect={(model) =>
@@ -2690,44 +2711,26 @@ export function ManagerAddListingForm({
                   </GridField>
                 ) : null}
                 {sub.shortTermRentalsAllowed ? (
-                  <>
-                    <div className="w-full">
-                      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={Boolean(bundle.shortTermEnabled)}
-                          onChange={(e) => {
-                            const on = e.target.checked;
-                            clearListingFieldError(stNightlyKey);
-                            setBundle(i, {
-                              shortTermEnabled: on,
-                              ...(on ? {} : { shortTermNightlyRent: "" }),
-                            });
-                          }}
-                        />
-                        Short-term rental
-                      </label>
+                  <GridField>
+                    {/* Short-term is decided once in Lease lengths; here the rate field just
+                        appears (no redundant per-row checkbox). A non-empty rate offers this
+                        unit for short-term stays. */}
+                    <FieldLabel hint="Nightly rate → stay total at checkout.">Short-term rent / night</FieldLabel>
+                    <div data-wizard-field={stNightlyKey}>
+                      <MoneyInput
+                        invalid={Boolean(stNightlyErr)}
+                        ariaLabel={`Short-term nightly rent for ${bundle.label.trim() || "bundle"}`}
+                        value={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
+                        onChange={(e) => {
+                          clearListingFieldError(stNightlyKey);
+                          const v = sanitizeMoneyInput(e.target.value);
+                          setBundle(i, { shortTermNightlyRent: v, shortTermEnabled: v.trim() !== "" });
+                        }}
+                        placeholder="85"
+                      />
+                      <StepFieldError msg={stNightlyErr} />
                     </div>
-                    {bundle.shortTermEnabled ? (
-                      <GridField>
-                        <FieldLabel hint="Nightly rate → stay total at checkout.">Short-term rent / night</FieldLabel>
-                        <div data-wizard-field={stNightlyKey}>
-                          <MoneyInput
-                            invalid={Boolean(stNightlyErr)}
-                            ariaLabel={`Short-term nightly rent for ${bundle.label.trim() || "bundle"}`}
-                            value={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => {
-                              clearListingFieldError(stNightlyKey);
-                              setBundle(i, { shortTermNightlyRent: sanitizeMoneyInput(e.target.value) });
-                            }}
-                            placeholder="85"
-                          />
-                          <StepFieldError msg={stNightlyErr} />
-                        </div>
-                      </GridField>
-                    ) : null}
-                  </>
+                  </GridField>
                 ) : null}
                 <div className="w-full flex flex-wrap items-center justify-between gap-2">
                   <FieldLabel>Rooms in this bundle</FieldLabel>

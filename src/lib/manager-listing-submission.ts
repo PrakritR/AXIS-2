@@ -77,6 +77,14 @@ export type ManagerRoomSubmission = {
    * `recordApprovedApplicationCharges` alongside per-room rent.
    */
   securityDeposit?: string;
+  /**
+   * Per-room move-in / cleaning fee (money string). Optional override with the same
+   * room-first precedence as {@link securityDeposit}: set → this room's approval bills
+   * THIS move-in fee; absent → falls back to the shared
+   * {@link ManagerListingSubmissionV1.moveInFee}. Room-level wins so the two never both
+   * bill for the same move-in.
+   */
+  moveInFee?: string;
   /** Estimated monthly utilities for this room (shown on listing). */
   utilitiesEstimate: string;
   /** Who pays utilities — defaults to manager-billed estimate through the portal. */
@@ -148,6 +156,9 @@ export type ManagerBundleRow = {
    * an auto-billed one. Reuses the same money representation as the listing deposit.
    */
   securityDeposit?: string;
+  /** Per-bundle move-in / cleaning fee (money string) — advertised default, same as the
+   *  bundle deposit (bundles aren't read by charge generation). */
+  moveInFee?: string;
   /**
    * Who pays utilities for this bundle — reuses {@link UtilitiesPaymentModel}
    * (manager_billed = "fixed cost" with {@link utilitiesEstimate}; tenant_direct =
@@ -912,6 +923,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof legacyRoom.securityDeposit === "string" && legacyRoom.securityDeposit.trim()
           ? legacyRoom.securityDeposit.trim()
           : undefined,
+      moveInFee:
+        typeof legacyRoom.moveInFee === "string" && legacyRoom.moveInFee.trim()
+          ? legacyRoom.moveInFee.trim()
+          : undefined,
       furnishing: (() => {
         const f = typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "";
         return f.trim().length === 0 ? "" : f;
@@ -1007,6 +1022,8 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof b.securityDeposit === "string" && b.securityDeposit.trim()
           ? b.securityDeposit.trim()
           : undefined,
+      moveInFee:
+        typeof b.moveInFee === "string" && b.moveInFee.trim() ? b.moveInFee.trim() : undefined,
       utilitiesPaymentModel: b.utilitiesPaymentModel
         ? normalizeUtilitiesPaymentModel(b.utilitiesPaymentModel)
         : undefined,
