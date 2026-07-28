@@ -254,11 +254,20 @@ export type ManagerListingSubmissionV1 = {
    * See `docs/agents/resident-payments.md`.
    */
   holdingDepositTiming?: "at_application" | "after_approval";
-  /** When true, residents may apply to additional properties or rooms beyond their first application. */
+  /**
+   * @deprecated Inert. Applying to multiple properties/rooms is now always
+   * allowed (only an exact same-property + same-room pending duplicate is
+   * blocked) — hard-coded in
+   * `src/lib/rental-application/application-policy.ts`, no longer read from the
+   * listing. Kept so stored submissions still normalize; no UI sets it.
+   */
   allowMultiplePropertyApplications?: boolean;
   /**
-   * When true, the application fee is only collected on the resident's first application
-   * (subsequent applications skip the fee step).
+   * @deprecated Inert. The application fee is now always collected ONCE per
+   * resident per manager (repeat applicants are waived) — hard-coded in
+   * `shouldWaiveApplicationFeeForResident`
+   * (`src/lib/rental-application/application-policy.ts`), no longer read from
+   * the listing. Kept so stored submissions still normalize; no UI sets it.
    */
   applicationFeeOnlyFirstApplication?: boolean;
   securityDeposit: string;

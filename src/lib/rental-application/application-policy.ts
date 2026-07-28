@@ -5,7 +5,6 @@ import {
   listingApplicationFeeAmount,
 } from "@/lib/household-charges";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
-import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
@@ -19,40 +18,63 @@ export function applicationsForResidentEmail(email: string): DemoApplicantRow[] 
   return readManagerApplicationRows().filter((row) => normalizeEmail(row.email ?? "") === e);
 }
 
-export function listingAllowsMultipleApplications(propertyId: string): boolean {
-  const sub = getPropertyById(propertyId)?.listingSubmission;
-  return sub?.allowMultiplePropertyApplications === true;
-}
-
-export function listingApplicationFeeOnlyFirstApplication(propertyId: string): boolean {
-  const sub = getPropertyById(propertyId)?.listingSubmission;
-  return sub?.applicationFeeOnlyFirstApplication === true;
-}
-
-/** Resident already has a submitted application (any property) before this new one. */
-export function residentHasPriorApplication(email: string): boolean {
-  return applicationsForResidentEmail(email).some((row) => !isInProgressApplicationRow(row));
-}
-
-/** Resident has a paid application-fee charge on any property. */
-export function residentHasPaidApplicationFee(email: string, residentUserId?: string | null): boolean {
-  const e = normalizeEmail(email);
-  if (!e) return false;
-  return readChargesForResident(e, residentUserId ?? null).some(
-    (c) => c.kind === "application_fee" && c.status === "paid",
+/**
+ * Resident already has a submitted application before this new one. When
+ * `managerUserId` is provided, only applications attributed to that manager
+ * count.
+ */
+export function residentHasPriorApplication(email: string, managerUserId?: string | null): boolean {
+  return applicationsForResidentEmail(email).some(
+    (row) =>
+      !isInProgressApplicationRow(row) &&
+      (managerUserId == null || row.managerUserId === managerUserId),
   );
 }
 
+/**
+ * Resident has a paid application-fee charge. When `managerUserId` is provided,
+ * only charges billed by that manager count.
+ */
+export function residentHasPaidApplicationFee(
+  email: string,
+  residentUserId?: string | null,
+  managerUserId?: string | null,
+): boolean {
+  const e = normalizeEmail(email);
+  if (!e) return false;
+  return readChargesForResident(e, residentUserId ?? null).some(
+    (c) =>
+      c.kind === "application_fee" &&
+      c.status === "paid" &&
+      (managerUserId == null || c.managerUserId === managerUserId),
+  );
+}
+
+/**
+ * The application fee is a single account-level charge collected ONCE per
+ * resident PER MANAGER, never re-charged per property. So a resident who
+ * already submitted an application to — or already paid an application fee
+ * billed by — this property's manager is waived on any of that manager's
+ * listings; a first-timer with that manager pays, and history with a DIFFERENT
+ * manager never waives another manager's fee. If the property's manager cannot
+ * be resolved, the fee is charged. (This used to be gated on a per-listing
+ * `applicationFeeOnlyFirstApplication` toggle, removed once the fee moved to
+ * manager-level settings.)
+ */
 export function shouldWaiveApplicationFeeForResident(input: {
   propertyId: string;
   residentEmail: string;
   residentUserId?: string | null;
 }): boolean {
   const pid = input.propertyId.trim();
-  if (!pid || !listingApplicationFeeOnlyFirstApplication(pid)) return false;
   const email = normalizeEmail(input.residentEmail);
-  if (!email) return false;
-  return residentHasPriorApplication(email) || residentHasPaidApplicationFee(email, input.residentUserId);
+  if (!pid || !email) return false;
+  const managerUserId = getPropertyById(pid)?.managerUserId?.trim() || null;
+  if (!managerUserId) return false;
+  return (
+    residentHasPriorApplication(email, managerUserId) ||
+    residentHasPaidApplicationFee(email, input.residentUserId, managerUserId)
+  );
 }
 
 export function residentApplicationFeeGate(input: {
@@ -96,24 +118,14 @@ export function residentApplicationSubmitBlocked(input: {
   const email = normalizeEmail(input.residentEmail);
   if (!pid || !email) return { blocked: false };
 
-  const sub = getPropertyById(pid)?.listingSubmission;
-  const allowMultiple = sub?.allowMultiplePropertyApplications === true;
+  // Applying to multiple properties/rooms is always allowed — a resident may
+  // hold several applications at once (one per property + room). The only thing
+  // blocked is a genuine duplicate: a second PENDING application for the exact
+  // same property AND room. (This used to be gated on a per-listing
+  // `allowMultiplePropertyApplications` toggle, removed with per-property
+  // applications; a returning applicant after a final withdrawal starts fresh.)
   const existing = applicationsForResidentEmail(email).filter((row) => !isInProgressApplicationRow(row));
   const room = input.roomChoice1?.trim() || "";
-
-  if (!allowMultiple) {
-    const active = existing.filter(
-      (row) => (row.bucket === "pending" || row.bucket === "approved") && !isInProgressApplicationRow(row),
-    );
-    if (active.length > 0) {
-      return {
-        blocked: true,
-        reason:
-          "This listing only accepts one application per resident. Contact the property manager if you need to apply elsewhere.",
-      };
-    }
-    return { blocked: false };
-  }
 
   const duplicatePending = existing.some((row) => {
     if (row.bucket !== "pending" || isInProgressApplicationRow(row)) return false;
@@ -135,14 +147,4 @@ export function residentApplicationSubmitBlocked(input: {
 /** Residents may withdraw only applications still awaiting manager review. */
 export function residentCanWithdrawApplication(row: DemoApplicantRow): boolean {
   return row.bucket === "pending";
-}
-
-export function listingApplicationSettingsSummary(sub: ManagerListingSubmissionV1 | null | undefined): {
-  allowMultiplePropertyApplications: boolean;
-  applicationFeeOnlyFirstApplication: boolean;
-} {
-  return {
-    allowMultiplePropertyApplications: sub?.allowMultiplePropertyApplications === true,
-    applicationFeeOnlyFirstApplication: sub?.applicationFeeOnlyFirstApplication === true,
-  };
 }
