@@ -35,11 +35,18 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import { MonthlyProfitChart } from "@/components/portal/monthly-profit-chart";
 import {
   applicationVisibleToPortalUser,
   collectLinkedPropertyIdsForModule,
   moduleRowVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
+import {
+  bucketByMonth,
+  lastNMonths,
+  mergeMonthlyProfit,
+  parseMoneyLabel,
+} from "@/lib/portal-monthly-profit";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
@@ -514,11 +521,6 @@ function fmt(iso: string) {
   return formatPacificDateTime(d);
 }
 
-/** Parse a "$1,200.00" balance label into a numeric dollar amount for KPI sums. */
-function parseMoneyLabel(label: string): number {
-  const n = Number(String(label).replace(/[^0-9.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
-}
 
 function formatUsd(amount: number): string {
   return amount.toLocaleString("en-US", {
@@ -526,145 +528,6 @@ function formatUsd(amount: number): string {
     currency: "USD",
     maximumFractionDigits: 0,
   });
-}
-
-type MonthPoint = { key: string; label: string; value: number };
-
-/** The last 6 calendar months (oldest → current), keyed `YYYY-MM` with a short label. */
-function lastSixMonths(nowMs: number): { key: string; label: string }[] {
-  const base = new Date(nowMs);
-  const out: { key: string; label: string }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const m = new Date(base.getFullYear(), base.getMonth() - i, 1);
-    out.push({
-      key: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`,
-      label: m.toLocaleString("en-US", { month: "short" }),
-    });
-  }
-  return out;
-}
-
-/** `YYYY-MM` bucket key for an ISO date, or null when unparseable. */
-function monthKeyOf(iso: string | undefined | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** Sum a list into the 6 month buckets by an ISO-date accessor. */
-function bucketByMonth<T>(
-  items: T[],
-  months: { key: string; label: string }[],
-  dateOf: (item: T) => string | undefined | null,
-  amountOf: (item: T) => number,
-): MonthPoint[] {
-  const sums = new Map(months.map((m) => [m.key, 0]));
-  for (const item of items) {
-    const key = monthKeyOf(dateOf(item));
-    if (key && sums.has(key)) sums.set(key, sums.get(key)! + (amountOf(item) || 0));
-  }
-  return months.map((m) => ({ key: m.key, label: m.label, value: sums.get(m.key) ?? 0 }));
-}
-
-function formatUsdShort(amount: number): string {
-  if (amount >= 1000) return `$${(amount / 1000).toFixed(amount >= 10000 ? 0 : 1)}k`;
-  return `$${Math.round(amount)}`;
-}
-
-/**
- * Cash-flow trend card: payments collected vs. expenses over the last 6 months,
- * as a theme-aware grouped bar chart (CSS heights, no chart lib). Bars scale to
- * the tallest value across both series; totals + net summarize the window.
- */
-function DashboardTrends({ payments, expenses }: { payments: MonthPoint[]; expenses: MonthPoint[] }) {
-  const totalIn = payments.reduce((s, p) => s + p.value, 0);
-  const totalOut = expenses.reduce((s, e) => s + e.value, 0);
-  const net = totalIn - totalOut;
-  const max = Math.max(1, ...payments.map((p) => p.value), ...expenses.map((e) => e.value));
-  const hasAny = totalIn > 0 || totalOut > 0;
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 sm:p-5 [html[data-native]_&]:p-3.5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Cash flow</h2>
-          <p className="mt-0.5 text-[11px] uppercase tracking-[0.07em] text-muted/70">Last 6 months</p>
-        </div>
-        <div className="flex items-center gap-4 text-right">
-          <div>
-            <div className="text-sm font-semibold tabular-nums text-[var(--status-confirmed-fg)]">
-              {formatUsd(totalIn)}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Collected</div>
-          </div>
-          <div>
-            <div className="text-sm font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-              {formatUsd(totalOut)}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Expenses</div>
-          </div>
-          <div>
-            <div
-              className={`text-sm font-semibold tabular-nums ${net >= 0 ? "text-foreground" : "text-[var(--status-overdue-fg)]"}`}
-            >
-              {net >= 0 ? "" : "−"}
-              {formatUsd(Math.abs(net))}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Net</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="mt-3 flex items-center gap-4 text-[11px] text-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[3px]" style={{ background: "var(--status-confirmed-fg)" }} />
-          Payments
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[3px]" style={{ background: "var(--status-overdue-fg)" }} />
-          Expenses
-        </span>
-      </div>
-
-      {hasAny ? (
-        <div className="mt-4 flex h-40 items-end gap-2 sm:gap-4 [html[data-native]_&]:h-32">
-          {payments.map((p, i) => {
-            const e = expenses[i];
-            const inPct = Math.round((p.value / max) * 100);
-            const outPct = Math.round(((e?.value ?? 0) / max) * 100);
-            return (
-              <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                <div className="flex h-full w-full items-end justify-center gap-1">
-                  <div
-                    className="group relative w-full max-w-[1.6rem] rounded-t-[3px] bg-[var(--status-confirmed-fg)] transition-[height] duration-500"
-                    style={{ height: `${Math.max(p.value > 0 ? 3 : 0, inPct)}%` }}
-                    title={`Payments · ${p.label}: ${formatUsd(p.value)}`}
-                  />
-                  <div
-                    className="group relative w-full max-w-[1.6rem] rounded-t-[3px] bg-[var(--status-overdue-fg)] transition-[height] duration-500"
-                    style={{ height: `${Math.max((e?.value ?? 0) > 0 ? 3 : 0, outPct)}%` }}
-                    title={`Expenses · ${e?.label ?? p.label}: ${formatUsd(e?.value ?? 0)}`}
-                  />
-                </div>
-                <span className="text-[10px] font-medium text-muted [html[data-native]_&]:text-[9px]">
-                  {p.label}
-                </span>
-                <span className="text-[9px] tabular-nums text-muted/60 [html[data-native]_&]:hidden">
-                  {formatUsdShort(p.value)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="mt-4 text-sm text-muted [html[data-native]_&]:text-xs">
-          No payments or expenses recorded yet. Collected rent and logged expenses will chart here.
-        </p>
-      )}
-    </div>
-  );
 }
 
 export function ManagerDashboard({ displayName = "there" }: { displayName?: string }) {
@@ -839,7 +702,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     // Cash-flow trend series (last 6 months), computed from real local stores:
     // payments = PAID charges bucketed by paid/created date; expenses = logged
     // outgoing expenses bucketed by expense date.
-    const months = lastSixMonths(nowMs);
+    const months = lastNMonths(nowMs, 6);
     const paymentsByMonth = bucketByMonth(
       charges.filter((c) => c.status === "paid"),
       months,
@@ -1014,7 +877,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
         {/* Financial trend graphs — payments collected vs. expenses, last 6 months. */}
         {visibility.cashflow ? (
-          <DashboardTrends payments={paymentsByMonth} expenses={expensesByMonth} />
+          <MonthlyProfitChart points={mergeMonthlyProfit(paymentsByMonth, expensesByMonth)} />
         ) : null}
 
         {/* Needs attention — a live, colour-coded queue: big all-caps heading over

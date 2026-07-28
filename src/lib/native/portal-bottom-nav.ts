@@ -86,10 +86,10 @@ export function orderNativeBottomNavItems<T extends { section: string }>(
  * manager-properties.tsx). Keep in sync with `src/lib/platform/parity.ts`.
  */
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
-  "dashboard",
   "properties",
-  "residents",
   "communication",
+  "dashboard",
+  "residents",
 ] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications"] as const;

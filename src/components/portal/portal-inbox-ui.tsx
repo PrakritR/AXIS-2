@@ -563,6 +563,10 @@ export function InboxChannelTag({ channel }: { channel: InboxChannel }) {
   );
 }
 
+/** Shared list-toolbar chrome (segment tabs + search) for inbox panes. */
+export const PORTAL_INBOX_LIST_TOOLBAR_CLASS =
+  "portal-inbox-list-toolbar shrink-0 space-y-2 border-b border-border p-2 max-md:space-y-1.5 max-md:p-1.5 sm:p-2.5 sm:space-y-2.5";
+
 /** Scrollable body for a conversation list pane. */
 export const INBOX_LIST_SCROLL =
   "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]";
@@ -624,7 +628,7 @@ export function InboxConversationRow({
   const badgeCount = unreadCount ?? (unread ? 1 : 0);
   return (
     <div
-      className={`portal-inbox-row flex items-center gap-2.5 border-b border-border/50 px-3 py-3 transition-colors ${
+      className={`portal-inbox-row flex items-center gap-2.5 border-b border-border/50 px-3 py-3 transition-colors max-md:gap-2 max-md:px-2.5 max-md:py-2.5 ${
         selected
           ? "portal-inbox-row--selected border-l-[3px] border-l-primary bg-primary/[0.06]"
           : "border-l-[3px] border-l-transparent hover:bg-foreground/[0.03]"
@@ -695,7 +699,7 @@ export function InboxListSegmentTabs({
   ];
   return (
     <div
-      className="flex gap-1 rounded-xl bg-foreground/[0.04] p-1"
+      className="flex gap-0.5 rounded-xl bg-foreground/[0.04] p-0.5 max-md:gap-0.5"
       role="tablist"
       aria-label="Conversation folders"
       data-attr="inbox-list-segments"
@@ -709,7 +713,7 @@ export function InboxListSegmentTabs({
             role="tab"
             aria-selected={selected}
             onClick={() => onChange(tab.id)}
-            className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+            className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors max-md:px-1.5 max-md:py-1 max-md:text-[11px] ${
               selected
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted hover:text-foreground"
@@ -1342,8 +1346,7 @@ export function InboxThreadView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header
-        className="portal-inbox-thread-header flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1.5 max-md:py-1 md:gap-1 md:px-2 md:py-2"
-        style={{ paddingTop: "max(0.375rem, env(safe-area-inset-top, 0px))" }}
+        className="portal-inbox-thread-header flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]"
       >
         {onBack ? (
           <button
@@ -1467,7 +1470,7 @@ export function InboxTwoPane({
   return (
     <div
       ref={rootRef}
-      className={`portal-inbox-two-pane overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] ${className}`}
+      className={`portal-inbox-two-pane overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] max-md:rounded-xl max-md:border-x-0 max-md:shadow-none ${className}`}
       style={{ height }}
       data-attr="portal-inbox-two-pane"
     >

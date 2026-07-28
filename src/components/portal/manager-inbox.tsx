@@ -38,6 +38,7 @@ import {
   InboxScheduledThreadList,
   InboxThreadEmpty,
   InboxThreadView,
+  PORTAL_INBOX_LIST_TOOLBAR_CLASS,
   InboxTwoPane,
   PortalInboxEmptyState,
   inboxTabEmptyCopy,
@@ -996,7 +997,7 @@ export const ManagerInbox = forwardRef<
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="portal-inbox-list-toolbar shrink-0 space-y-2 border-b border-border p-2.5">
+      <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
         {searchBox}
         {searchActive ? (
           <p className="px-1 text-[11px] leading-snug text-muted">

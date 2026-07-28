@@ -16,7 +16,7 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 
 /** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3.5";
+  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] max-lg:rounded-2xl max-lg:p-3 sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3 [html[data-native]_&]:py-3";
 
 /** Subtitle under the Dashboard heading — shared across all portal dashboards. */
 export function portalDashboardWelcomeSubtitle(displayName?: string | null): string {
@@ -213,7 +213,11 @@ export function PortalContentWell({ children }: { children: ReactNode }) {
 
 /** Compact full-width select for mobile section status buckets (Current / Previous, etc.). */
 export const PORTAL_MOBILE_STATUS_SELECT_CLASS =
-  "h-9 w-full min-w-0 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground";
+  "h-9 w-auto max-w-[min(100%,18rem)] shrink-0 rounded-full border border-border bg-card px-2.5 pr-8 text-sm font-semibold text-foreground";
+
+/** Mobile inline toolbar: status/tab dropdown + header actions on one row. */
+export const PORTAL_MOBILE_TOOLBAR_ROW_CLASS =
+  "flex w-full min-w-0 max-md:flex-nowrap max-md:items-center max-md:justify-between max-md:gap-2";
 
 /** Admin portal pattern: pill strip with label + count (Managers / Leases / Applications). */
 export function ManagerPortalStatusPills({
@@ -288,7 +292,7 @@ export function ManagerPortalStatusPills({
 
   return (
     <>
-      <label className="flex min-w-0 flex-1 md:hidden">
+      <label className="flex shrink-0 md:hidden">
         <span className="sr-only">{selectAriaLabel}</span>
         <Select
           className={PORTAL_MOBILE_STATUS_SELECT_CLASS}
@@ -386,7 +390,7 @@ export const PORTAL_DASHBOARD_SECTION_CARD =
   "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3";
 
 /** Vertical stack spacing for dashboard sections — tighter on native. */
-export const PORTAL_DASHBOARD_STACK = "space-y-5 [html[data-native]_&]:space-y-3";
+export const PORTAL_DASHBOARD_STACK = "space-y-5 max-lg:space-y-3 [html[data-native]_&]:space-y-3";
 
 /** KPI row: 2-column grid on phones (no sideways scroll); horizontal strip from `sm` up. */
 export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
@@ -477,6 +481,7 @@ export function ManagerPortalPageShell({
   welcomeSubtitle = false,
   compactFilterRow = false,
   mobileHideFilterRow = false,
+  mobileFlush = false,
 }: {
   title: string;
   subtitle?: string;
@@ -493,9 +498,19 @@ export function ManagerPortalPageShell({
   compactFilterRow?: boolean;
   /** Omit filter chrome on phones (e.g. Communication thread reading). */
   mobileHideFilterRow?: boolean;
+  /** Tighter section chrome on phones (e.g. full-bleed inbox thread). */
+  mobileFlush?: boolean;
 }) {
+  const titleAsideDesktopOnly = Boolean(titleAside && filterRow);
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
+    <div
+      className={cn(
+        PORTAL_SECTION_SURFACE,
+        "relative z-0 min-w-0 w-full shrink-0",
+        mobileFlush &&
+          "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {/* min-w-0 (not shrink-0) so a long title/subtitle shrinks + wraps within
             the viewport on mobile instead of forcing horizontal overflow. */}
@@ -520,11 +535,14 @@ export function ManagerPortalPageShell({
           ) : null}
         </div>
         {titleAside ? (
-          // min-w-0 (not shrink-0): the action group can shrink, so when it is
-          // too wide for the title row on a phone the whole group wraps to its
-          // own line (header is flex-wrap) and its buttons wrap within the
-          // viewport, instead of overflowing and clipping the last action.
-          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
+          <div
+            className={cn(
+              "ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2",
+              titleAsideDesktopOnly && "max-md:hidden",
+            )}
+          >
+            {titleAside}
+          </div>
         ) : null}
       </div>
       {filterRow ? (
@@ -535,9 +553,17 @@ export function ManagerPortalPageShell({
                 ? "mt-2 border-b border-border pb-2 max-md:mt-0 max-md:pb-1.5 sm:mt-4 sm:pb-4 [html[data-native]_&]:mt-1.5 [html[data-native]_&]:pb-2"
                 : "mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5",
               mobileHideFilterRow && "max-md:hidden",
+              mobileFlush && "max-md:mt-0 max-md:border-0 max-md:pb-0",
             )}
           >
-            {filterRow}
+            <div className={cn(PORTAL_MOBILE_TOOLBAR_ROW_CLASS, "md:contents")}>
+              {filterRow}
+              {titleAside && titleAsideDesktopOnly ? (
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 max-md:flex-nowrap md:hidden">
+                  {titleAside}
+                </div>
+              ) : null}
+            </div>
           </div>
           <div
             className={cn(
@@ -545,13 +571,14 @@ export function ManagerPortalPageShell({
                 ? "mt-2 sm:mt-4 [html[data-native]_&]:mt-1.5"
                 : "mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5",
               mobileHideFilterRow && "max-md:mt-0",
+              mobileFlush && "max-md:mt-0",
             )}
           >
             {children}
           </div>
         </>
       ) : (
-        <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-0">{children}</div>
+        <div className="mt-4 sm:mt-6 max-lg:mt-2 [html[data-native]_&]:mt-0">{children}</div>
       )}
     </div>
   );
@@ -652,7 +679,7 @@ export function ManagerPortalFilterRow({
   className?: string;
 }) {
   return (
-    <div className={cn("flex w-full min-w-0 max-w-full flex-wrap items-center gap-4", className)}>
+    <div className={cn("flex w-full min-w-0 max-w-full flex-wrap items-center gap-4 max-md:gap-2", className)}>
       {children}
     </div>
   );
@@ -669,7 +696,7 @@ export function ManagerPortalStatusFilterRow({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-3 flex w-full min-w-0 flex-wrap items-center gap-3", className)}>{children}</div>
+    <div className={cn("mb-3 flex w-full min-w-0 flex-wrap items-center gap-3 max-md:mb-2 max-md:gap-2", className)}>{children}</div>
   );
 }
 
