@@ -147,12 +147,40 @@ describe("publicListingProjection", () => {
 
   it("denies by default: a field added to the submission later is not published", () => {
     const listing = storedListing();
-    (listing.listingSubmission as unknown as Record<string, unknown>).yearBuilt = "1962";
+    (listing.listingSubmission as unknown as Record<string, unknown>).someFutureField = "value";
     (listing as unknown as Record<string, unknown>).internalOwnerNote = "seller is motivated";
 
     const projected = publicListingProjection(listing);
-    expect(allKeys(projected).has("yearBuilt")).toBe(false);
+    expect(allKeys(projected).has("someFutureField")).toBe(false);
     expect(allKeys(projected).has("internalOwnerNote")).toBe(false);
+  });
+
+  it("keeps the building compliance inputs off the public payload", () => {
+    // These landed on the submission AFTER the allowlist was written (the
+    // disclosure-trigger work), and deny-by-default kept them private without
+    // anyone editing this projection. They are regulatory inputs to the lease
+    // disclosure engine, not listing marketing — a registration number and an
+    // occupancy date in particular are manager compliance records. Pinned here
+    // so a later "make the listing richer" pass has to argue the case.
+    const listing = storedListing();
+    Object.assign(listing.listingSubmission as unknown as Record<string, unknown>, {
+      yearBuilt: 1962,
+      sharedUtilityMetering: true,
+      hasPeriodicPestService: true,
+      certificateOfOccupancyDate: "1962-04-01",
+      rrioRegistrationNumber: "RRIO-12345",
+    });
+
+    const keys = allKeys(publicListingProjection(listing));
+    for (const field of [
+      "yearBuilt",
+      "sharedUtilityMetering",
+      "hasPeriodicPestService",
+      "certificateOfOccupancyDate",
+      "rrioRegistrationNumber",
+    ]) {
+      expect(keys.has(field), `${field} must not reach an anonymous caller`).toBe(false);
+    }
   });
 
   it("keeps what browse, listing detail and the apply wizard read", () => {
