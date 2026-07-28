@@ -22,7 +22,7 @@ import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
 import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
-import { resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
+import { ensureSubmissionListingFees, normalizeListingFeeRow, resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -480,7 +480,14 @@ export type ManagerListingServiceOption = {
   createdAt: string;
 };
 
-export type ManagerCustomApplicationFieldType = "text" | "number" | "select" | "checkbox" | "date";
+export type ManagerCustomApplicationFieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "checkbox"
+  | "date"
+  | "photos"
+  | "file";
 
 export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
   id: ManagerCustomApplicationFieldType;
@@ -491,6 +498,8 @@ export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
   { id: "select", label: "Dropdown" },
   { id: "checkbox", label: "Checkbox" },
   { id: "date", label: "Date" },
+  { id: "photos", label: "Photos" },
+  { id: "file", label: "File" },
 ];
 
 /** Manager-defined application question asked during the rental application for this listing. */
@@ -937,12 +946,15 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       paymentAtSigningIncludes,
     });
   } else {
-    customFees = customFees.map((f) => ({
-      id: f.id ?? rid("fee"),
-      label: typeof f.label === "string" ? f.label.trim() : "",
-      amount: typeof f.amount === "string" ? f.amount.trim() : "",
-      frequency: f.frequency === "one-time" ? "one-time" : "monthly",
-    }));
+    customFees = customFees.map((f) =>
+      normalizeListingFeeRow({
+        ...(f as import("@/lib/listing-fees").ListingFeeRow),
+        id: f.id ?? rid("fee"),
+        label: typeof f.label === "string" ? f.label.trim() : "",
+        amount: typeof f.amount === "string" ? f.amount.trim() : "",
+        frequency: f.frequency === "one-time" ? "one-time" : "monthly",
+      }),
+    );
   }
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
@@ -1298,7 +1310,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
   delete (next as Record<string, unknown>).utilitiesMonthly;
-  return next as ManagerListingSubmissionV1;
+  return ensureSubmissionListingFees(next as ManagerListingSubmissionV1);
 }
 
 export function emptyRoom(index: number): ManagerRoomSubmission {

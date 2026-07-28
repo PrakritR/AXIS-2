@@ -490,6 +490,16 @@ export function feeMeaningfulForPublicListing(amount: string): boolean {
   return n > 0;
 }
 
+/** Canonical dollar amount for a built-in listing fee preset (unified fees + legacy scalars). */
+export function listingPresetFeeAmount(
+  sub: ManagerListingSubmissionV1,
+  presetId: ListingFeePresetId,
+): number {
+  const row = resolveListingFees(sub).find((fee) => fee.presetId === presetId);
+  if (!row || !isListingFeeAmountFilled(row.amount)) return 0;
+  return parseMoneyAmount(row.amount);
+}
+
 export type ListingFeeDisplayRow = {
   id: string;
   title: string;

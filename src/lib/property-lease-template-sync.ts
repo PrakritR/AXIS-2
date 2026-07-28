@@ -96,7 +96,7 @@ export function buildLeaseTemplateSeeds(
   if (allowed.includes(SHORT_TERM_LEASE_TERM)) {
     seeds.push({
       seedKey: "short-term",
-      kind: "custom",
+      kind: "short-term",
       label: "Short-term stay",
       applicationLeaseTerms: [SHORT_TERM_LEASE_TERM],
     });
@@ -231,7 +231,7 @@ export function resolvePropertyLeaseTemplateForApplication(
   if (term === SHORT_TERM_LEASE_TERM) {
     return (
       templates.find((t) => t.listingSeedKey === "short-term") ??
-      templates.find((t) => t.kind === "custom" && t.label.toLowerCase().includes("short")) ??
+      templates.find((t) => t.kind === "short-term") ??
       templates[0]!
     );
   }

@@ -136,6 +136,25 @@ describe("application-field-catalog", () => {
       type: "number",
       options: [],
     });
+    expect(catalogField("employment", "Proof of income (pay stub, etc.)")).toMatchObject({
+      type: "file",
+      required: false,
+      wizardFormKeys: ["incomeProofPhotos"],
+    });
+    expect(catalogField("personal", "Driver's license / ID — front photo")).toMatchObject({
+      type: "photos",
+      required: false,
+      wizardFormKeys: ["idPhotoFront"],
+    });
+    expect(catalogField("personal", "Driver's license / ID — back photo")).toMatchObject({
+      type: "photos",
+      required: false,
+      wizardFormKeys: ["idPhotoBack"],
+    });
+    expect(catalogField("personal", "Driver's license / ID")).toMatchObject({
+      type: "text",
+      wizardFormKeys: ["driversLicense"],
+    });
     expect(catalogField("employment", "Other income")).toMatchObject({
       type: "number",
       options: [],

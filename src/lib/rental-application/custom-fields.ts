@@ -94,7 +94,7 @@ export function validateCustomFieldAnswers(
 
 /** Human-readable answer for review screens and the application document ("" when unanswered). */
 export function formatCustomFieldAnswerDisplay(answer: RentalCustomFieldAnswer): string {
-  const value = answer.value.trim();
+  const value = String(answer.value ?? "").trim();
   if (answer.type === "checkbox") return value === "yes" ? "Yes" : value === "no" || !value ? "No" : value;
   return value;
 }

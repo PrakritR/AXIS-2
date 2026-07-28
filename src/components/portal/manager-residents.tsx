@@ -1277,7 +1277,7 @@ export function ManagerResidents({
           showToast(persisted.error ?? "Could not complete resident onboarding.");
           return;
         }
-        recordApprovedApplicationCharges(nextRow, userId ?? null);
+        recordApprovedApplicationCharges(nextRow, userId ?? null, true);
         syncLeasePipelineFromApplications(userId ?? null);
 
         showToast(
@@ -1416,7 +1416,7 @@ export function ManagerResidents({
     if (propId && residentEmail && rent != null && Number.isFinite(rent)) {
       updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
     }
-    recordApprovedApplicationCharges(nextRow, userId ?? null);
+    recordApprovedApplicationCharges(nextRow, userId ?? null, true);
 
     // Auto-regenerate any unsigned leases so room/rent/rules changes are reflected immediately
     if (residentEmail && nextRow.application) {
@@ -2087,12 +2087,11 @@ export function ManagerResidents({
                                       const c = residentChargeById.get(tr.id);
                                       if (!c) return tr.charge;
                                       const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
+                                      if (!overdue) return tr.charge;
                                       return (
                                         <span className="inline-flex flex-wrap items-center gap-2">
                                           <span>{tr.charge}</span>
-                                          <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                            {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
-                                          </Badge>
+                                          <Badge tone="overdue">Overdue</Badge>
                                         </span>
                                       );
                                     }}
