@@ -2258,17 +2258,30 @@ export function ManagerResidents({
       ) : null}
       <ManagerPortalPageShell
         title="Residents"
+        compactFilterRow
         titleAside={
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
             + Add
           </Button>
         }
         filterRow={
-          <ManagerPortalFilterRow>
+          <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
             <ManagerPortalStatusPills
+              compact
+              selectAriaLabel="Show current or previous residents"
               tabs={[
-                { id: "current", label: "Current", count: currentResidentsCount },
-                { id: "previous", label: "Previous", count: previousResidentsCount },
+                {
+                  id: "current",
+                  label: "Current",
+                  count: currentResidentsCount,
+                  dataAttr: "residents-tab-current",
+                },
+                {
+                  id: "previous",
+                  label: "Previous",
+                  count: previousResidentsCount,
+                  dataAttr: "residents-tab-previous",
+                },
               ]}
               activeId={residentsTab}
               onChange={(id) => {

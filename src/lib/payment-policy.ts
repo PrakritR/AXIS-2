@@ -27,6 +27,9 @@ export const AXIS_ACH_FEE_PERCENT = 0.8;
 
 export type ResidentAxisPaymentMethod = "ach" | "card" | "link";
 
+/** User-facing label for the card method-class (includes Apple Pay / Google Pay wallets in Checkout). */
+export const RESIDENT_CARD_PAYMENT_DISPLAY_LABEL = "Card · Apple Pay";
+
 /**
  * Who bears the payment "service fee" (Stripe's real processing cost) on a
  * resident charge. Resolved per manager from the plan tier + the Pro choice by
@@ -179,7 +182,7 @@ export function residentProcessingFeeDisplayLabel(method: ResidentAxisPaymentMet
 export function residentPaymentMethodLabel(method: ResidentAxisPaymentMethod): string {
   if (method === "ach") return "Bank (ACH)";
   if (method === "link") return "Link";
-  return "Credit card";
+  return RESIDENT_CARD_PAYMENT_DISPLAY_LABEL;
 }
 
 export function normalizeRentDueDayMode(raw: unknown): RentDueDayMode {
@@ -234,7 +237,7 @@ export function residentPaymentMethodsSummary(
   if (sub.zellePaymentsEnabled && sub.zelleContact?.trim()) methods.push(`Zelle (${sub.zelleContact.trim()})`);
   if (sub.venmoPaymentsEnabled && sub.venmoContact?.trim()) methods.push(`Venmo (${sub.venmoContact.trim()})`);
   if (axisPaymentsEnabledOnListing(sub)) {
-    methods.push("PropLane payments — bank (ACH), card, or Link with no added fees");
+    methods.push("PropLane payments — bank (ACH), card (Apple Pay), or Link with no added fees");
   }
   if (methods.length === 0) methods.push("Zelle, Venmo, ACH, or cash — your manager marks payments received.");
   return methods;
@@ -249,7 +252,7 @@ export const RESIDENT_ACCEPTED_PAYMENT_METHOD_LABELS: Record<ResidentAcceptedPay
   zelle: "Zelle",
   venmo: "Venmo",
   ach: "ACH",
-  card: "Credit card",
+  card: RESIDENT_CARD_PAYMENT_DISPLAY_LABEL,
 };
 
 export function isResidentAcceptedPaymentMethod(value: unknown): value is ResidentAcceptedPaymentMethod {

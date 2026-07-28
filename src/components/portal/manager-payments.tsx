@@ -419,10 +419,11 @@ export function ManagerPayments() {
   );
 
   const filterRow = (
-    <ManagerPortalFilterRow>
+    <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
       <PillTabs
         items={DIRECTION_LABELS}
         activeId={direction}
+        selectAriaLabel="Payment direction"
         onChange={(id) => {
           setDirection(id as ManagerPaymentDirection);
           setBucket("pending");
@@ -435,6 +436,7 @@ export function ManagerPayments() {
   return (
     <ManagerPortalPageShell
       title="Payments"
+      compactFilterRow
       titleAside={
         <>
           {direction === "incoming" ? (

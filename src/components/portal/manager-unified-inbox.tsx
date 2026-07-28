@@ -117,6 +117,7 @@ export function ManagerUnifiedInbox({
   onSmsUnreadCountChange,
   inboxRef,
   smsRef,
+  onThreadOpenChange,
 }: {
   tabId: string;
   commBase: string;
@@ -129,6 +130,7 @@ export function ManagerUnifiedInbox({
   onSmsUnreadCountChange?: (unread: number) => void;
   inboxRef?: React.RefObject<ManagerInboxHandle | null>;
   smsRef?: React.RefObject<ManagerSmsPanelHandle | null>;
+  onThreadOpenChange?: (open: boolean) => void;
 }) {
   const [emailThreads, setEmailThreads] = useState(() =>
     loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
@@ -339,6 +341,10 @@ export function ManagerUnifiedInbox({
   }, [filteredEmail, allSmsItems]);
 
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
+
+  useEffect(() => {
+    onThreadOpenChange?.(Boolean(selection));
+  }, [onThreadOpenChange, selection]);
 
   // Toggling the segment is a different result set — clear search; keep selection when possible.
   useEffect(() => {

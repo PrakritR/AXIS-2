@@ -64,16 +64,25 @@ export function resolvePortalMobileBackTarget(
       };
     }
     if (channel === "inbox" || channel === "email" || channel === "sms") {
-      const dashboard = definition.sections.find((entry) => entry.section === "dashboard");
-      return suppressDashboardBackOnNative({
-        href: `${definition.basePath}/dashboard`,
-        label: dashboard?.label ?? "Dashboard",
-      });
+      return null;
     }
   }
 
   if (tabId && firstTabId && tabId !== firstTabId) {
-    // Alternate section tab (e.g. Previous residents) — pills switch tabs; no chevron row.
+    // Alternate section tab (e.g. Previous residents) — dropdown handles navigation.
+    return null;
+  }
+
+  if (!tabId) {
+    return null;
+  }
+
+  if (firstTabId && tabId === firstTabId) {
+    return null;
+  }
+
+  const isDeclaredTab = meta?.tabs.some((entry) => entry.id === tabId) ?? false;
+  if (firstTabId && isDeclaredTab) {
     return null;
   }
 

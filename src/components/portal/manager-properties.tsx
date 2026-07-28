@@ -237,8 +237,9 @@ export function ManagerProperties() {
       <ManagerPortalPageShell
         title="Properties"
         titleAside={propertiesHeaderActions}
+        compactFilterRow
         filterRow={
-          <ManagerPortalFilterRow>
+          <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
             <div className="min-w-0 w-full max-w-full">
               <ManagerPortalStatusPills
                 compact

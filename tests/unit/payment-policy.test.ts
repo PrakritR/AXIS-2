@@ -3,7 +3,9 @@ import {
   formatRentDueDayLabel,
   lateFeePolicyFromSubmission,
   normalizeRentDueDayMode,
+  residentPaymentMethodLabel,
   resolveRentDueDayForMonth,
+  RESIDENT_CARD_PAYMENT_DISPLAY_LABEL,
 } from "@/lib/payment-policy";
 
 describe("payment-policy", () => {
@@ -26,5 +28,10 @@ describe("payment-policy", () => {
     const policy = lateFeePolicyFromSubmission({ lateFeeEnabled: true, lateFeeGraceDays: 3, lateFeeAmount: "$75" });
     expect(policy.graceDays).toBe(3);
     expect(policy.amount).toBe(75);
+  });
+
+  it("labels card payments with Apple Pay wallet hint", () => {
+    expect(residentPaymentMethodLabel("card")).toBe(RESIDENT_CARD_PAYMENT_DISPLAY_LABEL);
+    expect(RESIDENT_CARD_PAYMENT_DISPLAY_LABEL).toMatch(/Apple Pay/);
   });
 });

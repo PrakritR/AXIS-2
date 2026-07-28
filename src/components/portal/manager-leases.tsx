@@ -170,6 +170,7 @@ export function ManagerLeases() {
     <>
     <ManagerPortalPageShell
       title="Leases"
+      compactFilterRow
       titleAside={
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <Button
@@ -198,7 +199,7 @@ export function ManagerLeases() {
         </div>
       }
       filterRow={
-        <ManagerPortalFilterRow>
+        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
           <ManagerPortalStatusPills
             compact
             tabs={tabs}

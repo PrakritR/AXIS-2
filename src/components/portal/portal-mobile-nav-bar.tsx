@@ -80,7 +80,6 @@ export function PortalMobileNavBar({
     [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
-  const mobileHeaderTitle = dashboardLabel ?? sectionTitle;
 
   return (
     <div className="portal-mobile-nav-bar relative mb-3 flex min-h-11 w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
@@ -108,13 +107,12 @@ export function PortalMobileNavBar({
           {dashboardLabel}
         </h1>
       ) : sectionTitle ? (
-        <h1 className="pointer-events-none absolute left-1/2 top-1/2 z-[5] w-full max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 truncate px-2 text-center text-sm font-semibold text-foreground">
+        <h1 className="min-w-0 flex-1 truncate px-1 text-left text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
           {sectionTitle}
         </h1>
       ) : null}
 
-      {/* Balance spacer so centered titles sit between back (left) and profile (right). */}
-      {mobileHeaderTitle && !showBack ? (
+      {dashboardLabel && !showBack ? (
         <div className="min-h-9 min-w-[2.75rem] shrink-0" aria-hidden />
       ) : null}
 

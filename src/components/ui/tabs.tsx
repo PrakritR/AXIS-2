@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { Select } from "@/components/ui/input";
+
+const MOBILE_PILL_TAB_SELECT_CLASS =
+  "h-9 w-full min-w-0 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground";
 
 export type TabItem = { href: string; label: string; id: string; dataAttr?: string };
 
@@ -21,16 +25,35 @@ export function TabNav({
   items,
   activeId,
   shallow = false,
+  mobileSelect = true,
+  selectAriaLabel = "Section",
 }: {
   items: TabItem[];
   activeId: string;
   /** Switch tabs client-side via history.pushState — no server render. Use only
    *  when every tab renders the same panel keyed by the trailing path segment. */
   shallow?: boolean;
+  mobileSelect?: boolean;
+  selectAriaLabel?: string;
 }) {
+  const router = useRouter();
   const wrapRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef(new Map<string, HTMLAnchorElement>());
   const [pill, setPill] = useState({ left: 0, top: 0, w: 0, h: 0 });
+
+  const navigateToTab = useCallback(
+    (id: string) => {
+      const item = items.find((entry) => entry.id === id);
+      if (!item) return;
+      if (shallow) {
+        window.history.pushState(null, "", item.href);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        return;
+      }
+      router.push(item.href);
+    },
+    [items, router, shallow],
+  );
 
   const sync = useCallback(() => {
     const wrap = wrapRef.current;
@@ -63,7 +86,7 @@ export function TabNav({
     };
   }, [sync]);
 
-  return (
+  const nav = (
     <div
       ref={wrapRef}
       className="relative flex min-w-0 max-w-full flex-nowrap gap-1 overflow-x-auto rounded-full border border-border bg-accent/30 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -83,7 +106,7 @@ export function TabNav({
               if (event.defaultPrevented || event.button !== 0) return;
               if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
               event.preventDefault();
-              window.history.pushState(null, "", t.href);
+              navigateToTab(t.id);
             }
           : undefined;
         return (
@@ -106,16 +129,42 @@ export function TabNav({
       })}
     </div>
   );
+
+  if (!mobileSelect) return nav;
+
+  return (
+    <>
+      <label className="flex min-w-0 flex-1 md:hidden">
+        <span className="sr-only">{selectAriaLabel}</span>
+        <Select
+          className={MOBILE_PILL_TAB_SELECT_CLASS}
+          value={activeId}
+          onChange={(e) => navigateToTab(e.target.value)}
+        >
+          {items.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className="hidden min-w-0 md:block">{nav}</div>
+    </>
+  );
 }
 
 export function PillTabs({
   items,
   activeId,
   onChange,
+  mobileSelect = true,
+  selectAriaLabel = "View",
 }: {
   items: { id: string; label: string }[];
   activeId: string;
   onChange: (id: string) => void;
+  mobileSelect?: boolean;
+  selectAriaLabel?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -152,7 +201,7 @@ export function PillTabs({
     };
   }, [sync]);
 
-  return (
+  const pills = (
     <div
       ref={wrapRef}
       className="relative inline-flex w-fit max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
@@ -184,6 +233,28 @@ export function PillTabs({
         );
       })}
     </div>
+  );
+
+  if (!mobileSelect) return pills;
+
+  return (
+    <>
+      <label className="flex min-w-0 flex-1 md:hidden">
+        <span className="sr-only">{selectAriaLabel}</span>
+        <Select
+          className={MOBILE_PILL_TAB_SELECT_CLASS}
+          value={activeId}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {items.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className="hidden md:block">{pills}</div>
+    </>
   );
 }
 

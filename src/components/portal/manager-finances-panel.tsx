@@ -728,10 +728,11 @@ export function ManagerFinancesPanel({
   return (
     <ManagerPortalPageShell
       title="Finances"
+      compactFilterRow
       titleAside={headerActions}
       filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav shallow activeId={tabId} items={financeTabItems} />
+        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
+          <TabNav shallow activeId={tabId} items={financeTabItems} selectAriaLabel="Finance report" />
         </ManagerPortalFilterRow>
       }
     >
