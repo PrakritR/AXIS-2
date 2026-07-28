@@ -87,8 +87,11 @@ test.describe("Admin portal", () => {
     await page.getByPlaceholder(/write your message/i).fill("Automated trash-tab check.");
     await page.getByRole("button", { name: "Send", exact: true }).click();
 
-    // The sent message shows in the flat conversation list; expand it and archive.
-    const row = page.getByText(subject).first();
+    // The sent message shows in the flat conversation list; expand it and
+    // archive. The list dual-mounts (a lg:hidden mobile card list + a hidden
+    // lg:block desktop table), so target the desktop table ROW — getByText(...)
+    // .first() would resolve to the off-screen mobile copy at this viewport.
+    const row = page.getByRole("row").filter({ hasText: subject });
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.click();
     await page.getByRole("button", { name: "Move to trash" }).click();

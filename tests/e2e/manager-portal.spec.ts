@@ -90,9 +90,11 @@ test.describe("Manager portal", () => {
       await composeBtn.click();
       // Modal should appear with Subject field
       await expect(page.getByLabel(/subject/i).first()).toBeVisible({ timeout: 8_000 });
-      // Close the modal
-      const cancelBtn = page.getByRole("button", { name: /cancel|close/i }).first();
-      if (await cancelBtn.count() > 0) await cancelBtn.click();
+      // Close via the Cancel button (exact). A loose /close/i also matches the
+      // modal's full-screen overlay button (aria-label="Close"), which isn't
+      // reliably clickable and hangs the action.
+      const cancelBtn = page.getByRole("button", { name: "Cancel", exact: true });
+      if (await cancelBtn.count() > 0) await cancelBtn.first().click();
     }
   });
 
@@ -123,11 +125,18 @@ test.describe("Manager portal", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
-  test("calendar tab loads with navigation controls", async ({ page }) => {
+  test("calendar tab loads and a house week view exposes navigation", async ({ page }) => {
     await page.goto("/portal/calendar");
-    await expect(page.getByRole("heading").first()).toBeVisible();
-    // Calendar navigation (month/week/day) should be present
-    const calNav = page.getByRole("button", { name: /month|week|day|today/i }).first();
-    await expect(calNav).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible({ timeout: 15_000 });
+    // The availability calendar is house-scoped: the week grid and its ← / →
+    // week navigation only render once a house is selected.
+    await page.getByText("Select a house").first().click();
+    await page.getByRole("option").filter({ hasNotText: "Select a house" }).first().click();
+    // Week nav arrows carry aria-labels ("Previous week"/"Next week"), so those
+    // are their accessible names — not the "←"/"→" glyphs.
+    await expect(page.getByRole("button", { name: "Previous week" }).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole("button", { name: "Next week" }).first()).toBeVisible();
   });
 });
