@@ -7,7 +7,11 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  normalizeManagerListingSubmissionV1,
+  type ManagerCustomFeeRow,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
 import { formatRoomPriceAmount, roomDailyRentPrice } from "@/lib/room-pricing";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
@@ -2387,6 +2391,20 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   return Boolean(charge && !beforeIds.has(charge.id));
 }
 
+/** Genuinely-custom fee rows (the "+ Add custom fee" rows) — preset-backed rows bill through
+ *  their own legacy fields and are excluded here. */
+function genuinelyCustomFees(sub: ManagerListingSubmissionV1 | null | undefined): ManagerCustomFeeRow[] {
+  return (sub?.customFees ?? []).filter((fee) => {
+    const presetId = (fee as { presetId?: string }).presetId;
+    return !presetId || presetId === "custom";
+  });
+}
+
+/** Custom fees the manager set to bill once (frequency "one-time"). */
+function oneTimeCustomFees(sub: ManagerListingSubmissionV1 | null | undefined): ManagerCustomFeeRow[] {
+  return genuinelyCustomFees(sub).filter((fee) => fee.frequency === "one-time");
+}
+
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
@@ -2555,6 +2573,16 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before check-in");
     }
 
+    // Custom fees with a short-term amount bill ONCE before check-in, on top of the all-in
+    // stay total (they are explicit manager-added charges, unlike utilities which fold into
+    // the rate). A fee set only on the long-term side (no shortTermAmount) never bills here.
+    if (allowListingDefaults) {
+      for (const fee of genuinelyCustomFees(sub)) {
+        const amt = parseMoneyAmount(fee.shortTermAmount ?? "");
+        if (amt > 0) pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before check-in");
+      }
+    }
+
     const next = dedupeCharges([...rows, ...created]);
     const changed = chargesChanged(before, next);
     if (changed) writeAll(next);
@@ -2715,6 +2743,17 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   if (otherCostAmount > 0) {
     const otherCostTitle = row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost");
     pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before move-in");
+  }
+
+  // One-time custom fees the manager added on the listing bill ONCE at move-in. Custom fees
+  // were display-only before this; only genuinely-custom rows are billed here (preset-backed
+  // rows still bill through their own legacy fields). Monthly custom fees are not billed yet
+  // (staged — the recurring path is a separate change), so only one-time rows are read.
+  if (allowListingDefaults) {
+    for (const fee of oneTimeCustomFees(sub)) {
+      const amt = parseMoneyAmount(fee.amount ?? "");
+      if (amt > 0) pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before move-in");
+    }
   }
 
   const next = dedupeCharges([...rows, ...created]);

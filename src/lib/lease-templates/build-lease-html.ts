@@ -363,8 +363,33 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const otherCostAmount = escapeHtml(overrideFeeLabel(a.managerOtherCostAmount, "—"));
   const otherCostNum = otherCostIsMonthToMonth ? 0 : parseAmount(a.managerOtherCostAmount);
   const showOtherSigningCost = !otherCostIsMonthToMonth && Boolean(otherCostNum && otherCostNum > 0);
+
+  // One-time custom fees the manager added DO bill (once at move-in, via
+  // recordApprovedApplicationCharges), so they must appear in the lease and count toward the
+  // total due at signing — a lease that omits a billed charge is a legal problem. Only
+  // genuinely-custom rows are listed here (preset-backed rows render through their own lines);
+  // monthly custom fees are intentionally NOT listed because they do not yet bill.
+  const billableOneTimeCustomFees = (sub?.customFees ?? []).filter((fee) => {
+    const presetId = (fee as { presetId?: string }).presetId;
+    if (presetId && presetId !== "custom") return false;
+    if (fee.frequency !== "one-time") return false;
+    const n = parseAmount(fee.amount);
+    return n != null && n > 0;
+  });
+  const customFeesTotalNum = billableOneTimeCustomFees.reduce((s, f) => s + (parseAmount(f.amount) ?? 0), 0);
+  const customFeeSigningRows = billableOneTimeCustomFees
+    .map((f) => `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(f.amount) ?? 0))}</td></tr>`)
+    .join("\n");
+  const customFeeExhibitRows = billableOneTimeCustomFees
+    .map(
+      (f) =>
+        `  <tr><td>${escapeHtml(f.label?.trim() || "Custom fee")}</td><td>${escapeHtml(fmtUsd(parseAmount(f.amount) ?? 0))}</td><td>One-time</td></tr>`,
+    )
+    .join("\n");
+
   const paySigningBase = sub ? paymentAtSigningPriceLabel(sub) : "—";
-  const paySigningNum = (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0);
+  const paySigningNum =
+    (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0) + customFeesTotalNum;
   const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
 
   // ── Dates ─────────────────────────────────────────────────────────────────
@@ -421,7 +446,25 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       : null;
     const totalRent = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays) : "—";
     const depositAmount = parseAmount(shortDepositRaw);
-    const totalDue = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays + (depositAmount ?? 0)) : "—";
+    // Short-term custom fees bill once before check-in (recordApprovedApplicationCharges), so
+    // they must appear in the stay's Payment table and count toward the total due.
+    const stCustomFees = (subNorm?.customFees ?? []).filter((fee) => {
+      const presetId = (fee as { presetId?: string }).presetId;
+      if (presetId && presetId !== "custom") return false;
+      const n = parseAmount(fee.shortTermAmount);
+      return n != null && n > 0;
+    });
+    const stCustomFeesTotal = stCustomFees.reduce((s, f) => s + (parseAmount(f.shortTermAmount) ?? 0), 0);
+    const stCustomFeeRows = stCustomFees
+      .map(
+        (f) =>
+          `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(f.shortTermAmount) ?? 0))}</td></tr>`,
+      )
+      .join("\n");
+    const totalDue =
+      dailyCost && durationDays
+        ? fmtUsd(dailyCost * durationDays + (depositAmount ?? 0) + stCustomFeesTotal)
+        : "—";
     const requirements = escapeHtml(
       subNorm?.shortTermRequirements?.trim() ||
         "Guest must follow all reasonable house rules provided by the Owner/Host. Guest may not receive mail, declare residency, or claim tenancy.",
@@ -458,6 +501,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
   <tr><th>Total rent for days</th><td>${totalRent}</td></tr>
   <tr><th>Security deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
+${stCustomFeeRows}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>
 
@@ -532,6 +576,7 @@ ${proratedSection || ""}
   <tr><th>Security deposit</th><td><strong>${secDep}</strong></td></tr>
   <tr><th>Move-in fee (non-refundable)</th><td>${moveInFee}</td></tr>
   ${showOtherSigningCost ? `<tr><th>${otherCostLabel}</th><td>${otherCostAmount}</td></tr>` : ""}
+${customFeeSigningRows}
   <tr><th>Total due at signing</th><td><strong>${paySigning}</strong></td></tr>
 </table>
 <p>Resident shall pay a security deposit of <strong>${secDep}</strong> at lease signing. The deposit shall be held in accordance with ${config.depositStatuteRef} and secures Resident&apos;s full performance under this Agreement. Resident&apos;s liability is not limited to the deposit amount, and the deposit may not be applied toward rent or other charges during the tenancy.</p>
@@ -668,6 +713,7 @@ ${houseRules
   <tr><td>Security deposit</td><td>${secDep}</td><td>One-time (refundable)</td></tr>
   <tr><td>Move-in fee</td><td>${moveInFee}</td><td>One-time (non-refundable)</td></tr>
   ${showOtherSigningCost ? `<tr><td>${otherCostLabel}</td><td>${otherCostAmount}</td><td>One-time</td></tr>` : ""}
+${customFeeExhibitRows}
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
 </table>
 

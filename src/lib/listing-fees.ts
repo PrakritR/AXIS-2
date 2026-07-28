@@ -181,6 +181,12 @@ export function normalizeListingFeeRow(raw: ListingFeeRow): ListingFeeRow {
     dueAtSigning: row.dueAtSigning ?? preset?.dueAtSigning ?? false,
     shortTermOnly: row.shortTermOnly ?? preset?.shortTermOnly ?? false,
     creditsTowardSecurity: row.creditsTowardSecurity ?? preset?.creditsTowardSecurity ?? false,
+    // Preserve the optional per-fee short-term amount (custom-fee short-term billing) — the
+    // literal below would otherwise drop it, unbilling a fee the manager set for short-term.
+    shortTermAmount:
+      typeof row.shortTermAmount === "string" && row.shortTermAmount.trim()
+        ? row.shortTermAmount.trim()
+        : undefined,
   };
 }
 

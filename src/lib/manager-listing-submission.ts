@@ -141,6 +141,14 @@ export type ManagerCustomFeeRow = {
   amount: string;
   /** Default monthly when unset. */
   frequency?: "one-time" | "monthly";
+  /**
+   * Optional SHORT-TERM amount (money string). A custom fee can apply to long-term only
+   * ({@link amount} set), short-term only (this set), or both with different amounts. On a
+   * short-term stay this bills ONCE before check-in, on top of the all-in stay total (it is
+   * an explicit manager-added charge, unlike utilities which fold into the rate). Empty/absent
+   * means the fee does not apply to short-term stays.
+   */
+  shortTermAmount?: string;
 };
 
 /** Rows for the public “Bundles & leasing” table (optional — defaults are generated from rooms). */

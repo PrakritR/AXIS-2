@@ -469,7 +469,25 @@ export function ListingUnifiedFeesTable({
               </td>
               {showShortTerm ? (
               <td className="px-3 py-3 align-middle">
-                <span className="text-xs text-muted">—</span>
+                {/* A custom fee can apply to short-term (checkbox + amount), long-term (the
+                    amount + cadence at right), or both. Short-term custom fees bill once
+                    before check-in, so there is no cadence on this side. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <TermCheckbox
+                    checked={fee.shortTermAmount !== undefined}
+                    onChange={(on) =>
+                      onCustomFeeChange(i, { shortTermAmount: on ? (fee.shortTermAmount ?? "") : undefined })
+                    }
+                    label={`Apply custom fee ${i + 1} to short-term`}
+                  />
+                  {fee.shortTermAmount !== undefined ? (
+                    <FeeMoneyInput
+                      value={(fee.shortTermAmount ?? "").replace(/^\$/, "").trim()}
+                      onChange={(v) => onCustomFeeChange(i, { shortTermAmount: v })}
+                      ariaLabel={`Short-term custom fee ${i + 1} amount`}
+                    />
+                  ) : null}
+                </div>
               </td>
               ) : null}
               <td className="px-3 py-3 align-middle">
