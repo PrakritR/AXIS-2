@@ -55,20 +55,16 @@ export async function PATCH(req: Request) {
       applicationFeeCents: validated.applicationFeeCents,
     });
 
-    let waiverCode: string | null = null;
-    if ("waiverCode" in body) {
-      const raw = body.waiverCode == null ? "" : String(body.waiverCode);
-      const result = await setPrimaryApplicationFeeWaiverCode(ctx.db, ctx.userId, raw);
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: 400 });
-      }
-      waiverCode = result.code?.code ?? null;
-    } else {
-      const codes = await listApplicationFeeWaiverCodes(ctx.db, ctx.userId);
-      waiverCode = pickPrimaryApplicationFeeWaiverCode(codes)?.code ?? null;
+    if (!("waiverCode" in body)) {
+      return NextResponse.json({ settings: saved });
     }
 
-    return NextResponse.json({ settings: saved, waiverCode });
+    const raw = body.waiverCode == null ? "" : String(body.waiverCode);
+    const result = await setPrimaryApplicationFeeWaiverCode(ctx.db, ctx.userId, raw);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({ settings: saved, waiverCode: result.code?.code ?? null });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
