@@ -6,8 +6,10 @@ import {
   listApplicationFeeWaiverCodes,
   listApplicationFeeWaiverRedemptions,
   normalizeWaiverCode,
+  pickPrimaryApplicationFeeWaiverCode,
   redeemApplicationFeeWaiverCode,
   revokeApplicationFeeWaiverCode,
+  setPrimaryApplicationFeeWaiverCode,
 } from "@/lib/application-fee-waiver";
 
 /**
@@ -345,5 +347,50 @@ describe("redeemApplicationFeeWaiverCode — the security-critical path", () => 
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("NOT_FOUND");
+  });
+});
+
+describe("pickPrimaryApplicationFeeWaiverCode / setPrimaryApplicationFeeWaiverCode", () => {
+  it("picks the oldest active code as primary", () => {
+    const older = {
+      id: "1",
+      managerUserId: "mgr_A",
+      code: "OLD",
+      label: null,
+      status: "active" as const,
+      maxUses: null,
+      usedCount: 0,
+      expiresAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      revokedAt: null,
+    };
+    const newer = { ...older, id: "2", code: "NEW", createdAt: "2026-06-01T00:00:00.000Z" };
+    expect(pickPrimaryApplicationFeeWaiverCode([newer, older])?.code).toBe("OLD");
+    expect(pickPrimaryApplicationFeeWaiverCode([{ ...older, status: "revoked" }])).toBeNull();
+  });
+
+  it("creates one unlimited primary code and revokes extras when the text changes", async () => {
+    const { db } = makeFakeDb();
+    await createApplicationFeeWaiverCode(db, "mgr_A", { code: "ALPHA" });
+    await createApplicationFeeWaiverCode(db, "mgr_A", { code: "BETA" });
+
+    const set = await setPrimaryApplicationFeeWaiverCode(db, "mgr_A", "GAMMA");
+    expect(set.ok).toBe(true);
+    if (set.ok) expect(set.code?.code).toBe("GAMMA");
+
+    const codes = await listApplicationFeeWaiverCodes(db, "mgr_A");
+    const active = codes.filter((c) => c.status === "active");
+    expect(active).toHaveLength(1);
+    expect(active[0]?.code).toBe("GAMMA");
+  });
+
+  it("clears all active codes when primary is empty", async () => {
+    const { db } = makeFakeDb();
+    await createApplicationFeeWaiverCode(db, "mgr_A", { code: "KEEPME" });
+    const cleared = await setPrimaryApplicationFeeWaiverCode(db, "mgr_A", "");
+    expect(cleared.ok).toBe(true);
+    if (cleared.ok) expect(cleared.code).toBeNull();
+    const codes = await listApplicationFeeWaiverCodes(db, "mgr_A");
+    expect(codes.every((c) => c.status === "revoked")).toBe(true);
   });
 });

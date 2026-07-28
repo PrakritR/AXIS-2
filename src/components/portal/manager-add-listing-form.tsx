@@ -3622,94 +3622,14 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Resident payment methods"
-                description="How residents and applicants pay rent, utilities, application fees, and other charges."
+                description="Inherited from Payment setup under Payments — not configured per listing."
               >
-                <div
-                  data-wizard-field="residentPaymentMethods"
-                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
-                >
-                  <StepFieldError msg={stepFieldErrors.residentPaymentMethods} />
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-border"
-                      checked={sub.axisPaymentsEnabled !== false}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          axisPaymentsEnabled: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm font-medium text-foreground">
-                      Bank (ACH) with Stripe — no added fees, PropLane covers processing
-                    </span>
-                  </label>
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.zellePaymentsEnabled)}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setSub((s) => ({
-                            ...s,
-                            zellePaymentsEnabled: on,
-                          }));
-                        }}
-                      />
-                      <span className="text-sm font-medium text-foreground">Zelle</span>
-                    </label>
-                    {sub.zellePaymentsEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="zelleContact">
-                        <FieldLabel required>Zelle phone or email</FieldLabel>
-                        <Input
-                          value={sub.zelleContact ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("zelleContact");
-                            setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
-                          placeholder="+1 555 010 8899 or name@email.com"
-                        />
-                        <StepFieldError msg={stepFieldErrors.zelleContact} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.venmoPaymentsEnabled)}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setSub((s) => ({
-                            ...s,
-                            venmoPaymentsEnabled: on,
-                          }));
-                        }}
-                      />
-                      <span className="text-sm font-medium text-foreground">Venmo</span>
-                    </label>
-                    {sub.venmoPaymentsEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="venmoContact">
-                        <FieldLabel required>Venmo username, phone, or email</FieldLabel>
-                        <Input
-                          value={sub.venmoContact ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("venmoContact");
-                            setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
-                          placeholder="@username, +1 555 010 8899, or name@email.com"
-                        />
-                        <StepFieldError msg={stepFieldErrors.venmoContact} />
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
+                <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted">
+                  Residents use the methods you allow in{" "}
+                  <span className="font-medium text-foreground">Payments → Payment setup</span> (Stripe ACH, Zelle,
+                  Venmo). Link contacts and turn methods on or off there; new and existing listings follow those
+                  defaults.
+                </p>
               </ListingSubsection>
 
               <ListingSubsection

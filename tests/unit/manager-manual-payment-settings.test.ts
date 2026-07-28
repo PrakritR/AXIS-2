@@ -6,14 +6,14 @@ import {
 } from "@/lib/manager-manual-payment-settings";
 
 describe("manager manual payment settings", () => {
-  it("defaults to all methods off with receipt linking on", () => {
+  it("defaults to Stripe ACH on, Zelle/Venmo off, with receipt linking on", () => {
     expect(normalizeManagerManualPaymentSettings(null)).toEqual({
       ...DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS,
       receiptAutoMarkEnabled: true,
     });
   });
 
-  it("requires a contact when a method is enabled", () => {
+  it("requires a contact when a method is enabled, but keeps the contact when disabled", () => {
     expect(
       normalizeManagerManualPaymentSettings({
         zellePaymentsEnabled: true,
@@ -22,6 +22,7 @@ describe("manager manual payment settings", () => {
         venmoContact: "@payme",
       }),
     ).toEqual({
+      axisPaymentsEnabled: true,
       zellePaymentsEnabled: false,
       zelleContact: "",
       venmoPaymentsEnabled: true,
@@ -29,17 +30,36 @@ describe("manager manual payment settings", () => {
       receiptAutoMarkEnabled: true,
       serviceFeePayer: "resident",
     });
-  });
 
-  it("sanitizes contacts", () => {
     expect(
       normalizeManagerManualPaymentSettings({
+        zellePaymentsEnabled: false,
+        zelleContact: "keep@example.com",
+        venmoPaymentsEnabled: false,
+        venmoContact: "",
+      }),
+    ).toEqual({
+      axisPaymentsEnabled: true,
+      zellePaymentsEnabled: false,
+      zelleContact: "keep@example.com",
+      venmoPaymentsEnabled: false,
+      venmoContact: "",
+      receiptAutoMarkEnabled: true,
+      serviceFeePayer: "resident",
+    });
+  });
+
+  it("sanitizes contacts and respects axisPaymentsEnabled", () => {
+    expect(
+      normalizeManagerManualPaymentSettings({
+        axisPaymentsEnabled: false,
         zellePaymentsEnabled: true,
         zelleContact: "name@email.com",
         venmoPaymentsEnabled: false,
         venmoContact: "",
       }),
     ).toEqual({
+      axisPaymentsEnabled: false,
       zellePaymentsEnabled: true,
       zelleContact: "name@email.com",
       venmoPaymentsEnabled: false,

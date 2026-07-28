@@ -1,7 +1,5 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
 import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
-import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
-import { parseMoneyAmount } from "@/lib/parse-money";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
 
 export function listingRoomNameKey(roomId: string): string {
@@ -117,19 +115,8 @@ export function validateListingWizardStep(
         errs[String(key)] = `${label} is required — enter 0 if there is no fee.`;
       }
     }
-    if (sub.zellePaymentsEnabled && !sub.zelleContact?.trim()) {
-      errs.zelleContact = "Enter a Zelle phone or email for resident payments.";
-    }
-    if (sub.venmoPaymentsEnabled && !sub.venmoContact?.trim()) {
-      errs.venmoContact = "Enter a Venmo username, phone, or email for resident payments.";
-    }
-    const appFeeAmount = parseMoneyAmount(sub.applicationFee);
-    if (appFeeAmount > 0) {
-      const channels = listingApplicationFeeChannels(sub);
-      if (!channels.ach && !channels.zelle && !channels.venmo && !channels.other) {
-        errs.residentPaymentMethods = "Enable at least one resident payment method — applicants use the same options for the application fee.";
-      }
-    }
+    // Resident payment methods (Stripe ACH / Zelle / Venmo) are configured once
+    // in Payment setup and synced onto listings — not validated on the Pricing step.
   }
 
   return errs;

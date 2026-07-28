@@ -114,13 +114,15 @@ describe("create listing wizard", () => {
     expect(errs.applicationFee).toBeUndefined();
   });
 
-  it("requires a resident payment method when application fee is charged", () => {
+  it("does not gate pricing on resident payment methods (configured in Payment setup)", () => {
     const sub = filledPricingSubmission();
     sub.axisPaymentsEnabled = false;
     sub.zellePaymentsEnabled = false;
     sub.venmoPaymentsEnabled = false;
     const errs = validateListingWizardStep(4, sub);
-    expect(errs.residentPaymentMethods).toMatch(/payment method/i);
+    expect(errs.residentPaymentMethods).toBeUndefined();
+    expect(errs.zelleContact).toBeUndefined();
+    expect(errs.venmoContact).toBeUndefined();
   });
 
   it("finds the first invalid step in order", () => {
