@@ -35,6 +35,7 @@ import {
   InboxComposer,
   InboxConversationRow,
   InboxScheduledCard,
+  InboxScheduledThreadList,
   InboxThreadEmpty,
   InboxThreadView,
   InboxTwoPane,
@@ -1093,7 +1094,11 @@ export const ManagerInbox = forwardRef<
 
   const scheduledCards =
     activeThread && activeThread.folder !== "trash" && threadScheduledItems.length > 0 ? (
-      <div className="space-y-1.5 pt-1">
+      <InboxScheduledThreadList
+        count={threadScheduledItems.length}
+        nextSendLabel={threadScheduledItems[0]?.sendLabel}
+        defaultCollapsed={embeddedInCommunication && threadScheduledItems.length > 2}
+      >
         {threadScheduledItems.map((item) => (
           <InboxScheduledCard
             key={item.id}
@@ -1112,7 +1117,7 @@ export const ManagerInbox = forwardRef<
             onSaveEdit={item.editable ? (next) => saveScheduledEdit(item, next) : undefined}
           />
         ))}
-      </div>
+      </InboxScheduledThreadList>
     ) : null;
 
   const threadPane = activeThread ? (

@@ -20,13 +20,13 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PortalDataTableEmpty,
   PortalMobileSummaryCard,
   PortalTableInlineExpand,
   PORTAL_DETAIL_BTN,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
@@ -91,6 +91,15 @@ const LINKED_COUNT_TRIGGER =
 const PENDING_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
+const TEAM_SECTION_LABEL =
+  "text-[10px] font-semibold uppercase tracking-[0.14em] text-muted";
+
+const TEAM_INCOMING_PENDING_SURFACE =
+  "rounded-2xl border border-primary/30 bg-primary/[0.05] p-1 shadow-[var(--shadow-sm)]";
+
+const TEAM_PENDING_ACTIONS =
+  "flex flex-wrap items-center gap-2";
+
 type InviteDraft = {
   assignedPropertyIds: string[];
   propertyCoManagerPermissions: PropertyCoManagerPermissions;
@@ -118,6 +127,64 @@ function propertyChoices(userId: string): { id: string; label: string }[] {
 
 function resolvePropertyLabel(id: string, fallback: string): string {
   return resolvePropertyLabelForId(id, fallback);
+}
+
+function TeamAssignedPropertySummary({ propertyIds, max = 3 }: { propertyIds: string[]; max?: number }) {
+  if (propertyIds.length === 0) {
+    return <span className="text-xs text-muted">No properties in this invite</span>;
+  }
+  const shown = propertyIds.slice(0, max);
+  const rest = propertyIds.length - shown.length;
+  return (
+    <ul className="space-y-0.5">
+      {shown.map((pid) => (
+        <li key={pid} className="text-xs text-foreground">
+          {resolvePropertyLabel(pid, pid)}
+        </li>
+      ))}
+      {rest > 0 ? <li className="text-xs text-muted">+{rest} more</li> : null}
+    </ul>
+  );
+}
+
+function TeamLinksEmptyPanel({
+  variant,
+  atLinkCap,
+  onLinkAccount,
+}: {
+  variant: "none" | "linked" | "pending" | "filtered";
+  atLinkCap: boolean;
+  onLinkAccount: () => void;
+}) {
+  const message =
+    variant === "none"
+      ? "No co-managers yet. Invite another manager with their PropLane ID. You choose which properties they can access and what they can do on each."
+      : variant === "linked"
+        ? "No linked team members yet. Link an account to share properties and co-manage with clear permissions."
+        : variant === "pending"
+          ? "No pending invites. Requests waiting for your approval and invites you've sent will show up here."
+          : "No team members match this property filter. Try All properties or pick another listing.";
+
+  const showLinkCta = (variant === "none" || variant === "linked") && !atLinkCap;
+
+  return (
+    <div className={PORTAL_DATA_TABLE_WRAP}>
+      <PortalEmptyState title={message} icon="team" />
+      {showLinkCta ? (
+        <div className="-mt-6 flex justify-center pb-10">
+          <Button
+            type="button"
+            variant="primary"
+            className={`${PORTAL_HEADER_ACTION_BTN} shrink-0`}
+            onClick={onLinkAccount}
+            data-attr="co-manager-empty-link-account"
+          >
+            Link account
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 type GrantLevels = { read?: boolean; edit?: boolean; delete?: boolean };
@@ -342,8 +409,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     propertyIds: string[];
   } | null>(null);
 
-  const [teamLinkFilter, setTeamLinkFilter] = useState<"linked" | "pending">("linked");
+  const [teamLinkFilter, setTeamLinkFilter] = useState<"linked" | "pending">("pending");
   const [teamPropertyFilter, setTeamPropertyFilter] = useState("");
+  const initialTeamTabSetRef = useRef(false);
 
   const [transferPropertyId, setTransferPropertyId] = useState<string | null>(null);
   const [transferCoManagerUserId, setTransferCoManagerUserId] = useState<string | null>(null);
@@ -509,20 +577,32 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const teamLinkTabs = useMemo(
     () => [
       {
-        id: "linked",
-        label: "Linked",
-        count: (useRemote ? activeRemote.length : 0) + localRows.length,
-        dataAttr: "team-filter-linked",
-      },
-      {
         id: "pending",
         label: "Pending",
         count: useRemote ? incomingPending.length + outgoingPending.length : 0,
         dataAttr: "team-filter-pending",
       },
+      {
+        id: "linked",
+        label: "Linked",
+        count: (useRemote ? activeRemote.length : 0) + localRows.length,
+        dataAttr: "team-filter-linked",
+      },
     ],
     [useRemote, activeRemote.length, localRows.length, incomingPending.length, outgoingPending.length],
   );
+
+  useEffect(() => {
+    if (!remoteLoaded || initialTeamTabSetRef.current) return;
+    initialTeamTabSetRef.current = true;
+    if (useRemote && incomingPending.length > 0) {
+      setTeamLinkFilter("pending");
+      return;
+    }
+    if ((useRemote ? activeRemote.length : 0) + localRows.length > 0) {
+      setTeamLinkFilter("linked");
+    }
+  }, [remoteLoaded, useRemote, incomingPending.length, activeRemote.length, localRows.length]);
 
   const visibleIncomingPending = useMemo(() => {
     if (teamLinkFilter !== "pending" || !useRemote) return [];
@@ -1302,6 +1382,43 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     .filter(([, v]) => v)
     .map(([k]) => k);
 
+  const pendingActionsColumn = teamLinkFilter === "pending";
+
+  const renderPendingApproveActions = (inv: AccountLinkInviteDto) => (
+    <div className={TEAM_PENDING_ACTIONS}>
+      <Button
+        type="button"
+        variant="primary"
+        className={`${PORTAL_HEADER_ACTION_BTN} min-h-0 px-4 py-1.5 text-xs`}
+        onClick={() => void respondInvite(inv.id, "accept")}
+        data-attr="co-manager-approve-invite"
+      >
+        Approve
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-0 rounded-full px-4 py-1.5 text-xs"
+        onClick={() => void respondInvite(inv.id, "reject")}
+        data-attr="co-manager-decline-invite"
+      >
+        Decline
+      </Button>
+    </div>
+  );
+
+  const renderPendingWithdrawAction = (inv: AccountLinkInviteDto) => (
+    <Button
+      type="button"
+      variant="outline"
+      className="min-h-0 rounded-full px-4 py-1.5 text-xs"
+      onClick={() => void cancelInvite(inv.id)}
+      data-attr="co-manager-withdraw-invite"
+    >
+      Withdraw invite
+    </Button>
+  );
+
   const renderInviteDetail = (inv: AccountLinkInviteDto) => {
     const draft = getInviteDraft(inv);
     const readOnly = inv.direction === "incoming";
@@ -1445,35 +1562,64 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {!hasCoManagerLinks ? (
-          <PortalDataTableEmpty message="No co-managers yet." icon="data" />
+          <TeamLinksEmptyPanel variant="none" atLinkCap={atLinkCap} onLinkAccount={openLinkModal} />
         ) : !hasVisibleTeamRows ? (
-          <PortalDataTableEmpty message="No links match these filters." icon="data" />
+          <TeamLinksEmptyPanel
+            variant={
+              teamPropertyFilter.trim()
+                ? "filtered"
+                : teamLinkFilter === "pending"
+                  ? "pending"
+                  : "linked"
+            }
+            atLinkCap={atLinkCap}
+            onLinkAccount={openLinkModal}
+          />
         ) : (
           <>
-            <div className="space-y-2 lg:hidden">
-              {useRemote
-                ? visibleIncomingPending.map((inv) => (
+            <div className="space-y-4 lg:hidden">
+              {teamLinkFilter === "pending" && visibleIncomingPending.length > 0 ? (
+                <div className="space-y-2">
+                  <p className={TEAM_SECTION_LABEL}>Needs your approval</p>
+                  {visibleIncomingPending.map((inv) => (
+                    <div key={`pending-in-${inv.id}`} className={TEAM_INCOMING_PENDING_SURFACE}>
+                      <PortalMobileSummaryCard
+                        title={inv.linkedDisplayName ?? inv.linkedAxisId}
+                        subtitle={inv.linkedAxisId}
+                        badge={<span className={PENDING_ROLE_BADGE}>Needs approval</span>}
+                      >
+                        <div className="mt-2 space-y-3 border-t border-primary/15 pt-3">
+                          <TeamAssignedPropertySummary propertyIds={inv.assignedPropertyIds} />
+                          {renderPendingApproveActions(inv)}
+                        </div>
+                      </PortalMobileSummaryCard>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {teamLinkFilter === "pending" && visibleOutgoingPending.length > 0 ? (
+                <div className="space-y-2">
+                  <p className={TEAM_SECTION_LABEL}>Invites you sent</p>
+                  {visibleOutgoingPending.map((inv) => (
                     <PortalMobileSummaryCard
-                      key={`pending-in-${inv.id}`}
+                      key={`pending-out-${inv.id}`}
                       title={inv.linkedDisplayName ?? inv.linkedAxisId}
                       subtitle={inv.linkedAxisId}
-                      meta={`${inv.assignedPropertyIds.length} propert${inv.assignedPropertyIds.length === 1 ? "y" : "ies"}`}
-                      badge={<span className={PENDING_ROLE_BADGE}>Needs approval</span>}
+                      badge={<span className={PENDING_ROLE_BADGE}>Invite sent</span>}
                     >
-                      <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-                        <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
-                          Approve
-                        </Button>
-                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
-                          Decline
-                        </Button>
+                      <div className="mt-2 space-y-3 border-t border-border pt-3">
+                        <TeamAssignedPropertySummary propertyIds={inv.assignedPropertyIds} />
+                        {renderPendingWithdrawAction(inv)}
                       </div>
                     </PortalMobileSummaryCard>
-                  ))
-                : null}
+                  ))}
+                </div>
+              ) : null}
 
-              {useRemote
-                ? visibleActiveRemote.map((inv) => {
+              {teamLinkFilter === "linked"
+                ? useRemote
+                  ? visibleActiveRemote.map((inv) => {
                     const draft = getInviteDraft(inv);
                     const readOnly = inv.direction === "incoming";
                     const expanded = expandedLinkId === inv.id;
@@ -1538,39 +1684,34 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                         {expanded ? renderLocalRowDetail(r) : null}
                       </PortalMobileSummaryCard>
                     );
-                  })}
-
-              {useRemote
-                ? visibleOutgoingPending.map((inv) => (
-                    <PortalMobileSummaryCard
-                      key={`pending-out-${inv.id}`}
-                      title={inv.linkedDisplayName ?? inv.linkedAxisId}
-                      subtitle={inv.linkedAxisId}
-                      badge={<span className={PENDING_ROLE_BADGE}>Invite sent</span>}
-                    >
-                      <div className="mt-3 border-t border-border pt-3">
-                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
-                          Withdraw invite
-                        </Button>
-                      </div>
-                    </PortalMobileSummaryCard>
-                  ))
+                  })
                 : null}
+
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className="w-full table-fixed border-collapse text-left text-sm">
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Manager</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Role</th>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>Team member</th>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>{pendingActionsColumn ? "Status" : "Role"}</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Properties</th>
+                      {pendingActionsColumn ? (
+                        <th className={`${MANAGER_TABLE_TH} text-left`}>Actions</th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
+                    {pendingActionsColumn && visibleIncomingPending.length > 0 ? (
+                      <tr className="border-b border-border bg-accent/25">
+                        <td colSpan={4} className="px-4 py-2.5">
+                          <p className={TEAM_SECTION_LABEL}>Needs your approval</p>
+                        </td>
+                      </tr>
+                    ) : null}
                     {useRemote
                       ? visibleIncomingPending.map((inv) => (
-                          <tr key={`pending-in-${inv.id}`}>
+                          <tr key={`pending-in-${inv.id}`} className="border-b border-border/80 bg-primary/[0.03]">
                             <td className={PORTAL_TABLE_TD}>
                               <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
                               <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
@@ -1579,18 +1720,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                               <span className={PENDING_ROLE_BADGE}>Needs approval</span>
                             </td>
                             <td className={PORTAL_TABLE_TD}>
-                              <p className="text-xs text-muted">
-                                {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"}
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
-                                  Approve
-                                </Button>
-                                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
-                                  Decline
-                                </Button>
-                              </div>
+                              <TeamAssignedPropertySummary propertyIds={inv.assignedPropertyIds} />
                             </td>
+                            <td className={PORTAL_TABLE_TD}>{renderPendingApproveActions(inv)}</td>
                           </tr>
                         ))
                       : null}
@@ -1699,6 +1831,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           );
                         })}
 
+                    {pendingActionsColumn && visibleOutgoingPending.length > 0 ? (
+                      <tr className="border-b border-border bg-accent/25">
+                        <td colSpan={4} className="px-4 py-2.5">
+                          <p className={TEAM_SECTION_LABEL}>Invites you sent</p>
+                        </td>
+                      </tr>
+                    ) : null}
                     {useRemote
                       ? visibleOutgoingPending.map((inv) => (
                           <tr key={`pending-out-${inv.id}`}>
@@ -1710,10 +1849,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                               <span className={PENDING_ROLE_BADGE}>Invite sent</span>
                             </td>
                             <td className={PORTAL_TABLE_TD}>
-                              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void cancelInvite(inv.id)}>
-                                Withdraw invite
-                              </Button>
+                              <TeamAssignedPropertySummary propertyIds={inv.assignedPropertyIds} />
                             </td>
+                            <td className={PORTAL_TABLE_TD}>{renderPendingWithdrawAction(inv)}</td>
                           </tr>
                         ))
                       : null}
@@ -1730,6 +1868,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           onClose={closeLinkModal}
           panelClassName={draftAxisId ? "max-w-2xl" : undefined}
         >
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border pb-4 text-xs text-muted">
+            <span className={draftAxisId ? "" : "font-semibold text-foreground"}>1. Find account</span>
+            <span aria-hidden className="text-muted/60">
+              →
+            </span>
+            <span className={draftAxisId ? "font-semibold text-foreground" : ""}>2. Properties &amp; access</span>
+          </div>
           {!draftAxisId ? (
             <form
               onSubmit={(e) => {
@@ -1738,6 +1883,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               }}
               className="space-y-4"
             >
+              <div className="rounded-2xl border border-border bg-accent/20 p-4">
               <label className="block text-xs font-semibold text-muted">
                 {AXIS_ID_LABEL}
                 <Input
@@ -1749,10 +1895,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   className="mt-1 font-mono"
                 />
               </label>
-              <p className="text-xs text-muted">
+              <p className="mt-3 text-xs leading-relaxed text-muted">
                 Enter the {AXIS_ID_LABEL} of the manager you want to add. Next you&apos;ll choose which properties
                 they co-manage and what they can do on each.
               </p>
+              </div>
               <div className="flex justify-start gap-2">
                 <Button
                   type="button"
@@ -1770,10 +1917,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             </form>
           ) : (
             <div className="space-y-5">
-              <p className="text-sm text-muted">
-                Verified <span className="font-semibold text-foreground">{draftName}</span>{" "}
-                <span className="font-mono text-xs text-muted">({draftAxisId})</span>
-              </p>
+              <div className="rounded-2xl border border-primary/25 bg-primary/[0.05] px-4 py-3">
+                <p className="text-sm text-foreground">
+                  Linking with{" "}
+                  <span className="font-semibold">{draftName}</span>
+                </p>
+                <p className="mt-0.5 font-mono text-xs text-muted">{draftAxisId}</p>
+              </div>
 
               {inviteeAtCap ? (
                 <p className="rounded-xl portal-banner-danger px-4 py-3 text-xs font-medium text-[var(--status-overdue-fg)]">

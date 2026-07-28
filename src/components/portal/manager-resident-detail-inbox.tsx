@@ -250,7 +250,7 @@ export function ManagerResidentDetailInbox({
     );
 
   return (
-    <div className="flex min-h-[min(52dvh,28rem)] flex-col">
+    <div className="flex flex-col">
       {archivedCount > 0 ? (
         <div className="mb-2 flex justify-end">
           <button
@@ -270,6 +270,7 @@ export function ManagerResidentDetailInbox({
       ) : null}
       <InboxTwoPane
         className="min-h-0 flex-1"
+        heightMode="section"
         listHidden
         threadOpen={Boolean(selection)}
         list={null}

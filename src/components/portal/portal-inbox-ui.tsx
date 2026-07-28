@@ -1194,6 +1194,63 @@ export function InboxScheduledCard({
   );
 }
 
+/**
+ * Stacks many scheduled-message rows at the tail of a thread without pushing the
+ * whole pane tall — collapses when there are more than two, with a scroll cap when open.
+ */
+export function InboxScheduledThreadList({
+  count,
+  nextSendLabel,
+  defaultCollapsed = false,
+  children,
+}: {
+  count: number;
+  nextSendLabel?: string;
+  defaultCollapsed?: boolean;
+  children: ReactNode;
+}) {
+  const [listOpen, setListOpen] = useState(!defaultCollapsed);
+  const wrap = (inner: ReactNode) => <div className="space-y-1 pt-1">{inner}</div>;
+
+  if (count <= 2) return wrap(children);
+
+  const summary =
+    count === 1
+      ? "1 scheduled message"
+      : `${count} scheduled messages`;
+  const when = nextSendLabel ? ` · next sends ${nextSendLabel}` : "";
+
+  return (
+    <div className="pt-1" data-attr="inbox-scheduled-thread-list">
+      <button
+        type="button"
+        onClick={() => setListOpen((v) => !v)}
+        className="mb-1 flex w-full items-center gap-2 rounded-xl border border-dashed border-primary/25 bg-primary/[0.04] px-3 py-1.5 text-left"
+        aria-expanded={listOpen}
+        data-attr="inbox-scheduled-list-toggle"
+      >
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
+          <Clock className="h-3 w-3 text-primary" strokeWidth={2.25} />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+          <span className="font-semibold text-primary">{summary}</span>
+          <span className="text-muted">{when}</span>
+        </span>
+        {listOpen ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} />
+        )}
+      </button>
+      {listOpen ? (
+        <div className="max-h-44 space-y-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Right-pane placeholder shown when no conversation is selected. */
 export function InboxThreadEmpty({
   title = "Select a conversation",
@@ -1344,6 +1401,11 @@ export function InboxTwoPane({
   className = "",
   /** When true, hide the list pane and show only the thread (e.g. single-resident chat). */
   listHidden = false,
+  /**
+   * `section` caps height for embedded profile panels; `viewport` fills available
+   * screen space (full inbox pages).
+   */
+  heightMode = "viewport",
 }: {
   list: ReactNode;
   thread: ReactNode;
@@ -1351,11 +1413,13 @@ export function InboxTwoPane({
   threadOpen: boolean;
   className?: string;
   listHidden?: boolean;
+  heightMode?: "viewport" | "section";
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
 
   useEffect(() => {
+    if (heightMode === "section") return;
     const measure = () => {
       const el = rootRef.current;
       if (!el || typeof window === "undefined") return;
@@ -1379,10 +1443,12 @@ export function InboxTwoPane({
       window.clearTimeout(timer);
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [heightMode]);
 
+  const sectionHeight = "min(20rem, 38dvh)";
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
-  const height = measuredHeight ? `${measuredHeight}px` : fallback;
+  const height =
+    heightMode === "section" ? sectionHeight : measuredHeight ? `${measuredHeight}px` : fallback;
 
   return (
     <div
