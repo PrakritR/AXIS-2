@@ -81,4 +81,13 @@ describe("mergeApplicationRows", () => {
 
     expect(merged[0].withdrawnAt).toBe("2026-07-27T01:00:00.000Z");
   });
+
+  it("resurrects a server-deleted row that still lives in the local cache (delete must drop cache first)", () => {
+    const local = [row({ id: "PROPLANE-INCOMPLETE1", stage: "In progress" })];
+    const serverResponse: DemoApplicantRow[] = [];
+
+    const merged = mergeApplicationRows(local, serverResponse);
+
+    expect(merged.map((r) => r.id)).toContain("PROPLANE-INCOMPLETE1");
+  });
 });

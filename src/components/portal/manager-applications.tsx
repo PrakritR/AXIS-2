@@ -39,6 +39,7 @@ import {
   normalizeApplicationAxisId,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
+  writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
 import {
   MANAGER_PORTFOLIO_REFRESH_EVENTS,
@@ -564,8 +565,13 @@ export function ManagerApplications() {
   const deleteApplication = async (id: string) => {
     const row = rows.find((candidate) => candidate.id === id);
     const email = row?.email?.trim().toLowerCase();
+    const nextRows = rows.filter((r) => r.id !== id);
 
-    setRows((prev) => prev.filter((r) => r.id !== id));
+    // Drop from the session cache as well as React state — `syncManagerApplicationsFromServer`
+    // union-merges against `memoryRows`, so a server-deleted row that still lives in the
+    // cache is resurrected on the next poll/focus sync (the captain's "glitch" report).
+    writeManagerApplicationRows(nextRows);
+    setRows(nextRows);
     setExpandedId(null);
 
     let serverError: string | null = null;
@@ -601,10 +607,11 @@ export function ManagerApplications() {
       removeAllApplicationCharges(id, userId ?? null);
     }
 
-    await Promise.all([
+    const [syncedRows] = await Promise.all([
       syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
       syncHouseholdChargesFromServer(),
     ]);
+    setRows(syncedRows);
 
     showToast(
       email
