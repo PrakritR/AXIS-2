@@ -3170,7 +3170,7 @@ export function ManagerAddListingForm({
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
-          <div className="flex w-full min-w-0 items-start justify-between gap-3">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}

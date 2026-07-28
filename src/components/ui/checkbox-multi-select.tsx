@@ -11,6 +11,7 @@ import {
   FIELD_SELECT_MENU_OPTION_CLASS,
   FIELD_SELECT_TRIGGER_CLASS,
   FIELD_SELECT_TRIGGER_COMPACT_CLASS,
+  FIELD_SELECT_TRIGGER_PILL_CLASS,
   FIELD_SELECT_TRIGGER_INLINE_CLASS,
   partitionFieldSelectClasses,
 } from "@/components/ui/field-select-styles";
@@ -39,7 +40,7 @@ function summarizeSelection(
 function triggerClassForVariant(variant: "field" | "pill", hideLabel: boolean, extra?: string) {
   const base =
     variant === "pill"
-      ? FIELD_SELECT_TRIGGER_COMPACT_CLASS
+      ? FIELD_SELECT_TRIGGER_PILL_CLASS
       : hideLabel
         ? FIELD_SELECT_TRIGGER_INLINE_CLASS
         : FIELD_SELECT_TRIGGER_CLASS;
@@ -396,7 +397,7 @@ export function FieldSingleSelect({
         className={triggerClassForVariant(variant, hideLabel || pill, triggerClassName)}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={`min-w-0 truncate ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
+        <span className={`min-w-0 ${pill ? "whitespace-nowrap" : "truncate"} ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 

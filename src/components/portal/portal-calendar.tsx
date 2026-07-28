@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PillTabs } from "@/components/ui/tabs";
 import {
-  ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "./portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -54,11 +54,6 @@ import {
 } from "@/lib/demo-admin-scheduling";
 
 type ManagerCalendarView = "all" | "tours" | "services";
-
-const CALENDAR_KIND_TABS = [
-  { id: "tours", label: "Tours" },
-  { id: "services", label: "Service orders" },
-] as const;
 
 export function PortalCalendar({
   portal,
@@ -341,8 +336,6 @@ export function PortalCalendar({
     [calendarTabCounts],
   );
 
-  const calendarKind = calendarView === "services" ? "services" : "tours";
-
   const showTourAvailability = calendarView === "tours" || calendarView === "all";
   const showServiceVisits = calendarView === "services" || calendarView === "all";
   const servicesOnlyView = calendarView === "services";
@@ -362,29 +355,25 @@ export function PortalCalendar({
       : "Select a house before creating tour windows.";
 
 
+  const calendarPropertyFilter =
+    portal === "manager" ? (
+      <ManagerPortalFilterActions>
+        <PortalPropertyFilterPill
+          propertyOptions={managerPropertyFilterOptions}
+          propertyValue={activeCalendarPropertyId}
+          onPropertyChange={setCalendarPropertyId}
+          propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All properties"}
+        />
+      </ManagerPortalFilterActions>
+    ) : null;
+
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";
 
   if (portal === "manager" && !authReady) {
     return (
       <ManagerPortalPageShell
         title={pageTitle}
-        filterRow={
-          <ManagerPortalFilterRow>
-              <PillTabs
-                items={[...CALENDAR_KIND_TABS]}
-                activeId={calendarKind}
-                onChange={(id) => setCalendarView(id === "services" ? "services" : "tours")}
-              />
-              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
-                <PortalPropertyFilterPill
-                propertyOptions={managerPropertyFilterOptions}
-                propertyValue={activeCalendarPropertyId}
-                onPropertyChange={setCalendarPropertyId}
-                propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
-              />
-              </div>
-          </ManagerPortalFilterRow>
-        }
+
       >
         <p className="text-sm text-muted">{propertiesLoading ? "Loading houses…" : "Loading calendar…"}</p>
       </ManagerPortalPageShell>
@@ -394,23 +383,7 @@ export function PortalCalendar({
     return (
       <ManagerPortalPageShell
         title={pageTitle}
-        filterRow={
-          <ManagerPortalFilterRow>
-              <PillTabs
-                items={[...CALENDAR_KIND_TABS]}
-                activeId={calendarKind}
-                onChange={(id) => setCalendarView(id === "services" ? "services" : "tours")}
-              />
-              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
-                <PortalPropertyFilterPill
-                propertyOptions={managerPropertyFilterOptions}
-                propertyValue={activeCalendarPropertyId}
-                onPropertyChange={setCalendarPropertyId}
-                propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
-              />
-              </div>
-          </ManagerPortalFilterRow>
-        }
+
       >
         <p className="text-sm text-muted">Sign in to manage your availability.</p>
       </ManagerPortalPageShell>
@@ -447,52 +420,34 @@ export function PortalCalendar({
           </div>
         }
         filterRow={
-          portal === "manager" ? (
-            <div className="flex w-full min-w-0 flex-col gap-3">
-            <ManagerPortalFilterRow>
-              <PillTabs
-                items={[...CALENDAR_KIND_TABS]}
-                activeId={calendarKind}
-                onChange={(id) => setCalendarView(id === "services" ? "services" : "tours")}
+          portal === "manager" && showCoManagerCoordination ? (
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-primary"
+                checked={shareAvailability}
+                onChange={(e) => setShareAvailabilityPreference(e.target.checked)}
               />
-              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
-                <PortalPropertyFilterPill
-                  propertyOptions={managerPropertyFilterOptions}
-                  propertyValue={activeCalendarPropertyId}
-                  onPropertyChange={setCalendarPropertyId}
-                  propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
-                />
-              </div>
-            </ManagerPortalFilterRow>
-              {showCoManagerCoordination ? (
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-primary"
-                    checked={shareAvailability}
-                    onChange={(e) => setShareAvailabilityPreference(e.target.checked)}
-                  />
-                  <span>
-                    <span className="font-semibold text-foreground">Share availability with co-managers</span>
-                    <span className="mt-0.5 block text-xs text-muted">
-                      Linked managers on this house can see when you are open for tours. You only see their availability when they opt in too.
-                    </span>
-                  </span>
-                </label>
-              ) : null}
-            </div>
+              <span>
+                <span className="font-semibold text-foreground">Share availability with co-managers</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  Linked managers on this house can see when you are open for tours. You only see their availability when they opt in too.
+                </span>
+              </span>
+            </label>
           ) : undefined
         }
       >
         {portal === "manager" ? (
           <div className="mt-1">
-            <div className="mb-4">
+            <ManagerPortalStatusFilterRow>
               <ManagerPortalStatusPills
                 tabs={calendarTabs}
                 activeId={calendarView}
                 onChange={(id) => setCalendarView(id as ManagerCalendarView)}
               />
-            </div>
+              {calendarPropertyFilter}
+            </ManagerPortalStatusFilterRow>
             {calendarView !== "services" ? (
               <div className="mb-4">
                 <TourProposalsPanel />

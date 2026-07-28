@@ -12,6 +12,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
@@ -2463,11 +2464,13 @@ export function ManagerResidents({
                 navigate(`${portalBase}/residents/${next}`);
               }}
             />
+<ManagerPortalFilterActions>
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}
               onPropertyChange={setPropertyFilter}
             />
+          </ManagerPortalFilterActions>
           </ManagerPortalFilterRow>
         }
       >

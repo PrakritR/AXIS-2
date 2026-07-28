@@ -120,7 +120,34 @@ export function buildLeaseTemplateSeeds(
     });
   }
 
-  return seeds;
+  return appendDefaultHouseLeaseSeeds(seeds, sub);
+}
+
+/** Every house keeps a 12-month and short-term lease template for generation. */
+function appendDefaultHouseLeaseSeeds(
+  seeds: LeaseTemplateSeed[],
+  sub: Pick<ManagerListingSubmissionV1, "rooms" | "entireHomeMonthlyRent" | "listingPlaceCategoryId">,
+): LeaseTemplateSeed[] {
+  const out = [...seeds];
+  const keys = new Set(out.map((s) => s.seedKey));
+  const fixedKind = isEntireHomeListing(sub) ? "corporate-furnished" : "room-rental";
+  if (!keys.has("fixed-12-month")) {
+    out.push({
+      seedKey: "fixed-12-month",
+      kind: fixedKind,
+      label: "12-Month lease",
+      applicationLeaseTerms: ["12-Month"],
+    });
+  }
+  if (!keys.has("short-term")) {
+    out.push({
+      seedKey: "short-term",
+      kind: "short-term",
+      label: "Short-term stay",
+      applicationLeaseTerms: [SHORT_TERM_LEASE_TERM],
+    });
+  }
+  return out;
 }
 
 function defaultLabelForSeed(seed: LeaseTemplateSeed): string {
