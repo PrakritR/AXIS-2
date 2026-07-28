@@ -45,7 +45,7 @@ export const RENTAL_WIZARD_STEP_FIELD_ORDER: Record<number, string[]> = {
   1: ["applyingAsGroup", "groupRole", "groupSize", "groupId"],
   2: ["hasCosigner"],
   3: ["propertyId", "roomChoice1", "leaseTerm", "leaseStart", "leaseEnd", "shortTermCheckInTime", "shortTermCheckOutTime", "shortTermRulesAck"],
-  4: ["fullLegalName", "dateOfBirth", "ssn", "driversLicense", "phone", "email"],
+  4: ["fullLegalName", "phone", "email", "dateOfBirth", "ssn", "driversLicense"],
   5: ["currentStreet", "currentCity", "currentState", "currentZip", "currentMoveIn"],
   6: ["prevStreet", "prevCity", "prevState", "prevZip"],
   7: ["employer", "monthlyIncome", "annualIncome", "otherIncome"],
