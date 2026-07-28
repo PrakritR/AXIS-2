@@ -446,6 +446,59 @@ function LongTermUtilitiesPaymentPicker({
   );
 }
 
+/**
+ * The one segmented toggle used across the wizard (rounds 25–26). Two invariants make it a
+ * peer of the money inputs it sits beside, not a smaller afterthought:
+ *  - **Equal-width segments** — an inline grid with `auto-cols-fr` sizes every column to the
+ *    widest label, so Auto / Set per day is symmetrical instead of hugging each label.
+ *  - **Input height** — `min-h-[44px]` matches the shared field height (`fieldBase`), so a
+ *    row of [toggle][input][input] is one clean line with its labels on a shared baseline.
+ * Built once so it holds on the room, grouped-lease and whole-place panels alike.
+ */
+function SegmentedToggle<T extends string>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className,
+}: {
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (next: T) => void;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-grid min-h-[44px] grid-flow-col auto-cols-fr items-stretch rounded-2xl border border-border bg-card p-1",
+        className,
+      )}
+    >
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "flex items-center justify-center rounded-xl px-3 text-center text-xs font-medium transition-colors",
+              active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProrationMethodFields({
   prorateMethod,
   monthlyRent,
@@ -471,21 +524,15 @@ function ProrationMethodFields({
         <FieldLabel hint={prorateMethod === "auto" ? "Auto = (rent + utilities) ÷ days in the month." : undefined}>
           Prorated rent
         </FieldLabel>
-        <div className="mt-1 inline-flex rounded-lg border border-border bg-card p-0.5">
-          {(["auto", "daily_rate"] as const).map((method) => {
-            const active = prorateMethod === method;
-            return (
-              <button
-                key={method}
-                type="button"
-                onClick={() => onMethod(method)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
-              >
-                {method === "auto" ? "Auto" : "Set per day"}
-              </button>
-            );
-          })}
-        </div>
+        <SegmentedToggle
+          ariaLabel="Prorated rent method"
+          value={prorateMethod}
+          onChange={onMethod}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "daily_rate", label: "Set per day" },
+          ]}
+        />
       </div>
       {prorateMethod === "daily_rate" ? (
         <>
