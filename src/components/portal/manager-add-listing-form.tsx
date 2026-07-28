@@ -3495,6 +3495,7 @@ export function ManagerAddListingForm({
                 <div data-wizard-field="monthlyRent">
                 <ListingUnifiedFeesTable
                   expandableSections={feeExpandableSections}
+                  showShortTerm={Boolean(sub.shortTermRentalsAllowed)}
                   sub={sub}
                   isEntireHome={isEntireHome}
                   stFeeToggles={stFeeToggles}

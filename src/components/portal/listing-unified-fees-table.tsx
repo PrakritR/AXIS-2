@@ -34,6 +34,8 @@ export type FeeExpandableRow = {
   title: string;
   /** Long-term column summary (e.g. "$1,100/mo · Utilities billed"). */
   summary: ReactNode;
+  /** Short-term column summary (only rendered when the short-term column is shown). */
+  shortTermSummary?: ReactNode;
   expanded: boolean;
   onToggle: () => void;
   /** Omit to make the row non-removable. */
@@ -155,10 +157,10 @@ function FeeCadenceSelect({
 }
 
 /** Full-width section divider row inside the table. */
-function SectionHeaderRow({ title, hint, toolbar }: { title: string; hint?: string; toolbar?: ReactNode }) {
+function SectionHeaderRow({ title, hint, toolbar, colSpan }: { title: string; hint?: string; toolbar?: ReactNode; colSpan: number }) {
   return (
     <tr className="border-b border-border bg-accent/40">
-      <td colSpan={4} className="px-3 py-2">
+      <td colSpan={colSpan} className="px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</span>
@@ -172,7 +174,7 @@ function SectionHeaderRow({ title, hint, toolbar }: { title: string; hint?: stri
 }
 
 /** One expandable room/bundle row + its inline detail row. */
-function ExpandableRows({ row }: { row: FeeExpandableRow }) {
+function ExpandableRows({ row, showShortTerm, colSpan }: { row: FeeExpandableRow; showShortTerm: boolean; colSpan: number }) {
   return (
     <>
       <tr className={cn("border-b border-border/70", row.hasError && "bg-red-500/5")}>
@@ -192,7 +194,7 @@ function ExpandableRows({ row }: { row: FeeExpandableRow }) {
             <span className={cn("font-medium text-foreground", row.hasError && "text-red-600")}>{row.title}</span>
           </button>
         </td>
-        <td className="px-3 py-3 align-middle text-xs text-muted">—</td>
+        {showShortTerm ? <td className="px-3 py-3 align-middle text-xs text-muted">{row.shortTermSummary ?? "—"}</td> : null}
         <td className="px-3 py-3 align-middle text-sm text-muted">{row.summary}</td>
         <td className="px-3 py-3 text-right align-middle">
           {row.onRemove ? (
@@ -212,7 +214,7 @@ function ExpandableRows({ row }: { row: FeeExpandableRow }) {
       </tr>
       {row.expanded ? (
         <tr className="border-b border-border/70 bg-accent/10">
-          <td colSpan={4} className="px-3 py-3">
+          <td colSpan={colSpan} className="px-3 py-3">
             {row.detail}
           </td>
         </tr>
@@ -242,6 +244,7 @@ export function ListingUnifiedFeesTable({
   onRemoveStandardRow,
   onAddStandardRow,
   expandableSections,
+  showShortTerm,
 }: {
   sub: ManagerListingSubmissionV1;
   isEntireHome: boolean;
@@ -269,6 +272,8 @@ export function ListingUnifiedFeesTable({
   onAddStandardRow: (feeId: ListingFeeRowId) => void;
   /** Rooms / Bundles sections rendered AS ROWS at the top of this one table. */
   expandableSections?: FeeExpandableSection[];
+  /** Show the Short-term column. When false the whole column (header + cells) is gone. */
+  showShortTerm: boolean;
 }) {
   const visibleRows = LISTING_STANDARD_FEE_ROWS.filter(
     (row) => !hiddenRowIds?.has(row.id) && !removedRowIds.has(row.id),
@@ -277,6 +282,7 @@ export function ListingUnifiedFeesTable({
     (row) => rowIsRemovable(row.id) && removedRowIds.has(row.id) && !hiddenRowIds?.has(row.id),
   );
   const sections = expandableSections ?? [];
+  const colCount = showShortTerm ? 4 : 3;
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -284,20 +290,21 @@ export function ListingUnifiedFeesTable({
         <thead>
           <tr className="border-b border-border bg-accent/30 text-left text-xs font-semibold uppercase tracking-wide text-muted">
             <th className="px-3 py-2.5 font-semibold normal-case tracking-normal text-foreground">Fee</th>
-            <th className="px-3 py-2.5">Short-term</th>
+            {showShortTerm ? <th className="px-3 py-2.5">Short-term</th> : null}
             <th className="px-3 py-2.5">Long-term</th>
             <th className="px-3 py-2.5 text-right"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
           {sections.map((section) => (
-            <FeeSectionRows key={section.key} section={section} />
+            <FeeSectionRows key={section.key} section={section} showShortTerm={showShortTerm} colSpan={colCount} />
           ))}
 
           {sections.length > 0 ? (
             <SectionHeaderRow
               title="Other fees"
               hint={isEntireHome ? "Whole-home rent and shared fees." : "Fees shared across the whole property."}
+              colSpan={colCount}
             />
           ) : null}
 
@@ -319,6 +326,7 @@ export function ListingUnifiedFeesTable({
                     </div>
                   ) : null}
                 </td>
+                {showShortTerm ? (
                 <td className="px-3 py-3 align-middle">
                   {row.stField ? (
                     <div className="flex flex-wrap items-center gap-2">
@@ -345,6 +353,7 @@ export function ListingUnifiedFeesTable({
                     <p className="mt-1 text-xs font-medium text-red-600">{stepFieldErrors[String(row.stField)]}</p>
                   ) : null}
                 </td>
+                ) : null}
                 <td className="px-3 py-3 align-middle">
                   {row.ltField || row.id === "rent" ? (
                     <div className="flex flex-wrap items-center gap-2">
@@ -456,9 +465,11 @@ export function ListingUnifiedFeesTable({
                   aria-label={`Custom fee ${i + 1} name`}
                 />
               </td>
+              {showShortTerm ? (
               <td className="px-3 py-3 align-middle">
                 <span className="text-xs text-muted">—</span>
               </td>
+              ) : null}
               <td className="px-3 py-3 align-middle">
                 <div className="flex flex-wrap items-center gap-2">
                   <FeeMoneyInput
@@ -517,19 +528,19 @@ export function ListingUnifiedFeesTable({
 }
 
 /** A Rooms/Bundles section rendered inside the table: a header row then its expandable rows. */
-function FeeSectionRows({ section }: { section: FeeExpandableSection }) {
+function FeeSectionRows({ section, showShortTerm, colSpan }: { section: FeeExpandableSection; showShortTerm: boolean; colSpan: number }) {
   return (
     <>
-      <SectionHeaderRow title={section.title} hint={section.hint} toolbar={section.toolbar} />
+      <SectionHeaderRow title={section.title} hint={section.hint} toolbar={section.toolbar} colSpan={colSpan} />
       {section.rows.length === 0 && section.emptyHint ? (
         <tr className="border-b border-border/70">
-          <td colSpan={4} className="px-3 py-2.5 text-xs text-muted">
+          <td colSpan={colSpan} className="px-3 py-2.5 text-xs text-muted">
             {section.emptyHint}
           </td>
         </tr>
       ) : null}
       {section.rows.map((row) => (
-        <ExpandableRows key={row.id} row={row} />
+        <ExpandableRows key={row.id} row={row} showShortTerm={showShortTerm} colSpan={colSpan} />
       ))}
     </>
   );
