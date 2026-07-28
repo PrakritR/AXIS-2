@@ -5,6 +5,16 @@ export type PortalMobileBackTarget = {
   label: string;
 };
 
+/** Native app uses a fixed bottom bar for Dashboard — no chevron back to it. */
+function suppressDashboardBackOnNative(target: PortalMobileBackTarget | null): PortalMobileBackTarget | null {
+  if (!target) return null;
+  if (typeof document === "undefined" || !document.documentElement.hasAttribute("data-native")) {
+    return target;
+  }
+  if (target.label === "Dashboard" || /\/dashboard$/.test(target.href)) return null;
+  return target;
+}
+
 /** Splits pathname into section parts once the portal's basePath prefix matches, else null. */
 function portalSectionParts(pathname: string, definition: PortalDefinition): string[] | null {
   const baseParts = definition.basePath.split("/").filter(Boolean);
@@ -29,7 +39,6 @@ export function resolvePortalMobileBackTarget(
   const section = sectionParts[0];
   if (!section || section === "dashboard") return null;
 
-  // Early rental-application steps hide the dashboard back affordance (browse link is in the wizard).
   if (section === "applications" && sectionParts[1] === "apply") {
     const wizardStep = Number(searchParams?.get("wizardStep") ?? "0");
     if (wizardStep >= 1 && wizardStep <= 3) return null;
@@ -39,8 +48,6 @@ export function resolvePortalMobileBackTarget(
   const tabId = sectionParts[1];
   const firstTabId = meta?.tabs[0]?.id;
 
-  // Communication nests email/inbox folders and SMS buckets:
-  // /communication/inbox|email/{folder} or /communication/sms/{bucket}.
   if (section === "communication") {
     const channel = tabId;
     const folder = sectionParts[2];
@@ -58,10 +65,10 @@ export function resolvePortalMobileBackTarget(
     }
     if (channel === "inbox" || channel === "email" || channel === "sms") {
       const dashboard = definition.sections.find((entry) => entry.section === "dashboard");
-      return {
+      return suppressDashboardBackOnNative({
         href: `${definition.basePath}/dashboard`,
         label: dashboard?.label ?? "Dashboard",
-      };
+      });
     }
   }
 
@@ -73,15 +80,21 @@ export function resolvePortalMobileBackTarget(
   }
 
   const dashboard = definition.sections.find((entry) => entry.section === "dashboard");
-  return {
+  return suppressDashboardBackOnNative({
     href: `${definition.basePath}/dashboard`,
     label: dashboard?.label ?? "Dashboard",
-  };
+  });
 }
 
-/** Label for the mobile/native header when on a portal's own dashboard route (no back target). */
 export function portalDashboardMobileHeaderLabel(pathname: string, definition: PortalDefinition): string | null {
   const sectionParts = portalSectionParts(pathname, definition);
   if (!sectionParts || sectionParts[0] !== "dashboard") return null;
   return definition.sections.find((entry) => entry.section === "dashboard")?.label ?? "Dashboard";
+}
+
+export function portalMobileActiveSectionLabel(pathname: string, definition: PortalDefinition): string | null {
+  const sectionParts = portalSectionParts(pathname, definition);
+  if (!sectionParts?.[0] || sectionParts[0] === "dashboard") return null;
+  const section = sectionParts[0];
+  return definition.sections.find((entry) => entry.section === section)?.label ?? section;
 }

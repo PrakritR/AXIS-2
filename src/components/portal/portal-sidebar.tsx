@@ -355,8 +355,8 @@ export function PortalSidebar({
           onClick={portalNavClick(router, s.href, {
             preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
           })}
-          className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
-            active ? "text-primary" : "text-foreground"
+          className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 transition ${
+            active ? "text-primary" : "text-muted"
           }`}
           aria-label={lockAriaLabel(s.label, locked)}
           aria-current={active ? "page" : undefined}
@@ -380,6 +380,13 @@ export function PortalSidebar({
               ) : null}
             </span>
           ) : null}
+          <span
+            className={`max-w-full truncate text-[10px] font-medium leading-tight [html[data-native]_&]:text-[9px] ${
+              active ? "text-primary" : "text-muted"
+            }`}
+          >
+            {s.label}
+          </span>
         </Link>
       );
     }
