@@ -3209,8 +3209,8 @@ export function ManagerAddListingForm({
                   <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
               </GridField>
-              <div className="sm:col-span-2">
-                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground">
+              <div className="flex items-end pb-2.5">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                   <input
                     type="checkbox"
                     checked={sub.petFriendly}
