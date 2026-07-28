@@ -45,6 +45,7 @@ import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -1839,49 +1840,39 @@ export function ManagerResidents({
                               onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
                               headerAction={
                                 residentLease ? (
-                                  <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                                    {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_HEADER_ACTION_BTN}
-                                        data-attr="resident-lease-download"
-                                        onClick={() => {
-                                          if (residentLease.managerUploadedPdf?.dataUrl) {
-                                            downloadLeaseFromRow(residentLease);
-                                          } else if (residentLease.generatedHtml) {
-                                            printLeaseAsPdf(residentLease);
-                                          }
-                                          showToast("Lease download started.");
-                                        }}
-                                      >
-                                        Download
-                                      </Button>
-                                    ) : null}
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_HEADER_ACTION_BTN}
-                                        data-attr="resident-lease-sign-manager"
-                                        onClick={() => signLeaseAsManager(residentLease)}
-                                      >
-                                        Sign
-                                      </Button>
-                                    ) : residentLease.status === "Resident Signature Pending" ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_HEADER_ACTION_BTN}
-                                        data-attr="resident-lease-signing-reminder"
-                                        disabled={leaseReminderBusy}
-                                        title="Send signing reminder"
-                                        onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
-                                      >
-                                        {leaseReminderBusy ? "Sending…" : "Sign"}
-                                      </Button>
-                                    ) : null}
-                                  </div>
+                                  <LeasePrimaryHeaderActions
+                                    row={residentLease}
+                                    downloadDataAttr="resident-lease-download"
+                                    signManagerDataAttr="resident-lease-sign-manager"
+                                    signingReminderDataAttr="resident-lease-signing-reminder"
+                                    deleteDataAttr="resident-lease-delete"
+                                    onDownload={() => {
+                                      if (residentLease.managerUploadedPdf?.dataUrl) {
+                                        downloadLeaseFromRow(residentLease);
+                                      } else if (residentLease.generatedHtml) {
+                                        printLeaseAsPdf(residentLease);
+                                      }
+                                      showToast("Lease download started.");
+                                    }}
+                                    onSignManager={() => signLeaseAsManager(residentLease)}
+                                    onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
+                                    signingReminderBusy={leaseReminderBusy}
+                                    onDelete={() => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
+                                        )
+                                      ) {
+                                        return;
+                                      }
+                                      if (deleteLeasePipelineRow(residentLease.id, userId)) {
+                                        setLeaseTick((n) => n + 1);
+                                        showToast("Lease document deleted.");
+                                      } else {
+                                        showToast("Could not delete lease document.");
+                                      }
+                                    }}
+                                  />
                                 ) : undefined
                               }
                             >
@@ -1965,28 +1956,6 @@ export function ManagerResidents({
                                         </Button>
                                       </>
                                     ) : null}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      onClick={() => {
-                                        if (
-                                          !window.confirm(
-                                            `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
-                                          )
-                                        ) {
-                                          return;
-                                        }
-                                        if (deleteLeasePipelineRow(residentLease.id, userId)) {
-                                          setLeaseTick((n) => n + 1);
-                                          showToast("Lease document deleted.");
-                                        } else {
-                                          showToast("Could not delete lease document.");
-                                        }
-                                      }}
-                                    >
-                                      Delete lease
-                                    </Button>
                                   </PortalTableDetailActions>
                                   <LeaseDocumentPreview
                                     row={residentLease}
