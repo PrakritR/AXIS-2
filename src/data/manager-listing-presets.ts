@@ -324,6 +324,19 @@ export function parseFurnitureSet(furnishing: string): Set<string> {
   return out;
 }
 
+/**
+ * A room is Furnished when its `furnishing` string holds real content that isn't the
+ * explicit "Unfurnished" marker. This preserves the stored meaning across the
+ * Unfurnished→Furnished checkbox inversion: an existing room whose furnishing lists
+ * furniture stays Furnished, one stored as "Unfurnished" stays unfurnished, and an
+ * empty/new room reads as unfurnished (the new default). The wizard layers session
+ * state on top only to keep the box checked for a just-furnished room with no items yet.
+ */
+export function roomFurnishingIsFurnished(furnishing: string | undefined): boolean {
+  const f = (furnishing ?? "").trim();
+  return f !== "" && f.toLowerCase() !== "unfurnished";
+}
+
 type FurnishingSelectValue = (typeof ROOM_FURNISHING_OPTIONS)[number]["value"];
 
 /** For select: known preset, custom text, or empty */

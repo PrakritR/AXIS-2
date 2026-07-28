@@ -123,6 +123,7 @@ import {
   mergeFurnitureToggle,
   mergeToggleLine,
   parseFurnitureSet,
+  roomFurnishingIsFurnished,
   sanitizeRoomAmenityText,
   splitLineList,
 } from "@/data/manager-listing-presets";
@@ -1192,6 +1193,31 @@ export function ManagerAddListingForm({
   // from the + Add fee menu. Session-only: a removed row also has its amounts cleared, so
   // on reload it simply reappears empty (an empty fee bills nothing), which is harmless.
   const [removedFeeRows, setRemovedFeeRows] = useState<Set<ListingFeeRowId>>(() => new Set());
+  // Furnishing is a "Furnished" checkbox (default off = unfurnished). This holds rooms the
+  // manager just checked Furnished on that have no furniture ticked yet (an empty furnished
+  // state the `furnishing` string alone can't represent), plus the furniture we remember so
+  // unchecking + re-checking restores their picks instead of wiping them.
+  const [furnishedOpenRooms, setFurnishedOpenRooms] = useState<Set<string>>(() => new Set());
+  const rememberedFurnitureRef = useRef<Map<string, string>>(new Map());
+  const roomIsFurnished = (room: ManagerRoomSubmission): boolean =>
+    furnishedOpenRooms.has(room.id) || roomFurnishingIsFurnished(room.furnishing);
+  const setRoomFurnished = (index: number, room: ManagerRoomSubmission, on: boolean) => {
+    if (on) {
+      const remembered = rememberedFurnitureRef.current.get(room.id);
+      setFurnishedOpenRooms((prev) => new Set(prev).add(room.id));
+      setRoom(index, { furnishing: remembered && remembered.toLowerCase() !== "unfurnished" ? remembered : "" });
+    } else {
+      if (room.furnishing.trim() && room.furnishing.trim().toLowerCase() !== "unfurnished") {
+        rememberedFurnitureRef.current.set(room.id, room.furnishing);
+      }
+      setFurnishedOpenRooms((prev) => {
+        const next = new Set(prev);
+        next.delete(room.id);
+        return next;
+      });
+      setRoom(index, { furnishing: "Unfurnished" });
+    }
+  };
 
   const toggleListingItem = (key: string) => {
     setExpandedListingItems((prev) => {
@@ -3662,7 +3688,7 @@ export function ManagerAddListingForm({
               ) : null}
               {sortRoomIndicesByFloor(sub.rooms).map((i) => {
                 const room = sub.rooms[i]!;
-                const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
+                const furnished = roomIsFurnished(room);
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
                 const roomNameKey = listingRoomNameKey(room.id);
                 const roomRentKey = listingRoomRentKey(room.id);
@@ -3774,35 +3800,44 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Toggle items included, or add custom lines below.">Furnishing &amp; furniture</FieldLabel>
+                        <FieldLabel hint="Check Furnished to list included items.">Furnishing</FieldLabel>
                         <div className="mt-2 rounded-xl border border-border bg-card p-3">
-                          <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-border pb-2 text-sm">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
                             <input
                               type="checkbox"
                               className="h-4 w-4 rounded border-border"
-                              checked={isUnfurnished}
-                              onChange={(e) => setRoom(i, { furnishing: e.target.checked ? "Unfurnished" : "" })}
+                              checked={furnished}
+                              onChange={(e) => setRoomFurnished(i, room, e.target.checked)}
                             />
-                            <span className="font-semibold text-muted">Unfurnished</span>
+                            <span className="font-semibold text-foreground">Furnished</span>
+                            <span className="text-xs text-muted">— default is unfurnished</span>
                           </label>
-                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                            {dedupedPresets.furniture.map((p) => {
-                              const on = checkedFurniture.has(p.label);
-                              return (
-                                <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-border bg-card"} ${isUnfurnished ? "pointer-events-none opacity-40" : ""}`}>
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4 rounded border-border"
-                                    checked={on}
-                                    disabled={isUnfurnished}
-                                    onChange={(e) => setRoom(i, { furnishing: mergeFurnitureToggle(room.furnishing, p.label, e.target.checked) })}
-                                  />
-                                  <span className="font-medium text-foreground">{p.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                          <Textarea className="mt-2" rows={2} value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} placeholder="Other furnishing or layout notes (optional)" />
+                          {furnished ? (
+                            <>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                {dedupedPresets.furniture.map((p) => {
+                                  const on = checkedFurniture.has(p.label);
+                                  return (
+                                    <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-border bg-card"}`}>
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-border"
+                                        checked={on}
+                                        onChange={(e) => setRoom(i, { furnishing: mergeFurnitureToggle(room.furnishing, p.label, e.target.checked) })}
+                                      />
+                                      <span className="font-medium text-foreground">{p.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <Input
+                                className="mt-2 h-9 text-sm"
+                                value={room.detail}
+                                onChange={(e) => setRoom(i, { detail: e.target.value })}
+                                placeholder="Other furnishing notes (optional)"
+                              />
+                            </>
+                          ) : null}
                         </div>
                       </div>
                       <div className="sm:col-span-2">
