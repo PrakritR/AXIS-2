@@ -51,7 +51,7 @@ export async function buildLeaseSignaturePagePdf(row: LeasePipelineRow): Promise
 
   // The standard fonts are WinAnsi-only and pdf-lib THROWS on anything outside
   // it. Resident names, unit labels and (soon) template ids are free text, so an
-  // emoji or a CJK character would abort the whole certificate — and the caller
+  // emoji or a CJK character would abort the whole certificate, and the caller
   // swallows that, silently shipping a signed PDF with no certificate page.
   // Losing one glyph beats losing the evidence.
   const winAnsiSafe = (text: string) => text.replace(/[^\x20-\x7E\xA0-\xFF]/g, "?");
@@ -104,7 +104,7 @@ export async function buildLeaseSignaturePagePdf(row: LeasePipelineRow): Promise
     );
   }
 
-  // The FULL digest, not the readable prefix — a 64-bit prefix is a convenience
+  // The FULL digest, not the readable prefix. A 64-bit prefix is a convenience
   // for comparing two certificates by eye, not something to stand behind.
   const provenance = [
     row.documentSha256 ? `Document fingerprint (SHA-256): ${row.documentSha256}` : "",

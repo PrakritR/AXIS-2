@@ -75,8 +75,8 @@ describe("runExistingResidentOnboarding", () => {
   });
 
   it("refuses to upsert onto a lease record another manager owns", async () => {
-    // `leaseId` is derived from the application axis id — the same id space real
-    // approved-application leases use — and the route falls back to a
+    // `leaseId` is derived from the application axis id, the same id space real
+    // approved-application leases use, and the route falls back to a
     // client-supplied `row`. Without this check a colliding id would replace
     // another manager's executed lease and re-parent it to the caller.
     const db = mockDb({ id: "lease_app_PROPLANE-TEST01", manager_user_id: "mgr-victim" });

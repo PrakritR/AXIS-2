@@ -2,7 +2,7 @@
 /**
  * A lease row that carries a signature IS the evidence of what was signed.
  * These tests fail if any future change lets a signed row's document body be
- * replaced — remove the `preserveSignedLeaseDocuments` call from `write` and
+ * replaced. Remove the `preserveSignedLeaseDocuments` call from `write` and
  * the first test goes red.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";

@@ -109,7 +109,7 @@ function post(body: unknown) {
 
 const storedRowData = () => state.leases[0]!.row_data as Row;
 
-describe("POST /api/portal-lease-pipeline — signed documents are immutable server-side", () => {
+describe("POST /api/portal-lease-pipeline: signed documents are immutable server-side", () => {
   beforeEach(() => {
     state.user = { id: "11111111-2222-4333-8444-555555555555", email: "manager@axis.test" };
     state.profile = { email: "manager@axis.test", role: "manager" };

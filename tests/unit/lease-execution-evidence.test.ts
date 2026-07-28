@@ -75,7 +75,7 @@ describe("lease document hashing", () => {
 
   it("refuses to carry a stored value that is not a SHA-256 digest", () => {
     // row_data is client-writable and this value is printed on a legal
-    // certificate — "CAFEBABE" must never render as a fingerprint.
+    // certificate, so "CAFEBABE" must never render as a fingerprint.
     const row = baseRow({
       residentSignature: {
         role: "resident",
@@ -129,7 +129,7 @@ describe("lease document hashing", () => {
 
     expect(signedDocumentHashesDiverge(diverged)).toBe(true);
     expect(signedDocumentHashesDiverge(agreed)).toBe(false);
-    // A pre-change signature carries no hash — unknown, not divergent.
+    // A pre-change signature carries no hash: unknown, not divergent.
     expect(signedDocumentHashesDiverge(baseRow({ residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z" } }))).toBe(false);
   });
 });
@@ -197,7 +197,7 @@ describe("signing records the hash of what was signed", () => {
 
   // Resident-side reads are unscoped (`readRaw()` with no manager id), so the
   // resident half of the flow seeds the shared store and the manager half seeds
-  // the manager's — the same split the two portals have in the browser.
+  // the manager's, the same split the two portals have in the browser.
   const RESIDENT_SCOPE = "";
 
   it("stamps the resident signature with the hash of the document they were shown", async () => {

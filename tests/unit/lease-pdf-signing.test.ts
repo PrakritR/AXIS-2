@@ -79,7 +79,7 @@ describe("lease-pdf-signing", () => {
     expect(doc.getPageCount()).toBe(2);
   });
 
-  it("draws the full evidence certificate — hashes, provenance, divergence warning and consent — on one page", async () => {
+  it("draws the full evidence certificate (hashes, provenance, divergence warning, consent) on one page", async () => {
     const bytes = await buildLeaseSignaturePagePdf(fullEvidenceRow());
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBe(1);
@@ -97,7 +97,7 @@ describe("lease-pdf-signing", () => {
     const bytes = await buildLeaseSignaturePagePdf({
       ...row,
       residentName: "李 明 🏠",
-      unit: "Ünit — Ω",
+      unit: "Ünit Ω",
       residentSignature: { ...row.residentSignature!, name: "李 明" },
     });
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);

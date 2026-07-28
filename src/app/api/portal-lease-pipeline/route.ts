@@ -164,7 +164,7 @@ export async function POST(req: Request) {
       // Evidence integrity, authoritative copy. The client store runs the same
       // predicate, but it runs IN the browser against a store the browser owns,
       // so it is advisory: this route is where a signed lease's document body
-      // actually becomes immutable. Refuse rather than silently restore — a
+      // actually becomes immutable. Refuse rather than silently restore, because a
       // legitimate client never replaces the body of a row that still carries a
       // signature, so a request that does is either tampering or a bug, and
       // both deserve to surface. Admins are not exempt; the point is that the

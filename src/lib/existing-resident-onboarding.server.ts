@@ -88,7 +88,7 @@ export async function runExistingResidentOnboarding(
   });
 
   // `leaseId` is derived from the application's axis id, which is the SAME id
-  // space real approved-application leases use — and the route falls back to a
+  // space real approved-application leases use, and the route falls back to a
   // client-supplied `row` when the scoped application lookup misses. Without
   // this check an upsert on a colliding id would replace another manager's
   // fully executed lease (document, signatures and all) and re-parent the row

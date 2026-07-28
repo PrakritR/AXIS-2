@@ -9,7 +9,7 @@
  * WHICH BYTES. The document a signer sees is either the generated lease HTML
  * (`generatedHtml`, hashed as UTF-8) or the uploaded PDF (hashed as decoded
  * bytes). For the PDF path we hash the ORIGINAL upload, never the copy in
- * `managerUploadedPdf.dataUrl` — that copy has the signature certificate page
+ * `managerUploadedPdf.dataUrl`. That copy has the signature certificate page
  * appended to it, and the certificate cannot contain a hash of itself. The
  * certificate page is a platform artifact; the agreement is the base document.
  */
@@ -60,7 +60,7 @@ export async function leaseDocumentSha256(row: LeasePipelineRow): Promise<string
 }
 
 /**
- * A stored hash is data, not a computation — it arrives from `row_data` and is
+ * A stored hash is data, not a computation. It arrives from `row_data` and is
  * printed on a legal certificate, so anything that is not a SHA-256 digest is
  * rejected rather than rendered as one.
  */
@@ -90,7 +90,7 @@ export function signedDocumentHashesDiverge(row: LeasePipelineRow): boolean {
 /**
  * Pure signature predicate, defined here rather than in the storage module so
  * server routes can enforce the immutability rule without importing 1700 lines
- * of browser-oriented store. `hasAnyLeaseSignature` delegates to it — one
+ * of browser-oriented store. `hasAnyLeaseSignature` delegates to it: one
  * definition, so the client guard and the server guard can never disagree.
  */
 export function rowHasAnySignature(row: Pick<LeasePipelineRow, "managerSignature" | "residentSignature" | "signatureName" | "signedAtIso">): boolean {
@@ -111,7 +111,7 @@ export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null;
 
 /**
  * True when `next` replaces the document body of an already-signed `stored`
- * row. Clearing the signatures drops out by design — that is a superseding
+ * row. Clearing the signatures drops out by design, because that is a superseding
  * document (void, send back, renew, amend), not a silent edit to an executed
  * one. Filling in an absent body on an `externallySignedLease` row is how
  * existing-resident onboarding files an already-executed off-platform PDF.
