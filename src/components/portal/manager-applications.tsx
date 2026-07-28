@@ -802,7 +802,10 @@ export function ManagerApplications() {
     <ManagerPortalPageShell
       title="Applications"
       titleAside={
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        // min-w-0 (not shrink-0) so this 4-action toolbar can shrink and wrap to
+        // its own line on a phone instead of overflowing the header — Send was
+        // being clipped off the right edge and was unreachable at 360/390px.
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
           <Button
             type="button"
