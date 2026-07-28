@@ -139,7 +139,7 @@ export function ManagerCommunication({
   );
 
   const threadFilters = (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:gap-3">
       <CheckboxMultiSelect
         variant="pill"
         label="House"

@@ -454,6 +454,12 @@ export function ManagerUnifiedInbox({
     );
 
   return (
-    <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />
+    <InboxTwoPane
+      mobileCompact
+      className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+      threadOpen={Boolean(selection)}
+      list={listPane}
+      thread={threadPane}
+    />
   );
 }

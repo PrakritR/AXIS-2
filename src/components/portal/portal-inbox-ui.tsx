@@ -742,7 +742,7 @@ export function InboxBubble({
         <span className="mb-1 px-1 text-[11px] font-medium text-muted">{message.author}</span>
       ) : null}
       <div
-        className={`portal-inbox-inbound-bubble max-w-[min(85%,32rem)] px-3.5 py-2 text-sm leading-relaxed ${
+        className={`portal-inbox-inbound-bubble max-w-[min(92%,32rem)] px-3 py-2 text-sm leading-relaxed max-md:max-w-[96%] max-md:px-3 max-md:py-1.5 max-md:text-[13px] ${
           outbound
             ? "rounded-2xl rounded-br-md text-primary-foreground"
             : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
@@ -789,7 +789,7 @@ export function InboxComposer({
   const canSend = !sending && !disabled && value.trim().length > 0;
   return (
     <form
-      className="portal-inbox-composer shrink-0 border-t border-border bg-card px-3 py-2.5"
+      className="portal-inbox-composer shrink-0 border-t border-border bg-card px-2 py-2 max-md:py-1.5 md:px-3 md:py-2.5"
       style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
       onSubmit={(e) => {
         e.preventDefault();
@@ -1066,7 +1066,7 @@ export function InboxScheduledCard({
 
   return (
     <div
-      className="portal-inbox-scheduled-card ml-auto max-w-[min(92%,34rem)] rounded-2xl border border-dashed border-primary/30 bg-primary/[0.06]"
+      className="portal-inbox-scheduled-card w-full max-w-[min(92%,34rem)] rounded-2xl border border-dashed border-primary/30 bg-primary/[0.06] max-md:ml-0 max-md:max-w-none md:ml-auto"
       data-attr="inbox-scheduled-card"
     >
       {/* Compact summary row — always visible, click to expand. */}
@@ -1342,23 +1342,25 @@ export function InboxThreadView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header
-        className="portal-inbox-thread-header flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
-        style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
+        className="portal-inbox-thread-header flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1.5 max-md:py-1 md:gap-1 md:px-2 md:py-2"
+        style={{ paddingTop: "max(0.375rem, env(safe-area-inset-top, 0px))" }}
       >
         {onBack ? (
           <button
             type="button"
             onClick={onBack}
-            className="flex min-h-9 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary lg:hidden"
+            className="flex min-h-8 shrink-0 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary lg:hidden"
             aria-label="Back to conversations"
             data-attr="inbox-thread-back"
           >
             <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-            <span>Inbox</span>
+            <span className="sr-only">Inbox</span>
           </button>
         ) : null}
-        <div className="flex min-w-0 flex-1 items-center gap-2.5 px-1">
-          {avatarName ? <InboxAvatar name={avatarName} className="h-9 w-9 text-[11px]" /> : null}
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
+          {avatarName ? (
+            <InboxAvatar name={avatarName} className="h-8 w-8 text-[10px] md:h-9 md:w-9 md:text-[11px]" />
+          ) : null}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{title}</p>
             {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
@@ -1370,17 +1372,21 @@ export function InboxThreadView({
       <div
         ref={scrollRef}
         onScroll={handleThreadScroll}
-        className="portal-inbox-thread-body min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
+        className="portal-inbox-thread-body flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background/40 px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3"
       >
         {messages.length === 0 && !afterMessages ? (
-          <div className="flex min-h-full items-center justify-center py-6">
+          <div className="flex min-h-full flex-1 items-center justify-center py-4">
             <PortalInboxEmptyState title={emptyLabel} />
           </div>
         ) : (
-          messages.map((m) => <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />)
+          <div className="mt-auto flex w-full flex-col gap-2 md:gap-3">
+            {messages.map((m) => (
+              <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />
+            ))}
+            {afterMessages}
+            <div ref={endRef} />
+          </div>
         )}
-        {afterMessages}
-        <div ref={endRef} />
       </div>
 
       {composer}
@@ -1406,6 +1412,8 @@ export function InboxTwoPane({
    * screen space (full inbox pages).
    */
   heightMode = "viewport",
+  /** Tighter viewport fill on phones (Communication page with heavy filter chrome). */
+  mobileCompact = false,
 }: {
   list: ReactNode;
   thread: ReactNode;
@@ -1414,6 +1422,7 @@ export function InboxTwoPane({
   className?: string;
   listHidden?: boolean;
   heightMode?: "viewport" | "section";
+  mobileCompact?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
@@ -1429,8 +1438,13 @@ export function InboxTwoPane({
       // display:none on desktop, so this contributes 0 there.
       const bottomNav = document.querySelector(".portal-native-bottom-nav");
       const navHeight = bottomNav ? bottomNav.getBoundingClientRect().height : 0;
-      const avail = window.innerHeight - top - navHeight - 16;
-      setMeasuredHeight(Math.max(440, Math.min(760, avail)));
+      const narrow = window.innerWidth < 768;
+      const compact = mobileCompact && narrow;
+      const edgePad = compact ? 8 : 16;
+      const avail = window.innerHeight - top - navHeight - edgePad;
+      const minH = compact ? 280 : narrow ? 360 : 440;
+      const maxH = compact ? 600 : narrow ? 680 : 760;
+      setMeasuredHeight(Math.max(minH, Math.min(maxH, avail)));
     };
     measure();
     // Re-measure after layout settles — the fixed bottom nav (and final card
@@ -1443,7 +1457,7 @@ export function InboxTwoPane({
       window.clearTimeout(timer);
       window.removeEventListener("resize", measure);
     };
-  }, [heightMode]);
+  }, [heightMode, mobileCompact]);
 
   const sectionHeight = "min(20rem, 38dvh)";
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";

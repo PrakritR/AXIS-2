@@ -37,7 +37,7 @@ export function PortalCommunicationShell({
         ) : undefined
       }
     >
-      <div className="portal-communication-inbox mt-1">
+      <div className="portal-communication-inbox max-md:-mt-1 md:mt-1">
         {statusPills ? <div className="mb-4">{statusPills}</div> : null}
         {children}
       </div>
