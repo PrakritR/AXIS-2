@@ -8,6 +8,7 @@ import {
   type ListingStFeeToggles,
   readListingFeeCellAmount,
 } from "@/lib/listing-fee-term-toggles";
+import type { ListingFeeRow } from "@/lib/listing-fees";
 import { sanitizeMoneyInput } from "@/lib/listing-form-inputs";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -199,7 +200,18 @@ export function ListingUnifiedFeesTable({
             );
           })}
 
-          {customFees.map((fee, i) => (
+          {/* Only genuinely custom rows belong here. Preset-backed rows are already
+              rendered above as standard fees, so listing them again duplicated every
+              fee once the legacy->unified migration started materializing presets
+              into customFees. Indices are captured before filtering because the
+              change/remove callbacks address the unfiltered array. */}
+          {customFees
+            .map((fee, i) => ({ fee, i }))
+            .filter(({ fee }) => {
+              const presetId = (fee as ListingFeeRow).presetId;
+              return !presetId || presetId === "custom";
+            })
+            .map(({ fee, i }) => (
             <tr key={fee.id} className="border-b border-border/70 last:border-b-0">
               <td className="px-3 py-3 align-middle">
                 <Input
