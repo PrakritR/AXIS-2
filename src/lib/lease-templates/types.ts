@@ -71,14 +71,30 @@ export type LeaseJurisdictionTemplateConfig = {
    * only safe default. Never populate this without a verified source.
    */
   landlordMaintenanceStatuteRef?: string;
+  /**
+   * Jurisdiction-specific NUMERIC lease terms.
+   *
+   * These were hardcoded in the template body with Washington figures, so every California
+   * lease printed a WA notice period, a WA deposit-return window, and a WA minimum heat
+   * temperature. They are optional for the same reason `landlordMaintenanceStatuteRef` is:
+   * a value is set only where it came from a verified source, and an omitted one falls back
+   * to language that asserts no specific figure ("as required by applicable law"). Stating a
+   * wrong number on an executed lease is worse than stating none. Never populate these for a
+   * jurisdiction without confirming the figure for THAT jurisdiction.
+   */
+  monthToMonthTerminationNotice?: string;
+  depositReturnWindow?: string;
+  minimumHeatTemperature?: string;
 };
 
-export const SEATTLE_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
-  headerSubtitle: "State of Washington · King County",
-  municipalComplianceParagraph:
-    "This Agreement shall be interpreted consistently with the Washington Residential Landlord-Tenant Act (RCW Chapter 59.18). If the Premises are located within the City of Seattle, applicable Seattle rental regulations (including notice, just-cause, relocation, or habitability rules) shall apply to the minimum extent required by law.",
+/**
+ * Statewide Washington. `SEATTLE_LEASE_CONFIG` derives from this, so a statute or term that
+ * applies state-wide is written ONCE. Only genuinely city-specific values are overridden.
+ */
+export const WASHINGTON_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
+  headerSubtitle: "State of Washington",
   governingLawParagraph:
-    "This Agreement is governed by the laws of the <strong>State of Washington</strong> (RCW Title 59) and, where applicable, the ordinances of the City of Seattle. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
+    "This Agreement is governed by the laws of the <strong>State of Washington</strong> (RCW Title 59) and, where applicable, the ordinances of the city and county in which the Premises are located. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
   shortTermPurposeParagraph:
     "The Guest is staying temporarily as a short-term lodger / guest only. This agreement does not create a landlord-tenant relationship under Washington law. The stay is intended to be exempt from RCW 59.18.040 where legally applicable.",
   lateFeeStatuteRef: "RCW 59.18.283",
@@ -87,14 +103,31 @@ export const SEATTLE_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
   residentMaintenanceStatuteRef: "RCW 59.18.130",
   landlordMaintenanceStatuteRef: "RCW 59.18.060",
   defaultNoticeStatuteRef: "RCW 59.12.030",
+  monthToMonthTerminationNotice: "at least 20 days before the end of any monthly rental period",
+  depositReturnWindow: "Within 30 days after termination of the tenancy and vacancy of the Premises",
+  minimumHeatTemperature: "68°F",
 };
 
-export const SAN_FRANCISCO_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
-  headerSubtitle: "State of California · City and County of San Francisco",
+export const SEATTLE_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
+  ...WASHINGTON_LEASE_CONFIG,
+  headerSubtitle: "State of Washington · King County",
   municipalComplianceParagraph:
-    "If the Premises are located within the City and County of San Francisco, the parties agree that the San Francisco Rent Ordinance (SF Administrative Code Chapter 37) and other applicable local rental regulations shall apply to the minimum extent required by law, including notice, habitability, and relocation requirements where applicable.",
+    "This Agreement shall be interpreted consistently with the Washington Residential Landlord-Tenant Act (RCW Chapter 59.18). If the Premises are located within the City of Seattle, applicable Seattle rental regulations (including notice, just-cause, relocation, or habitability rules) shall apply to the minimum extent required by law.",
   governingLawParagraph:
-    "This Agreement is governed by the laws of the <strong>State of California</strong> and, where applicable, the ordinances of the City and County of San Francisco. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
+    "This Agreement is governed by the laws of the <strong>State of Washington</strong> (RCW Title 59) and, where applicable, the ordinances of the City of Seattle. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
+};
+
+/**
+ * Statewide California, for any CA property outside San Francisco.
+ *
+ * The three numeric terms are deliberately UNSET: the values previously printed here were
+ * Washington's, and no verified California figures exist in this repo. They render as
+ * "as required by applicable law" until someone sources them.
+ */
+export const CALIFORNIA_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
+  headerSubtitle: "State of California",
+  governingLawParagraph:
+    "This Agreement is governed by the laws of the <strong>State of California</strong> and, where applicable, the ordinances of the city and county in which the Premises are located. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
   shortTermPurposeParagraph:
     "The Guest is staying temporarily as a short-term lodger / guest only. This agreement does not create a landlord-tenant relationship under California law except to the minimum extent required by applicable statute.",
   lateFeeStatuteRef: "California Civil Code",
@@ -102,4 +135,13 @@ export const SAN_FRANCISCO_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
   landlordEntryStatuteRef: "California Civil Code § 1954",
   residentMaintenanceStatuteRef: "California Civil Code",
   defaultNoticeStatuteRef: "California Code of Civil Procedure",
+};
+
+export const SAN_FRANCISCO_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
+  ...CALIFORNIA_LEASE_CONFIG,
+  headerSubtitle: "State of California · City and County of San Francisco",
+  municipalComplianceParagraph:
+    "If the Premises are located within the City and County of San Francisco, the parties agree that the San Francisco Rent Ordinance (SF Administrative Code Chapter 37) and other applicable local rental regulations shall apply to the minimum extent required by law, including notice, habitability, and relocation requirements where applicable.",
+  governingLawParagraph:
+    "This Agreement is governed by the laws of the <strong>State of California</strong> and, where applicable, the ordinances of the City and County of San Francisco. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
 };

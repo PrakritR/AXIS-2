@@ -560,3 +560,61 @@ describe("stay pricing: document and ledger agree", () => {
     expect(html).not.toContain("San Francisco Rent Ordinance");
   });
 });
+
+describe("stay pricing: the document never asserts a credit the ledger will not apply", () => {
+  it("omits the holding-deposit credit note on an EXPLICIT short-term agreement", () => {
+    // The ledger credits a paid holding deposit only on its standard branch; the short-term
+    // branch charges the full shortTermDeposit and returns before that code. Printing the
+    // note there tells a guest they get a credit that is never applied.
+    const propertyId = "prop-credit-short";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
+      shortTermRentalsAllowed: true,
+      shortTermDeposit: "300",
+    });
+    const html = leaseHtml(
+      application(propertyId, { rentalType: "short_term", leaseTerm: "Short-Term Stay" }),
+    );
+    expect(html).toContain("SHORT-TERM ROOM STAY AGREEMENT");
+    expect(html).not.toContain("holding deposit already paid");
+  });
+
+  it("keeps the note when the stay document backs a STANDARD application, which the ledger does credit", () => {
+    const propertyId = "prop-credit-standard";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
+      shortTermRentalsAllowed: true,
+      securityDeposit: "900",
+    });
+    const html = leaseHtml(application(propertyId));
+    expect(html).toContain("SHORT-TERM ROOM STAY AGREEMENT");
+    expect(html).toContain("holding deposit already paid");
+  });
+});
+
+describe("stay pricing: statewide leases do not carry another state's numeric terms", () => {
+  it("a California lease states no Washington notice period, deposit window, or heat figure", () => {
+    const propertyId = "prop-ca-terms";
+    seedListing(propertyId, room({ monthlyRent: 1200 }));
+    const html = leaseHtml(application(propertyId, { leaseTerm: "12-Month", leaseEnd: "2027-03-09" }));
+    expect(html).toContain("State of California");
+    expect(html).not.toContain("20 days before the end of any monthly rental period");
+    expect(html).not.toContain("Within 30 days after termination");
+    expect(html).not.toContain("68°F");
+    // Replaced by language that asserts no specific figure rather than a guessed one.
+    expect(html).toContain("required by applicable law");
+  });
+
+  it("a Washington lease KEEPS its own verified figures", () => {
+    // The California fix must not strip the terms from the state they actually came from.
+    const propertyId = "prop-wa-terms";
+    const property = seedListing(propertyId, room({ monthlyRent: 1200 }));
+    cachePublicExtraListings(
+      [{ ...property, address: "1500 Pike St, Seattle, WA", zip: "98101", neighborhood: "Belltown" }],
+      { silent: true },
+    );
+    const html = leaseHtml(application(propertyId, { leaseTerm: "12-Month", leaseEnd: "2027-03-09" }));
+    expect(html).toContain("State of Washington");
+    expect(html).toContain("20 days before the end of any monthly rental period");
+    expect(html).toContain("Within 30 days after termination");
+    expect(html).toContain("68°F");
+  });
+});

@@ -943,6 +943,45 @@ matching city config with every city-specific claim **removed**: no
 without the city-ordinance clause. Every statute reference carried over is already state level
 (RCW chapter 59.18, California Civil Code), so no citation was authored.
 
+## Jurisdiction-specific numeric terms
+
+Three figures used to be hardcoded in the long-form body with Washington values, so every
+California lease printed a WA notice period, a WA deposit-return window, and a WA minimum
+heat temperature. They are now OPTIONAL config fields
+(`monthToMonthTerminationNotice`, `depositReturnWindow`, `minimumHeatTemperature`),
+populated for Washington and Seattle from the values that were already in the repo and
+deliberately UNSET for California and San Francisco, where they fall back to language that
+asserts no figure at all ("as required by applicable law").
+
+That asymmetry is the same rule as the lodger statute: a wrong number on an executed lease is
+worse than no number. Do not populate a jurisdiction's field without a source verified for
+THAT jurisdiction.
+
+`SEATTLE_LEASE_CONFIG` now derives from `WASHINGTON_LEASE_CONFIG` and
+`SAN_FRANCISCO_LEASE_CONFIG` from `CALIFORNIA_LEASE_CONFIG` (spread + override), so a
+state-level statute or term is written once. Duplicating them meant a citation update had to
+land in two places per state, and a missed one silently shipped a stale citation.
+
+Coverage: `tests/unit/stay-pricing-repro.test.ts` asserts a California lease contains none of
+the three WA figures and that a Washington lease still contains all of them.
+
+## The document never asserts a credit the ledger will not apply
+
+`HOLDING_DEPOSIT_CREDIT_NOTE` renders only when `rentalType !== "short_term"`. The ledger
+credits a paid holding deposit on its STANDARD branch only; the explicit short-term branch
+charges the full `shortTermDeposit` and returns before that code. Keyed on `rentalType`, not
+on the resolved `stayKind`, for exactly the same reason the deposit amount is: the stay
+document also backs a standard application, and in that case the credit IS applied.
+
+## One room lookup on the ledger side
+
+`resolveRowSubmissionRoom` / `roomForRow` are the only way `household-charges.ts` picks a
+room, and they call the shared `resolveSubmissionRoom`. `selectedRoomRentAmount`,
+`selectedRoomUtilities`, `selectedRoom`, and `recordApprovedApplicationCharges` previously
+resolved it three different ways, so one approval could bill rent off one room and utilities
+off another while the lease quoted a third. The private `findRoomInSub` is deleted; do not
+reintroduce a local lookup.
+
 ## Known gaps, not fixed here
 
 - **Uploaded-template properties never reach the short-term agreement.**
@@ -965,11 +1004,10 @@ without the city-ordinance clause. Every statute reference carried over is alrea
   prefers `manualResidentDetails.securityDeposit` and suppresses listing defaults entirely
   (`allowListingDefaults = !row.manuallyAdded`); the builder only receives the application, so
   it still quotes the listing default. Pre-existing.
-- **Statewide leases still carry city-derived numeric terms.** The long-form body hardcodes "at
-  least 20 days before the end of any monthly rental period" (a WA RLTA figure; California is
-  30 days) and a "3-day pay-or-vacate / 10-day cure" framing. Pre-existing for the SF template,
-  but the widened CA support surface now applies it to every California address. Fixing it
-  properly needs per-jurisdiction notice-period config fields.
+- **A "3-day pay-or-vacate / 10-day cure" framing is still hardcoded** in the Default &amp;
+  Remedies section. It sits beside `defaultNoticeStatuteRef` but is not driven by it, so it
+  reads as a nationwide rule. Same class as the three numeric terms fixed below; it needs its
+  own optional config field and a verified figure per jurisdiction.
 - **Dates render as raw ISO** (`2026-08-03`) on both documents rather than a written-out date.
 
 ## Coverage

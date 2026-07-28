@@ -4,10 +4,14 @@
  */
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  normalizeManagerListingSubmissionV1,
+  type ManagerListingSubmissionV1,
+  type ManagerRoomSubmission,
+} from "@/lib/manager-listing-submission";
 import { formatRoomPriceAmount, resolveStayPricing, roomDailyRentPrice } from "@/lib/room-pricing";
 import { resolveSubmissionRoom } from "@/lib/listing-room-resolution";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
@@ -1109,22 +1113,41 @@ function lastMonthChargeForLeaseEnd(
   };
 }
 
-function findRoomInSub(
+/**
+ * The row's listing submission and its resolved room, both derived ONCE through the shared
+ * chain in `listing-room-resolution.ts` that the lease document also uses.
+ *
+ * Every rent/utilities/deposit figure on this side must come from the SAME room the document
+ * priced, so this is the only place the ledger is allowed to pick one. Resolving it per
+ * call site is what let a single approval bill off one room while its lease quoted another.
+ */
+function resolveRowSubmissionRoom(
+  row: Pick<
+    DemoApplicantRow,
+    "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "signedMonthlyRent"
+  >,
+): { sub: ReturnType<typeof normalizeManagerListingSubmissionV1> | null; room: ManagerRoomSubmission | null } {
+  const propertyId =
+    row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return { sub: null, room: null };
+  return { sub, room: roomForRow(sub, row, prop?.unitLabel) };
+}
+
+/** Shared room lookup for a row. Every caller must pass the same inputs (see the module doc). */
+function roomForRow(
   sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
-  choice: string,
-  signedRent?: number | null,
-) {
-  const { listingRoomId } = parseRoomChoiceValue(choice);
-  if (listingRoomId) {
-    const byId = sub.rooms.find((r) => r.id === listingRoomId);
-    if (byId) return byId;
-  }
-  if (signedRent && signedRent > 0) {
-    const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
-    if (byRent.length === 1) return byRent[0]!;
-  }
-  if (sub.rooms.length === 1) return sub.rooms[0]!;
-  return null;
+  row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "manualResidentDetails" | "signedMonthlyRent">,
+  unitLabel: string | null | undefined,
+): ManagerRoomSubmission | null {
+  return (
+    resolveSubmissionRoom(sub, {
+      roomChoices: [row.assignedRoomChoice, row.application?.roomChoice1],
+      unitLabel: unitLabel ?? row.manualResidentDetails?.roomNumber,
+      signedMonthlyRent: row.signedMonthlyRent,
+    }) ?? null
+  );
 }
 
 function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "manuallyAdded" | "signedMonthlyRent">): {
@@ -1136,35 +1159,15 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const manualUtils = row.manualResidentDetails?.monthlyUtilities;
   if (manualUtils != null && manualUtils > 0) return { raw: String(manualUtils), amount: manualUtils };
   if (row.manuallyAdded) return { raw: "", amount: 0 };
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const { sub, room } = resolveRowSubmissionRoom(row);
   if (!sub) return { raw: "", amount: 0 };
-  // Try both assignedRoomChoice and roomChoice1 for ID lookup before falling back
-  let room = null;
-  for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-    const t = c?.trim();
-    if (!t) continue;
-    const { listingRoomId } = parseRoomChoiceValue(t);
-    if (listingRoomId) {
-      const byId = sub.rooms.find((r) => r.id === listingRoomId);
-      if (byId) { room = byId; break; }
-    }
-  }
-  if (!room) room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   const amount = utilitiesBillableMonthlyAmount(sub, room);
   const raw = amount > 0 ? String(amount) : room?.utilitiesEstimate?.trim() || "";
   return { raw, amount };
 }
 
 function selectedRoom(row: DemoApplicantRow) {
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
-  if (!sub) return null;
-  return findRoomInSub(sub, choice, row.signedMonthlyRent);
+  return resolveRowSubmissionRoom(row).room;
 }
 
 /**
@@ -1189,12 +1192,7 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const negotiated = residentNegotiatedMonthlyRent(row);
   if (negotiated > 0) return negotiated;
   if (row.manuallyAdded) return 0;
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
-  if (!sub) return 0;
-  const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
+  const { room } = resolveRowSubmissionRoom(row);
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
 }
 
@@ -2376,15 +2374,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   // assignedRoomChoice.
   // Resolved BEFORE the short-term branch: that branch prices the stay from the room the
   // applicant selected, so it cannot be resolved after the branch returns.
-  const room = sub
-    ? resolveSubmissionRoom(sub, {
-        roomChoices: [row.assignedRoomChoice, row.application?.roomChoice1],
-        // The document passes its own listing property's unit label. Withholding it here
-        // would let the shared chain fall through to a different room on this side.
-        unitLabel: prop?.unitLabel,
-        signedMonthlyRent: row.signedMonthlyRent,
-      }) ?? null
-    : selectedRoom(row);
+  const room = sub ? roomForRow(sub, row, prop?.unitLabel) : selectedRoom(row);
 
   const isShortTermStay = row.application?.rentalType === "short_term";
 

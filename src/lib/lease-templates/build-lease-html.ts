@@ -215,8 +215,12 @@ function proratedBlock(
     const dim = span ? span.daysInMonth : new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
     const remaining = span ? span.billableDays : dim - day + 1;
     const useManual = prorate?.method === "daily_rate" && prorate.dailyRentRate && prorate.dailyRentRate > 0;
+    // The ledger gates the daily utilities rate on `prorateMethod === "daily_rate"`, and a
+    // positive `dailyUtilitiesRate` survives on the room after the manager switches proration
+    // back to "auto" (the wizard only rewrites `prorateMethod`). Dropping that condition here
+    // would prorate off a stale rate the ledger ignores, so the same gate applies on both sides.
     const useManualUtils =
-      (useManual || utilitiesOnly) && prorate?.dailyUtilitiesRate && prorate.dailyUtilitiesRate > 0;
+      prorate?.method === "daily_rate" && prorate.dailyUtilitiesRate && prorate.dailyUtilitiesRate > 0;
     const proratedRent =
       utilitiesOnly || !rent
         ? 0
@@ -403,7 +407,11 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       : null;
 
   const appFee = escapeHtml(sub?.applicationFee ?? "—");
-  const secDep = escapeHtml(overrideFeeLabel(a.managerSecurityDepositOverride, sub?.securityDeposit ?? "—"));
+  // One derivation for the deposit, exactly as for the rate: `resolveStayPricing` already
+  // picked the field the ledger will charge (override, then shortTermDeposit or
+  // securityDeposit keyed on rentalType). Recomputing it here let the document and the ledger
+  // drift the moment either rule changed.
+  const secDep = escapeHtml(stay.deposit !== undefined ? fmtUsd(stay.deposit) : "—");
   const moveInFee = escapeHtml(overrideFeeLabel(a.managerMoveInFeeOverride, sub?.moveInFee ?? "—"));
   const rawOtherCostLabel = a.managerOtherCostLabel?.trim() || "Other costs";
   const otherCostIsMonthToMonth = isMonthToMonthOtherCost(rawOtherCostLabel);
@@ -487,6 +495,12 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     // rate whenever it has one. Same two branches here, or the two totals diverge.
     const stayUtilitiesSpan = intraMonthStaySpan(a.leaseStart, a.leaseEnd);
     const stayUtilitiesBase = a.rentalType === "short_term" ? 0 : (utilitiesNum ?? 0);
+    // The ledger only credits a paid holding deposit on its STANDARD branch; the explicit
+    // short-term branch charges the full shortTermDeposit and returns before that code. So
+    // the credit sentence is only true for a standard application, and printing it on an
+    // explicit short-term agreement would assert a credit the resident never receives.
+    // Keyed on rentalType, not stayKind, for exactly the same reason the deposit is.
+    const holdingCreditApplies = a.rentalType !== "short_term";
     const stayDailyUtilitiesRate =
       specificRoom?.prorateMethod === "daily_rate" && (specificRoom.dailyUtilitiesRate ?? 0) > 0
         ? specificRoom.dailyUtilitiesRate!
@@ -549,7 +563,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   ${stayOtherNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${fmtUsd(stayOtherNum)}</td></tr>` : ""}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>
-<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>
+${holdingCreditApplies ? `<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>` : ""}
 
 <h2>5. Lodger Status</h2>
 <p>${config.shortTermPurposeParagraph}</p>
@@ -609,7 +623,7 @@ ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplia
 
 <h2>3. Lease Term</h2>
 <p>The initial term is <strong>${leaseTerm}</strong>, beginning <strong>${leaseStart}</strong> and ending <strong>${leaseEnd}</strong>. ${leaseTermsBody}</p>
-<p>At the conclusion of the initial term, the tenancy shall convert to a month-to-month tenancy under the same terms unless either party provides written notice to terminate at least 20 days before the end of any monthly rental period.</p>
+<p>At the conclusion of the initial term, the tenancy shall convert to a month-to-month tenancy under the same terms unless either party provides written notice to terminate ${config.monthToMonthTerminationNotice ?? "within the period required by applicable law"}.</p>
 
 <h2>4. Rent</h2>
 <table>
@@ -634,7 +648,7 @@ ${proratedSection || ""}
 </table>
 <p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>
 <p>Resident shall pay a security deposit of <strong>${secDep}</strong> at lease signing. The deposit shall be held in accordance with ${config.depositStatuteRef} and secures Resident&apos;s full performance under this Agreement. Resident&apos;s liability is not limited to the deposit amount, and the deposit may not be applied toward rent or other charges during the tenancy.</p>
-<p>Within 30 days after termination of the tenancy and vacancy of the Premises, Landlord shall return any refundable portion of the deposit or provide a written itemized statement of deductions, as required by law. Resident shall provide a forwarding address for delivery of the deposit accounting and any refund. Any refund may be issued as a single check payable to all Residents.</p>
+<p>${config.depositReturnWindow ?? "Within the period required by applicable law after termination of the tenancy and vacancy of the Premises"}, Landlord shall return any refundable portion of the deposit or provide a written itemized statement of deductions, as required by law. Resident shall provide a forwarding address for delivery of the deposit accounting and any refund. Any refund may be issued as a single check payable to all Residents.</p>
 <p>Deductions from the deposit may include, to the extent permitted by law:</p>
 <ul>
   <li>Unpaid rent, utilities, or other charges.</li>
@@ -686,7 +700,7 @@ ${houseRules
 <h3>Landlord responsibilities${config.landlordMaintenanceStatuteRef ? ` (${config.landlordMaintenanceStatuteRef})` : ""}:</h3>
 <ul>
   <li>Maintain the dwelling in a structurally sound, weathertight, and sanitary condition.</li>
-  <li>Provide adequate heating capable of maintaining 68°F and functioning plumbing and hot water.</li>
+  <li>Provide adequate heating capable of maintaining ${config.minimumHeatTemperature ?? "the minimum temperature required by applicable law"} and functioning plumbing and hot water.</li>
   <li>Keep common areas clean, sanitary, and reasonably free from pests.</li>
   <li>Maintain all electrical, plumbing, heating, and mechanical systems in good working order.</li>
   <li>Respond to emergency repair requests (no heat, water, major leak) within 24 hours; non-emergency repairs within a reasonable timeframe, generally 10 business days.</li>
