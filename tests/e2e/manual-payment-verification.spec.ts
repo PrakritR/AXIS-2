@@ -51,6 +51,6 @@ test.describe("Manual payment verification UI", () => {
     expect(res.ok()).toBeTruthy();
     const body = (await res.json()) as { paid?: boolean; message?: string };
     expect(body.paid).toBe(false);
-    expect(body.message).toMatch(/not paid/i);
+    expect(body.message).toMatch(/haven't received|not paid/i);
   });
 });

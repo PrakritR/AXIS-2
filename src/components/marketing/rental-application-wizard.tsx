@@ -1077,7 +1077,7 @@ function RentalApplicationWizardInner({
       }
       if (!data.paid) {
         setApplicationFeeCheckError(
-          typeof data.message === "string" ? data.message : "Payment not paid. Please send payment.",
+          typeof data.message === "string" ? data.message : "We haven't received this payment yet. Send the fee, wait a moment, then check again.",
         );
         setForm((f) => ({ ...f, applicationFeeZelleSentConfirmed: false }));
         setErrors((e) => ({ ...e, applicationFeeZelleSentConfirmed: "" }));
@@ -1336,7 +1336,7 @@ function RentalApplicationWizardInner({
     }
     if (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other") {
       if (!applicationFeePaymentVerified) {
-        return applicationFeeCheckBusy ? "Checking payment…" : "Check payment first";
+        return "Check payment above";
       }
       return submitting ? "Submitting…" : "Submit application";
     }
@@ -1347,7 +1347,6 @@ function RentalApplicationWizardInner({
     applicationFeeGate.paid,
     applicationFeeGate.needsFee,
     applicationFeePaymentVerified,
-    applicationFeeCheckBusy,
     submitting,
   ]);
 
@@ -1520,6 +1519,24 @@ function RentalApplicationWizardInner({
         }
 
         if (needsFee && (payChannel === "zelle" || payChannel === "venmo" || payChannel === "other")) {
+          if (!applicationFeePaymentVerified) {
+            const hint =
+              payChannel === "other"
+                ? "Tap Check payment above after following the payment instructions."
+                : `Tap Check payment above after sending the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`;
+            showToast(hint);
+            setErrors((e) => ({
+              ...e,
+              applicationFeeZelleSentConfirmed: hint,
+            }));
+            queueMicrotask(() =>
+              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], {
+                applicationFeeZelleSentConfirmed: hint,
+              }),
+            );
+            return;
+          }
+
           ensurePendingApplicationFeeCharge({
             residentEmail: form.email,
             residentName: form.fullLegalName,
@@ -1554,15 +1571,15 @@ function RentalApplicationWizardInner({
             const msg =
               typeof checkData.message === "string"
                 ? checkData.message
-                : "Payment not paid. Please send payment.";
+                : "We haven't received this payment yet. Send the fee, wait a moment, then check again.";
             setForm((f) => ({ ...f, applicationFeeZelleSentConfirmed: false }));
             setApplicationFeeCheckError(msg);
             setErrors((e) => ({
               ...e,
               applicationFeeZelleSentConfirmed:
                 payChannel === "other"
-                  ? "Check payment before submitting your application."
-                  : `Tap Check payment after sending the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`,
+                  ? "Tap Check payment above after following the payment instructions."
+                  : `Tap Check payment above after sending the application fee by ${payChannel === "venmo" ? "Venmo" : "Zelle"}.`,
             }));
             showToast(msg);
             queueMicrotask(() =>

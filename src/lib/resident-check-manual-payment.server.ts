@@ -6,10 +6,15 @@ import { upsertManagerCharges } from "@/lib/household-charges.server";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { generatePaymentReference } from "@/lib/payment-reference";
+import {
+  effectiveApplicationFeeCents,
+  loadManagerApplicationSettings,
+} from "@/lib/manager-application-settings";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { chargeOwnedByUser } from "@/lib/stripe-household-charge-checkout.server";
 
-export const MANUAL_PAYMENT_NOT_PAID_MESSAGE = "Payment not paid. Please send payment.";
+export const MANUAL_PAYMENT_NOT_PAID_MESSAGE =
+  "We haven't received this payment yet. Send the fee, wait a moment, then check again.";
 
 export type CheckManualPaymentResult =
   | { ok: true; paid: true; charges: HouseholdCharge[] }
@@ -194,11 +199,17 @@ async function ensureApplicationFeeChargeRow(
   if (!resolved) return null;
   const { managerUserId, propertyLabel, sub } = resolved;
 
-  const amount = parseMoneyAmount(sub.applicationFee);
+  const managerSettings = await loadManagerApplicationSettings(db, managerUserId);
+  const listingFeeCents = Math.round(parseMoneyAmount(sub.applicationFee) * 100);
+  const applicationFeeCents = effectiveApplicationFeeCents({
+    managerFeeCents: managerSettings.applicationFeeCents,
+    listingFeeCents,
+  });
+  const amount = applicationFeeCents / 100;
   if (amount <= 0) return null;
 
   const email = input.residentEmail.trim();
-  const label = sub.applicationFee?.trim() || `$${amount.toFixed(2)}`;
+  const label = `$${amount.toFixed(2)}`;
   const chargeId = applicationFeeFallbackChargeId(email, input.propertyId);
   const charge: HouseholdCharge = {
     id: chargeId,

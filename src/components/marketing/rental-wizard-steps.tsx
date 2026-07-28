@@ -882,14 +882,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Signer information</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Signer Information</h2>
           <StepIntro className="mt-3">
             Start with how we can reach you, then confirm your identity exactly as it appears on your ID. This section is
             encrypted in transit in production environments.
           </StepIntro>
         </div>
 
-        <div className="space-y-5 rounded-2xl border border-border p-5 sm:p-6">
+        <div className="space-y-5">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Contact</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <WizardFieldGate fieldKey="fullLegalName" enabled={showWizardField}>
@@ -948,7 +948,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         </div>
 
-        <div className="space-y-5 rounded-2xl border border-border p-5 sm:p-6">
+        <div className="space-y-5">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <WizardFieldGate fieldKey="dateOfBirth" enabled={showWizardField}>
@@ -1698,7 +1698,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Consent and signature</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Consent and Signature</h2>
           <StepIntro className="mt-3">Review the authorizations below. Your typed name carries the same effect as a handwritten signature.</StepIntro>
         </div>
         <div className="rounded-2xl border border-border bg-accent/30 p-5 text-sm leading-relaxed text-foreground">
@@ -1986,11 +1986,33 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </StepIntro>
         </div>
 
-        {/* Fee waiver code — a clear, named part of the application, not a field
-            buried among the payment options. */}
+        {applicationFeeGate.needsFee ? (
+          <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Application fee</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
+            {!applicationFeeGate.paid ? (
+              <p className="mt-1 text-xs text-muted">The exact total is itemized before you pay.</p>
+            ) : null}
+            {applicationFeeGate.paid ? (
+              <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
+                Paid
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
+            {codeWaived
+              ? "No application fee is due — your waiver code covers it in full."
+              : applicationFeeGate.waived
+              ? "No application fee is required. Your first application fee already covers additional applications."
+              : "No application fee is required for this listing."}
+          </div>
+        )}
+
+        {/* Fee waiver code — optional; quieter than amount, after fee display. */}
         {!applicationFeeGate.paid ? (
-          <div className="space-y-2 rounded-2xl border border-border bg-card p-5 sm:p-6" data-attr="application-fee-waiver-section">
-            <p className="text-sm font-semibold text-foreground">Fee waiver code</p>
+          <div className="space-y-2 rounded-2xl border border-border bg-card p-4" data-attr="application-fee-waiver-section">
+            <p className="text-sm font-semibold text-foreground">Fee waiver code <span className="font-normal text-muted">(optional)</span></p>
             {codeWaived ? (
               <p className="rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success" data-attr="application-fee-waiver-applied">
                 Waiver applied — no application fee is due.
@@ -2025,29 +2047,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             )}
           </div>
         ) : null}
-
-        {applicationFeeGate.needsFee ? (
-          <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Application fee</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
-            {!applicationFeeGate.paid ? (
-              <p className="mt-1 text-xs text-muted">The exact total is itemized before you pay.</p>
-            ) : null}
-            {applicationFeeGate.paid ? (
-              <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
-                Paid
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-            {codeWaived
-              ? "No application fee is due — your waiver code covers it in full."
-              : applicationFeeGate.waived
-              ? "No application fee is required. Your first application fee already covers additional applications."
-              : "No application fee is required for this listing."}
-          </div>
-        )}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
             <p className="text-sm font-semibold text-foreground">Payment method</p>
@@ -2153,39 +2152,39 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           )
         ) : null}
-        {showZelleInstructions ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-success">
-            <p className="font-semibold">Send by Zelle</p>
-            <p className="mt-2 rounded-lg border border-emerald-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
-              {sub!.zelleContact!.trim()}
-            </p>
-            <p className="mt-2 leading-relaxed">
-              Send the amount due above, then tap <span className="font-semibold">Check payment</span> below before you submit.
-            </p>
-          </div>
-        ) : null}
-        {showVenmoInstructions ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
-            <p className="font-semibold">Send by Venmo</p>
-            <p className="mt-2 rounded-lg border border-sky-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
-              {sub!.venmoContact!.trim()}
-            </p>
-            <p className="mt-2 leading-relaxed">
-              Send the amount due above, then tap <span className="font-semibold">Check payment</span> below before you submit.
-            </p>
-          </div>
-        ) : null}
-        {showOtherInstructions ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-pending">
-            <p className="font-semibold">Payment instructions</p>
-            <p className="mt-2 whitespace-pre-wrap leading-relaxed">{sub!.applicationFeeOtherInstructions!.trim()}</p>
-            <p className="mt-2 leading-relaxed">
-              Follow the instructions above, then tap <span className="font-semibold">Check payment</span> before you submit.
-            </p>
-          </div>
-        ) : null}
         {feeStillDue && !isAchApplicationFeeChannel(payChannel) ? (
-          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4 sm:p-5" data-attr="application-fee-manual-pay">
+            {showZelleInstructions ? (
+              <div className="rounded-xl border px-4 py-3 text-sm portal-banner-success">
+                <p className="font-semibold">Send by Zelle</p>
+                <p className="mt-2 rounded-lg border border-emerald-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
+                  {sub!.zelleContact!.trim()}
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  Send the amount due above, then tap <span className="font-semibold">Check payment</span> below.
+                </p>
+              </div>
+            ) : null}
+            {showVenmoInstructions ? (
+              <div className="rounded-xl border px-4 py-3 text-sm portal-banner-info">
+                <p className="font-semibold">Send by Venmo</p>
+                <p className="mt-2 rounded-lg border border-sky-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
+                  {sub!.venmoContact!.trim()}
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  Send the amount due above, then tap <span className="font-semibold">Check payment</span> below.
+                </p>
+              </div>
+            ) : null}
+            {showOtherInstructions ? (
+              <div className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
+                <p className="font-semibold">Payment instructions</p>
+                <p className="mt-2 whitespace-pre-wrap leading-relaxed">{sub!.applicationFeeOtherInstructions!.trim()}</p>
+                <p className="mt-2 leading-relaxed">
+                  Follow the instructions above, then tap <span className="font-semibold">Check payment</span> below.
+                </p>
+              </div>
+            ) : null}
             {applicationFeePaymentVerified ? (
               <p className="text-sm font-medium text-[var(--status-confirmed-fg)]">Payment verified.</p>
             ) : applicationFeeCheckError ? (
