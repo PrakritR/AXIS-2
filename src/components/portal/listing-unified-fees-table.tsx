@@ -220,6 +220,23 @@ export function ListingUnifiedFeesTable({
                     onChange={(v) => onCustomFeeChange(i, { amount: v })}
                     ariaLabel={`Custom fee ${i + 1} amount`}
                   />
+                  {/* A fee's cadence is part of what the manager is setting, and the
+                      submission already carries `frequency` — without this control it
+                      was written but never choosable, so every custom fee silently
+                      defaulted to monthly. */}
+                  <select
+                    className="h-9 shrink-0 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+                    value={fee.frequency === "one-time" ? "one-time" : "monthly"}
+                    onChange={(e) =>
+                      onCustomFeeChange(i, {
+                        frequency: e.target.value === "one-time" ? "one-time" : "monthly",
+                      })
+                    }
+                    aria-label={`Custom fee ${i + 1} frequency`}
+                  >
+                    <option value="monthly">Monthly</option>
+                    <option value="one-time">One-time</option>
+                  </select>
                   <Button
                     type="button"
                     variant="outline"
