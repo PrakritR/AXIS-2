@@ -13,8 +13,8 @@ test.describe("Ladder smoke", () => {
 
   test("sign-in page loads", async ({ page }) => {
     await page.goto("/auth/sign-in");
-    await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByPlaceholder("Password")).toBeVisible();
   });
 
   test("protected portal redirects to sign-in", async ({ page }) => {
