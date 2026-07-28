@@ -44,6 +44,7 @@ import {
   summarizePropertyMediaReadiness,
   type RoomMediaScore,
 } from "@/lib/listing-room-media-quality";
+import { uploadLeaseTemplateDataUrl } from "@/lib/lease-template-storage";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
   BUSINESS_MAX_PROPERTIES,
@@ -911,11 +912,34 @@ async function uploadSubmissionMedia(
     const settled = await Promise.all(urls.map((u) => uploadOne(u)));
     return settled.filter((u): u is string => typeof u === "string" && u.length > 0);
   }
+  // Lease templates are the manager's own legal document, so they go to the
+  // PRIVATE bucket, never through `uploadOne` (which publishes). Pickers already
+  // upload on select; this only catches a legacy draft still carrying base64.
+  async function uploadLeaseTemplate(url: string | null | undefined, name?: string | null) {
+    if (!url) return url ?? null;
+    try {
+      return await uploadLeaseTemplateDataUrl(url, name);
+    } catch (err) {
+      console.error("manager-add-listing-form: lease template upload failed", err);
+      failedCount += 1;
+      return null;
+    }
+  }
 
-  const [housePhotos, houseVideo, leaseTemplateDocUrl, propertyFloorPlan, floorPlanByLabel, rooms, bathrooms, sharedSpaces] = await Promise.all([
+  const [housePhotos, houseVideo, leaseTemplateDocUrl, propertyLeaseTemplates, propertyFloorPlan, floorPlanByLabel, rooms, bathrooms, sharedSpaces] = await Promise.all([
     uploadAll(sub.housePhotoDataUrls ?? []),
     uploadOne(sub.houseVideoDataUrl),
-    uploadOne(sub.leaseTemplateDocUrl),
+    uploadLeaseTemplate(sub.leaseTemplateDocUrl, sub.leaseTemplateDocName),
+    // Per-property lease templates carry their own uploads and were previously
+    // invisible to this pass, so a base64 PDF rode into `property_data` verbatim.
+    sub.propertyLeaseTemplates
+      ? Promise.all(
+          sub.propertyLeaseTemplates.map(async (t) => ({
+            ...t,
+            leaseTemplateDocUrl: await uploadLeaseTemplate(t.leaseTemplateDocUrl, t.leaseTemplateDocName),
+          })),
+        )
+      : Promise.resolve(undefined),
     uploadOne(sub.propertyFloorPlanDataUrl),
     (async () => {
       const entries = Object.entries(sub.floorPlanByLabel ?? {});
@@ -956,6 +980,7 @@ async function uploadSubmissionMedia(
       housePhotoDataUrls: housePhotos,
       houseVideoDataUrl: houseVideo,
       leaseTemplateDocUrl,
+      ...(propertyLeaseTemplates ? { propertyLeaseTemplates } : {}),
       propertyFloorPlanDataUrl: propertyFloorPlan,
       floorPlanByLabel: Object.keys(floorPlanByLabel).length > 0 ? floorPlanByLabel : undefined,
       rooms,

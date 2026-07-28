@@ -1,0 +1,175 @@
+import { NextResponse } from "next/server";
+import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
+import {
+  collectSubmissionLeaseTemplatePaths,
+  isLeaseTemplatePath,
+  LEASE_TEMPLATE_BUCKET,
+  LEASE_TEMPLATE_MAX_BYTES,
+} from "@/lib/lease-template-storage";
+import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { getReportsAuthContext } from "@/lib/reports/auth";
+import { resolveResidentFilingScope } from "@/lib/resident-manager-scope";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+
+export const runtime = "nodejs";
+
+type ServiceClient = ReturnType<typeof createSupabaseServiceRoleClient>;
+
+/** Denials are 404, never 403, so the route never confirms that a path exists. */
+function notFound(): NextResponse {
+  return NextResponse.json({ error: "Not found." }, { status: 404 });
+}
+
+function submissionOf(propertyData: unknown): ManagerListingSubmissionV1 | null {
+  if (!propertyData || typeof propertyData !== "object" || Array.isArray(propertyData)) return null;
+  const sub = (propertyData as { listingSubmission?: unknown }).listingSubmission;
+  if (!sub || typeof sub !== "object" || Array.isArray(sub)) return null;
+  return sub as ManagerListingSubmissionV1;
+}
+
+/**
+ * Does any of these property records reference this exact object path? Membership
+ * is the authorization: a caller who may see the property may see the template
+ * that property's own submission points at. An unreferenced path is never served,
+ * so an unguessable filename is a second layer rather than the control itself.
+ */
+async function propertiesReferenceTemplate(
+  db: ServiceClient,
+  propertyIds: string[],
+  path: string,
+): Promise<boolean> {
+  const ids = propertyIds.filter((id) => id.trim());
+  if (ids.length === 0) return false;
+  const { data } = await db.from("manager_property_records").select("property_data").in("id", ids);
+  return (data ?? []).some((row) => collectSubmissionLeaseTemplatePaths(submissionOf(row.property_data)).has(path));
+}
+
+/**
+ * May this signed-in user read this template? Checked by RELATIONSHIP, not by
+ * portal role, so a multi-role account (a manager who also rents somewhere) is
+ * judged on each relationship it actually holds:
+ *   - the manager who uploaded it, by the object's own folder
+ *   - a co-manager assigned the property that references it
+ *   - the resident whose linked property references it
+ */
+async function canReadLeaseTemplate(
+  db: ServiceClient,
+  userId: string,
+  email: string,
+  path: string,
+): Promise<boolean> {
+  if (path.split("/")[0] === userId) return true;
+
+  const linked = await linkedPropertyIdsForModule(db, userId, "properties");
+  if (linked.size > 0 && (await propertiesReferenceTemplate(db, [...linked], path))) return true;
+
+  if (!email) return false;
+  const scope = await resolveResidentFilingScope(db, { residentEmail: email });
+  if (!scope?.propertyId) return false;
+  return propertiesReferenceTemplate(db, [scope.propertyId], path);
+}
+
+// ---------------------------------------------------------------------------
+// GET ?path=<uid>/<file>.pdf — stream the template's bytes.
+//
+// Streamed rather than redirected to a signed storage URL: the value stored on
+// the submission is baked into the persisted generated-lease HTML as an
+// `<object data=…>`, which outlives any signed-URL TTL, and the documents module
+// already learned that a 302 to storage opens a new tab in the Capacitor WebView
+// instead of rendering. The privacy guarantee is identical — the bucket is
+// private and every request is re-authorized here.
+// ---------------------------------------------------------------------------
+export async function GET(req: Request) {
+  try {
+    const path = new URL(req.url).searchParams.get("path")?.trim() ?? "";
+    if (!isLeaseTemplatePath(path)) return notFound();
+
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return notFound();
+
+    const db = createSupabaseServiceRoleClient();
+    const { data: profile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
+    const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+    if (!(await canReadLeaseTemplate(db, user.id, email, path))) return notFound();
+
+    const { data, error } = await db.storage.from(LEASE_TEMPLATE_BUCKET).download(path);
+    if (error || !data) return notFound();
+    return new NextResponse(Buffer.from(await data.arrayBuffer()), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": 'inline; filename="lease-template.pdf"',
+        "Cache-Control": "private, no-store",
+      },
+    });
+  } catch {
+    return notFound();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST (multipart `file`) — upload a template into the caller's own folder.
+// ---------------------------------------------------------------------------
+export async function POST(req: Request) {
+  try {
+    const auth = await getReportsAuthContext({ preferRole: "manager" });
+    if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    if (auth.role !== "manager" && auth.role !== "admin") {
+      return NextResponse.json({ error: "Not allowed." }, { status: 403 });
+    }
+
+    const form = await req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) return NextResponse.json({ error: "No file." }, { status: 400 });
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+      return NextResponse.json({ error: "Upload the lease template as a PDF." }, { status: 400 });
+    }
+    if (file.size === 0 || file.size > LEASE_TEMPLATE_MAX_BYTES) {
+      return NextResponse.json({ error: "Lease template is too large. Keep it under 8 MB." }, { status: 400 });
+    }
+
+    // The folder is the AUTHENTICATED user's id, never a name from the request —
+    // it is what the read path treats as ownership.
+    const path = `${auth.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
+    const { error } = await auth.db.storage.from(LEASE_TEMPLATE_BUCKET).upload(path, file, {
+      contentType: "application/pdf",
+      cacheControl: "0",
+      upsert: false,
+    });
+    if (error) return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 502 });
+    return NextResponse.json({ path });
+  } catch {
+    return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DELETE { paths: string[] } — reclaim objects a discarded submission owned.
+// Only the folder owner may remove, so one manager can never strip another's.
+// ---------------------------------------------------------------------------
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const body = (await req.json().catch(() => ({}))) as { paths?: unknown };
+    const paths = (Array.isArray(body.paths) ? body.paths : [])
+      .filter((p): p is string => typeof p === "string")
+      .map((p) => p.trim())
+      .filter((p) => isLeaseTemplatePath(p) && p.split("/")[0] === user.id);
+    if (paths.length === 0) return NextResponse.json({ ok: true, removed: 0 });
+
+    const db = createSupabaseServiceRoleClient();
+    const { error } = await db.storage.from(LEASE_TEMPLATE_BUCKET).remove(paths);
+    if (error) return NextResponse.json({ error: "Could not remove the file." }, { status: 502 });
+    return NextResponse.json({ ok: true, removed: paths.length });
+  } catch {
+    return NextResponse.json({ error: "Delete failed." }, { status: 500 });
+  }
+}
