@@ -428,7 +428,6 @@ export function ResidentLeasePanel() {
           row={pipelineRow}
           signerName={leaseCtx.application?.fullLegalName ?? pipelineRow.residentName ?? ""}
           signerRoleLabel="Your full legal name"
-          agreementLabel="Residential Room Rental Agreement"
           onSign={handleModalSign}
           onClose={() => setShowSigningModal(false)}
         />

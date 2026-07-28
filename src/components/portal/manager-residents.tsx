@@ -2395,7 +2395,6 @@ export function ManagerResidents({
           row={signingLease}
           signerName=""
           signerRoleLabel="Manager / authorized agent name"
-          agreementLabel="Residential Room Rental Agreement"
           onSign={handleManagerModalSign}
           onClose={() => setSigningLease(null)}
         />

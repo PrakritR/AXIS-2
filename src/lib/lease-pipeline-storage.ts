@@ -13,6 +13,13 @@ import {
   resolveLeaseJurisdiction,
   unsupportedJurisdictionMessage,
 } from "@/lib/lease-jurisdiction";
+import {
+  LEASE_ESIGN_CONSENT_TEXT,
+  LEASE_ESIGN_CONSENT_VERSION,
+  documentFingerprintLabel,
+  leaseDocumentSha256,
+  signedDocumentHashesDiverge,
+} from "@/lib/lease-execution-evidence";
 import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
 import { stripLeaseAiDisclaimerFromHtml, stripLeaseAiReviewDisclaimer } from "@/lib/lease-templates/types";
 import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
@@ -46,13 +53,23 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function optionalTrimmedString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function normalizeLeaseSignature(raw: unknown, role: "manager" | "resident"): LeaseSignature | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Partial<LeaseSignature>;
   const name = typeof r.name === "string" ? r.name.trim() : "";
   const signedAtIso = typeof r.signedAtIso === "string" ? r.signedAtIso.trim() : "";
   if (!name || !signedAtIso) return null;
-  return { name, signedAtIso, role };
+  return {
+    name,
+    signedAtIso,
+    role,
+    documentSha256: optionalTrimmedString(r.documentSha256),
+    consentVersion: optionalTrimmedString(r.consentVersion),
+  };
 }
 
 function signatureDateLabel(iso: string | undefined | null): string {
@@ -73,15 +90,41 @@ function electronicSignatureBlock(row: LeasePipelineRow): string {
     "resident",
   );
   if (!manager && !resident) return "";
-  const signatureCard = (label: string, sig: LeaseSignature | null) => `
+  const signatureCard = (label: string, sig: LeaseSignature | null) => {
+    const fingerprint = documentFingerprintLabel(sig?.documentSha256);
+    return `
     <div class="axis-esign-card">
       <p class="axis-esign-label">${escapeHtml(label)}</p>
       ${
         sig
-          ? `<p class="axis-esign-name">${escapeHtml(sig.name)}</p><p class="axis-esign-meta">Electronically signed ${escapeHtml(signatureDateLabel(sig.signedAtIso))}</p>`
+          ? `<p class="axis-esign-name">${escapeHtml(sig.name)}</p><p class="axis-esign-meta">Electronically signed ${escapeHtml(signatureDateLabel(sig.signedAtIso))}</p>` +
+            (fingerprint
+              ? `<p class="axis-esign-meta">Document signed: <span class="axis-esign-mono">${escapeHtml(fingerprint)}</span></p>`
+              : "") +
+            (sig.consentVersion ? `<p class="axis-esign-meta">Consented to transact electronically</p>` : "")
           : `<p class="axis-esign-pending">Pending signature</p>`
       }
     </div>`;
+  };
+
+  const provenance = [
+    documentFingerprintLabel(row.documentSha256)
+      ? `<li>Document fingerprint (SHA-256): <span class="axis-esign-mono">${escapeHtml(documentFingerprintLabel(row.documentSha256)!)}</span></li>`
+      : "",
+    row.templateVersion ? `<li>Lease template: ${escapeHtml(row.templateVersion)}</li>` : "",
+    row.executedJurisdiction ? `<li>Executed under: ${escapeHtml(row.executedJurisdiction)}</li>` : "",
+  ]
+    .filter(Boolean)
+    .join("\n    ");
+
+  const consentQuote =
+    manager?.consentVersion === LEASE_ESIGN_CONSENT_VERSION || resident?.consentVersion === LEASE_ESIGN_CONSENT_VERSION
+      ? `<p class="axis-esign-fine">Consent accepted before signing: &ldquo;${escapeHtml(LEASE_ESIGN_CONSENT_TEXT)}&rdquo;</p>`
+      : "";
+
+  const divergence = signedDocumentHashesDiverge(row)
+    ? `<p class="axis-esign-warn">The two parties did not sign identical documents. Each fingerprint above identifies the document that party actually signed.</p>`
+    : "";
 
   return `
 <!-- axis-signatures:start -->
@@ -92,6 +135,16 @@ function electronicSignatureBlock(row: LeasePipelineRow): string {
     ${signatureCard("Landlord / Authorized Agent", manager)}
     ${signatureCard("Resident / Tenant", resident)}
   </div>
+  ${divergence}
+  ${
+    provenance
+      ? `<ul class="axis-esign-provenance">
+    ${provenance}
+  </ul>
+  <p class="axis-esign-fine">The fingerprint is a SHA-256 checksum of this lease document exactly as it was presented for signature (it does not cover this certificate). Any later change to the document, however small, produces a different fingerprint.</p>`
+      : ""
+  }
+  ${consentQuote}
 </section>
 <!-- axis-signatures:end -->`;
 }
@@ -105,6 +158,59 @@ export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean 
   if (row.status === "Voided" || row.status === "Fully Signed") return false;
   if (hasAnyLeaseSignature(row)) return false;
   return row.bucket === "manager";
+}
+
+/**
+ * The agreement bytes, excluding the signature certificate page that signing
+ * appends into `managerUploadedPdf.dataUrl`. That page is derived from the
+ * signatures, so it legitimately changes as parties sign; the base document
+ * must not.
+ */
+function leaseDocumentBody(row: LeasePipelineRow): { html: string | null; pdf: string | null } {
+  return {
+    html: row.generatedHtml ?? null,
+    pdf: row.managerUploadedPdf?.originalDataUrl ?? row.managerUploadedPdf?.dataUrl ?? null,
+  };
+}
+
+/**
+ * A row carrying a signature IS the evidence of what was signed, so its
+ * document body can never be replaced in place. Returns `next` with any such
+ * replacement reverted to the stored body.
+ *
+ * This is the choke point rather than a per-mutation check: every mutation in
+ * this module funnels through `write`, so a new write path inherits the
+ * guarantee instead of having to remember `leaseAllowsManagerDocumentEdits`.
+ * Clearing the signatures (void, send back to manager, renew, amend) drops the
+ * row out of the guard by design — that is a superseding document, not a
+ * silent edit to an executed one.
+ */
+export function preserveSignedLeaseDocuments(
+  prev: LeasePipelineRow[],
+  next: LeasePipelineRow[],
+): LeasePipelineRow[] {
+  if (prev.length === 0) return next;
+  const prevById = new Map(prev.map((row) => [row.id, row]));
+  let reverted = false;
+  const guarded = next.map((row) => {
+    const before = prevById.get(row.id);
+    if (!before || !hasAnyLeaseSignature(before) || !hasAnyLeaseSignature(row)) return row;
+    const stored = leaseDocumentBody(before);
+    const incoming = leaseDocumentBody(row);
+    if (stored.html === incoming.html && stored.pdf === incoming.pdf) return row;
+    // Attaching an off-platform lease to a row that never carried a document is
+    // not a replacement — that is how existing-resident onboarding files the
+    // already-executed PDF it was given.
+    if (!stored.html && !stored.pdf && before.externallySignedLease) return row;
+    reverted = true;
+    return {
+      ...row,
+      generatedHtml: before.generatedHtml ?? null,
+      generatedAtIso: before.generatedAtIso ?? null,
+      managerUploadedPdf: before.managerUploadedPdf ?? null,
+    };
+  });
+  return reverted ? guarded : next;
 }
 
 export function hasBothLeaseSignatures(row: LeasePipelineRow): boolean {
@@ -130,6 +236,10 @@ export function applyLeaseSignaturesToHtml(row: LeasePipelineRow, html: string |
     .axis-esign-label { margin: 0 0 0.5rem; font-weight: 700; }
     .axis-esign-name { margin: 0.35rem 0; font-size: 1.35rem; font-family: Georgia, "Times New Roman", serif; font-style: italic; }
     .axis-esign-meta, .axis-esign-pending { margin: 0; color: #555; font-size: 0.85rem; }
+    .axis-esign-mono { font-family: "Courier New", monospace; letter-spacing: 0.04em; }
+    .axis-esign-provenance { margin: 1rem 0 0; padding-left: 1.1rem; color: #333; font-size: 0.85rem; }
+    .axis-esign-fine { margin: 0.5rem 0 0; color: #555; font-size: 0.78rem; }
+    .axis-esign-warn { margin: 1rem 0 0; border-left: 3px solid #b00; padding-left: 0.75rem; color: #b00; font-size: 0.85rem; font-weight: 700; }
   `;
   const withStyle = withoutExisting.includes(".axis-esign")
     ? withoutExisting
@@ -152,6 +262,15 @@ export type LeaseSignature = {
   name: string;
   signedAtIso: string;
   role: "manager" | "resident";
+  /**
+   * SHA-256 of the document THIS party was shown, captured at signature time.
+   * Per-signature rather than row-level so that a document which changed
+   * between the two signatures is visible instead of silently overwritten.
+   * Absent on every signature recorded before this field existed.
+   */
+  documentSha256?: string | null;
+  /** Version of the consent-to-transact-electronically text the signer accepted. */
+  consentVersion?: string | null;
 };
 
 export type LeaseWorkflowStatus =
@@ -202,6 +321,17 @@ export type LeasePipelineRow = {
   leaseDocumentRemovedAt?: string | null;
   /** Off-platform lease — both parties treated as signed; no e-sign workflow. */
   externallySignedLease?: boolean;
+  /**
+   * Execution provenance. All three are optional and absent on every row signed
+   * before they existed — absent means unknown, and unknown is honest. Never
+   * backfill a guessed value.
+   */
+  /** Jurisdiction the lease was executed under, e.g. "US-CA" or "US-CA/san_francisco". */
+  executedJurisdiction?: string | null;
+  /** Template identifier plus semver, e.g. "ca-residential@1.2.0". */
+  templateVersion?: string | null;
+  /** SHA-256 of the document as first executed (see `LeaseSignature.documentSha256`). */
+  documentSha256?: string | null;
   /**
    * Renewal terms awaiting signatures. Set by the renew flow; consumed (and
    * cleared) after BOTH parties sign, when the terms are applied to the
@@ -354,6 +484,9 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     versionNumber,
     leaseDocumentRemovedAt: typeof r.leaseDocumentRemovedAt === "string" ? r.leaseDocumentRemovedAt : null,
     externallySignedLease: r.externallySignedLease === true,
+    executedJurisdiction: optionalTrimmedString(r.executedJurisdiction),
+    templateVersion: optionalTrimmedString(r.templateVersion),
+    documentSha256: optionalTrimmedString(r.documentSha256) ?? residentSignature?.documentSha256 ?? null,
   };
 }
 
@@ -554,9 +687,10 @@ function readRaw(scopeUserId?: string | null): LeasePipelineRow[] | null {
   return canUseStorage() ? memoryRows : null;
 }
 
-function write(rows: LeasePipelineRow[], scopeUserId?: string | null) {
+function write(unguardedRows: LeasePipelineRow[], scopeUserId?: string | null) {
   if (!canUseStorage()) return;
   ensureLeasePipelineScope(scopeUserId);
+  const rows = preserveSignedLeaseDocuments(memoryRows, unguardedRows);
   if (!leaseRowsChanged(memoryRows, rows)) return;
   memoryRows = rows;
   persistLeasePipelineToSession(rows, scopeUserId ?? activeLeasePipelineScopeUserId);
@@ -863,7 +997,8 @@ function computeLeasePipelineRows(managerUserId?: string | null): LeasePipelineR
 
 /** Persist application-seeded / merged rows so mutations can update raw storage. */
 function materializeLeasePipeline(managerUserId?: string | null): LeasePipelineRow[] {
-  const merged = computeLeasePipelineRows(managerUserId);
+  // Persists without going through `write`, so it needs the same guard.
+  const merged = preserveSignedLeaseDocuments(memoryRows, computeLeasePipelineRows(managerUserId));
   if (!leaseRowsChanged(memoryRows, merged)) return merged;
   memoryRows = merged;
   persistLeasePipelineToSession(merged, managerUserId ?? activeLeasePipelineScopeUserId);
@@ -1158,10 +1293,6 @@ export function getLeaseDocumentHtml(row: LeasePipelineRow): string | null {
   return stripLeaseAiDisclaimerFromHtml(raw);
 }
 
-export function recomputeLeaseSignedHtml(): boolean {
-  return true;
-}
-
 export function appendLeaseThreadMessage(
   id: string,
   role: LeaseThreadRole,
@@ -1244,13 +1375,19 @@ export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: tru
 }
 
 async function refreshUploadedPdfSignatures(row: LeasePipelineRow): Promise<LeasePipelineRow["managerUploadedPdf"]> {
-  if (!row.managerUploadedPdf?.dataUrl) return row.managerUploadedPdf ?? null;
+  const pdf = row.managerUploadedPdf;
+  if (!pdf?.dataUrl) return pdf ?? null;
+  // Pin the agreement bytes before the first merge. Without this a legacy row
+  // that carries only `dataUrl` would have the certificate page appended to an
+  // already-merged copy on the second signature, and the guard below could not
+  // tell a certificate merge from a document swap.
+  const pinned = pdf.originalDataUrl ? pdf : { ...pdf, originalDataUrl: pdf.dataUrl };
   try {
-    const merged = await mergeUploadedLeasePdfWithSignatures(row);
-    if (!merged) return row.managerUploadedPdf;
-    return { ...row.managerUploadedPdf, dataUrl: merged };
+    const merged = await mergeUploadedLeasePdfWithSignatures({ ...row, managerUploadedPdf: pinned });
+    if (!merged) return pinned;
+    return { ...pinned, dataUrl: merged };
   } catch {
-    return row.managerUploadedPdf;
+    return pinned;
   }
 }
 
@@ -1298,121 +1435,6 @@ export function generateLeaseHtmlForRow(
     managerUserId,
   );
   return ok ? { ok: true, version } : { ok: false, error: "Could not save generated lease." };
-}
-
-/**
- * Persist enriched application snapshots (phone, email, DOB, name) from linked application records.
- */
-export function refreshAllLeaseApplicationSnapshots(managerUserId?: string | null): number {
-  const raw = [...materializeLeasePipeline(managerUserId)];
-  const apps = readManagerApplicationRows();
-  let refreshed = 0;
-  for (let i = 0; i < raw.length; i++) {
-    const row = raw[i]!;
-    if (!row.axisId) continue;
-    const app = apps.find((a) => a.id === row.axisId);
-    if (!app?.application) continue;
-    const enrichedApp = enrichApplicationForLease(app, effectiveApplicationForRow(app), row.application);
-    const nextRow = normalizeLeasePipelineRow({
-      ...row,
-      application: enrichedApp,
-      residentName: app.name?.trim() || row.residentName,
-      residentEmail: app.email?.trim().toLowerCase() || row.residentEmail,
-    });
-    if (JSON.stringify(nextRow.application) === JSON.stringify(row.application) &&
-        nextRow.residentName === row.residentName &&
-        nextRow.residentEmail === row.residentEmail) {
-      continue;
-    }
-    raw[i] = nextRow;
-    refreshed++;
-  }
-  if (refreshed > 0) write(raw, managerUserId);
-  return refreshed;
-}
-
-/**
- * Regenerates lease HTML for every row that has application data.
- * Returns a summary of how many rows were updated vs skipped.
- */
-export function regenerateAllLeaseHtml(managerUserId?: string | null): {
-  updated: number;
-  skipped: number;
-  snapshotsRefreshed: number;
-} {
-  const snapshotsRefreshed = refreshAllLeaseApplicationSnapshots(managerUserId);
-  const rows = readLeasePipeline(managerUserId);
-  let updated = 0;
-  let skipped = 0;
-  for (const row of rows) {
-    if (row.status === "Voided") {
-      skipped++;
-      continue;
-    }
-    const app = applicationSnapshotForLeaseRow(row);
-    if (!app || !Object.keys(app).length) {
-      skipped++;
-      continue;
-    }
-    const signed = row.status === "Fully Signed" || hasBothLeaseSignatures(row);
-    if (signed) {
-      try {
-        const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-        if (!leaseTemplateDocForContext(ctx) && !isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
-          skipped++;
-          continue;
-        }
-        const html = buildAiGeneratedLeaseHtml(ctx);
-        updateLeasePipelineRow(
-          row.id,
-          {
-            application: app,
-            generatedHtml: html,
-            generatedAtIso: new Date().toISOString(),
-          },
-          managerUserId,
-        );
-        updated++;
-      } catch {
-        skipped++;
-      }
-      continue;
-    }
-    if (hasAnyLeaseSignature(row)) {
-      skipped++;
-      continue;
-    }
-    if (!leaseAllowsManagerDocumentEdits(row)) {
-      skipped++;
-      continue;
-    }
-    try {
-      const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-      if (!leaseTemplateDocForContext(ctx) && !isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
-        skipped++;
-        continue;
-      }
-      const html = buildAiGeneratedLeaseHtml(ctx);
-      const version = (row.versionNumber ?? row.pdfVersion) + 1;
-      updateLeasePipelineRow(
-        row.id,
-        {
-          generatedHtml: html,
-          managerUploadedPdf: null,
-          generatedAtIso: new Date().toISOString(),
-          pdfVersion: version,
-          versionNumber: version,
-          status: "Manager Review",
-          currentActorRole: "manager",
-        },
-        managerUserId,
-      );
-      updated++;
-    } catch {
-      skipped++;
-    }
-  }
-  return { updated, skipped, snapshotsRefreshed };
 }
 
 export function downloadLeaseFromRow(row: LeasePipelineRow): void {
@@ -1584,7 +1606,16 @@ export async function residentSignLease(email: string, signatureName?: string): 
   if (row.status !== "Resident Signature Pending" || row.bucket !== "resident" || row.residentSignature) return false;
   const iso = new Date().toISOString();
   const trimmedSignature = signatureName?.trim() || row.residentName || "Resident";
-  const residentSignature: LeaseSignature = { role: "resident", name: trimmedSignature, signedAtIso: iso };
+  // Hash the bytes the resident was actually shown, BEFORE the signature (and
+  // its certificate page) touches the row.
+  const documentSha256 = await leaseDocumentSha256(row);
+  const residentSignature: LeaseSignature = {
+    role: "resident",
+    name: trimmedSignature,
+    signedAtIso: iso,
+    documentSha256,
+    consentVersion: LEASE_ESIGN_CONSENT_VERSION,
+  };
   const sigMsg = `Resident signed electronically — ${trimmedSignature}.`;
   const thread = [...(row.thread ?? []), makeMsg("resident", sigMsg)];
   const nextRowBase = normalizeLeasePipelineRow({
@@ -1592,6 +1623,7 @@ export async function residentSignLease(email: string, signatureName?: string): 
     residentSignature,
     signatureName: trimmedSignature,
     signedAtIso: iso,
+    documentSha256: row.documentSha256 ?? documentSha256,
   });
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
   const mergedPdf = await refreshUploadedPdfSignatures(nextRowBase);
@@ -1624,10 +1656,21 @@ export async function managerSignLease(rowId: string, signatureName: string, man
   const trimmedSignature = signatureName.trim();
   if (!trimmedSignature) return false;
   const iso = new Date().toISOString();
-  const managerSignature: LeaseSignature = { role: "manager", name: trimmedSignature, signedAtIso: iso };
+  // Hash the agreement bytes, not the copy carrying the resident's certificate
+  // page — see lease-execution-evidence.ts. Equal to the resident's hash unless
+  // the document changed between the two signatures.
+  const documentSha256 = await leaseDocumentSha256(row);
+  const managerSignature: LeaseSignature = {
+    role: "manager",
+    name: trimmedSignature,
+    signedAtIso: iso,
+    documentSha256,
+    consentVersion: LEASE_ESIGN_CONSENT_VERSION,
+  };
   const nextRowBase = normalizeLeasePipelineRow({
     ...row,
     managerSignature,
+    documentSha256: row.documentSha256 ?? documentSha256,
   });
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
   const mergedPdf = await refreshUploadedPdfSignatures(nextRowBase);
