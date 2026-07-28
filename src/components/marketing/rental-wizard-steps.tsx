@@ -616,9 +616,18 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 const next = e.target.value;
                 if (next && isByRoom) {
                   // A bundle application replaces ranked room choices.
-                  patch({ bundleId: next, roomChoice1: "", roomChoice2: "", roomChoice3: "" });
+                  patch({
+                    bundleId: next,
+                    roomChoice1: "",
+                    roomChoice2: "",
+                    roomChoice3: "",
+                    ...(form.applyingAsGroup !== "yes" ? { applyingAsGroup: "yes" as const } : {}),
+                  });
                 } else {
-                  patch({ bundleId: next });
+                  patch({
+                    bundleId: next,
+                    ...(next && form.applyingAsGroup !== "yes" ? { applyingAsGroup: "yes" as const } : {}),
+                  });
                 }
               }}
             >

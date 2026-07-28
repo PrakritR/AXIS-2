@@ -25,6 +25,7 @@ import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
 import { buildSeattleLeaseHtml } from "@/lib/lease-templates/seattle";
+import type { JointLeaseMember } from "@/lib/bundle-group/types";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
@@ -125,6 +126,9 @@ export type LeaseGenerationContext = {
   listingProperty: MockProperty | undefined;
   submission: ManagerListingSubmissionV1 | undefined;
   generatedAtIso: string;
+  /** Co-tenants on a joint bundle lease (when leaseKind is joint_bundle). */
+  jointLeaseMembers?: JointLeaseMember[];
+  leaseKind?: "individual" | "joint_bundle";
 };
 
 export function leaseContextFromApplication(application: Partial<RentalWizardFormState>): LeaseGenerationContext {
