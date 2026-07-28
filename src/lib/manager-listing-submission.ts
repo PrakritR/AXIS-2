@@ -219,6 +219,15 @@ export type ManagerListingSubmissionV1 = {
   /** Structured basics (create-listing wizard). Fills quick facts when `homeStructureNote` is empty. */
   listingPropertyTypeId?: string;
   listingPlaceCategoryId?: string;
+  /**
+   * Durable STAMP of the listing's rental model, migration-first for the removal of the
+   * "Rental model" dropdown. Normalization records the listing's CURRENT model here (from
+   * {@link listingPlaceCategoryId}) so today's behavior is captured as data BEFORE anything
+   * derives it. `listingPlaceCategoryId` is kept as the rollback source and is still what
+   * `isEntireHomeListing` reads for now — the stamp is dormant until the derivation switch
+   * lands. Never silently defaulted: {@link stampRentalModel} reports missing/malformed.
+   */
+  rentalModelStamp?: "shared_home" | "entire_home";
   /** When listingPlaceCategoryId is entire_home — one monthly lease for the full unit (USD). */
   entireHomeMonthlyRent?: number;
   /** Entire-home monthly utilities estimate (synced to first bedroom for signing math). */
@@ -696,6 +705,38 @@ function rid(prefix: string) {
 /** True when the listing is rented as one lease for the full unit. */
 export function isEntireHomeListing(sub: Pick<ManagerListingSubmissionV1, "listingPlaceCategoryId">): boolean {
   return sub.listingPlaceCategoryId === "entire_home";
+}
+
+export type RentalModel = "shared_home" | "entire_home";
+
+export type RentalModelStampResult = {
+  model: RentalModel;
+  /** True when the model had to be INFERRED because listingPlaceCategoryId was missing or
+   *  unrecognized — surfaced (never silently defaulted) so the audit migration can report it. */
+  inferred: boolean;
+};
+
+/**
+ * Migration-first stamp of the listing's CURRENT rental model. Idempotent: an already
+ * stamped listing returns its stamp unchanged. Reads the authoritative
+ * `listingPlaceCategoryId`; a missing/malformed value yields the historical `shared_home`
+ * default but is flagged `inferred` so it is reported, not silently assumed. Kept dormant
+ * (nothing reads the stamp) until the derivation switch lands.
+ */
+export function stampRentalModel(
+  sub: Pick<ManagerListingSubmissionV1, "listingPlaceCategoryId" | "rentalModelStamp">,
+): RentalModelStampResult {
+  if (sub.rentalModelStamp === "entire_home" || sub.rentalModelStamp === "shared_home") {
+    return { model: sub.rentalModelStamp, inferred: false };
+  }
+  // Mirror TODAY's behavior exactly: isEntireHomeListing is `=== "entire_home"`, so ANY
+  // other non-empty stored value (e.g. the legacy `private_room` that the dev data still
+  // carries) already behaves as shared-home everywhere — stamping shared_home preserves
+  // that and is NOT an inference. Only a truly missing value is inferred and reported.
+  const pc = (sub.listingPlaceCategoryId ?? "").trim();
+  if (pc === "entire_home") return { model: "entire_home", inferred: false };
+  if (pc === "") return { model: "shared_home", inferred: true };
+  return { model: "shared_home", inferred: false };
 }
 
 /** Resolved monthly rent for an entire-home listing. */
@@ -1239,6 +1280,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   const next = {
     ...sub,
     listingPropertyTypeId: typeof sub.listingPropertyTypeId === "string" ? sub.listingPropertyTypeId : "",
+    // Migration-first (dormant): record the current rental model as durable data. Nothing
+    // reads this yet — listingPlaceCategoryId (kept as the rollback source) still drives
+    // isEntireHomeListing — so this stamp cannot change any behavior on its own.
+    rentalModelStamp: stampRentalModel({ listingPlaceCategoryId, rentalModelStamp: sub.rentalModelStamp }).model,
     listingPlaceCategoryId,
     entireHomeMonthlyRent: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeMonthlyRent : undefined,
     entireHomeUtilitiesEstimate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeUtilitiesEstimate : undefined,
