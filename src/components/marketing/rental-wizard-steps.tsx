@@ -948,15 +948,19 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </WizardFieldGate>
           </div>
           {/* A2P 10DLC SMS opt-in. Optional (never required to apply); the number
-              entered above is the one that would receive texts. Unchecked by
-              default; consent + timestamp persist on the submitted snapshot. */}
-          <SmsConsentCheckbox
-            inputId="sms-consent"
-            checked={Boolean(form.smsConsent)}
-            onChange={(next) =>
-              patch({ smsConsent: next, smsConsentAt: next ? new Date().toISOString() : undefined })
-            }
-          />
+              entered above is the one that would receive texts, so the control
+              follows the Phone question's gate. Unchecked by default; consent +
+              timestamp persist on the submitted snapshot (the server re-stamps
+              the timestamp + wording version on upsert). */}
+          <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
+            <SmsConsentCheckbox
+              inputId="sms-consent"
+              checked={Boolean(form.smsConsent)}
+              onChange={(next) =>
+                patch({ smsConsent: next, smsConsentAt: next ? new Date().toISOString() : undefined })
+              }
+            />
+          </WizardFieldGate>
         </div>
 
         <div className="space-y-5">
