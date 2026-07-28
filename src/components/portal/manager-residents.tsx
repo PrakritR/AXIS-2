@@ -214,6 +214,7 @@ function ResidentDetailSection({
         if (open !== expanded) onToggle();
       }}
       headerActions={headerAction}
+      headerActionsInline={Boolean(headerAction)}
       contentClassName="pb-6"
       surfaceMuted={false}
       toggleDataAttr="resident-section-toggle"
