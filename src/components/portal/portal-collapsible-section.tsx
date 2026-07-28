@@ -83,7 +83,7 @@ export function PortalCollapsibleSection({
       } ${className}`.trim()}
     >
       <div
-        className={`flex items-center justify-between gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
+        className={`flex flex-wrap items-center justify-between gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
           canCollapse ? "cursor-pointer" : ""
         }`}
         role={canCollapse ? "button" : undefined}
@@ -99,7 +99,11 @@ export function PortalCollapsibleSection({
           }
         }}
       >
-        <div className="min-w-0 flex-1">
+        {/* flex-auto (basis: auto, not flex-1's basis: 0) so the title participates
+            in the wrap calculation: a medium-width action group that can't sit beside
+            the title wraps to its own row instead of squeezing the title to nothing
+            and rendering on top of it. Still min-w-0 so a very long title truncates. */}
+        <div className="min-w-0 flex-auto">
           <div className={titleClass}>
             <span className="min-w-0">{title}</span>
             {titleAddon ? <span className="shrink-0">{titleAddon}</span> : null}
@@ -115,7 +119,11 @@ export function PortalCollapsibleSection({
         {headerActions ? (
           <div
             className={cn(
-              "flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2",
+              // Not shrink-0: with the header now flex-wrap, an inline action group
+              // that is too wide for the title row on a phone wraps to its own line
+              // and its buttons wrap within the viewport — instead of overflowing
+              // and rendering on top of the title (the listing-preview overlap bug).
+              "flex min-w-0 flex-wrap items-center justify-end gap-2",
               headerActionsInline ? "ml-2" : "w-full lg:ml-auto lg:w-auto lg:max-w-[70%] lg:justify-end",
             )}
             onClick={(e) => e.stopPropagation()}
