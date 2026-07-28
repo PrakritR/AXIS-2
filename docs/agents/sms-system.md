@@ -219,17 +219,17 @@ dark unless `SMS_RELAY_POOL_AUTOBUY=1` — the current Sole Proprietor A2P brand
 allows exactly ONE local number, so extra buys would be carrier-filtered.
 Bought numbers must join the Messaging Service
 (`TWILIO_MESSAGING_SERVICE_SID`) to inherit the A2P campaign; a failed attach
-releases the number. A2P compliance pages: `/sms-terms` + the SMS opt-in
-section on `/privacy`.
+releases the number. A2P compliance pages: `/sms-terms`, the SMS opt-in
+section on `/privacy`, and the public consent page `/sms-consent` (owner
+section: "Public SMS consent page" below).
 
-**Web opt-in consent (carrier-required).** The public tours-contact page
-(`/rent/tours-contact`) is what Twilio's A2P reviewer inspects, so every public
-form there that collects a phone renders a carrier-compliant SMS consent
-checkbox (`SmsConsentCheckbox` in
-`src/components/marketing/sms-consent-checkbox.tsx`): unchecked by default,
-optional (submitting without it still works), not bundled with any other
-agreement, naming sender + message types + STOP/HELP and linking `/privacy` +
-`/tos`. The decision is persisted two ways: `smsConsent` + a SERVER-stamped
+**Web opt-in consent (carrier-required).** Every public form that collects a
+phone and can lead to an outbound text renders the shared `SmsConsentCheckbox`
+— its wording, invariants, and the reviewer-facing `/sms-consent` page are
+owned by the "Public SMS consent page" section below (the tours-contact page
+gates anonymous visitors behind a manager link, so it is NOT the page a
+carrier reviewer can inspect cold). On the tours-contact page
+(`/rent/tours-contact`), the decision is persisted two ways: `smsConsent` + a SERVER-stamped
 `smsConsentAt` on the `PartnerInquiry` record (the route coerces the flag to a
 strict boolean and ignores any client-supplied timestamp, so per-lead consent is
 provable), and a positive opt-in written to the `sms_consent` ledger via
