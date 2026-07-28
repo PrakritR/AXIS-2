@@ -178,7 +178,10 @@ function overrideFeeLabel(overrideRaw: string | undefined | null, fallbackLabel:
     const amount = parseAmount(override);
     return amount != null ? fmtUsd(amount) : override;
   }
-  return fallbackLabel;
+  // Format the listing fallback as currency too — the listing-fee normalization stores
+  // amounts without a "$" (e.g. "500.00"), and a lease must show "$500.00", not "500.00".
+  const fallbackAmount = parseAmount(fallbackLabel);
+  return fallbackAmount != null ? fmtUsd(fallbackAmount) : fallbackLabel;
 }
 
 function isMonthToMonthOtherCost(label: string | undefined | null): boolean {

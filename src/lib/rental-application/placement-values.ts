@@ -10,6 +10,7 @@ import {
   isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import { ensureSubmissionListingFees, listingPresetFeeAmount } from "@/lib/listing-fees";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 
@@ -95,10 +96,18 @@ export function resolvePlacementValuesForRow(
     : utilitiesBillableMonthlyAmount(sub ?? undefined, room);
 
   const depOverride = app?.managerSecurityDepositOverride?.trim();
-  const securityDeposit = depOverride ? parseMoneyAmount(depOverride) : parseMoneyAmount(sub?.securityDeposit ?? "");
+  const securityDeposit = depOverride
+    ? parseMoneyAmount(depOverride)
+    : sub
+      ? listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "")
+      : 0;
 
   const moveOverride = app?.managerMoveInFeeOverride?.trim();
-  const moveInFee = moveOverride ? parseMoneyAmount(moveOverride) : parseMoneyAmount(sub?.moveInFee ?? "");
+  const moveInFee = moveOverride
+    ? parseMoneyAmount(moveOverride)
+    : sub
+      ? listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "")
+      : 0;
 
   const otherCostLabel = app?.managerOtherCostLabel?.trim() || "";
   const otherCostAmount = parseMoneyAmount(app?.managerOtherCostAmount ?? "");

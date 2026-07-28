@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import {
   LeaseConfigForm,
+  LeaseDocumentAndTypeFields,
   readLeaseTemplateFile,
   type LeaseConfigDraft,
 } from "@/components/portal/lease-config-form";
@@ -21,7 +22,6 @@ import {
   type PropertyLeaseTemplateKind,
 } from "@/lib/property-lease-templates";
 import {
-  PROPERTY_LEASE_SOURCE_OPTIONS,
   draftFieldsFromLeaseSource,
   leaseSourceFromDraft,
   type PropertyLeaseSource,
@@ -86,10 +86,6 @@ export function PropertyLeaseFormModal({
   const typeMeta = useMemo(
     () => PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === kind),
     [kind],
-  );
-  const documentMeta = useMemo(
-    () => PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === source),
-    [source],
   );
 
   const previewSub = useMemo(
@@ -235,43 +231,13 @@ export function PropertyLeaseFormModal({
           />
         </div>
 
-        <div>
-          <label className={fieldLabelClass} htmlFor="property-lease-type">
-            Lease type
-          </label>
-          <Select
-            id="property-lease-type"
-            value={kind}
-            onChange={(e) => setKind(e.target.value as PropertyLeaseTemplateKind)}
-            data-attr="property-lease-type"
-          >
-            {PROPERTY_LEASE_TYPE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          {typeMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{typeMeta.description}</p> : null}
-        </div>
-
-        <div>
-          <label className={fieldLabelClass} htmlFor="property-lease-document">
-            Lease document
-          </label>
-          <Select
-            id="property-lease-document"
-            value={source}
-            onChange={(e) => setSource(e.target.value as PropertyLeaseSource)}
-            data-attr="property-lease-document"
-          >
-            {PROPERTY_LEASE_SOURCE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          {documentMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{documentMeta.detail}</p> : null}
-        </div>
+        <LeaseDocumentAndTypeFields
+          source={source}
+          onSourceChange={setSource}
+          kind={kind}
+          onKindChange={setKind}
+          dataAttrPrefix="property"
+        />
 
         {source !== "axis_default" ? (
           <LeaseConfigForm

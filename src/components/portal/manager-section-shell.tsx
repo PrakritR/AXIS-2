@@ -57,6 +57,7 @@ export function PortalPropertyFilterPill({
   propertyOptions,
   propertyValue,
   onPropertyChange,
+  propertyPlaceholder,
   residentOptions,
   residentValue,
   onResidentChange,
@@ -75,6 +76,7 @@ export function PortalPropertyFilterPill({
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
+  propertyPlaceholder?: string;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -98,6 +100,7 @@ export function PortalPropertyFilterPill({
       applicationOptions={applicationOptions}
       applicationValue={applicationValue}
       onApplicationChange={onApplicationChange}
+      propertyPlaceholder={propertyPlaceholder}
     />
   );
 }
@@ -115,6 +118,7 @@ export function PortalPropertyFilter({
   applicationOptions,
   applicationValue = "",
   onApplicationChange,
+  propertyPlaceholder,
 }: {
   applications?: boolean;
   residents?: boolean;
@@ -127,6 +131,7 @@ export function PortalPropertyFilter({
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
+  propertyPlaceholder?: string;
 }) {
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
@@ -139,7 +144,7 @@ export function PortalPropertyFilter({
           aria-label="Properties"
           value={propertyValue}
           onChange={(next) => onPropertyChange?.(next)}
-          placeholder="All your properties"
+          placeholder={propertyPlaceholder ?? "All your properties"}
           options={propertyOptions ?? []}
         />
       ) : null}

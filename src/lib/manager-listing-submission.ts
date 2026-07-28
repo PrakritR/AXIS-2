@@ -23,6 +23,7 @@ import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment"
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
 import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
 import {
+  ensureSubmissionListingFees,
   normalizeListingFeeRow,
   resolveListingFees,
   submissionUsesUnifiedListingFees,
@@ -553,7 +554,14 @@ export type ManagerListingServiceOption = {
   createdAt: string;
 };
 
-export type ManagerCustomApplicationFieldType = "text" | "number" | "select" | "checkbox" | "date";
+export type ManagerCustomApplicationFieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "checkbox"
+  | "date"
+  | "photos"
+  | "file";
 
 export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
   id: ManagerCustomApplicationFieldType;
@@ -564,6 +572,8 @@ export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
   { id: "select", label: "Dropdown" },
   { id: "checkbox", label: "Checkbox" },
   { id: "date", label: "Date" },
+  { id: "photos", label: "Photos" },
+  { id: "file", label: "File" },
 ];
 
 /** Manager-defined application question asked during the rental application for this listing. */
@@ -1101,7 +1111,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     // back as a custom fee and rendered a SECOND time below the standard row — the
     // duplicate-preset-row bug on existing listings. Recovering the tag lets the Fees
     // table's `!presetId || presetId === "custom"` filter exclude it. Idempotent: a row
-    // that already carries a presetId keeps it.
+    // that already carries a presetId keeps it. normalizeListingFeeRow already applies the
+    // id/label/amount/frequency defaulting the prakrit lane did explicitly, and it
+    // additionally preserves the custom-fee shortTermAmount and recovers preset labels.
     customFees = customFees.map((f) => normalizeListingFeeRow(f as ListingFeeRow));
   }
 
@@ -1463,7 +1475,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
   delete (next as Record<string, unknown>).utilitiesMonthly;
-  return next as ManagerListingSubmissionV1;
+  return ensureSubmissionListingFees(next as ManagerListingSubmissionV1);
 }
 
 export function emptyRoom(index: number): ManagerRoomSubmission {

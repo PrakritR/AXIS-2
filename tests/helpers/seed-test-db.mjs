@@ -408,7 +408,9 @@ try {
   await cleanLegacyDemoManagerPortfolio(managerUserId);
 
   const portfolioScript = path.join(__dirname, "seed-canonical-demo-portfolio.ts");
+  const projectRoot = path.join(__dirname, "..", "..");
   const portfolioResult = spawnSync("npx", ["--yes", "tsx", portfolioScript], {
+    cwd: projectRoot,
     env: {
       ...process.env,
       SEED_MANAGER_USER_ID: managerUserId,

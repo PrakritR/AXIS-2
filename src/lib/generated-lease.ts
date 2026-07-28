@@ -19,6 +19,7 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
+import { normalizeApplicationLeaseTerm } from "@/lib/resident-manual-lease-terms";
 import { leaseCss } from "@/lib/lease-templates/types";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -145,7 +146,7 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
       email: application.email ?? "",
       application: application as RentalWizardFormState,
     }),
-    leaseTerm: dates.leaseTerm || application.leaseTerm,
+    leaseTerm: normalizeApplicationLeaseTerm(dates.leaseTerm || application.leaseTerm || ""),
     leaseStart: dates.leaseStart,
     leaseEnd: dates.leaseEnd,
   };

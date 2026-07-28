@@ -342,10 +342,13 @@ export function FieldSingleSelect({
         // menu is portaled to document.body as a sibling of the modal, so a lower
         // value renders it *behind* the modal and every option click lands on the
         // modal instead — the dropdowns then silently refuse selections.
-        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${
+          pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
+        }`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
+          minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
           backgroundColor: "#ffffff",
         }}
