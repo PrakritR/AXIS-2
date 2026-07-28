@@ -163,11 +163,14 @@ export function ManagerPlanNative({
   }
 
   if (stripeManaged) {
+    // App Store 3.1.1: don't steer the user to an external site to manage/buy.
+    // They already have an active plan, so there is simply nothing to purchase
+    // here — no website named, no "manage on the web" instruction.
     return (
       <div className="native-only mx-auto max-w-lg rounded-2xl border border-border surface-panel p-6 text-center">
         <p className="text-lg font-semibold text-foreground">You&apos;re on {TIER_LABEL[currentTier]}</p>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          Your subscription is billed on the web. Manage your plan at prop-lane.space — no need to buy again here.
+          Your plan is already active — there&apos;s nothing to purchase here.
         </p>
       </div>
     );

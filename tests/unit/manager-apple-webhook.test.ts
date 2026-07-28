@@ -9,8 +9,8 @@ import {
 const NOW = Date.UTC(2026, 6, 24); // 2026-07-24
 const FUTURE = NOW + 30 * 24 * 60 * 60 * 1000;
 const PAST = NOW - 24 * 60 * 60 * 1000;
-const PRO = "com.axisseattlehousing.app.pro.monthly";
-const BUSINESS = "com.axisseattlehousing.app.business.monthly";
+const PRO = "space.proplane.app.pro.monthly";
+const BUSINESS = "space.proplane.app.business.monthly";
 
 function ev(overrides: Partial<RevenueCatWebhookEvent>): RevenueCatWebhookEvent {
   return {

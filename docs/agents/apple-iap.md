@@ -125,15 +125,25 @@ All three are documented in `.env.example` (Optional section).
 
 - **Paid Applications Agreement** Active (banking → "Clear" + tax + DSA trader
   status) — hard prerequisite; nothing sandbox-testable until signed.
-- **App Store Connect products** (immutable ids): `com.axisseattlehousing.app.pro.monthly`,
-  `com.axisseattlehousing.app.business.monthly`, in one auto-renewable subscription
-  group, prices at web parity, Small Business Program enrolled, 14-day intro offer,
-  billing grace enabled, review screenshot of the native purchase screen.
-- **RevenueCat**: project + iOS app (App-Specific Shared Secret / In-App Purchase
-  key), entitlements/products mapped to the ids above, webhook → `/api/revenuecat/webhook`
-  with the Authorization value = `REVENUECAT_WEBHOOK_AUTH_HEADER`.
-- **Native build**: `@revenuecat/purchases-capacitor` is in `package.json`; the
-  iOS TestFlight workflow's `npx cap sync ios` integrates the native plugin. The
-  plugin ships a CocoaPods podspec (dep `PurchasesHybridCommon`); verify it
-  resolves under this project's SPM (`CapApp-SPM`) on the first `cap sync` — if
-  not, pin a RevenueCat version with SPM support or add the pod.
+- **App Store Connect products** (immutable ids): `space.proplane.app.pro.monthly`
+  ($20/mo, matches web Pro), `space.proplane.app.business.monthly` ($200/mo, matches
+  web Business), in one auto-renewable subscription group, prices at web parity,
+  Small Business Program enrolled, 14-day intro offer, billing grace enabled,
+  review screenshot of the native purchase screen. The ids track the CURRENT bundle
+  id `space.proplane.app` (renamed from `com.axisseattlehousing.app`); they are the
+  single source of truth in `src/lib/manager-apple-purchase.ts`
+  (`APPLE_IAP_PRODUCT_TIERS` / `APPLE_IAP_LAUNCH_PRODUCT_IDS`).
+- **RevenueCat**: a project + iOS app registered under bundle id `space.proplane.app`
+  (a NEW RevenueCat app — the old `com.axisseattlehousing.app` app cannot be reused,
+  its App-Specific Shared Secret is per-bundle), entitlements/products mapped to the
+  ids above, webhook → `/api/revenuecat/webhook` with the Authorization value =
+  `REVENUECAT_WEBHOOK_AUTH_HEADER`. `NEXT_PUBLIC_REVENUECAT_IOS_API_KEY` must be the
+  new app's public SDK key.
+- **Native build**: `@revenuecat/purchases-capacitor` is pinned at `^13.2.4` in
+  `package.json`, the first line that ships an SPM `Package.swift` (targets iOS 15,
+  `@capacitor/core >= 8`). This project is **SPM-only** (`CapApp-SPM/Package.swift`,
+  no Podfile), so a podspec-only version (≤ 11.x) would NOT link — `npx cap sync ios`
+  silently skips a plugin with no `Package.swift` and the StoreKit code never reaches
+  the built app. The iOS TestFlight workflow's `npx cap sync ios` regenerates
+  `CapApp-SPM/Package.swift` to include the RevenueCat SPM package; verify that first
+  native build links it (`import Purchases` resolves) before trusting the purchase UI.

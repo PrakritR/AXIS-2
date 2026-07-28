@@ -430,7 +430,11 @@ export default function CreateAccountClient() {
             <Link className="font-semibold text-primary hover:opacity-90" href={nativeAwarePath("/partner/pricing")}>
               Partner pricing
             </Link>
-            . Free goes straight to your portal; Pro and Business open secure Stripe checkout.
+            . Free goes straight to your portal;{" "}
+            {/* App Store 3.1.1: never name web/Stripe checkout on native — Pro/Business
+                are an in-app purchase there. The web copy is unchanged via `.native-hide`. */}
+            <span className="native-hide">Pro and Business open secure Stripe checkout.</span>
+            <span className="native-only">Pro and Business unlock with an in-app purchase.</span>
           </>
         )}
       </div>

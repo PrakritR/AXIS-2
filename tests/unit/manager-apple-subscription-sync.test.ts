@@ -214,7 +214,7 @@ describe("applyRevenueCatWebhookEvent", () => {
       {
         type: "INITIAL_PURCHASE",
         app_user_id: "u1",
-        product_id: "com.axisseattlehousing.app.pro.monthly",
+        product_id: "space.proplane.app.pro.monthly",
         environment: "PRODUCTION",
         expiration_at_ms: Date.now() + 86400000,
         original_transaction_id: OTX,
@@ -224,6 +224,30 @@ describe("applyRevenueCatWebhookEvent", () => {
 
     expect(decision.action).toBe("grant");
     expect(updates.find((u) => u.value === "p1")?.patch).toMatchObject({ tier: "pro", billing: "apple" });
+  });
+
+  it("unlocks Business from a purchase of the business launch product id", async () => {
+    // Purchase-success entitlement unlock for the OTHER launch product — proves
+    // both new-bundle-id (`space.proplane.app.*`) products grant their tier.
+    const { updates } = fakeClient({
+      profile: { email: "m@x.com", manager_id: "MGR-1" },
+      rowsByUser: [{ id: "p1", tier: "free", billing: "free", stripe_subscription_id: null, apple_original_transaction_id: null, user_id: "u1" }],
+    });
+
+    const { decision } = await applyRevenueCatWebhookEvent(
+      {
+        type: "INITIAL_PURCHASE",
+        app_user_id: "u1",
+        product_id: "space.proplane.app.business.monthly",
+        environment: "PRODUCTION",
+        expiration_at_ms: Date.now() + 86400000,
+        original_transaction_id: OTX,
+      },
+      Date.now(),
+    );
+
+    expect(decision.action).toBe("grant");
+    expect(updates.find((u) => u.value === "p1")?.patch).toMatchObject({ tier: "business", billing: "apple" });
   });
 
   it("routes an expiration event through the downgrade path", async () => {
@@ -236,7 +260,7 @@ describe("applyRevenueCatWebhookEvent", () => {
       {
         type: "EXPIRATION",
         app_user_id: "u1",
-        product_id: "com.axisseattlehousing.app.pro.monthly",
+        product_id: "space.proplane.app.pro.monthly",
         expiration_at_ms: Date.now() - 86400000,
         original_transaction_id: OTX,
       },
@@ -255,7 +279,7 @@ describe("applyRevenueCatWebhookEvent", () => {
         {
           type: "INITIAL_PURCHASE",
           app_user_id: "u1",
-          product_id: "com.axisseattlehousing.app.pro.monthly",
+          product_id: "space.proplane.app.pro.monthly",
           expiration_at_ms: Date.now() + 86400000,
           original_transaction_id: OTX,
         },
@@ -275,7 +299,7 @@ describe("applyRevenueCatWebhookEvent", () => {
         {
           type: "INITIAL_PURCHASE",
           app_user_id: "u1",
-          product_id: "com.axisseattlehousing.app.pro.monthly",
+          product_id: "space.proplane.app.pro.monthly",
           expiration_at_ms: Date.now() + 86400000,
           original_transaction_id: null,
           transaction_id: null,
@@ -304,11 +328,45 @@ describe("reconcileManagerPurchaseWithApple", () => {
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
-      json: async () => ({ subscriber: { subscriptions: { "com.axisseattlehousing.app.pro.monthly": { expires_date: "2000-01-01T00:00:00Z" } } } }),
+      json: async () => ({ subscriber: { subscriptions: { "space.proplane.app.pro.monthly": { expires_date: "2000-01-01T00:00:00Z" } } } }),
     } as never);
 
     await reconcileManagerPurchaseWithApple("u1", Date.UTC(2026, 6, 24));
     expect(updates.find((u) => u.value === "p1")?.patch).toMatchObject({ tier: "free", billing: "free" });
+  });
+
+  it("restore/renewal: keeps access when RevenueCat still reports an active subscription", async () => {
+    // The restore path server-side: after Purchases.restorePurchases() the entitlement
+    // is live at RevenueCat; the next subscription read reconciles and must NOT downgrade.
+    process.env.REVENUECAT_SECRET_API_KEY = "sk_test";
+    const { updates } = fakeClient({
+      singleRow: { id: "p1", tier: "pro", billing: "apple", stripe_subscription_id: null, apple_original_transaction_id: OTX },
+      rowsByUser: [{ id: "p1", tier: "pro", billing: "apple", stripe_subscription_id: null, apple_original_transaction_id: OTX, user_id: "u1" }],
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ subscriber: { subscriptions: { "space.proplane.app.pro.monthly": { expires_date: "2099-01-01T00:00:00Z" } } } }),
+    } as never);
+
+    await reconcileManagerPurchaseWithApple("u1", Date.UTC(2026, 6, 24));
+    // Same tier still active → no downgrade-to-free write at all.
+    expect(updates.find((u) => u.patch.tier === "free")).toBeUndefined();
+  });
+
+  it("restore: re-grants the active tier when it drifted (e.g. upgraded on another device)", async () => {
+    process.env.REVENUECAT_SECRET_API_KEY = "sk_test";
+    const { updates } = fakeClient({
+      profile: { email: "m@x.com", manager_id: "MGR-1" },
+      singleRow: { id: "p1", tier: "pro", billing: "apple", stripe_subscription_id: null, apple_original_transaction_id: OTX },
+      rowsByUser: [{ id: "p1", tier: "pro", billing: "apple", stripe_subscription_id: null, apple_original_transaction_id: OTX, user_id: "u1" }],
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ subscriber: { subscriptions: { "space.proplane.app.business.monthly": { expires_date: "2099-01-01T00:00:00Z" } } } }),
+    } as never);
+
+    await reconcileManagerPurchaseWithApple("u1", Date.UTC(2026, 6, 24));
+    expect(updates.find((u) => u.value === "p1")?.patch).toMatchObject({ tier: "business", billing: "apple" });
   });
 
   it("keeps state on a transient (non-200) RevenueCat response", async () => {

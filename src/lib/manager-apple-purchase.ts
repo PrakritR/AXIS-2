@@ -52,18 +52,24 @@ export function isAppleBilledManagerPurchase(
  * immutable once created in App Store Connect (see report §4.1). Pro + Business
  * monthly ship at launch; the annual ids are mapped ahead of time so adding them
  * later is a console-only change, not a code change.
+ *
+ * These are keyed on the CURRENT bundle id `space.proplane.app` (the iOS rebrand
+ * from `com.axisseattlehousing.app`). App Store Connect product ids don't have to
+ * prefix the bundle id, but we keep them aligned so the product namespace tracks
+ * the app. The RevenueCat products firstmate configures MUST use these exact ids,
+ * or offerings are filtered out (nothing purchasable) and webhook grants ignored.
  */
 export const APPLE_IAP_PRODUCT_TIERS: Record<string, { tier: PaidTier; billing: StripeBilling }> = {
-  "com.axisseattlehousing.app.pro.monthly": { tier: "pro", billing: "monthly" },
-  "com.axisseattlehousing.app.business.monthly": { tier: "business", billing: "monthly" },
-  "com.axisseattlehousing.app.pro.annual": { tier: "pro", billing: "annual" },
-  "com.axisseattlehousing.app.business.annual": { tier: "business", billing: "annual" },
+  "space.proplane.app.pro.monthly": { tier: "pro", billing: "monthly" },
+  "space.proplane.app.business.monthly": { tier: "business", billing: "monthly" },
+  "space.proplane.app.pro.annual": { tier: "pro", billing: "annual" },
+  "space.proplane.app.business.annual": { tier: "business", billing: "annual" },
 };
 
 /** Product ids offered on iOS at launch (Pro + Business, monthly only). */
 export const APPLE_IAP_LAUNCH_PRODUCT_IDS = [
-  "com.axisseattlehousing.app.pro.monthly",
-  "com.axisseattlehousing.app.business.monthly",
+  "space.proplane.app.pro.monthly",
+  "space.proplane.app.business.monthly",
 ] as const;
 
 /** Map an App Store product id to its plan tier + cadence, or null if not ours. */

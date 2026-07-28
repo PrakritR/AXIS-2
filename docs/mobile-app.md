@@ -60,9 +60,12 @@ add `space.proplane.app` to Supabase → Auth → Providers → **Apple** Client
 URLs (native Google/Apple OAuth returns via this custom scheme — there is no Google
 reversed-client scheme in this repo); register the new App ID `space.proplane.app` in
 Apple Developer with Sign in with Apple + Associated Domains + Push enabled; and create
-the App Store Connect record + IAP products for the new id (the `com.axisseattlehousing.app.pro/.business.*`
-product ids and the `com.axisseattlehousing.app.web` Services ID are separate identifiers,
-left unchanged in-repo pending that console work).
+the App Store Connect record + IAP products for the new id. The IAP product ids are now
+`space.proplane.app.pro.monthly` / `.business.monthly` in-repo
+(`src/lib/manager-apple-purchase.ts`) — App Store Connect + RevenueCat must be created with
+those exact ids (see [`docs/agents/apple-iap.md`](agents/apple-iap.md)). The
+`com.axisseattlehousing.app.web` Services ID is a separate identifier, left unchanged in-repo
+pending that console work.
 
 ## What's already in the repo
 
