@@ -424,7 +424,7 @@ function LongTermUtilitiesPaymentPicker({
   onSelect,
 }: {
   value: UtilitiesPaymentModel | undefined;
-  onSelect: (model: Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct">) => void;
+  onSelect: (model: UtilitiesPaymentModel) => void;
 }) {
   const selected = longTermUtilitiesPickerValue(value);
   return (
@@ -434,9 +434,7 @@ function LongTermUtilitiesPaymentPicker({
         aria-label="Utilities payment"
         className={selectInputCls}
         value={selected}
-        onChange={(e) =>
-          onSelect(e.target.value as Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct">)
-        }
+        onChange={(e) => onSelect(e.target.value as UtilitiesPaymentModel)}
       >
         {LONG_TERM_UTILITIES_PAYMENT_OPTIONS.map((opt) => (
           <option key={opt.id} value={opt.id}>
