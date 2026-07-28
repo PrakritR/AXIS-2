@@ -42,7 +42,6 @@ import {
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import {
-  propertyMediaReadinessLabel,
   scoreRoomMedia,
   shouldWarnOnPublish,
   summarizePropertyMediaReadiness,
@@ -1199,6 +1198,17 @@ export function ManagerAddListingForm({
   // unchecking + re-checking restores their picks instead of wiping them.
   const [furnishedOpenRooms, setFurnishedOpenRooms] = useState<Set<string>>(() => new Set());
   const rememberedFurnitureRef = useRef<Map<string, string>>(new Map());
+  // Rooms where the "Other amenities" small text box is revealed even though it is still
+  // empty (the manager just ticked Other). Rooms that already have custom amenity text
+  // read as open without needing to be in this set.
+  const [otherAmenitiesOpenRooms, setOtherAmenitiesOpenRooms] = useState<Set<string>>(() => new Set());
+  const toggleOtherAmenitiesOpen = (roomId: string, on: boolean) =>
+    setOtherAmenitiesOpenRooms((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(roomId);
+      else next.delete(roomId);
+      return next;
+    });
   const roomIsFurnished = (room: ManagerRoomSubmission): boolean =>
     furnishedOpenRooms.has(room.id) || roomFurnishingIsFurnished(room.furnishing);
   const setRoomFurnished = (index: number, room: ManagerRoomSubmission, on: boolean) => {
@@ -3861,26 +3871,37 @@ export function ManagerAddListingForm({
                               </label>
                             );
                           })}
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border"
+                              checked={otherAmenitiesOpenRooms.has(room.id) || customRoomAmenitiesText.trim() !== ""}
+                              onChange={(e) => toggleOtherAmenitiesOpen(room.id, e.target.checked)}
+                            />
+                            <span className="font-medium text-foreground">Other</span>
+                          </label>
                         </div>
-                        <Textarea
-                          className="mt-2"
-                          rows={2}
-                          value={customRoomAmenitiesText}
-                          onChange={(e) => {
-                            const presetLines = splitLineList(room.roomAmenitiesText).filter((line) =>
-                              roomPresetLabels.has(line),
-                            );
-                            const customLines = splitLineList(e.target.value);
-                            setRoom(i, { roomAmenitiesText: [...presetLines, ...customLines].join("\n") });
-                          }}
-                          placeholder="Other amenities not listed above (one per line)."
-                        />
+                        {otherAmenitiesOpenRooms.has(room.id) || customRoomAmenitiesText.trim() !== "" ? (
+                          <Input
+                            className="mt-2 h-9 text-sm"
+                            value={customRoomAmenitiesText}
+                            onChange={(e) => {
+                              const presetLines = splitLineList(room.roomAmenitiesText).filter((line) =>
+                                roomPresetLabels.has(line),
+                              );
+                              const customLines = splitLineList(e.target.value);
+                              setRoom(i, { roomAmenitiesText: [...presetLines, ...customLines].join("\n") });
+                            }}
+                            placeholder="Other amenities, comma-separated"
+                          />
+                        ) : null}
                       </div>
 
                       {!isEntireHome ? (
                       <>
-                      <div className="sm:col-span-2">
-                        <FieldLabel>Photos (optional)</FieldLabel>
+                      <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <FieldLabel hint="Up to 8 images, auto-compressed.">Photos</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-photos-${room.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `room-photos-${room.id}`)}
@@ -3895,7 +3916,7 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </MediaPickTrigger>
-                          <p className="mt-3 text-sm text-muted">Drag and drop room photos here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop photos here or use the button.</p>
                           {room.photoDataUrls.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
@@ -3913,14 +3934,12 @@ export function ManagerAddListingForm({
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="One short clip per room (~14 MB max).">Video tour</FieldLabel>
+                      <div>
+                        <FieldLabel hint="One short clip, ~14 MB max, MP4/MOV/WebM.">Video tour</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-video-${room.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `room-video-${room.id}`)}
@@ -3936,9 +3955,9 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            <p className="mt-2 text-xs text-primary">Uploading…</p>
                           ) : (
-                          <p className="mt-3 text-sm text-muted">Drag and drop one room video here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
                           )}
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
@@ -3956,10 +3975,9 @@ export function ManagerAddListingForm({
                                 Remove video
                               </button>
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-muted">Optional — MP4, MOV, or WebM. Preview appears after you choose a file.</p>
-                          )}
+                          ) : null}
                         </div>
+                      </div>
                       </div>
                       </>
                       ) : null}
@@ -3983,31 +4001,9 @@ export function ManagerAddListingForm({
               })}
             </div>
 
-            {(() => {
-              const readiness = summarizePropertyMediaReadiness(sub.rooms);
-              const pct = Math.round(readiness.percentReady * 100);
-              return (
-                <div
-                  className="mt-4 rounded-xl border border-border bg-accent/25 p-4"
-                  data-testid="listing-media-readiness"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">Room media readiness</p>
-                    <p className="text-xs text-muted">{propertyMediaReadinessLabel(readiness)}</p>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-border/60">
-                    <div
-                      className={`h-full rounded-full transition-all ${pct >= 70 ? "bg-emerald-500" : "bg-amber-500"}`}
-                      style={{ width: `${readiness.listedCount ? Math.max(pct, 4) : 0}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                    Bronze = 1+ photo or video · Silver = 3+ photos · Gold = 3+ photos + video. Aim for 70%+ before
-                    publishing.
-                  </p>
-                </div>
-              );
-            })()}
+            {/* The "Room media readiness" panel was removed at the captain's request. The
+                underlying summarizePropertyMediaReadiness still backs the publish-time
+                warning (shouldWarnOnPublish) below, which is a separate safety gate. */}
 
             <ListingSubsection
               title="Floor plans"
