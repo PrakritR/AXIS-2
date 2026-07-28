@@ -80,7 +80,7 @@ import { syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
 import { Input, Select } from "@/components/ui/input";
 
-const TAM_ROLE_LABEL = "TAM";
+const TEAM_MEMBER_ROLE_LABEL = "Team";
 
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -190,7 +190,7 @@ function CoManagerPermissionsEditor({
       </div>
       {isEmpty ? (
         <p className="rounded-lg border border-dashed border-border bg-accent/20 px-3 py-2 text-xs text-muted">
-          No restrictions. This TAM has full access to every module on this property.
+          No restrictions. This team member has full access to every module on this property.
           Check modules below to restrict them. (To remove the property entirely, use
           &ldquo;Remove access&rdquo;.)
         </p>
@@ -1001,7 +1001,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       seedAccountLinksCache(nextInvites);
       writeProRelationships(userId, proRelationshipRowsFromInvites(nextInvites.filter((i) => i.status === "accepted")));
       scheduleInviteSave(inv.id, { assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms });
-      showToast("Property removed from this TAM.");
+      showToast("Property removed from this team member.");
       return;
     }
     const all = readProRelationships(userId);
@@ -1011,7 +1011,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     });
     writeProRelationships(userId, next);
     refreshLocal();
-    showToast("Property removed from this TAM.");
+    showToast("Property removed from this team member.");
   };
 
   const removePropertyFromLocalRow = (rowId: string, propId: string) => {
@@ -1037,7 +1037,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       ),
     );
     refreshLocal();
-    showToast("Property removed from this TAM.");
+    showToast("Property removed from this team member.");
   };
 
   const openTransferForProperty = (propertyId: string, coManagerUserId: string) => {
@@ -1059,7 +1059,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         });
         const body = (await res.json()) as { ok?: boolean; userId?: string; error?: string };
         if (!res.ok || !body.ok || !body.userId) {
-          showToast(body.error ?? "Could not resolve TAM account.");
+          showToast(body.error ?? "Could not resolve team account.");
           return;
         }
         coManagerUserId = body.userId;
@@ -1344,7 +1344,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             onClick={() => void removeLink(inv.id)}
             data-attr="co-manager-remove-link"
           >
-            {readOnly ? "Leave this TAM link" : "Remove TAM link"}
+            {readOnly ? "Leave this team link" : "Remove team link"}
           </Button>
         </div>
       </>
@@ -1446,7 +1446,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {!hasAnyTeamData ? (
-          <PortalDataTableEmpty message="No TAMs linked yet." icon="data" />
+          <PortalDataTableEmpty message="No team members yet." icon="data" />
         ) : !hasVisibleTeamRows ? (
           <PortalDataTableEmpty message="No links match these filters." icon="data" />
         ) : (
@@ -1482,7 +1482,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       <PortalMobileSummaryCard
                         key={inv.id}
                         title={inv.linkedDisplayName ?? inv.linkedAxisId}
-                        subtitle={readOnly ? "Linked to you" : TAM_ROLE_LABEL}
+                        subtitle={readOnly ? "Linked to you" : TEAM_MEMBER_ROLE_LABEL}
                         trailing={
                           <button
                             type="button"
@@ -1500,7 +1500,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           </button>
                         }
                         badge={
-                          <span className={CO_MANAGER_ROLE_BADGE}>{readOnly ? "Linked to you" : TAM_ROLE_LABEL}</span>
+                          <span className={CO_MANAGER_ROLE_BADGE}>{readOnly ? "Linked to you" : TEAM_MEMBER_ROLE_LABEL}</span>
                         }
                         expanded={expanded}
                         onClick={() => setExpandedLinkId((cur) => (cur === inv.id ? null : inv.id))}
@@ -1515,7 +1515,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       <PortalMobileSummaryCard
                         key={r.id}
                         title={r.linkedDisplayName ?? r.linkedAxisId}
-                        subtitle={TAM_ROLE_LABEL}
+                        subtitle={TEAM_MEMBER_ROLE_LABEL}
                         trailing={
                           <button
                             type="button"
@@ -1532,7 +1532,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <span>linked</span>
                           </button>
                         }
-                        badge={<span className={CO_MANAGER_ROLE_BADGE}>{TAM_ROLE_LABEL}</span>}
+                        badge={<span className={CO_MANAGER_ROLE_BADGE}>{TEAM_MEMBER_ROLE_LABEL}</span>}
                         expanded={expanded}
                         onClick={() => setExpandedLinkId((cur) => (cur === r.id ? null : r.id))}
                       >
@@ -1620,7 +1620,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
                                   <span className={CO_MANAGER_ROLE_BADGE}>
-                                    {readOnly ? "Linked to you" : TAM_ROLE_LABEL}
+                                    {readOnly ? "Linked to you" : TEAM_MEMBER_ROLE_LABEL}
                                   </span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1670,7 +1670,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                   <p className="mt-0.5 font-mono text-xs text-muted">{r.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
-                                  <span className={CO_MANAGER_ROLE_BADGE}>{TAM_ROLE_LABEL}</span>
+                                  <span className={CO_MANAGER_ROLE_BADGE}>{TEAM_MEMBER_ROLE_LABEL}</span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
                                   <button
@@ -1868,11 +1868,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
               <p className="text-lg font-semibold text-foreground">Transfer ownership</p>
               <p className="mt-2 text-sm text-muted">
-                Promote a TAM to main manager of{" "}
+                Promote a team member to main manager of{" "}
                 <span className="font-medium text-foreground">
                   {resolvePropertyLabel(transferPropertyId, transferPropertyId)}
                 </span>
-                . Choose the permissions you keep as a TAM.
+                . Choose the permissions you keep as a team member.
               </p>
 
               <label className="mt-4 block text-xs font-semibold text-muted">
@@ -1891,7 +1891,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               </label>
 
               <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your TAM permissions</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your team permissions</p>
                 <div className="mt-2">
                   <CoManagerPermissionsEditor value={transferPermissions} onChange={setTransferPermissions} />
                 </div>
