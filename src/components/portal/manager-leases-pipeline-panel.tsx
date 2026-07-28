@@ -62,6 +62,7 @@ export function ManagerLeasesPipelinePanel({
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const uploadTargetRowIdRef = useRef<string | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
   const [signingRow, setSigningRow] = useState<LeasePipelineRow | null>(null);
@@ -220,10 +221,6 @@ export function ManagerLeasesPipelinePanel({
   }
 
   const generationGate = (row: LeasePipelineRow) => leaseGenerationSupportedForRow(row);
-  const generationGateTitle = (row: LeasePipelineRow) => {
-    const gate = generationGate(row);
-    return gate.ok ? undefined : gate.error;
-  };
   const hasLeaseDocument = (row: LeasePipelineRow) => Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => leaseRowMatchesManagerTab(r, tab)), [rows, tab]);
@@ -379,21 +376,31 @@ export function ManagerLeasesPipelinePanel({
     } else showToast(res.error ?? "Upload failed.");
   };
 
-  const renderLeaseRowDetail = (row: LeasePipelineRow) => (
+  const renderLeaseRowDetail = (row: LeasePipelineRow) => {
+    const generation = generationGate(row);
+    const canEditDocument = leaseAllowsManagerDocumentEdits(row);
+    const showGenerate = !hasLeaseDocument(row) && canEditDocument;
+
+    return (
     <>
       <PortalTableDetailActions placement="top">
-            {!hasLeaseDocument(row) && leaseAllowsManagerDocumentEdits(row) ? (
+            {showGenerate ? (
+              <>
               <Button
                 type="button"
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
                 data-attr="lease-generate"
-                disabled={generatingRowId === row.id || !generationGate(row).ok}
-                title={generationGateTitle(row)}
+                disabled={generatingRowId === row.id || !generation.ok}
+                title={generation.ok ? undefined : generation.error}
                 onClick={() => runGenerateLease(row)}
               >
                 {generatingRowId === row.id ? "Generating..." : "Generate lease"}
               </Button>
+              {!generation.ok ? (
+                <p className="max-w-xl text-xs leading-relaxed text-amber-800">{generation.error}</p>
+              ) : null}
+              </>
             ) : null}
             {hasLeaseDocument(row) ? (
             <Button
@@ -438,18 +445,18 @@ export function ManagerLeasesPipelinePanel({
                 Sign as manager
               </Button>
             ) : null}
-            {leaseAllowsManagerDocumentEdits(row) ? (
+            {canEditDocument ? (
             <Button
               type="button"
               variant="outline"
               className={PORTAL_DETAIL_BTN}
               onClick={() => {
-                setPendingRowId(row.id);
+                uploadTargetRowIdRef.current = row.id;
                 uploadRef.current?.click();
               }}
               disabled={pendingRowId === row.id}
             >
-              Upload replacement
+              {pendingRowId === row.id ? "Uploading…" : hasLeaseDocument(row) ? "Upload replacement" : "Upload PDF"}
             </Button>
             ) : null}
 
@@ -535,7 +542,8 @@ export function ManagerLeasesPipelinePanel({
 
       <LeaseDocumentPreview row={row} />
     </>
-  );
+    );
+  };
 
   if (bucketRows.length === 0) {
     return (
@@ -610,7 +618,8 @@ export function ManagerLeasesPipelinePanel({
         className="sr-only"
         aria-hidden
         onChange={(e) => {
-          const id = pendingRowId;
+          const id = uploadTargetRowIdRef.current;
+          uploadTargetRowIdRef.current = null;
           if (id) void onPickUpload(id, e.target.files);
         }}
       />

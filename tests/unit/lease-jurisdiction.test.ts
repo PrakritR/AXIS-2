@@ -25,6 +25,18 @@ describe("lease-jurisdiction", () => {
     expect(isLeaseGenerationSupported(resolveLeaseJurisdiction(withSeattle))).toBe(true);
   });
 
+  it("detects Seattle from Brooklyn Ave NE street address without city/state", () => {
+    expect(resolveLeaseJurisdiction({
+      listingProperty: { address: "5257 Brooklyn Ave NE" },
+    })).toBe("seattle");
+  });
+
+  it("detects Seattle from property ZIP when address omits city/state", () => {
+    expect(resolveLeaseJurisdiction({
+      listingProperty: { address: "5257 Brooklyn Ave NE", zip: "98105" },
+    })).toBe("seattle");
+  });
+
   it("detects San Francisco from address", () => {
     const app = snapshotJordanLee();
     const ctx = leaseContextFromApplication(app);

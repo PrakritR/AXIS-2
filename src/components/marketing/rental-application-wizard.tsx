@@ -1062,6 +1062,7 @@ function RentalApplicationWizardInner({
         body: JSON.stringify({
           propertyId: pid,
           residentEmail: emailTrim,
+          residentName: form.fullLegalName?.trim() || undefined,
           channel: payChannel,
         }),
       });
@@ -1533,6 +1534,7 @@ function RentalApplicationWizardInner({
             body: JSON.stringify({
               propertyId: pid,
               residentEmail: emailTrim,
+              residentName: form.fullLegalName?.trim() || undefined,
               channel: payChannel,
               feeWaived: form.applicationFeeWaived,
             }),

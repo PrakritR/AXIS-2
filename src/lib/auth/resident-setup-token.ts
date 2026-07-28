@@ -25,10 +25,20 @@ function hashesEqual(a: string, b: string): boolean {
   }
 }
 
+
+export function residentSetupIdFromUrlParams(params: { get(name: string): string | null }): string {
+  const proplane = params.get("proplane_id")?.trim() ?? "";
+  if (proplane) return normalizeApplicationAxisId(proplane);
+  const legacy = params.get("axis_id")?.trim() ?? "";
+  return legacy ? normalizeApplicationAxisId(legacy) : "";
+}
+
 export function buildResidentSetupHref(token: string, axisId: string): string {
+  const id = normalizeApplicationAxisId(axisId);
   const params = new URLSearchParams({
     token: token.trim(),
-    axis_id: normalizeApplicationAxisId(axisId),
+    proplane_id: id,
+    axis_id: id,
   });
   return `/auth/resident-setup?${params.toString()}`;
 }

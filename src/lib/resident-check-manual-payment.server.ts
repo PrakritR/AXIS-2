@@ -150,7 +150,11 @@ async function loadListingForProperty(db: SupabaseClient, propertyId: string): P
   const sub = propertyData?.listingSubmission as ManagerListingSubmissionV1 | undefined;
   if (!sub || sub.v !== 1) return null;
 
-  const propertyLabel = typeof propertyData?.title === "string" ? propertyData.title : sub.buildingName || "Listing";
+  const propertyLabel =
+    sub.address?.trim() ||
+    (typeof propertyData?.title === "string" ? propertyData.title.trim() : "") ||
+    sub.buildingName?.trim() ||
+    "Listing";
   return { managerUserId, propertyLabel, sub };
 }
 
@@ -170,7 +174,21 @@ async function ensureApplicationFeeChargeRow(
     input.propertyId,
     input.residentUserId,
   );
-  if (existing) return existing;
+  if (existing) {
+    const name = input.residentName?.trim();
+    const charge = existing.row_data;
+    if (name && charge && (!charge.residentName?.trim() || charge.residentName.trim() === "Applicant")) {
+      const managerUserId =
+        (existing.manager_user_id as string | null)?.trim() || charge.managerUserId?.trim() || "";
+      if (managerUserId) {
+        await upsertManagerCharges(db, managerUserId, [{ ...charge, residentName: name }]);
+        return (
+          (await loadApplicationFeeRow(db, input.residentEmail, input.propertyId, input.residentUserId)) ?? existing
+        );
+      }
+    }
+    return existing;
+  }
 
   const resolved = listing ?? (await loadListingForProperty(db, input.propertyId));
   if (!resolved) return null;

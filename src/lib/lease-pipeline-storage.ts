@@ -1191,19 +1191,49 @@ export function appendLeaseThreadMessage(
 }
 
 function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWizardFormState> | undefined {
-  if (!row.application || !Object.keys(row.application).length) return undefined;
-  if (!row.axisId) return row.application;
-  const appRow = readManagerApplicationRows().find((a) => a.id === row.axisId);
-  if (!appRow?.application) return row.application;
-  return enrichApplicationForLease(appRow, effectiveApplicationForRow(appRow), row.application);
+  const stored =
+    row.application && Object.keys(row.application).length ? row.application : undefined;
+  let app: Partial<RentalWizardFormState> | undefined;
+  if (row.axisId) {
+    const appRow = readManagerApplicationRows().find((a) => a.id === row.axisId);
+    if (appRow?.application) {
+      app = enrichApplicationForLease(appRow, effectiveApplicationForRow(appRow), stored);
+    }
+  }
+  app = app ?? stored;
+  if (!app || !Object.keys(app).length) return undefined;
+  return {
+    ...app,
+    propertyId: app.propertyId?.trim() || row.propertyId?.trim() || undefined,
+    roomChoice1: app.roomChoice1?.trim() || row.roomChoice?.trim() || undefined,
+  };
+}
+
+function leaseGenerationContextForRow(row: LeasePipelineRow) {
+  const app = applicationSnapshotForLeaseRow(row);
+  if (!app || !Object.keys(app).length) return null;
+  let ctx = leaseContextFromApplication(app as RentalWizardFormState);
+  if (!ctx.listingProperty?.address?.trim() && row.propertyId?.trim()) {
+    const prop = getPropertyById(row.propertyId.trim());
+    if (prop) {
+      ctx = {
+        ...ctx,
+        listingProperty: prop,
+        leasedRoom: ctx.leasedRoom ?? prop,
+        submission:
+          ctx.submission ??
+          (prop.listingSubmission?.v === 1 ? prop.listingSubmission : undefined),
+      };
+    }
+  }
+  return ctx;
 }
 
 export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: true } | { ok: false; error: string } {
-  const app = applicationSnapshotForLeaseRow(row);
-  if (!app || !Object.keys(app).length) {
+  const ctx = leaseGenerationContextForRow(row);
+  if (!ctx) {
     return { ok: false, error: "No application data on file." };
   }
-  const ctx = leaseContextFromApplication(app as RentalWizardFormState);
   // Properties with a manager-uploaded lease template can generate anywhere.
   if (leaseTemplateDocForContext(ctx)) return { ok: true };
   const jurisdiction = resolveLeaseJurisdiction(ctx);
@@ -1240,9 +1270,12 @@ export function generateLeaseHtmlForRow(
   }
   const supported = leaseGenerationSupportedForRow(row);
   if (!supported.ok) return { ok: false, error: supported.error };
+  const ctx = leaseGenerationContextForRow(row);
+  if (!ctx) {
+    return { ok: false, error: "No application data on file — approve an application with saved answers first." };
+  }
   let html: string;
   try {
-    const ctx = leaseContextFromApplication(app as RentalWizardFormState);
     html = buildAiGeneratedLeaseHtml(ctx);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Could not build lease from saved application.";

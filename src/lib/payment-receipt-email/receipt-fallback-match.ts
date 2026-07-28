@@ -19,6 +19,15 @@ import { parseMoneyAmount } from "@/lib/parse-money";
 export const MEMO_SCAN_MAX_CHARS = 4000;
 
 /** Generic street-type / connector words that carry no identifying signal on their own. */
+function normalizeMemoForPropertyMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\bavenue\b/g, "ave")
+    .replace(/\bstreet\b/g, "st")
+    .replace(/\broad\b/g, "rd")
+    .replace(/\bboulevard\b/g, "blvd");
+}
+
 const STREET_STOPWORDS = new Set([
   "at",
   "the",
@@ -103,11 +112,12 @@ export function payerNameMatchesResident(payerName: string | null, residentName:
  * "brooklyn" for a "5257 Brooklyn Avenue" listing. Either alone is too weak.
  */
 export function memoMatchesProperty(memoText: string, propertyLabel: string): boolean {
-  const labelTokens = tokenize(propertyLabel);
+  const labelTokensNorm = tokenize(normalizeMemoForPropertyMatch(propertyLabel));
+  const labelTokens = labelTokensNorm.length ? labelTokensNorm : tokenize(propertyLabel);
   const numberTokens = labelTokens.filter((t) => /^\d+$/.test(t));
   const wordTokens = labelTokens.filter((t) => /^[a-z]+$/.test(t) && t.length >= 3 && !STREET_STOPWORDS.has(t));
   if (numberTokens.length === 0 || wordTokens.length === 0) return false;
-  const memoSet = new Set(tokenize(memoText));
+  const memoSet = new Set(tokenize(normalizeMemoForPropertyMatch(memoText)));
   const numberHit = numberTokens.some((n) => memoSet.has(n));
   const wordHit = wordTokens.some((w) => memoSet.has(w));
   return numberHit && wordHit;

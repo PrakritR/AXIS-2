@@ -13,6 +13,7 @@ describe("buildPaymentReceiptGmailQuery", () => {
     expect(q).toContain("newer_than:14d");
     expect(q).toContain("venmo.com");
     expect(q).toContain("zellepay.com");
+    expect(q).toContain('subject:"paid you"');
   });
 
   it("clamps days between 1 and 90", () => {

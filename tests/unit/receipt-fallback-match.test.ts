@@ -58,6 +58,10 @@ describe("memoMatchesProperty", () => {
     expect(memoMatchesProperty("rent for the avenue place", "5257 Brooklyn Avenue")).toBe(false);
   });
 
+  it("matches abbreviated street words in the memo", () => {
+    expect(memoMatchesProperty("Application fee at 5257 Brooklyn ave", "5257 Brooklyn Avenue")).toBe(true);
+  });
+
   it("does not match on the number alone", () => {
     expect(memoMatchesProperty("here is 5257 dollars", "5257 Brooklyn Avenue")).toBe(false);
   });
