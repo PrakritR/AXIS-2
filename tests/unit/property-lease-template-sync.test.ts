@@ -14,8 +14,10 @@ describe("property lease template sync", () => {
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month"];
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const templates = readPropertyLeaseTemplates(synced);
-    expect(templates).toHaveLength(2);
-    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(["fixed-12-month", "month-to-month"]);
+    expect(templates).toHaveLength(3);
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(
+      ["fixed-12-month", "month-to-month", "short-term"].sort(),
+    );
     expect(templates.find((t) => t.listingSeedKey === "fixed-12-month")?.applicationLeaseTerms).toEqual([
       "12-Month",
     ]);
@@ -65,7 +67,7 @@ describe("property lease template sync", () => {
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const templates = readPropertyLeaseTemplates(synced);
     expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(
-      ["custom-term", "fixed-3-month", "month-to-month", "short-term"].sort(),
+      ["custom-term", "fixed-12-month", "fixed-3-month", "month-to-month", "short-term"].sort(),
     );
     const three = resolvePropertyLeaseTemplateForApplication(synced, { leaseTerm: "3-Month" });
     expect(three?.listingSeedKey).toBe("fixed-3-month");
@@ -89,5 +91,15 @@ describe("property lease template sync", () => {
     const again = readPropertyLeaseTemplates(synced)[0]!;
     expect(again.customLeaseTerms).toBe("No pets on patio.");
     expect(again.leaseConfigMode).toBe("custom");
+  });
+
+  it("always includes 12-month and short-term house lease templates", () => {
+    const sub = createDefaultListingSubmission();
+    sub.allowedLeaseTerms = ["Month-to-Month"];
+    sub.shortTermRentalsAllowed = false;
+    const synced = syncPropertyLeaseTemplatesFromListing(sub);
+    const keys = readPropertyLeaseTemplates(synced).map((t) => t.listingSeedKey).sort();
+    expect(keys).toContain("fixed-12-month");
+    expect(keys).toContain("short-term");
   });
 });

@@ -114,6 +114,7 @@ export function ManagerApplicationQuestionsEditorModal({
   saveTarget,
   propertyIds,
   managerUserId,
+  initialVariant = "standard",
   onClose,
   onSaved,
   showToast,
@@ -125,6 +126,8 @@ export function ManagerApplicationQuestionsEditorModal({
   /** When set, each save applies the same application config to every id (bulk edit). */
   propertyIds?: string[];
   managerUserId: string;
+  /** Which stay-type form opens first (long-term vs short-term). */
+  initialVariant?: ApplicationFormVariant;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
@@ -144,14 +147,14 @@ export function ManagerApplicationQuestionsEditorModal({
   useEffect(() => {
     if (!open) return;
     setLocalSub(sub);
-    setVariant("standard");
+    setVariant(initialVariant);
     setExpandedSectionId(null);
     setEditOpen(false);
     setEditingField(null);
     setIsNewField(false);
     setDirty(false);
     setSaving(false);
-  }, [open, sub]);
+  }, [open, sub, initialVariant]);
 
   const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
   const isBulkSave = bulkIds.length > 0;
