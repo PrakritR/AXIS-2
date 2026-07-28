@@ -64,6 +64,13 @@ export type LeaseJurisdictionTemplateConfig = {
   landlordEntryStatuteRef: string;
   residentMaintenanceStatuteRef: string;
   defaultNoticeStatuteRef: string;
+  /**
+   * Landlord habitability-duty statute. OPTIONAL and deliberately unset for California:
+   * the Washington citation used to be hardcoded in the template body, so it printed on
+   * every California lease too. Omitted renders the heading with no citation, which is the
+   * only safe default. Never populate this without a verified source.
+   */
+  landlordMaintenanceStatuteRef?: string;
 };
 
 export const SEATTLE_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
@@ -78,6 +85,7 @@ export const SEATTLE_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
   depositStatuteRef: "RCW 59.18.260–.280",
   landlordEntryStatuteRef: "RCW 59.18.150",
   residentMaintenanceStatuteRef: "RCW 59.18.130",
+  landlordMaintenanceStatuteRef: "RCW 59.18.060",
   defaultNoticeStatuteRef: "RCW 59.12.030",
 };
 

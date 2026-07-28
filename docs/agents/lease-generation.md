@@ -621,3 +621,218 @@ sandboxed without `allow-scripts`.
   `DELETE` scoped to the caller's own folder.
 - `tests/unit/lease-template-storage.test.ts` also asserts a foreign URL merely
   containing the route resolves to null.
+
+---
+
+
+## The document is chosen client side, in one place
+
+Generation is fully browser side. There is no API route in the path:
+
+```
+manager-leases-pipeline-panel.tsx  runGenerateLease(row)
+  -> lease-pipeline-storage.ts     generateLeaseHtmlForRow()
+       -> generated-lease.ts       leaseContextFromApplication()  (builds LeaseGenerationContext)
+       -> generated-lease.ts       buildAiGeneratedLeaseHtml(ctx)
+            -> buildManagerTemplateLeaseHtml   when the manager uploaded a template (returns FIRST)
+            -> build{Seattle,SanFrancisco,California,Washington}LeaseHtml -> buildLeaseHtml(ctx, config)
+```
+
+`buildLeaseHtml` then picks the short-term agreement or the long-form lease.
+
+## Stay pricing: one resolver, two consumers (Jul 2026)
+
+### The bug
+
+A manager reported that short-term / daily rentals were billed correctly but received the
+wrong lease document, or none. There were **four** unrelated "daily rate" fields and no two
+of them agreed:
+
+| Field | Read by |
+| --- | --- |
+| `room.rentBasis:"daily"` + `room.dailyRentPrice` | charges, and only for **non**-short-term applications |
+| `sub.shortTermDailyCost` (string) | the short-term **document** and the short-term **charges** |
+| `bundle.shortTermNightlyRent` | the listing price label only. Never charges, never the lease |
+| `room.prorateMethod:"daily_rate"` + `dailyRentRate` | proration of the edge months of a MONTHLY room. Unrelated, do not conflate |
+
+### Reproduction observed (scripted, `tests/unit/stay-pricing-repro.test.ts`)
+
+Driving the real `recordApprovedApplicationCharges` and `buildAiGeneratedLeaseHtml` on one
+fixture (a $55/day room in Fremont CA, an 11-day stay), before the fix:
+
+1. Daily room, short-term rentals **unticked**: the ledger billed **$605.00** correctly, but
+   the document was the long-form residential lease quoting `$1200.00 / month` in Exhibit A.
+   Right charge, wrong document, wrong number.
+2. Room `$55/day` vs listing `shortTermDailyCost` `$40`, explicit short-term application: the
+   ledger billed **$440.00**, the listing rate. Both sides ignored the room.
+3. Listing short-term fields blank: the document rendered `— per day` and `—` for both totals.
+4. Uploaded template + daily room: `<th>Monthly rent</th>` above the value `$55.00 / day`.
+5. Fremont CA: the header claimed "City and County of San Francisco" and the document carried
+   the SF Rent Ordinance paragraph, because any bare `ca` resolved to `san_francisco`.
+6. Monthly room: unchanged. This is the regression baseline and it passed before and after.
+
+### `resolveStayPricing` (`src/lib/room-pricing.ts`)
+
+The single decision point. The lease document and the charge ledger both call it, so they
+cannot quote different numbers for the same resident.
+
+Precedence, in order:
+
+1. **`rentalType === "short_term"` wins the kind outright.** Short stay, daily basis. The ROOM
+   the applicant selected supplies the rate; `sub.shortTermDailyCost` is the fallback.
+   A negotiated monthly rent deliberately does **not** apply here: the short-term charge branch
+   does not consult `managerRentOverride` either, and letting the document do so would recreate
+   the disagreement this resolver exists to remove.
+2. **Negotiated monthly rent** (`managerRentOverride`, then `signedMonthlyRent`) beats the
+   room's daily basis, exactly as it already beat the room's listing monthly rent. Mirrors
+   `residentNegotiatedMonthlyRent` in `household-charges.ts`.
+3. **A room priced by the day is a short stay ONLY when the stay is actually short**, i.e.
+   `isIntraMonthStay(leaseStart, leaseEnd)` (`short-term-stay-pricing.ts`), which mirrors the
+   ledger's `intraMonthLeaseSpan` and is exactly when the charges settle as ONE up-front stay
+   total. This clause is the fix that makes the short-term agreement reachable for a
+   daily-priced room whose manager never ticked `shortTermRentalsAllowed`.
+
+   **The duration bound is load-bearing, do not remove it.** `rentBasis:"daily"` is a BILLING
+   BASIS, and AGENTS.md defines it as a supported way to bill a normal tenancy (first month,
+   each recurring month, partial last month). Gating the document type on the basis alone
+   handed a 12-month daily-priced resident a lodger agreement that disclaims tenancy, drops the
+   federally required lead-paint disclosure, deposit-return terms, entry notice and Addenda
+   A-E, and states a single up-front total the ledger never bills. Both ship-gate reviews
+   caught this independently. With unknown or open-ended dates the resolver returns `"long"`:
+   the expensive mistake is giving a real tenant a document that denies their tenancy.
+
+   `basis` stays `"daily"` in both outcomes, so rent labels follow the real rate either way.
+4. Otherwise the room's monthly rent. Byte-identical to legacy behavior.
+
+**The deposit keys on `rentalType`, not on the resolved `stayKind`.** That asymmetry is
+deliberate and load-bearing: only an explicit short-term application is charged
+`sub.shortTermDeposit`; a daily-priced room on a standard application is charged
+`sub.securityDeposit`. The document has to quote whichever one the ledger will actually bill,
+so it follows the same key. The move-in fee in the short-term document follows the same rule
+(`shortTermMoveInFee` vs `moveInFee`), and utilities are added to the stay total only for a
+standard application, because an explicit short-term nightly rate is all-in.
+
+`managerSecurityDepositOverride` beats both, and a NON-EMPTY override wins even when it parses
+to zero (`overrideMoney`, mirroring the ledger's `savedAmount`). Treating "0" as absent made a
+waived deposit fall back to the listing default, so the document printed a deposit the ledger
+never charged.
+
+`leaseStart` / `leaseEnd` are accepted for call-site convenience and intentionally unused.
+Night counting stays in `shortTermStayNightCount` (`short-term-stay-pricing.ts`), the one
+implementation the ledger bills from. `build-lease-html.ts` used to re-implement it inline with
+bare `new Date("YYYY-MM-DD")`, which parses as UTC and could land a day away from the charges.
+
+`room-pricing.ts` must **never** import `generated-lease.ts`, which imports it. It may import
+`parse-money` and `short-term-stay-pricing` (both verified acyclic).
+
+### Charge path change, and its live-data consequence
+
+`household-charges.ts` now resolves the room **before** the short-term branch (it used to
+resolve it after, so the branch was structurally unable to see the room) and prices the stay
+through the resolver.
+
+**Behavior change on a money path:** a listing carrying both a room `dailyRentPrice` and a
+listing `shortTermDailyCost`, with an explicit short-term application, now bills the room's
+rate where it previously billed the listing's. That is the intended correction (the room the
+applicant selected is the authority for its own price), but a regeneration on such a row will
+move the amount.
+
+### A future-dated lease was billed twice for its move-in month (fixed)
+
+Found by the document-vs-ledger invariant test, pre-existing and NOT specific to daily rooms.
+
+`syncAllRecurringRentCharges` looked one month ahead (`monthsToGenerate.add(nextMonth)`) with
+no floor. A recurring profile's `startMonth` is deliberately the month AFTER move-in
+(`firstRecurringMonthAfterLeaseStart`) because the move-in month is already covered by the
+upfront first-month/prorated charges. For any lease starting in a future month, `nextMonth`
+was therefore EARLIER than `startMonth`, and the pass generated a second `rent` row for the
+month the upfront charge had already billed. An 11-day $55/day stay came to $2,612.90 instead
+of $1,847.58.
+
+It only ever reproduced for a future-dated lease, which is why the existing suites missed it:
+they all use past fixture dates, and past months are never generated. The guard is now
+`if (nextMonth >= profileStartMonth)`. Coverage: `stay-pricing-repro.test.ts` cases 9 and 10,
+both of which derive their dates from the clock so they stay future-dated forever.
+
+## Legal guardrails
+
+**Never author, infer, or paraphrase a statute citation.** A plausible-looking wrong citation
+on an executed lease is the worst thing this module can produce.
+
+- **There is no lodger statute anywhere in this repo.** `leases/disclosure-clause-rules.json`
+  was checked: no `1946.5`, no `lodger`, for either CA or WA. The short-term document's
+  **Lodger Status** section therefore renders `config.shortTermPurposeParagraph` unchanged, so
+  Washington keeps its existing RCW 59.18.040 reference and California cites nothing.
+  **Open gap for the next wave:** if a verified CA lodger citation (Cal. Civ. Code 1946.5 is
+  the likely one) is added to `disclosure-clause-rules.json` with `cite_verified: true`, add an
+  optional `shortTermLodgerStatuteRef` to `LeaseJurisdictionTemplateConfig` and render it in
+  that section. No such field was added here, because it would have carried zero values.
+- **`leases/disclosure-clause-rules.json` is reference material and is never parsed at
+  runtime.** `leases/lease-generation-manifest.json` still lists wiring it into the section
+  renderer as a TODO. `build-lease-html.ts` hardcodes its own disclosures.
+- Two hardcoded Washington citations used to print on **every** California lease
+  (`Landlord responsibilities (RCW 59.18.060)` and Addendum C's `(RCW 59.18.130)`). They sat
+  outside the `config` mechanism. Both are now routed through config rather than deleted,
+  because deleting them stripped a CORRECT citation from every Washington lease:
+  - Addendum C uses the existing `residentMaintenanceStatuteRef` (already RCW 59.18.130 for
+    WA, "California Civil Code" for CA). No new field.
+  - The landlord-duty heading uses a new **optional** `landlordMaintenanceStatuteRef`, set to
+    RCW 59.18.060 for Seattle and Washington and deliberately **unset** for California and San
+    Francisco, where it renders with no citation. Nothing was authored: RCW 59.18.060 was
+    already in the file. Populate the CA side only from a verified source.
+
+## Jurisdiction resolution: city match first, then statewide
+
+`resolveLeaseJurisdiction` (`src/lib/lease-jurisdiction.ts`) regex-matches the property address.
+It resolves five values: `seattle`, `san_francisco`, `california`, `washington`, `unsupported`.
+
+The two statewide values were added because the state rules used to fall through to the CITY
+templates, so a Fremont CA property generated a lease claiming "City and County of San
+Francisco" and citing the SF Rent Ordinance. Explicit city names, the Ave NE street pattern,
+the Oregon exclusion, and the 981xx / 941xx ZIP rules all still run first and are unchanged, so
+Seattle and San Francisco resolve exactly as before.
+
+`CALIFORNIA_LEASE_CONFIG` and `WASHINGTON_LEASE_CONFIG` live in their own modules
+(`lease-templates/california.ts`, `washington.ts`) rather than in `types.ts`. Each is the
+matching city config with every city-specific claim **removed**: no
+`municipalComplianceParagraph`, a state-only `headerSubtitle`, and a governing-law paragraph
+without the city-ordinance clause. Every statute reference carried over is already state level
+(RCW chapter 59.18, California Civil Code), so no citation was authored.
+
+## Known gaps, not fixed here
+
+- **Uploaded-template properties never reach the short-term agreement.**
+  `buildAiGeneratedLeaseHtml` returns `buildManagerTemplateLeaseHtml` before the jurisdiction
+  dispatch, so a nightly stay at such a property gets the monthly-worded Placement Summary. The
+  rent LABEL there now follows the resolved basis, but the document shape does not.
+- **`bundle.shortTermNightlyRent` is advertised but never billed.** Listing cards show it;
+  neither the ledger nor the lease uses it. Both fall back to the listing default.
+- **Drifted duplicate helpers.** `escapeHtml`, `dash`, `findSubmissionRoomRent`, and
+  `submissionRoomRentFromChoice` exist in both `generated-lease.ts` and `build-lease-html.ts`.
+  Only the `generated-lease.ts` copies are daily-price aware. Same name, two answers.
+- **Short-term default check-in time is `"10:00 PM"`** (`build-lease-html.ts`), which reads like
+  a typo for an afternoon check-in such as 3:00 PM.
+- **`parseMoneyAmount` concatenates every digit run**: `"500 refundable + $100 cleaning"` parses
+  to `500100`, and that figure is both charged by the ledger and now printed on the lease. The
+  fix (take the first numeric run, as `parseAmount` in `build-lease-html.ts` does) belongs in
+  `parse-money.ts` and would move existing charge amounts, so it was left alone here.
+- **The document cannot see `manualResidentDetails`.** For a manually-added resident the ledger
+  prefers `manualResidentDetails.securityDeposit` and suppresses listing defaults entirely
+  (`allowListingDefaults = !row.manuallyAdded`); the builder only receives the application, so
+  it still quotes the listing default. Pre-existing.
+- **Statewide leases still carry city-derived numeric terms.** The long-form body hardcodes "at
+  least 20 days before the end of any monthly rental period" (a WA RLTA figure; California is
+  30 days) and a "3-day pay-or-vacate / 10-day cure" framing. Pre-existing for the SF template,
+  but the widened CA support surface now applies it to every California address. Fixing it
+  properly needs per-jurisdiction notice-period config fields.
+- **Dates render as raw ISO** (`2026-08-03`) on both documents rather than a written-out date.
+
+## Coverage
+
+| Test | What it pins |
+| --- | --- |
+| `tests/unit/stay-pricing.test.ts` | the resolver in isolation: all four precedence rules, both deposit branches, monthly no-ops |
+| `tests/unit/stay-pricing-repro.test.ts` | document and ledger agree, end to end, on one fixture. This is the reproduction, flipped |
+| `tests/unit/daily-rent-charges.test.ts` | the monthly charge path is unmoved (`$851.61`, `Rent — April 2026`, no `/day`) |
+| `tests/unit/lease-jurisdiction.test.ts` | address to jurisdiction, including the statewide fallbacks |
+| `tests/unit/generated-lease.test.ts` | long-form document content |

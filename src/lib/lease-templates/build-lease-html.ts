@@ -21,6 +21,8 @@ import {
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
+import { resolveStayPricing } from "@/lib/room-pricing";
+import { intraMonthStaySpan, shortTermStayNightCount } from "@/lib/short-term-stay-pricing";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
@@ -398,20 +400,61 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
   });
 
-  if (a.rentalType === "short_term") {
-    const dailyCostRaw = subNorm?.shortTermDailyCost?.trim() || "—";
-    const shortDepositRaw = subNorm?.shortTermDeposit?.trim() || "—";
-    const dailyCost = parseAmount(dailyCostRaw);
-    const startDate = new Date(a.leaseStart ?? "");
-    const endDate = new Date(a.leaseEnd ?? "");
-    const startOk = startDate && !Number.isNaN(startDate.getTime());
-    const endOk = endDate && !Number.isNaN(endDate.getTime());
-    const durationDays = startOk && endOk
-      ? Math.max(1, Math.ceil((endDate!.getTime() - startDate!.getTime()) / (24 * 60 * 60 * 1000)) + 1)
-      : null;
+  // One resolver decides the stay's kind, rate, and deposit, so this document and the
+  // charge ledger can never quote different numbers. A room priced by the day reaches the
+  // short-term agreement even when the manager never ticked "short-term rentals allowed".
+  const stay = resolveStayPricing({
+    // A bundle application leases the bundle's rooms, not one room, so a stray roomChoice1
+    // must not let one member room's daily price decide the whole document's type.
+    room: leasedBundle ? undefined : specificRoom,
+    submission: subNorm,
+    application: {
+      rentalType: a.rentalType,
+      leaseStart: a.leaseStart,
+      leaseEnd: a.leaseEnd,
+      managerRentOverride: a.managerRentOverride,
+      managerSecurityDepositOverride: a.managerSecurityDepositOverride,
+      signedMonthlyRent: parseAmount(signedRentLabel ?? "") ?? undefined,
+    },
+  });
+
+  if (stay.stayKind === "short") {
+    const dailyCost = stay.dailyRate;
+    // Same night count the ledger bills from. The previous inline math parsed
+    // "YYYY-MM-DD" as UTC, which could land a day off from the charges.
+    const durationDays = shortTermStayNightCount(a.leaseStart, a.leaseEnd);
+    const dailyCostRaw = dailyCost !== undefined ? fmtUsd(dailyCost) : "—";
+    const depositAmount = stay.deposit;
+    const shortDepositRaw = depositAmount !== undefined ? fmtUsd(depositAmount) : "—";
     const totalRent = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays) : "—";
-    const depositAmount = parseAmount(shortDepositRaw);
-    const totalDue = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays + (depositAmount ?? 0)) : "—";
+    // The ledger bills more than rent + deposit on a stay, so the document has to list the
+    // rest or its "Total due" understates what the guest owes. Which move-in field applies
+    // follows rentalType, exactly as the ledger's two branches do.
+    const stayMoveInLabel = overrideFeeLabel(
+      a.managerMoveInFeeOverride,
+      (a.rentalType === "short_term" ? subNorm?.shortTermMoveInFee : subNorm?.moveInFee) ?? "",
+    );
+    const stayMoveInNum = parseAmount(stayMoveInLabel) ?? 0;
+    const stayOtherNum = showOtherSigningCost ? (otherCostNum ?? 0) : 0;
+    // Utilities are billed alongside a standard-application stay but never on an explicit
+    // short-term stay, whose nightly rate is all-in. The ledger PRORATES them across the
+    // stay's span, so quoting the full monthly estimate here would overstate the total.
+    const stayUtilitiesSpan = intraMonthStaySpan(a.leaseStart, a.leaseEnd);
+    const stayUtilitiesBase = a.rentalType === "short_term" ? 0 : (utilitiesNum ?? 0);
+    const stayUtilitiesNum =
+      stayUtilitiesBase > 0 && stayUtilitiesSpan
+        ? Number((stayUtilitiesBase * (stayUtilitiesSpan.billableDays / stayUtilitiesSpan.daysInMonth)).toFixed(2))
+        : 0;
+    const totalDue =
+      dailyCost && durationDays
+        ? fmtUsd(
+            dailyCost * durationDays +
+              (depositAmount ?? 0) +
+              stayMoveInNum +
+              stayOtherNum +
+              stayUtilitiesNum,
+          )
+        : "—";
     const requirements = escapeHtml(
       subNorm?.shortTermRequirements?.trim() ||
         "Guest must follow all reasonable house rules provided by the Owner/Host. Guest may not receive mail, declare residency, or claim tenancy.",
@@ -420,8 +463,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     const checkOutTime = dash(a.shortTermCheckOutTime || "11:00 AM");
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
-<h1>SHORT-TERM ROOM STAY AGREEMENT</h1>
-<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via PropLane</p>
+<h1>SHORT-TERM ROOM STAY AGREEMENT${durationDays ? ` (${durationDays}-Day Stay)` : ""}</h1>
+<p class="sub">Owner-Occupied Residence · ${config.headerSubtitle}</p>
+<p class="generated">Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Parties</h2>
 <table>
@@ -446,12 +490,15 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 <h2>4. Payment</h2>
 <table>
   <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
-  <tr><th>Total rent for days</th><td>${totalRent}</td></tr>
+  <tr><th>Total rent for ${durationDays ? `${durationDays} day${durationDays === 1 ? "" : "s"}` : "the stay"}</th><td>${totalRent}</td></tr>
   <tr><th>Security deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
+  ${stayUtilitiesNum > 0 && stayUtilitiesSpan ? `<tr><th>Utilities estimate (${stayUtilitiesSpan.billableDays}/${stayUtilitiesSpan.daysInMonth} days)</th><td>${fmtUsd(stayUtilitiesNum)}</td></tr>` : ""}
+  ${stayMoveInNum > 0 ? `<tr><th>Move-in fee</th><td>${fmtUsd(stayMoveInNum)}</td></tr>` : ""}
+  ${stayOtherNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${fmtUsd(stayOtherNum)}</td></tr>` : ""}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>
 
-<h2>5. Purpose of Stay</h2>
+<h2>5. Lodger Status</h2>
 <p>${config.shortTermPurposeParagraph}</p>
 
 <h2>6. House Rules &amp; Short-Term Requirements</h2>
@@ -461,16 +508,24 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 <h2>7. No Right to Remain After Check-Out</h2>
 <p>Guest must vacate the room and property by the check-out date and time. If Guest refuses to leave, Guest may be treated as a trespasser to the fullest extent permitted by law.</p>
 
-<h2>8. Shared Residence</h2>
+<h2>8. Revocation of Permission</h2>
+<p>Guest occupies the room by permission of the Owner/Host, not under a tenancy. Owner/Host may revoke that permission at any time for conduct that endangers persons or property, violates the house rules, or breaches this agreement, and Guest must then leave the property.</p>
+<p>If Guest does not leave after permission is revoked or after the check-out time, Owner/Host may contact law enforcement to remove Guest, to the fullest extent permitted by applicable law. Nothing in this section waives any right Guest may have under law that applies to this stay.</p>
+
+<h2>9. Damages and Liability</h2>
+<p>Guest is responsible for any loss or damage to the room, shared areas, furnishings, or the property caused by Guest or by anyone Guest permits on the property, beyond ordinary wear from the agreed use. Owner/Host may recover the cost of repair, replacement, or cleaning.</p>
+<p>Guest is responsible for insuring Guest's own belongings. Owner/Host is not liable for loss, theft, or damage to Guest's personal property except to the extent caused by Owner/Host's own negligence or as otherwise required by law.</p>
+
+<h2>10. Shared Residence</h2>
 <p>Owner/Host lives on or controls the property. Guest is renting a room only and receives only temporary shared-area access as approved by Owner/Host.</p>
 
-<h2>9. No Mail / No Residency</h2>
+<h2>11. No Mail / No Residency</h2>
 <p>Guest may not receive mail, declare residency, or claim tenancy at the property. Guest may not use the property address for government ID, voter registration, banking, employment, delivery accounts, or similar residency purposes.</p>
 
-<h2>10. Condition of Room</h2>
+<h2>12. Condition of Room</h2>
 <p>Guest agrees to leave the room and shared areas in clean, undamaged condition. Owner/Host may deduct unpaid amounts, cleaning costs, missing items, or damage beyond ordinary use from the deposit.</p>
 
-<h2>11. Electronic Signature</h2>
+<h2>13. Electronic Signature</h2>
 <p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the PropLane portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
 ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </body></html>`;
@@ -573,7 +628,7 @@ ${houseRules
 <p>Pet disclosure on application: <strong>${pets}</strong>.</p>
 
 <h2>${proratedSection ? "13" : "12"}. Maintenance &amp; Repairs</h2>
-<h3>Landlord responsibilities (RCW 59.18.060):</h3>
+<h3>Landlord responsibilities${config.landlordMaintenanceStatuteRef ? ` (${config.landlordMaintenanceStatuteRef})` : ""}:</h3>
 <ul>
   <li>Maintain the dwelling in a structurally sound, weathertight, and sanitary condition.</li>
   <li>Provide adequate heating capable of maintaining 68°F and functioning plumbing and hot water.</li>
@@ -690,7 +745,7 @@ ${houseRules
 
 <div class="addendum">
 <h2>Addendum C — Mold &amp; Moisture Policy</h2>
-<p>Resident agrees to maintain adequate ventilation in the room and bathroom (open windows when possible, use exhaust fans). Resident shall promptly report visible mold, moisture intrusion, or condensation to Landlord in writing. Resident shall wipe down surfaces subject to moisture (shower walls, windowsills) regularly. Resident shall not dry laundry inside the room or any space without adequate ventilation. Failure to report mold or moisture conditions within 24 hours of discovery may result in Resident being held liable for resulting damage (RCW 59.18.130).</p>
+<p>Resident agrees to maintain adequate ventilation in the room and bathroom (open windows when possible, use exhaust fans). Resident shall promptly report visible mold, moisture intrusion, or condensation to Landlord in writing. Resident shall wipe down surfaces subject to moisture (shower walls, windowsills) regularly. Resident shall not dry laundry inside the room or any space without adequate ventilation. Failure to report mold or moisture conditions within 24 hours of discovery may result in Resident being held liable for resulting damage (${escapeHtml(config.residentMaintenanceStatuteRef)}).</p>
 </div>
 
 <div class="addendum">

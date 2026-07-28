@@ -1,6 +1,22 @@
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Whole calendar days between two local dates, immune to daylight-saving shifts.
+ *
+ * Differencing the raw local timestamps is NOT safe: a span crossing a fall-back transition
+ * gains 3,600,000 ms, which pushed the old `Math.ceil(delta / MS_PER_DAY)` up by a whole day
+ * and billed the guest an extra night (e.g. Nov 1 to Nov 10 counted 11 nights, not 10).
+ * Normalizing both ends to UTC midnight removes the offset before dividing.
+ */
+function calendarDaysBetween(start: Date, end: Date): number {
+  const s = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const e = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.round((e - s) / MS_PER_DAY);
+}
+
 /** Inclusive night count for a short-term stay (matches generated lease HTML). */
 export function shortTermStayNightCount(
   leaseStart: string | undefined | null,
@@ -9,11 +25,44 @@ export function shortTermStayNightCount(
   const start = parseFlexibleLocalDate(leaseStart);
   const end = parseFlexibleLocalDate(leaseEnd);
   if (!start || !end) return null;
-  const nights = Math.max(
-    1,
-    Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
-  );
+  const nights = Math.max(1, calendarDaysBetween(start, end) + 1);
   return Number.isFinite(nights) && nights > 0 ? nights : null;
+}
+
+/**
+ * The billable span when a lease starts and ends inside ONE calendar month without covering
+ * the whole month, else null. That is exactly when the charge ledger bills a daily-priced
+ * placement ONCE, up front, as a single stay total (`endsInsideFirstMonth` in
+ * household-charges.ts), and its `billableDays / daysInMonth` is the same factor the ledger
+ * prorates the stay's utilities by, so the document can quote the figure that is charged.
+ *
+ * This is the line between a short STAY and a tenancy that merely happens to be priced by the
+ * day. A daily-priced room on a 3-month or month-to-month lease bills monthly, recurring, so
+ * it is a tenancy and must keep the full residential lease. Without this bound, a billing-basis
+ * flag would silently decide the legal document type and hand a year-long resident an
+ * agreement that disclaims tenancy.
+ */
+export function intraMonthStaySpan(
+  leaseStart: string | undefined | null,
+  leaseEnd: string | undefined | null,
+): { billableDays: number; daysInMonth: number } | null {
+  const start = parseFlexibleLocalDate(leaseStart);
+  const end = parseFlexibleLocalDate(leaseEnd);
+  if (!start || !end) return null;
+  if (start.getFullYear() !== end.getFullYear() || start.getMonth() !== end.getMonth()) return null;
+  const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  if (!Number.isFinite(daysInMonth) || daysInMonth <= 0) return null;
+  const billableDays = Math.min(daysInMonth, end.getDate()) - start.getDate() + 1;
+  if (billableDays <= 0 || billableDays >= daysInMonth) return null;
+  return { billableDays, daysInMonth };
+}
+
+/** @see intraMonthStaySpan */
+export function isIntraMonthStay(
+  leaseStart: string | undefined | null,
+  leaseEnd: string | undefined | null,
+): boolean {
+  return intraMonthStaySpan(leaseStart, leaseEnd) !== null;
 }
 
 export function shortTermNightlyRate(raw: string | undefined | null): number {

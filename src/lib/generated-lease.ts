@@ -22,15 +22,15 @@ import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-
 import { leaseCss } from "@/lib/lease-templates/types";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
-import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
+import { resolveLeaseJurisdiction, unsupportedJurisdictionMessage } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
 import { buildSeattleLeaseHtml } from "@/lib/lease-templates/seattle";
+import { buildCaliforniaLeaseHtml } from "@/lib/lease-templates/california";
+import { buildWashingtonLeaseHtml } from "@/lib/lease-templates/washington";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
 };
-
-const MONTH_TO_MONTH_RENT_SURCHARGE = 25;
 
 function escapeHtml(s: string): string {
   return s
@@ -65,26 +65,6 @@ export function resolveApplicationListing(app: Partial<RentalWizardFormState>): 
 
 function submissionFor(prop: MockProperty | undefined): ManagerListingSubmissionV1 | undefined {
   return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
-}
-
-function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined): string {
-  if (!raw?.v) return "Common kitchen, bath, and living areas as shared among residents.";
-  const sub = normalizeManagerListingSubmissionV1(raw);
-  const entries = sub.sharedSpaces?.filter((s) => s.name.trim()) ?? [];
-  if (!entries.length) return "Common kitchen, bath, and living areas as shared among residents.";
-  return entries
-    .map((s) => {
-      const names = (s.roomAccessIds ?? [])
-        .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
-        .filter(Boolean)
-        .join(", ");
-      const head = names.length
-        ? `${s.name.trim()} — access includes: ${names}.`
-        : `${s.name.trim()}.`;
-      const d = s.detail.trim();
-      return d ? `${head} ${d}` : head;
-    })
-    .join(" ");
 }
 
 function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, unitLabel: string): string | undefined {
@@ -214,6 +194,11 @@ function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: 
   const cityZip = dash([prop?.neighborhood ?? sub?.neighborhood, prop?.zip ?? sub?.zip].filter(Boolean).join(", "));
   const roomLabel = dash(prop?.unitLabel);
   const rent = rentSummaryFromApplication(a) ?? "As set forth in the lease document below";
+  // The value is already period-aware ("$55.00 / day" for a daily-priced room), so the label
+  // is derived from the rendered string itself. A second resolver run cannot be kept in step
+  // with it: the resolver honours rentalType and overrides that `rentSummaryFromApplication`
+  // ignores, so a short-term row would print "Daily rent" above "$1200.00 / month".
+  const rentLabel = /\/\s*day\b/i.test(rent) ? "Daily rent" : "Monthly rent";
   const leaseEnd = a.leaseTerm === "Month-to-Month" ? dash(a.leaseEnd || "N/A (month-to-month)") : dash(a.leaseEnd);
   const isPdf = /\.pdf(\?|$)/i.test(doc.url) || doc.url.startsWith("data:application/pdf") || /\.pdf$/i.test(doc.name);
   const docUrl = escapeHtml(doc.url);
@@ -234,7 +219,7 @@ function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: 
   <tr><th>Lease term</th><td>${dash(a.leaseTerm)}</td></tr>
   <tr><th>Lease start</th><td>${dash(a.leaseStart)}</td></tr>
   <tr><th>Lease end</th><td>${leaseEnd}</td></tr>
-  <tr><th>Monthly rent</th><td>${escapeHtml(rent)}</td></tr>
+  <tr><th>${rentLabel}</th><td>${escapeHtml(rent)}</td></tr>
 </table>
 
 <h2>2. Lease Document (Manager Template)</h2>
@@ -254,7 +239,9 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   if (jurisdiction === "san_francisco") return buildSanFranciscoLeaseHtml(ctx);
   if (jurisdiction === "seattle") return buildSeattleLeaseHtml(ctx);
-  throw new Error("Lease generation is only available for Seattle and San Francisco properties.");
+  if (jurisdiction === "california") return buildCaliforniaLeaseHtml(ctx);
+  if (jurisdiction === "washington") return buildWashingtonLeaseHtml(ctx);
+  throw new Error(unsupportedJurisdictionMessage(jurisdiction));
 }
 
 export function downloadAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): void {

@@ -1,4 +1,15 @@
-export type LeaseJurisdiction = "seattle" | "san_francisco" | "unsupported";
+/**
+ * `california` / `washington` are the STATEWIDE fallbacks for a supported state outside the
+ * two cities (Fremont CA, Tacoma WA, ...). They exist because the state rules used to fall
+ * through to the city templates, so a Fremont lease claimed "City and County of San Francisco"
+ * and cited the SF Rent Ordinance. City matches still win; see `resolveFromHaystack`.
+ */
+export type LeaseJurisdiction =
+  | "seattle"
+  | "san_francisco"
+  | "california"
+  | "washington"
+  | "unsupported";
 
 export type LeaseJurisdictionInput = {
   listingProperty?: { address?: string; neighborhood?: string; zip?: string } | null;
@@ -43,8 +54,10 @@ function resolveFromHaystack(hay: string): LeaseJurisdiction {
   // Seattle / SF metro ZIPs when address omits city/state (e.g. Brooklyn Ave NE, 98105).
   if (/\b981\d{2}\b/.test(hay)) return "seattle";
   if (/\b941\d{2}\b/.test(hay)) return "san_francisco";
-  if (/\b(wa|washington)\b/i.test(hay)) return "seattle";
-  if (/\b(ca|california)\b/i.test(hay)) return "san_francisco";
+  // State-only signal, no city match above: use the statewide template. Never assume the
+  // state's largest city, which would put its municipal ordinance on someone else's lease.
+  if (/\b(wa|washington)\b/i.test(hay)) return "washington";
+  if (/\b(ca|california)\b/i.test(hay)) return "california";
   return "unsupported";
 }
 
@@ -57,14 +70,16 @@ export function resolveLeaseJurisdiction(ctx: LeaseJurisdictionInput): LeaseJuri
 export function jurisdictionLabel(j: LeaseJurisdiction): string {
   if (j === "seattle") return "Seattle, WA";
   if (j === "san_francisco") return "San Francisco, CA";
+  if (j === "washington") return "Washington";
+  if (j === "california") return "California";
   return "Unsupported";
 }
 
 export function isLeaseGenerationSupported(j: LeaseJurisdiction): boolean {
-  return j === "seattle" || j === "san_francisco";
+  return j !== "unsupported";
 }
 
 export function unsupportedJurisdictionMessage(j: LeaseJurisdiction = "unsupported"): string {
   void j;
-  return "Lease generation is only available for Seattle and San Francisco properties. Upload a PDF lease for other locations.";
+  return "Lease generation is only available for California and Washington properties. Upload a PDF lease for other locations.";
 }

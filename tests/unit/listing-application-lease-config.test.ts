@@ -177,6 +177,6 @@ describe("lease generation with custom config", () => {
   });
 
   it("still rejects unsupported jurisdictions for the standard generated lease", () => {
-    expect(() => buildAiGeneratedLeaseHtml(leaseCtx(subWith({})))).toThrow(/Seattle and San Francisco/);
+    expect(() => buildAiGeneratedLeaseHtml(leaseCtx(subWith({})))).toThrow(/California and Washington/);
   });
 });

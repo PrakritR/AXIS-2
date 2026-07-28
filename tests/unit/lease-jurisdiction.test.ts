@@ -68,6 +68,24 @@ describe("lease-jurisdiction", () => {
       application: { ...ctx.application, currentCity: "Portland", currentState: "OR" },
     };
     expect(resolveLeaseJurisdiction(portlandCtx)).toBe("unsupported");
-    expect(unsupportedJurisdictionMessage("unsupported")).toContain("Seattle");
+    expect(unsupportedJurisdictionMessage("unsupported")).toContain("California and Washington");
+  });
+
+  // A state-only match used to fall through to that state's CITY template, so a Fremont
+  // lease claimed "City and County of San Francisco" and carried the SF Rent Ordinance.
+  it("uses the statewide template for a supported state outside the two cities", () => {
+    expect(resolveLeaseJurisdiction({ listingProperty: { address: "3200 Walnut Ave, Fremont, CA", zip: "94538" } })).toBe(
+      "california",
+    );
+    expect(resolveLeaseJurisdiction({ listingProperty: { address: "1000 Pacific Ave, Tacoma, WA", zip: "98402" } })).toBe(
+      "washington",
+    );
+  });
+
+  it("still prefers an explicit city match over the statewide fallback", () => {
+    expect(resolveLeaseJurisdiction({ listingProperty: { address: "123 Market St, San Francisco, CA" } })).toBe(
+      "san_francisco",
+    );
+    expect(resolveLeaseJurisdiction({ listingProperty: { address: "1500 Pike St, Seattle, WA" } })).toBe("seattle");
   });
 });

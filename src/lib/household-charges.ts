@@ -8,7 +8,7 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { formatRoomPriceAmount, roomDailyRentPrice } from "@/lib/room-pricing";
+import { formatRoomPriceAmount, resolveStayPricing, roomDailyRentPrice } from "@/lib/room-pricing";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
@@ -25,7 +25,6 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
 import {
-  shortTermNightlyRate,
   shortTermStayChargeTitle,
   shortTermStayNightCount,
   shortTermStayTotalAmount,
@@ -1634,7 +1633,12 @@ function syncAllRecurringRentCharges(): boolean {
     const currentMonth = monthKeyFromDate(now);
     const nextMonth = addMonthsToMonthKey(currentMonth, 1);
     const monthsToGenerate = new Set<string>(monthsBetweenInclusive(profileStartMonth, currentMonth));
-    monthsToGenerate.add(nextMonth);
+    // Look one month ahead so next month's rent is visible early — but NEVER before the
+    // profile's own start month. `startMonth` is deliberately the month AFTER move-in
+    // (`firstRecurringMonthAfterLeaseStart`) because the move-in month is already billed by the
+    // upfront first-month/prorated charges. Adding `nextMonth` unconditionally re-billed that
+    // same month for any lease starting in the future, on top of the upfront charge.
+    if (nextMonth >= profileStartMonth) monthsToGenerate.add(nextMonth);
 
     for (const rentMonth of [...monthsToGenerate].sort()) {
       const [candidateYear, candidateMonthNum] = rentMonth.split("-").map(Number);
@@ -2386,10 +2390,53 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
+  // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
+  // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
+  // a second property lookup and to catch stale room IDs in assignedRoomChoice.
+  // Resolved BEFORE the short-term branch: that branch prices the stay from the room the
+  // applicant selected, so it cannot be resolved after the branch returns.
+  const room = (() => {
+    if (!sub) return selectedRoom(row);
+    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+      const trimmed = c?.trim();
+      if (!trimmed) continue;
+      const { listingRoomId } = parseRoomChoiceValue(trimmed);
+      if (listingRoomId) {
+        const byId = sub.rooms.find((r) => r.id === listingRoomId);
+        if (byId) return byId;
+      }
+    }
+    const signedRent = Number(row.signedMonthlyRent ?? 0);
+    if (signedRent > 0) {
+      const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
+      if (byRent.length === 1) return byRent[0] ?? null;
+    }
+    if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
+    // Last resort: only one room is configured with daily_rate → it must be the right room
+    const drRooms = sub.rooms.filter((r) => r.prorateMethod === "daily_rate" && r.dailyRentRate && r.dailyRentRate > 0);
+    if (drRooms.length === 1) return drRooms[0] ?? null;
+    return null;
+  })();
+
   const isShortTermStay = row.application?.rentalType === "short_term";
 
   if (isShortTermStay) {
-    const nightlyRate = shortTermNightlyRate(sub?.shortTermDailyCost);
+    // The room the applicant selected is the authority for the nightly rate; the listing's
+    // shortTermDailyCost is the fallback. Same resolver the lease document reads, so the
+    // stay total charged here always matches the figure the agreement states.
+    const nightlyRate =
+      resolveStayPricing({
+        room,
+        submission: sub,
+        application: {
+          rentalType: row.application?.rentalType,
+          leaseStart,
+          leaseEnd,
+          managerRentOverride: row.application?.managerRentOverride,
+          managerSecurityDepositOverride: row.application?.managerSecurityDepositOverride,
+          signedMonthlyRent: row.signedMonthlyRent,
+        },
+      }).dailyRate ?? 0;
     const nights = shortTermStayNightCount(leaseStart, leaseEnd);
     if (nightlyRate > 0 && nights) {
       pushCharge(
@@ -2435,31 +2482,6 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     return changed;
   }
 
-  // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
-  // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
-  // a second property lookup and to catch stale room IDs in assignedRoomChoice.
-  const room = (() => {
-    if (!sub) return selectedRoom(row);
-    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-      const trimmed = c?.trim();
-      if (!trimmed) continue;
-      const { listingRoomId } = parseRoomChoiceValue(trimmed);
-      if (listingRoomId) {
-        const byId = sub.rooms.find((r) => r.id === listingRoomId);
-        if (byId) return byId;
-      }
-    }
-    const signedRent = Number(row.signedMonthlyRent ?? 0);
-    if (signedRent > 0) {
-      const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
-      if (byRent.length === 1) return byRent[0] ?? null;
-    }
-    if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
-    // Last resort: only one room is configured with daily_rate → it must be the right room
-    const drRooms = sub.rooms.filter((r) => r.prorateMethod === "daily_rate" && r.dailyRentRate && r.dailyRentRate > 0);
-    if (drRooms.length === 1) return drRooms[0] ?? null;
-    return null;
-  })();
   const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
   const dailyRentRate = room?.dailyRentRate;
   const dailyUtilitiesRate = room?.dailyUtilitiesRate;
