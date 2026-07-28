@@ -15,7 +15,7 @@ describe("resolveNativeOAuthCallbackTarget", () => {
   it("maps custom scheme deep links to /auth/callback", () => {
     expect(
       resolveNativeOAuthCallbackTarget(
-        "com.axisseattlehousing.app://auth/callback?code=abc",
+        "space.proplane.app://auth/callback?code=abc",
         origin,
       ),
     ).toBe("/auth/callback?code=abc");
@@ -60,7 +60,7 @@ describe("nativeSupabaseRedirectUrls", () => {
   });
 
   it("documents setup in the hint", () => {
-    expect(nativeOAuthSetupHint()).toContain("com.axisseattlehousing.app://auth/callback");
+    expect(nativeOAuthSetupHint()).toContain("space.proplane.app://auth/callback");
     expect(nativeOAuthSetupHint()).toContain("/auth/callback");
   });
 });

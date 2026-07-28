@@ -10,7 +10,9 @@ Use this after `ios/` and `android/` exist and the app runs in a simulator. Push
 ## 2. Android app
 
 1. Firebase → **Add app** → **Android**.
-2. Package name: `com.axisseattlehousing.app` (must match `capacitor.config.ts`).
+2. Package name: `com.axisseattlehousing.app` (must match `android/app/build.gradle`
+   `applicationId` — Android keeps the legacy id; only iOS rebranded to
+   `space.proplane.app`. See `docs/mobile-app.md` → "App identity").
 3. Download **`google-services.json`**.
 4. Place it at:
    ```
@@ -21,7 +23,7 @@ Use this after `ios/` and `android/` exist and the app runs in a simulator. Push
 ## 3. iOS app
 
 1. Firebase → **Add app** → **iOS**.
-2. Bundle ID: `com.axisseattlehousing.app`.
+2. Bundle ID: `space.proplane.app`.
 3. Download **`GoogleService-Info.plist`**.
 4. In Xcode (`npm exec cap open ios`), drag the file into **App → App** (check “Copy items if needed”).
 5. Run `npm exec cap sync ios`.

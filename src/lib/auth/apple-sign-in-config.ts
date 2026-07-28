@@ -4,7 +4,7 @@ import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** iOS bundle ID — must match capacitor.config.ts appId and Xcode PRODUCT_BUNDLE_IDENTIFIER. */
-export const IOS_BUNDLE_ID = "com.axisseattlehousing.app";
+export const IOS_BUNDLE_ID = "space.proplane.app";
 
 /**
  * Apple Services ID for web OAuth — must exist in Apple Developer (Identifiers → Services IDs).
@@ -15,7 +15,7 @@ export const APPLE_WEB_SERVICES_ID = "com.axisseattlehousing.app.web";
 
 /** Native iOS (`signInWithIdToken`) — bundle ID only, blank Supabase secret. */
 export const APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE =
-  "Apple sign-in is not enabled in Supabase. Enable Authentication → Providers → Apple, set Client IDs to com.axisseattlehousing.app, and leave Secret Key blank for native iOS.";
+  "Apple sign-in is not enabled in Supabase. Enable Authentication → Providers → Apple, set Client IDs to space.proplane.app, and leave Secret Key blank for native iOS.";
 
 /** @deprecated Prefer APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE or APPLE_SIGN_IN_WEB_OAUTH_SETUP_MESSAGE. */
 export const APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE = APPLE_SIGN_IN_NATIVE_SETUP_MESSAGE;

@@ -34,7 +34,7 @@ Rent & utility payments (card incl. Apple Pay / Google Pay, ACH, Link via Stripe
 - **Styling** — Tailwind CSS v4, Radix UI
 - **Data** — Supabase (Auth + Postgres), SQL migrations in `supabase/migrations/`
 - **Payments** — Stripe (subscriptions + Connect)
-- **Native** — Capacitor 8 (`com.axisseattlehousing.app`)
+- **Native** — Capacitor 8 (`space.proplane.app`)
 - **Tests** — Vitest (unit + integration), Playwright (e2e)
 
 Requires **Node 22.x** and **npm 10.x** (see `package.json` `engines`).
