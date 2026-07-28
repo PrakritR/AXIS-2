@@ -32,9 +32,9 @@ describe("parseManagerApplicationLink", () => {
 });
 
 describe("buildResidentCreateAccountHref", () => {
-  it("points at resident setup with axis id and optional email", () => {
+  it("points at resident setup with proplane id and optional email", () => {
     expect(buildResidentCreateAccountHref("AXIS-1", "a@b.com")).toBe(
-      "/auth/resident-setup?axis_id=AXIS-1&email=a%40b.com",
+      "/auth/resident-setup?proplane_id=AXIS-1&email=a%40b.com",
     );
   });
 });
