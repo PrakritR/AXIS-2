@@ -2527,12 +2527,17 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
+  // Per-room deposit override: when the resolved room carries its own securityDeposit it
+  // wins over the listing-level shared deposit — the same room-first precedence rent uses.
+  // A room with no per-room deposit falls back to sub.securityDeposit, so listings that
+  // never set one bill exactly as before. Manager override / manual detail still win above.
+  const roomSecurityDeposit = room?.securityDeposit?.trim() ? room.securityDeposit : undefined;
   const securityDeposit = savedAmount(
     row.application?.managerSecurityDepositOverride,
     row.manualResidentDetails?.securityDeposit != null
       ? String(row.manualResidentDetails.securityDeposit)
       : allowListingDefaults
-        ? sub?.securityDeposit
+        ? (roomSecurityDeposit ?? sub?.securityDeposit)
         : undefined,
   );
   const holdingCredit = paidHoldingDepositCreditCents(applicationId) / 100;

@@ -22,7 +22,12 @@ import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
 import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
-import { resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
+import {
+  normalizeListingFeeRow,
+  resolveListingFees,
+  submissionUsesUnifiedListingFees,
+  type ListingFeeRow,
+} from "@/lib/listing-fees";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -64,6 +69,14 @@ export type ManagerRoomSubmission = {
   roomAmenitiesText: string;
   photoDataUrls: string[];
   videoDataUrl: string | null;
+  /**
+   * Per-room security deposit (money string, e.g. "1200"). Optional override: when set,
+   * an approved application on this room bills THIS deposit; when absent/empty the charge
+   * falls back to the listing-level shared {@link ManagerListingSubmissionV1.securityDeposit},
+   * so existing listings with no per-room deposit bill exactly as before. Threaded through
+   * `recordApprovedApplicationCharges` alongside per-room rent.
+   */
+  securityDeposit?: string;
   /** Estimated monthly utilities for this room (shown on listing). */
   utilitiesEstimate: string;
   /** Who pays utilities — defaults to manager-billed estimate through the portal. */
@@ -127,6 +140,22 @@ export type ManagerBundleRow = {
   shortTermEnabled?: boolean;
   /** Nightly rate for short-term stays on this bundle (stay total = rate × nights). */
   shortTermNightlyRent?: string;
+  /**
+   * Per-bundle security deposit (money string) shown in the bundle's Fees dropdown.
+   * Presentation/default only — bundles have never been read by charge generation
+   * (`recordApprovedApplicationCharges` resolves rent/deposit per room or via the
+   * manager's negotiated override), so this is the bundle's advertised deposit, not
+   * an auto-billed one. Reuses the same money representation as the listing deposit.
+   */
+  securityDeposit?: string;
+  /**
+   * Who pays utilities for this bundle — reuses {@link UtilitiesPaymentModel}
+   * (manager_billed = "fixed cost" with {@link utilitiesEstimate}; tenant_direct =
+   * resident pays directly). Presentation for the bundle offering; no parallel model.
+   */
+  utilitiesPaymentModel?: UtilitiesPaymentModel;
+  /** Estimated monthly utilities for this bundle when manager-billed (money string). */
+  utilitiesEstimate?: string;
 };
 
 /** How a room uses a specific bathroom row (optional; improves listing copy). */
@@ -835,6 +864,13 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       utilitiesPaymentModel: normalizeUtilitiesPaymentModel(
         (legacyRoom as ManagerRoomSubmission).utilitiesPaymentModel,
       ),
+      // Optional per-room deposit override; undefined (not "") when absent so a room
+      // that never set one is byte-identical to a legacy room and toEqual snapshots
+      // are unchanged. Charge generation falls back to the shared listing deposit.
+      securityDeposit:
+        typeof legacyRoom.securityDeposit === "string" && legacyRoom.securityDeposit.trim()
+          ? legacyRoom.securityDeposit.trim()
+          : undefined,
       furnishing: (() => {
         const f = typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "";
         return f.trim().length === 0 ? "" : f;
@@ -917,6 +953,19 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           : legacyShortTerm
             ? (sub.shortTermDailyCost ?? "").trim()
             : "",
+      // Optional per-bundle deposit/utilities — undefined when absent so legacy
+      // bundles are byte-identical and toEqual snapshots are unchanged.
+      securityDeposit:
+        typeof b.securityDeposit === "string" && b.securityDeposit.trim()
+          ? b.securityDeposit.trim()
+          : undefined,
+      utilitiesPaymentModel: b.utilitiesPaymentModel
+        ? normalizeUtilitiesPaymentModel(b.utilitiesPaymentModel)
+        : undefined,
+      utilitiesEstimate:
+        typeof b.utilitiesEstimate === "string" && b.utilitiesEstimate.trim()
+          ? b.utilitiesEstimate.trim()
+          : undefined,
     };
   });
 
@@ -937,12 +986,14 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       paymentAtSigningIncludes,
     });
   } else {
-    customFees = customFees.map((f) => ({
-      id: f.id ?? rid("fee"),
-      label: typeof f.label === "string" ? f.label.trim() : "",
-      amount: typeof f.amount === "string" ? f.amount.trim() : "",
-      frequency: f.frequency === "one-time" ? "one-time" : "monthly",
-    }));
+    // Route every row through normalizeListingFeeRow so a legacy row that was stripped
+    // to {id,label,amount,frequency} recovers its presetId FROM ITS LABEL (0825197f).
+    // The old minimal map dropped presetId, so an untagged "Security deposit" row loaded
+    // back as a custom fee and rendered a SECOND time below the standard row — the
+    // duplicate-preset-row bug on existing listings. Recovering the tag lets the Fees
+    // table's `!presetId || presetId === "custom"` filter exclude it. Idempotent: a row
+    // that already carries a presetId keeps it.
+    customFees = customFees.map((f) => normalizeListingFeeRow(f as ListingFeeRow));
   }
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)

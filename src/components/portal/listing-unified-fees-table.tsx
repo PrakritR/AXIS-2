@@ -14,6 +14,19 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+/**
+ * The one remove control used on EVERY deletable item across the Fees UI — standard
+ * fee rows, custom fees, room dropdowns, and bundle dropdowns — so the affordance is
+ * identical everywhere (mirrors the wizard's LISTING_WIZARD_REMOVE_BTN).
+ */
+const FEE_REMOVE_BTN =
+  "h-9 shrink-0 rounded-lg px-2.5 text-xs border-rose-200 text-rose-800 portal-danger-outline";
+
+/** "rent" is the core price row and is never removable; every other standard row is. */
+function rowIsRemovable(id: ListingFeeRowId): boolean {
+  return id !== "rent";
+}
+
 function FeeMoneyInput({
   value,
   onChange,
@@ -125,6 +138,10 @@ export function ListingUnifiedFeesTable({
   onRemoveCustomFee,
   onCustomFeeChange,
   onPresetCadenceChange,
+  hiddenRowIds,
+  removedRowIds,
+  onRemoveStandardRow,
+  onAddStandardRow,
 }: {
   sub: ManagerListingSubmissionV1;
   isEntireHome: boolean;
@@ -142,19 +159,36 @@ export function ListingUnifiedFeesTable({
   onCustomFeeChange: (index: number, patch: Partial<ManagerCustomFeeRow>) => void;
   /** Set cadence for a preset fee that has no materialized row yet (new listing). */
   onPresetCadenceChange?: (presetId: string, next: "one-time" | "monthly") => void;
+  /** Standard rows hidden entirely for this rental model (e.g. securityDeposit lives per-room). */
+  hiddenRowIds?: ReadonlySet<ListingFeeRowId>;
+  /** Standard rows the manager deleted this session — hidden but re-addable via + Add fee. */
+  removedRowIds: ReadonlySet<ListingFeeRowId>;
+  /** Delete a standard fee row: clears its amounts and drops it from the table. */
+  onRemoveStandardRow: (feeId: ListingFeeRowId) => void;
+  /** Re-add a previously-removed standard fee row from the + Add fee menu. */
+  onAddStandardRow: (feeId: ListingFeeRowId) => void;
 }) {
+  const visibleRows = LISTING_STANDARD_FEE_ROWS.filter(
+    (row) => !hiddenRowIds?.has(row.id) && !removedRowIds.has(row.id),
+  );
+  // Presets the manager can re-add: removed rows that this rental model still allows.
+  const readdableRows = LISTING_STANDARD_FEE_ROWS.filter(
+    (row) => rowIsRemovable(row.id) && removedRowIds.has(row.id) && !hiddenRowIds?.has(row.id),
+  );
+
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-full min-w-[32rem] border-collapse text-sm">
+      <table className="w-full min-w-[34rem] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border bg-accent/30 text-left text-xs font-semibold uppercase tracking-wide text-muted">
             <th className="px-3 py-2.5 font-semibold normal-case tracking-normal text-foreground">Fee</th>
             <th className="px-3 py-2.5">Short-term</th>
             <th className="px-3 py-2.5">Long-term</th>
+            <th className="px-3 py-2.5 text-right"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
-          {LISTING_STANDARD_FEE_ROWS.map((row) => {
+          {visibleRows.map((row) => {
             const rowId = row.id;
             const stOn = stFeeToggles[rowId];
             const ltOn = ltFeeToggles[rowId];
@@ -223,7 +257,7 @@ export function ListingUnifiedFeesTable({
                         />
                       ) : null}
                       {ltOn && rentLtPerRoom ? (
-                        <span className="text-xs text-muted">Per room below</span>
+                        <span className="text-xs text-muted">Set per room above</span>
                       ) : null}
                       {ltOn && !rentLtPerRoom
                         ? (() => {
@@ -271,6 +305,21 @@ export function ListingUnifiedFeesTable({
                     </p>
                   ) : null}
                 </td>
+                <td className="px-3 py-3 text-right align-middle">
+                  {rowIsRemovable(rowId) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={FEE_REMOVE_BTN}
+                      onClick={() => onRemoveStandardRow(rowId)}
+                      aria-label={`Remove ${row.label}`}
+                    >
+                      Remove
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted">—</span>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -312,24 +361,45 @@ export function ListingUnifiedFeesTable({
                     onChange={(next) => onCustomFeeChange(i, { frequency: next })}
                     ariaLabel={`Custom fee ${i + 1} payment frequency`}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 shrink-0 rounded-lg px-2.5 text-xs"
-                    onClick={() => onRemoveCustomFee(i)}
-                  >
-                    Remove
-                  </Button>
                 </div>
+              </td>
+              <td className="px-3 py-3 text-right align-middle">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={FEE_REMOVE_BTN}
+                  onClick={() => onRemoveCustomFee(i)}
+                  aria-label={`Remove custom fee ${i + 1}`}
+                >
+                  Remove
+                </Button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div className="border-t border-border px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2.5">
+        {readdableRows.length > 0 ? (
+          <select
+            className="h-8 rounded-full border border-border bg-card px-3 text-xs text-foreground"
+            value=""
+            onChange={(e) => {
+              const id = e.target.value as ListingFeeRowId;
+              if (id) onAddStandardRow(id);
+            }}
+            aria-label="Add a fee back to the table"
+          >
+            <option value="">+ Add fee…</option>
+            {readdableRows.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onAddCustomFee}>
-          + Add fee
+          + Add custom fee
         </Button>
       </div>
     </div>
