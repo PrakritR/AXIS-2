@@ -43,6 +43,7 @@ export function ShareLeadLinkModal({
   const multiEnabled = properties.length > 0;
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
+  const [applyRentalType, setApplyRentalType] = useState<"standard" | "short_term">("standard");
   const [prospectName, setProspectName] = useState("");
   const [prospectEmail, setProspectEmail] = useState("");
   const [note, setNote] = useState("");
@@ -58,6 +59,7 @@ export function ShareLeadLinkModal({
           : properties[0]?.id ?? "";
       setPropertyIds(initialId ? [initialId] : []);
       setRoomChoice("");
+      setApplyRentalType("standard");
       setProspectName("");
       setProspectEmail("");
       setNote("");
@@ -117,8 +119,9 @@ export function ShareLeadLinkModal({
       propertyId: singlePropertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
+      rentalType: applyRentalType,
     });
-  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions]);
+  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions, applyRentalType]);
 
   const listingSummary = useMemo(() => {
     if (kind !== "listing" || isMultiListing || !singlePropertyId) return null;
@@ -314,6 +317,22 @@ export function ShareLeadLinkModal({
                   />
                 ) : null}
               </div>
+
+              {kind === "apply" && !isMultiApply ? (
+                <div>
+                  <label htmlFor="share-lead-application-type" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    Application
+                  </label>
+                  <Select
+                    id="share-lead-application-type"
+                    value={applyRentalType}
+                    onChange={(e) => setApplyRentalType(e.target.value === "short_term" ? "short_term" : "standard")}
+                  >
+                    <option value="standard">Long-term lease</option>
+                    <option value="short_term">Short-term stay</option>
+                  </Select>
+                </div>
+              ) : null}
 
               {kind === "apply" && !isMultiApply && roomOptions.length > 0 ? (
                 <div>

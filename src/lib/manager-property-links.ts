@@ -12,6 +12,7 @@ export type ManagerApplyLinkParams = {
   bundleId?: string;
   /** Prospect phone for SMS apply-link prefill. */
   phone?: string;
+  rentalType?: "standard" | "short_term";
 };
 
 export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkParams): string {
@@ -22,6 +23,7 @@ export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkPar
     listingRoomName: params.roomName?.trim() || undefined,
     bundleId: params.bundleId?.trim() || undefined,
     phone: params.phone?.trim() || undefined,
+    rentalType: params.rentalType,
   });
   return `${base}${path}`;
 }
