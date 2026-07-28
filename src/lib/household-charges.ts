@@ -152,6 +152,10 @@ export type HouseholdCharge = {
   workOrderId?: string;
   recurringRentProfileId?: string;
   rentMonth?: string;
+  /** Set on charges generated from a listing custom fee (`ManagerCustomFeeRow.id`). It gives
+   *  each custom fee its own charge identity so several custom fees — and a monthly custom
+   *  fee across months — never collapse onto the single `other_cost|applicationId` key. */
+  customFeeId?: string;
   dueDay?: number;
   /** When set, dueDay is computed per month (1st vs last day). */
   dueDayMode?: RentDueDayMode;
@@ -186,6 +190,9 @@ export type RecurringRentProfile = {
   dailyRentPrice?: number;
   /** Full monthly utilities/RUBS from listing or manager override — billed each month with rent. */
   monthlyUtilities?: number;
+  /** Monthly custom fees (parking, storage, …) billed each recurring month alongside rent.
+   *  Each fee's `id` is stable so its charges dedupe across syncs and can be purged on removal. */
+  monthlyFees?: { id: string; label: string; amount: number }[];
   dueDay: number;
   dueDayMode?: RentDueDayMode;
   startMonth: string;
@@ -540,6 +547,12 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
   if (charge.kind === "holding_deposit") {
     return `holding_deposit|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}`;
   }
+  // Custom fees each get their own key, per fee AND per month (recurring), so multiple
+  // custom fees never collide on `other_cost|applicationId` and a monthly fee emits exactly
+  // once per month across repeated syncs.
+  if (charge.customFeeId) {
+    return `custom_fee|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}|${charge.customFeeId}|${charge.rentMonth ?? ""}`;
+  }
   if (charge.applicationId && (
     charge.kind === "first_month_rent" ||
     charge.kind === "prorated_rent" ||
@@ -766,7 +779,13 @@ export function isStaleRecurringHouseholdCharge(
   allCharges: HouseholdCharge[],
 ): boolean {
   if (charge.status === "paid" || !charge.recurringRentProfileId || !charge.rentMonth) return false;
-  if (charge.kind !== "rent" && charge.kind !== "utilities") return false;
+  // Recurring rent/utilities AND monthly custom-fee rows are all bounds-checked below. A
+  // custom row is purged only when its month falls outside the lease (before start / after
+  // end) — NOT when its fee is removed or its amount changes: an already-emitted unpaid month
+  // is a charge the resident may owe, so removal just stops FUTURE emission and an amount
+  // change applies only to months not yet emitted.
+  const isCustomRecurring = Boolean(charge.customFeeId);
+  if (charge.kind !== "rent" && charge.kind !== "utilities" && !isCustomRecurring) return false;
   const prof = profileById.get(charge.recurringRentProfileId);
   if (!prof) return false;
 
@@ -784,7 +803,9 @@ export function isStaleRecurringHouseholdCharge(
 
     const daysInEndMonth = new Date(leaseEndYear, leaseEndMonthNum, 0).getDate();
     const partialLastMonth = leaseEndDay != null && leaseEndDay > 0 && leaseEndDay < daysInEndMonth;
-    if (partialLastMonth && charge.rentMonth === leaseEndMonth) {
+    // Only rent/utilities have an upfront prorated-last-month charge that would duplicate the
+    // recurring row; custom fees are flat (full each month), so this dedup does not apply.
+    if (!isCustomRecurring && partialLastMonth && charge.rentMonth === leaseEndMonth) {
       const hasUpfront =
         charge.kind === "rent"
           ? hasUpfrontProratedLastMonthCharge(allCharges, prof.residentEmail, prof.propertyId, "prorated_last_month_rent")
@@ -1865,6 +1886,43 @@ function syncAllRecurringRentCharges(): boolean {
           });
         }
       }
+
+      // Monthly custom fees (parking, storage, …) bill their FULL amount each recurring
+      // month — a flat monthly service, not prorated. Each fee's own business key
+      // (custom_fee|…|feeId|month) makes emission exactly-once per month across repeated
+      // syncs; an amount change only affects months not yet emitted.
+      for (const fee of profile.monthlyFees ?? []) {
+        if (!(fee.amount > 0)) continue;
+        const feeKey = `custom_fee|${emailLower}|${profile.propertyId}|${fee.id}|${rentMonth}`;
+        const alreadyFee =
+          existing.some((c) => chargeBusinessKey(c) === feeKey) ||
+          newCharges.some((c) => chargeBusinessKey(c) === feeKey);
+        if (alreadyFee) continue;
+        newCharges.push({
+          id: `hc_cf_${chargeKeyPart(fee.id)}_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
+          createdAt: new Date().toISOString(),
+          residentEmail: profile.residentEmail,
+          residentName: profile.residentName,
+          residentUserId: profile.residentUserId,
+          propertyId: profile.propertyId,
+          propertyLabel: profile.propertyLabel,
+          managerUserId: profile.managerUserId,
+          kind: "other_cost",
+          customFeeId: fee.id,
+          title: `${fee.label} — ${monthLabel}`,
+          amountLabel: moneyAmountLabel(fee.amount),
+          balanceLabel: moneyAmountLabel(fee.amount),
+          status: "pending",
+          recurringRentProfileId: profile.id,
+          rentMonth,
+          dueDay,
+          dueDayMode,
+          dueDateLabel: dueLabel,
+          blocksLeaseUntilPaid: false,
+          zelleContactSnapshot: profile.zelleContact,
+          venmoContactSnapshot: profile.venmoContact,
+        });
+      }
     }
   }
 
@@ -1960,6 +2018,9 @@ export function upsertRecurringRentProfile(input: {
    */
   dailyRentPrice?: number;
   monthlyUtilities?: number;
+  /** Monthly custom fees to bill each recurring month. An explicit array (even []) is
+   *  authoritative — [] clears prior fees; omitting the field inherits the existing set. */
+  monthlyFees?: { id: string; label: string; amount: number }[];
   dueDay?: number;
   dueDayMode?: RentDueDayMode;
   startMonth?: string;
@@ -1975,6 +2036,9 @@ export function upsertRecurringRentProfile(input: {
     input.monthlyUtilities !== undefined && Number.isFinite(input.monthlyUtilities)
       ? Math.max(0, Number(input.monthlyUtilities))
       : (existing?.monthlyUtilities ?? 0);
+  const monthlyFees = (input.monthlyFees ?? existing?.monthlyFees ?? [])
+    .map((f) => ({ id: f.id, label: f.label, amount: Math.max(0, Number(f.amount) || 0) }))
+    .filter((f) => f.amount > 0);
   const profile: RecurringRentProfile = {
     id: existing?.id ?? `rrp_${chargeKeyPart(input.residentEmail)}_${chargeKeyPart(input.propertyId)}`,
     residentEmail: input.residentEmail,
@@ -1993,6 +2057,7 @@ export function upsertRecurringRentProfile(input: {
         ? (input.dailyRentPrice > 0 ? Number(input.dailyRentPrice) : undefined)
         : existing?.dailyRentPrice,
     monthlyUtilities,
+    monthlyFees,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
     dueDayMode: input.dueDayMode ?? existing?.dueDayMode ?? "first_of_month",
     startMonth: input.startMonth ?? currentRentMonth(),
@@ -2715,6 +2780,15 @@ function syncPendingApprovedChargesFromListing(
   return changed;
 }
 
+/** Monthly custom fees (default cadence) resolved to a stable {id,label,amount} for the
+ *  recurring rent profile — only positive amounts bill. */
+function monthlyCustomFees(sub: ManagerListingSubmissionV1 | null | undefined): { id: string; label: string; amount: number }[] {
+  return genuinelyCustomFees(sub)
+    .filter((fee) => fee.frequency !== "one-time")
+    .map((fee) => ({ id: fee.id, label: fee.label?.trim() || "Custom fee", amount: parseMoneyAmount(fee.amount ?? "") }))
+    .filter((fee) => fee.amount > 0);
+}
+
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
@@ -2804,6 +2878,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     title: string,
     blocksLeaseUntilPaid: boolean,
     dueDateLabel = moveInDue,
+    customFeeId?: string,
   ) => {
     if (!(amount > 0)) return;
     const split = applyBundleGroupSplit(amount, title, bundleGroupCtx);
@@ -2811,7 +2886,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     if (!(finalAmount > 0)) return;
     const label = moneyAmountLabel(Number(finalAmount.toFixed(2)));
     const charge: HouseholdCharge = withPaymentReference({
-      id: approvedChargeId(applicationId, kind),
+      // A custom fee needs its OWN id per fee — approvedChargeId keys only on (app, kind),
+      // so several custom fees would otherwise share one id and collapse to one row.
+      id: customFeeId ? `${approvedChargeId(applicationId, kind)}_cf_${chargeKeyPart(customFeeId)}` : approvedChargeId(applicationId, kind),
       createdAt: new Date().toISOString(),
       applicationId,
       residentEmail,
@@ -2829,6 +2906,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       venmoContactSnapshot: venmoSnap,
       blocksLeaseUntilPaid,
       dueDateLabel,
+      ...(customFeeId ? { customFeeId } : {}),
       ...split.split,
     });
     const key = chargeBusinessKey(charge);
@@ -2908,7 +2986,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     if (allowListingDefaults) {
       for (const fee of genuinelyCustomFees(sub)) {
         const amt = parseMoneyAmount(fee.shortTermAmount ?? "");
-        if (amt > 0) pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before check-in");
+        if (amt > 0)
+          pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before check-in", fee.id);
       }
     }
 
@@ -3061,14 +3140,14 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before move-in");
   }
 
-  // One-time custom fees the manager added on the listing bill ONCE at move-in. Custom fees
-  // were display-only before this; only genuinely-custom rows are billed here (preset-backed
-  // rows still bill through their own legacy fields). Monthly custom fees are not billed yet
-  // (staged — the recurring path is a separate change), so only one-time rows are read.
+  // One-time custom fees bill ONCE at move-in. Only genuinely-custom rows are billed here
+  // (preset-backed rows bill through their own legacy fields); monthly custom fees bill
+  // through the recurring profile below, not here.
   if (allowListingDefaults) {
     for (const fee of oneTimeCustomFees(sub)) {
       const amt = parseMoneyAmount(fee.amount ?? "");
-      if (amt > 0) pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before move-in");
+      if (amt > 0)
+        pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before move-in", fee.id);
     }
   }
 
@@ -3076,10 +3155,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const changed = chargesChanged(before, next);
   if (changed) writeAll(next);
 
-  // Set up recurring monthly rent (+ utilities) starting the month after move-in.
-  // The move-in month itself is always covered by the upfront first-month/prorated charges above.
+  // Set up recurring monthly rent (+ utilities + monthly custom fees) starting the month
+  // after move-in. The move-in month itself is covered by the upfront first-month/prorated
+  // charges above; monthly custom fees begin with the first full recurring month (they are a
+  // flat monthly service, not prorated, and are not charged for the partial move-in month).
+  const monthlyFeeSet = monthlyCustomFees(sub);
   let computedStartMonth: string | undefined;
-  if (leaseStart && (rentAmount > 0 || utilities.amount > 0 || (dailyBasisRate && dailyBasisRate > 0))) {
+  if (leaseStart && (rentAmount > 0 || utilities.amount > 0 || (dailyBasisRate && dailyBasisRate > 0) || monthlyFeeSet.length > 0)) {
     const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
     if (leaseYearRaw && leaseMonthRaw) {
       computedStartMonth = firstRecurringMonthAfterLeaseStart(leaseStart);
@@ -3101,6 +3183,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         // switched daily -> monthly clears the old daily rate instead of inheriting it.
         dailyRentPrice: dailyBasisRate && dailyBasisRate > 0 ? dailyBasisRate : 0,
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
+        // Always explicit (even []) so removing every monthly fee clears the stored set on
+        // re-approval rather than inheriting stale fees.
+        monthlyFees: monthlyFeeSet,
         dueDay: resolveRentDueDayForMonth(dueDayMode, computedStartMonth),
         dueDayMode,
         startMonth: computedStartMonth,

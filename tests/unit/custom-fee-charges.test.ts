@@ -6,7 +6,7 @@
  *  - a SHORT-TERM custom fee bills once before check-in on a short-term stay, on top of the
  *    all-in stay total,
  *  - a fee set on only one side never leaks to the other,
- *  - a MONTHLY custom fee does NOT bill yet (recurring path is staged),
+ *  - a MONTHLY custom fee bills as a recurring charge (full contract in custom-fee-monthly-charges),
  *  - removing a custom fee stops it billing.
  */
 import { beforeEach, describe, expect, it } from "vitest";
@@ -113,15 +113,18 @@ describe("custom-fee billing", () => {
     expect(cleaning[0]?.recurringRentProfileId).toBeUndefined();
   });
 
-  it("a monthly custom fee does NOT bill yet (recurring path staged)", () => {
+  it("a monthly custom fee bills as a recurring charge (see custom-fee-monthly-charges for the full contract)", () => {
     const email = "monthly@example.com";
     removeResidentHouseholdPaymentData(email);
     const propertyId = "prop-custom-monthly";
-    seedListing(propertyId, [{ id: "cf1", label: "Parking", amount: "100", frequency: "monthly" }]);
+    // "Bike storage" (not "Parking", which would re-tag as the parking_monthly preset).
+    seedListing(propertyId, [{ id: "cf-bike", label: "Bike storage", amount: "100", frequency: "monthly" }]);
 
     recordApprovedApplicationCharges(applicant(propertyId, email, false), MANAGER_ID, true);
 
-    expect(otherCosts(email).some((c) => c.title === "Parking")).toBe(false);
+    const recurring = otherCosts(email).filter((c) => c.customFeeId === "cf-bike" && Boolean(c.recurringRentProfileId));
+    expect(recurring.length).toBeGreaterThan(0);
+    expect(recurring.every((c) => c.amountLabel === "$100.00")).toBe(true);
   });
 
   it("a short-term custom fee bills once before check-in; a long-term-only fee does not leak in", () => {
