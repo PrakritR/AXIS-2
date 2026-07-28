@@ -18,7 +18,6 @@ import { buildListingModalAssistantContext } from "@/lib/listing-assistant-conte
 import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
-import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
   ListingUnifiedFeesTable,
@@ -1476,19 +1475,6 @@ export function ManagerAddListingForm({
     }),
     [listingPresets],
   );
-  // RRIO is a Seattle-only registration, so hide it once the address says this is
-  // somewhere else. Still shown while the address is blank (nothing to resolve yet)
-  // and whenever a value is already stored, so an entered number can never be
-  // orphaned behind a hidden input.
-  const showRrioField = useMemo(() => {
-    if (sub.rrioRegistrationNumber?.trim()) return true;
-    if (!sub.address.trim() && !sub.zip.trim()) return true;
-    return (
-      resolveLeaseJurisdiction({
-        submission: { address: sub.address, neighborhood: sub.neighborhood, zip: sub.zip },
-      }) === "seattle"
-    );
-  }, [sub.address, sub.neighborhood, sub.zip, sub.rrioRegistrationNumber]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
   // The draft record this wizard owns. It starts as the resumed draft's id (if
@@ -3534,70 +3520,6 @@ export function ManagerAddListingForm({
                   placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
                 />
               </div>
-              </div>
-            </ListingSubsection>
-
-            <ListingSubsection
-              title="Compliance details"
-              description="Building facts we use to decide which disclosures belong in this property's lease. Every field is optional, and leaving one blank never blocks publishing."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-              <GridField>
-                <FieldLabel hint="Optional — homes built before 1978 need a lead-based paint disclosure with the lease. Leave blank if you are not sure; we will not guess.">
-                  Year built
-                </FieldLabel>
-                <Input
-                  value={sub.yearBuilt === undefined ? "" : String(sub.yearBuilt)}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-                    setSub((s) => ({ ...s, yearBuilt: digits ? Number(digits) : undefined }));
-                  }}
-                  className={listingTextInputCls}
-                  inputMode="numeric"
-                  placeholder="e.g. 1962"
-                />
-              </GridField>
-              <GridField>
-                <FieldLabel hint="Optional — the date the building was first approved for occupancy, if you have it.">
-                  Certificate of occupancy date
-                </FieldLabel>
-                <DateField
-                  value={sub.certificateOfOccupancyDate ?? ""}
-                  onChange={(iso) => setSub((s) => ({ ...s, certificateOfOccupancyDate: iso || undefined }))}
-                  className={listingTextInputCls}
-                />
-              </GridField>
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={sub.sharedUtilityMetering === true}
-                  onChange={(e) => setSub((s) => ({ ...s, sharedUtilityMetering: e.target.checked || undefined }))}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                />
-                A resident&rsquo;s utility meter also serves areas outside their unit
-              </label>
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={sub.hasPeriodicPestService === true}
-                  onChange={(e) => setSub((s) => ({ ...s, hasPeriodicPestService: e.target.checked || undefined }))}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                />
-                The property is on a contracted periodic pest control service
-              </label>
-              {showRrioField ? (
-                <div className="sm:col-span-2">
-                  <FieldLabel hint="Optional — Seattle properties only. The city's Rental Registration and Inspection Ordinance number.">
-                    Seattle RRIO registration number
-                  </FieldLabel>
-                  <Input
-                    value={sub.rrioRegistrationNumber ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, rrioRegistrationNumber: e.target.value }))}
-                    className={listingTextInputCls}
-                    placeholder="e.g. RRIO-123456"
-                  />
-                </div>
-              ) : null}
               </div>
             </ListingSubsection>
 

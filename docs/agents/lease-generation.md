@@ -73,18 +73,9 @@ automatically.
 
 ### UI
 
-A "Compliance details" subsection on the add-listing wizard's property-details
-step (`src/components/portal/manager-add-listing-form.tsx`). Every field is
-optional and none of them gate publishing — `listing-wizard-validation.ts` is
-deliberately untouched.
-
-`yearBuilt` carries plain-language helper text ("Homes built before 1978 need a
-lead-based paint disclosure with the lease") with no statutory citation and no
-legal advice. The RRIO input renders only when the address resolves to Seattle
-via the existing `resolveLeaseJurisdiction` (`src/lib/lease-jurisdiction.ts` —
-reused, not reimplemented), while the address is still blank, or whenever a value
-is already stored, so a number a manager entered can never be orphaned behind a
-hidden input.
+The add-listing wizard no longer collects compliance inputs (year built, occupancy
+date, utility metering, pest service, RRIO). The submission fields remain on
+`ManagerListingSubmissionV1` for drafts, imports, and a future rules-engine surface.
 
 These are internal compliance inputs, not marketing copy. Do not render them on
 the public listing page.
