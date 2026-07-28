@@ -26,6 +26,23 @@ describe("validateListingWizardStep", () => {
     expect(errs.monthlyRent).toMatch(/rent/i);
   });
 
+  it("does not require lease bundles for entire-home listings", () => {
+    const sub = createDefaultListingSubmission();
+    sub.listingPlaceCategoryId = "entire_home";
+    sub.allowedLeaseTerms = ["12-Month"];
+    sub.entireHomeMonthlyRent = 4500;
+    sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "Bedroom 1", monthlyRent: 4500 }];
+    sub.securityDeposit = "0";
+    sub.moveInFee = "0";
+    sub.parkingMonthly = "0";
+    sub.hoaMonthly = "0";
+    sub.otherMonthlyFees = "0";
+    sub.monthToMonthSurcharge = "0";
+    sub.bundles = [];
+    const errs = validateListingWizardStep(4, sub, { entireHomeRent: 4500 });
+    expect(Object.keys(errs)).toEqual([]);
+  });
+
   it("orders room name keys before summary on step 1", () => {
     const sub = createDefaultListingSubmission();
     sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "" }];

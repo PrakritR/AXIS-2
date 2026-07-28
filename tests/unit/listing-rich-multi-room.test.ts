@@ -70,6 +70,30 @@ describe("listing multi-room lease basics", () => {
     expect(rich.bundleCards[0]?.price).toBe("$2,200/mo");
   });
 
+  it("does not show bundle cards for entire-home listings", () => {
+    const sub = createDefaultListingSubmission();
+    sub.listingPlaceCategoryId = "entire_home";
+    sub.entireHomeMonthlyRent = 4500;
+    sub.rooms = [{ ...sub.rooms[0]!, id: "bed-1", name: "Bedroom 1", monthlyRent: 4500 }];
+    sub.bundles = [
+      {
+        id: "bundle-legacy",
+        label: "Whole house lease",
+        price: "$4500/mo",
+        strikethrough: "",
+        promo: "",
+        roomsLine: "",
+        includedRoomIds: ["bed-1"],
+      },
+    ];
+
+    const property = mockProperty({ id: "entire-home-no-bundles", listingSubmission: sub });
+    const rich = listingRichFromManagerSubmission(property, sub);
+
+    expect(rich.bundleCards).toEqual([]);
+    expect(rich.leaseBasics.some((row) => row.id === "lease-multi-room")).toBe(false);
+  });
+
   it("falls back to generated demo lease basics when no submission exists", () => {
     const rich = getListingRichContent(mockProperty({ id: "demo-only" }));
     expect(rich.leaseBasics.some((row) => row.id === "lease-multi-room")).toBe(true);
