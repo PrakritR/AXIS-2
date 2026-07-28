@@ -470,7 +470,7 @@ function ProrationMethodFields({
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div>
-        <FieldLabel>Prorated rent</FieldLabel>
+        <FieldLabel hint="Auto = (rent + utilities) ÷ days in the month.">Prorated rent</FieldLabel>
         <div className="mt-1 inline-flex rounded-lg border border-border bg-card p-0.5">
           {(["auto", "daily_rate"] as const).map((method) => {
             const active = prorateMethod === method;
@@ -506,9 +506,7 @@ function ProrationMethodFields({
             />
           </div>
         </>
-      ) : (
-        <p className="self-center text-xs text-muted">Auto = (rent + utilities) ÷ days in the month.</p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -2636,7 +2634,7 @@ export function ManagerAddListingForm({
                     </div>
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Optional — falls back to the shared security deposit.">Security deposit</FieldLabel>
+                    <FieldLabel>Security deposit</FieldLabel>
                     <MoneyInput
                       ariaLabel={`Security deposit for ${roomLabel}`}
                       value={(room.securityDeposit ?? "").replace(/^\$/, "").trim()}
@@ -2645,7 +2643,7 @@ export function ManagerAddListingForm({
                     />
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Optional — falls back to the shared move-in fee.">Move-in fee</FieldLabel>
+                    <FieldLabel>Move-in fee</FieldLabel>
                     <MoneyInput
                       ariaLabel={`Move-in fee for ${roomLabel}`}
                       value={(room.moveInFee ?? "").replace(/^\$/, "").trim()}
@@ -2778,7 +2776,7 @@ export function ManagerAddListingForm({
                   </div>
                 </GridField>
                 <GridField>
-                  <FieldLabel hint="Optional — falls back to the shared security deposit.">Security deposit</FieldLabel>
+                  <FieldLabel>Security deposit</FieldLabel>
                   <MoneyInput
                     ariaLabel={`Security deposit for ${bundle.label.trim() || "bundle"}`}
                     value={(bundle.securityDeposit ?? "").replace(/^\$/, "").trim()}
@@ -2787,7 +2785,7 @@ export function ManagerAddListingForm({
                   />
                 </GridField>
                 <GridField>
-                  <FieldLabel hint="Optional — falls back to the shared move-in fee.">Move-in fee</FieldLabel>
+                  <FieldLabel>Move-in fee</FieldLabel>
                   <MoneyInput
                     ariaLabel={`Move-in fee for ${bundle.label.trim() || "bundle"}`}
                     value={(bundle.moveInFee ?? "").replace(/^\$/, "").trim()}
