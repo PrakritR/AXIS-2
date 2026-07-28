@@ -453,21 +453,25 @@ function ProrationMethodFields({
   prorateMethod,
   monthlyRent,
   dailyRentRate,
+  dailyUtilitiesRate,
   onMethod,
   onDailyRent,
+  onDailyUtilities,
 }: {
   prorateMethod: "auto" | "daily_rate";
   monthlyRent: number;
   dailyRentRate?: number;
+  dailyUtilitiesRate?: number;
   onMethod: (m: "auto" | "daily_rate") => void;
   onDailyRent: (n: number | undefined) => void;
+  onDailyUtilities: (n: number | undefined) => void;
 }) {
-  // Dense: proration toggle and its one all-in daily rate share a single row. There is
-  // deliberately no separate "daily utilities rate" — the daily rate is all-in.
+  // Prorated rent: Auto = (rent + utilities) ÷ days in month; "Set per day" bills an
+  // explicit per-day rent AND per-day utilities separately.
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div>
-        <FieldLabel>Proration</FieldLabel>
+        <FieldLabel>Prorated rent</FieldLabel>
         <div className="mt-1 inline-flex rounded-lg border border-border bg-card p-0.5">
           {(["auto", "daily_rate"] as const).map((method) => {
             const active = prorateMethod === method;
@@ -478,22 +482,34 @@ function ProrationMethodFields({
                 onClick={() => onMethod(method)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
               >
-                {method === "auto" ? "Auto" : "Daily rate"}
+                {method === "auto" ? "Auto" : "Set per day"}
               </button>
             );
           })}
         </div>
       </div>
       {prorateMethod === "daily_rate" ? (
-        <div>
-          <FieldLabel hint="All-in — the daily rate already covers utilities.">Daily rate</FieldLabel>
-          <MoneyInput
-            value={dailyRentRate ?? ""}
-            onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
-            placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
-          />
-        </div>
-      ) : null}
+        <>
+          <div>
+            <FieldLabel>Rent / day</FieldLabel>
+            <MoneyInput
+              value={dailyRentRate ?? ""}
+              onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
+            />
+          </div>
+          <div>
+            <FieldLabel>Utilities / day</FieldLabel>
+            <MoneyInput
+              value={dailyUtilitiesRate ?? ""}
+              onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder="6"
+            />
+          </div>
+        </>
+      ) : (
+        <p className="self-center text-xs text-muted">Auto = (rent + utilities) ÷ days in the month.</p>
+      )}
     </div>
   );
 }
@@ -2575,8 +2591,10 @@ export function ManagerAddListingForm({
                       prorateMethod={room.prorateMethod ?? "auto"}
                       monthlyRent={room.monthlyRent}
                       dailyRentRate={room.dailyRentRate}
+                      dailyUtilitiesRate={room.dailyUtilitiesRate}
                       onMethod={(m) => setRoom(i, { prorateMethod: m })}
                       onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                      onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
                     />
                   </div>
                 </div>
@@ -2810,8 +2828,10 @@ export function ManagerAddListingForm({
               prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
               monthlyRent={entireHomeRent}
               dailyRentRate={sub.entireHomeDailyRentRate}
+              dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
               onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
               onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+              onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
             />
           </div>
         </div>
@@ -2835,7 +2855,7 @@ export function ManagerAddListingForm({
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
-          <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-3">
+          <div className="flex w-full min-w-0 items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}
@@ -2918,9 +2938,10 @@ export function ManagerAddListingForm({
           )}
         >
         <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
-          {/* Constrained, centered content column so fields sit in the middle of the wide
-              modal instead of hugging the left edge — consistent on every step. */}
-          <div className="mx-auto w-full max-w-3xl">
+          {/* Content FILLS the modal width (padding on the scroll container provides the
+              margins). A max-width column here centered wide children and clipped them on
+              both edges against the panel's overflow-hidden — do not reintroduce it. */}
+          <div className="w-full min-w-0">
           {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
@@ -4433,7 +4454,7 @@ export function ManagerAddListingForm({
         </div>
 
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="w-full min-w-0">
           {draftSaveError ? (
             <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
               {draftSaveError}

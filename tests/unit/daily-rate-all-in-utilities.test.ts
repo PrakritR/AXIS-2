@@ -94,49 +94,64 @@ beforeEach(() => {
   window.sessionStorage.clear();
 });
 
-describe("normalization — daily utilities folded into the daily rate, idempotently", () => {
-  it("folds dailyUtilitiesRate into dailyRentRate and clears the source", () => {
+function prorated(email: string) {
+  return chargesFor(email).find((c) => c.kind === "prorated_utilities");
+}
+function proratedRent(email: string) {
+  return chargesFor(email).find((c) => c.kind === "rent" || c.kind === "prorated_rent");
+}
+
+describe("normalization keeps per-day rent and utilities SEPARATE (fold reversed)", () => {
+  it("does not combine or clear the two", () => {
     const sub = createDefaultListingSubmission();
     sub.rooms = [room({ prorateMethod: "daily_rate", dailyRentRate: 40, dailyUtilitiesRate: 6 })];
     const once = normalizeManagerListingSubmissionV1(sub);
-    expect(once.rooms[0]!.dailyRentRate).toBe(46); // 40 rent + 6 utilities, all-in
-    expect(once.rooms[0]!.dailyUtilitiesRate).toBeUndefined();
-
-    // Idempotent: re-normalizing the already-folded submission must NOT add utilities again.
-    const twice = normalizeManagerListingSubmissionV1(once);
-    expect(twice.rooms[0]!.dailyRentRate).toBe(46);
-    expect(twice.rooms[0]!.dailyUtilitiesRate).toBeUndefined();
+    expect(once.rooms[0]!.dailyRentRate).toBe(40);
+    expect(once.rooms[0]!.dailyUtilitiesRate).toBe(6);
   });
 });
 
-describe("charge generation — daily rate is all-in, no double-billed utilities", () => {
-  it("bills only the all-in daily rent for a prorated month, never a separate utilities line", () => {
-    const email = "allin@example.com";
+describe("charge generation — separate per-day rent and utilities", () => {
+  it("case 1/3 — a listing with both per-day rates bills rent and utilities separately, once each", () => {
+    const email = "split@example.com";
     removeResidentHouseholdPaymentData(email);
-    const propertyId = "prop-all-in";
-    // Room has BOTH a daily rate AND a monthly utilities estimate — the trap for a double-bill.
+    const propertyId = "prop-split";
     seed(propertyId, room({ prorateMethod: "daily_rate", dailyRentRate: 40, dailyUtilitiesRate: 6, utilitiesEstimate: "150" }));
 
-    // Lease Mar 10 → Mar 25 2026: a single partial month, daily-rate prorated.
+    // Mar 10 → Mar 25 2026 = 16 billable days.
     recordApprovedApplicationCharges(applicantRow(propertyId, email, "2026-03-10", "2026-03-25"), MANAGER_ID, true);
-    const charges = chargesFor(email);
 
-    // No utilities / prorated_utilities charge at all — utilities are inside the daily rate.
-    expect(charges.some((c) => c.kind === "utilities" || c.kind === "prorated_utilities")).toBe(false);
-    // The rent line bills the all-in folded rate (46/day), not 40.
-    const rent = charges.find((c) => c.kind === "rent" || c.kind === "prorated_rent");
-    expect(rent?.title).toContain("$46/day");
+    expect(proratedRent(email)?.title).toContain("$40/day");
+    // Exactly one utilities line, computed from the PER-DAY rate ($6/day) — not the monthly
+    // estimate, and not doubled.
+    const utils = chargesFor(email).filter((c) => c.kind === "prorated_utilities" || c.kind === "utilities");
+    expect(utils).toHaveLength(1);
+    expect(prorated(email)?.title).toContain("$6/day");
   });
 
-  it("auto proration still bills utilities separately (long-term utilities unchanged)", () => {
+  it("case 2 — a FOLDED listing (daily rent set, no per-day utilities) bills the same total: rent only, zero utilities", () => {
+    const email = "folded@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-folded";
+    // Folded shape: rent rate already includes utilities (46 = 40+6), no separate util rate,
+    // and a monthly estimate still present. Must NOT bill the estimate on top.
+    seed(propertyId, room({ prorateMethod: "daily_rate", dailyRentRate: 46, dailyUtilitiesRate: undefined, utilitiesEstimate: "150" }));
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, email, "2026-03-10", "2026-03-25"), MANAGER_ID, true);
+
+    // Zero utilities lines — the daily rent already covers them.
+    expect(chargesFor(email).some((c) => c.kind === "prorated_utilities" || c.kind === "utilities")).toBe(false);
+    // Rent bills the all-in 46/day (unchanged total vs when the fold was active).
+    expect(proratedRent(email)?.title).toContain("$46/day");
+  });
+
+  it("auto proration still bills the monthly utilities estimate (unchanged)", () => {
     const email = "auto-utils@example.com";
     removeResidentHouseholdPaymentData(email);
     const propertyId = "prop-auto-utils";
     seed(propertyId, room({ prorateMethod: "auto", utilitiesEstimate: "150" }));
 
     recordApprovedApplicationCharges(applicantRow(propertyId, email, "2026-03-10", "2027-03-09"), MANAGER_ID, true);
-    const charges = chargesFor(email);
-    // Auto listings keep a real utilities line.
-    expect(charges.some((c) => c.kind === "utilities" || c.kind === "prorated_utilities")).toBe(true);
+    expect(chargesFor(email).some((c) => c.kind === "utilities" || c.kind === "prorated_utilities")).toBe(true);
   });
 });

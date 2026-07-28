@@ -2569,10 +2569,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     return null;
   })();
   const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
-  // The daily rent rate is ALL-IN (utilities were folded into it at normalization), so a
-  // daily-rate-prorated month bills no separate prorated utilities — there is deliberately
-  // no `dailyUtilitiesRate` here anymore.
   const dailyRentRate = room?.dailyRentRate;
+  // Per-day rent and utilities are separate again. A MISSING per-day utilities rate is read
+  // as zero on purpose: a listing that was briefly folded (rent baked-in, no util rate)
+  // then bills rent-including-utilities + zero utilities = the same total as before, never
+  // a double-charge. Do NOT "fix" this into deriving a utilities figure — that reintroduces
+  // the double-bill for those listings.
+  const dailyUtilitiesRate = room?.dailyUtilitiesRate;
   // When the room is priced by the day, rent (not utilities) bills per-day every period —
   // unless this resident has their own negotiated monthly rent, which wins exactly as it
   // does over the room's listing monthly rent.
@@ -2594,20 +2597,24 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const utilities = selectedRoomUtilities(row);
   if (utilities.amount > 0) {
     const proration = leaseFirstPeriodProration(leaseStart, leaseEnd, endsInsideFirstMonth);
-    // A daily-rate-prorated partial month already includes utilities inside its all-in
-    // daily rent line, so DO NOT also bill a prorated utilities line — that is the
-    // double-bill. A full first month (not prorated) still bills monthly utilities.
-    const utilitiesInDailyRate = proration.prorated && prorateMethod === "daily_rate";
-    if (!utilitiesInDailyRate) {
+    if (proration.prorated && prorateMethod === "daily_rate") {
+      // A daily-rate month bills utilities ONLY from the explicit per-day utilities rate.
+      // A missing rate reads as ZERO (do NOT fall back to the monthly estimate): a folded
+      // listing has utilities baked into its daily rent, so billing the estimate here would
+      // double-charge. dev has no daily-rate listings, so this affects nothing today.
+      if (dailyUtilitiesRate && dailyUtilitiesRate > 0) {
+        pushCharge(
+          "prorated_utilities",
+          Number((proration.billableDays * dailyUtilitiesRate).toFixed(2)),
+          `Prorated utilities (${proration.billableDays} days × ${formatRoomPriceAmount(dailyUtilitiesRate)}/day)`,
+          false,
+          moveInDue,
+        );
+      }
+    } else {
       const utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
       const utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
-      pushCharge(
-        proration.prorated ? "prorated_utilities" : "utilities",
-        utilAmount,
-        utilTitle,
-        false,
-        moveInDue,
-      );
+      pushCharge(proration.prorated ? "prorated_utilities" : "utilities", utilAmount, utilTitle, false, moveInDue);
     }
   }
 
@@ -2623,10 +2630,13 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       lastMonthRentCharge.dueDateLabel,
     );
   }
-  // A daily-rate last month is all-in (utilities folded into the daily rent), so skip the
-  // separate last-month utilities line for daily_rate; auto proration bills it as before.
-  const lastMonthUtilitiesCharge = !endsInsideFirstMonth && utilities.amount > 0 && prorateMethod !== "daily_rate"
-    ? lastMonthChargeForLeaseEnd(utilities.amount, leaseEnd, "utilities", prorateMethod)
+  // Last-month utilities: a daily-rate month bills per-day utilities ONLY when an explicit
+  // per-day rate is set; a missing rate reads as zero (folded-listing case — no monthly
+  // fallback, or a folded listing would double-charge). Auto proration bills the monthly
+  // estimate as before.
+  const dailyUtilInRange = prorateMethod !== "daily_rate" || Boolean(dailyUtilitiesRate && dailyUtilitiesRate > 0);
+  const lastMonthUtilitiesCharge = !endsInsideFirstMonth && utilities.amount > 0 && dailyUtilInRange
+    ? lastMonthChargeForLeaseEnd(utilities.amount, leaseEnd, "utilities", prorateMethod, dailyUtilitiesRate)
     : null;
   if (lastMonthUtilitiesCharge) {
     pushCharge(
