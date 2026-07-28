@@ -192,9 +192,9 @@ export function ResidentLeasePanel() {
     setShowSigningModal(true);
   };
 
-  const handleModalSign = async (signatureName: string) => {
+  const handleModalSign = async (signatureName: string, consentVersion: string) => {
     if (!email || !pipelineRow) return false;
-    const ok = await residentSignLease(email, signatureName);
+    const ok = await residentSignLease(email, signatureName, consentVersion);
     if (ok) {
       const signedRow = {
         ...pipelineRow,
@@ -428,7 +428,6 @@ export function ResidentLeasePanel() {
           row={pipelineRow}
           signerName={leaseCtx.application?.fullLegalName ?? pipelineRow.residentName ?? ""}
           signerRoleLabel="Your full legal name"
-          agreementLabel="Residential Room Rental Agreement"
           onSign={handleModalSign}
           onClose={() => setShowSigningModal(false)}
         />
