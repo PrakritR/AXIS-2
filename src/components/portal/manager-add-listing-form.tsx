@@ -1134,18 +1134,21 @@ function SelectAllCheckbox({
   someChecked,
   onToggle,
   label = "Select all",
+  disabled,
 }: {
   allChecked: boolean;
   someChecked: boolean;
   onToggle: (checkAll: boolean) => void;
   label?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-sm">
+    <label className={cn("flex items-center gap-2 text-sm", disabled ? "cursor-default" : "cursor-pointer")}>
       <input
         type="checkbox"
-        className="h-4 w-4 shrink-0 rounded border-border"
+        className="h-4 w-4 shrink-0 rounded border-border disabled:opacity-60"
         checked={allChecked}
+        disabled={disabled}
         ref={(el) => {
           if (el) el.indeterminate = someChecked;
         }}
@@ -4128,24 +4131,46 @@ export function ManagerAddListingForm({
                         />
                         <span className="font-medium text-foreground">Whole-house bathroom</span>
                       </label>
-                      {!b.allResidents ? (
+                      {sub.rooms.length > 0 ? (
                         <div className="sm:col-span-2">
                           <FieldLabel>Used by rooms</FieldLabel>
-                          <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                          {/* Same pattern as Shared spaces "Room access" (round 29): "All rooms"
+                              select-all first, three columns, indeterminate. "Whole-house
+                              bathroom" ticks and LOCKS this list (all checked, disabled) so the
+                              two controls can never contradict; the data model still keeps
+                              allResidents' assignedRoomIds empty. */}
+                          <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                            <SelectAllCheckbox
+                              allChecked={
+                                Boolean(b.allResidents) ||
+                                sub.rooms.every((room) => (b.assignedRoomIds ?? []).includes(room.id))
+                              }
+                              someChecked={
+                                !b.allResidents &&
+                                (b.assignedRoomIds ?? []).length > 0 &&
+                                !sub.rooms.every((room) => (b.assignedRoomIds ?? []).includes(room.id))
+                              }
+                              onToggle={(checkAll) =>
+                                setBath(i, { assignedRoomIds: checkAll ? sub.rooms.map((room) => room.id) : [] })
+                              }
+                              disabled={Boolean(b.allResidents)}
+                              label="All rooms"
+                            />
                             {sub.rooms.map((room) => {
-                              const checked = (b.assignedRoomIds ?? []).includes(room.id);
+                              const checked = Boolean(b.allResidents) || (b.assignedRoomIds ?? []).includes(room.id);
                               return (
                                 <div key={`${b.id}-${room.id}`} className="min-w-0">
                                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                                     <input
                                       type="checkbox"
-                                      className="h-4 w-4 shrink-0 rounded border-border"
+                                      className="h-4 w-4 shrink-0 rounded border-border disabled:opacity-60"
                                       checked={checked}
+                                      disabled={Boolean(b.allResidents)}
                                       onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
                                     />
                                     <span className="truncate font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
                                   </label>
-                                  {checked ? (
+                                  {checked && !b.allResidents ? (
                                     <Select
                                       aria-label={`Bathroom situation for ${room.name.trim() || "room"}`}
                                       className={`${selectInputCls} mt-1 h-8 text-xs`}
