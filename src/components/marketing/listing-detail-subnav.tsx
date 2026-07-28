@@ -289,7 +289,11 @@ export function ListingStickySubnav({
     >
       <ul
         ref={listRef}
-        className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]"
+        // On mobile the strip scrolls horizontally (flex-nowrap + overflow-x-auto);
+        // a right-edge fade mask signals that more tabs exist beyond the viewport
+        // instead of the tabs looking truncated mid-word. Removed at sm+ where the
+        // strip wraps and centers (no horizontal scroll).
+        className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] [mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]"
       >
         {nav.map((item) => {
           const active = activeId === item.id;
