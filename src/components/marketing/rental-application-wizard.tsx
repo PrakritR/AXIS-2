@@ -845,6 +845,7 @@ function RentalApplicationWizardInner({
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
     const bundleParam = (searchParams.get("bundle") ?? "").trim();
     const rentalTypeParam = (searchParams.get("rentalType") ?? "").trim();
+    const phoneParam = (searchParams.get("phone") ?? "").trim();
     const shortTermFromLink = rentalTypeParam === "short_term";
 
     queueMicrotask(() => {
