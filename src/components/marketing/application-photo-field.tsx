@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  APPLICATION_SAVE_STATUS_EVENT,
   settlePendingApplicationRowUpserts,
 } from "@/lib/manager-applications-storage";
 import {
@@ -192,8 +191,8 @@ type SinglePhotoFieldProps = {
    */
   setupTokenRequired?: boolean;
   getSetupToken?: () => string | null;
-  /** Whether the form already carries the applicant's email — drives the gate hint copy. */
-  hasApplicantEmail?: boolean;
+  /** When true, hide camera capture and only offer file upload. */
+  uploadOnly?: boolean;
   readOnly?: boolean;
   dataAttr?: string;
 };
@@ -209,7 +208,7 @@ export function ApplicationPhotoField({
   getApplicationId,
   setupTokenRequired,
   getSetupToken,
-  hasApplicantEmail,
+  uploadOnly = false,
   readOnly,
   dataAttr,
 }: SinglePhotoFieldProps) {
@@ -219,23 +218,6 @@ export function ApplicationPhotoField({
   const [error, setError] = useState<string | null>(null);
   const [lastFailedFile, setLastFailedFile] = useState<File | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
-  // Starts pessimistic when a token is required (matching the server render —
-  // sessionStorage is client-only) and the mount effect lifts the gate.
-  const [setupTokenReady, setSetupTokenReady] = useState(() => !setupTokenRequired);
-
-  // The token arrives asynchronously with the first successful autosave, which
-  // announces itself via the save-status event — re-check then.
-  useEffect(() => {
-    if (!setupTokenRequired) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- lift the gate when no token is required
-      setSetupTokenReady(true);
-      return;
-    }
-    const update = () => setSetupTokenReady(Boolean(getSetupToken?.()));
-    update();
-    window.addEventListener(APPLICATION_SAVE_STATUS_EVENT, update);
-    return () => window.removeEventListener(APPLICATION_SAVE_STATUS_EVENT, update);
-  }, [setupTokenRequired, getSetupToken]);
 
   // Revoke object URLs on unmount / change to avoid leaks.
   useEffect(() => {
@@ -313,18 +295,31 @@ export function ApplicationPhotoField({
       {attachment ? (
         <div className="space-y-2">
           <AttachmentPreview attachment={attachment} localPreview={localPreview} readUrl={readUrl} />
-          {!readOnly && setupTokenReady ? (
+          {!readOnly ? (
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="px-4 text-[13px]"
-                disabled={busy}
-                onClick={() => cameraInputRef.current?.click()}
-                data-attr={dataAttr ? `${dataAttr}-retake` : undefined}
-              >
-                {busy ? "Working…" : "Retake"}
-              </Button>
+              {!uploadOnly ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="px-4 text-[13px]"
+                  disabled={busy}
+                  onClick={() => cameraInputRef.current?.click()}
+                  data-attr={dataAttr ? `${dataAttr}-retake` : undefined}
+                >
+                  {busy ? "Working…" : "Retake"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="px-4 text-[13px]"
+                  disabled={busy}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-attr={dataAttr ? `${dataAttr}-replace` : undefined}
+                >
+                  {busy ? "Uploading…" : "Upload file"}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="danger"
@@ -340,25 +335,21 @@ export function ApplicationPhotoField({
         </div>
       ) : readOnly ? (
         <p className="text-sm text-muted">Not provided</p>
-      ) : !setupTokenReady ? (
-        <p className="text-sm text-muted">
-          {hasApplicantEmail
-            ? "Preparing photo uploads — this unlocks as soon as your application saves."
-            : "Add your email above first — once your application saves, you can attach photos here."}
-        </p>
       ) : (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              className="px-4 text-[13px]"
-              disabled={busy}
-              onClick={() => cameraInputRef.current?.click()}
-              data-attr={dataAttr ? `${dataAttr}-camera` : undefined}
-            >
-              {busy ? "Uploading…" : "Take photo"}
-            </Button>
+            {!uploadOnly ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-4 text-[13px]"
+                disabled={busy}
+                onClick={() => cameraInputRef.current?.click()}
+                data-attr={dataAttr ? `${dataAttr}-camera` : undefined}
+              >
+                {busy ? "Uploading…" : "Take photo"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="secondary"
@@ -367,7 +358,7 @@ export function ApplicationPhotoField({
               onClick={() => fileInputRef.current?.click()}
               data-attr={dataAttr ? `${dataAttr}-upload` : undefined}
             >
-              Upload file
+              {busy ? "Uploading…" : "Upload file"}
             </Button>
           </div>
         </div>
@@ -394,17 +385,19 @@ export function ApplicationPhotoField({
       ) : null}
 
       {/* Camera-first input (opens the camera on a phone). */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        onChange={(e) => {
-          void handleFile(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-      />
+      {!uploadOnly ? (
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="sr-only"
+          onChange={(e) => {
+            void handleFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      ) : null}
       {/* File picker (photo library or a file on desktop; PDF where allowed). */}
       <input
         ref={fileInputRef}
@@ -426,7 +419,7 @@ type IncomeProofPhotosProps = {
   getApplicationId: () => string;
   setupTokenRequired?: boolean;
   getSetupToken?: () => string | null;
-  hasApplicantEmail?: boolean;
+  uploadOnly?: boolean;
   readOnly?: boolean;
   max?: number;
 };
@@ -438,7 +431,7 @@ export function IncomeProofPhotos({
   getApplicationId,
   setupTokenRequired,
   getSetupToken,
-  hasApplicantEmail,
+  uploadOnly,
   readOnly,
   max = 3,
 }: IncomeProofPhotosProps) {
@@ -465,7 +458,7 @@ export function IncomeProofPhotos({
           getApplicationId={getApplicationId}
           setupTokenRequired={setupTokenRequired}
           getSetupToken={getSetupToken}
-          hasApplicantEmail={hasApplicantEmail}
+          uploadOnly={uploadOnly}
           readOnly={readOnly}
           dataAttr="application-income-proof"
         />
@@ -483,7 +476,6 @@ export function IncomeProofPhotos({
           getApplicationId={getApplicationId}
           setupTokenRequired={setupTokenRequired}
           getSetupToken={getSetupToken}
-          hasApplicantEmail={hasApplicantEmail}
           dataAttr="application-income-proof-add"
         />
       ) : null}

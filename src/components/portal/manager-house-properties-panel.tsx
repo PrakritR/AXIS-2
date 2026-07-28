@@ -128,9 +128,9 @@ function deferCatalogMutation(fn: () => void) {
 }
 
 const MANAGER_STAGES = [
+  { key: "drafts", label: "Drafts", buckets: [5] as AdminPropertyBucketIndex[] },
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
-  { key: "drafts", label: "Drafts", buckets: [5] as AdminPropertyBucketIndex[] },
 ] as const;
 
 export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
@@ -185,7 +185,7 @@ function ManagerPropertyInlineDetails({
   );
   const rich = useMemo(() => (previewProperty ? getListingRichContent(previewProperty) : null), [previewProperty]);
   const hasPreview = Boolean(previewProperty && rich);
-  const [previewExpanded, setPreviewExpanded] = useState(true);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 

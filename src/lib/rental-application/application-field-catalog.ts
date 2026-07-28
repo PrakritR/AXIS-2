@@ -17,10 +17,9 @@ const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
   "personal:Full legal name": ["fullLegalName"],
   "personal:Date of birth": ["dateOfBirth"],
   "personal:Social Security number": ["ssn"],
-  // The ID-photo attachments ride on the same question as the ID number: a
-  // listing that disables "Driver's license / ID" (and the short-term form,
-  // which disables it by default) hides AND strips the photos too.
-  "personal:Driver's license / ID": ["driversLicense", "idPhotoFront", "idPhotoBack"],
+  "personal:Driver's license / ID": ["driversLicense"],
+  "personal:Driver's license / ID — front photo": ["idPhotoFront"],
+  "personal:Driver's license / ID — back photo": ["idPhotoBack"],
   "personal:Phone": ["phone"],
   "personal:Email": ["email"],
   "current_address:Street, city, state, ZIP": ["currentStreet", "currentCity", "currentState", "currentZip"],
@@ -34,9 +33,8 @@ const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
   "employment:Employer & employer address": ["employer", "employerAddress"],
   "employment:Supervisor name & phone": ["supervisorName", "supervisorPhone"],
   "employment:Job title & employment start": ["jobTitle", "employmentStart"],
-  // Proof-of-income attachments ride on the income question, so the short-term
-  // form (which omits the whole employment section) never shows or keeps them.
-  "employment:Monthly / annual income": ["monthlyIncome", "annualIncome", "incomeProofPhotos"],
+  "employment:Monthly / annual income": ["monthlyIncome", "annualIncome"],
+  "employment:Proof of income (pay stub, etc.)": ["incomeProofPhotos"],
   "employment:Other income": ["otherIncome"],
   "references:Reference 1 — name, relationship, phone": ["ref1Name", "ref1Relationship", "ref1Phone"],
   "references:Reference 2 — name, relationship, phone": ["ref2Name", "ref2Relationship", "ref2Phone"],
@@ -72,6 +70,7 @@ const YES_NO_OPTIONS = ["Yes", "No"] as const;
 type StandardFieldConfig = {
   type: ManagerCustomApplicationFieldType;
   options?: readonly string[];
+  required?: boolean;
 };
 
 /** Default editor types/options aligned with the applicant rental wizard. */
@@ -84,6 +83,8 @@ const STANDARD_FIELD_TYPE_MAP: Record<string, StandardFieldConfig> = {
   "personal:Date of birth": { type: "date" },
   "personal:Social Security number": { type: "text" },
   "personal:Driver's license / ID": { type: "text" },
+  "personal:Driver's license / ID — front photo": { type: "photos", required: false },
+  "personal:Driver's license / ID — back photo": { type: "photos", required: false },
   "personal:Phone": { type: "text" },
   "personal:Email": { type: "text" },
   "current_address:Street, city, state, ZIP": { type: "text" },
@@ -98,6 +99,7 @@ const STANDARD_FIELD_TYPE_MAP: Record<string, StandardFieldConfig> = {
   "employment:Supervisor name & phone": { type: "text" },
   "employment:Job title & employment start": { type: "text" },
   "employment:Monthly / annual income": { type: "number" },
+  "employment:Proof of income (pay stub, etc.)": { type: "file", required: false },
   "employment:Other income": { type: "number" },
   "references:Reference 1 — name, relationship, phone": { type: "text" },
   "references:Reference 2 — name, relationship, phone": { type: "text" },
@@ -139,7 +141,7 @@ export const STANDARD_APPLICATION_FIELD_CATALOG: readonly StandardApplicationFie
         section: section.id,
         label,
         type: config.type,
-        required: true,
+        required: config.required ?? true,
         options: [...(config.options ?? [])],
         wizardFormKeys: STANDARD_FIELD_WIZARD_KEYS[`${section.id}:${label}`] ?? [],
       };
@@ -171,6 +173,8 @@ const SHORT_TERM_OMITTED_SECTIONS = new Set<RentalApplicationSectionId>([
 const SHORT_TERM_OMITTED_STANDARD_LABELS = new Set<string>([
   "personal:Social Security number",
   "personal:Driver's license / ID",
+  "personal:Driver's license / ID — front photo",
+  "personal:Driver's license / ID — back photo",
   "consent:Credit & background check consent",
 ]);
 

@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
-import { Modal, ModalFooter } from "@/components/ui/modal";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
@@ -16,7 +14,6 @@ import {
   syncScheduleRecordsFromServer,
   writeAvailabilityDateSetForStorageKeyToServer,
   writeCalendarShareAvailability,
-  toLocalDateStr,
   startOfWeekMonday,
 } from "@/lib/demo-admin-scheduling";
 import {
@@ -37,8 +34,6 @@ import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
 import { GoogleCalendarConnectDialog } from "@/components/portal/google-calendar-connect-dialog";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
-
-type CopyRange = "week" | "future" | "all";
 
 function ManagerCalendarPropertyFilter({
   properties,
@@ -86,10 +81,6 @@ export function PortalCalendar({
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
-  const [copyModalOpen, setCopyModalOpen] = useState(false);
-  const [copySourceId, setCopySourceId] = useState<string>("");
-  const [copyDestId, setCopyDestId] = useState<string>("");
-  const [copyRange, setCopyRange] = useState<CopyRange>("all");
   const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
   const [coManagerPeers, setCoManagerPeers] = useState<CoManagerCalendarPeerDto[]>([]);
   const [shareAvailability, setShareAvailability] = useState(false);
@@ -274,49 +265,6 @@ export function PortalCalendar({
     registerManagerForProperty(userId, activeCalendarPropertyId, label);
   }, [portal, userId, email, activeCalendarPropertyId]);
 
-  const openCopyModal = useCallback(() => {
-    setCopySourceId(activeCalendarPropertyId);
-    setCopyDestId("");
-    setCopyRange("all");
-    setCopyModalOpen(true);
-  }, [activeCalendarPropertyId]);
-
-  const executeCopy = useCallback(() => {
-    if (!userId || !copySourceId || !copyDestId || copySourceId === copyDestId) return;
-    const srcKey = managerPropertyAvailabilityStorageKey(userId, copySourceId);
-    const dstKey = managerPropertyAvailabilityStorageKey(userId, copyDestId);
-    const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
-    const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
-
-    const todayStr = toLocalDateStr(new Date());
-    const weekMonday = startOfWeekMonday(new Date());
-    const weekStrs = new Set(
-      Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(weekMonday);
-        d.setDate(d.getDate() + i);
-        return toLocalDateStr(d);
-      }),
-    );
-
-    for (const key of srcSlots) {
-      const dateStr = key.split(":")[0] ?? "";
-      if (copyRange === "week" && !weekStrs.has(dateStr)) continue;
-      if (copyRange === "future" && dateStr < todayStr) continue;
-      dstSlots.add(key);
-    }
-
-    setCopyModalOpen(false);
-    void writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey)
-      .then((ok) => {
-        if (!ok) showToast("Could not save copied schedule to backend.");
-        return syncScheduleRecordsFromServer({ force: true });
-      })
-      .finally(() => setCalendarRefreshSignal((n) => n + 1));
-    const srcName = managerProperties.find((p) => p.id === copySourceId)?.name ?? copySourceId;
-    const dstName = managerProperties.find((p) => p.id === copyDestId)?.name ?? copyDestId;
-    showToast(`Copied schedule from ${srcName} to ${dstName}.`);
-  }, [userId, copySourceId, copyDestId, copyRange, managerProperties, showToast]);
-
   const storageKey = useMemo(() => {
     if (portal === "admin") return ADMIN_AVAILABILITY_STORAGE_KEY;
     if (!userId) return null;
@@ -358,111 +306,6 @@ export function PortalCalendar({
     );
   }
 
-  const copyModal = portal === "manager" && managerProperties.length > 1 ? (
-    <Modal
-      open={copyModalOpen}
-      title="Copy schedule between houses"
-      onClose={() => setCopyModalOpen(false)}
-      footer={
-        <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setCopyModalOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={!copySourceId || !copyDestId}
-            onClick={executeCopy}
-          >
-            Copy schedule
-          </Button>
-        </ModalFooter>
-      }
-    >
-      <div className="space-y-5">
-        <p className="text-sm text-muted">
-          Copy availability from one house to another inside this manager account. Existing slots on the destination house are kept.
-        </p>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Copy from</label>
-          <Select
-            value={copySourceId}
-            onChange={(e) => {
-              setCopySourceId(e.target.value);
-              if (e.target.value === copyDestId) setCopyDestId("");
-            }}
-          >
-            <option value="">Select source house</option>
-            {managerProperties.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Copy to</label>
-          <Select
-            value={copyDestId}
-            onChange={(e) => setCopyDestId(e.target.value)}
-          >
-            <option value="">Select destination house</option>
-            {managerProperties
-              .filter((p) => p.id !== copySourceId)
-              .map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-foreground">Date range</p>
-          <div className="space-y-2">
-            {(
-              [
-                { id: "all", label: "Entire schedule", desc: "Copy all stored availability slots" },
-                { id: "future", label: "Future dates only", desc: "Copy only slots from today onwards" },
-                { id: "week", label: "This week only", desc: "Copy only slots in the current calendar week" },
-              ] as const
-            ).map(({ id, label, desc }) => (
-              <label
-                key={id}
-                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition ${
-                  copyRange === id
-                    ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
-                    : "border-border bg-card hover:border-primary/30"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="copy-range"
-                  value={id}
-                  checked={copyRange === id}
-                  onChange={() => setCopyRange(id)}
-                  className="mt-0.5 accent-primary"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{label}</p>
-                  <p className="text-xs text-muted">{desc}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {copySourceId && copyDestId ? (
-          <div className="rounded-xl border border-border bg-accent/40 px-4 py-3 text-xs text-muted">
-            Copying <span className="font-semibold text-foreground">{managerProperties.find((p) => p.id === copySourceId)?.name}</span>
-            {" to "}
-            <span className="font-semibold text-foreground">{managerProperties.find((p) => p.id === copyDestId)?.name}</span>
-            {copyRange === "week" ? " - this week" : copyRange === "future" ? " - future dates" : " - all dates"}
-          </div>
-        ) : null}
-      </div>
-    </Modal>
-  ) : null;
-
   return (
     <>
       <ManagerPortalPageShell
@@ -471,17 +314,6 @@ export function PortalCalendar({
           <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             {portal === "manager" ? (
               <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
-            ) : null}
-            {portal === "manager" && managerProperties.length > 1 ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                onClick={openCopyModal}
-                title="Copy availability schedule from one house to another"
-              >
-                Copy
-              </Button>
             ) : null}
             {portal === "manager" ? (
               <Button
@@ -563,17 +395,20 @@ export function PortalCalendar({
             }
             onCopyWeekToHouses={
               portal === "manager" && userId && activeCalendarPropertyId
-                ? (propertyIds, weekDateStrs) => {
+                ? (propertyIds, weekDateStrs, scope) => {
                     if (!userId || !activeCalendarPropertyId) return;
                     const srcKey = managerPropertyAvailabilityStorageKey(userId, activeCalendarPropertyId);
                     const srcSlots = readAvailabilityDateSetForStorageKey(srcKey);
                     const weekStrs = new Set(weekDateStrs);
-                    const weekSrcSlots = [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
+                    const slotsToCopy =
+                      scope === "entire"
+                        ? [...srcSlots]
+                        : [...srcSlots].filter((key) => weekStrs.has(key.split(":")[0] ?? ""));
                     void Promise.all(
                       propertyIds.map((pid) => {
                         const dstKey = managerPropertyAvailabilityStorageKey(userId, pid);
                         const dstSlots = new Set(readAvailabilityDateSetForStorageKey(dstKey));
-                        for (const slot of weekSrcSlots) dstSlots.add(slot);
+                        for (const slot of slotsToCopy) dstSlots.add(slot);
                         return writeAvailabilityDateSetForStorageKeyToServer(dstSlots, dstKey);
                       }),
                     )
@@ -585,14 +420,17 @@ export function PortalCalendar({
                     const destNames = propertyIds
                       .map((id) => managerProperties.find((p) => p.id === id)?.name ?? id)
                       .join(", ");
-                    showToast(`Week schedule pushed to: ${destNames}.`);
+                    showToast(
+                      scope === "entire"
+                        ? `Full schedule copied to: ${destNames}.`
+                        : `This week's schedule copied to: ${destNames}.`,
+                    );
                   }
                 : undefined
             }
           />
         )}
       </ManagerPortalPageShell>
-      {copyModal}
       {portal === "manager" ? (
         <ShareLeadLinkModal
           open={shareTourModalOpen}

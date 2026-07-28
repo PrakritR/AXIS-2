@@ -1035,24 +1035,24 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <ApplicationPhotoField
                   slot="idFront"
                   label="Front of ID"
+                  uploadOnly
                   attachment={form.idPhotoFront}
                   onChange={(next) => patch({ idPhotoFront: next })}
                   getApplicationId={getApplicationId}
                   setupTokenRequired={p.photoSetupTokenRequired}
                   getSetupToken={p.getPhotoSetupToken}
-                  hasApplicantEmail={Boolean(form.email.trim())}
                   readOnly={photosReadOnly}
                   dataAttr="application-id-photo-front"
                 />
                 <ApplicationPhotoField
                   slot="idBack"
                   label="Back of ID"
+                  uploadOnly
                   attachment={form.idPhotoBack}
                   onChange={(next) => patch({ idPhotoBack: next })}
                   getApplicationId={getApplicationId}
                   setupTokenRequired={p.photoSetupTokenRequired}
                   getSetupToken={p.getPhotoSetupToken}
-                  hasApplicantEmail={Boolean(form.email.trim())}
                   readOnly={photosReadOnly}
                   dataAttr="application-id-photo-back"
                 />
@@ -1490,7 +1490,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               getApplicationId={getApplicationId}
               setupTokenRequired={p.photoSetupTokenRequired}
               getSetupToken={p.getPhotoSetupToken}
-              hasApplicantEmail={Boolean(form.email.trim())}
               readOnly={photosReadOnly}
             />
           </div>

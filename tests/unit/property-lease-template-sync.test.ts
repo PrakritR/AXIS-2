@@ -27,9 +27,11 @@ describe("property lease template sync", () => {
     sub.shortTermRentalsAllowed = true;
     const seeds = buildLeaseTemplateSeeds(sub);
     expect(seeds.some((s) => s.seedKey === "short-term")).toBe(true);
+    expect(seeds.find((s) => s.seedKey === "short-term")?.kind).toBe("short-term");
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const short = readPropertyLeaseTemplates(synced).find((t) => t.listingSeedKey === "short-term");
     expect(short?.applicationLeaseTerms).toEqual([SHORT_TERM_LEASE_TERM]);
+    expect(short?.kind).toBe("short-term");
   });
 
   it("resolves the month-to-month template for month-to-month applicants", () => {

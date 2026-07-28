@@ -7,7 +7,13 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  entireHomeMonthlyRentAmount,
+  isEntireHomeListing,
+  normalizeManagerListingSubmissionV1,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
+import { listingPresetFeeAmount } from "@/lib/listing-fees";
 import { formatRoomPriceAmount, roomDailyRentPrice } from "@/lib/room-pricing";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
@@ -1248,6 +1254,10 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
     const totals = resolveBundleFinancialTotals(sub, bundleId);
     if (totals && totals.monthlyRent > 0) return totals.monthlyRent;
   }
+  if (isEntireHomeListing(sub)) {
+    const entireHomeRent = entireHomeMonthlyRentAmount(sub);
+    if (entireHomeRent > 0) return entireHomeRent;
+  }
   const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
@@ -2387,6 +2397,302 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   return Boolean(charge && !beforeIds.has(charge.id));
 }
 
+type ApprovedChargeDraft = {
+  kind: HouseholdChargeKind;
+  amount: number;
+  title: string;
+  dueDateLabel: string;
+};
+
+function patchPendingApprovedChargeAmount(applicationId: string, draft: ApprovedChargeDraft): boolean {
+  if (!(draft.amount > 0)) return false;
+  const id = approvedChargeId(applicationId, draft.kind);
+  const rows = readAll();
+  const idx = rows.findIndex((charge) => charge.id === id && charge.status === "pending");
+  if (idx === -1) return false;
+  const label = moneyAmountLabel(Number(draft.amount.toFixed(2)));
+  const current = rows[idx]!;
+  if (current.amountLabel === label && current.title === draft.title && current.dueDateLabel === draft.dueDateLabel) {
+    return false;
+  }
+  const next = [...rows];
+  next[idx] = {
+    ...current,
+    amountLabel: label,
+    balanceLabel: label,
+    title: draft.title,
+    dueDateLabel: draft.dueDateLabel,
+  };
+  writeAll(next);
+  return true;
+}
+
+function resolveApprovedLeaseRoom(
+  row: DemoApplicantRow,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+) {
+  if (isEntireHomeListing(sub)) {
+    const named = sub.rooms.find((room) => room.name.trim());
+    if (named) return named;
+  }
+  for (const choice of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+    const trimmed = choice?.trim();
+    if (!trimmed) continue;
+    const { listingRoomId } = parseRoomChoiceValue(trimmed);
+    if (listingRoomId) {
+      const byId = sub.rooms.find((room) => room.id === listingRoomId);
+      if (byId) return byId;
+    }
+  }
+  const signedRent = Number(row.signedMonthlyRent ?? 0);
+  if (signedRent > 0) {
+    const byRent = sub.rooms.filter((room) => room.monthlyRent === signedRent);
+    if (byRent.length === 1) return byRent[0] ?? null;
+  }
+  if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
+  const dailyRooms = sub.rooms.filter(
+    (room) => room.prorateMethod === "daily_rate" && room.dailyRentRate && room.dailyRentRate > 0,
+  );
+  if (dailyRooms.length === 1) return dailyRooms[0] ?? null;
+  return null;
+}
+
+function buildApprovedStandardChargeDrafts(
+  row: DemoApplicantRow,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+  opts: {
+    allowListingDefaults: boolean;
+    applicationId: string;
+    leaseStart?: string;
+    leaseEnd?: string;
+    moveInDue: string;
+  },
+): ApprovedChargeDraft[] {
+  const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
+    const value = raw?.trim();
+    if (value != null && value !== "") return parseMoneyAmount(value);
+    return parseMoneyAmount(fallback ?? "");
+  };
+  const drafts: ApprovedChargeDraft[] = [];
+  const pushDraft = (kind: HouseholdChargeKind, amount: number, title: string, dueDateLabel = opts.moveInDue) => {
+    if (!(amount > 0)) return;
+    const split = applyBundleGroupSplit(amount, title, resolveBundleGroupChargeContext(row));
+    if (!(split.amount > 0)) return;
+    drafts.push({
+      kind,
+      amount: Number(split.amount.toFixed(2)),
+      title: split.title,
+      dueDateLabel,
+    });
+  };
+
+  const room = resolveApprovedLeaseRoom(row, sub);
+  const entireHome = isEntireHomeListing(sub);
+  const prorateMethod =
+    entireHome && sub.entireHomeProrateMethod === "daily_rate"
+      ? "daily_rate"
+      : room?.prorateMethod === "daily_rate"
+        ? "daily_rate"
+        : "auto";
+  const dailyRentRate = entireHome ? sub.entireHomeDailyRentRate : room?.dailyRentRate;
+  const dailyUtilitiesRate = entireHome ? sub.entireHomeDailyUtilitiesRate : room?.dailyUtilitiesRate;
+  const dailyBasisRate =
+    residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
+  const endsInsideFirstMonth =
+    (dailyBasisRate ?? 0) > 0 && intraMonthLeaseSpan(opts.leaseStart, opts.leaseEnd) !== null;
+
+  const rentAmount = selectedRoomRentAmount(row);
+  if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {
+    const rentCharge = firstMonthRentChargeForLeaseStart(
+      rentAmount,
+      opts.leaseStart,
+      prorateMethod,
+      dailyRentRate,
+      dailyBasisRate,
+      opts.leaseEnd,
+    );
+    if (rentCharge) pushDraft(rentCharge.kind, rentCharge.amount, rentCharge.title);
+  }
+
+  const utilities = selectedRoomUtilities(row);
+  if (utilities.amount > 0) {
+    const proration = leaseFirstPeriodProration(opts.leaseStart, opts.leaseEnd, endsInsideFirstMonth);
+    let utilAmount: number;
+    let utilTitle: string;
+    if (proration.prorated && prorateMethod === "daily_rate" && dailyUtilitiesRate && dailyUtilitiesRate > 0) {
+      utilAmount = Number((proration.billableDays * dailyUtilitiesRate).toFixed(2));
+      utilTitle = `Prorated utilities (${proration.billableDays} days × ${formatRoomPriceAmount(dailyUtilitiesRate)}/day)`;
+    } else {
+      utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
+      utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+    }
+    pushDraft(
+      proration.prorated ? "prorated_utilities" : "utilities",
+      utilAmount,
+      utilTitle,
+    );
+  }
+
+  const lastMonthRentCharge =
+    !endsInsideFirstMonth && (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0))
+      ? lastMonthChargeForLeaseEnd(rentAmount, opts.leaseEnd, "rent", prorateMethod, dailyRentRate, dailyBasisRate)
+      : null;
+  if (lastMonthRentCharge) {
+    pushDraft(
+      lastMonthRentCharge.kind,
+      lastMonthRentCharge.amount,
+      lastMonthRentCharge.title,
+      lastMonthRentCharge.dueDateLabel ?? opts.moveInDue,
+    );
+  }
+
+  const lastMonthUtilitiesCharge =
+    !endsInsideFirstMonth && utilities.amount > 0
+      ? lastMonthChargeForLeaseEnd(utilities.amount, opts.leaseEnd, "utilities", prorateMethod, dailyUtilitiesRate)
+      : null;
+  if (lastMonthUtilitiesCharge) {
+    pushDraft(
+      lastMonthUtilitiesCharge.kind,
+      lastMonthUtilitiesCharge.amount,
+      lastMonthUtilitiesCharge.title,
+      lastMonthUtilitiesCharge.dueDateLabel ?? opts.moveInDue,
+    );
+  }
+
+  const securityDeposit = savedAmount(
+    row.application?.managerSecurityDepositOverride,
+    row.manualResidentDetails?.securityDeposit != null
+      ? String(row.manualResidentDetails.securityDeposit)
+      : opts.allowListingDefaults
+        ? String(listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? ""))
+        : undefined,
+  );
+  const holdingCredit = paidHoldingDepositCreditCents(opts.applicationId) / 100;
+  const netSecurityDeposit = Math.max(0, securityDeposit - holdingCredit);
+  const securityTitle =
+    holdingCredit > 0 && netSecurityDeposit > 0
+      ? `${chargeTitle("security_deposit")} ($${holdingCredit.toFixed(2)} holding deposit credited)`
+      : holdingCredit > 0 && netSecurityDeposit <= 0
+        ? `${chargeTitle("security_deposit")} (fully covered by holding deposit)`
+        : chargeTitle("security_deposit");
+  if (netSecurityDeposit > 0) {
+    pushDraft(
+      "security_deposit",
+      netSecurityDeposit,
+      securityTitle,
+      row.manuallyAdded ? opts.moveInDue : "Before lease signing",
+    );
+  }
+
+  const moveInFee = savedAmount(
+    row.application?.managerMoveInFeeOverride,
+    row.manualResidentDetails?.moveInFee != null
+      ? String(row.manualResidentDetails.moveInFee)
+      : opts.allowListingDefaults
+        ? String(listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? ""))
+        : undefined,
+  );
+  pushDraft("move_in_fee", moveInFee, chargeTitle("move_in_fee"));
+
+  const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+  if (otherCostAmount > 0) {
+    const otherCostTitle = row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost");
+    pushDraft("other_cost", otherCostAmount, otherCostTitle);
+  }
+
+  return drafts;
+}
+
+function syncPendingApprovedChargesFromListing(
+  row: DemoApplicantRow,
+  applicationId: string,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+  allowListingDefaults: boolean,
+  leaseStart: string | undefined,
+  leaseEnd: string | undefined,
+  moveInDue: string,
+): boolean {
+  const drafts =
+    row.application?.rentalType === "short_term"
+      ? (() => {
+          const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
+            const value = raw?.trim();
+            if (value != null && value !== "") return parseMoneyAmount(value);
+            return parseMoneyAmount(fallback ?? "");
+          };
+          const out: ApprovedChargeDraft[] = [];
+          const nightlyRate = shortTermNightlyRate(sub.shortTermDailyCost);
+          const nights = shortTermStayNightCount(leaseStart, leaseEnd);
+          if (nightlyRate > 0 && nights) {
+            out.push({
+              kind: "stay_total",
+              amount: shortTermStayTotalAmount(nightlyRate, nights),
+              title: shortTermStayChargeTitle(nights, nightlyRate),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          const shortDeposit = savedAmount(
+            row.application?.managerSecurityDepositOverride,
+            row.manualResidentDetails?.securityDeposit != null
+              ? String(row.manualResidentDetails.securityDeposit)
+              : allowListingDefaults
+                ? String(
+                    listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? ""),
+                  )
+                : undefined,
+          );
+          if (shortDeposit > 0) {
+            out.push({
+              kind: "security_deposit",
+              amount: shortDeposit,
+              title: chargeTitle("security_deposit"),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          const shortMoveIn = savedAmount(
+            row.application?.managerMoveInFeeOverride,
+            row.manualResidentDetails?.moveInFee != null
+              ? String(row.manualResidentDetails.moveInFee)
+              : allowListingDefaults
+                ? String(
+                    listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? ""),
+                  )
+                : undefined,
+          );
+          if (shortMoveIn > 0) {
+            out.push({
+              kind: "move_in_fee",
+              amount: shortMoveIn,
+              title: chargeTitle("move_in_fee"),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+          if (otherCostAmount > 0) {
+            out.push({
+              kind: "other_cost",
+              amount: otherCostAmount,
+              title: row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost"),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          return out;
+        })()
+      : buildApprovedStandardChargeDrafts(row, sub, {
+          allowListingDefaults,
+          applicationId,
+          leaseStart,
+          leaseEnd,
+          moveInDue,
+        });
+
+  let changed = false;
+  for (const draft of drafts) {
+    if (patchPendingApprovedChargeAmount(applicationId, draft)) changed = true;
+  }
+  return changed;
+}
+
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
@@ -2397,7 +2703,10 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   if (!propertyId) return false;
 
   const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const sub =
+    prop?.listingSubmission?.v === 1
+      ? normalizeManagerListingSubmissionV1(prop.listingSubmission as ManagerListingSubmissionV1)
+      : null;
 
   // The resident's browser doesn't have the manager's listing catalog, so getPropertyById()
   // returns null there. Without the listing we can't determine proration method or daily rates,
@@ -2429,6 +2738,18 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   // Pass force=true (via the "Regenerate" button) to refresh from current listing terms.
   const emailLowerForFilter = residentEmail.trim().toLowerCase();
   if (!force) {
+    let synced = false;
+    if (sub) {
+      synced = syncPendingApprovedChargesFromListing(
+        row,
+        applicationId,
+        sub,
+        allowListingDefaults,
+        leaseStart,
+        leaseEnd,
+        moveInDue,
+      );
+    }
     const hasExisting = readAll().some(
       (c) =>
         (c.applicationId === applicationId && c.kind !== "application_fee" && c.status === "pending") ||
@@ -2437,7 +2758,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
           c.residentEmail.trim().toLowerCase() === emailLowerForFilter &&
           c.propertyId === propertyId),
     );
-    if (hasExisting) return false;
+    if (hasExisting) return synced;
   }
   // Preserve paid charges — only wipe pending ones so they can be regenerated with correct amounts.
   // Also wipe pending recurring rent/utilities for this resident+property so updated amounts are used.
@@ -2514,7 +2835,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       row.manualResidentDetails?.securityDeposit != null
         ? String(row.manualResidentDetails.securityDeposit)
         : allowListingDefaults
-          ? sub?.shortTermDeposit
+          ? String(listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub?.shortTermDeposit ?? ""))
           : undefined,
     );
     if (shortDeposit > 0) {
@@ -2526,7 +2847,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       row.manualResidentDetails?.moveInFee != null
         ? String(row.manualResidentDetails.moveInFee)
         : allowListingDefaults
-          ? sub?.shortTermMoveInFee
+          ? String(listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub?.shortTermMoveInFee ?? ""))
           : undefined,
     );
     pushCharge("move_in_fee", shortMoveIn, chargeTitle("move_in_fee"), false, "Before check-in");
@@ -2543,34 +2864,17 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     return changed;
   }
 
-  // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
-  // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
-  // a second property lookup and to catch stale room IDs in assignedRoomChoice.
-  const room = (() => {
-    if (!sub) return selectedRoom(row);
-    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-      const trimmed = c?.trim();
-      if (!trimmed) continue;
-      const { listingRoomId } = parseRoomChoiceValue(trimmed);
-      if (listingRoomId) {
-        const byId = sub.rooms.find((r) => r.id === listingRoomId);
-        if (byId) return byId;
-      }
-    }
-    const signedRent = Number(row.signedMonthlyRent ?? 0);
-    if (signedRent > 0) {
-      const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
-      if (byRent.length === 1) return byRent[0] ?? null;
-    }
-    if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
-    // Last resort: only one room is configured with daily_rate → it must be the right room
-    const drRooms = sub.rooms.filter((r) => r.prorateMethod === "daily_rate" && r.dailyRentRate && r.dailyRentRate > 0);
-    if (drRooms.length === 1) return drRooms[0] ?? null;
-    return null;
-  })();
-  const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
-  const dailyRentRate = room?.dailyRentRate;
-  const dailyUtilitiesRate = room?.dailyUtilitiesRate;
+  // Resolve room for proration — entire-home listings use whole-unit settings when room choice is absent.
+  const room = sub ? resolveApprovedLeaseRoom(row, sub) : selectedRoom(row);
+  const entireHome = Boolean(sub && isEntireHomeListing(sub));
+  const prorateMethod =
+    entireHome && sub?.entireHomeProrateMethod === "daily_rate"
+      ? "daily_rate"
+      : room?.prorateMethod === "daily_rate"
+        ? "daily_rate"
+        : "auto";
+  const dailyRentRate = entireHome ? sub?.entireHomeDailyRentRate : room?.dailyRentRate;
+  const dailyUtilitiesRate = entireHome ? sub?.entireHomeDailyUtilitiesRate : room?.dailyUtilitiesRate;
   // When the room is priced by the day, rent (not utilities) bills per-day every period —
   // unless this resident has their own negotiated monthly rent, which wins exactly as it
   // does over the room's listing monthly rent.
@@ -2639,8 +2943,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     row.application?.managerSecurityDepositOverride,
     row.manualResidentDetails?.securityDeposit != null
       ? String(row.manualResidentDetails.securityDeposit)
-      : allowListingDefaults
-        ? sub?.securityDeposit
+      : allowListingDefaults && sub
+        ? String(listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? ""))
         : undefined,
   );
   const holdingCredit = paidHoldingDepositCreditCents(applicationId) / 100;
@@ -2665,8 +2969,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     row.application?.managerMoveInFeeOverride,
     row.manualResidentDetails?.moveInFee != null
       ? String(row.manualResidentDetails.moveInFee)
-      : allowListingDefaults
-        ? sub?.moveInFee
+      : allowListingDefaults && sub
+        ? String(listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? ""))
         : undefined,
   );
   pushCharge("move_in_fee", moveInFee, chargeTitle("move_in_fee"), false, "Before move-in");

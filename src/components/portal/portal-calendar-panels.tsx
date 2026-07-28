@@ -234,7 +234,7 @@ export function PortalCalendarPanels({
   unavailableMessage?: string;
   compactAvailability?: boolean;
   otherProperties?: { id: string; name: string }[];
-  onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
+  onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[], scope: "week" | "entire") => void;
   scheduledTourFilter?: ScheduledTourFilter;
   coManagerAvailabilityOverlays?: CoManagerAvailabilityOverlay[];
   scheduleOwnerLabel?: string | null;
@@ -282,6 +282,7 @@ export function PortalCalendarPanels({
   const [blockCadence, setBlockCadence] = useState<RecurrenceCadence>("weekly");
   const [blockOccurrences, setBlockOccurrences] = useState(4);
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
+  const [copyToHousesScope, setCopyToHousesScope] = useState<"week" | "entire">("week");
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
   const [durationChoice, setDurationChoice] = useState<number | "custom">(DEFAULT_EVENT_DURATION_MINUTES);
@@ -1232,7 +1233,7 @@ export function PortalCalendarPanels({
                 {!readOnly ? (
                   <>
                     <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
-                      Copy week
+                      Copy previous week
                     </Button>
                     <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
                       Block
@@ -1249,10 +1250,11 @@ export function PortalCalendarPanels({
                     className={COMPACT_CALENDAR_ACTION_BTN}
                     onClick={() => {
                       setSelectedHouseIds(new Set());
+                      setCopyToHousesScope("week");
                       setUpdateToHousesOpen(true);
                     }}
                   >
-                    Update houses
+                    Copy to houses
                   </Button>
                 ) : null}
               </div>
@@ -1640,7 +1642,7 @@ export function PortalCalendarPanels({
         {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
           <Modal
             open={updateToHousesOpen}
-            title="Update week schedule to other houses"
+            title="Copy availability to other houses"
             onClose={() => setUpdateToHousesOpen(false)}
             footer={
               <ModalFooter>
@@ -1653,18 +1655,20 @@ export function PortalCalendarPanels({
                   className="rounded-full"
                   disabled={selectedHouseIds.size === 0}
                   onClick={() => {
-                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs);
+                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs, copyToHousesScope);
                     setUpdateToHousesOpen(false);
                   }}
                 >
-                  Update {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
+                  Copy to {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
                 </Button>
               </ModalFooter>
             }
           >
             <div className="space-y-5">
               <p className="text-sm text-muted">
-                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones — nothing is removed.
+                {copyToHousesScope === "week"
+                  ? "Copy this week's open slots to the selected houses. New slots are added on top of existing ones — nothing is removed."
+                  : "Copy every open slot from this house to the selected houses. New slots are added on top of existing ones — nothing is removed."}
               </p>
               <div className="space-y-2">
                 {otherProperties.map((p) => (
@@ -1692,6 +1696,38 @@ export function PortalCalendarPanels({
                     <span className="text-sm font-medium text-foreground">{p.name}</span>
                   </label>
                 ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    copyToHousesScope === "week"
+                      ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
+                      : "border-border bg-card hover:border-border"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={copyToHousesScope === "week"}
+                    onChange={() => setCopyToHousesScope("week")}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                  <span className="text-sm font-medium text-foreground">This week only</span>
+                </label>
+                <label
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    copyToHousesScope === "entire"
+                      ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
+                      : "border-border bg-card hover:border-border"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={copyToHousesScope === "entire"}
+                    onChange={() => setCopyToHousesScope("entire")}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                  <span className="text-sm font-medium text-foreground">Entire schedule</span>
+                </label>
               </div>
             </div>
           </Modal>

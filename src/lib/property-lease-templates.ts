@@ -9,12 +9,13 @@ import {
 export type PropertyLeaseTemplateKind =
   | "room-rental"
   | "month-to-month"
+  | "short-term"
   | "sublease"
   | "corporate-furnished"
   | "custom";
 
 /** Legacy stored values — normalized on read. */
-type LegacyLeaseTemplateKind = "standard" | "short-term";
+type LegacyLeaseTemplateKind = "standard";
 
 export type StoredPropertyLeaseTemplateKind = PropertyLeaseTemplateKind | LegacyLeaseTemplateKind;
 
@@ -62,6 +63,12 @@ export const PROPERTY_LEASE_TYPE_OPTIONS: readonly {
     defaultLabel: "Month-to-month lease",
   },
   {
+    id: "short-term",
+    label: "Short-term stay",
+    description: "Guest or furnished short stay with check-in/out and house rules.",
+    defaultLabel: "Short-term stay lease",
+  },
+  {
     id: "sublease",
     label: "Sublease",
     description: "Approved tenant sublease or roommate transfer agreement.",
@@ -86,7 +93,6 @@ export const PROPERTY_LEASE_TEMPLATE_KIND_OPTIONS = PROPERTY_LEASE_TYPE_OPTIONS;
 
 export function normalizeLeaseTemplateKind(kind: string | undefined | null): PropertyLeaseTemplateKind {
   if (kind === "standard") return "room-rental";
-  if (kind === "short-term") return "custom";
   if (PROPERTY_LEASE_TYPE_OPTIONS.some((o) => o.id === kind)) {
     return kind as PropertyLeaseTemplateKind;
   }
