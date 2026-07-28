@@ -116,7 +116,6 @@ import {
   pruneSharedSpaceAmenitiesForKind,
   type SharedSpaceKind,
   mergeFurnitureToggle,
-  mergeToggleLine,
   parseFurnitureSet,
   roomFurnishingIsFurnished,
   sanitizeRoomAmenityText,
@@ -925,6 +924,93 @@ function FieldLabel({
 function StepFieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className="mt-1 text-xs font-medium text-red-600">{msg}</p>;
+}
+
+/**
+ * The one checkbox-group used for every preset list (amenities, furniture, …). A
+ * "Select all" checkbox comes FIRST with a real indeterminate state; the presets follow
+ * in a compact borderless grid; "Other" comes LAST and reveals a SMALL input holding ONLY
+ * the custom (non-preset) values — no permanent notes box, nothing echoed. Value is the
+ * stored newline list; the component preserves custom lines when presets toggle and vice
+ * versa. Built once so the same pattern is solved the same way everywhere.
+ */
+function PresetCheckboxGroup({
+  presets,
+  value,
+  onChange,
+  otherForcedOpen,
+  onOtherForcedOpenChange,
+  columns = "sm:grid-cols-2 lg:grid-cols-3",
+  otherPlaceholder = "Other, comma-separated",
+}: {
+  presets: readonly { id: string; label: string }[];
+  value: string;
+  onChange: (nextValue: string) => void;
+  otherForcedOpen: boolean;
+  onOtherForcedOpenChange: (open: boolean) => void;
+  columns?: string;
+  otherPlaceholder?: string;
+}) {
+  const presetLabels = presets.map((p) => p.label);
+  const lines = splitLineList(value);
+  const checked = new Set(lines.filter((l) => presetLabels.includes(l)));
+  const custom = lines.filter((l) => !presetLabels.includes(l));
+  const allChecked = presets.length > 0 && checked.size === presets.length;
+  const someChecked = checked.size > 0 && !allChecked;
+  const otherOpen = otherForcedOpen || custom.length > 0;
+  const write = (nextChecked: Set<string>, nextCustom: string[]) =>
+    onChange([...presetLabels.filter((l) => nextChecked.has(l)), ...nextCustom].join("\n"));
+  return (
+    <>
+      <div className={`mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 ${columns}`}>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 rounded border-border"
+            checked={allChecked}
+            ref={(el) => {
+              if (el) el.indeterminate = someChecked;
+            }}
+            onChange={(e) => write(new Set(e.target.checked ? presetLabels : []), custom)}
+          />
+          <span className="font-medium text-muted">Select all</span>
+        </label>
+        {presets.map((p) => (
+          <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 rounded border-border"
+              checked={checked.has(p.label)}
+              onChange={(e) => {
+                const next = new Set(checked);
+                if (e.target.checked) next.add(p.label);
+                else next.delete(p.label);
+                write(next, custom);
+              }}
+            />
+            <span className="font-medium text-foreground">{p.label}</span>
+          </label>
+        ))}
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 rounded border-border"
+            checked={otherOpen}
+            onChange={(e) => onOtherForcedOpenChange(e.target.checked)}
+          />
+          <span className="font-medium text-foreground">Other</span>
+        </label>
+      </div>
+      {otherOpen ? (
+        <Input
+          className="mt-2 h-9 text-sm"
+          value={custom.join(", ")}
+          onChange={(e) => write(checked, splitLineList(e.target.value))}
+          placeholder={otherPlaceholder}
+        />
+      ) : null}
+    </>
+  );
 }
 
 /** In CSS grid rows, bottom-aligns the control with siblings when label/hint blocks differ in height. */
@@ -3244,34 +3330,14 @@ export function ManagerAddListingForm({
               description="What shows in the main amenities table on the listing. Kitchen gear, shared desks, and TV belong under Shared spaces; bathroom finishes under Bathrooms."
             >
               <div>
-                <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
-                <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {dedupedPresets.houseWide.map((p) => {
-                    const on = splitLineList(sub.amenitiesText).includes(p.label);
-                    return (
-                      <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={on}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
-                            }))
-                          }
-                        />
-                        <span className="font-medium text-foreground">{p.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <Textarea
-                  className="mt-2"
-                  rows={2}
+                <FieldLabel>Common amenities</FieldLabel>
+                <PresetCheckboxGroup
+                  presets={dedupedPresets.houseWide}
                   value={sub.amenitiesText}
-                  onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))}
-                  placeholder="Add custom amenities not listed above (one per line)."
+                  onChange={(v) => setSub((s) => ({ ...s, amenitiesText: v }))}
+                  otherForcedOpen={otherAmenitiesOpenRooms.has("house")}
+                  onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen("house", open)}
+                  otherPlaceholder="Other amenities, comma-separated"
                 />
               </div>
             </ListingSubsection>
@@ -3557,10 +3623,6 @@ export function ManagerAddListingForm({
                 const roomNameErr = stepFieldErrors[roomNameKey];
                 const roomRentErr = stepFieldErrors[roomRentKey];
                 const roomHasErr = Boolean(roomNameErr || roomRentErr);
-                const roomPresetLabels = new Set(dedupedPresets.room.map((p) => p.label));
-                const customRoomAmenitiesText = splitLineList(room.roomAmenitiesText)
-                  .filter((line) => !roomPresetLabels.has(line))
-                  .join("\n");
                 const roomSubtitle = [
                   room.floor.trim() || null,
                   room.furnishing.trim() || null,
@@ -3680,50 +3742,15 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Check common room amenities — use the field below for anything not listed.">Room amenities</FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-3">
-                          {dedupedPresets.room.map((p) => {
-                            const on = splitLineList(room.roomAmenitiesText).includes(p.label);
-                            return (
-                              <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-border"
-                                  checked={on}
-                                  onChange={(e) =>
-                                    setRoom(i, {
-                                      roomAmenitiesText: mergeToggleLine(room.roomAmenitiesText, p.label, e.target.checked),
-                                    })
-                                  }
-                                />
-                                <span className="font-medium text-foreground">{p.label}</span>
-                              </label>
-                            );
-                          })}
-                          <label className="flex cursor-pointer items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-border"
-                              checked={otherAmenitiesOpenRooms.has(room.id) || customRoomAmenitiesText.trim() !== ""}
-                              onChange={(e) => toggleOtherAmenitiesOpen(room.id, e.target.checked)}
-                            />
-                            <span className="font-medium text-foreground">Other</span>
-                          </label>
-                        </div>
-                        {otherAmenitiesOpenRooms.has(room.id) || customRoomAmenitiesText.trim() !== "" ? (
-                          <Input
-                            className="mt-2 h-9 text-sm"
-                            value={customRoomAmenitiesText}
-                            onChange={(e) => {
-                              const presetLines = splitLineList(room.roomAmenitiesText).filter((line) =>
-                                roomPresetLabels.has(line),
-                              );
-                              const customLines = splitLineList(e.target.value);
-                              setRoom(i, { roomAmenitiesText: [...presetLines, ...customLines].join("\n") });
-                            }}
-                            placeholder="Other amenities, comma-separated"
-                          />
-                        ) : null}
+                        <FieldLabel>Room amenities</FieldLabel>
+                        <PresetCheckboxGroup
+                          presets={dedupedPresets.room}
+                          value={room.roomAmenitiesText}
+                          onChange={(v) => setRoom(i, { roomAmenitiesText: v })}
+                          otherForcedOpen={otherAmenitiesOpenRooms.has(room.id)}
+                          onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen(room.id, open)}
+                          otherPlaceholder="Other amenities, comma-separated"
+                        />
                       </div>
 
                       {!isEntireHome ? (
@@ -3988,61 +4015,16 @@ export function ManagerAddListingForm({
                         </div>
                       ) : null}
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Finishes and fixtures for this bathroom only (beyond shower / toilet / tub above).">
-                          Bathroom amenities
-                        </FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2">
-                          {dedupedPresets.bathroom.map((p) => {
-                            const on = splitLineList(b.amenitiesText ?? "").includes(p.label);
-                            return (
-                              <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-border"
-                                  checked={on}
-                                  onChange={(e) =>
-                                    setBath(i, {
-                                      amenitiesText: mergeToggleLine(b.amenitiesText ?? "", p.label, e.target.checked),
-                                    })
-                                  }
-                                />
-                                <span className="font-medium text-foreground">{p.label}</span>
-                              </label>
-                            );
-                          })}
-                          {(() => {
-                            const presetSet = new Set(dedupedPresets.bathroom.map((p) => p.label));
-                            const custom = splitLineList(b.amenitiesText ?? "").filter((l) => !presetSet.has(l));
-                            const open = otherAmenitiesOpenRooms.has(`bath-${b.id}`) || custom.length > 0;
-                            return (
-                              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-border"
-                                  checked={open}
-                                  onChange={(e) => toggleOtherAmenitiesOpen(`bath-${b.id}`, e.target.checked)}
-                                />
-                                <span className="font-medium text-foreground">Other</span>
-                              </label>
-                            );
-                          })()}
-                        </div>
-                        {(() => {
-                          const presetSet = new Set(dedupedPresets.bathroom.map((p) => p.label));
-                          const custom = splitLineList(b.amenitiesText ?? "").filter((l) => !presetSet.has(l));
-                          if (!(otherAmenitiesOpenRooms.has(`bath-${b.id}`) || custom.length > 0)) return null;
-                          return (
-                            <Input
-                              className="mt-2 h-9 text-sm"
-                              value={custom.join(", ")}
-                              onChange={(e) => {
-                                const presets = splitLineList(b.amenitiesText ?? "").filter((l) => presetSet.has(l));
-                                setBath(i, { amenitiesText: [...presets, ...splitLineList(e.target.value)].join("\n") });
-                              }}
-                              placeholder="Other amenities, comma-separated"
-                            />
-                          );
-                        })()}
+                        <FieldLabel>Bathroom amenities</FieldLabel>
+                        <PresetCheckboxGroup
+                          presets={dedupedPresets.bathroom}
+                          value={b.amenitiesText ?? ""}
+                          onChange={(v) => setBath(i, { amenitiesText: v })}
+                          otherForcedOpen={otherAmenitiesOpenRooms.has(`bath-${b.id}`)}
+                          onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen(`bath-${b.id}`, open)}
+                          columns="sm:grid-cols-2"
+                          otherPlaceholder="Other amenities, comma-separated"
+                        />
                       </div>
                       <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
                       <div>
@@ -4185,10 +4167,6 @@ export function ManagerAddListingForm({
                     const spaceNameErr = stepFieldErrors[spaceNameKey];
                     const spaceKind = normalizeSharedSpaceKind(sp.spaceKind, sp.name);
                     const kindPresets = sharedSpaceAmenityPresetsForKind(spaceKind, dedupedPresets.sharedSpace);
-                    const kindPresetLabels = new Set(kindPresets.map((p) => p.label));
-                    const customAmenitiesText = splitLineList(sp.amenitiesText ?? "")
-                      .filter((line) => !kindPresetLabels.has(line))
-                      .join("\n");
                     const spaceKindLabel =
                       SHARED_SPACE_KIND_OPTIONS.find((opt) => opt.id === spaceKind)?.label ?? "Shared space";
 
@@ -4270,51 +4248,15 @@ export function ManagerAddListingForm({
                           </Select>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()} — check all that apply.`}>
-                            Amenities
-                          </FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {kindPresets.map((p) => {
-                              const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
-                              return (
-                                <label key={p.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/30"
-                                    checked={on}
-                                    onChange={(e) =>
-                                      setSharedSpace(i, {
-                                        amenitiesText: mergeToggleLine(sp.amenitiesText ?? "", p.label, e.target.checked),
-                                      })
-                                    }
-                                  />
-                                  <span className="font-medium text-foreground">{p.label}</span>
-                                </label>
-                              );
-                            })}
-                            <label className="flex cursor-pointer items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-border"
-                                checked={otherAmenitiesOpenRooms.has(`space-${sp.id}`) || customAmenitiesText.trim() !== ""}
-                                onChange={(e) => toggleOtherAmenitiesOpen(`space-${sp.id}`, e.target.checked)}
-                              />
-                              <span className="font-medium text-foreground">Other</span>
-                            </label>
-                          </div>
-                          {otherAmenitiesOpenRooms.has(`space-${sp.id}`) || customAmenitiesText.trim() !== "" ? (
-                            <Input
-                              className="mt-2 h-9 text-sm"
-                              value={customAmenitiesText}
-                              onChange={(e) => {
-                                const presetLines = splitLineList(sp.amenitiesText ?? "").filter((line) =>
-                                  kindPresetLabels.has(line),
-                                );
-                                setSharedSpace(i, { amenitiesText: [...presetLines, ...splitLineList(e.target.value)].join("\n") });
-                              }}
-                              placeholder="Other amenities, comma-separated"
-                            />
-                          ) : null}
+                          <FieldLabel>Amenities</FieldLabel>
+                          <PresetCheckboxGroup
+                            presets={kindPresets}
+                            value={sp.amenitiesText ?? ""}
+                            onChange={(v) => setSharedSpace(i, { amenitiesText: v })}
+                            otherForcedOpen={otherAmenitiesOpenRooms.has(`space-${sp.id}`)}
+                            onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen(`space-${sp.id}`, open)}
+                            otherPlaceholder="Other amenities, comma-separated"
+                          />
                         </div>
                         <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
                         <div>
