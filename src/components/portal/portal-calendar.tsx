@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PillTabs } from "@/components/ui/tabs";
 import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
@@ -51,6 +52,11 @@ import {
 } from "@/lib/demo-admin-scheduling";
 
 type ManagerCalendarView = "all" | "tours" | "services";
+
+const CALENDAR_KIND_TABS = [
+  { id: "tours", label: "Tours" },
+  { id: "services", label: "Service orders" },
+] as const;
 
 export function PortalCalendar({
   portal,
@@ -333,6 +339,8 @@ export function PortalCalendar({
     [calendarTabCounts],
   );
 
+  const calendarKind = calendarView === "services" ? "services" : "tours";
+
   const showTourAvailability = calendarView === "tours" || calendarView === "all";
   const showServiceVisits = calendarView === "services" || calendarView === "all";
   const servicesOnlyView = calendarView === "services";
@@ -360,17 +368,19 @@ export function PortalCalendar({
         title={pageTitle}
         filterRow={
           <ManagerPortalFilterRow>
-              <ManagerPortalStatusPills
-                tabs={calendarTabs}
-                activeId={calendarView}
-                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+              <PillTabs
+                items={[...CALENDAR_KIND_TABS]}
+                activeId={calendarKind}
+                onChange={(id) => setCalendarView(id === "services" ? "services" : "tours")}
               />
-              <PortalPropertyFilterPill
+              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
+                <PortalPropertyFilterPill
                 propertyOptions={managerPropertyFilterOptions}
                 propertyValue={activeCalendarPropertyId}
                 onPropertyChange={setCalendarPropertyId}
                 propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
               />
+              </div>
           </ManagerPortalFilterRow>
         }
       >
@@ -384,17 +394,19 @@ export function PortalCalendar({
         title={pageTitle}
         filterRow={
           <ManagerPortalFilterRow>
-              <ManagerPortalStatusPills
-                tabs={calendarTabs}
-                activeId={calendarView}
-                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+              <PillTabs
+                items={[...CALENDAR_KIND_TABS]}
+                activeId={calendarKind}
+                onChange={(id) => setCalendarView(id === "services" ? "services" : "tours")}
               />
-              <PortalPropertyFilterPill
+              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
+                <PortalPropertyFilterPill
                 propertyOptions={managerPropertyFilterOptions}
                 propertyValue={activeCalendarPropertyId}
                 onPropertyChange={setCalendarPropertyId}
                 propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
               />
+              </div>
           </ManagerPortalFilterRow>
         }
       >
@@ -417,13 +429,13 @@ export function PortalCalendar({
                 type="button"
                 variant="outline"
                 className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                disabled={!activeCalendarPropertyId || calendarView === "services"}
+                disabled={shareableProperties.length === 0 || calendarView === "services"}
                 title={
                   calendarView === "services"
                     ? "Switch to Tours or All to share a tour link"
-                    : !activeCalendarPropertyId
-                      ? "Select a house first"
-                      : "Share tour link"
+                    : shareableProperties.length === 0
+                      ? "List a property as active before sharing tour links"
+                      : "Share tour links"
                 }
                 onClick={() => setShareTourModalOpen(true)}
               >
@@ -436,17 +448,19 @@ export function PortalCalendar({
           portal === "manager" ? (
             <div className="flex w-full min-w-0 flex-col gap-3">
             <ManagerPortalFilterRow>
-              <ManagerPortalStatusPills
-                tabs={calendarTabs}
-                activeId={calendarView}
-                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+              <PillTabs
+                items={[...CALENDAR_KIND_TABS]}
+                activeId={calendarKind}
+                onChange={(id) => setCalendarView(id === "services" ? "services" : "tours")}
               />
-              <PortalPropertyFilterPill
-                propertyOptions={managerPropertyFilterOptions}
-                propertyValue={activeCalendarPropertyId}
-                onPropertyChange={setCalendarPropertyId}
-                propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
-              />
+              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
+                <PortalPropertyFilterPill
+                  propertyOptions={managerPropertyFilterOptions}
+                  propertyValue={activeCalendarPropertyId}
+                  onPropertyChange={setCalendarPropertyId}
+                  propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
+                />
+              </div>
             </ManagerPortalFilterRow>
               {showCoManagerCoordination ? (
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
@@ -468,20 +482,30 @@ export function PortalCalendar({
           ) : undefined
         }
       >
-        {portal === "manager" && calendarView !== "services" ? (
-          <div className="mb-4">
-            <TourProposalsPanel />
-          </div>
-        ) : null}
-        {portal === "manager" && servicesOnlyView ? (
-          <p className="mb-3 text-sm text-muted">
-            Scheduled vendor visits and work you assigned to yourself. Filter by house or leave all properties selected to see your full service schedule.
-          </p>
-        ) : null}
-        {propertiesLoading && managerProperties.length === 0 ? (
-          <p className="text-sm text-muted">Loading houses from the backend…</p>
-        ) : (
-          <PortalCalendarPanels
+        {portal === "manager" ? (
+          <div className="mt-1">
+            <div className="mb-4">
+              <ManagerPortalStatusPills
+                tabs={calendarTabs}
+                activeId={calendarView}
+                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+              />
+            </div>
+            {calendarView !== "services" ? (
+              <div className="mb-4">
+                <TourProposalsPanel />
+              </div>
+            ) : null}
+            {servicesOnlyView ? (
+              <p className="mb-3 text-sm text-muted">
+                Scheduled vendor visits and work you assigned to yourself. Filter by house or leave all properties
+                selected to see your full service schedule.
+              </p>
+            ) : null}
+            {propertiesLoading && managerProperties.length === 0 ? (
+              <p className="text-sm text-muted">Loading houses from the backend…</p>
+            ) : (
+              <PortalCalendarPanels
             key={`${calendarStorageKey ?? "calendar-unavailable"}-${calendarView}`}
             storageKey={calendarStorageKey}
             calendarRefreshSignal={calendarRefreshSignal}
@@ -547,6 +571,16 @@ export function PortalCalendar({
                   }
                 : undefined
             }
+              />
+            )}
+          </div>
+        ) : (
+          <PortalCalendarPanels
+            key={storageKey ?? "calendar-unavailable"}
+            storageKey={storageKey}
+            calendarRefreshSignal={calendarRefreshSignal}
+            availabilityHeading="Schedule meeting"
+            compactAvailability
           />
         )}
       </ManagerPortalPageShell>

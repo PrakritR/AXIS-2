@@ -18,6 +18,7 @@ import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
   buildManagerListingUrl,
+  buildManagerPortfolioTourUrl,
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
@@ -39,8 +40,7 @@ export function ShareLeadLinkModal({
   preselectedPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
-  // Listing sends support several/all properties at once; apply/tour stay single.
-  const multiEnabled = kind === "listing";
+  const multiEnabled = properties.length > 0;
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
   const [prospectName, setProspectName] = useState("");
@@ -52,11 +52,11 @@ export function ShareLeadLinkModal({
   useEffect(() => {
     if (!open) return;
     void Promise.resolve().then(() => {
-      const initial =
+      const initialId =
         preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
           ? preselectedPropertyId
           : properties[0]?.id ?? "";
-      setPropertyIds(initial ? [initial] : []);
+      setPropertyIds(initialId ? [initialId] : []);
       setRoomChoice("");
       setProspectName("");
       setProspectEmail("");
@@ -66,15 +66,37 @@ export function ShareLeadLinkModal({
     });
   }, [open, kind, preselectedPropertyId, properties]);
 
-  // Room pre-selection applies to apply invites only; listing sends link to the whole property.
   const singlePropertyId = propertyIds.length === 1 ? propertyIds[0] : "";
-  const isMultiListing = multiEnabled && propertyIds.length > 1;
+  const isMultiProperty = propertyIds.length > 1;
+  const isMultiListing = kind === "listing" && isMultiProperty;
+  const isMultiApply = kind === "apply" && isMultiProperty;
+  const isPortfolioTour = kind === "tour" && isMultiProperty;
 
   const propertyTitle = useMemo(() => {
-    if (isMultiListing) return `${propertyIds.length} homes`;
+    if (isMultiProperty) {
+      return kind === "tour" ? `${propertyIds.length} properties` : `${propertyIds.length} homes`;
+    }
     if (!singlePropertyId) return "";
     return properties.find((p) => p.id === singlePropertyId)?.label ?? singlePropertyId;
-  }, [properties, singlePropertyId, isMultiListing, propertyIds.length]);
+  }, [properties, singlePropertyId, isMultiProperty, propertyIds.length, kind]);
+
+  const portfolioTourUrl = useMemo(() => {
+    if (!isPortfolioTour || typeof window === "undefined") return "";
+    return buildManagerPortfolioTourUrl(window.location.origin, propertyIds);
+  }, [isPortfolioTour, propertyIds]);
+
+  const individualTourLinks = useMemo(() => {
+    if (kind !== "tour" || typeof window === "undefined") return [];
+    const origin = window.location.origin;
+    const selected = new Set(propertyIds);
+    return properties
+      .filter((property) => selected.has(property.id))
+      .map((property) => ({
+        id: property.id,
+        label: property.label,
+        url: buildManagerTourUrl(origin, property.id),
+      }));
+  }, [kind, properties, propertyIds]);
 
   const roomOptions = useMemo(() => {
     if (kind !== "apply" || !singlePropertyId) return [];
@@ -84,7 +106,8 @@ export function ShareLeadLinkModal({
   const linkUrl = useMemo(() => {
     if (propertyIds.length === 0 || typeof window === "undefined") return "";
     const origin = window.location.origin;
-    if (isMultiListing) return buildManagerBrowseUrl(origin, propertyIds);
+    if (isPortfolioTour) return portfolioTourUrl;
+    if (isMultiListing || isMultiApply) return buildManagerBrowseUrl(origin, propertyIds);
     if (!singlePropertyId) return "";
     if (kind === "tour") return buildManagerTourUrl(origin, singlePropertyId);
     if (kind === "listing") return buildManagerListingUrl(origin, singlePropertyId);
@@ -95,7 +118,7 @@ export function ShareLeadLinkModal({
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
     });
-  }, [kind, propertyIds, singlePropertyId, isMultiListing, roomChoice, roomOptions]);
+  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions]);
 
   const listingSummary = useMemo(() => {
     if (kind !== "listing" || isMultiListing || !singlePropertyId) return null;
@@ -106,13 +129,14 @@ export function ShareLeadLinkModal({
 
   const invitePreviewBody = useMemo(() => {
     if (!linkUrl) return "";
-    if (isMultiListing) {
+    if (isMultiProperty) {
       return buildLeadInviteEmailBody({
         kind,
         prospectName: prospectName.trim() || undefined,
         propertyTitle,
         linkUrl,
-        listingCount: propertyIds.length,
+        listingCount: isMultiListing || isMultiApply ? propertyIds.length : undefined,
+        tourCount: isPortfolioTour ? propertyIds.length : undefined,
         managerNote: note.trim() || undefined,
       });
     }
@@ -131,10 +155,10 @@ export function ShareLeadLinkModal({
       listingSummary: listingSummary ?? undefined,
       managerNote: note.trim() || undefined,
     });
-  }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiListing, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
+  }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiProperty, isMultiListing, isPortfolioTour, isMultiApply, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
 
   const sendListingRoomParams = useMemo(() => {
-    if (kind === "listing" || isMultiListing) {
+    if (kind === "listing" || isMultiListing || isMultiApply) {
       return { listingRoomId: undefined, roomName: undefined };
     }
     if (!roomChoice) return { listingRoomId: undefined, roomName: undefined };
@@ -143,15 +167,15 @@ export function ShareLeadLinkModal({
       listingRoomId: listingRoomId || undefined,
       roomName: roomOptions.find((o) => o.value === roomChoice)?.label,
     };
-  }, [kind, isMultiListing, roomChoice, roomOptions]);
+  }, [kind, isMultiListing, isMultiApply, roomChoice, roomOptions]);
 
-  const handleCopy = async () => {
-    if (!linkUrl) {
+  const handleCopy = async (text: string, successMessage: string) => {
+    if (!text) {
       showToast("Select a property first.");
       return;
     }
-    const ok = await copyTextToClipboard(linkUrl);
-    showToast(ok ? (kind === "tour" ? "Tour link copied." : kind === "apply" ? "Application link copied." : "Link copied.") : "Could not copy link.");
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? successMessage : "Could not copy link.");
   };
 
   const openSendPreview = () => {
@@ -174,7 +198,7 @@ export function ShareLeadLinkModal({
       if (isDemoModeActive()) {
         logDemoOutboundEmail(
           prospectEmail.trim(),
-          leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined),
+          leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined),
           invitePreviewBody,
         );
         showToast(kind === "listing" ? "Listing sent (demo)." : "Invite sent (demo).");
@@ -288,25 +312,10 @@ export function ShareLeadLinkModal({
                       setRoomChoice("");
                     }}
                   />
-                ) : (
-                  <Select
-                    id="share-lead-property"
-                    value={singlePropertyId}
-                    onChange={(e) => {
-                      setPropertyIds(e.target.value ? [e.target.value] : []);
-                      setRoomChoice("");
-                    }}
-                  >
-                    {properties.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </Select>
-                )}
+                ) : null}
               </div>
 
-              {kind === "apply" && !isMultiListing && roomOptions.length > 0 ? (
+              {kind === "apply" && !isMultiApply && roomOptions.length > 0 ? (
                 <div>
                   <label htmlFor="share-lead-room" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
                     Room (optional)
@@ -340,7 +349,9 @@ export function ShareLeadLinkModal({
                     variant="outline"
                     className="mt-2 rounded-full"
                     disabled={!linkUrl}
-                    onClick={() => void handleCopy()}
+                    onClick={() =>
+                      void handleCopy(linkUrl, isMultiListing ? "Browse link copied." : "Listing link copied.")
+                    }
                   >
                     {isMultiListing ? "Copy browse link" : "Copy listing link"}
                   </Button>
@@ -348,41 +359,97 @@ export function ShareLeadLinkModal({
               ) : null}
 
               {kind === "tour" ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public tour link</p>
-                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                    {linkUrl || "Select a property to generate a link."}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2 rounded-full"
-                    disabled={!linkUrl}
-                    onClick={() => void handleCopy()}
-                  >
-                    Copy tour link
-                  </Button>
+                <div className="space-y-4">
+                  {isPortfolioTour ? (
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Generic tour link</p>
+                      <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                        {portfolioTourUrl}
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                        Prospects pick which property to tour before choosing a time.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2 rounded-full"
+                        disabled={!portfolioTourUrl}
+                        onClick={() => void handleCopy(portfolioTourUrl, "Generic tour link copied.")}
+                      >
+                        Copy generic tour link
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {isPortfolioTour ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Property tour links</p>
+                      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                        {individualTourLinks.map((entry) => (
+                          <div key={entry.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
+                            <p className="text-sm font-semibold text-foreground">{entry.label}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-muted break-all">{entry.url}</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="mt-2 rounded-full"
+                              onClick={() => void handleCopy(entry.url, "Tour link copied.")}
+                            >
+                              Copy link
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public tour link</p>
+                      <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                        {linkUrl || "Select a property to generate a link."}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="mt-2 rounded-full"
+                        disabled={!linkUrl}
+                        onClick={() => void handleCopy(linkUrl, "Tour link copied.")}
+                      >
+                        Copy tour link
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : null}
 
               {kind === "apply" ? (
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public application link</p>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                    {isMultiApply ? "Public browse link" : "Public application link"}
+                  </p>
                   <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
                     {linkUrl || "Select a property to generate a link."}
                   </div>
+                  {isMultiApply ? (
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                      Opens the browse page filtered to the {propertyIds.length} homes you selected.
+                    </p>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
                     className="mt-2 rounded-full"
                     disabled={!linkUrl}
-                    onClick={() => void handleCopy()}
+                    onClick={() =>
+                      void handleCopy(linkUrl, isMultiApply ? "Browse link copied." : "Application link copied.")
+                    }
                   >
-                    Copy application link
+                    {isMultiApply ? "Copy browse link" : "Copy application link"}
                   </Button>
-                  <p className="mt-2 text-xs leading-relaxed text-muted">
-                    Applicants create a resident account first, then complete the application in their portal.
-                  </p>
+                  {!isMultiApply ? (
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                      Applicants create a resident account first, then complete the application in their portal.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -442,7 +509,7 @@ export function ShareLeadLinkModal({
         title={kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link"}
         onClose={() => setSendPreviewOpen(false)}
         recipient={prospectEmail.trim()}
-        subject={leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined)}
+        subject={leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined)}
         body={invitePreviewBody}
         intro="Review the email before sending."
         footerNote="Sent via PropLane when email delivery is configured."

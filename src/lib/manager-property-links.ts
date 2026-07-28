@@ -48,6 +48,22 @@ export function buildManagerTourUrl(origin: string, propertyId: string): string 
   return `${base}${buildTourContactHref(propertyId)}`;
 }
 
+/**
+ * Portfolio tour link — prospect picks a property before scheduling. Uses the same
+ * `ids` param as browse so managers can share one link for all linked homes.
+ */
+export function buildPortfolioTourContactHref(propertyIds: string[]): string {
+  const ids = parseBrowseIdsParam(propertyIds.join(","));
+  if (ids.length === 0) return "/rent/tours-contact";
+  const q = new URLSearchParams({ [BROWSE_IDS_PARAM]: ids.join(",") });
+  return `/rent/tours-contact?${q.toString()}`;
+}
+
+export function buildManagerPortfolioTourUrl(origin: string, propertyIds: string[]): string {
+  const base = origin.replace(/\/$/, "");
+  return `${base}${buildPortfolioTourContactHref(propertyIds)}`;
+}
+
 export function buildManagerListingUrl(origin: string, propertyId: string): string {
   const base = origin.replace(/\/$/, "");
   const id = propertyId.trim();
