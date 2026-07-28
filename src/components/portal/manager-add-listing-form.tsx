@@ -18,7 +18,10 @@ import { buildListingModalAssistantContext } from "@/lib/listing-assistant-conte
 import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
-import { ListingUnifiedFeesTable } from "@/components/portal/listing-unified-fees-table";
+import {
+  ListingUnifiedFeesTable,
+  type FeeExpandableSection,
+} from "@/components/portal/listing-unified-fees-table";
 import { LISTING_FEE_PRESETS } from "@/lib/listing-fees";
 import {
   submitManagerPendingPropertyToServer,
@@ -1065,16 +1068,6 @@ function ListingSubsection({
         {description ? <p className="text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
       <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
-/** Divider label for the sections inside the unified Fees UI (Rooms / Bundles / Other fees). */
-function FeeSectionHeader({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</span>
-      {hint ? <span className="text-[11px] text-muted">{hint}</span> : null}
     </div>
   );
 }
@@ -2598,327 +2591,310 @@ export function ManagerAddListingForm({
   // screen reads as one sectioned table (Rooms | Bundles + Other fees) instead of the old
   // separate floating blocks. Each room and each bundle carries its own dropdown with rent
   // (rooms) / price (bundles), security deposit, and utilities (fixed cost vs resident pays).
-  const roomsFeesSection =
-    longTermLeaseEnabled && !isEntireHome ? (
-      <div className="space-y-3" data-wizard-field="monthlyRent">
-        <FeeSectionHeader title="Rooms" hint="Each room's rent, deposit, and utilities." />
-        {stepFieldErrors.monthlyRent ? (
-          <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
-        ) : null}
-        {sub.rooms.map((room, i) => {
-          const roomRentKey = listingRoomRentKey(room.id);
-          const roomRentErr = stepFieldErrors[roomRentKey];
-          const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
-          const roomLabel = room.name.trim() || `Room ${i + 1}`;
-          const priced = listingRoomHasRent(room);
-          const utilModel = resolveRoomUtilitiesPaymentModel(room);
-          const utilShort = utilModel === "tenant_direct" ? "Paid by resident" : "Payment amount";
-          const priceKey = listingItemKey("roomPrice", room.id);
-          const expanded = priced
-            ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
-            : true;
-          return (
-            <ListingWizardCollapsibleCard
-              key={room.id}
-              expanded={expanded}
-              onToggle={() => toggleListingItem(priceKey)}
-              title={roomLabel}
-              subtitle={`${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`}
-              hasError={Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent)}
-              bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5"
-              toggleDataAttr={`listing-room-price-toggle-${room.id}`}
-              headerActions={
-                sub.rooms.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={LISTING_WIZARD_REMOVE_BTN}
-                    onClick={() => removeRoom(i)}
-                  >
-                    Remove
-                  </Button>
-                ) : undefined
-              }
-            >
-              <GridField>
-                <FieldLabel>Monthly rent *</FieldLabel>
-                <div data-wizard-field={roomRentKey}>
-                  <MoneyInput
-                    invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
-                    ariaLabel={`Monthly rent for ${roomLabel}`}
-                    value={room.monthlyRent || ""}
-                    onChange={(e) => {
-                      clearListingFieldError("monthlyRent");
-                      clearListingFieldError(roomRentKey);
-                      expandListingItem(priceKey);
-                      setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
-                      if (parseSanitizedMoneyNumber(e.target.value) > 0) {
-                        setLtFeeToggles((prev) => ({ ...prev, rent: true }));
-                      }
-                    }}
-                    placeholder="800"
-                  />
-                  <StepFieldError msg={roomRentErr} />
-                </div>
-              </GridField>
-              <GridField>
-                <FieldLabel hint="Optional — falls back to the shared security deposit.">Security deposit</FieldLabel>
-                <MoneyInput
-                  ariaLabel={`Security deposit for ${roomLabel}`}
-                  value={(room.securityDeposit ?? "").replace(/^\$/, "").trim()}
-                  onChange={(e) => setRoom(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
-                  placeholder="1000"
-                />
-              </GridField>
-              <GridField>
-                <LongTermUtilitiesPaymentPicker
-                  value={room.utilitiesPaymentModel}
-                  onSelect={(model) =>
-                    setRoom(i, {
-                      utilitiesPaymentModel: model,
-                      ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
-                    })
-                  }
-                />
-              </GridField>
-              {longTermUtilitiesEstimateRequired(room.utilitiesPaymentModel) ? (
-                <GridField>
-                  <FieldLabel>Utilities amount</FieldLabel>
-                  <MoneyInput
-                    ariaLabel={`Utilities amount for ${roomLabel}`}
-                    value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                    onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                    placeholder="175"
-                  />
-                </GridField>
-              ) : null}
-              <div className="sm:col-span-2">
-                <ProrationMethodFields
-                  prorateMethod={room.prorateMethod ?? "auto"}
-                  monthlyRent={room.monthlyRent}
-                  dailyRentRate={room.dailyRentRate}
-                  dailyUtilitiesRate={room.dailyUtilitiesRate}
-                  onMethod={(m) => setRoom(i, { prorateMethod: m })}
-                  onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
-                  onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
-                />
-              </div>
-            </ListingWizardCollapsibleCard>
-          );
-        })}
-      </div>
-    ) : null;
-
-  const bundlesFeesSection = !isEntireHome ? (
-    <div className="space-y-3">
-      <FeeSectionHeader title="Bundles" hint="Offer rooms together on one lease — optional." />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full text-xs"
-          onClick={() => addGeneratedBundle("whole_house")}
-          disabled={sub.rooms.length === 0}
-        >
-          Whole house
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full text-xs"
-          onClick={() => addGeneratedBundle("multi_room")}
-          disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
-        >
-          Group
-        </Button>
-        <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
-          Custom
-        </Button>
-      </div>
-      {(() => {
-        const bundles = sub.bundles ?? [];
-        if (bundles.length === 0) {
-          return <p className="text-xs text-muted">Optional — per-room pricing works without bundles.</p>;
-        }
-        return (
-          <div className="space-y-3">
-            {bundles.map((bundle) => {
-              const i = (sub.bundles ?? []).findIndex((b) => b.id === bundle.id);
-              const selectedIds = new Set(bundle.includedRoomIds ?? []);
-              const namedRooms = sub.rooms.filter((r) => r.name.trim());
-              const selectedRooms = namedRooms.filter((r) => selectedIds.has(r.id));
-              const rentSum = selectedRooms.reduce((sum, r) => sum + (Number.isFinite(r.monthlyRent) ? r.monthlyRent : 0), 0);
-              const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
-              const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
-              const stNightlyKey = `bundle-${bundle.id}-shortTermNightlyRent`;
-              const stNightlyErr = stepFieldErrors[stNightlyKey];
-              const stPriceHint = bundleShortTermPriceLabel(bundle, sub);
-              return (
-                <ListingWizardCollapsibleCard
-                  key={bundle.id}
-                  expanded={isListingItemExpanded(listingItemKey("bundle", bundle.id))}
-                  onToggle={() => toggleListingItem(listingItemKey("bundle", bundle.id))}
-                  title={bundle.label.trim() || `Package ${i + 1}`}
-                  subtitle={[
-                    `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
-                    rentSum > 0 ? `$${rentSum}/mo base` : null,
-                    hasManualPrice ? "Custom price" : null,
-                    bundle.shortTermEnabled && stPriceHint ? stPriceHint : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  bodyClassName="grid gap-3 sm:grid-cols-2"
-                  toggleDataAttr={`listing-bundle-toggle-${bundle.id}`}
-                  headerActions={
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={LISTING_WIZARD_ACTION_BTN}
-                        onClick={() => applyBundleRoomScope(i, "none")}
-                      >
-                        Clear
-                      </Button>
-                      <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeBundle(i)}>
-                        Remove
-                      </Button>
-                    </>
-                  }
-                >
+  const roomsFeeSection: FeeExpandableSection | null =
+    longTermLeaseEnabled && !isEntireHome
+      ? {
+          key: "rooms",
+          title: "Rooms",
+          hint: "Each room's rent, deposit, and utilities.",
+          rows: sub.rooms.map((room, i) => {
+            const roomRentKey = listingRoomRentKey(room.id);
+            const roomRentErr = stepFieldErrors[roomRentKey];
+            const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
+            const roomLabel = room.name.trim() || `Room ${i + 1}`;
+            const priced = listingRoomHasRent(room);
+            const utilModel = resolveRoomUtilitiesPaymentModel(room);
+            const utilShort = utilModel === "tenant_direct" ? "Paid by resident" : "Payment amount";
+            const priceKey = listingItemKey("roomPrice", room.id);
+            const expanded = priced
+              ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
+              : true;
+            return {
+              id: room.id,
+              title: roomLabel,
+              summary: `${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`,
+              expanded,
+              onToggle: () => toggleListingItem(priceKey),
+              onRemove: sub.rooms.length > 1 ? () => removeRoom(i) : undefined,
+              hasError: Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent),
+              toggleDataAttr: `listing-room-price-toggle-${room.id}`,
+              detail: (
+                <div className="grid gap-3 sm:grid-cols-2">
                   <GridField>
-                    <FieldLabel>Bundle name</FieldLabel>
-                    <Input
-                      value={bundle.label}
-                      onChange={(e) => setBundle(i, { label: sanitizePlaceNameInput(e.target.value) })}
-                      placeholder="Whole house lease, Rooms A+B"
-                    />
-                  </GridField>
-                  <GridField>
-                    <FieldLabel hint="Defaults to sum of room rents; edit for discounts.">Bundle rent / mo</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                      <Input
-                        inputMode="decimal"
-                        className="pl-8"
-                        value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                        onChange={(e) => setBundle(i, { price: sanitizeMoneyInput(e.target.value) })}
-                        placeholder={rentSum > 0 ? String(rentSum) : "4500"}
+                    <FieldLabel>Monthly rent *</FieldLabel>
+                    <div data-wizard-field={roomRentKey}>
+                      <MoneyInput
+                        invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
+                        ariaLabel={`Monthly rent for ${roomLabel}`}
+                        value={room.monthlyRent || ""}
+                        onChange={(e) => {
+                          clearListingFieldError("monthlyRent");
+                          clearListingFieldError(roomRentKey);
+                          expandListingItem(priceKey);
+                          setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
+                          if (parseSanitizedMoneyNumber(e.target.value) > 0) {
+                            setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+                          }
+                        }}
+                        placeholder="800"
                       />
-                    </div>
-                  </GridField>
-                  <GridField>
-                    <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                      <Input
-                        inputMode="decimal"
-                        className="pl-8"
-                        value={bundle.strikethrough.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                        onChange={(e) => setBundle(i, { strikethrough: sanitizeMoneyInput(e.target.value) })}
-                        placeholder="4800"
-                      />
+                      <StepFieldError msg={roomRentErr} />
                     </div>
                   </GridField>
                   <GridField>
                     <FieldLabel hint="Optional — falls back to the shared security deposit.">Security deposit</FieldLabel>
                     <MoneyInput
-                      ariaLabel={`Security deposit for ${bundle.label.trim() || "bundle"}`}
-                      value={(bundle.securityDeposit ?? "").replace(/^\$/, "").trim()}
-                      onChange={(e) => setBundle(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
-                      placeholder="1500"
+                      ariaLabel={`Security deposit for ${roomLabel}`}
+                      value={(room.securityDeposit ?? "").replace(/^\$/, "").trim()}
+                      onChange={(e) => setRoom(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="1000"
                     />
                   </GridField>
                   <GridField>
                     <LongTermUtilitiesPaymentPicker
-                      value={bundle.utilitiesPaymentModel}
+                      value={room.utilitiesPaymentModel}
                       onSelect={(model) =>
-                        setBundle(i, {
+                        setRoom(i, {
                           utilitiesPaymentModel: model,
                           ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
                         })
                       }
                     />
                   </GridField>
-                  {longTermUtilitiesEstimateRequired(bundle.utilitiesPaymentModel) ? (
+                  {longTermUtilitiesEstimateRequired(room.utilitiesPaymentModel) ? (
                     <GridField>
                       <FieldLabel>Utilities amount</FieldLabel>
                       <MoneyInput
-                        ariaLabel={`Utilities amount for ${bundle.label.trim() || "bundle"}`}
-                        value={(bundle.utilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                        onChange={(e) => setBundle(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                        placeholder="200"
+                        ariaLabel={`Utilities amount for ${roomLabel}`}
+                        value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                        onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                        placeholder="175"
                       />
                     </GridField>
                   ) : null}
-                  {sub.shortTermRentalsAllowed ? (
-                    <>
-                      <div className="sm:col-span-2">
-                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-border"
-                            checked={Boolean(bundle.shortTermEnabled)}
-                            onChange={(e) => {
-                              const on = e.target.checked;
-                              clearListingFieldError(stNightlyKey);
-                              setBundle(i, {
-                                shortTermEnabled: on,
-                                ...(on ? {} : { shortTermNightlyRent: "" }),
-                              });
-                            }}
-                          />
-                          Short-term rental
-                        </label>
-                      </div>
-                      {bundle.shortTermEnabled ? (
-                        <GridField>
-                          <FieldLabel hint="Nightly rate → stay total at checkout.">Short-term rent / night</FieldLabel>
-                          <div data-wizard-field={stNightlyKey}>
-                            <MoneyInput
-                              invalid={Boolean(stNightlyErr)}
-                              ariaLabel={`Short-term nightly rent for ${bundle.label.trim() || "bundle"}`}
-                              value={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
-                              onChange={(e) => {
-                                clearListingFieldError(stNightlyKey);
-                                setBundle(i, { shortTermNightlyRent: sanitizeMoneyInput(e.target.value) });
-                              }}
-                              placeholder="85"
-                            />
-                            <StepFieldError msg={stNightlyErr} />
-                          </div>
-                        </GridField>
-                      ) : null}
-                    </>
-                  ) : null}
                   <div className="sm:col-span-2">
-                    <FieldLabel>Rooms in this bundle</FieldLabel>
-                    <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {sub.rooms.map((room) => (
-                        <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-border"
-                            checked={selectedIds.has(room.id)}
-                            onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
-                          />
-                          <span className="min-w-0 font-medium text-foreground">
-                            <span className="truncate">{roomLabelForBundle(room)}</span>
-                            {room.monthlyRent > 0 ? (
-                              <span className="ml-1 tabular-nums text-xs font-normal text-muted">· ${room.monthlyRent}</span>
-                            ) : null}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
+                    <ProrationMethodFields
+                      prorateMethod={room.prorateMethod ?? "auto"}
+                      monthlyRent={room.monthlyRent}
+                      dailyRentRate={room.dailyRentRate}
+                      dailyUtilitiesRate={room.dailyUtilitiesRate}
+                      onMethod={(m) => setRoom(i, { prorateMethod: m })}
+                      onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                      onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
+                    />
                   </div>
-                </ListingWizardCollapsibleCard>
-              );
-            })}
-          </div>
-        );
-      })()}
-    </div>
-  ) : null;
+                </div>
+              ),
+            };
+          }),
+        }
+      : null;
+
+  const bundlesFeeSection: FeeExpandableSection | null = !isEntireHome
+    ? {
+        key: "bundles",
+        title: "Bundles",
+        hint: "Offer rooms together on one lease — optional.",
+        emptyHint: "Optional — per-room pricing works without bundles.",
+        toolbar: (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-xs"
+              onClick={() => addGeneratedBundle("whole_house")}
+              disabled={sub.rooms.length === 0}
+            >
+              Whole house
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-xs"
+              onClick={() => addGeneratedBundle("multi_room")}
+              disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
+            >
+              Group
+            </Button>
+            <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
+              Custom
+            </Button>
+          </>
+        ),
+        rows: (sub.bundles ?? []).map((bundle) => {
+          const i = (sub.bundles ?? []).findIndex((b) => b.id === bundle.id);
+          const selectedIds = new Set(bundle.includedRoomIds ?? []);
+          const namedRooms = sub.rooms.filter((r) => r.name.trim());
+          const selectedRooms = namedRooms.filter((r) => selectedIds.has(r.id));
+          const rentSum = selectedRooms.reduce((sum, r) => sum + (Number.isFinite(r.monthlyRent) ? r.monthlyRent : 0), 0);
+          const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
+          const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
+          const stNightlyKey = `bundle-${bundle.id}-shortTermNightlyRent`;
+          const stNightlyErr = stepFieldErrors[stNightlyKey];
+          const stPriceHint = bundleShortTermPriceLabel(bundle, sub);
+          return {
+            id: bundle.id,
+            title: bundle.label.trim() || `Package ${i + 1}`,
+            summary: [
+              `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
+              rentSum > 0 ? `$${rentSum}/mo base` : null,
+              hasManualPrice ? "Custom price" : null,
+              bundle.shortTermEnabled && stPriceHint ? stPriceHint : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            expanded: isListingItemExpanded(listingItemKey("bundle", bundle.id)),
+            onToggle: () => toggleListingItem(listingItemKey("bundle", bundle.id)),
+            onRemove: () => removeBundle(i),
+            toggleDataAttr: `listing-bundle-toggle-${bundle.id}`,
+            detail: (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <GridField>
+                  <FieldLabel>Bundle name</FieldLabel>
+                  <Input
+                    value={bundle.label}
+                    onChange={(e) => setBundle(i, { label: sanitizePlaceNameInput(e.target.value) })}
+                    placeholder="Whole house lease, Rooms A+B"
+                  />
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Defaults to sum of room rents; edit for discounts.">Bundle rent / mo</FieldLabel>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                    <Input
+                      inputMode="decimal"
+                      className="pl-8"
+                      value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                      onChange={(e) => setBundle(i, { price: sanitizeMoneyInput(e.target.value) })}
+                      placeholder={rentSum > 0 ? String(rentSum) : "4500"}
+                    />
+                  </div>
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                    <Input
+                      inputMode="decimal"
+                      className="pl-8"
+                      value={bundle.strikethrough.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                      onChange={(e) => setBundle(i, { strikethrough: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="4800"
+                    />
+                  </div>
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Optional — falls back to the shared security deposit.">Security deposit</FieldLabel>
+                  <MoneyInput
+                    ariaLabel={`Security deposit for ${bundle.label.trim() || "bundle"}`}
+                    value={(bundle.securityDeposit ?? "").replace(/^\$/, "").trim()}
+                    onChange={(e) => setBundle(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
+                    placeholder="1500"
+                  />
+                </GridField>
+                <GridField>
+                  <LongTermUtilitiesPaymentPicker
+                    value={bundle.utilitiesPaymentModel}
+                    onSelect={(model) =>
+                      setBundle(i, {
+                        utilitiesPaymentModel: model,
+                        ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
+                      })
+                    }
+                  />
+                </GridField>
+                {longTermUtilitiesEstimateRequired(bundle.utilitiesPaymentModel) ? (
+                  <GridField>
+                    <FieldLabel>Utilities amount</FieldLabel>
+                    <MoneyInput
+                      ariaLabel={`Utilities amount for ${bundle.label.trim() || "bundle"}`}
+                      value={(bundle.utilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                      onChange={(e) => setBundle(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="200"
+                    />
+                  </GridField>
+                ) : null}
+                {sub.shortTermRentalsAllowed ? (
+                  <>
+                    <div className="sm:col-span-2">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          checked={Boolean(bundle.shortTermEnabled)}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            clearListingFieldError(stNightlyKey);
+                            setBundle(i, {
+                              shortTermEnabled: on,
+                              ...(on ? {} : { shortTermNightlyRent: "" }),
+                            });
+                          }}
+                        />
+                        Short-term rental
+                      </label>
+                    </div>
+                    {bundle.shortTermEnabled ? (
+                      <GridField>
+                        <FieldLabel hint="Nightly rate → stay total at checkout.">Short-term rent / night</FieldLabel>
+                        <div data-wizard-field={stNightlyKey}>
+                          <MoneyInput
+                            invalid={Boolean(stNightlyErr)}
+                            ariaLabel={`Short-term nightly rent for ${bundle.label.trim() || "bundle"}`}
+                            value={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
+                            onChange={(e) => {
+                              clearListingFieldError(stNightlyKey);
+                              setBundle(i, { shortTermNightlyRent: sanitizeMoneyInput(e.target.value) });
+                            }}
+                            placeholder="85"
+                          />
+                          <StepFieldError msg={stNightlyErr} />
+                        </div>
+                      </GridField>
+                    ) : null}
+                  </>
+                ) : null}
+                <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+                  <FieldLabel>Rooms in this bundle</FieldLabel>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={LISTING_WIZARD_ACTION_BTN}
+                    onClick={() => applyBundleRoomScope(i, "none")}
+                  >
+                    Clear rooms
+                  </Button>
+                </div>
+                <div className="sm:col-span-2">
+                  <div className="grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {sub.rooms.map((room) => (
+                      <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          checked={selectedIds.has(room.id)}
+                          onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
+                        />
+                        <span className="min-w-0 font-medium text-foreground">
+                          <span className="truncate">{roomLabelForBundle(room)}</span>
+                          {room.monthlyRent > 0 ? (
+                            <span className="ml-1 tabular-nums text-xs font-normal text-muted">· ${room.monthlyRent}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ),
+          };
+        }),
+      }
+    : null;
+
+  const feeExpandableSections: FeeExpandableSection[] = [roomsFeeSection, bundlesFeeSection].filter(
+    (s): s is FeeExpandableSection => s !== null,
+  );
 
   const entireHomeUtilitiesBlock =
     longTermLeaseEnabled && isEntireHome ? (
@@ -3516,14 +3492,9 @@ export function ManagerAddListingForm({
               </ListingSubsection>
 
               <ListingSubsection title="Fees">
-                {roomsFeesSection}
-                {bundlesFeesSection}
-                <div className="space-y-2">
-                <FeeSectionHeader
-                  title="Other fees"
-                  hint={isEntireHome ? "Whole-home rent and shared fees." : "Fees shared across the whole property."}
-                />
+                <div data-wizard-field="monthlyRent">
                 <ListingUnifiedFeesTable
+                  expandableSections={feeExpandableSections}
                   sub={sub}
                   isEntireHome={isEntireHome}
                   stFeeToggles={stFeeToggles}

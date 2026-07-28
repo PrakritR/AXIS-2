@@ -422,6 +422,16 @@ with `sharp` (16/32/48 as 32-bit BMP entries plus a 256 PNG entry). Regenerate
 it whenever `icon.svg` changes — a stale `.ico` wins in the tab on browsers
 that prefer it, so editing only the SVG leaves the old mark visible.
 
+# Landing rule (keeper-branch ladder)
+
+**Any time there is a change, land it on `claude-2` first — fast-forward only, no
+PR.** `claude-2` is the captain's review lane: it is reviewed on localhost before
+anything moves onward. Land with `git push origin <your-branch>:claude-2`; never
+force. If that push is not a fast-forward, STOP (the branch diverged) rather than
+rebasing or forcing past it. **Never land straight to `prakrit`, `main`, or
+`production`** — those advance only when the captain asks. Open a PR only on
+explicit request.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the

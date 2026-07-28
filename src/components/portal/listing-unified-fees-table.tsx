@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ManagerCustomFeeRow, ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   LISTING_STANDARD_FEE_ROWS,
@@ -16,15 +18,45 @@ import { Input } from "@/components/ui/input";
 
 /**
  * The one remove control used on EVERY deletable item across the Fees UI — standard
- * fee rows, custom fees, room dropdowns, and bundle dropdowns — so the affordance is
- * identical everywhere (mirrors the wizard's LISTING_WIZARD_REMOVE_BTN).
+ * fee rows, custom fees, room rows, and bundle rows — so the affordance is identical
+ * everywhere (mirrors the wizard's LISTING_WIZARD_REMOVE_BTN).
  */
 const FEE_REMOVE_BTN =
   "h-9 shrink-0 rounded-lg px-2.5 text-xs border-rose-200 text-rose-800 portal-danger-outline";
 
-/** "rent" is the core price row and is never removable; every other standard row is. */
-function rowIsRemovable(id: ListingFeeRowId): boolean {
-  return id !== "rent";
+/**
+ * A room or bundle rendered AS A ROW inside the single Fees table. Clicking the row
+ * expands `detail` inline (a full-width row beneath it) — the "dropdown inside the fee
+ * table" the design calls for, instead of a card floating above the table.
+ */
+export type FeeExpandableRow = {
+  id: string;
+  title: string;
+  /** Long-term column summary (e.g. "$1,100/mo · Utilities billed"). */
+  summary: ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  /** Omit to make the row non-removable. */
+  onRemove?: () => void;
+  hasError?: boolean;
+  detail: ReactNode;
+  toggleDataAttr?: string;
+};
+
+/** A titled section of expandable rows (Rooms, Bundles) that sits inside the one table. */
+export type FeeExpandableSection = {
+  key: string;
+  title: string;
+  hint?: string;
+  /** Optional controls shown in the section header row (e.g. the bundle add buttons). */
+  toolbar?: ReactNode;
+  rows: FeeExpandableRow[];
+  emptyHint?: ReactNode;
+};
+
+/** "rent" is now removable too (the design: any payment, including rent, can be removed). */
+function rowIsRemovable(_id: ListingFeeRowId): boolean {
+  return true;
 }
 
 function FeeMoneyInput({
@@ -122,6 +154,73 @@ function FeeCadenceSelect({
   );
 }
 
+/** Full-width section divider row inside the table. */
+function SectionHeaderRow({ title, hint, toolbar }: { title: string; hint?: string; toolbar?: ReactNode }) {
+  return (
+    <tr className="border-b border-border bg-accent/40">
+      <td colSpan={4} className="px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</span>
+            {hint ? <span className="text-[11px] text-muted">{hint}</span> : null}
+          </div>
+          {toolbar ? <div className="flex flex-wrap items-center gap-2">{toolbar}</div> : null}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** One expandable room/bundle row + its inline detail row. */
+function ExpandableRows({ row }: { row: FeeExpandableRow }) {
+  return (
+    <>
+      <tr className={cn("border-b border-border/70", row.hasError && "bg-red-500/5")}>
+        <td className="px-3 py-3 align-middle">
+          <button
+            type="button"
+            className="flex items-center gap-2 text-left"
+            onClick={row.onToggle}
+            data-attr={row.toggleDataAttr}
+            aria-expanded={row.expanded}
+          >
+            {row.expanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
+            )}
+            <span className={cn("font-medium text-foreground", row.hasError && "text-red-600")}>{row.title}</span>
+          </button>
+        </td>
+        <td className="px-3 py-3 align-middle text-xs text-muted">—</td>
+        <td className="px-3 py-3 align-middle text-sm text-muted">{row.summary}</td>
+        <td className="px-3 py-3 text-right align-middle">
+          {row.onRemove ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={FEE_REMOVE_BTN}
+              onClick={row.onRemove}
+              aria-label={`Remove ${row.title}`}
+            >
+              Remove
+            </Button>
+          ) : (
+            <span className="text-xs text-muted">—</span>
+          )}
+        </td>
+      </tr>
+      {row.expanded ? (
+        <tr className="border-b border-border/70 bg-accent/10">
+          <td colSpan={4} className="px-3 py-3">
+            {row.detail}
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
 export function ListingUnifiedFeesTable({
   sub,
   isEntireHome,
@@ -142,6 +241,7 @@ export function ListingUnifiedFeesTable({
   removedRowIds,
   onRemoveStandardRow,
   onAddStandardRow,
+  expandableSections,
 }: {
   sub: ManagerListingSubmissionV1;
   isEntireHome: boolean;
@@ -167,14 +267,16 @@ export function ListingUnifiedFeesTable({
   onRemoveStandardRow: (feeId: ListingFeeRowId) => void;
   /** Re-add a previously-removed standard fee row from the + Add fee menu. */
   onAddStandardRow: (feeId: ListingFeeRowId) => void;
+  /** Rooms / Bundles sections rendered AS ROWS at the top of this one table. */
+  expandableSections?: FeeExpandableSection[];
 }) {
   const visibleRows = LISTING_STANDARD_FEE_ROWS.filter(
     (row) => !hiddenRowIds?.has(row.id) && !removedRowIds.has(row.id),
   );
-  // Presets the manager can re-add: removed rows that this rental model still allows.
   const readdableRows = LISTING_STANDARD_FEE_ROWS.filter(
     (row) => rowIsRemovable(row.id) && removedRowIds.has(row.id) && !hiddenRowIds?.has(row.id),
   );
+  const sections = expandableSections ?? [];
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -188,6 +290,17 @@ export function ListingUnifiedFeesTable({
           </tr>
         </thead>
         <tbody>
+          {sections.map((section) => (
+            <FeeSectionRows key={section.key} section={section} />
+          ))}
+
+          {sections.length > 0 ? (
+            <SectionHeaderRow
+              title="Other fees"
+              hint={isEntireHome ? "Whole-home rent and shared fees." : "Fees shared across the whole property."}
+            />
+          ) : null}
+
           {visibleRows.map((row) => {
             const rowId = row.id;
             const stOn = stFeeToggles[rowId];
@@ -266,9 +379,6 @@ export function ListingUnifiedFeesTable({
                             const idx = customFees.findIndex(
                               (f) => (f as ListingFeeRow).presetId === presetId,
                             );
-                            // A brand-new listing has no materialized fee rows yet, so
-                            // fall back to the preset's own cadence instead of hiding
-                            // the control until the listing has been saved once.
                             const presetCadence = LISTING_FEE_PRESETS.find(
                               (p) => p.presetId === presetId,
                             )?.cadence;
@@ -403,5 +513,24 @@ export function ListingUnifiedFeesTable({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** A Rooms/Bundles section rendered inside the table: a header row then its expandable rows. */
+function FeeSectionRows({ section }: { section: FeeExpandableSection }) {
+  return (
+    <>
+      <SectionHeaderRow title={section.title} hint={section.hint} toolbar={section.toolbar} />
+      {section.rows.length === 0 && section.emptyHint ? (
+        <tr className="border-b border-border/70">
+          <td colSpan={4} className="px-3 py-2.5 text-xs text-muted">
+            {section.emptyHint}
+          </td>
+        </tr>
+      ) : null}
+      {section.rows.map((row) => (
+        <ExpandableRows key={row.id} row={row} />
+      ))}
+    </>
   );
 }
