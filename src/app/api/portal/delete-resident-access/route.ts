@@ -66,9 +66,9 @@ export async function POST(req: Request) {
         // saw it in their list yet got "resident is not in your portfolio" on
         // Delete — the list and the guard disagreeing about the same row.
         // This is a destructive route (account deletion, optionally purged), so
-        // a co-manager needs the "delete" level, matching
-        // `assertCanDeleteApplicationRecords`; read-level visibility is not
-        // enough to destroy.
+        // a co-manager needs the "delete" level — the same predicate + level
+        // `assertCanDeleteApplicationRecords` delegates to; read-level
+        // visibility is not enough to destroy.
         const { data: appRow } = await svc
           .from("manager_application_records")
           .select("manager_user_id, property_id, assigned_property_id")

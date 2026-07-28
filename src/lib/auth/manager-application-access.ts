@@ -12,6 +12,25 @@ export type ApplicationAccessRecord = {
 };
 
 /**
+ * Every property id this manager DIRECTLY owns (`manager_property_records
+ * .manager_user_id = userId`). This is the ONE resolution of direct ownership
+ * shared by the Applications LIST (`fetchApplicationsForManagerUser`) and every
+ * by-id ACTION guard (`managerCanAccessApplicationRecord`), so the list and the
+ * guards can never drift on who owns what — the exact divergence that let a
+ * manager SEE an "Incomplete" draft on their own property yet be told "resident
+ * is not in your portfolio" on delete. A manager owns few properties, so the
+ * caller filters this set in memory rather than re-querying per candidate.
+ */
+export async function managerOwnedPropertyIdSet(db: ServiceClient, userId: string): Promise<Set<string>> {
+  if (!userId) return new Set();
+  const { data, error } = await db.from("manager_property_records").select("id").eq("manager_user_id", userId);
+  if (error) {
+    throw new Error(`Failed to load owned properties for manager ${userId}: ${error.message}`);
+  }
+  return new Set<string>((data ?? []).map((row) => String(row.id ?? "").trim()).filter(Boolean));
+}
+
+/**
  * Does this manager have access to one application record?
  *
  * This is the SAME visibility test the Applications list uses
@@ -46,19 +65,16 @@ export async function managerCanAccessApplicationRecord(
   ].filter(Boolean);
   if (candidateIds.length === 0) return false;
 
-  // Direct ownership — the list's `manager_property_records.manager_user_id = userId`.
-  const { data: owned } = await db
-    .from("manager_property_records")
-    .select("id")
-    .eq("manager_user_id", userId)
-    .in("id", candidateIds)
-    .limit(1);
-  if ((owned ?? []).length > 0) return true;
+  // Direct ownership — resolved through the SAME `managerOwnedPropertyIdSet`
+  // helper the Applications list uses, so the list and this guard can never
+  // disagree about which properties the manager owns.
+  const owned = await managerOwnedPropertyIdSet(db, userId);
+  if (candidateIds.some((id) => owned.has(id))) return true;
 
   // Co-manager grant at `level` on EITHER the applications or residents module —
   // the same union the list applies (the client then filters each tab by its own
-  // grant), via the same level-aware check `assertCanDeleteApplicationRecords`
-  // uses.
+  // grant). This is the ONE level-aware check: `assertCanDeleteApplicationRecords`
+  // delegates here at level "delete" rather than running its own.
   for (const propertyId of candidateIds) {
     if (await managerHasCoManagerPermissionForProperty(db, userId, propertyId, "applications", level)) {
       return true;
