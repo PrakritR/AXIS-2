@@ -95,19 +95,28 @@ export function resolvePlacementValuesForRow(
     ? parseMoneyAmount(utilOverride)
     : utilitiesBillableMonthlyAmount(sub ?? undefined, room);
 
+  // Room-first precedence, identical to recordApprovedApplicationCharges — a room's own
+  // deposit/move-in wins over the listing amount (a set "0" means the room genuinely has
+  // none). This preview must show exactly what will bill, not the shared listing value.
+  const roomSecurityDeposit = room?.securityDeposit?.trim() ? room.securityDeposit : undefined;
   const depOverride = app?.managerSecurityDepositOverride?.trim();
   const securityDeposit = depOverride
     ? parseMoneyAmount(depOverride)
-    : sub
-      ? listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "")
-      : 0;
+    : roomSecurityDeposit != null
+      ? parseMoneyAmount(roomSecurityDeposit)
+      : sub
+        ? listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "")
+        : 0;
 
+  const roomMoveInFee = room?.moveInFee?.trim() ? room.moveInFee : undefined;
   const moveOverride = app?.managerMoveInFeeOverride?.trim();
   const moveInFee = moveOverride
     ? parseMoneyAmount(moveOverride)
-    : sub
-      ? listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "")
-      : 0;
+    : roomMoveInFee != null
+      ? parseMoneyAmount(roomMoveInFee)
+      : sub
+        ? listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "")
+        : 0;
 
   const otherCostLabel = app?.managerOtherCostLabel?.trim() || "";
   const otherCostAmount = parseMoneyAmount(app?.managerOtherCostAmount ?? "");
