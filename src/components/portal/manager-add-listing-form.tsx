@@ -13,15 +13,10 @@ import {
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
-import { cn } from "@/lib/utils";
-import { buildListingModalAssistantContext } from "@/lib/listing-assistant-context";
-import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
-import { ListingFeesEditor } from "@/components/portal/listing-fees-editor";
 import {
   submitManagerPendingPropertyToServer,
-  syncPropertyPipelineFromServer,
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
@@ -35,7 +30,6 @@ import {
   listingWizardHasUnsavedInput,
   stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
-import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import {
   propertyMediaReadinessLabel,
@@ -57,17 +51,19 @@ import {
   applyListingBathroomSlots,
   listingTotalBathroomsIdFromCount,
   applyEntireHomeListingPricing,
+  applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
   customApplicationFieldKeyFromLabel,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
+  normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
-  syncShortTermLeaseTermInAllowed,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
+  emptyCustomFeeRow,
   emptyQuickFactRow,
   emptyRoom,
   emptySharedSpace,
@@ -76,6 +72,7 @@ import {
   type ManagerBathroomSubmission,
   type ManagerBundleRow,
   type ManagerCustomApplicationField,
+  type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
   type ManagerListingServiceOption,
   type ManagerQuickFactRow,
@@ -83,11 +80,8 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
-import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
-import { withShortTermListingFees } from "@/lib/listing-fees";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
-  resolveRoomUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
 import {
@@ -125,6 +119,7 @@ import {
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
+  sanitizePaymentLinkInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,
@@ -134,21 +129,17 @@ import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
-  listingRoomDailyRentKey,
-  listingRoomHasRent,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
   validateListingWizardStep,
 } from "@/lib/listing-wizard-validation";
-import { roomHeadlinePriceLabel } from "@/lib/room-pricing";
 import {
   scrollToFirstWizardFieldError,
   wizardFieldErrorClass,
   wizardSectionErrorClass,
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
-import { CUSTOM_LEASE_TERM, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
@@ -386,6 +377,15 @@ function ListingWizardCollapsibleCard({
   );
 }
 
+const LISTING_CHOICE_CARD =
+  "rounded-2xl border px-3 py-3 text-left transition sm:px-4 sm:py-3.5";
+
+function listingChoiceCardClass(selected: boolean) {
+  return selected
+    ? `${LISTING_CHOICE_CARD} border-primary ring-2 ring-primary/25`
+    : `${LISTING_CHOICE_CARD} border-border hover:border-primary/30`;
+}
+
 function togglePaymentAtSigning(
   current: PaymentAtSigningOptionId[],
   id: PaymentAtSigningOptionId,
@@ -489,7 +489,9 @@ function PlaceCategoryPicker({
       data-wizard-field="listingPlaceCategoryId"
       className={wizardSectionErrorClass(Boolean(hasError))}
     >
-      <FieldLabel>How is this property rented?</FieldLabel>
+      <FieldLabel hint="We’ll tailor rent, utilities, and proration fields below.">
+        How is this property rented?
+      </FieldLabel>
       <Select
         aria-label="Rental model"
         className={wizardFieldErrorClass(Boolean(hasError), selectInputCls)}
@@ -517,20 +519,24 @@ function UtilitiesPaymentModelPicker({
 }) {
   const selected = value ?? "manager_billed";
   return (
-    <div>
-      <FieldLabel>Utilities payment</FieldLabel>
-      <Select
-        aria-label="Utilities payment"
-        className={selectInputCls}
-        value={selected}
-        onChange={(e) => onSelect(e.target.value as UtilitiesPaymentModel)}
-      >
-        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </Select>
+    <div className="space-y-2">
+      <FieldLabel hint="How residents pay for utilities on this listing.">Utilities payment</FieldLabel>
+      <div className="grid gap-2">
+        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => {
+          const on = selected === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onSelect(opt.id)}
+              className={listingChoiceCardClass(on)}
+            >
+              <span className="text-sm font-semibold text-foreground">{opt.label}</span>
+              <span className="mt-0.5 block text-xs text-muted">{opt.hint}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -555,11 +561,11 @@ function ProrationMethodFields({
   onDailyUtilities: (n: number | undefined) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <FieldLabel hint="Mid-month move-in: Auto splits by days in the month; Daily rate uses a rate you set.">
-        Proration
+    <div className="space-y-3">
+      <FieldLabel hint="How first-month rent and utilities are prorated when someone moves in mid-month.">
+        Proration method
       </FieldLabel>
-      <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
+      <div className="flex gap-3">
         {(["auto", "daily_rate"] as const).map((method) => {
           const active = prorateMethod === method;
           return (
@@ -567,70 +573,56 @@ function ProrationMethodFields({
               key={method}
               type="button"
               onClick={() => onMethod(method)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
+              className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-border bg-card text-muted hover:border-border hover:bg-accent/30"}`}
             >
-              {method === "auto" ? "Auto" : "Daily rate"}
+              <span className="block font-semibold">
+                {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted">
+                {method === "auto"
+                  ? "Remaining days ÷ days in month × monthly rate"
+                  : "Remaining days × your set daily rate"}
+              </span>
             </button>
           );
         })}
       </div>
+      {prorateMethod === "auto" && monthlyRent > 0 ? (
+        <p className="text-xs text-muted">
+          Example: move-in May 14 → 18/31 × ${monthlyRent} ={" "}
+          <span className="font-semibold text-muted">${((18 / 31) * monthlyRent).toFixed(2)}</span> prorated rent
+        </p>
+      ) : null}
       {prorateMethod === "daily_rate" ? (
-        <div className="flex flex-wrap gap-3">
-          <div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <GridField>
             <FieldLabel>Daily rent rate</FieldLabel>
-            <MoneyInput
-              value={dailyRentRate ?? ""}
-              onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
-              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
-            />
-          </div>
-          <div>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+              <Input
+                inputMode="decimal"
+                className="pl-8"
+                value={dailyRentRate ?? ""}
+                onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
+                placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
+              />
+            </div>
+          </GridField>
+          <GridField>
             <FieldLabel>{utilitiesLabel ?? "Daily utilities rate"}</FieldLabel>
-            <MoneyInput
-              value={dailyUtilitiesRate ?? ""}
-              onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
-              placeholder="6"
-            />
-          </div>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+              <Input
+                inputMode="decimal"
+                className="pl-8"
+                value={dailyUtilitiesRate ?? ""}
+                onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
+                placeholder="6"
+              />
+            </div>
+          </GridField>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * Compact dollar-amount input — a short value should look like one. Fixed narrow
- * width with an inline `$` affix, used across the Pricing step's amount fields.
- */
-function MoneyInput({
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  invalid,
-  ariaLabel,
-  className,
-}: {
-  value: string | number;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  invalid?: boolean;
-  ariaLabel?: string;
-  className?: string;
-}) {
-  return (
-    <div className={`relative w-full max-w-[11rem] ${className ?? ""}`}>
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-      <Input
-        inputMode="decimal"
-        aria-label={ariaLabel}
-        disabled={disabled}
-        className={wizardFieldErrorClass(Boolean(invalid), "pl-7")}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-      />
     </div>
   );
 }
@@ -701,7 +693,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
   bathrooms:   "Bathroom name, location, and amenities for the public listing.",
   spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
-  lease:       "Rent, utilities, lease lengths, deposits, and fees.",
+  lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
   finish:      "Sidebar quick facts and final submit.",
 };
 
@@ -953,50 +945,12 @@ async function uploadVideoFile(file: File): Promise<string> {
   return uploadToBucket(file);
 }
 
-/**
- * Desktop widths open the PropLane Assistant beside the form by default, so the
- * manager sees it "to the left" without hunting for the collapsed strip; phones
- * and tablets start collapsed so the fields keep the full width (a two-column
- * split is worse than the original on a narrow screen). SSR-guarded — the wizard
- * only mounts on the client, but a `useState` initializer still runs during any
- * server render of the tree.
- */
-function prefersAssistantOpenBeside(): boolean {
-  // `matchMedia` is missing under SSR and in jsdom; fall back to collapsed there
-  // (a safe default — the real browser opens it beside the form on desktop).
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(min-width: 1024px)").matches;
-}
-
-/**
- * One field's label. `required` marks a must-fill with a red asterisk;
- * `optional` prints a muted "Optional" tag so the two are never the same visual
- * weight (a plain optional input used to look identical to a required select).
- * Pass at most one of the two.
- */
-function FieldLabel({
-  children,
-  hint,
-  required,
-  optional,
-}: {
-  children: React.ReactNode;
-  hint?: string;
-  required?: boolean;
-  optional?: boolean;
-}) {
+function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
   return (
     <div className="mb-1.5">
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-        <span>
-          {children}
-          {required ? <span className="text-red-600"> *</span> : null}
-        </span>
-        {optional && !required ? (
-          <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-            Optional
-          </span>
-        ) : null}
+      <p className="text-xs font-semibold text-foreground">
+        {children}
+        {required ? <span className="text-red-600"> *</span> : null}
       </p>
       {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
@@ -1034,10 +988,10 @@ function ListingSubsection({
   children: React.ReactNode;
 }) {
   return (
-    <div id={id} className="space-y-5 border-t border-border pt-6 first:border-t-0 first:pt-0">
-      <div className="space-y-1.5">
-        <h4 className="text-[15px] font-semibold tracking-tight text-foreground">{title}</h4>
-        {description ? <p className="text-xs leading-relaxed text-muted">{description}</p> : null}
+    <div id={id} className="space-y-4 border-t border-border pt-5">
+      <div>
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        {description ? <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -1136,10 +1090,6 @@ export function ManagerAddListingForm({
    */
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
-  /** Mirrors the assistant strip's own open/closed state so the wizard body can
-   * lay out beside it (wide screens) instead of always stacking above it. Opens
-   * to the left by default on desktop; collapsed on narrow screens. */
-  const [assistantExpanded, setAssistantExpanded] = useState(prefersAssistantOpenBeside);
   const resumedStepIndex = clampWizardStep(initialStepIndex);
   const resumedMaxStepReached = Math.max(clampWizardStep(initialMaxStepReached), resumedStepIndex);
   const [stepIndex, setStepIndex] = useState(resumedStepIndex);
@@ -1229,41 +1179,6 @@ export function ManagerAddListingForm({
   const isFinalStep = stepIndex === lastStepIndex;
   const isPreviewWizard = wizardScope === "preview";
   const wizardTitlePrefix = isPreviewWizard ? "Edit preview" : isEditMode ? "Edit listing" : "New listing";
-  const [savedListingId, setSavedListingId] = useState<string | null>(
-    () => editDraftId?.trim() || editPendingId?.trim() || editListingId?.trim() || editRequestChangeId?.trim() || null,
-  );
-  const listingAssistantContext = useMemo(
-    () =>
-      buildListingModalAssistantContext({
-        wizardTitle: wizardTitlePrefix,
-        stepLabel: LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing",
-        // savedListingId mirrors draftIdRef at every render-observable point
-        // (both start from editDraftId; every ref assignment of a real id also
-        // sets it), and refs must not be read during render (react-hooks/refs).
-        propertyId: savedListingId,
-        submission: sub,
-      }),
-    [wizardTitlePrefix, stepIndex, savedListingId, sub],
-  );
-
-  useEffect(() => {
-    const propertyId = savedListingId ?? draftIdRef.current;
-    if (!propertyId?.trim() || !userId) return;
-    const onAssistantUpdated = (event: Event) => {
-      const detail = (event as CustomEvent<ListingAssistantUpdatedDetail>).detail;
-      if (!detail || detail.propertyId !== propertyId) return;
-      void (async () => {
-        await syncPropertyPipelineFromServer({ userId, force: true });
-        const hit = resolveManagerListingSubmissionForPropertyId(userId, propertyId);
-        if (hit) {
-          setSub(normalizeManagerListingSubmissionV1(hit.sub));
-          showToast("Assistant added photos to your listing.");
-        }
-      })();
-    };
-    window.addEventListener(LISTING_ASSISTANT_UPDATED_EVENT, onAssistantUpdated);
-    return () => window.removeEventListener(LISTING_ASSISTANT_UPDATED_EVENT, onAssistantUpdated);
-  }, [savedListingId, showToast, userId]);
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
@@ -1689,6 +1604,7 @@ export function ManagerAddListingForm({
       const bundles = [...(s.bundles ?? [])];
       const cur = bundles[bundleIndex];
       if (!cur) return s;
+      const named = s.rooms.filter((r) => r.name.trim());
       const includedRoomIds = mode === "all_named" ? s.rooms.map((r) => r.id) : [];
       bundles[bundleIndex] = {
         ...cur,
@@ -1718,6 +1634,27 @@ export function ManagerAddListingForm({
     setSub((s) => ({
       ...s,
       quickFacts: (s.quickFacts ?? []).filter((_, j) => j !== i),
+    }));
+  };
+
+  const setCustomFee = (i: number, patch: Partial<ManagerCustomFeeRow>) => {
+    setSub((s) => {
+      const customFees = [...(s.customFees ?? [])];
+      customFees[i] = { ...customFees[i]!, ...patch };
+      return { ...s, customFees };
+    });
+  };
+
+  const addCustomFee = () => {
+    const next = emptyCustomFeeRow();
+    expandListingItem(listingItemKey("fee", next.id));
+    setSub((s) => ({ ...s, customFees: [...(s.customFees ?? []), next] }));
+  };
+
+  const removeCustomFee = (i: number) => {
+    setSub((s) => ({
+      ...s,
+      customFees: (s.customFees ?? []).filter((_, j) => j !== i),
     }));
   };
 
@@ -2243,7 +2180,6 @@ export function ManagerAddListingForm({
       }
       setDraftSaveError(null);
       draftIdRef.current = savedId;
-      setSavedListingId(savedId);
       onSaved?.();
       const droppedAttachments = droppedAttachmentsRef.current;
       droppedAttachmentsRef.current = false;
@@ -2444,21 +2380,20 @@ export function ManagerAddListingForm({
       className="modal-overlay fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onClick={(e) => { if (e.target === e.currentTarget) closeWizard(); }}
     >
-      {/* A plain container, not a <form>: the PropLane Assistant embedded in the
-          body has its own <form> for the chat composer, and a form-in-form is
-          invalid HTML that throws a hydration error whenever the assistant is
-          open (now the default on desktop). Continue / Submit are onClick buttons,
-          so nothing here relied on form submission. */}
-      <div
+      <form
         id="manager-add-listing-form"
+        onSubmit={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className="modal-panel @container relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
+        className="modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
+                Step {visibleStepPosition + 1} of {visibleStepCount}
+              </p>
+              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
@@ -2473,55 +2408,48 @@ export function ManagerAddListingForm({
             </button>
           </div>
 
-          {/* The single progress + navigation signal (replaces the old
-              "STEP X OF 6" line + duplicate progress bar). A completed step
-              shows a ✓ and stays clickable; the current step is filled; a step
-              not yet reached is visible but disabled, so the wizard never styles
-              a jump the manager cannot actually make. */}
-          <nav aria-label="Listing steps" className="mt-3 -mx-1 overflow-x-auto px-1 [-webkit-overflow-scrolling:touch]">
-            <ol className="flex min-w-max items-center gap-1">
+          {/* Step pills — jump only to steps already reached via Continue */}
+          <div className="-mx-0 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <div className="flex min-w-max gap-1.5">
               {wizardSteps.map((i, pillPos) => {
                 const step = LISTING_FORM_STEPS[i]!;
                 const reachable = canNavigateToWizardStep(i, maxStepReached);
-                const isCurrent = i === stepIndex;
                 const completed = pillPos < visibleStepPosition;
                 return (
-                  <li key={step.id} className="flex items-center">
-                    <button
-                      type="button"
-                      disabled={!reachable}
-                      aria-current={isCurrent ? "step" : undefined}
-                      onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
-                      className={cn(
-                        "flex shrink-0 items-center gap-1.5 rounded-full py-1.5 pl-1.5 pr-3 text-xs font-semibold transition",
-                        isCurrent
-                          ? "bg-primary/10 text-primary"
-                          : completed
-                            ? "text-foreground hover:bg-accent/40"
-                            : reachable
-                              ? "text-muted hover:bg-accent/40"
-                              : "cursor-default text-muted/45",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
-                          completed
-                            ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]"
-                            : isCurrent
-                              ? "bg-primary text-white"
-                              : "border border-border text-muted/60",
-                        )}
-                      >
-                        {completed ? "✓" : pillPos + 1}
-                      </span>
-                      {step.label}
-                    </button>
-                  </li>
-                );
+                <button
+                  key={step.id}
+                  type="button"
+                  disabled={!reachable}
+                  onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    i === stepIndex
+                      ? "bg-primary/10 text-primary"
+                      : completed
+                        ? "text-muted hover:bg-accent/30"
+                        : reachable
+                          ? "text-muted hover:bg-accent/30"
+                          : "cursor-not-allowed text-slate-300"
+                  }`}
+                >
+                  <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                    completed ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-accent/30 text-muted" : "bg-accent/30 text-muted"
+                  }`}>
+                    {completed ? "✓" : pillPos + 1}
+                  </span>
+                  {step.label}
+                </button>
+              );
               })}
-            </ol>
-          </nav>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+              style={{ width: `${((visibleStepPosition + 1) / visibleStepCount) * 100}%` }}
+            />
+          </div>
 
           {/* Step blurb */}
           <p className="mt-3 text-[12px] leading-relaxed text-muted">
@@ -2529,31 +2457,18 @@ export function ManagerAddListingForm({
           </p>
         </div>
 
-        {/* `@container` lives on the panel <div> above (a container cannot query
-            its own size for its own layout), so this row/column switch can react
-            to how much space the panel actually has. */}
-        <div
-          className={cn(
-            "flex min-h-0 flex-1",
-            assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
-          )}
-        >
-        <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6">
           {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
             title="Tell us about your place"
-            description="The essentials for your listing, grouped into a few short sections. You can change anything here later."
+            description="Type the address to autofill ZIP and neighborhood. Everything can be changed later."
             compact
           >
-            <ListingSubsection
-              title="Address & property type"
-              description="Where the place is and what kind of home it is. Choosing an address result fills in ZIP and neighborhood for you."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div data-wizard-field="listingPropertyTypeId" className={wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId))}>
-                <FieldLabel required>Property type</FieldLabel>
+                <FieldLabel>Property type *</FieldLabel>
                 <Select
                   aria-label="Property type"
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId), selectInputCls)}
@@ -2574,7 +2489,7 @@ export function ManagerAddListingForm({
               </div>
 
               <div data-wizard-field="buildingName">
-                <FieldLabel optional>Building name</FieldLabel>
+                <FieldLabel>Building name</FieldLabel>
                 <Input
                   value={sub.buildingName}
                   onChange={(e) => {
@@ -2582,13 +2497,13 @@ export function ManagerAddListingForm({
                     setSub((s) => ({ ...s, buildingName: sanitizeBuildingNameInput(e.target.value) }));
                   }}
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.buildingName), listingTextInputCls)}
-                  placeholder="e.g. Maple Court"
+                  placeholder="Optional"
                 />
                 <StepFieldError msg={stepFieldErrors.buildingName} />
               </div>
 
               <div className="relative z-20 sm:col-span-2" data-wizard-field="address">
-                <FieldLabel required hint="Start typing to search. Choosing a result fills in ZIP and neighborhood below.">Street address</FieldLabel>
+                <FieldLabel>Street address *</FieldLabel>
                 <ListingAddressAutocomplete
                   value={sub.address}
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.address), listingTextInputCls)}
@@ -2615,7 +2530,7 @@ export function ManagerAddListingForm({
               </div>
 
               <GridField>
-                <FieldLabel required hint="Fills in from the address. Edit if it is off.">ZIP</FieldLabel>
+                <FieldLabel>ZIP *</FieldLabel>
                 <div data-wizard-field="zip">
                   <Input
                     value={sub.zip}
@@ -2632,7 +2547,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel optional hint="Fills in from the address. Edit if it is off.">Neighborhood</FieldLabel>
+                <FieldLabel>Neighborhood</FieldLabel>
                 <div data-wizard-field="neighborhood">
                   <Input
                     value={sub.neighborhood}
@@ -2646,16 +2561,9 @@ export function ManagerAddListingForm({
                   <StepFieldError msg={stepFieldErrors.neighborhood} />
                 </div>
               </GridField>
-              </div>
-            </ListingSubsection>
 
-            <ListingSubsection
-              title="Size & layout"
-              description="How big the home is and how it is laid out."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
               <GridField>
-                <FieldLabel required>Floors</FieldLabel>
+                <FieldLabel>Floors *</FieldLabel>
                 <div data-wizard-field="listingStoriesId">
                   <Select
                     aria-label="Number of floors"
@@ -2677,7 +2585,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel required>Bathrooms</FieldLabel>
+                <FieldLabel>Bathrooms *</FieldLabel>
                 <div data-wizard-field="listingTotalBathroomsId">
                   <Select
                     aria-label="Total bathrooms"
@@ -2699,7 +2607,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel required>Bedrooms</FieldLabel>
+                <FieldLabel>Bedrooms *</FieldLabel>
                 <div data-wizard-field="listingBedroomSlots">
                   <Select
                     aria-label="Bedrooms for rent"
@@ -2730,16 +2638,9 @@ export function ManagerAddListingForm({
                   Pet-friendly
                 </label>
               </div>
-              </div>
-            </ListingSubsection>
 
-            <ListingSubsection
-              title="Description & move-in"
-              description="What a renter reads on the listing, plus how they get in on move-in day."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <FieldLabel optional>Listing tagline</FieldLabel>
+                <FieldLabel>Listing tagline</FieldLabel>
                 <Input
                   value={sub.tagline}
                   onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))}
@@ -2748,7 +2649,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel optional>House overview</FieldLabel>
+                <FieldLabel>House overview</FieldLabel>
                 <Textarea
                   rows={3}
                   value={sub.houseOverview}
@@ -2758,7 +2659,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel optional hint="Only if the layout is unusual.">Extra layout note</FieldLabel>
+                <FieldLabel hint="Optional — only if the layout is unusual.">Extra layout note</FieldLabel>
                 <Input
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
@@ -2767,7 +2668,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel optional hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
                 <Textarea
                   rows={4}
                   value={sub.houseMoveInInstructions ?? ""}
@@ -2776,9 +2677,9 @@ export function ManagerAddListingForm({
                   placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
                 />
               </div>
-              </div>
-            </ListingSubsection>
+            </div>
 
+            <div className="mt-4">
             <ListingSubsection
               title="Full-house photos & video"
               description="Up to 12 photos for the public listing gallery."
@@ -2869,12 +2770,19 @@ export function ManagerAddListingForm({
                 />
               </div>
             </ListingSubsection>
+            </div>
           </FormSection>
           ) : null}
 
           {/* ── Step 4: Pricing ── */}
           {stepIndex === 4 ? (
-          <FormSection id="edit-lease" title="Pricing">
+          <FormSection
+            id="edit-lease"
+            title="Pricing"
+            description={
+              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount — enter 0 when you do not charge it, and it stays off the public listing.</>
+            }
+          >
             <div className="space-y-5">
               <PlaceCategoryPicker
                 hasError={Boolean(stepFieldErrors.listingPlaceCategoryId)}
@@ -2896,18 +2804,24 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
+                description={
+                  isEntireHome
+                    ? "One monthly lease for the full unit — utilities and proration apply to the whole home."
+                    : "Set rent, utilities estimate, and proration for each bedroom you are listing."
+                }
               >
                 {isEntireHome ? (
-                  <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <GridField>
-                        <div data-wizard-field="monthlyRent">
-                          <FieldLabel>Monthly rent for entire home *</FieldLabel>
-                        </div>
-                        <div>
-                          <MoneyInput
-                            invalid={Boolean(stepFieldErrors.monthlyRent)}
-                            ariaLabel="Monthly rent for entire home"
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <GridField>
+                      <div data-wizard-field="monthlyRent">
+                        <FieldLabel>Monthly rent for entire home *</FieldLabel>
+                      </div>
+                      <div>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                          <Input
+                            inputMode="decimal"
+                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.monthlyRent), "pl-8")}
                             value={
                               typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0
                                 ? String(sub.entireHomeMonthlyRent)
@@ -2921,95 +2835,88 @@ export function ManagerAddListingForm({
                             }}
                             placeholder="4500"
                           />
-                          <StepFieldError msg={stepFieldErrors.monthlyRent} />
                         </div>
-                      </GridField>
-                      <GridField>
-                        <UtilitiesPaymentModelPicker
-                          value={sub.entireHomeUtilitiesPaymentModel}
-                          onSelect={(model) =>
-                            setSub((s) =>
-                              applyEntireHomeListingPricing(s, {
-                                entireHomeUtilitiesPaymentModel: model,
-                                ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
-                              }),
-                            )
-                          }
-                        />
-                      </GridField>
-                      <GridField>
-                        <FieldLabel>Utilities estimate (whole home)</FieldLabel>
-                        <MoneyInput
+                        <StepFieldError msg={stepFieldErrors.monthlyRent} />
+                      </div>
+                    </GridField>
+                    <div className="sm:col-span-2">
+                      <UtilitiesPaymentModelPicker
+                        value={sub.entireHomeUtilitiesPaymentModel}
+                        onSelect={(model) =>
+                          setSub((s) =>
+                            applyEntireHomeListingPricing(s, {
+                              entireHomeUtilitiesPaymentModel: model,
+                              ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                            }),
+                          )
+                        }
+                      />
+                    </div>
+                    <GridField>
+                      <FieldLabel
+                        hint={
+                          (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
+                            ? "Not billed separately when included in rent."
+                            : (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
+                              ? "Optional — typical monthly cost shown on the listing."
+                              : "Monthly estimate used in signing totals."
+                        }
+                      >
+                        Utilities estimate (whole home)
+                      </FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                        <Input
+                          inputMode="decimal"
+                          className="pl-8"
                           disabled={(sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                          ariaLabel="Utilities estimate (whole home)"
                           value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
                           onChange={(e) =>
                             setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
                           }
                           placeholder="175"
                         />
-                      </GridField>
-                      <div className="sm:col-span-2">
-                        <ProrationMethodFields
-                          prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
-                          monthlyRent={entireHomeRent}
-                          dailyRentRate={sub.entireHomeDailyRentRate}
-                          dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
-                          utilitiesLabel="Daily utilities rate (whole home)"
-                          onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
-                          onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
-                          onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
-                        />
                       </div>
+                    </GridField>
+                    <div className="sm:col-span-2">
+                      <ProrationMethodFields
+                        prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
+                        monthlyRent={entireHomeRent}
+                        dailyRentRate={sub.entireHomeDailyRentRate}
+                        dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
+                        utilitiesLabel="Daily utilities rate (whole home)"
+                        onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
+                        onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+                        onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
+                      />
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3" data-wizard-field="monthlyRent">
+                  <div className="space-y-4" data-wizard-field="monthlyRent">
                     {stepFieldErrors.monthlyRent ? (
                       <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
                     ) : null}
                     {sub.rooms.map((room, i) => {
                       const roomRentKey = listingRoomRentKey(room.id);
                       const roomRentErr = stepFieldErrors[roomRentKey];
-                      const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
-                      const roomLabel = room.name.trim() || `Room ${i + 1}`;
-                      const priced = listingRoomHasRent(room);
-                      const utilModel = resolveRoomUtilitiesPaymentModel(room);
-                      const utilShort =
-                        utilModel === "manager_billed"
-                          ? "Utilities billed by manager"
-                          : utilModel === "tenant_direct"
-                            ? "Tenant pays utilities"
-                            : "Utilities in rent";
-                      const priceKey = listingItemKey("roomPrice", room.id);
-                      // A room whose rent is still unset can never be collapsed away — the
-                      // required field must stay on screen. Priced rooms collapse to a
-                      // one-line summary; an errored one force-expands so it can be fixed.
-                      const expanded = priced
-                        ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
-                        : true;
                       return (
-                        <ListingWizardCollapsibleCard
-                          key={room.id}
-                          expanded={expanded}
-                          onToggle={() => toggleListingItem(priceKey)}
-                          title={roomLabel}
-                          subtitle={`${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`}
-                          hasError={Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent)}
-                          bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5"
-                          toggleDataAttr={`listing-room-price-toggle-${room.id}`}
-                        >
+                      <div
+                        key={room.id}
+                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
+                      >
+                        <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <GridField>
                             <FieldLabel>Monthly rent *</FieldLabel>
-                            <div data-wizard-field={roomRentKey}>
-                              <MoneyInput
-                                invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
-                                ariaLabel={`Monthly rent for ${roomLabel}`}
+                            <div className="relative" data-wizard-field={roomRentKey}>
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                              <Input
+                                inputMode="decimal"
+                                className={wizardFieldErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "pl-8")}
                                 value={room.monthlyRent || ""}
                                 onChange={(e) => {
                                   clearListingFieldError("monthlyRent");
                                   clearListingFieldError(roomRentKey);
-                                  expandListingItem(priceKey);
                                   setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
                                 }}
                                 placeholder="800"
@@ -3018,6 +2925,30 @@ export function ManagerAddListingForm({
                             </div>
                           </GridField>
                           <GridField>
+                            <FieldLabel
+                              hint={
+                                (room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
+                                  ? "Not billed separately when included in rent."
+                                  : (room.utilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
+                                    ? "Optional — typical monthly cost shown on the listing."
+                                    : "Monthly estimate billed with rent through the portal."
+                              }
+                            >
+                              Utilities estimate
+                            </FieldLabel>
+                            <div className="relative">
+                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                              <Input
+                                inputMode="decimal"
+                                className="pl-8"
+                                disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
+                                value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                                placeholder="175"
+                              />
+                            </div>
+                          </GridField>
+                          <div className="sm:col-span-2">
                             <UtilitiesPaymentModelPicker
                               value={room.utilitiesPaymentModel}
                               onSelect={(model) =>
@@ -3027,17 +2958,7 @@ export function ManagerAddListingForm({
                                 })
                               }
                             />
-                          </GridField>
-                          <GridField>
-                            <FieldLabel>Utilities estimate</FieldLabel>
-                            <MoneyInput
-                              disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                              ariaLabel={`Utilities estimate for ${roomLabel}`}
-                              value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                              onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                              placeholder="175"
-                            />
-                          </GridField>
+                          </div>
                           <div className="sm:col-span-2">
                             <ProrationMethodFields
                               prorateMethod={room.prorateMethod ?? "auto"}
@@ -3049,70 +2970,24 @@ export function ManagerAddListingForm({
                               onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
                             />
                           </div>
-                        </ListingWizardCollapsibleCard>
+                        </div>
+                      </div>
                       );
                     })}
                   </div>
                 )}
               </ListingSubsection>
 
-              <ListingSubsection
-                title="Lease terms"
-                description="Pick the lengths applicants can choose. PropLane builds a lease template for each."
-              >
+              <ListingSubsection title="Lease terms">
                 <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
-                  <FieldLabel required>Lease lengths offered</FieldLabel>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {/*
-                      Display order: named terms, then Short-Term Stay, then
-                      Custom last (the escape hatch). Short-term is offered as one
-                      more lease option, not a separate walled-off section, and
-                      Custom follows it so it never wedges between real terms.
-                    */}
-                    {[
-                      ...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM),
-                      SHORT_TERM_LEASE_TERM,
-                      CUSTOM_LEASE_TERM,
-                    ].map((term) => {
-                      if (term === SHORT_TERM_LEASE_TERM) {
-                        return (
-                          <label
-                            key={SHORT_TERM_LEASE_TERM}
-                            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
-                              sub.shortTermRentalsAllowed ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-border"
-                              checked={Boolean(sub.shortTermRentalsAllowed)}
-                              onChange={(e) => {
-                                clearListingFieldError("allowedLeaseTerms");
-                                const on = e.target.checked;
-                                setSub((s) => {
-                                  const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
-                                  const next = syncShortTermLeaseTermInAllowed(standard, on);
-                                  const base = syncPropertyLeaseTemplatesFromListing({
-                                    ...s,
-                                    shortTermRentalsAllowed: on,
-                                    allowedLeaseTerms: next,
-                                    leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                                  });
-                                  return withShortTermListingFees(base, on);
-                                });
-                              }}
-                            />
-                            <span className="font-medium text-foreground">{SHORT_TERM_LEASE_TERM}</span>
-                          </label>
-                        );
-                      }
+                  <FieldLabel required>Lease terms offered</FieldLabel>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {LEASE_TERM_OPTIONS.map((term) => {
                       const selected = resolveAllowedLeaseTerms(sub).includes(term);
                       return (
                         <label
                           key={term}
-                          className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
-                            selected ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
-                          }`}
+                          className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm shadow-sm"
                         >
                           <input
                             type="checkbox"
@@ -3122,19 +2997,15 @@ export function ManagerAddListingForm({
                               clearListingFieldError("allowedLeaseTerms");
                               const on = e.target.checked;
                               setSub((s) => {
-                                const current = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
-                                const nextStandard = on
+                                const current = resolveAllowedLeaseTerms(s);
+                                const next = on
                                   ? [...new Set([...current, term])]
                                   : current.filter((t) => t !== term);
-                                const next = syncShortTermLeaseTermInAllowed(
-                                  nextStandard,
-                                  Boolean(s.shortTermRentalsAllowed),
-                                );
-                                return syncPropertyLeaseTemplatesFromListing({
+                                return {
                                   ...s,
                                   allowedLeaseTerms: next,
                                   leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                                });
+                                };
                               });
                             }}
                           />
@@ -3145,21 +3016,73 @@ export function ManagerAddListingForm({
                   </div>
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>
+              </ListingSubsection>
 
-                {/* Short-term pricing only appears once short-term stays are offered above. */}
+              <ListingSubsection
+                title="Short-term stays"
+                description="Enable this only if this property may host temporary lodger / guest stays."
+              >
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border"
+                    checked={Boolean(sub.shortTermRentalsAllowed)}
+                    onChange={(e) => setSub((s) => ({ ...s, shortTermRentalsAllowed: e.target.checked }))}
+                  />
+                  <span className="text-sm font-medium text-foreground">This property allows short-term room stays</span>
+                </label>
                 {sub.shortTermRentalsAllowed ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted">
-                      Nightly rate, deposit, and move-in for {SHORT_TERM_LEASE_TERM} are in Fees below.
-                    </p>
-                    <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
-                      Requirements for short-term stays
-                    </FieldLabel>
-                    <Textarea
-                      value={sub.shortTermRequirements ?? ""}
-                      onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
-                      placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout."
-                    />
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <GridField>
+                      <FieldLabel>Daily cost</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                        <Input
+                          className="pl-8"
+                          inputMode="decimal"
+                          value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
+                          placeholder="40"
+                        />
+                      </div>
+                    </GridField>
+                    <GridField>
+                      <FieldLabel>Short-term deposit</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                        <Input
+                          className="pl-8"
+                          inputMode="decimal"
+                          value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
+                          placeholder="100"
+                        />
+                      </div>
+                    </GridField>
+                    <GridField>
+                      <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                        <Input
+                          className="pl-8"
+                          inputMode="decimal"
+                          value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                          onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
+                          placeholder="50"
+                        />
+                      </div>
+                    </GridField>
+                    <div className="sm:col-span-2">
+                      <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
+                        Requirements / house rules for short-term stays
+                      </FieldLabel>
+                      <Textarea
+                        className=""
+                        value={sub.shortTermRequirements ?? ""}
+                        onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
+                        placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
+                      />
+                    </div>
                   </div>
                 ) : null}
               </ListingSubsection>
@@ -3168,15 +3091,15 @@ export function ManagerAddListingForm({
                 title="Lease bundles"
                 description={
                   isEntireHome
-                    ? "Optional — add only for promo pricing or extra listing copy."
-                    : "Optional packages (whole house, roommate groups). Skip to use per-room pricing."
+                    ? "Optional — the public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
+                    : "Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
                 }
               >
                 {!isEntireHome ? (
                 <div className="rounded-xl border border-border p-4 sm:p-5">
                   <p className="text-sm font-semibold text-foreground">Build from your rooms</p>
                   <p className="mt-1 text-xs leading-5 text-muted">
-                    Rent defaults to the sum of selected rooms — edit for discounts or promos.
+                    Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
@@ -3330,27 +3253,161 @@ export function ManagerAddListingForm({
                 )}
               </ListingSubsection>
 
-              <ListingSubsection title="Fees" description="Deposits, recurring charges, and custom fees — one list for the whole listing.">
-                <ListingFeesEditor
-                  sub={sub}
-                  setSub={setSub}
-                  stepFieldErrors={stepFieldErrors}
-                  clearListingFieldError={clearListingFieldError}
-                  listingItemKey={listingItemKey}
-                  isListingItemExpanded={isListingItemExpanded}
-                  toggleListingItem={toggleListingItem}
-                  expandListingItem={expandListingItem}
-                  wizardFieldErrorClass={wizardFieldErrorClass}
-                />
+              <ListingSubsection title="Fees">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {(
+                    [
+                      ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim()],
+                      ["holdingDeposit", "Holding deposit", (sub.holdingDeposit ?? "$100").replace(/^\$/, "").trim()],
+                      ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
+                      ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
+                      ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
+                      ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim()],
+                      ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim()],
+                      ["monthToMonthSurcharge", "Month-to-month surcharge", (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim()],
+                    ] as const
+                  ).map(([key, label, value]) => (
+                    <GridField key={key}>
+                      <div data-wizard-field={key}>
+                        <FieldLabel required>{label}</FieldLabel>
+                      </div>
+                      <div>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                          <Input
+                            className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
+                            inputMode="decimal"
+                            value={value}
+                            onChange={(e) => {
+                              clearListingFieldError(key);
+                              setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
+                            }}
+                            placeholder="0"
+                          />
+                        </div>
+                        <StepFieldError msg={stepFieldErrors[key]} />
+                      </div>
+                    </GridField>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted">
+                  Holding deposit secures the application and is credited toward the security deposit when the resident is
+                  approved. Default is $100 when left blank on new listings.
+                </p>
+                <div className="mt-4 space-y-3 rounded-xl border border-border bg-card p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application options</p>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      checked={Boolean(sub.allowMultiplePropertyApplications)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          allowMultiplePropertyApplications: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">
+                      <span className="font-medium">Allow multiple applications</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Residents can apply to more than one property or room on this listing.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          applicationFeeOnlyFirstApplication: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">
+                      <span className="font-medium">Application fee only for first application</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Charge the application fee once per resident; skip payment on later applications.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                {(sub.customFees ?? []).length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>
+                    {(sub.customFees ?? []).map((fee, i) => (
+                      <ListingWizardCollapsibleCard
+                        key={fee.id}
+                        expanded={isListingItemExpanded(listingItemKey("fee", fee.id))}
+                        onToggle={() => toggleListingItem(listingItemKey("fee", fee.id))}
+                        title={fee.label.trim() || `Fee ${i + 1}`}
+                        subtitle={`$${fee.amount.replace(/^\$/, "").trim() || "0"} · ${fee.frequency === "one-time" ? "One-time" : "Monthly"}`}
+                        bodyClassName="grid gap-3 sm:grid-cols-2"
+                        toggleDataAttr={`listing-fee-toggle-${fee.id}`}
+                        headerActions={
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeCustomFee(i)}>
+                            Remove
+                          </Button>
+                        }
+                      >
+                        <div className="sm:col-span-2 sm:grid sm:grid-cols-2 sm:gap-3">
+                        <div>
+                          <FieldLabel>Fee name</FieldLabel>
+                          <Input
+                            value={fee.label}
+                            onChange={(e) => setCustomFee(i, { label: sanitizePlaceNameInput(e.target.value) })}
+                            placeholder="e.g. Pet fee, Cleaning fee"
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Amount</FieldLabel>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                            <Input
+                              className="pl-8"
+                              inputMode="decimal"
+                              value={fee.amount.replace(/^\$/, "").trim()}
+                              onChange={(e) => setCustomFee(i, { amount: sanitizeMoneyInput(e.target.value) })}
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel>Type</FieldLabel>
+                          <div className="relative">
+                            <Select
+                              aria-label={`Additional fee ${i + 1} type`}
+                              className={`${selectInputCls}`}
+                              value={fee.frequency ?? "monthly"}
+                              onChange={(e) =>
+                                setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
+                              }
+                            >
+                              <option value="monthly">Monthly</option>
+                              <option value="one-time">One-time</option>
+                            </Select>
+                          </div>
+                        </div>
+                        </div>
+                      </ListingWizardCollapsibleCard>
+                    ))}
+                  </div>
+                ) : null}
+                <Button type="button" variant="outline" className={`mt-4 ${LISTING_WIZARD_ACTION_BTN}`} onClick={addCustomFee}>
+                  + Add fee
+                </Button>
               </ListingSubsection>
 
               <ListingSubsection
                 title="Payment at signing"
-                description="Security deposit and move-in follow the Due at signing flags on those fee rows. Add rent or utilities here if you collect them at signing."
+                description="Select every charge collected when the lease is signed."
               >
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {PAYMENT_AT_SIGNING_OPTIONS.filter((opt) => opt.id === "first_month_rent" || opt.id === "first_month_utilities").map((opt) => (
-                    <label key={opt.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm">
+                <div className="grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
+                  {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
+                    <label key={opt.id} className="flex cursor-pointer items-center gap-2">
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-border"
@@ -3362,7 +3419,7 @@ export function ManagerAddListingForm({
                           }))
                         }
                       />
-                      <span className="font-medium text-foreground">{opt.label}</span>
+                      <span className="text-sm font-medium text-foreground">{opt.label}</span>
                     </label>
                   ))}
                 </div>
@@ -3371,83 +3428,103 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Resident payment methods"
-                description="ACH, Zelle, and Venmo for rent and application payments."
+                description="How residents and applicants pay rent, utilities, application fees, and other charges."
               >
                 <div
                   data-wizard-field="residentPaymentMethods"
-                  className={`space-y-3 rounded-xl border bg-card p-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
+                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
                 >
                   <StepFieldError msg={stepFieldErrors.residentPaymentMethods} />
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-border"
                       checked={sub.axisPaymentsEnabled !== false}
-                      onChange={(e) => setSub((s) => ({ ...s, axisPaymentsEnabled: e.target.checked }))}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          axisPaymentsEnabled: e.target.checked,
+                        }))
+                      }
                     />
-                    <span className="font-medium text-foreground">Bank (ACH) with Stripe</span>
+                    <span className="text-sm font-medium text-foreground">
+                      Bank (ACH) with Stripe — no added fees, PropLane covers processing
+                    </span>
                   </label>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <div className="space-y-2 rounded-lg border border-border/80 p-2.5">
-                      <label className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={Boolean(sub.zellePaymentsEnabled)}
-                          onChange={(e) => setSub((s) => ({ ...s, zellePaymentsEnabled: e.target.checked }))}
+                  <div className="border-t border-border pt-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        checked={Boolean(sub.zellePaymentsEnabled)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSub((s) => ({
+                            ...s,
+                            zellePaymentsEnabled: on,
+                          }));
+                        }}
+                      />
+                      <span className="text-sm font-medium text-foreground">Zelle</span>
+                    </label>
+                    {sub.zellePaymentsEnabled ? (
+                      <div className="mt-2 pl-7" data-wizard-field="zelleContact">
+                        <FieldLabel required>Zelle phone or email</FieldLabel>
+                        <Input
+                          value={sub.zelleContact ?? ""}
+                          onChange={(e) => {
+                            clearListingFieldError("zelleContact");
+                            setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
+                          }}
+                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
+                          placeholder="+1 555 010 8899 or name@email.com"
                         />
-                        <span className="font-medium">Zelle</span>
-                      </label>
-                      {sub.zellePaymentsEnabled ? (
-                        <div data-wizard-field="zelleContact">
-                          <Input
-                            aria-label="Zelle phone or email"
-                            value={sub.zelleContact ?? ""}
-                            onChange={(e) => {
-                              clearListingFieldError("zelleContact");
-                              setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
-                            }}
-                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
-                            placeholder="Phone or email"
-                          />
-                          <StepFieldError msg={stepFieldErrors.zelleContact} />
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="space-y-2 rounded-lg border border-border/80 p-2.5">
-                      <label className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={Boolean(sub.venmoPaymentsEnabled)}
-                          onChange={(e) => setSub((s) => ({ ...s, venmoPaymentsEnabled: e.target.checked }))}
+                        <StepFieldError msg={stepFieldErrors.zelleContact} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="border-t border-border pt-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        checked={Boolean(sub.venmoPaymentsEnabled)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSub((s) => ({
+                            ...s,
+                            venmoPaymentsEnabled: on,
+                          }));
+                        }}
+                      />
+                      <span className="text-sm font-medium text-foreground">Venmo</span>
+                    </label>
+                    {sub.venmoPaymentsEnabled ? (
+                      <div className="mt-2 pl-7" data-wizard-field="venmoContact">
+                        <FieldLabel required>Venmo username, phone, or email</FieldLabel>
+                        <Input
+                          value={sub.venmoContact ?? ""}
+                          onChange={(e) => {
+                            clearListingFieldError("venmoContact");
+                            setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
+                          }}
+                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
+                          placeholder="@username, +1 555 010 8899, or name@email.com"
                         />
-                        <span className="font-medium">Venmo</span>
-                      </label>
-                      {sub.venmoPaymentsEnabled ? (
-                        <div data-wizard-field="venmoContact">
-                          <Input
-                            aria-label="Venmo contact"
-                            value={sub.venmoContact ?? ""}
-                            onChange={(e) => {
-                              clearListingFieldError("venmoContact");
-                              setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
-                            }}
-                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
-                            placeholder="@username or phone"
-                          />
-                          <StepFieldError msg={stepFieldErrors.venmoContact} />
-                        </div>
-                      ) : null}
-                    </div>
+                        <StepFieldError msg={stepFieldErrors.venmoContact} />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </ListingSubsection>
 
-              <ListingSubsection title="Rent due & late fees" description="Recurring rent schedule and automatic late fees.">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <ListingSubsection
+                title="Rent due date & late fees"
+                description="First month rent is always due on move-in. Recurring rent follows the schedule below."
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
                   <GridField>
-                    <FieldLabel>Monthly due date</FieldLabel>
+                    <FieldLabel hint="When recurring rent and utilities are due each month.">Monthly due date</FieldLabel>
                     <Select
                       value={sub.rentDueDayMode ?? "first_of_month"}
                       onChange={(e) =>
@@ -3457,12 +3534,12 @@ export function ManagerAddListingForm({
                         }))
                       }
                     >
-                      <option value="first_of_month">1st of month</option>
-                      <option value="last_of_month">Last day of month</option>
+                      <option value="first_of_month">1st of the month</option>
+                      <option value="last_of_month">Last day of the month</option>
                     </Select>
                   </GridField>
                   <GridField>
-                    <FieldLabel>Late fee grace (days)</FieldLabel>
+                    <FieldLabel hint="Days after the due date before a late fee is added automatically.">Late fee grace period (days)</FieldLabel>
                     <Input
                       inputMode="numeric"
                       min={0}
@@ -3477,7 +3554,7 @@ export function ManagerAddListingForm({
                     />
                   </GridField>
                   <GridField>
-                    <FieldLabel>Late fee amount</FieldLabel>
+                    <FieldLabel hint="Flat fee added once per overdue charge after the grace period.">Late fee amount</FieldLabel>
                     <div className="relative">
                       <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                       <Input
@@ -3490,15 +3567,15 @@ export function ManagerAddListingForm({
                     </div>
                   </GridField>
                   <GridField>
-                    <FieldLabel>Auto late fees</FieldLabel>
-                    <label className="mt-2 flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm">
+                    <FieldLabel>Automatic late fees</FieldLabel>
+                    <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-border"
                         checked={sub.lateFeeEnabled !== false}
                         onChange={(e) => setSub((s) => ({ ...s, lateFeeEnabled: e.target.checked }))}
                       />
-                      <span>Assess & notify</span>
+                      <span className="text-sm text-foreground">Create late fee charges & send messages</span>
                     </label>
                   </GridField>
                 </div>
@@ -4583,20 +4660,7 @@ export function ManagerAddListingForm({
           ) : null}
         </div>
 
-          <ModalAssistantStrip
-            contextHint={listingAssistantContext}
-            storageScopeKey={wizardTitlePrefix}
-            onExpandedChange={setAssistantExpanded}
-            side="left"
-            defaultExpanded={prefersAssistantOpenBeside()}
-            // Content is first in the DOM so the collapsed strip (and the whole
-            // narrow-screen stack) sits below the fields; when expanded on a wide
-            // panel, `order-first` floats the chat to the left of the form.
-            className={cn("z-10 px-5 sm:px-6", assistantExpanded && "@2xl:order-first")}
-          />
-        </div>
-
-        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
           {draftSaveError ? (
             <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
               {draftSaveError}
@@ -4658,8 +4722,12 @@ export function ManagerAddListingForm({
               )}
             </div>
           </div>
+          <ModalAssistantStrip
+            contextHint={`${wizardTitlePrefix} · ${LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing"}`}
+            storageScopeKey={wizardTitlePrefix}
+          />
         </div>
-      </div>
+      </form>
 
     </div>,
     portalContainer ?? document.body,

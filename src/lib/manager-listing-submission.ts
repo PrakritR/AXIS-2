@@ -9,22 +9,10 @@ import {
   inferSharedSpaceKind,
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
-import {
-  CUSTOM_LEASE_TERM,
-  LEASE_TERM_OPTIONS,
-  LISTING_LEASE_TERM_OPTION_SET,
-  SHORT_TERM_LEASE_TERM,
-  sortLeaseTermsCanonical,
-} from "@/lib/rental-application/lease-terms";
+import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
 import { roomIsDailyPriced } from "@/lib/room-pricing";
 import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
 import { parseMoneyAmount } from "@/lib/parse-money";
-import {
-  defaultCoreListingFeeRows,
-  ensureSubmissionListingFees,
-  normalizeListingFeeRow,
-} from "@/lib/listing-fees";
-export { isListingFeeAmountFilled } from "@/lib/listing-fees";
 import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
@@ -107,18 +95,13 @@ export type ManagerQuickFactRow = {
   value: string;
 };
 
-/** Listing fee row — preset slots plus custom fees (see `listing-fees.ts`). */
+/** Optional extra fees beyond the standard application / deposit / parking fields. */
 export type ManagerCustomFeeRow = {
   id: string;
   label: string;
   amount: string;
-  /** Default monthly when unset. Kept in sync with `cadence` for older readers. */
+  /** Default monthly when unset. */
   frequency?: "one-time" | "monthly";
-  cadence?: import("@/lib/listing-fees").ListingFeeCadence;
-  presetId?: import("@/lib/listing-fees").ListingFeePresetId | "custom";
-  dueAtSigning?: boolean;
-  shortTermOnly?: boolean;
-  creditsTowardSecurity?: boolean;
 };
 
 /** Rows for the public “Bundles & leasing” table (optional — defaults are generated from rooms). */
@@ -128,16 +111,12 @@ export type ManagerBundleRow = {
   /** e.g. from $899/mo or $950/mo */
   price: string;
   strikethrough: string;
-  /** @deprecated No longer edited in the listing wizard; kept for legacy submissions. */
+  /** Shown as “offer” / promo line when set */
   promo: string;
   /** Secondary line under the bundle name — optional manual override when rooms are picked. */
   roomsLine: string;
   /** Rooms included in this bundle (scope line auto-built from names when set). */
   includedRoomIds?: string[];
-  /** Offer this bundle for short-term stays when listing short-term rentals are enabled. */
-  shortTermEnabled?: boolean;
-  /** Nightly rate for short-term stays on this bundle (stay total = rate × nights). */
-  shortTermNightlyRent?: string;
 };
 
 /** How a room uses a specific bathroom row (optional; improves listing copy). */
@@ -253,47 +232,14 @@ export type ManagerListingSubmissionV1 = {
   shortTermDeposit?: string;
   /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
   shortTermMoveInFee?: string;
-  /** Short-term holding deposit (parallel to {@link holdingDeposit}). */
-  shortTermHoldingDeposit?: string;
-  /** Short-term parking fee (parallel to {@link parkingMonthly}). */
-  shortTermParkingMonthly?: string;
-  /** Short-term HOA / community fee (parallel to {@link hoaMonthly}). */
-  shortTermHoaMonthly?: string;
-  /** Short-term other monthly fees (parallel to {@link otherMonthlyFees}). */
-  shortTermOtherMonthlyFees?: string;
-  /** Short-term month-to-month surcharge (parallel to {@link monthToMonthSurcharge}). */
-  shortTermMonthToMonthSurcharge?: string;
   applicationFee: string;
-  /**
-   * Refundable deposit securing the application; credited toward the security
-   * deposit on approval (defaults to $100 when blank). Billed under Payments
-   * after approval — never collected during the application. Not a recurring
-   * charge — see `holding_deposit` household charge kind.
-   */
+  /** Refundable deposit securing the application; credited toward security deposit on approval. */
   holdingDeposit?: string;
-  /**
-   * @deprecated The at-application collection this once selected was removed
-   * (captain decision, 2026-07-26): the application collects ONLY the
-   * application fee, and the deposit always bills under Payments after
-   * approval. Kept so stored submissions still normalize; no UI sets it and
-   * nothing creates a combined fee+deposit charge anymore.
-   * See `docs/agents/resident-payments.md`.
-   */
-  holdingDepositTiming?: "at_application" | "after_approval";
-  /**
-   * @deprecated Inert. Applying to multiple properties/rooms is now always
-   * allowed (only an exact same-property + same-room pending duplicate is
-   * blocked) — hard-coded in
-   * `src/lib/rental-application/application-policy.ts`, no longer read from the
-   * listing. Kept so stored submissions still normalize; no UI sets it.
-   */
+  /** When true, residents may apply to additional properties or rooms beyond their first application. */
   allowMultiplePropertyApplications?: boolean;
   /**
-   * @deprecated Inert. The application fee is now always collected ONCE per
-   * resident per manager (repeat applicants are waived) — hard-coded in
-   * `shouldWaiveApplicationFeeForResident`
-   * (`src/lib/rental-application/application-policy.ts`), no longer read from
-   * the listing. Kept so stored submissions still normalize; no UI sets it.
+   * When true, the application fee is only collected on the resident's first application
+   * (subsequent applications skip the fee step).
    */
   applicationFeeOnlyFirstApplication?: boolean;
   securityDeposit: string;
@@ -374,28 +320,8 @@ export type ManagerListingSubmissionV1 = {
    * How the rental application is configured for this property.
    * "standard" = default Axis application only (custom questions kept but inactive);
    * "custom" = custom questions apply. Absent (legacy) = custom questions apply if present.
-   *
-   * NOTE: `customApplicationFields` / `disabledStandardApplicationKeys` /
-   * `applicationConfigMode` configure the LONG-TERM (standard) application only.
-   * The short-term application is configured independently by the
-   * `shortTerm*` triplet below, so turning a question off in one form never
-   * touches the other. See `applicationConfigForVariant` in
-   * `rental-application/application-field-catalog.ts`.
    */
   applicationConfigMode?: "standard" | "custom";
-  /** Manager-defined SHORT-TERM application questions (independent of the long-term form). */
-  shortTermCustomApplicationFields?: ManagerCustomApplicationField[];
-  /** Built-in questions the manager removed from the SHORT-TERM application (independent of the long-term form). */
-  shortTermDisabledStandardApplicationKeys?: string[];
-  /**
-   * How the SHORT-TERM application is configured for this property.
-   * Absent / "standard" = PropLane's curated short-term question set
-   * (guest name, property + room, check-in/out date & time, house-rules
-   * acknowledgement, signature — screening/employment/reference sections
-   * off by default). "custom" = the manager has edited the short-term form,
-   * so the stored `shortTerm*` values apply verbatim.
-   */
-  shortTermApplicationConfigMode?: "standard" | "custom";
   /**
    * How the lease document is produced for this property.
    * "standard"/absent = Axis generated lease (current behavior);
@@ -417,55 +343,37 @@ export type ManagerListingSubmissionV1 = {
   leaseTemplateDocUrl?: string | null;
   /** Original filename of the uploaded lease template. */
   leaseTemplateDocName?: string;
-  /** Multiple lease templates per property (standard, month-to-month, short-term, custom). */
-  propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
 };
 
+const LEASE_TERM_OPTION_SET = new Set<string>(LEASE_TERM_OPTIONS);
+
+/** Fee fields must be filled with a dollar amount; use 0 when there is no charge. */
+export function isListingFeeAmountFilled(raw: string): boolean {
+  const t = String(raw ?? "")
+    .replace(/^\$/, "")
+    .trim();
+  if (!t) return false;
+  if (/^waived$/i.test(t)) return false;
+  if (!/[\d]/.test(t)) return false;
+  const n = parseMoneyAmount(t);
+  return Number.isFinite(n) && n >= 0;
+}
+
 export function formatLeaseTermsBodyFromAllowed(terms: string[]): string {
-  const clean = terms.filter((t) => LISTING_LEASE_TERM_OPTION_SET.has(t));
+  const clean = terms.filter((t) => LEASE_TERM_OPTION_SET.has(t));
   if (clean.length === 0) return "";
   return `Available lease lengths: ${clean.join(", ")}.`;
 }
 
-export function syncShortTermLeaseTermInAllowed(
-  terms: string[],
-  shortTermRentalsAllowed: boolean,
-): string[] {
-  const without = terms.filter((t) => t !== SHORT_TERM_LEASE_TERM);
-  const withShortTerm = shortTermRentalsAllowed ? [...without, SHORT_TERM_LEASE_TERM] : without;
-  // Canonical order does the rest: ascending length → Short-Term Stay → Custom
-  // last. Sorting here (rather than only appending Short-Term/Custom) also fixes
-  // a stored listing whose terms were persisted out of order — e.g. 12-Month
-  // before 9-Month, which is what shipped the transposed production dropdown.
-  return sortLeaseTermsCanonical(withShortTerm);
-}
-
 export function resolveAllowedLeaseTerms(
-  sub:
-    | Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody" | "shortTermRentalsAllowed">
-    | null
-    | undefined,
+  sub: Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody"> | null | undefined,
 ): string[] {
-  const fromArray = (sub?.allowedLeaseTerms ?? []).filter((t) => LISTING_LEASE_TERM_OPTION_SET.has(t));
-  let terms: string[];
-  if (fromArray.length > 0) {
-    terms = fromArray;
-  } else {
-    const body = sub?.leaseTermsBody?.trim() ?? "";
-    if (!body) {
-      terms = [];
-    } else {
-      const found = LEASE_TERM_OPTIONS.filter((opt) => body.toLowerCase().includes(opt.toLowerCase()));
-      terms = [...found];
-      if (
-        sub?.shortTermRentalsAllowed &&
-        body.toLowerCase().includes(SHORT_TERM_LEASE_TERM.toLowerCase())
-      ) {
-        terms = [...terms, SHORT_TERM_LEASE_TERM];
-      }
-    }
-  }
-  return syncShortTermLeaseTermInAllowed(terms, Boolean(sub?.shortTermRentalsAllowed));
+  const fromArray = (sub?.allowedLeaseTerms ?? []).filter((t) => LEASE_TERM_OPTION_SET.has(t));
+  if (fromArray.length > 0) return fromArray;
+  const body = sub?.leaseTermsBody?.trim() ?? "";
+  if (!body) return [];
+  const found = LEASE_TERM_OPTIONS.filter((opt) => body.toLowerCase().includes(opt.toLowerCase()));
+  return [...found];
 }
 
 export type ManagerListingServiceOption = {
@@ -778,7 +686,6 @@ export function applyEntireHomeListingPricing(
   return {
     ...merged,
     entireHomeMonthlyRent: rent,
-    bundles: [],
     rooms: syncEntireHomeRoomPricing(merged.rooms, {
       rent,
       utilitiesEstimate: merged.entireHomeUtilitiesEstimate ?? "",
@@ -897,27 +804,17 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let bundles = sub.bundles;
   if (!Array.isArray(bundles)) bundles = [];
-  bundles = bundles.map((b) => {
-    const legacyShortTerm = b.id === "short-term-bundle";
-    return {
-      id: b.id ?? rid("bundle"),
-      label: b.label ?? "",
-      price: b.price ?? "",
-      strikethrough: b.strikethrough ?? "",
-      promo: b.promo ?? "",
-      roomsLine: b.roomsLine ?? "",
-      includedRoomIds: Array.isArray(b.includedRoomIds)
-        ? rooms.map((room) => room.id).filter((id) => b.includedRoomIds?.includes(id))
-        : [],
-      shortTermEnabled: legacyShortTerm ? true : Boolean(b.shortTermEnabled),
-      shortTermNightlyRent:
-        typeof b.shortTermNightlyRent === "string"
-          ? b.shortTermNightlyRent.trim()
-          : legacyShortTerm
-            ? (sub.shortTermDailyCost ?? "").trim()
-            : "",
-    };
-  });
+  bundles = bundles.map((b) => ({
+    id: b.id ?? rid("bundle"),
+    label: b.label ?? "",
+    price: b.price ?? "",
+    strikethrough: b.strikethrough ?? "",
+    promo: b.promo ?? "",
+    roomsLine: b.roomsLine ?? "",
+    includedRoomIds: Array.isArray(b.includedRoomIds)
+      ? rooms.map((room) => room.id).filter((id) => b.includedRoomIds?.includes(id))
+      : [],
+  }));
 
   let quickFacts = sub.quickFacts;
   if (!Array.isArray(quickFacts)) quickFacts = [];
@@ -929,7 +826,12 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let customFees = sub.customFees;
   if (!Array.isArray(customFees)) customFees = [];
-  customFees = customFees.map((f) => normalizeListingFeeRow(f));
+  customFees = customFees.map((f) => ({
+    id: f.id ?? rid("fee"),
+    label: typeof f.label === "string" ? f.label.trim() : "",
+    amount: typeof f.amount === "string" ? f.amount.trim() : "",
+    frequency: f.frequency === "one-time" ? "one-time" : "monthly",
+  }));
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
     ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
@@ -1185,14 +1087,6 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
     shortTermDeposit: typeof sub.shortTermDeposit === "string" ? sub.shortTermDeposit : "",
     shortTermMoveInFee: typeof sub.shortTermMoveInFee === "string" ? sub.shortTermMoveInFee : "",
-    shortTermHoldingDeposit: typeof sub.shortTermHoldingDeposit === "string" ? sub.shortTermHoldingDeposit : "",
-    shortTermParkingMonthly: typeof sub.shortTermParkingMonthly === "string" ? sub.shortTermParkingMonthly : "",
-    shortTermHoaMonthly: typeof sub.shortTermHoaMonthly === "string" ? sub.shortTermHoaMonthly : "",
-    shortTermOtherMonthlyFees: typeof sub.shortTermOtherMonthlyFees === "string" ? sub.shortTermOtherMonthlyFees : "",
-    shortTermMonthToMonthSurcharge:
-      typeof sub.shortTermMonthToMonthSurcharge === "string" ? sub.shortTermMonthToMonthSurcharge : "",
-    holdingDeposit: typeof sub.holdingDeposit === "string" ? sub.holdingDeposit : "",
-    holdingDepositTiming: sub.holdingDepositTiming === "at_application" ? "at_application" : "after_approval",
     monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
     allowedLeaseTerms,
     leaseTermsBody,
@@ -1200,7 +1094,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     rooms: normalizedRooms,
     bathrooms,
     sharedSpaces,
-    bundles: isEntireHomeListing({ listingPlaceCategoryId }) ? [] : bundles,
+    bundles,
     quickFacts,
     customFees,
     serviceRequestOptions,
@@ -1214,21 +1108,6 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       sub.applicationConfigMode === "standard" || sub.applicationConfigMode === "custom"
         ? sub.applicationConfigMode
         : undefined,
-    shortTermCustomApplicationFields: normalizeCustomApplicationFields(
-      (sub as { shortTermCustomApplicationFields?: unknown }).shortTermCustomApplicationFields,
-    ),
-    shortTermDisabledStandardApplicationKeys: Array.isArray(
-      (sub as { shortTermDisabledStandardApplicationKeys?: unknown }).shortTermDisabledStandardApplicationKeys,
-    )
-      ? (sub as { shortTermDisabledStandardApplicationKeys: unknown[] }).shortTermDisabledStandardApplicationKeys.filter(
-          (k): k is string => typeof k === "string" && k.trim().length > 0,
-        )
-      : [],
-    shortTermApplicationConfigMode:
-      (sub as { shortTermApplicationConfigMode?: unknown }).shortTermApplicationConfigMode === "standard" ||
-      (sub as { shortTermApplicationConfigMode?: unknown }).shortTermApplicationConfigMode === "custom"
-        ? ((sub as { shortTermApplicationConfigMode: "standard" | "custom" }).shortTermApplicationConfigMode)
-        : undefined,
     leaseConfigMode:
       sub.leaseConfigMode === "standard" || sub.leaseConfigMode === "custom" ? sub.leaseConfigMode : undefined,
     leaseCustomKind: sub.leaseCustomKind === "document" ? "document" : sub.leaseCustomKind === "terms" ? "terms" : undefined,
@@ -1236,9 +1115,6 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     leaseUtilities: normalizeLeaseUtilities((sub as { leaseUtilities?: unknown }).leaseUtilities),
     leaseTemplateDocUrl: typeof sub.leaseTemplateDocUrl === "string" ? sub.leaseTemplateDocUrl || null : null,
     leaseTemplateDocName: typeof sub.leaseTemplateDocName === "string" ? sub.leaseTemplateDocName : "",
-    propertyLeaseTemplates: Array.isArray((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates)
-      ? ((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates as import("@/lib/property-lease-templates").PropertyLeaseTemplate[])
-      : undefined,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
@@ -1284,7 +1160,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
   delete (next as Record<string, unknown>).utilitiesMonthly;
-  return ensureSubmissionListingFees(next as ManagerListingSubmissionV1);
+  return next as ManagerListingSubmissionV1;
 }
 
 export function emptyRoom(index: number): ManagerRoomSubmission {
@@ -1316,8 +1192,6 @@ export function emptyBundleRow(): ManagerBundleRow {
     promo: "",
     roomsLine: "",
     includedRoomIds: [],
-    shortTermEnabled: false,
-    shortTermNightlyRent: "",
   };
 }
 
@@ -1330,13 +1204,12 @@ export function emptyQuickFactRow(): ManagerQuickFactRow {
 }
 
 export function emptyCustomFeeRow(): ManagerCustomFeeRow {
-  return normalizeListingFeeRow({
+  return {
     id: rid("fee"),
     label: "",
     amount: "",
     frequency: "monthly",
-    presetId: "custom",
-  });
+  };
 }
 
 export function emptyCustomApplicationField(section?: string): ManagerCustomApplicationField {
@@ -1634,7 +1507,6 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     shortTermDeposit: "",
     applicationFee: "",
     holdingDeposit: "$100",
-    holdingDepositTiming: "after_approval",
     securityDeposit: "",
     moveInFee: "",
     paymentAtSigningIncludes: ["security_deposit", "move_in_fee"],
@@ -1666,14 +1538,11 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     bathrooms: [],
     bundles: [],
     quickFacts: [],
-    customFees: defaultCoreListingFeeRows(),
+    customFees: [],
     serviceRequestOptions: [],
     customApplicationFields: [],
     disabledStandardApplicationKeys: [],
     applicationConfigMode: "standard",
-    shortTermCustomApplicationFields: [],
-    shortTermDisabledStandardApplicationKeys: [],
-    shortTermApplicationConfigMode: "standard",
     leaseConfigMode: "standard",
     leaseCustomKind: "terms",
     customLeaseTerms: "",

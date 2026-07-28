@@ -72,8 +72,6 @@ export type DemoApplicantRow = {
   setupTokenHash?: string | null;
   /** ISO expiry for the resident account setup token. */
   setupTokenExpiresAt?: string | null;
-  /** ISO timestamp when the one-time setup email was sent after the applicant started (not submitted). */
-  startedSetupEmailSentAt?: string | null;
   /** ISO timestamp when the setup token was used to create/link a resident account. */
   setupTokenConsumedAt?: string | null;
   /** Checkr criminal background check (clear/consider) — run per-applicant on demand. */
@@ -166,8 +164,6 @@ export type DemoManagerPaymentLedgerRow = {
   manualPaymentChannel?: "zelle" | "venmo";
   manualPaymentReportedAt?: string;
   paymentReference?: string;
-  zelleContactSnapshot?: string;
-  venmoContactSnapshot?: string;
 };
 
 export type DemoManagerOutgoingPaymentRow = {
@@ -265,10 +261,6 @@ export type DemoManagerWorkOrderRow = {
   vendorPaymentChannel?: "zelle" | "venmo" | "ach";
   vendorZelleContactSnapshot?: string;
   vendorVenmoContactSnapshot?: string;
-  /** WO- memo code for Zelle/Venmo vendor payouts. */
-  paymentReference?: string;
-  /** Gmail message id when auto-marked from vendor Gmail sync. */
-  paidViaGmailMessageId?: string;
   /** ISO timestamp of the resident's last manager reminder for this pending request. */
   residentReminderSentAt?: string;
 };
