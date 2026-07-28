@@ -1,9 +1,14 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
+import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
+import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
+import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
 import {
   LEASE_TERM_OPTIONS,
   SHORT_TERM_LEASE_TERM,
@@ -16,15 +21,12 @@ import {
   isRoomApprovedConflict,
   isRoomPendingConflict,
   listingAllowedLeaseTerms,
-  propertyAllowsShortTermRental,
   roomSelectOptionsWithNone,
 } from "@/lib/rental-application/data";
 import {
   paymentAtSigningPriceLabel,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
-import { listingHoldingDepositAmount } from "@/lib/household-charges";
-import { residentProcessingFeeCents } from "@/lib/payment-policy";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
@@ -37,9 +39,13 @@ import {
   listingCustomApplicationFields,
   upsertCustomFieldAnswer,
 } from "@/lib/rental-application/custom-fields";
-import type { ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
+import { normalizeCustomApplicationFields, type ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
 import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
-import { isWizardFormFieldEnabled } from "@/lib/rental-application/application-field-catalog";
+import {
+  activeApplicationWizardSteps,
+  applicationConfigForVariant,
+  isWizardFormFieldEnabled,
+} from "@/lib/rental-application/application-field-catalog";
 
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/6";
 const pillActive = "rounded-full px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition min-h-[44px] sm:min-h-0";
@@ -137,7 +143,13 @@ export type WizardStepsProps = {
   step: number;
   form: RentalWizardFormState;
   errors: RentalWizardErrors;
-  mode?: "public" | "portal";
+  /**
+   * `public` and `portal` are the two live APPLY surfaces (guest apply page /
+   * resident portal apply) — both collect the fee inline. `editor` is the
+   * portal's read-back editor for an already-submitted application, where no
+   * payment may ever render.
+   */
+  mode?: "public" | "portal" | "editor";
   propertyOptions: { value: string; label: string }[];
   propertyLocked?: boolean;
   emailLocked?: boolean;
@@ -148,7 +160,19 @@ export type WizardStepsProps = {
     displayLabel: string;
     amount: number;
     waived?: boolean;
+    /** True while the server's authoritative fee is still being resolved — hold payment UI, never claim "no fee". */
+    pending?: boolean;
   };
+  applicationFeeCheckBusy?: boolean;
+  applicationFeeCheckError?: string | null;
+  applicationFeePaymentVerified?: boolean;
+  onCheckApplicationFeePayment?: () => void;
+  /** Waiver-code entry (a named part of the fee step, not a buried field). */
+  waiverCodeBusy?: boolean;
+  waiverCodeError?: string | null;
+  onApplyWaiverCode?: () => void;
+  /** App path the inline (embedded) fee payment returns to after completion. */
+  applyReturnPath?: string;
   /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
   occupancySyncEpoch: number;
   showAvailabilityWarnings: boolean;
@@ -161,6 +185,18 @@ export type WizardStepsProps = {
   setSsn: (next: string) => void;
   goToStep: (n: number) => void;
   editFromReview: (n: number) => void;
+  /**
+   * Lazily returns (minting on first call) the stable application id that
+   * ID/income photo uploads attach to — the SAME axis id the autosave uses, so
+   * an attached photo resumes with the rest of the answers.
+   */
+  getApplicationId?: () => string;
+  /**
+   * Guest (no-session) capture is gated on the row's resident-setup token —
+   * minted when the draft first autosaves — which authorizes the photo writes.
+   */
+  photoSetupTokenRequired?: boolean;
+  getPhotoSetupToken?: () => string | null;
 };
 
 function displayOrDash(v: string | null | undefined) {
@@ -261,7 +297,7 @@ function CustomQuestionField({
           ))}
         </Select>
       ) : field.type === "date" ? (
-        <Input id={inputId} type="date" value={value} onChange={(e) => onChange(e.target.value)} className={errorClass} />
+        <DateField id={inputId} value={value} onChange={onChange} className={errorClass} />
       ) : (
         <Input
           id={inputId}
@@ -277,20 +313,32 @@ function CustomQuestionField({
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings, applicationFeeCheckBusy, applicationFeeCheckError, applicationFeePaymentVerified, onCheckApplicationFeePayment, waiverCodeBusy, waiverCodeError, onApplyWaiverCode, applyReturnPath } = p;
 
   const listingSub = (() => {
     const prop = getPropertyById(form.propertyId);
     return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
   })();
-  const showWizardField = (key: string) => isWizardFormFieldEnabled(listingSub, key);
+  // Field visibility + manager custom questions resolve for the form the
+  // applicant is on: short-term guests and long-term tenants see different,
+  // independently-configured question sets. `rentalType` is derived from the
+  // step-3 lease-term dropdown (the single listing-permission gate), so the two
+  // can never disagree.
+  const applicationConfig = applicationConfigForVariant(listingSub, form.rentalType);
+  const showWizardField = (key: string) => isWizardFormFieldEnabled(applicationConfig, key);
+
+  // Photo uploads are read-only in the portal's editor (an already-submitted
+  // application is never re-uploaded). `getApplicationId` mints/returns the
+  // stable axis id an upload attaches to; falls back to the form email context.
+  const photosReadOnly = mode === "editor";
+  const getApplicationId = p.getApplicationId ?? (() => form.email.trim().toLowerCase() || "");
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
     if (step < 3 || step > 10) return null;
     const stepProp = getPropertyById(form.propertyId);
     const fields = customFieldsForWizardStep(
-      listingCustomApplicationFields(stepProp?.listingSubmission?.v === 1 ? stepProp.listingSubmission : undefined),
+      listingCustomApplicationFields(applicationConfig),
       step,
     );
     if (fields.length === 0) return null;
@@ -456,11 +504,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 3) {
     void occupancySyncEpoch;
     const selectedProperty = getPropertyById(form.propertyId);
-    const shortTermAllowed = propertyAllowsShortTermRental(form.propertyId);
-    const leaseTermOptions =
-      form.propertyId.trim() && form.rentalType !== "short_term"
-        ? listingAllowedLeaseTerms(form.propertyId)
-        : [...LEASE_TERM_OPTIONS];
+    // A single lease-term dropdown carries short-term too: listingAllowedLeaseTerms
+    // includes "Short-Term Stay" exactly when the listing permits it, so there is no
+    // separate "Application type" toggle that could contradict the term.
+    const leaseTermOptions = form.propertyId.trim()
+      ? listingAllowedLeaseTerms(form.propertyId)
+      : [...LEASE_TERM_OPTIONS];
     const rooms = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true }).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true });
     // Whole-unit listings (leased as one place, not room-by-room) don't ask for
@@ -539,7 +588,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 ? roomSelectOptionsWithNone(pid, { includeUnavailable: true }).filter((o) => o.value !== "")
                 : [];
               const autoRoom = isEntire ? pid : wholeUnit && unitOpts.length <= 1 ? (unitOpts[0]?.value ?? pid) : "";
-              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", rentalType: "standard" });
+              patch({ propertyId: pid, bundleId: "", roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", leaseTerm: "", rentalType: "standard" });
             }}
             placeholder="Search by address, neighborhood, or property name…"
             emptyMessage="No properties match your search."
@@ -675,72 +724,47 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         )}
         </WizardFieldGate>
 
-        {shortTermAllowed && showWizardField("rentalType") ? (
-          <div className="space-y-3 rounded-2xl border border-border bg-accent/30 p-5">
-            <Label required>Application type</Label>
-            <div className={pillWrap}>
-              {[
-                { id: "standard" as const, label: "Standard lease" },
-                { id: "short_term" as const, label: "Short-term stay" },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={form.rentalType === opt.id ? pillActive : pillIdle}
-                  onClick={() =>
-                    patch(
-                      opt.id === "short_term"
-                        ? { rentalType: opt.id, leaseTerm: SHORT_TERM_LEASE_TERM }
-                        : { rentalType: opt.id, leaseTerm: "" },
-                    )
-                  }
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {form.rentalType === "short_term" ? (
-              <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
-                <p>
-                  Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
-                  {" · "}
-                  Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
-                </p>
-                {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
-                  <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
         <WizardFieldGate fieldKey="leaseTerm" enabled={showWizardField}>
         <div className="space-y-2" data-wizard-field="leaseTerm">
           <Label htmlFor="leaseTerm" required>
-            {form.rentalType === "short_term" ? "Stay type" : "Lease term"}
+            Lease term
           </Label>
           <Select
             id="leaseTerm"
             value={form.leaseTerm}
-            disabled={form.rentalType === "short_term"}
             onChange={(e) => {
               const v = e.target.value;
-              patch(v === "Month-to-Month" ? { leaseTerm: v, leaseEnd: "" } : { leaseTerm: v });
+              // The single dropdown carries short-term as one option; rentalType is
+              // derived from the choice so the two can never contradict each other.
+              const rentalType = v === SHORT_TERM_LEASE_TERM ? "short_term" : "standard";
+              patch(
+                v === "Month-to-Month"
+                  ? { leaseTerm: v, leaseEnd: "", rentalType }
+                  : { leaseTerm: v, rentalType },
+              );
             }}
             className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
           >
             <option value="">Select lease length</option>
-            {form.rentalType === "short_term" ? (
-              <option value={SHORT_TERM_LEASE_TERM}>{SHORT_TERM_LEASE_TERM}</option>
-            ) : (
-              leaseTermOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))
-            )}
+            {leaseTermOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </Select>
           <FieldError msg={errors.leaseTerm} />
+          {form.rentalType === "short_term" ? (
+            <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
+              <p>
+                Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
+                {" · "}
+                Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
+              </p>
+              {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
+                <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
+              ) : null}
+            </div>
+          ) : null}
           {form.leaseTerm === "Month-to-Month" ? (
             <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
               Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
@@ -755,20 +779,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Label htmlFor="leaseStart" required>
               {form.rentalType === "short_term" ? "Check-in date" : "Lease start date"}
             </Label>
-            <Input
+            <DateField
               id="leaseStart"
-              type="date"
               min="2020-01-01"
               max="2035-12-31"
               value={form.leaseStart}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (!raw) { patch({ leaseStart: "" }); return; }
-                const [y, m, d] = raw.split("-");
-                const year = parseInt(y ?? "0", 10);
-                const clamped = year > 2035 ? "2035" : year < 2020 ? "2020" : y!;
-                patch({ leaseStart: `${clamped}-${m}-${d}` });
-              }}
+              onChange={(next) => patch({ leaseStart: next })}
               className={errors.leaseStart ? "border-red-400 ring-2 ring-red-100" : ""}
             />
             <FieldError msg={errors.leaseStart} />
@@ -778,20 +794,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Label htmlFor="leaseEnd" required>
                 {form.rentalType === "short_term" ? "Check-out date" : "Lease end date"}
               </Label>
-              <Input
+              <DateField
                 id="leaseEnd"
-                type="date"
                 min="2020-01-01"
                 max="2040-12-31"
                 value={form.leaseEnd}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (!raw) { patch({ leaseEnd: "" }); return; }
-                  const [y, m, d] = raw.split("-");
-                  const year = parseInt(y ?? "0", 10);
-                  const clamped = year > 2040 ? "2040" : year < 2020 ? "2020" : y!;
-                  patch({ leaseEnd: `${clamped}-${m}-${d}` });
-                }}
+                onChange={(next) => patch({ leaseEnd: next })}
                 className={errors.leaseEnd ? "border-red-400 ring-2 ring-red-100" : ""}
               />
               <FieldError msg={errors.leaseEnd} />
@@ -811,10 +819,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             application.
           </p>
         ) : null}
-        {form.rentalType === "short_term" && showWizardField("rentalType") ? (
+        {form.rentalType === "short_term" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shortTermCheckInTime" optional>
+              <Label htmlFor="shortTermCheckInTime" required>
                 Check-in time
               </Label>
               <Input
@@ -822,10 +830,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 type="time"
                 value={form.shortTermCheckInTime}
                 onChange={(e) => patch({ shortTermCheckInTime: e.target.value })}
+                className={errors.shortTermCheckInTime ? "border-red-400 ring-2 ring-red-100" : ""}
               />
+              <FieldError msg={errors.shortTermCheckInTime} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shortTermCheckOutTime" optional>
+              <Label htmlFor="shortTermCheckOutTime" required>
                 Check-out time
               </Label>
               <Input
@@ -833,9 +843,35 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 type="time"
                 value={form.shortTermCheckOutTime}
                 onChange={(e) => patch({ shortTermCheckOutTime: e.target.value })}
+                className={errors.shortTermCheckOutTime ? "border-red-400 ring-2 ring-red-100" : ""}
               />
+              <FieldError msg={errors.shortTermCheckOutTime} />
             </div>
           </div>
+        ) : null}
+
+        {form.rentalType === "short_term" ? (
+          <label
+            className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground"
+            htmlFor="shortTermRulesAck"
+          >
+            <input
+              id="shortTermRulesAck"
+              type="checkbox"
+              checked={form.shortTermRulesAck}
+              onChange={(e) => patch({ shortTermRulesAck: e.target.checked })}
+              className="mt-1 h-4 w-4 shrink-0"
+              data-attr="short-term-rules-ack"
+            />
+            <span>
+              {`I have read and agree to follow the host's house rules for this short-term stay${
+                selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? " shown above" : ""
+              }.`}
+              {errors.shortTermRulesAck ? (
+                <span className="mt-1 block text-red-500">{errors.shortTermRulesAck}</span>
+              ) : null}
+            </span>
+          </label>
         ) : null}
 
         {stepManagerQuestions}
@@ -847,16 +883,16 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Signer information</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Signer Information</h2>
           <StepIntro className="mt-3">
-            Enter your legal name and contact details exactly as they appear on your ID. This section is encrypted in transit in
-            production environments.
+            Start with how we can reach you, then confirm your identity exactly as it appears on your ID. This section is
+            encrypted in transit in production environments.
           </StepIntro>
         </div>
 
-        <div className="rounded-2xl border border-border bg-accent/30/40 p-5 sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity & contact</p>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+        <div className="space-y-5">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Contact</p>
+          <div className="grid gap-4 sm:grid-cols-2">
             <WizardFieldGate fieldKey="fullLegalName" enabled={showWizardField}>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="fullLegalName" required>
@@ -873,16 +909,68 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.fullLegalName} />
             </div>
             </WizardFieldGate>
+            <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
+            <div className="space-y-2">
+              <Label htmlFor="phone" required>
+                Phone number
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={form.phone}
+                onChange={(e) => p.setPhone(e.target.value)}
+                placeholder="(###) ###-####"
+                className={errors.phone ? "border-red-400 ring-2 ring-red-100" : ""}
+              />
+              <FieldError msg={errors.phone} />
+            </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="email" enabled={showWizardField}>
+            <div className="space-y-2">
+              <Label htmlFor="email" required>
+                Email address
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={(e) => patch({ email: e.target.value })}
+                placeholder="you@example.com"
+                readOnly={Boolean(p.emailLocked)}
+                disabled={Boolean(p.emailLocked)}
+                className={errors.email ? "border-red-400 ring-2 ring-red-100" : ""}
+              />
+              <FieldError msg={errors.email} />
+            </div>
+            </WizardFieldGate>
+          </div>
+          {/* A2P 10DLC SMS opt-in. Optional (never required to apply); the number
+              entered above is the one that would receive texts. Unchecked by
+              default; consent + timestamp persist on the submitted snapshot. */}
+          <SmsConsentCheckbox
+            inputId="sms-consent"
+            checked={Boolean(form.smsConsent)}
+            onChange={(next) =>
+              patch({ smsConsent: next, smsConsentAt: next ? new Date().toISOString() : undefined })
+            }
+          />
+        </div>
+
+        <div className="space-y-5">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity</p>
+          <div className="grid gap-4 sm:grid-cols-2">
             <WizardFieldGate fieldKey="dateOfBirth" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="dateOfBirth" required>
                 Date of birth
               </Label>
-              <Input
+              <DateField
                 id="dateOfBirth"
-                type="date"
                 value={form.dateOfBirth}
-                onChange={(e) => patch({ dateOfBirth: e.target.value })}
+                onChange={(next) => patch({ dateOfBirth: next })}
                 className={errors.dateOfBirth ? "border-red-400 ring-2 ring-red-100" : ""}
               />
               <FieldError msg={errors.dateOfBirth} />
@@ -906,7 +994,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
             </WizardFieldGate>
             <WizardFieldGate fieldKey="driversLicense" enabled={showWizardField}>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="driversLicense" required>
                 Driver&apos;s license or ID number
               </Label>
@@ -919,41 +1007,43 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.driversLicense} />
             </div>
             </WizardFieldGate>
-            <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
-            <div className="space-y-2">
-              <Label htmlFor="phone" required>
-                Phone number
-              </Label>
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={form.phone}
-                onChange={(e) => p.setPhone(e.target.value)}
-                placeholder="(###) ###-####"
-                className={errors.phone ? "border-red-400 ring-2 ring-red-100" : ""}
-              />
-              <FieldError msg={errors.phone} />
-            </div>
-            </WizardFieldGate>
-            <WizardFieldGate fieldKey="email" enabled={showWizardField}>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="email" required>
-                Email address
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={(e) => patch({ email: e.target.value })}
-                placeholder="you@example.com"
-                readOnly={Boolean(p.emailLocked)}
-                disabled={Boolean(p.emailLocked)}
-                className={errors.email ? "border-red-400 ring-2 ring-red-100" : ""}
-              />
-              <FieldError msg={errors.email} />
+            <WizardFieldGate fieldKey="idPhotoFront" enabled={showWizardField}>
+            <div className="space-y-3 sm:col-span-2">
+              <div>
+                <Label>
+                  Photo of your driver&apos;s license or ID
+                  <span className="pl-1 font-normal text-muted/70">(optional)</span>
+                </Label>
+                <p className="mt-1 text-xs text-muted">
+                  Clear front and back photos — shared only with the property manager for this application.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ApplicationPhotoField
+                  slot="idFront"
+                  label="Front of ID"
+                  attachment={form.idPhotoFront}
+                  onChange={(next) => patch({ idPhotoFront: next })}
+                  getApplicationId={getApplicationId}
+                  setupTokenRequired={p.photoSetupTokenRequired}
+                  getSetupToken={p.getPhotoSetupToken}
+                  hasApplicantEmail={Boolean(form.email.trim())}
+                  readOnly={photosReadOnly}
+                  dataAttr="application-id-photo-front"
+                />
+                <ApplicationPhotoField
+                  slot="idBack"
+                  label="Back of ID"
+                  attachment={form.idPhotoBack}
+                  onChange={(next) => patch({ idPhotoBack: next })}
+                  getApplicationId={getApplicationId}
+                  setupTokenRequired={p.photoSetupTokenRequired}
+                  getSetupToken={p.getPhotoSetupToken}
+                  hasApplicantEmail={Boolean(form.email.trim())}
+                  readOnly={photosReadOnly}
+                  dataAttr="application-id-photo-back"
+                />
+              </div>
             </div>
             </WizardFieldGate>
           </div>
@@ -1061,13 +1151,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Label htmlFor="currentMoveIn" optional>
               Current move-in date
             </Label>
-            <Input id="currentMoveIn" type="date" value={form.currentMoveIn} onChange={(e) => patch({ currentMoveIn: e.target.value })} />
+            <DateField id="currentMoveIn" value={form.currentMoveIn} onChange={(next) => patch({ currentMoveIn: next })} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="currentMoveOut" optional>
               Current move-out date
             </Label>
-            <Input id="currentMoveOut" type="date" value={form.currentMoveOut} onChange={(e) => patch({ currentMoveOut: e.target.value })} />
+            <DateField id="currentMoveOut" value={form.currentMoveOut} onChange={(next) => patch({ currentMoveOut: next })} />
           </div>
         </div>
         </WizardFieldGate>
@@ -1194,13 +1284,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <Label htmlFor="prevMoveIn" optional>
                   Move-in date
                 </Label>
-                <Input id="prevMoveIn" type="date" value={form.prevMoveIn} onChange={(e) => patch({ prevMoveIn: e.target.value })} />
+                <DateField id="prevMoveIn" value={form.prevMoveIn} onChange={(next) => patch({ prevMoveIn: next })} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="prevMoveOut" optional>
                   Move-out date
                 </Label>
-                <Input id="prevMoveOut" type="date" value={form.prevMoveOut} onChange={(e) => patch({ prevMoveOut: e.target.value })} />
+                <DateField id="prevMoveOut" value={form.prevMoveOut} onChange={(next) => patch({ prevMoveOut: next })} />
               </div>
             </div>
             </WizardFieldGate>
@@ -1307,7 +1397,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <Label htmlFor="employmentStart" optional>
                 Employment start date
               </Label>
-              <Input id="employmentStart" type="date" value={form.employmentStart} disabled={form.notEmployed} onChange={(e) => patch({ employmentStart: e.target.value })} />
+              <DateField id="employmentStart" value={form.employmentStart} disabled={form.notEmployed} onChange={(next) => patch({ employmentStart: next })} />
             </div>
             </WizardFieldGate>
           </div>
@@ -1368,6 +1458,30 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
             </WizardFieldGate>
           </div>
+          <WizardFieldGate fieldKey="incomeProofPhotos" enabled={showWizardField}>
+          <div className="space-y-3 border-t border-border pt-4 [html[data-theme=dark]_&]:border-white/12">
+            <div>
+              <Label>
+                Proof of income
+                <span className="pl-1 font-normal text-muted/70">(optional)</span>
+              </Label>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                Attach a recent pay stub, an offer letter, or a bank statement to back up the amounts above. Photos or
+                PDFs are fine. These are shared only with the property manager for this application and are kept with
+                your application record — stored privately, never public.
+              </p>
+            </div>
+            <IncomeProofPhotos
+              attachments={form.incomeProofPhotos}
+              onChange={(next) => patch({ incomeProofPhotos: next })}
+              getApplicationId={getApplicationId}
+              setupTokenRequired={p.photoSetupTokenRequired}
+              getSetupToken={p.getPhotoSetupToken}
+              hasApplicantEmail={Boolean(form.email.trim())}
+              readOnly={photosReadOnly}
+            />
+          </div>
+          </WizardFieldGate>
         </div>
         ) : null}
 
@@ -1595,7 +1709,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Consent and signature</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Consent and Signature</h2>
           <StepIntro className="mt-3">Review the authorizations below. Your typed name carries the same effect as a handwritten signature.</StepIntro>
         </div>
         <div className="rounded-2xl border border-border bg-accent/30 p-5 text-sm leading-relaxed text-foreground">
@@ -1654,7 +1768,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Label htmlFor="dateSigned" required>
               Date signed
             </Label>
-            <Input id="dateSigned" type="date" value={form.dateSigned} onChange={(e) => patch({ dateSigned: e.target.value })} className={errors.dateSigned ? "border-red-400 ring-2 ring-red-100" : ""} />
+            <DateField id="dateSigned" value={form.dateSigned} onChange={(next) => patch({ dateSigned: next })} className={errors.dateSigned ? "border-red-400 ring-2 ring-red-100" : ""} />
             <FieldError msg={errors.dateSigned} />
           </div>
         </div>
@@ -1672,6 +1786,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const reviewBundleLabel = form.bundleId.trim()
       ? getBundleChoiceLabel(form.propertyId, form.bundleId)
       : "";
+    // Only review the sections this form actually asks. The short-term form
+    // skips the screening sections, so the summary (and its "Edit" links) must
+    // not reference steps the applicant never walked through.
+    const activeStepSet = new Set(
+      activeApplicationWizardSteps(applicationConfig, normalizeCustomApplicationFields),
+    );
     return (
       <div className="space-y-8">
         <div>
@@ -1704,7 +1824,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ) : (
               <ReviewRow k="Unit" v={displayOrDash(roomLabel(form.roomChoice1))} />
             )}
-            <ReviewRow k="Application type" v={form.rentalType === "short_term" ? "Short-term stay" : "Standard lease"} />
             <ReviewRow k="Lease term" v={displayOrDash(form.leaseTerm)} />
             <ReviewRow k={form.rentalType === "short_term" ? "Check-in date" : "Lease start"} v={displayOrDash(form.leaseStart)} />
             {form.leaseTerm !== "Month-to-Month" ? <ReviewRow k={form.rentalType === "short_term" ? "Check-out date" : "Lease end"} v={displayOrDash(form.leaseEnd)} /> : null}
@@ -1712,12 +1831,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <>
                 <ReviewRow k="Check-in time" v={displayOrDash(form.shortTermCheckInTime)} />
                 <ReviewRow k="Check-out time" v={displayOrDash(form.shortTermCheckOutTime)} />
+                <ReviewRow k="House rules" v={form.shortTermRulesAck ? "Acknowledged" : "—"} />
               </>
             ) : null}
           </ReviewSection>
           {prop?.listingSubmission?.v === 1 ? (
             <ReviewSection title="Housing charges (this listing)" stepTarget={3} onEdit={editFromReview}>
-              <ReviewRow k="Application fee" v={displayOrDash(prop.listingSubmission.applicationFee)} />
+              <ReviewRow k="Application fee" v={displayOrDash(applicationFeeGate.pending ? "…" : applicationFeeGate.displayLabel)} />
               <ReviewRow k="Security deposit" v={displayOrDash(prop.listingSubmission.securityDeposit)} />
               <ReviewRow k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
               <ReviewRow k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
@@ -1733,12 +1853,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           )}
           <ReviewSection title="Personal information" stepTarget={4} onEdit={editFromReview}>
             <ReviewRow k="Legal name" v={displayOrDash(form.fullLegalName)} />
+            <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
+            <ReviewRow k="Email" v={displayOrDash(form.email)} />
             <ReviewRow k="Date of birth" v={displayOrDash(form.dateOfBirth)} />
             <ReviewRow k="SSN" v={maskSsnReview(form.ssn)} />
             <ReviewRow k="ID number" v={displayOrDash(form.driversLicense)} />
-            <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
-            <ReviewRow k="Email" v={displayOrDash(form.email)} />
           </ReviewSection>
+          {activeStepSet.has(5) || activeStepSet.has(6) ? (
           <ReviewSection title="Address history" stepTarget={5} onEdit={editFromReview}>
             <ReviewRow
               k="Current address"
@@ -1781,6 +1902,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </>
             )}
           </ReviewSection>
+          ) : null}
+          {activeStepSet.has(7) ? (
           <ReviewSection title="Employment" stepTarget={7} onEdit={editFromReview}>
             <ReviewRow k="Not employed" v={form.notEmployed ? "Yes" : "No"} />
             <ReviewRow k="Employer" v={displayOrDash(form.employer)} />
@@ -1792,10 +1915,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Annual income" v={displayOrDash(form.annualIncome)} />
             <ReviewRow k="Other income" v={displayOrDash(form.otherIncome)} />
           </ReviewSection>
+          ) : null}
+          {activeStepSet.has(8) ? (
           <ReviewSection title="References" stepTarget={8} onEdit={editFromReview}>
             <ReviewRow k="Reference 1" v={displayOrDash(`${form.ref1Name} · ${form.ref1Relationship} · ${form.ref1Phone}`)} />
             <ReviewRow k="Reference 2" v={form.ref2Name.trim() ? displayOrDash(`${form.ref2Name} · ${form.ref2Relationship} · ${form.ref2Phone}`) : displayOrDash("")} />
           </ReviewSection>
+          ) : null}
+          {activeStepSet.has(9) ? (
           <ReviewSection title="Additional details" stepTarget={9} onEdit={editFromReview}>
             <ReviewRow k="Occupants" v={displayOrDash(form.occupancyCount)} />
             <ReviewRow k="Pets" v={displayOrDash(form.pets)} />
@@ -1803,6 +1930,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes: ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
             <ReviewRow k="Criminal history" v={form.criminalHistory === "yes" ? `Yes: ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
           </ReviewSection>
+          ) : null}
           {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
             <ReviewSection title="Manager questions" stepTarget={9} onEdit={editFromReview}>
               {displayableCustomFieldAnswers(form.customFieldAnswers).map((answer) => (
@@ -1811,7 +1939,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </ReviewSection>
           ) : null}
           <ReviewSection title="Consent" stepTarget={10} onEdit={editFromReview}>
-            <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
+            {showWizardField("consentCredit") ? (
+              <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
+            ) : null}
             <ReviewRow k="Accuracy confirmed" v={form.consentTruth ? "Yes" : "Not checked"} />
             <ReviewRow k="Signature" v={displayOrDash(form.digitalSignature)} />
             <ReviewRow k="Date signed" v={displayOrDash(form.dateSigned)} />
@@ -1827,28 +1957,26 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const channels = listingApplicationFeeChannels(sub);
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-    const appFeeSubtotalCents = Math.round(applicationFeeGate.amount * 100);
-    // PropLane covers Stripe's processing cost, so the applicant is charged the
-    // listing's application fee at face value on every channel. This stays
-    // derived from `residentProcessingFeeCents` (rather than hard-coded to 0) so
-    // the disclosure can never drift from what checkout actually collects.
-    const appFeeProcessingCents = !applicationFeeGate.paid && channels.ach && isAchApplicationFeeChannel(payChannel)
-      ? residentProcessingFeeCents(appFeeSubtotalCents, "card")
-      : 0;
-    const appFeeLabel =
-      appFeeProcessingCents > 0
-        ? `$${((appFeeSubtotalCents + appFeeProcessingCents) / 100).toFixed(2)}`
-        : sub?.applicationFee?.trim() || (applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—");
+    // Headline application fee for the summary card, from the gate — which the
+    // wizard derives from the SERVER's authoritative fee preview (manager-level
+    // setting), never from the listing's grandfathered `applicationFee` text.
+    // Any plan-based service fee (card channel only) is itemized inside the
+    // inline payment form, so the exact amount charged is always disclosed
+    // before the applicant pays — never a surprise here.
+    const appFeeLabel = applicationFeeGate.needsFee ? applicationFeeGate.displayLabel : "—";
+    const codeWaived = Boolean(form.applicationFeeWaived);
+    const managerUserIdForPay = prop?.managerUserId?.trim() ?? "";
     const enabledChannels = [
       channels.ach ? ("ach" as const) : null,
       channels.zelle ? ("zelle" as const) : null,
       channels.venmo ? ("venmo" as const) : null,
       channels.other ? ("other" as const) : null,
     ].filter((channel): channel is "ach" | "zelle" | "venmo" | "other" => Boolean(channel));
-    const showChannelPick = applicationFeeGate.needsFee && enabledChannels.length > 1;
-    const showZelleInstructions = applicationFeeGate.needsFee && payChannel === "zelle" && sub?.zelleContact?.trim();
-    const showVenmoInstructions = applicationFeeGate.needsFee && payChannel === "venmo" && sub?.venmoContact?.trim();
-    const showOtherInstructions = applicationFeeGate.needsFee && payChannel === "other" && sub?.applicationFeeOtherInstructions?.trim();
+    const feeStillDue = applicationFeeGate.needsFee && !applicationFeeGate.paid;
+    const showChannelPick = feeStillDue && enabledChannels.length > 1;
+    const showZelleInstructions = feeStillDue && payChannel === "zelle" && sub?.zelleContact?.trim();
+    const showVenmoInstructions = feeStillDue && payChannel === "venmo" && sub?.venmoContact?.trim();
+    const showOtherInstructions = feeStillDue && payChannel === "other" && sub?.applicationFeeOtherInstructions?.trim();
     const singleChannelLabel =
       enabledChannels.length === 1
         ? enabledChannels[0] === "ach"
@@ -1863,20 +1991,18 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
       <div className="space-y-6">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">Application fee</h2>
-          <StepIntro className="mt-2">Choose how you want to pay the application fee.</StepIntro>
+          <StepIntro className="mt-2">
+            The application fee is the only payment collected here — any deposit is billed later, under Payments, after
+            you&apos;re approved.
+          </StepIntro>
         </div>
+
         {applicationFeeGate.needsFee ? (
           <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-              {appFeeProcessingCents > 0 ? "Total due" : "Application fee"}
-            </p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Application fee</p>
             <p className="mt-2 text-3xl font-bold tabular-nums text-foreground">{appFeeLabel}</p>
-            {appFeeProcessingCents > 0 ? (
-              <p className="mt-1 text-xs text-muted">
-                Includes ${(appFeeProcessingCents / 100).toFixed(2)} card processing fee.
-              </p>
-            ) : applicationFeeGate.needsFee && !applicationFeeGate.paid ? (
-              <p className="mt-1 text-xs text-muted">No added fees — PropLane covers payment processing.</p>
+            {!applicationFeeGate.paid ? (
+              <p className="mt-1 text-xs text-muted">The exact total is itemized before you pay.</p>
             ) : null}
             {applicationFeeGate.paid ? (
               <p className="mt-3 rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success">
@@ -1886,25 +2012,52 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-            {applicationFeeGate.waived
+            {codeWaived
+              ? "No application fee is due — your waiver code covers it in full."
+              : applicationFeeGate.waived
               ? "No application fee is required. Your first application fee already covers additional applications."
               : "No application fee is required for this listing."}
           </div>
         )}
-        {(() => {
-          const holding = form.propertyId ? listingHoldingDepositAmount(form.propertyId) : { amount: 0, displayLabel: "—" };
-          if (!(holding.amount > 0)) return null;
-          return (
-            <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Holding deposit</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{holding.displayLabel}</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                Secures your application while it is reviewed. When you are approved, this amount is credited toward your
-                security deposit.
+
+        {/* Fee waiver code — optional; quieter than amount, after fee display. */}
+        {!applicationFeeGate.paid ? (
+          <div className="space-y-2 rounded-2xl border border-border bg-card p-4" data-attr="application-fee-waiver-section">
+            <p className="text-sm font-semibold text-foreground">Fee waiver code <span className="font-normal text-muted">(optional)</span></p>
+            {codeWaived ? (
+              <p className="rounded-xl border px-4 py-3 text-sm font-medium portal-banner-success" data-attr="application-fee-waiver-applied">
+                Waiver applied — no application fee is due.
               </p>
-            </div>
-          );
-        })()}
+            ) : (
+              <>
+                <p className="text-xs text-muted">
+                  Have a code from the property manager? Enter it to waive the application fee.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={form.applicationFeeWaiverCode}
+                    onChange={(e) => patch({ applicationFeeWaiverCode: e.target.value })}
+                    placeholder="Enter code"
+                    data-attr="application-fee-waiver-code-input"
+                    className="sm:max-w-[220px]"
+                    disabled={waiverCodeBusy}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="px-4 text-[13px]"
+                    disabled={waiverCodeBusy || !form.applicationFeeWaiverCode.trim()}
+                    data-attr="application-fee-waiver-code-apply"
+                    onClick={() => onApplyWaiverCode?.()}
+                  >
+                    {waiverCodeBusy ? "Applying…" : "Apply code"}
+                  </Button>
+                </div>
+                {waiverCodeError ? <p className="text-xs font-medium text-red-600">{waiverCodeError}</p> : null}
+              </>
+            )}
+          </div>
+        ) : null}
         {showChannelPick ? (
           <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
             <p className="text-sm font-semibold text-foreground">Payment method</p>
@@ -1978,79 +2131,91 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ) : null}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && singleChannelLabel ? (
+        {feeStillDue && singleChannelLabel ? (
           <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm text-foreground">
             <span className="font-semibold text-foreground">Payment method:</span> {singleChannelLabel}
           </div>
         ) : null}
-        {applicationFeeGate.needsFee && isAchApplicationFeeChannel(payChannel) ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
-            Pay securely with Apple Pay, Google Pay, or card on the next screen. Your application submits as soon as the
-            payment is confirmed.
-          </div>
-        ) : null}
-        {showZelleInstructions ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-success">
-            <p className="font-semibold">Send by Zelle</p>
-            <p className="mt-2 rounded-lg border border-emerald-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
-              {sub!.zelleContact!.trim()}
-            </p>
-            <p className="mt-2 leading-relaxed">
-              When you submit, we&apos;ll ask you to confirm that you already sent the Zelle payment.
-            </p>
-          </div>
-        ) : null}
-        {showVenmoInstructions ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
-            <p className="font-semibold">Send by Venmo</p>
-            <p className="mt-2 rounded-lg border border-sky-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
-              {sub!.venmoContact!.trim()}
-            </p>
-            <p className="mt-2 leading-relaxed">
-              When you submit, we&apos;ll ask you to confirm that you already sent the Venmo payment.
-            </p>
-          </div>
-        ) : null}
-        {showOtherInstructions ? (
-          <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-pending">
-            <p className="font-semibold">Payment instructions</p>
-            <p className="mt-2 whitespace-pre-wrap leading-relaxed">{sub!.applicationFeeOtherInstructions!.trim()}</p>
-            <p className="mt-2 leading-relaxed">
-              When you submit, we&apos;ll ask you to confirm that you followed these instructions.
-            </p>
-          </div>
-        ) : null}
-        {applicationFeeGate.needsFee && !isAchApplicationFeeChannel(payChannel) ? (
-          <label
-            data-wizard-field="applicationFeeZelleSentConfirmed"
-            className={`flex cursor-pointer gap-3 rounded-2xl border p-4 ${errors.applicationFeeZelleSentConfirmed ? "border-red-300 bg-red-50/50 ring-2 ring-red-100" : "border-border bg-card"}`}
-          >
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 shrink-0 rounded border-border"
-              checked={form.applicationFeeZelleSentConfirmed}
-              onChange={(e) => patch({ applicationFeeZelleSentConfirmed: e.target.checked })}
+        {feeStillDue && isAchApplicationFeeChannel(payChannel) ? (
+          applicationFeeGate.pending ? (
+            <div className="flex min-h-[80px] items-center justify-center rounded-2xl border border-border bg-card text-sm text-muted">
+              Confirming the application fee…
+            </div>
+          ) : mode !== "editor" && form.propertyId && form.email.includes("@") && managerUserIdForPay ? (
+            // Inline (embedded) card payment for BOTH apply surfaces (public
+            // and portal) — the applicant pays without leaving the
+            // application. The `editor` surface (reviewing an already-submitted
+            // application) must never mint a payment. On completion Stripe
+            // returns the applicant here and the fee is verified server-side;
+            // an abandoned/failed payment keeps them on this step with their
+            // answers intact.
+            <ApplicationFeeInlinePayment
+              propertyId={form.propertyId}
+              residentEmail={form.email.trim()}
+              residentName={form.fullLegalName.trim() || undefined}
+              managerUserId={managerUserIdForPay}
+              returnPath={applyReturnPath ?? "/rent/apply"}
             />
-            <span className="text-sm leading-relaxed text-foreground">
-              {payChannel === "other" ? (
-                <>
-                  I confirm I followed the manager&apos;s instructions and sent the application fee.
-                </>
-              ) : (
-                <>
-                  I confirm I already sent the application fee by{" "}
-                  <span className="font-semibold">{payChannel === "venmo" ? "Venmo" : "Zelle"}</span>
-                  {payChannel === "venmo" && sub?.venmoContact?.trim() ? (
-                    <> to <span className="font-mono font-semibold">{sub.venmoContact.trim()}</span></>
-                  ) : null}
-                  {payChannel === "zelle" && sub?.zelleContact?.trim() ? (
-                    <> to <span className="font-mono font-semibold">{sub.zelleContact.trim()}</span></>
-                  ) : null}
-                  .
-                </>
-              )}
-            </span>
-          </label>
+          ) : (
+            <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
+              Pay securely with Apple Pay, Google Pay, or card. Your application submits as soon as the payment is
+              confirmed.
+            </div>
+          )
+        ) : null}
+        {feeStillDue && !isAchApplicationFeeChannel(payChannel) ? (
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4 sm:p-5" data-attr="application-fee-manual-pay">
+            {showZelleInstructions ? (
+              <div className="rounded-xl border px-4 py-3 text-sm portal-banner-success">
+                <p className="font-semibold">Send by Zelle</p>
+                <p className="mt-2 rounded-lg border border-emerald-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
+                  {sub!.zelleContact!.trim()}
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  Send the amount due above, then tap <span className="font-semibold">Check payment</span> below.
+                </p>
+              </div>
+            ) : null}
+            {showVenmoInstructions ? (
+              <div className="rounded-xl border px-4 py-3 text-sm portal-banner-info">
+                <p className="font-semibold">Send by Venmo</p>
+                <p className="mt-2 rounded-lg border border-sky-300/80 bg-card px-3 py-2 font-mono text-base font-bold tracking-tight">
+                  {sub!.venmoContact!.trim()}
+                </p>
+                <p className="mt-2 leading-relaxed">
+                  Send the amount due above, then tap <span className="font-semibold">Check payment</span> below.
+                </p>
+              </div>
+            ) : null}
+            {showOtherInstructions ? (
+              <div className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
+                <p className="font-semibold">Payment instructions</p>
+                <p className="mt-2 whitespace-pre-wrap leading-relaxed">{sub!.applicationFeeOtherInstructions!.trim()}</p>
+                <p className="mt-2 leading-relaxed">
+                  Follow the instructions above, then tap <span className="font-semibold">Check payment</span> below.
+                </p>
+              </div>
+            ) : null}
+            {applicationFeePaymentVerified ? (
+              <p className="text-sm font-medium text-[var(--status-confirmed-fg)]">Payment verified.</p>
+            ) : applicationFeeCheckError ? (
+              <p className="text-sm text-red-600">{applicationFeeCheckError}</p>
+            ) : (
+              <p className="text-sm text-muted">
+                After you send payment, check that we received it before submitting your application.
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full rounded-full sm:w-auto"
+              disabled={applicationFeeCheckBusy || applicationFeeGate.paid}
+              data-attr="application-fee-check-payment"
+              onClick={() => onCheckApplicationFeePayment?.()}
+            >
+              {applicationFeeCheckBusy ? "Checking…" : applicationFeeGate.paid ? "Payment received" : "Check payment"}
+            </Button>
+          </div>
         ) : null}
         <FieldError msg={errors.applicationFeeZelleSentConfirmed} />
       </div>

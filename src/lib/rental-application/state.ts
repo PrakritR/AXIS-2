@@ -37,6 +37,7 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     idPhotoBack: null,
     phone: "",
     email: "",
+    smsConsent: false,
     currentStreet: "",
     currentCity: "",
     currentState: "",

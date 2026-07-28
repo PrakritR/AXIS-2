@@ -22,8 +22,14 @@ describe("SmsConsentCheckbox", () => {
     render(<SmsConsentCheckbox checked={false} onChange={() => {}} inputId="c2" />);
     const label = screen.getByText(/I agree to receive text messages from PropLane/i);
     const text = label.textContent ?? "";
+    // Verbatim wording declared to the A2P 10DLC campaign — carriers compare it
+    // character-for-character, so it is locked here.
+    expect(text).toContain(
+      "I agree to receive text messages from PropLane about my rental application and account. " +
+        "Msg & data rates may apply. Message frequency varies. Reply STOP to opt out, HELP for help.",
+    );
     expect(text).toMatch(/Message frequency varies/i);
-    expect(text).toMatch(/Message and data rates may apply/i);
+    expect(text).toMatch(/Msg & data rates may apply/i);
     expect(text).toMatch(/Reply STOP to opt out/i);
     expect(text).toMatch(/HELP for help/i);
     expect(text).toMatch(/optional and not required/i);
