@@ -43,6 +43,7 @@ import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment
 import {
   residentPaymentMethodLabel,
   residentProcessingFeeDisplayLabel,
+  RESIDENT_CARD_PAYMENT_DISPLAY_LABEL,
   type ResidentAxisPaymentMethod,
 } from "@/lib/payment-policy";
 import { nativePlatformRequestHeaders } from "@/lib/platform/native-client";
@@ -83,7 +84,7 @@ const CHECKOUT_METHOD_OPTIONS: {
   title: string;
 }[] = [
   { id: "ach", title: "Bank (ACH)" },
-  { id: "card", title: "Credit card" },
+  { id: "card", title: RESIDENT_CARD_PAYMENT_DISPLAY_LABEL },
   { id: "link", title: "Link" },
 ];
 
@@ -617,11 +618,8 @@ export function ResidentPaymentsPanel({
       <div className={`grid gap-2 ${options.length > 2 ? "sm:grid-cols-3" : "grid-cols-2"}`}>
         {options.map((option) => {
           const selected = paymentMethod === option.id;
-          // Apple Pay / Google Pay ride on the card method-class in Stripe
-          // Checkout — surface that so the wallet one-tap is discoverable. Only
-          // on the web surface: the native WKWebView/WebView shell is not
-          // entitled for web wallets, so promising them there is a dead end.
-          const walletHint = option.id === "card" && !isNativeApp;
+          // Apple Pay / Google Pay ride on the card method-class in Stripe Checkout.
+          const walletHint = option.id === "card";
           return (
             <button
               key={option.id}
@@ -639,7 +637,9 @@ export function ResidentPaymentsPanel({
             >
               <p className="text-sm font-semibold text-foreground">{option.title}</p>
               {walletHint ? (
-                <p className="mt-0.5 text-[11px] font-medium text-primary"> Apple&nbsp;Pay · Google&nbsp;Pay</p>
+                <p className="mt-0.5 text-[11px] font-medium text-primary">
+                  {isNativeApp ? "Apple Pay in secure checkout" : "Apple Pay · Google Pay"}
+                </p>
               ) : null}
               <p className="mt-1 text-xs text-muted">{option.feeLabel}</p>
             </button>

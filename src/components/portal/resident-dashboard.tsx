@@ -7,6 +7,7 @@ import {
   portalDashboardWelcomeSubtitle,
   PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
+  PortalDashboardKpiRow,
   formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
 import {
@@ -112,7 +113,7 @@ function KpiTile({
     <Link
       href={href}
       data-attr={dataAttr}
-      className="flex min-w-[8.75rem] flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 [html[data-native]_&]:min-w-[7.25rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
+      className="flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 max-md:min-w-0 sm:min-w-[8.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
     >
       <span
         className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
@@ -573,11 +574,10 @@ export function ResidentDashboard({
       title="Dashboard"
       subtitle={portalDashboardWelcomeSubtitle(welcomeName)}
       hideTitleOnNative
+      welcomeSubtitle
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-        {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
-        <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
+        <PortalDashboardKpiRow>
             <KpiTile
               label="Balance due"
               value={formatUsd(totalBalanceDue)}
@@ -613,8 +613,7 @@ export function ResidentDashboard({
               href={`${BASE}/communication/inbox/unopened`}
               dataAttr="resident-dashboard-kpi-inbox"
             />
-          </div>
-        </div>
+        </PortalDashboardKpiRow>
 
         {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">

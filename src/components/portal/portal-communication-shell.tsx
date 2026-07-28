@@ -14,6 +14,9 @@ export function PortalCommunicationShell({
   threadFilters,
   statusPills,
   children,
+  hideMobileFilterRow = false,
+  compactFilterRow = true,
+  hideMobileTitleActions = false,
 }: {
   title: string;
   titleAside?: ReactNode;
@@ -23,21 +26,34 @@ export function PortalCommunicationShell({
   /** Legacy folder tabs; omitted in the unified conversation inbox. */
   statusPills?: ReactNode;
   children: ReactNode;
+  /** Hide the filter row on phones (e.g. while reading a thread). */
+  hideMobileFilterRow?: boolean;
+  compactFilterRow?: boolean;
+  hideMobileTitleActions?: boolean;
 }) {
+  const aside =
+    titleAside && hideMobileTitleActions ? (
+      <div className="max-md:hidden">{titleAside}</div>
+    ) : (
+      titleAside
+    );
+
   return (
     <ManagerPortalPageShell
       title={title}
-      titleAside={titleAside}
+      titleAside={aside}
+      compactFilterRow={compactFilterRow}
+      mobileHideFilterRow={hideMobileFilterRow}
       filterRow={
         threadFilters || channelNav ? (
-          <ManagerPortalFilterRow>
+          <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
             {channelNav ? <div className="w-fit shrink-0">{channelNav}</div> : null}
             {threadFilters}
           </ManagerPortalFilterRow>
         ) : undefined
       }
     >
-      <div className="portal-communication-inbox mt-1">
+      <div className="portal-communication-inbox max-md:mt-0 md:mt-1">
         {statusPills ? <div className="mb-4">{statusPills}</div> : null}
         {children}
       </div>

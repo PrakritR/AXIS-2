@@ -306,6 +306,7 @@ export function ManagerAllServicesPanel({
   return (
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
+      compactFilterRow
       titleAside={
         <>
           {typeFilter === "vendors" ? (
@@ -344,10 +345,11 @@ export function ManagerAllServicesPanel({
         </>
       }
       filterRow={
-        <ManagerPortalFilterRow>
+        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
           <TabNav
             shallow
             activeId={typeFilter}
+            selectAriaLabel="Services section"
             items={[
               { id: "requests", label: "Add-on services", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders`, dataAttr: "manager-services-tab-work-orders" },

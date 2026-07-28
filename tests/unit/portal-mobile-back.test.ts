@@ -45,11 +45,8 @@ describe("resolvePortalMobileBackTarget", () => {
     expect(resolvePortalMobileBackTarget("/resident/dashboard", residentPortal)).toBeNull();
   });
 
-  it("returns dashboard from a top-level section", () => {
-    expect(resolvePortalMobileBackTarget("/resident/applications", residentPortal)).toEqual({
-      href: "/resident/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from a top-level section (section title in the mobile bar)", () => {
+    expect(resolvePortalMobileBackTarget("/resident/applications", residentPortal)).toBeNull();
   });
 
   it("hides dashboard back on early rental-application wizard steps", () => {
@@ -72,11 +69,8 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
-  it("returns dashboard from the default communication email tab", () => {
-    expect(resolvePortalMobileBackTarget("/resident/communication/email/unopened", residentPortal)).toEqual({
-      href: "/resident/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from the default communication email tab", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/email/unopened", residentPortal)).toBeNull();
   });
 
   it("returns sms all view from deeper resident sms bucket", () => {
@@ -93,18 +87,48 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
-  it("returns dashboard from communication sms all view", () => {
-    expect(resolvePortalMobileBackTarget("/portal/communication/sms/all", managerPortal)).toEqual({
-      href: "/portal/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from communication sms all view", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/all", managerPortal)).toBeNull();
   });
 
-  it("returns dashboard from legacy communication sms unopened bucket", () => {
-    expect(resolvePortalMobileBackTarget("/portal/communication/sms/unopened", managerPortal)).toEqual({
-      href: "/portal/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from legacy communication sms unopened bucket", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/unopened", managerPortal)).toBeNull();
+  });
+
+  it("returns null for an alternate section tab (tab pills handle navigation)", () => {
+    const portalWithResidents: PortalDefinition = {
+      ...managerPortal,
+      sections: [
+        ...managerPortal.sections,
+        {
+          section: "residents",
+          label: "Residents",
+          tabs: [
+            { id: "current", label: "Current" },
+            { id: "previous", label: "Previous" },
+          ],
+        },
+      ],
+    };
+    expect(resolvePortalMobileBackTarget("/portal/residents/previous", portalWithResidents)).toBeNull();
+  });
+
+  it("returns null for the primary residents tab", () => {
+    const portalWithResidents: PortalDefinition = {
+      ...managerPortal,
+      sections: [
+        ...managerPortal.sections,
+        {
+          section: "residents",
+          label: "Residents",
+          tabs: [
+            { id: "current", label: "Current" },
+            { id: "previous", label: "Previous" },
+          ],
+        },
+      ],
+    };
+    expect(resolvePortalMobileBackTarget("/portal/residents/current", portalWithResidents)).toBeNull();
   });
 });
 describe("portalDashboardMobileHeaderLabel", () => {

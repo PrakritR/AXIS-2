@@ -767,6 +767,7 @@ export function ManagerApplications() {
     <>
     <ManagerPortalPageShell
       title="Applications"
+      compactFilterRow
       titleAside={
         // min-w-0 (not shrink-0) so this 4-action toolbar can shrink and wrap to
         // its own line on a phone instead of overflowing the header — Send was
@@ -807,7 +808,7 @@ export function ManagerApplications() {
         </div>
       }
       filterRow={
-        <ManagerPortalFilterRow>
+        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
 <ManagerPortalFilterActions>
           <PortalPropertyFilterPill

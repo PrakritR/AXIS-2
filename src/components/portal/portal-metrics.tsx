@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { Select } from "@/components/ui/input";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
 import { cn } from "@/lib/utils";
@@ -210,6 +211,10 @@ export function PortalContentWell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Compact full-width select for mobile section status buckets (Current / Previous, etc.). */
+export const PORTAL_MOBILE_STATUS_SELECT_CLASS =
+  "h-9 w-full min-w-0 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground";
+
 /** Admin portal pattern: pill strip with label + count (Managers / Leases / Applications). */
 export function ManagerPortalStatusPills({
   tabs,
@@ -219,15 +224,20 @@ export function ManagerPortalStatusPills({
   activeTone = "default",
   /** Single-row horizontal scroll with tighter chips (long lease labels on mobile). */
   compact = false,
+  /** On phones, use one dropdown instead of a pill strip. */
+  mobileSelect = true,
+  selectAriaLabel = "Section view",
 }: {
   tabs: { id: string; label: string; count: number; alert?: boolean; dataAttr?: string }[];
   activeId: string;
   onChange: (id: string) => void;
   activeTone?: "default" | "primary";
   compact?: boolean;
+  mobileSelect?: boolean;
+  selectAriaLabel?: string;
 }) {
   const isPrimary = activeTone === "primary";
-  return (
+  const pills = (
     <div
       className={
         compact
@@ -272,6 +282,29 @@ export function ManagerPortalStatusPills({
         );
       })}
     </div>
+  );
+
+  if (!mobileSelect) return pills;
+
+  return (
+    <>
+      <label className="flex min-w-0 flex-1 md:hidden">
+        <span className="sr-only">{selectAriaLabel}</span>
+        <Select
+          className={PORTAL_MOBILE_STATUS_SELECT_CLASS}
+          value={activeId}
+          onChange={(e) => onChange(e.target.value)}
+          data-attr="portal-status-mobile-select"
+        >
+          {tabs.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.label} ({tab.count})
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className="hidden min-w-0 md:block">{pills}</div>
+    </>
   );
 }
 
@@ -355,6 +388,15 @@ export const PORTAL_DASHBOARD_SECTION_CARD =
 /** Vertical stack spacing for dashboard sections — tighter on native. */
 export const PORTAL_DASHBOARD_STACK = "space-y-5 [html[data-native]_&]:space-y-3";
 
+/** KPI row: 2-column grid on phones (no sideways scroll); horizontal strip from `sm` up. */
+export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 max-md:[&>*]:min-w-0 sm:-mx-1 sm:flex sm:gap-2.5 sm:overflow-x-auto sm:px-1 sm:pb-1 sm:[&>*]:min-w-[8.75rem] [-ms-overflow-style:none] sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
+      {children}
+    </div>
+  );
+}
+
 /** Compact list row used in dashboard section previews. */
 export function PortalDashboardCompactRow({
   title,
@@ -431,6 +473,10 @@ export function ManagerPortalPageShell({
   filterRow,
   children,
   hideTitleOnNative = false,
+  hideTitleOnMobileNav = true,
+  welcomeSubtitle = false,
+  compactFilterRow = false,
+  mobileHideFilterRow = false,
 }: {
   title: string;
   subtitle?: string;
@@ -439,6 +485,14 @@ export function ManagerPortalPageShell({
   children: ReactNode;
   /** Visually hide the page title in the native app (bottom nav shows the section). */
   hideTitleOnNative?: boolean;
+  /** Hide duplicate page title on mobile when {@link PortalMobileNavBar} shows the section name. */
+  hideTitleOnMobileNav?: boolean;
+  /** Larger welcome line under the title (portal dashboards). */
+  welcomeSubtitle?: boolean;
+  /** Tighter filter row spacing (Communication on mobile). */
+  compactFilterRow?: boolean;
+  /** Omit filter chrome on phones (e.g. Communication thread reading). */
+  mobileHideFilterRow?: boolean;
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
@@ -449,12 +503,18 @@ export function ManagerPortalPageShell({
           <h1
             className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
               hideTitleOnNative ? "[html[data-native]_&]:sr-only" : ""
-            }`}
+            } ${hideTitleOnMobileNav ? "max-md:sr-only" : ""}`}
           >
             {title}
           </h1>
           {subtitle ? (
-            <p className="mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:mt-0.5 [html[data-native]_&]:text-xs">
+            <p
+              className={
+                welcomeSubtitle
+                  ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-left max-md:text-lg [html[data-native]_&]:mt-1 [html[data-native]_&]:text-base"
+                  : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:mt-0.5 [html[data-native]_&]:text-xs"
+              }
+            >
               {subtitle}
             </p>
           ) : null}
@@ -469,10 +529,26 @@ export function ManagerPortalPageShell({
       </div>
       {filterRow ? (
         <>
-          <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
+          <div
+            className={cn(
+              compactFilterRow
+                ? "mt-2 border-b border-border pb-2 max-md:mt-0 max-md:pb-1.5 sm:mt-4 sm:pb-4 [html[data-native]_&]:mt-1.5 [html[data-native]_&]:pb-2"
+                : "mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5",
+              mobileHideFilterRow && "max-md:hidden",
+            )}
+          >
             {filterRow}
           </div>
-          <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
+          <div
+            className={cn(
+              compactFilterRow
+                ? "mt-2 sm:mt-4 [html[data-native]_&]:mt-1.5"
+                : "mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5",
+              mobileHideFilterRow && "max-md:mt-0",
+            )}
+          >
+            {children}
+          </div>
         </>
       ) : (
         <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-0">{children}</div>
@@ -568,9 +644,17 @@ export function PortalToolbarSortSelect<T extends string>({
 }
 
 /** Standard filter row wrapper (status pills + optional sort). */
-export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
+export function ManagerPortalFilterRow({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-4">{children}</div>
+    <div className={cn("flex w-full min-w-0 max-w-full flex-wrap items-center gap-4", className)}>
+      {children}
+    </div>
   );
 }
 
@@ -589,8 +673,18 @@ export function ManagerPortalStatusFilterRow({
   );
 }
 
-export function ManagerPortalFilterActions({ children }: { children: ReactNode }) {
-  return <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">{children}</div>;
+export function ManagerPortalFilterActions({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3", className)}>
+      {children}
+    </div>
+  );
 }
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */

@@ -685,6 +685,7 @@ export function ManagerPromotion() {
   return (
     <ManagerPortalPageShell
       title="Promotion"
+      compactFilterRow
       titleAside={
         <Button
           type="button"
