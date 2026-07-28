@@ -1,23 +1,27 @@
 export type LeaseJurisdiction = "seattle" | "san_francisco" | "unsupported";
 
 export type LeaseJurisdictionInput = {
-  listingProperty?: { address?: string; neighborhood?: string } | null;
-  leasedRoom?: { address?: string; neighborhood?: string } | null;
-  submission?: { address?: string; neighborhood?: string } | null;
+  listingProperty?: { address?: string; neighborhood?: string; zip?: string } | null;
+  leasedRoom?: { address?: string; neighborhood?: string; zip?: string } | null;
+  submission?: { address?: string; neighborhood?: string; zip?: string } | null;
   application?: { currentCity?: string; currentState?: string } | null;
 };
 
 const SEATTLE_RE = /\bseattle\b/i;
+const SEATTLE_STREET_RE = /\b(?:\d+\s+)?[\w\s]{0,40}\bave\s+ne\b/i;
 const SF_RE = /\b(san\s*francisco|sf,\s*ca|,\s*sf\b)\b/i;
 
 function propertyHaystack(ctx: LeaseJurisdictionInput): string {
   return [
     ctx.submission?.address,
+    ctx.submission?.zip,
     ctx.listingProperty?.address,
     ctx.listingProperty?.neighborhood,
+    ctx.listingProperty?.zip,
     ctx.submission?.neighborhood,
     ctx.leasedRoom?.address,
     ctx.leasedRoom?.neighborhood,
+    ctx.leasedRoom?.zip,
   ]
     .filter(Boolean)
     .join(" ")
@@ -34,7 +38,11 @@ function resolveFromHaystack(hay: string): LeaseJurisdiction {
   if (!hay.trim()) return "unsupported";
   if (SF_RE.test(hay)) return "san_francisco";
   if (SEATTLE_RE.test(hay)) return "seattle";
+  if (SEATTLE_STREET_RE.test(hay)) return "seattle";
   if (/\b(or|oregon)\b/i.test(hay)) return "unsupported";
+  // Seattle / SF metro ZIPs when address omits city/state (e.g. Brooklyn Ave NE, 98105).
+  if (/\b981\d{2}\b/.test(hay)) return "seattle";
+  if (/\b941\d{2}\b/.test(hay)) return "san_francisco";
   if (/\b(wa|washington)\b/i.test(hay)) return "seattle";
   if (/\b(ca|california)\b/i.test(hay)) return "san_francisco";
   return "unsupported";

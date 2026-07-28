@@ -17,7 +17,12 @@ export function residentAccountCreationUrl(_origin: string, axisId: string, setu
   if (setupToken?.trim()) {
     return residentSetupAccountUrl(base, setupToken, axisId);
   }
-  return `${base}/auth/resident-setup?axis_id=${encodeURIComponent(axisId.trim())}`;
+  const id = axisId.trim();
+  const params = new URLSearchParams({
+    proplane_id: id,
+    axis_id: id,
+  });
+  return `${base}/auth/resident-setup?${params.toString()}`;
 }
 
 /** Full invitation text (e.g. copy/paste); too long for reliable mailto URLs in most clients. */

@@ -12,6 +12,7 @@ type Body = {
   channel?: "zelle" | "venmo" | "other";
   /** True when a manager waiver code already covered the application fee — only the holding deposit (if any) is checked. */
   feeWaived?: boolean;
+  residentName?: string;
 };
 
 export async function POST(req: Request) {
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
       residentEmail,
       residentUserId,
       feeWaived: body.feeWaived === true,
+      residentName: typeof body.residentName === "string" ? body.residentName.trim() : undefined,
     });
 
     if (!result.ok) {

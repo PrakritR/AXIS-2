@@ -3,6 +3,7 @@ import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import {
   consumeResidentSetupTokenOnApplication,
   findApplicationForResidentSetup,
+  residentSetupIdFromUrlParams,
 } from "@/lib/auth/resident-setup-token";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const token = url.searchParams.get("token")?.trim() ?? "";
-    const axisId = url.searchParams.get("axis_id")?.trim() ?? "";
+    const axisId = residentSetupIdFromUrlParams(url.searchParams);
     const db = createSupabaseServiceRoleClient();
     const lookup = await findApplicationForResidentSetup(db, { token, axisId });
     if (!lookup.ok) {

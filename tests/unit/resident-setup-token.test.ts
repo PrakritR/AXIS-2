@@ -3,6 +3,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   attachResidentSetupToken,
   buildResidentSetupHref,
+  residentSetupIdFromUrlParams,
   hashResidentSetupToken,
   isResidentSetupTokenValid,
   markResidentSetupTokenConsumed,
@@ -47,10 +48,10 @@ describe("resident-setup-token", () => {
 
   it("builds setup href and absolute URL", () => {
     expect(buildResidentSetupHref("tok_abc", "AXIS-1")).toBe(
-      "/auth/resident-setup?token=tok_abc&axis_id=AXIS-1",
+      "/auth/resident-setup?token=tok_abc&proplane_id=AXIS-1&axis_id=AXIS-1",
     );
     expect(residentSetupAccountUrl("https://www.axis-seattle-housing.com", "tok_abc", "AXIS-1")).toBe(
-      "https://www.axis-seattle-housing.com/auth/resident-setup?token=tok_abc&axis_id=AXIS-1",
+      "https://www.axis-seattle-housing.com/auth/resident-setup?token=tok_abc&proplane_id=AXIS-1&axis_id=AXIS-1",
     );
   });
 });

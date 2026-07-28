@@ -26,7 +26,7 @@ function ResidentSetupInner() {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
   const token = useMemo(() => searchParams.get("token")?.trim() ?? "", [searchParams]);
-  const axisIdFromUrl = useMemo(() => searchParams.get("axis_id")?.trim() ?? "", [searchParams]);
+  const axisIdFromUrl = useMemo(() => residentSetupIdFromUrlParams(searchParams), [searchParams]);
 
   const [loading, setLoading] = useState(true);
   const [invalid, setInvalid] = useState(false);
