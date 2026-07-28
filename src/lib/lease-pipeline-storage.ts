@@ -609,6 +609,9 @@ function syncJointBundleLeases(
 
   for (const group of bundleGroups.values()) {
     if (!bundleGroupReadyForJointLease(group) || !group.bundleId || !group.propertyId) continue;
+    // Capture the guarded non-null values into consts: TS loses property narrowing on
+    // `group.bundleId` across the function calls below, so read it once here.
+    const bundleId = group.bundleId;
     const memberApps = approvedApps.filter((a) => group.members.some((m) => m.id === a.id));
     const organizer = memberApps.find((a) => a.application?.groupRole === "first") ?? memberApps[0];
     if (!organizer) continue;
@@ -618,8 +621,8 @@ function syncJointBundleLeases(
     const members = buildJointLeaseMembers(memberApps, group);
     const propertyId = group.propertyId;
     const effectiveManagerUserId = organizer.managerUserId ?? managerUserId ?? null;
-    const rowId = jointLeaseRowId(group.groupId, group.bundleId, propertyId);
-    const existingIdx = next.findIndex((r) => r.id === rowId || r.bundleGroupKey === bundleGroupKey(group.groupId, group.bundleId, propertyId));
+    const rowId = jointLeaseRowId(group.groupId, bundleId, propertyId);
+    const existingIdx = next.findIndex((r) => r.id === rowId || r.bundleGroupKey === bundleGroupKey(group.groupId, bundleId, propertyId));
     const existing = existingIdx !== -1 ? next[existingIdx]! : null;
     const seeded = buildJointLeasePipelineRow({
       group,
