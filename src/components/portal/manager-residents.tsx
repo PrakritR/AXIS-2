@@ -1834,6 +1834,53 @@ export function ManagerResidents({
                               }
                               expanded={expandedResidentSection === "lease"}
                               onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
+                              headerAction={
+                                residentLease ? (
+                                  <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                                    {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={PORTAL_HEADER_ACTION_BTN}
+                                        data-attr="resident-lease-download"
+                                        onClick={() => {
+                                          if (residentLease.managerUploadedPdf?.dataUrl) {
+                                            downloadLeaseFromRow(residentLease);
+                                          } else if (residentLease.generatedHtml) {
+                                            printLeaseAsPdf(residentLease);
+                                          }
+                                          showToast("Lease download started.");
+                                        }}
+                                      >
+                                        Download
+                                      </Button>
+                                    ) : null}
+                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={PORTAL_HEADER_ACTION_BTN}
+                                        data-attr="resident-lease-sign-manager"
+                                        onClick={() => signLeaseAsManager(residentLease)}
+                                      >
+                                        Sign
+                                      </Button>
+                                    ) : residentLease.status === "Resident Signature Pending" ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={PORTAL_HEADER_ACTION_BTN}
+                                        data-attr="resident-lease-signing-reminder"
+                                        disabled={leaseReminderBusy}
+                                        title="Send signing reminder"
+                                        onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
+                                      >
+                                        {leaseReminderBusy ? "Sending…" : "Sign"}
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                ) : undefined
+                              }
                             >
                               {residentLease ? (
                                 <>
@@ -1879,36 +1926,6 @@ export function ManagerResidents({
                                         </label>
                                       </>
                                     ) : null}
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        disabled={
-                                          !residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl
-                                        }
-                                        onClick={() => signLeaseAsManager(residentLease)}
-                                      >
-                                        Sign as manager
-                                      </Button>
-                                    ) : null}
-                                    {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        onClick={() => {
-                                          if (residentLease.managerUploadedPdf?.dataUrl) {
-                                            downloadLeaseFromRow(residentLease);
-                                          } else if (residentLease.generatedHtml) {
-                                            printLeaseAsPdf(residentLease);
-                                          }
-                                          showToast("Lease download started.");
-                                        }}
-                                      >
-                                        Download lease
-                                      </Button>
-                                    ) : null}
                                     {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
                                       <Button
                                         type="button"
@@ -1921,15 +1938,6 @@ export function ManagerResidents({
                                       </Button>
                                     ) : residentLease.status === "Resident Signature Pending" ? (
                                       <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          disabled={leaseReminderBusy}
-                                          onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
-                                        >
-                                          {leaseReminderBusy ? "Sending…" : "Send signing reminder"}
-                                        </Button>
                                         <Button
                                           type="button"
                                           variant="outline"
