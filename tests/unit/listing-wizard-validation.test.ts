@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { deriveListingLtFeeToggles } from "@/lib/listing-fee-term-toggles";
 import { createDefaultListingSubmission, emptyRoom } from "@/lib/manager-listing-submission";
 import {
   buildListingStepFieldOrder,
@@ -21,7 +22,10 @@ describe("validateListingWizardStep", () => {
     sub.listingPlaceCategoryId = "shared_home";
     sub.allowedLeaseTerms = ["12-Month"];
     sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "Room A", monthlyRent: 0 }];
-    const errs = validateListingWizardStep(4, sub, { entireHomeRent: 0 });
+    const errs = validateListingWizardStep(4, sub, {
+      entireHomeRent: 0,
+      ltFeeToggles: { ...deriveListingLtFeeToggles(sub), rent: true },
+    });
     expect(errs[listingRoomRentKey("r1")]).toBeUndefined();
     expect(errs.monthlyRent).toMatch(/rent/i);
   });

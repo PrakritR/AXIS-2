@@ -1,29 +1,45 @@
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { isListingFeeAmountFilled } from "@/lib/manager-listing-submission";
+import {
+  applyEntireHomeListingPricing,
+  isEntireHomeListing,
+  isListingFeeAmountFilled,
+  type ManagerRoomSubmission,
+} from "@/lib/manager-listing-submission";
 import { shortTermNightlyRate } from "@/lib/short-term-stay-pricing";
 
-/** Short-term fee rows that can be toggled independently in the unified Fees table. */
-export type ListingStFeeToggleId = "rent" | "applicationFee" | "securityDeposit" | "moveInFee";
+function listingRoomHasRent(room: ManagerRoomSubmission): boolean {
+  return room.monthlyRent > 0 || (room.rentBasis === "daily" && (room.dailyRentPrice ?? 0) > 0);
+}
 
-export type ListingStFeeToggles = Record<ListingStFeeToggleId, boolean>;
-
-/** Standard fee rows shown in the unified Fees table (excluding custom fees). */
-export type ListingStandardFeeRowId =
-  | ListingStFeeToggleId
+/** Row ids in the unified Fees table — one toggle per row per term. */
+export type ListingFeeRowId =
+  | "rent"
+  | "applicationFee"
+  | "securityDeposit"
+  | "moveInFee"
   | "holdingDeposit"
   | "parkingMonthly"
   | "hoaMonthly"
   | "otherMonthlyFees"
   | "monthToMonthSurcharge";
 
+export type ListingStandardFeeRowId = ListingFeeRowId;
+
+/** @deprecated Use ListingFeeRowId */
+export type ListingStFeeToggleId = ListingFeeRowId;
+
+export type ListingFeeToggles = Record<ListingFeeRowId, boolean>;
+
+export type ListingStFeeToggles = ListingFeeToggles;
+export type ListingLtFeeToggles = ListingFeeToggles;
+
 export const LISTING_STANDARD_FEE_ROWS: readonly {
-  id: ListingStandardFeeRowId;
+  id: ListingFeeRowId;
   label: string;
   stField?: keyof ManagerListingSubmissionV1;
   ltField?: keyof ManagerListingSubmissionV1;
   stHint?: string;
   ltHint?: string;
-  ltRequiredWhenLongTerm?: boolean;
 }[] = [
   {
     id: "rent",
@@ -37,51 +53,65 @@ export const LISTING_STANDARD_FEE_ROWS: readonly {
     id: "applicationFee",
     label: "Application fee",
     stField: "applicationFee",
+    ltField: "applicationFee",
   },
   {
     id: "securityDeposit",
     label: "Security deposit",
     stField: "shortTermDeposit",
     ltField: "securityDeposit",
-    ltRequiredWhenLongTerm: true,
   },
   {
     id: "moveInFee",
     label: "Move-in / cleaning",
     stField: "shortTermMoveInFee",
     ltField: "moveInFee",
-    ltRequiredWhenLongTerm: true,
   },
   {
     id: "holdingDeposit",
     label: "Holding deposit",
+    stField: "shortTermHoldingDeposit",
     ltField: "holdingDeposit",
   },
   {
     id: "parkingMonthly",
     label: "Parking",
+    stField: "shortTermParkingMonthly",
     ltField: "parkingMonthly",
-    ltRequiredWhenLongTerm: true,
   },
   {
     id: "hoaMonthly",
     label: "HOA / community",
+    stField: "shortTermHoaMonthly",
     ltField: "hoaMonthly",
-    ltRequiredWhenLongTerm: true,
   },
   {
     id: "otherMonthlyFees",
     label: "Other monthly fees",
+    stField: "shortTermOtherMonthlyFees",
     ltField: "otherMonthlyFees",
-    ltRequiredWhenLongTerm: true,
   },
   {
     id: "monthToMonthSurcharge",
     label: "Month-to-month surcharge",
+    stField: "shortTermMonthToMonthSurcharge",
     ltField: "monthToMonthSurcharge",
-    ltRequiredWhenLongTerm: true,
   },
 ];
+
+function emptyFeeToggles(): ListingFeeToggles {
+  return {
+    rent: false,
+    applicationFee: false,
+    securityDeposit: false,
+    moveInFee: false,
+    holdingDeposit: false,
+    parkingMonthly: false,
+    hoaMonthly: false,
+    otherMonthlyFees: false,
+    monthToMonthSurcharge: false,
+  };
+}
 
 function stripMoneyDisplay(raw: unknown): string {
   return String(raw ?? "")
@@ -90,19 +120,8 @@ function stripMoneyDisplay(raw: unknown): string {
     .trim();
 }
 
-/** Infer ST fee checkboxes from stored submission values (edit/resume). */
-export function deriveListingStFeeToggles(
-  sub: Pick<
-    ManagerListingSubmissionV1,
-    "shortTermDailyCost" | "applicationFee" | "shortTermDeposit" | "shortTermMoveInFee"
-  >,
-): ListingStFeeToggles {
-  return {
-    rent: isListingFeeAmountFilled(sub.shortTermDailyCost ?? ""),
-    applicationFee: isListingFeeAmountFilled(sub.applicationFee ?? ""),
-    securityDeposit: isListingFeeAmountFilled(sub.shortTermDeposit ?? ""),
-    moveInFee: isListingFeeAmountFilled(sub.shortTermMoveInFee ?? ""),
-  };
+export function listingFeeRowById(id: ListingFeeRowId) {
+  return LISTING_STANDARD_FEE_ROWS.find((r) => r.id === id);
 }
 
 /** Read the string amount shown in a Fees-table cell. */
@@ -118,16 +137,92 @@ export function readListingFeeCellAmount(
   return stripMoneyDisplay(sub[field]);
 }
 
-/** Map ST/LT toggle + amount edits onto submission fields. */
+function ltRentToggleOn(sub: ManagerListingSubmissionV1): boolean {
+  if (isEntireHomeListing(sub)) {
+    return (sub.entireHomeMonthlyRent ?? 0) > 0;
+  }
+  return sub.rooms.some(listingRoomHasRent);
+}
+
+function stToggleOnForRow(sub: ManagerListingSubmissionV1, rowId: ListingFeeRowId): boolean {
+  const row = listingFeeRowById(rowId);
+  if (!row?.stField) return false;
+  return isListingFeeAmountFilled(readListingFeeCellAmount(sub, row.stField));
+}
+
+function ltToggleOnForRow(sub: ManagerListingSubmissionV1, rowId: ListingFeeRowId): boolean {
+  if (rowId === "rent") return ltRentToggleOn(sub);
+  const row = listingFeeRowById(rowId);
+  if (!row?.ltField) return false;
+  if (row.ltField === "entireHomeMonthlyRent") {
+    return (sub.entireHomeMonthlyRent ?? 0) > 0;
+  }
+  return isListingFeeAmountFilled(readListingFeeCellAmount(sub, row.ltField));
+}
+
+/** Infer ST fee checkboxes from stored submission values (edit/resume). */
+export function deriveListingStFeeToggles(sub: ManagerListingSubmissionV1): ListingFeeToggles {
+  const toggles = emptyFeeToggles();
+  for (const row of LISTING_STANDARD_FEE_ROWS) {
+    if (row.stField) toggles[row.id] = stToggleOnForRow(sub, row.id);
+  }
+  return toggles;
+}
+
+/** Infer LT fee checkboxes from stored submission values (edit/resume). */
+export function deriveListingLtFeeToggles(sub: ManagerListingSubmissionV1): ListingFeeToggles {
+  const toggles = emptyFeeToggles();
+  for (const row of LISTING_STANDARD_FEE_ROWS) {
+    if (row.ltField || row.id === "rent") toggles[row.id] = ltToggleOnForRow(sub, row.id);
+  }
+  return toggles;
+}
+
+function sharedFeeField(row: (typeof LISTING_STANDARD_FEE_ROWS)[number]): boolean {
+  return Boolean(row.stField && row.ltField && row.stField === row.ltField);
+}
+
+function clearFeeField(
+  sub: ManagerListingSubmissionV1,
+  field: keyof ManagerListingSubmissionV1,
+): ManagerListingSubmissionV1 {
+  if (field === "entireHomeMonthlyRent") {
+    return applyEntireHomeListingPricing(sub, { entireHomeMonthlyRent: 0 });
+  }
+  return { ...sub, [field]: "" };
+}
+
+/** Map ST toggle edits onto submission fields. */
 export function applyListingStFeeToggle(
   sub: ManagerListingSubmissionV1,
-  feeId: ListingStFeeToggleId,
+  feeId: ListingFeeRowId,
   enabled: boolean,
+  ltToggles?: ListingLtFeeToggles,
 ): ManagerListingSubmissionV1 {
-  const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+  const row = listingFeeRowById(feeId);
   if (!row?.stField) return sub;
   if (!enabled) {
-    return { ...sub, [row.stField]: "" };
+    if (sharedFeeField(row) && ltToggles?.[feeId]) return sub;
+    return clearFeeField(sub, row.stField);
+  }
+  return sub;
+}
+
+/** Map LT toggle edits onto submission fields. */
+export function applyListingLtFeeToggle(
+  sub: ManagerListingSubmissionV1,
+  feeId: ListingFeeRowId,
+  enabled: boolean,
+  stToggles?: ListingStFeeToggles,
+): ManagerListingSubmissionV1 {
+  const row = listingFeeRowById(feeId);
+  if (feeId === "rent" && !isEntireHomeListing(sub)) {
+    return sub;
+  }
+  if (!row?.ltField) return sub;
+  if (!enabled) {
+    if (sharedFeeField(row) && stToggles?.[feeId]) return sub;
+    return clearFeeField(sub, row.ltField);
   }
   return sub;
 }
@@ -142,36 +237,37 @@ export function applyListingLtFeeAmount(
       sanitizedAmount === "" || sanitizedAmount === "."
         ? 0
         : Number.parseFloat(sanitizedAmount);
-    return {
-      ...sub,
+    return applyEntireHomeListingPricing(sub, {
       entireHomeMonthlyRent: Number.isFinite(nextRent) ? nextRent : 0,
-    };
+    });
   }
   return { ...sub, [field]: sanitizedAmount };
 }
 
 export function applyListingStFeeAmount(
   sub: ManagerListingSubmissionV1,
-  feeId: ListingStFeeToggleId,
+  feeId: ListingFeeRowId,
   sanitizedAmount: string,
 ): ManagerListingSubmissionV1 {
-  const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+  const row = listingFeeRowById(feeId);
   if (!row?.stField) return sub;
   return { ...sub, [row.stField]: sanitizedAmount };
 }
 
-/** Whether long-term fee fields must be filled (0 allowed) on the pricing step. */
-export function listingLtFeeFieldsRequired(hasLongTerm: boolean): (keyof ManagerListingSubmissionV1)[] {
-  if (!hasLongTerm) return [];
-  return LISTING_STANDARD_FEE_ROWS.filter((r) => r.ltRequiredWhenLongTerm && r.ltField).map(
-    (r) => r.ltField!,
-  );
+export function applyListingLtFeeAmountForRow(
+  sub: ManagerListingSubmissionV1,
+  feeId: ListingFeeRowId,
+  sanitizedAmount: string,
+): ManagerListingSubmissionV1 {
+  const row = listingFeeRowById(feeId);
+  if (!row?.ltField) return sub;
+  return applyListingLtFeeAmount(sub, row.ltField, sanitizedAmount);
 }
 
 /** Validation helpers for ST fee toggles → submission fields. */
 export function validateListingStFeeToggles(
   sub: ManagerListingSubmissionV1,
-  toggles: ListingStFeeToggles,
+  toggles: ListingFeeToggles,
   hasShortTerm: boolean,
 ): Record<string, string> {
   const errs: Record<string, string> = {};
@@ -185,8 +281,7 @@ export function validateListingStFeeToggles(
 
   for (const row of LISTING_STANDARD_FEE_ROWS) {
     if (!row.stField || row.id === "rent") continue;
-    const toggleId = row.id as ListingStFeeToggleId;
-    if (!(toggleId in toggles) || !toggles[toggleId]) continue;
+    if (!toggles[row.id]) continue;
     const raw = String(sub[row.stField] ?? "");
     if (!isListingFeeAmountFilled(raw)) {
       errs[String(row.stField)] = `Enter an amount for ${row.label.toLowerCase()} (0 if none).`;
@@ -194,4 +289,37 @@ export function validateListingStFeeToggles(
   }
 
   return errs;
+}
+
+/** Validation helpers for LT fee toggles → submission fields. */
+export function validateListingLtFeeToggles(
+  sub: ManagerListingSubmissionV1,
+  toggles: ListingFeeToggles,
+  hasLongTerm: boolean,
+  opts: { isEntireHome?: boolean; entireHomeRent?: number } = {},
+): Record<string, string> {
+  const errs: Record<string, string> = {};
+  if (!hasLongTerm) return errs;
+
+  if (toggles.rent) {
+    if (opts.isEntireHome && !((opts.entireHomeRent ?? 0) > 0)) {
+      errs.monthlyRent = "Enter the monthly rent for the entire home.";
+    }
+  }
+
+  for (const row of LISTING_STANDARD_FEE_ROWS) {
+    if (!row.ltField || row.id === "rent" || row.ltField === "entireHomeMonthlyRent") continue;
+    if (!toggles[row.id]) continue;
+    const raw = String(sub[row.ltField] ?? "");
+    if (!isListingFeeAmountFilled(raw)) {
+      errs[String(row.ltField)] = `${row.label} is required — enter 0 if there is no fee.`;
+    }
+  }
+
+  return errs;
+}
+
+/** @deprecated Use validateListingLtFeeToggles with toggle state instead. */
+export function listingLtFeeFieldsRequired(_hasLongTerm: boolean): (keyof ManagerListingSubmissionV1)[] {
+  return [];
 }

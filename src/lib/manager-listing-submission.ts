@@ -116,12 +116,16 @@ export type ManagerBundleRow = {
   /** e.g. from $899/mo or $950/mo */
   price: string;
   strikethrough: string;
-  /** Shown as “offer” / promo line when set */
+  /** @deprecated No longer edited in the listing wizard; kept for legacy submissions. */
   promo: string;
   /** Secondary line under the bundle name — optional manual override when rooms are picked. */
   roomsLine: string;
   /** Rooms included in this bundle (scope line auto-built from names when set). */
   includedRoomIds?: string[];
+  /** Offer this bundle for short-term stays when listing short-term rentals are enabled. */
+  shortTermEnabled?: boolean;
+  /** Nightly rate for short-term stays on this bundle (stay total = rate × nights). */
+  shortTermNightlyRent?: string;
 };
 
 /** How a room uses a specific bathroom row (optional; improves listing copy). */
@@ -237,6 +241,16 @@ export type ManagerListingSubmissionV1 = {
   shortTermDeposit?: string;
   /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
   shortTermMoveInFee?: string;
+  /** Short-term holding deposit (parallel to {@link holdingDeposit}). */
+  shortTermHoldingDeposit?: string;
+  /** Short-term parking fee (parallel to {@link parkingMonthly}). */
+  shortTermParkingMonthly?: string;
+  /** Short-term HOA / community fee (parallel to {@link hoaMonthly}). */
+  shortTermHoaMonthly?: string;
+  /** Short-term other monthly fees (parallel to {@link otherMonthlyFees}). */
+  shortTermOtherMonthlyFees?: string;
+  /** Short-term month-to-month surcharge (parallel to {@link monthToMonthSurcharge}). */
+  shortTermMonthToMonthSurcharge?: string;
   applicationFee: string;
   /**
    * Refundable deposit securing the application; credited toward the security
@@ -883,17 +897,27 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let bundles = sub.bundles;
   if (!Array.isArray(bundles)) bundles = [];
-  bundles = bundles.map((b) => ({
-    id: b.id ?? rid("bundle"),
-    label: b.label ?? "",
-    price: b.price ?? "",
-    strikethrough: b.strikethrough ?? "",
-    promo: b.promo ?? "",
-    roomsLine: b.roomsLine ?? "",
-    includedRoomIds: Array.isArray(b.includedRoomIds)
-      ? rooms.map((room) => room.id).filter((id) => b.includedRoomIds?.includes(id))
-      : [],
-  }));
+  bundles = bundles.map((b) => {
+    const legacyShortTerm = b.id === "short-term-bundle";
+    return {
+      id: b.id ?? rid("bundle"),
+      label: b.label ?? "",
+      price: b.price ?? "",
+      strikethrough: b.strikethrough ?? "",
+      promo: b.promo ?? "",
+      roomsLine: b.roomsLine ?? "",
+      includedRoomIds: Array.isArray(b.includedRoomIds)
+        ? rooms.map((room) => room.id).filter((id) => b.includedRoomIds?.includes(id))
+        : [],
+      shortTermEnabled: legacyShortTerm ? true : Boolean(b.shortTermEnabled),
+      shortTermNightlyRent:
+        typeof b.shortTermNightlyRent === "string"
+          ? b.shortTermNightlyRent.trim()
+          : legacyShortTerm
+            ? (sub.shortTermDailyCost ?? "").trim()
+            : "",
+    };
+  });
 
   let quickFacts = sub.quickFacts;
   if (!Array.isArray(quickFacts)) quickFacts = [];
@@ -1166,6 +1190,12 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
     shortTermDeposit: typeof sub.shortTermDeposit === "string" ? sub.shortTermDeposit : "",
     shortTermMoveInFee: typeof sub.shortTermMoveInFee === "string" ? sub.shortTermMoveInFee : "",
+    shortTermHoldingDeposit: typeof sub.shortTermHoldingDeposit === "string" ? sub.shortTermHoldingDeposit : "",
+    shortTermParkingMonthly: typeof sub.shortTermParkingMonthly === "string" ? sub.shortTermParkingMonthly : "",
+    shortTermHoaMonthly: typeof sub.shortTermHoaMonthly === "string" ? sub.shortTermHoaMonthly : "",
+    shortTermOtherMonthlyFees: typeof sub.shortTermOtherMonthlyFees === "string" ? sub.shortTermOtherMonthlyFees : "",
+    shortTermMonthToMonthSurcharge:
+      typeof sub.shortTermMonthToMonthSurcharge === "string" ? sub.shortTermMonthToMonthSurcharge : "",
     holdingDeposit: typeof sub.holdingDeposit === "string" ? sub.holdingDeposit : "",
     holdingDepositTiming: sub.holdingDepositTiming === "at_application" ? "at_application" : "after_approval",
     monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
@@ -1291,6 +1321,8 @@ export function emptyBundleRow(): ManagerBundleRow {
     promo: "",
     roomsLine: "",
     includedRoomIds: [],
+    shortTermEnabled: false,
+    shortTermNightlyRent: "",
   };
 }
 

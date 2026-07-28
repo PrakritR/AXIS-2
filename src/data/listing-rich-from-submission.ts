@@ -12,6 +12,7 @@ import {
   sanitizeRoomAmenityText,
   splitLineList,
 } from "@/data/manager-listing-presets";
+import { parseMoneyAmount } from "@/lib/parse-money";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   bathroomShareCountForRoom,
@@ -22,7 +23,9 @@ import {
   roomHasPrivateBath,
 } from "@/lib/listing-bathroom-layout";
 import { compareFloorLabels, compareRoomsByFloorThenName } from "@/lib/listing-floor-order";
-import { parseMoneyAmount } from "@/lib/parse-money";
+import {
+  bundleShortTermPriceLabel,
+} from "@/lib/listing-bundle-short-term";
 import {
   formatUtilitiesListingLine,
   resolveRoomUtilitiesPaymentModel,
@@ -303,8 +306,9 @@ function bundleRowHasContent(b: ManagerBundleRow): boolean {
     b.label.trim() ||
       b.price.trim() ||
       b.roomsLine.trim() ||
-      b.promo.trim() ||
       b.strikethrough.trim() ||
+      b.shortTermNightlyRent?.trim() ||
+      b.shortTermEnabled ||
       (b.includedRoomIds?.length ?? 0) > 0,
   );
 }
@@ -475,11 +479,11 @@ function multiRoomLeaseBasicRow(
     id: "lease-multi-room",
     icon: "🏘️",
     title: bundle?.label.trim() || "Two or more rooms",
-    detail: bundle?.promo.trim() || "Combine bedrooms on one lease",
+    detail: bundle?.roomsLine.trim() || "Combine bedrooms on one lease",
     price: bundle?.price.trim() || autoPrice,
     status: "Monthly rent",
     body: bundle?.roomsLine.trim()
-      ? `${bundle.promo.trim() || "Group lease available."} ${bundle.roomsLine.trim()}.`
+      ? `${bundle.roomsLine.trim()}.`
       : twoOrMoreRoomDetailBody(rooms),
   };
 }
@@ -549,15 +553,21 @@ function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSub
       const scopedRooms = (b.includedRoomIds?.length ?? 0) > 0
         ? rooms.filter((room) => b.includedRoomIds?.includes(room.id))
         : rooms;
+      const stPrice = bundleShortTermPriceLabel(b, sub);
       return {
         id: b.id,
         label: b.label.trim() || "Package",
-        price: b.price.trim() || "—",
+        price: stPrice ?? (b.price.trim() || "—"),
         strikethrough: b.strikethrough.trim() || undefined,
-        promo: b.promo.trim() || undefined,
+        promo: stPrice ? "Short-term stay" : undefined,
         roomsLine: scope || `${scopedRooms.length} room${scopedRooms.length === 1 ? "" : "s"} included`,
         roomLines: scopedRooms.map((room) => perRoomBundleSummaryLine(room, sub)),
-        summaryItems: bundleSummaryItems(scopedRooms, sub),
+        summaryItems: [
+          ...bundleSummaryItems(scopedRooms, sub),
+          ...(stPrice
+            ? [{ label: "Short-term", value: `${stPrice} (stay total at checkout)` }]
+            : []),
+        ],
       };
     });
   }

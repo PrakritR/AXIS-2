@@ -3,7 +3,8 @@
 import type { ManagerCustomFeeRow, ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   LISTING_STANDARD_FEE_ROWS,
-  type ListingStFeeToggleId,
+  type ListingFeeRowId,
+  type ListingLtFeeToggles,
   type ListingStFeeToggles,
   readListingFeeCellAmount,
 } from "@/lib/listing-fee-term-toggles";
@@ -51,12 +52,10 @@ function TermCheckbox({
   checked,
   onChange,
   label,
-  disabled,
 }: {
   checked: boolean;
   onChange: (on: boolean) => void;
   label: string;
-  disabled?: boolean;
 }) {
   return (
     <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-foreground">
@@ -64,7 +63,6 @@ function TermCheckbox({
         type="checkbox"
         className="h-3.5 w-3.5 shrink-0 rounded border-border"
         checked={checked}
-        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
       <span className="sr-only">{label}</span>
@@ -75,12 +73,13 @@ function TermCheckbox({
 export function ListingUnifiedFeesTable({
   sub,
   isEntireHome,
-  shortTermEnabled,
-  longTermEnabled,
   stFeeToggles,
+  ltFeeToggles,
   onStToggle,
+  onLtToggle,
   onStAmount,
   onLtAmount,
+  onLtAmountForRow,
   stepFieldErrors,
   customFees,
   onAddCustomFee,
@@ -89,12 +88,13 @@ export function ListingUnifiedFeesTable({
 }: {
   sub: ManagerListingSubmissionV1;
   isEntireHome: boolean;
-  shortTermEnabled: boolean;
-  longTermEnabled: boolean;
   stFeeToggles: ListingStFeeToggles;
-  onStToggle: (feeId: ListingStFeeToggleId, enabled: boolean) => void;
-  onStAmount: (feeId: ListingStFeeToggleId, amount: string) => void;
+  ltFeeToggles: ListingLtFeeToggles;
+  onStToggle: (feeId: ListingFeeRowId, enabled: boolean) => void;
+  onLtToggle: (feeId: ListingFeeRowId, enabled: boolean) => void;
+  onStAmount: (feeId: ListingFeeRowId, amount: string) => void;
   onLtAmount: (field: keyof ManagerListingSubmissionV1, amount: string) => void;
+  onLtAmountForRow: (feeId: ListingFeeRowId, amount: string) => void;
   stepFieldErrors: Record<string, string>;
   customFees: ManagerCustomFeeRow[];
   onAddCustomFee: () => void;
@@ -113,13 +113,12 @@ export function ListingUnifiedFeesTable({
         </thead>
         <tbody>
           {LISTING_STANDARD_FEE_ROWS.map((row) => {
-            const stToggleId = row.stField ? (row.id as ListingStFeeToggleId) : null;
-            const stOn = stToggleId ? stFeeToggles[stToggleId] : false;
+            const rowId = row.id;
+            const stOn = stFeeToggles[rowId];
+            const ltOn = ltFeeToggles[rowId];
             const stAmount = row.stField ? readListingFeeCellAmount(sub, row.stField) : "";
             const ltAmount = row.ltField ? readListingFeeCellAmount(sub, row.ltField) : "";
-            const stAvailable = Boolean(row.stField) && shortTermEnabled;
-            const ltAvailable =
-              Boolean(row.ltField) && longTermEnabled && !(row.id === "rent" && !isEntireHome);
+            const rentLtPerRoom = row.id === "rent" && !isEntireHome;
 
             return (
               <tr key={row.id} className="border-b border-border/70 last:border-b-0">
@@ -132,45 +131,45 @@ export function ListingUnifiedFeesTable({
                   ) : null}
                 </td>
                 <td className="px-3 py-3 align-middle">
-                  {!row.stField || !shortTermEnabled ? (
-                    <span className="text-xs text-muted">—</span>
-                  ) : (
+                  {row.stField ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <TermCheckbox
                         checked={stOn}
-                        onChange={(on) => stToggleId && onStToggle(stToggleId, on)}
+                        onChange={(on) => onStToggle(rowId, on)}
                         label={`Apply ${row.label} to short-term`}
                       />
-                      {stAvailable && stOn ? (
+                      {stOn ? (
                         <FeeMoneyInput
                           value={stAmount}
-                          onChange={(v) => stToggleId && onStAmount(stToggleId, v)}
+                          onChange={(v) => onStAmount(rowId, v)}
                           placeholder={row.id === "rent" ? "85" : "0"}
-                          invalid={Boolean(row.stField && stepFieldErrors[String(row.stField)])}
+                          invalid={Boolean(stepFieldErrors[String(row.stField)])}
                           ariaLabel={`Short-term ${row.label}`}
                           dataField={String(row.stField)}
                         />
                       ) : null}
                     </div>
+                  ) : (
+                    <span className="text-xs text-muted">—</span>
                   )}
                   {row.stField && stepFieldErrors[String(row.stField)] ? (
                     <p className="mt-1 text-xs font-medium text-red-600">{stepFieldErrors[String(row.stField)]}</p>
                   ) : null}
                 </td>
                 <td className="px-3 py-3 align-middle">
-                  {!row.ltField ? (
-                    <span className="text-xs text-muted">—</span>
-                  ) : row.id === "rent" && !isEntireHome ? (
-                    <span className="text-xs text-muted">Per room ↑</span>
-                  ) : !longTermEnabled ? (
-                    <span className="text-xs text-muted">—</span>
-                  ) : (
+                  {row.ltField || row.id === "rent" ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <TermCheckbox checked={ltAvailable} onChange={() => {}} label={`Apply ${row.label} to long-term`} disabled />
-                      {ltAvailable ? (
+                      <TermCheckbox
+                        checked={ltOn}
+                        onChange={(on) => onLtToggle(rowId, on)}
+                        label={`Apply ${row.label} to long-term`}
+                      />
+                      {ltOn && !rentLtPerRoom ? (
                         <FeeMoneyInput
                           value={ltAmount}
-                          onChange={(v) => row.ltField && onLtAmount(row.ltField, v)}
+                          onChange={(v) =>
+                            row.ltField ? onLtAmount(row.ltField, v) : onLtAmountForRow(rowId, v)
+                          }
                           placeholder={row.id === "holdingDeposit" ? "100" : "0"}
                           invalid={Boolean(
                             row.ltField &&
@@ -181,7 +180,12 @@ export function ListingUnifiedFeesTable({
                           dataField={row.id === "rent" && isEntireHome ? "monthlyRent" : String(row.ltField)}
                         />
                       ) : null}
+                      {ltOn && rentLtPerRoom ? (
+                        <span className="text-xs text-muted">Per room below</span>
+                      ) : null}
                     </div>
+                  ) : (
+                    <span className="text-xs text-muted">—</span>
                   )}
                   {row.ltField && (stepFieldErrors[String(row.ltField)] || (row.id === "rent" && isEntireHome && stepFieldErrors.monthlyRent)) ? (
                     <p className="mt-1 text-xs font-medium text-red-600">
