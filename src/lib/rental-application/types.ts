@@ -83,6 +83,17 @@ export type RentalWizardFormState = {
   idPhotoBack: ApplicationPhotoAttachment | null;
   phone: string;
   email: string;
+  /**
+   * A2P 10DLC SMS opt-in. Optional consent (never a precondition for applying)
+   * for PropLane to text the applicant about their rental application and
+   * account at the phone above. `smsConsentAt` records WHEN the applicant
+   * checked the box (the compliance timestamp). NOT an application question —
+   * screening, charges, and the manager review ignore it. Optional on the type
+   * so existing snapshots and literal constructions stay valid; the wizard's
+   * initial state seeds `smsConsent: false` so the control is unchecked.
+   */
+  smsConsent?: boolean;
+  smsConsentAt?: string;
   currentStreet: string;
   currentCity: string;
   currentState: string;

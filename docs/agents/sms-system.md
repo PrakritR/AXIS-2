@@ -453,3 +453,31 @@ a sandbox manager in the first place. Do not add a second, independent
 sandbox filter inside the listing tools themselves (`leasing-sms.ts`) — the
 registration choke point is the intended single source of truth; duplicating
 the check there would just be another place to forget to update.
+
+## Public SMS consent page (A2P 10DLC carrier review)
+
+Carrier reviewers open a declared consent URL and look for the opt-in with their
+own eyes, so PropLane keeps a **public, no-login** consent page at **`/sms-consent`**
+(`src/app/(public)/sms-consent/`). Invariants — breaking any of them gets the A2P
+campaign rejected on resubmit:
+
+- It must stay **ungated**: no sign-in, no manager link, no required query param.
+  It is a plain server component (renders every disclosure with JS off) plus one
+  client island (`sms-opt-in-form.tsx`) whose SSR HTML shows the phone field and
+  an **unchecked** checkbox. Middleware does not gate top-level paths — keep it
+  that way; do not add a `next.config.ts` redirect for it.
+- The consent wording lives in **exactly one place**, `SmsConsentCheckbox`
+  (`src/components/marketing/sms-consent-checkbox.tsx`), and must match the
+  campaign declaration **verbatim** ("…about my rental application and account.
+  Msg & data rates may apply. Message frequency varies. Reply STOP to opt out,
+  HELP for help."). It is unchecked by default and consent is optional (never a
+  precondition for applying). Locked by `tests/unit/tours-contact-sms-consent-ui.test.tsx`
+  and `tests/unit/sms-consent-page-form.test.tsx`.
+- The **real** opt-in lives in the rental application flow: the same checkbox
+  renders in the wizard Contact step (`rental-wizard-steps.tsx`, step 4) and
+  persists `smsConsent` / `smsConsentAt` on the submitted application snapshot
+  (`RentalWizardFormState`). The number the applicant enters is the one that
+  receives texts.
+- Privacy (`/privacy`) and Terms (`/tos`) must name **PropLane** at
+  **prop-lane.space** (they do) — the consent page and the campaign both link to
+  them; a brand/domain mismatch invites a second rejection.
