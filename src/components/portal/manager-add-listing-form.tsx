@@ -18,6 +18,7 @@ import { buildListingModalAssistantContext } from "@/lib/listing-assistant-conte
 import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
+import { ListingUnifiedFeesTable } from "@/components/portal/listing-unified-fees-table";
 import {
   submitManagerPendingPropertyToServer,
   syncPropertyPipelineFromServer,
@@ -86,7 +87,9 @@ import {
 } from "@/lib/manager-listing-submission";
 import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
-  UTILITIES_PAYMENT_MODEL_OPTIONS,
+  LONG_TERM_UTILITIES_PAYMENT_OPTIONS,
+  longTermUtilitiesEstimateRequired,
+  longTermUtilitiesPickerValue,
   resolveRoomUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
@@ -129,6 +132,20 @@ import {
   sanitizeStreetAddressInput,
   sanitizeZipInput,
 } from "@/lib/listing-form-inputs";
+import {
+  applyListingLtFeeAmount,
+  applyListingLtFeeAmountForRow,
+  applyListingLtFeeToggle,
+  applyListingStFeeAmount,
+  applyListingStFeeToggle,
+  deriveListingLtFeeToggles,
+  deriveListingStFeeToggles,
+  LISTING_STANDARD_FEE_ROWS,
+  type ListingFeeRowId,
+  type ListingLtFeeToggles,
+  type ListingStFeeToggles,
+} from "@/lib/listing-fee-term-toggles";
+import { bundleShortTermPriceLabel } from "@/lib/listing-bundle-short-term";
 import { canNavigateToWizardStep } from "@/lib/wizard-step-nav";
 import {
   buildListingStepFieldOrder,
@@ -508,24 +525,26 @@ function PlaceCategoryPicker({
   );
 }
 
-function UtilitiesPaymentModelPicker({
+function LongTermUtilitiesPaymentPicker({
   value,
   onSelect,
 }: {
   value: UtilitiesPaymentModel | undefined;
-  onSelect: (model: UtilitiesPaymentModel) => void;
+  onSelect: (model: Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct">) => void;
 }) {
-  const selected = value ?? "manager_billed";
+  const selected = longTermUtilitiesPickerValue(value);
   return (
     <div>
-      <FieldLabel>Utilities payment</FieldLabel>
+      <FieldLabel>Utilities</FieldLabel>
       <Select
         aria-label="Utilities payment"
         className={selectInputCls}
         value={selected}
-        onChange={(e) => onSelect(e.target.value as UtilitiesPaymentModel)}
+        onChange={(e) =>
+          onSelect(e.target.value as Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct">)
+        }
       >
-        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => (
+        {LONG_TERM_UTILITIES_PAYMENT_OPTIONS.map((opt) => (
           <option key={opt.id} value={opt.id}>
             {opt.label}
           </option>
@@ -1020,62 +1039,6 @@ function GridField({ children, className }: { children: React.ReactNode; classNa
   );
 }
 
-const SHORT_TERM_BUNDLE_ID = "short-term-bundle";
-
-/** Compact checkbox + optional $ input on one row — used in the short-term fees panel. */
-function CompactFeeCheckboxRow({
-  label,
-  sublabel,
-  enabled,
-  onEnabledChange,
-  amount,
-  onAmountChange,
-  placeholder = "0",
-  amountDataField,
-  amountInvalid,
-  amountError,
-}: {
-  label: string;
-  sublabel?: string;
-  enabled: boolean;
-  onEnabledChange: (on: boolean) => void;
-  amount?: string;
-  onAmountChange?: (value: string) => void;
-  placeholder?: string;
-  amountDataField?: string;
-  amountInvalid?: boolean;
-  amountError?: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-      <label className="flex min-w-0 cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
-        <input
-          type="checkbox"
-          className="h-4 w-4 shrink-0 rounded border-border"
-          checked={enabled}
-          onChange={(e) => onEnabledChange(e.target.checked)}
-        />
-        <span className="min-w-0">
-          {label}
-          {sublabel ? <span className="ml-1 text-xs font-normal text-muted">{sublabel}</span> : null}
-        </span>
-      </label>
-      {enabled && onAmountChange ? (
-        <div data-wizard-field={amountDataField}>
-          <MoneyInput
-            invalid={Boolean(amountInvalid)}
-            ariaLabel={label}
-            value={(amount ?? "").replace(/^\$/, "").trim()}
-            onChange={(e) => onAmountChange(sanitizeMoneyInput(e.target.value))}
-            placeholder={placeholder}
-          />
-          <StepFieldError msg={amountError} />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function ListingSubsection({
   id,
   title,
@@ -1212,17 +1175,15 @@ export function ManagerAddListingForm({
     return normalized.serviceRequestOptions ?? [];
   });
   const [expandedListingItems, setExpandedListingItems] = useState<Set<string>>(() => new Set());
-  const [shortTermAppFeeOpen, setShortTermAppFeeOpen] = useState(() =>
-    Boolean((initialSubmission?.applicationFee ?? "").trim()),
+  const [stFeeToggles, setStFeeToggles] = useState<ListingStFeeToggles>(() =>
+    deriveListingStFeeToggles(
+      normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()),
+    ),
   );
-  const [shortTermDepositOpen, setShortTermDepositOpen] = useState(() =>
-    Boolean((initialSubmission?.shortTermDeposit ?? "").trim()),
-  );
-  const [shortTermPaymentOpen, setShortTermPaymentOpen] = useState(() =>
-    Boolean((initialSubmission?.shortTermDailyCost ?? "").trim()),
-  );
-  const [shortTermBundleOpen, setShortTermBundleOpen] = useState(() =>
-    Boolean((initialSubmission?.bundles ?? []).some((b) => b.id === SHORT_TERM_BUNDLE_ID)),
+  const [ltFeeToggles, setLtFeeToggles] = useState<ListingLtFeeToggles>(() =>
+    deriveListingLtFeeToggles(
+      normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()),
+    ),
   );
 
   const toggleListingItem = (key: string) => {
@@ -1416,8 +1377,65 @@ export function ManagerAddListingForm({
     });
   };
 
+  const longTermLeaseEnabled = useMemo(() => {
+    const longTermTerms = resolveAllowedLeaseTerms(sub).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+    return longTermTerms.length > 0;
+  }, [sub]);
+
+  const handleStFeeToggle = (feeId: ListingFeeRowId, enabled: boolean) => {
+    setStFeeToggles((prev) => ({ ...prev, [feeId]: enabled }));
+    setSub((s) => applyListingStFeeToggle(s, feeId, enabled, ltFeeToggles));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.stField) clearListingFieldError(String(row.stField));
+  };
+
+  const handleStFeeAmount = (feeId: ListingFeeRowId, amount: string) => {
+    const sanitized = sanitizeMoneyInput(amount);
+    setSub((s) => applyListingStFeeAmount(s, feeId, sanitized));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.stField) clearListingFieldError(String(row.stField));
+    if (sanitized.trim()) {
+      setStFeeToggles((prev) => ({ ...prev, [feeId]: true }));
+    }
+  };
+
+  const handleLtFeeToggle = (feeId: ListingFeeRowId, enabled: boolean) => {
+    setLtFeeToggles((prev) => ({ ...prev, [feeId]: enabled }));
+    setSub((s) => applyListingLtFeeToggle(s, feeId, enabled, stFeeToggles));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.ltField) clearListingFieldError(String(row.ltField));
+    if (feeId === "rent") clearListingFieldError("monthlyRent");
+  };
+
+  const handleLtFeeAmount = (field: keyof ManagerListingSubmissionV1, amount: string) => {
+    const sanitized = sanitizeMoneyInput(amount);
+    setSub((s) => applyListingLtFeeAmount(s, field, sanitized));
+    clearListingFieldError(String(field));
+    if (field === "entireHomeMonthlyRent") {
+      clearListingFieldError("monthlyRent");
+      if (sanitized.trim() && sanitized !== ".") {
+        setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+      }
+    } else {
+      const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.ltField === field);
+      if (row && sanitized.trim()) {
+        setLtFeeToggles((prev) => ({ ...prev, [row.id]: true }));
+      }
+    }
+  };
+
+  const handleLtFeeAmountForRow = (feeId: ListingFeeRowId, amount: string) => {
+    const sanitized = sanitizeMoneyInput(amount);
+    setSub((s) => applyListingLtFeeAmountForRow(s, feeId, sanitized));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.ltField) clearListingFieldError(String(row.ltField));
+    if (sanitized.trim()) {
+      setLtFeeToggles((prev) => ({ ...prev, [feeId]: true }));
+    }
+  };
+
   const validateListingStep = (i: number): Record<string, string> =>
-    validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
+    validateListingWizardStep(i, sub, { isEditMode, entireHomeRent, stFeeToggles, ltFeeToggles });
 
   const goNext = () => {
     const errs = validateListingStep(stepIndex);
@@ -1731,10 +1749,7 @@ export function ManagerAddListingForm({
         label: kind === "whole_house" ? "Whole house lease" : "Group lease bundle",
         price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
         strikethrough: "",
-        promo:
-          kind === "whole_house"
-            ? "Rent the full home as one lease — all rooms included."
-            : "Select any rooms that can be rented together.",
+        promo: "",
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
         includedRoomIds,
       };
@@ -2995,11 +3010,19 @@ export function ManagerAddListingForm({
                       setSub((s) => {
                         const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
                         const next = syncShortTermLeaseTermInAllowed(standard, on);
+                        const bundles = on
+                          ? s.bundles
+                          : (s.bundles ?? []).map((b) => ({
+                              ...b,
+                              shortTermEnabled: false,
+                              shortTermNightlyRent: "",
+                            }));
                         return syncPropertyLeaseTemplatesFromListing({
                           ...s,
                           shortTermRentalsAllowed: on,
                           allowedLeaseTerms: next,
                           leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                          bundles,
                         });
                       });
                     }}
@@ -3007,272 +3030,14 @@ export function ManagerAddListingForm({
                   Enable short-term rentals
                 </label>
                 {sub.shortTermRentalsAllowed ? (
-                  <div className="space-y-3 rounded-xl border border-border bg-card p-3">
-                    <CompactFeeCheckboxRow
-                      label="Application fee"
-                      enabled={shortTermAppFeeOpen}
-                      onEnabledChange={(on) => {
-                        setShortTermAppFeeOpen(on);
-                        if (!on) setSub((s) => ({ ...s, applicationFee: "" }));
-                      }}
-                      amount={sub.applicationFee ?? ""}
-                      onAmountChange={(value) => setSub((s) => ({ ...s, applicationFee: value }))}
-                    />
-                    <CompactFeeCheckboxRow
-                      label="Security deposit"
-                      enabled={shortTermDepositOpen}
-                      onEnabledChange={(on) => {
-                        setShortTermDepositOpen(on);
-                        if (!on) setSub((s) => ({ ...s, shortTermDeposit: "" }));
-                      }}
-                      amount={sub.shortTermDeposit ?? ""}
-                      onAmountChange={(value) => setSub((s) => ({ ...s, shortTermDeposit: value }))}
-                    />
-                    <CompactFeeCheckboxRow
-                      label="Payment amount"
-                      sublabel="(nightly → stay total)"
-                      enabled={shortTermPaymentOpen}
-                      onEnabledChange={(on) => {
-                        setShortTermPaymentOpen(on);
-                        if (!on) setSub((s) => ({ ...s, shortTermDailyCost: "" }));
-                      }}
-                      amount={sub.shortTermDailyCost ?? ""}
-                      onAmountChange={(value) => setSub((s) => ({ ...s, shortTermDailyCost: value }))}
-                      placeholder="85"
-                      amountDataField="shortTermDailyCost"
-                      amountInvalid={Boolean(stepFieldErrors.shortTermDailyCost)}
-                      amountError={stepFieldErrors.shortTermDailyCost}
-                    />
-                    <CompactFeeCheckboxRow
-                      label="Lease bundle for short-term stay"
-                      enabled={shortTermBundleOpen}
-                      onEnabledChange={(on) => {
-                        setShortTermBundleOpen(on);
-                        setSub((s) => {
-                          const bundles = [...(s.bundles ?? [])];
-                          const idx = bundles.findIndex((b) => b.id === SHORT_TERM_BUNDLE_ID);
-                          if (on) {
-                            if (idx >= 0) return s;
-                            return {
-                              ...s,
-                              bundles: [
-                                ...bundles,
-                                {
-                                  ...emptyBundleRow(),
-                                  id: SHORT_TERM_BUNDLE_ID,
-                                  label: "Short-term stay bundle",
-                                  includedRoomIds: isEntireHome ? s.rooms.map((r) => r.id) : [],
-                                },
-                              ],
-                            };
-                          }
-                          if (idx < 0) return s;
-                          return { ...s, bundles: bundles.filter((b) => b.id !== SHORT_TERM_BUNDLE_ID) };
-                        });
-                      }}
-                    />
-                    {shortTermBundleOpen ? (() => {
-                      const stBundle = (sub.bundles ?? []).find((b) => b.id === SHORT_TERM_BUNDLE_ID);
-                      const stBundleIndex = (sub.bundles ?? []).findIndex((b) => b.id === SHORT_TERM_BUNDLE_ID);
-                      if (!stBundle || stBundleIndex < 0) return null;
-                      return (
-                        <div className="space-y-2 border-t border-border pt-3">
-                          <GridField>
-                            <FieldLabel optional>Bundle name</FieldLabel>
-                            <Input
-                              value={stBundle.label}
-                              onChange={(e) => setBundle(stBundleIndex, { label: sanitizePlaceNameInput(e.target.value) })}
-                              placeholder="Short-term stay bundle"
-                            />
-                          </GridField>
-                          {!isEntireHome && sub.rooms.length > 0 ? (
-                            <div>
-                              <FieldLabel optional>Rooms</FieldLabel>
-                              <div className="mt-1 flex flex-wrap gap-2">
-                                {sub.rooms.map((room) => {
-                                  const selected = (stBundle.includedRoomIds ?? []).includes(room.id);
-                                  return (
-                                    <label key={room.id} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs">
-                                      <input
-                                        type="checkbox"
-                                        className="h-3.5 w-3.5 rounded border-border"
-                                        checked={selected}
-                                        onChange={(e) => toggleBundleRoom(stBundleIndex, room.id, e.target.checked)}
-                                      />
-                                      {room.name.trim() || "Room"}
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })() : null}
-                  </div>
+                  <p className="text-xs text-muted">
+                    Set short-term pricing per fee in <span className="font-medium text-foreground">Fees</span> below, or enable short-term on individual lease bundles.
+                  </p>
                 ) : null}
               </ListingSubsection>
 
-              <ListingSubsection title="Rent">
-                {isEntireHome ? (
-                  <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <GridField>
-                        <div data-wizard-field="monthlyRent">
-                          <FieldLabel>Monthly rent for entire home *</FieldLabel>
-                        </div>
-                        <div>
-                          <MoneyInput
-                            invalid={Boolean(stepFieldErrors.monthlyRent)}
-                            ariaLabel="Monthly rent for entire home"
-                            value={
-                              typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0
-                                ? String(sub.entireHomeMonthlyRent)
-                                : ""
-                            }
-                            onChange={(e) => {
-                              clearListingFieldError("monthlyRent");
-                              const raw = sanitizeMoneyInput(e.target.value);
-                              const nextRent = raw === "" || raw === "." ? 0 : parseSanitizedMoneyNumber(raw);
-                              setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: nextRent }));
-                            }}
-                            placeholder="4500"
-                          />
-                          <StepFieldError msg={stepFieldErrors.monthlyRent} />
-                        </div>
-                      </GridField>
-                      <GridField>
-                        <UtilitiesPaymentModelPicker
-                          value={sub.entireHomeUtilitiesPaymentModel}
-                          onSelect={(model) =>
-                            setSub((s) =>
-                              applyEntireHomeListingPricing(s, {
-                                entireHomeUtilitiesPaymentModel: model,
-                                ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
-                              }),
-                            )
-                          }
-                        />
-                      </GridField>
-                      <GridField>
-                        <FieldLabel>Utilities estimate (whole home)</FieldLabel>
-                        <MoneyInput
-                          disabled={(sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                          ariaLabel="Utilities estimate (whole home)"
-                          value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                          onChange={(e) =>
-                            setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
-                          }
-                          placeholder="175"
-                        />
-                      </GridField>
-                      <div className="sm:col-span-2">
-                        <ProrationMethodFields
-                          prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
-                          monthlyRent={entireHomeRent}
-                          dailyRentRate={sub.entireHomeDailyRentRate}
-                          dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
-                          utilitiesLabel="Daily utilities rate (whole home)"
-                          onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
-                          onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
-                          onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3" data-wizard-field="monthlyRent">
-                    {stepFieldErrors.monthlyRent ? (
-                      <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
-                    ) : null}
-                    {sub.rooms.map((room, i) => {
-                      const roomRentKey = listingRoomRentKey(room.id);
-                      const roomRentErr = stepFieldErrors[roomRentKey];
-                      const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
-                      const roomLabel = room.name.trim() || `Room ${i + 1}`;
-                      const priced = listingRoomHasRent(room);
-                      const utilModel = resolveRoomUtilitiesPaymentModel(room);
-                      const utilShort =
-                        utilModel === "manager_billed"
-                          ? "Utilities billed by manager"
-                          : utilModel === "tenant_direct"
-                            ? "Tenant pays utilities"
-                            : "Utilities in rent";
-                      const priceKey = listingItemKey("roomPrice", room.id);
-                      // A room whose rent is still unset can never be collapsed away — the
-                      // required field must stay on screen. Priced rooms collapse to a
-                      // one-line summary; an errored one force-expands so it can be fixed.
-                      const expanded = priced
-                        ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
-                        : true;
-                      return (
-                        <ListingWizardCollapsibleCard
-                          key={room.id}
-                          expanded={expanded}
-                          onToggle={() => toggleListingItem(priceKey)}
-                          title={roomLabel}
-                          subtitle={`${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`}
-                          hasError={Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent)}
-                          bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5"
-                          toggleDataAttr={`listing-room-price-toggle-${room.id}`}
-                        >
-                          <GridField>
-                            <FieldLabel>Monthly rent *</FieldLabel>
-                            <div data-wizard-field={roomRentKey}>
-                              <MoneyInput
-                                invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
-                                ariaLabel={`Monthly rent for ${roomLabel}`}
-                                value={room.monthlyRent || ""}
-                                onChange={(e) => {
-                                  clearListingFieldError("monthlyRent");
-                                  clearListingFieldError(roomRentKey);
-                                  expandListingItem(priceKey);
-                                  setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
-                                }}
-                                placeholder="800"
-                              />
-                              <StepFieldError msg={roomRentErr} />
-                            </div>
-                          </GridField>
-                          <GridField>
-                            <UtilitiesPaymentModelPicker
-                              value={room.utilitiesPaymentModel}
-                              onSelect={(model) =>
-                                setRoom(i, {
-                                  utilitiesPaymentModel: model,
-                                  ...(model === "included_in_rent" ? { utilitiesEstimate: "" } : {}),
-                                })
-                              }
-                            />
-                          </GridField>
-                          <GridField>
-                            <FieldLabel>Utilities estimate</FieldLabel>
-                            <MoneyInput
-                              disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                              ariaLabel={`Utilities estimate for ${roomLabel}`}
-                              value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                              onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                              placeholder="175"
-                            />
-                          </GridField>
-                          <div className="sm:col-span-2">
-                            <ProrationMethodFields
-                              prorateMethod={room.prorateMethod ?? "auto"}
-                              monthlyRent={room.monthlyRent}
-                              dailyRentRate={room.dailyRentRate}
-                              dailyUtilitiesRate={room.dailyUtilitiesRate}
-                              onMethod={(m) => setRoom(i, { prorateMethod: m })}
-                              onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
-                              onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
-                            />
-                          </div>
-                        </ListingWizardCollapsibleCard>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="space-y-3 border-t border-border pt-4">
+              <ListingSubsection title="Leasing">
+                <div className="space-y-3">
                   <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
                     <FieldLabel required>Lease lengths</FieldLabel>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -3347,15 +3112,15 @@ export function ManagerAddListingForm({
                 ) : null}
 
                 {(() => {
-                  const longTermBundles = (sub.bundles ?? []).filter((b) => b.id !== SHORT_TERM_BUNDLE_ID);
-                  if (longTermBundles.length === 0) {
+                  const bundles = sub.bundles ?? [];
+                  if (bundles.length === 0) {
                     return isEntireHome ? null : (
                       <p className="text-xs text-muted">Optional — per-room pricing works without bundles.</p>
                     );
                   }
                   return (
                   <div className="space-y-3">
-                    {longTermBundles.map((bundle) => {
+                    {bundles.map((bundle) => {
                       const i = (sub.bundles ?? []).findIndex((b) => b.id === bundle.id);
                       const selectedIds = new Set(bundle.includedRoomIds ?? []);
                       const namedRooms = sub.rooms.filter((r) => r.name.trim());
@@ -3363,6 +3128,9 @@ export function ManagerAddListingForm({
                       const rentSum = selectedRooms.reduce((sum, r) => sum + (Number.isFinite(r.monthlyRent) ? r.monthlyRent : 0), 0);
                       const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
                       const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
+                      const stNightlyKey = `bundle-${bundle.id}-shortTermNightlyRent`;
+                      const stNightlyErr = stepFieldErrors[stNightlyKey];
+                      const stPriceHint = bundleShortTermPriceLabel(bundle, sub);
                       return (
                         <ListingWizardCollapsibleCard
                           key={bundle.id}
@@ -3373,6 +3141,7 @@ export function ManagerAddListingForm({
                             `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
                             rentSum > 0 ? `$${rentSum}/mo base` : null,
                             hasManualPrice ? "Custom price" : null,
+                            bundle.shortTermEnabled && stPriceHint ? stPriceHint : null,
                           ]
                             .filter(Boolean)
                             .join(" · ")}
@@ -3380,16 +3149,6 @@ export function ManagerAddListingForm({
                           toggleDataAttr={`listing-bundle-toggle-${bundle.id}`}
                           headerActions={
                             <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={LISTING_WIZARD_ACTION_BTN}
-                                onClick={() => applyBundleRoomScope(i, "all_named")}
-                                disabled={namedRooms.length === 0}
-                                aria-label="Select all named rooms"
-                              >
-                                All rooms
-                              </Button>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -3438,14 +3197,46 @@ export function ManagerAddListingForm({
                                 />
                               </div>
                             </GridField>
-                            <GridField>
-                              <FieldLabel>Promo line</FieldLabel>
-                              <Input
-                                value={bundle.promo}
-                                onChange={(e) => setBundle(i, { promo: e.target.value })}
-                                placeholder="Best for groups — limited availability"
-                              />
-                            </GridField>
+                            {sub.shortTermRentalsAllowed ? (
+                              <>
+                                <div className="sm:col-span-2">
+                                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-border"
+                                      checked={Boolean(bundle.shortTermEnabled)}
+                                      onChange={(e) => {
+                                        const on = e.target.checked;
+                                        clearListingFieldError(stNightlyKey);
+                                        setBundle(i, {
+                                          shortTermEnabled: on,
+                                          ...(on ? {} : { shortTermNightlyRent: "" }),
+                                        });
+                                      }}
+                                    />
+                                    Short-term rental
+                                  </label>
+                                </div>
+                                {bundle.shortTermEnabled ? (
+                                  <GridField>
+                                    <FieldLabel hint="Nightly rate → stay total at checkout.">Short-term rent / night</FieldLabel>
+                                    <div data-wizard-field={stNightlyKey}>
+                                      <MoneyInput
+                                        invalid={Boolean(stNightlyErr)}
+                                        ariaLabel={`Short-term nightly rent for ${bundle.label.trim() || "bundle"}`}
+                                        value={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
+                                        onChange={(e) => {
+                                          clearListingFieldError(stNightlyKey);
+                                          setBundle(i, { shortTermNightlyRent: sanitizeMoneyInput(e.target.value) });
+                                        }}
+                                        placeholder="85"
+                                      />
+                                      <StepFieldError msg={stNightlyErr} />
+                                    </div>
+                                  </GridField>
+                                ) : null}
+                              </>
+                            ) : null}
                             <div className="sm:col-span-2">
                               <FieldLabel>Rooms in this bundle</FieldLabel>
                               <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -3480,12 +3271,13 @@ export function ManagerAddListingForm({
                 <ListingUnifiedFeesTable
                   sub={sub}
                   isEntireHome={isEntireHome}
-                  shortTermEnabled={Boolean(sub.shortTermRentalsAllowed)}
-                  longTermEnabled={longTermLeaseEnabled}
                   stFeeToggles={stFeeToggles}
+                  ltFeeToggles={ltFeeToggles}
                   onStToggle={handleStFeeToggle}
+                  onLtToggle={handleLtFeeToggle}
                   onStAmount={handleStFeeAmount}
                   onLtAmount={handleLtFeeAmount}
+                  onLtAmountForRow={handleLtFeeAmountForRow}
                   stepFieldErrors={stepFieldErrors}
                   customFees={sub.customFees ?? []}
                   onAddCustomFee={addCustomFee}
@@ -3498,6 +3290,143 @@ export function ManagerAddListingForm({
                     setCustomFee(i, patch);
                   }}
                 />
+
+                {longTermLeaseEnabled ? (
+                  isEntireHome ? (
+                    <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+                      <FieldLabel optional>Utilities & proration</FieldLabel>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <GridField>
+                          <LongTermUtilitiesPaymentPicker
+                            value={sub.entireHomeUtilitiesPaymentModel}
+                            onSelect={(model) =>
+                              setSub((s) =>
+                                applyEntireHomeListingPricing(s, {
+                                  entireHomeUtilitiesPaymentModel: model,
+                                  ...(model === "tenant_direct" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                                }),
+                              )
+                            }
+                          />
+                        </GridField>
+                        {longTermUtilitiesEstimateRequired(sub.entireHomeUtilitiesPaymentModel) ? (
+                          <GridField>
+                            <FieldLabel>Utilities amount</FieldLabel>
+                            <MoneyInput
+                              ariaLabel="Utilities amount (whole home)"
+                              value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                              onChange={(e) =>
+                                setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
+                              }
+                              placeholder="175"
+                            />
+                          </GridField>
+                        ) : null}
+                        <div className="sm:col-span-2">
+                          <ProrationMethodFields
+                            prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
+                            monthlyRent={entireHomeRent}
+                            dailyRentRate={sub.entireHomeDailyRentRate}
+                            dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
+                            utilitiesLabel="Daily utilities rate (whole home)"
+                            onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
+                            onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+                            onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3 border-t border-border pt-4" data-wizard-field="monthlyRent">
+                      <FieldLabel>Room pricing</FieldLabel>
+                      <p className="text-xs text-muted">Long-term monthly rent and utilities per room.</p>
+                      {stepFieldErrors.monthlyRent ? (
+                        <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
+                      ) : null}
+                      {sub.rooms.map((room, i) => {
+                        const roomRentKey = listingRoomRentKey(room.id);
+                        const roomRentErr = stepFieldErrors[roomRentKey];
+                        const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
+                        const roomLabel = room.name.trim() || `Room ${i + 1}`;
+                        const priced = listingRoomHasRent(room);
+                        const utilModel = resolveRoomUtilitiesPaymentModel(room);
+                        const utilShort =
+                          utilModel === "tenant_direct" ? "Paid by resident" : "Payment amount";
+                        const priceKey = listingItemKey("roomPrice", room.id);
+                        const expanded = priced
+                          ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
+                          : true;
+                        return (
+                          <ListingWizardCollapsibleCard
+                            key={room.id}
+                            expanded={expanded}
+                            onToggle={() => toggleListingItem(priceKey)}
+                            title={roomLabel}
+                            subtitle={`${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`}
+                            hasError={Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent)}
+                            bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5"
+                            toggleDataAttr={`listing-room-price-toggle-${room.id}`}
+                          >
+                            <GridField>
+                              <FieldLabel>Monthly rent *</FieldLabel>
+                              <div data-wizard-field={roomRentKey}>
+                                <MoneyInput
+                                  invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
+                                  ariaLabel={`Monthly rent for ${roomLabel}`}
+                                  value={room.monthlyRent || ""}
+                                  onChange={(e) => {
+                                    clearListingFieldError("monthlyRent");
+                                    clearListingFieldError(roomRentKey);
+                                    expandListingItem(priceKey);
+                                    setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
+                                    if (parseSanitizedMoneyNumber(e.target.value) > 0) {
+                                      setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+                                    }
+                                  }}
+                                  placeholder="800"
+                                />
+                                <StepFieldError msg={roomRentErr} />
+                              </div>
+                            </GridField>
+                            <GridField>
+                              <LongTermUtilitiesPaymentPicker
+                                value={room.utilitiesPaymentModel}
+                                onSelect={(model) =>
+                                  setRoom(i, {
+                                    utilitiesPaymentModel: model,
+                                    ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
+                                  })
+                                }
+                              />
+                            </GridField>
+                            {longTermUtilitiesEstimateRequired(room.utilitiesPaymentModel) ? (
+                              <GridField>
+                                <FieldLabel>Utilities amount</FieldLabel>
+                                <MoneyInput
+                                  ariaLabel={`Utilities amount for ${roomLabel}`}
+                                  value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                  onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                                  placeholder="175"
+                                />
+                              </GridField>
+                            ) : null}
+                            <div className="sm:col-span-2">
+                              <ProrationMethodFields
+                                prorateMethod={room.prorateMethod ?? "auto"}
+                                monthlyRent={room.monthlyRent}
+                                dailyRentRate={room.dailyRentRate}
+                                dailyUtilitiesRate={room.dailyUtilitiesRate}
+                                onMethod={(m) => setRoom(i, { prorateMethod: m })}
+                                onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                                onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
+                              />
+                            </div>
+                          </ListingWizardCollapsibleCard>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : null}
 
                 <div className="mt-4 space-y-3 border-t border-border pt-4">
                   <FieldLabel optional>Payment at signing</FieldLabel>

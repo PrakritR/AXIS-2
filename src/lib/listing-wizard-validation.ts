@@ -1,10 +1,13 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
 import {
-  listingLtFeeFieldsRequired,
+  deriveListingLtFeeToggles,
+  validateListingLtFeeToggles,
   validateListingStFeeToggles,
+  type ListingLtFeeToggles,
   type ListingStFeeToggles,
 } from "@/lib/listing-fee-term-toggles";
-import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
+import { validateListingBundleShortTermPricing } from "@/lib/listing-bundle-short-term";
+import { isEntireHomeListing, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
 import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 
@@ -47,6 +50,8 @@ export type ListingWizardValidateOptions = {
   entireHomeRent?: number;
   /** ST fee checkbox state from the unified Fees table (defaults derived from submission). */
   stFeeToggles?: ListingStFeeToggles;
+  /** LT fee checkbox state from the unified Fees table (defaults derived from submission). */
+  ltFeeToggles?: ListingLtFeeToggles;
 };
 
 export function validateListingWizardStep(
@@ -97,11 +102,14 @@ export function validateListingWizardStep(
 
     if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term or enable short-term stays.";
 
+    const ltToggles = opts.ltFeeToggles ?? deriveListingLtFeeToggles(sub);
+
     if (hasLongTerm) {
-      if (isEntireHome && entireHomeRent <= 0) {
-        errs.monthlyRent = "Enter the monthly rent for the entire home.";
-      }
-      if (!isEntireHome) {
+      Object.assign(
+        errs,
+        validateListingLtFeeToggles(sub, ltToggles, true, { isEntireHome, entireHomeRent }),
+      );
+      if (ltToggles.rent && !isEntireHome) {
         const anyRent = sub.rooms.some(listingRoomHasRent);
         if (!anyRent && sub.rooms.length > 0) {
           errs.monthlyRent = "Set a monthly or daily rent for at least one room (leave others at 0 if not offered).";
@@ -112,26 +120,12 @@ export function validateListingWizardStep(
           }
         }
       }
-      for (const key of listingLtFeeFieldsRequired(true)) {
-        const row = [
-          { key: "securityDeposit" as const, label: "Security deposit" },
-          { key: "moveInFee" as const, label: "Move-in fee" },
-          { key: "parkingMonthly" as const, label: "Parking (monthly)" },
-          { key: "hoaMonthly" as const, label: "HOA / community" },
-          { key: "otherMonthlyFees" as const, label: "Other monthly fees" },
-          { key: "monthToMonthSurcharge" as const, label: "Month-to-month surcharge" },
-        ].find((r) => r.key === key);
-        const label = row?.label ?? String(key);
-        const raw = String(sub[key] ?? "");
-        if (!isListingFeeAmountFilled(raw)) {
-          errs[String(key)] = `${label} is required — enter 0 if there is no fee.`;
-        }
-      }
     }
 
     if (hasShortTerm && opts.stFeeToggles) {
       Object.assign(errs, validateListingStFeeToggles(sub, opts.stFeeToggles, true));
     }
+    Object.assign(errs, validateListingBundleShortTermPricing(sub));
     // Resident payment methods (Stripe ACH / Zelle / Venmo) are configured once
     // in Payment setup and synced onto listings — not validated on the Pricing step.
   }

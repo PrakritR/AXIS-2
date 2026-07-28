@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyListingLtFeeToggle,
   applyListingStFeeAmount,
   applyListingStFeeToggle,
+  deriveListingLtFeeToggles,
   deriveListingStFeeToggles,
-  listingLtFeeFieldsRequired,
   readListingFeeCellAmount,
+  validateListingLtFeeToggles,
   validateListingStFeeToggles,
 } from "@/lib/listing-fee-term-toggles";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
@@ -18,10 +20,23 @@ describe("listing fee term toggles", () => {
     sub.shortTermDeposit = "";
     sub.shortTermMoveInFee = "0";
 
-    expect(deriveListingStFeeToggles(sub)).toEqual({
+    expect(deriveListingStFeeToggles(sub)).toMatchObject({
       rent: true,
       applicationFee: true,
       securityDeposit: false,
+      moveInFee: true,
+    });
+  });
+
+  it("derives LT toggles from stored submission amounts", () => {
+    const sub = createDefaultListingSubmission();
+    sub.securityDeposit = "900";
+    sub.moveInFee = "0";
+    sub.rooms[0]!.monthlyRent = 800;
+
+    expect(deriveListingLtFeeToggles(sub)).toMatchObject({
+      rent: true,
+      securityDeposit: true,
       moveInFee: true,
     });
   });
@@ -34,6 +49,15 @@ describe("listing fee term toggles", () => {
     const next = applyListingStFeeToggle(sub, "rent", false);
     expect(next.shortTermDailyCost).toBe("");
     expect(next.applicationFee).toBe("40");
+  });
+
+  it("clears LT entire-home rent when toggled off", () => {
+    const sub = createDefaultListingSubmission();
+    sub.listingPlaceCategoryId = "entire_home";
+    sub.entireHomeMonthlyRent = 4200;
+
+    const next = applyListingLtFeeToggle(sub, "rent", false);
+    expect(next.entireHomeMonthlyRent).toBe(0);
   });
 
   it("maps ST rent amount to shortTermDailyCost", () => {
@@ -60,18 +84,17 @@ describe("listing fee term toggles", () => {
 
     expect(validateListingStFeeToggles(sub, { ...deriveListingStFeeToggles(sub), rent: false }, true)).toEqual({});
 
-    const errs = validateListingStFeeToggles(
-      sub,
-      { ...deriveListingStFeeToggles(sub), rent: true },
-      true,
-    );
+    const errs = validateListingStFeeToggles(sub, { ...deriveListingStFeeToggles(sub), rent: true }, true);
     expect(errs.shortTermDailyCost).toMatch(/nightly/i);
   });
 
-  it("lists LT-required fee fields when long-term is offered", () => {
-    expect(listingLtFeeFieldsRequired(true)).toContain("securityDeposit");
-    expect(listingLtFeeFieldsRequired(true)).toContain("moveInFee");
-    expect(listingLtFeeFieldsRequired(false)).toEqual([]);
+  it("requires LT fee amounts only when LT toggles are on", () => {
+    const sub = createDefaultListingSubmission();
+    sub.securityDeposit = "";
+
+    const toggles = { ...deriveListingLtFeeToggles(sub), securityDeposit: true };
+    const errs = validateListingLtFeeToggles(sub, toggles, true);
+    expect(errs.securityDeposit).toMatch(/required/i);
   });
 });
 
@@ -96,7 +119,8 @@ describe("listing wizard ST fee validation integration", () => {
     sub.shortTermDailyCost = "";
 
     const errs = validateListingWizardStep(4, sub, {
-      stFeeToggles: { rent: false, applicationFee: false, securityDeposit: false, moveInFee: false },
+      stFeeToggles: { ...deriveListingStFeeToggles(sub), rent: false },
+      ltFeeToggles: deriveListingLtFeeToggles(sub),
     });
     expect(errs.shortTermDailyCost).toBeUndefined();
   });
@@ -107,8 +131,19 @@ describe("listing wizard ST fee validation integration", () => {
     sub.shortTermDailyCost = "";
 
     const errs = validateListingWizardStep(4, sub, {
-      stFeeToggles: { rent: true, applicationFee: false, securityDeposit: false, moveInFee: false },
+      stFeeToggles: { ...deriveListingStFeeToggles(sub), rent: true },
+      ltFeeToggles: deriveListingLtFeeToggles(sub),
     });
     expect(errs.shortTermDailyCost).toMatch(/nightly/i);
+  });
+
+  it("does not require room rent when LT rent toggle is off", () => {
+    const sub = filledPricingSubmission();
+    sub.rooms[0]!.monthlyRent = 0;
+
+    const errs = validateListingWizardStep(4, sub, {
+      ltFeeToggles: { ...deriveListingLtFeeToggles(sub), rent: false },
+    });
+    expect(errs.monthlyRent).toBeUndefined();
   });
 });

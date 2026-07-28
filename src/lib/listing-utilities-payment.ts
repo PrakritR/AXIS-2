@@ -28,6 +28,23 @@ export const UTILITIES_PAYMENT_MODEL_OPTIONS: ReadonlyArray<{
   },
 ] as const;
 
+/** Long-term listing wizard — two clear choices only. */
+export const LONG_TERM_UTILITIES_PAYMENT_OPTIONS: ReadonlyArray<{
+  id: Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct">;
+  label: string;
+}> = [
+  { id: "manager_billed", label: "Payment amount" },
+  { id: "tenant_direct", label: "Paid by resident" },
+] as const;
+
+export function longTermUtilitiesPickerValue(model: UtilitiesPaymentModel | undefined): Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct"> {
+  return model === "tenant_direct" ? "tenant_direct" : "manager_billed";
+}
+
+export function longTermUtilitiesEstimateRequired(model: UtilitiesPaymentModel | undefined): boolean {
+  return longTermUtilitiesPickerValue(model) === "manager_billed";
+}
+
 export function normalizeUtilitiesPaymentModel(raw: unknown): UtilitiesPaymentModel {
   if (raw === "tenant_direct" || raw === "included_in_rent") return raw;
   return "manager_billed";
