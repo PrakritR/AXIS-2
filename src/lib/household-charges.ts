@@ -2574,12 +2574,17 @@ function buildApprovedStandardChargeDrafts(
     );
   }
 
+  // Room-first precedence, identical to recordApprovedApplicationCharges: a room's own
+  // deposit wins over the shared listing amount, so a live re-sync never patches a per-room
+  // deposit charge back down to the listing value. The two layers must not disagree.
+  const roomSecurityDeposit = room?.securityDeposit?.trim() ? room.securityDeposit : undefined;
   const securityDeposit = savedAmount(
     row.application?.managerSecurityDepositOverride,
     row.manualResidentDetails?.securityDeposit != null
       ? String(row.manualResidentDetails.securityDeposit)
       : opts.allowListingDefaults
-        ? String(listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? ""))
+        ? (roomSecurityDeposit ??
+          String(listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "")))
         : undefined,
   );
   const holdingCredit = paidHoldingDepositCreditCents(opts.applicationId) / 100;
@@ -2599,12 +2604,14 @@ function buildApprovedStandardChargeDrafts(
     );
   }
 
+  const roomMoveInFee = room?.moveInFee?.trim() ? room.moveInFee : undefined;
   const moveInFee = savedAmount(
     row.application?.managerMoveInFeeOverride,
     row.manualResidentDetails?.moveInFee != null
       ? String(row.manualResidentDetails.moveInFee)
       : opts.allowListingDefaults
-        ? String(listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? ""))
+        ? (roomMoveInFee ??
+          String(listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "")))
         : undefined,
   );
   pushDraft("move_in_fee", moveInFee, chargeTitle("move_in_fee"));

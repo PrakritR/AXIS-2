@@ -187,3 +187,37 @@ describe("per-room move-in fee — room wins over the shared move-in, never both
     expect(moveInCharge(email)?.amountLabel).toBe("$150.00");
   });
 });
+
+// The create path and the sync-patch path (syncPendingApprovedChargesFromListing, which runs
+// on a non-forced re-record when pending charges already exist) must agree on room-first
+// precedence — otherwise a live re-sync silently patches a per-room deposit down to the
+// listing amount. This is the exact case flagged during the prakrit merge.
+describe("live re-sync keeps per-room amounts (sync-patch room-first precedence)", () => {
+  it("does not patch a per-room deposit down to the listing deposit on re-sync", () => {
+    const email = "resync-deposit@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-resync-deposit";
+    seedListing(propertyId, room({ securityDeposit: "1500" }), "1000");
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, "room-1", email), MANAGER_ID, true);
+    expect(depositCharge(email)?.amountLabel).toBe("$1,500.00");
+
+    // Non-forced re-record triggers the sync-patch layer; it must NOT overwrite the per-room
+    // $1,500 with the $1,000 listing deposit.
+    recordApprovedApplicationCharges(applicantRow(propertyId, "room-1", email), MANAGER_ID, false);
+    expect(depositCharge(email)?.amountLabel).toBe("$1,500.00");
+  });
+
+  it("does not patch a per-room move-in fee down to the listing move-in on re-sync", () => {
+    const email = "resync-movein@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-resync-movein";
+    seedListing(propertyId, room({ moveInFee: "300" }), "1000", "150");
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, "room-1", email), MANAGER_ID, true);
+    expect(moveInCharge(email)?.amountLabel).toBe("$300.00");
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, "room-1", email), MANAGER_ID, false);
+    expect(moveInCharge(email)?.amountLabel).toBe("$300.00");
+  });
+});
