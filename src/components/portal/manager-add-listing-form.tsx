@@ -89,6 +89,10 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+import {
+  applyListingFeeContextDefaults,
+  feeContextForBundleKind,
+} from "@/lib/listing-fee-defaults";
 import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
   LONG_TERM_UTILITIES_PAYMENT_OPTIONS,
@@ -569,57 +573,45 @@ function ProrationMethodFields({
   prorateMethod,
   monthlyRent,
   dailyRentRate,
-  dailyUtilitiesRate,
-  utilitiesLabel,
   onMethod,
   onDailyRent,
-  onDailyUtilities,
 }: {
   prorateMethod: "auto" | "daily_rate";
   monthlyRent: number;
   dailyRentRate?: number;
-  dailyUtilitiesRate?: number;
-  utilitiesLabel?: string;
   onMethod: (m: "auto" | "daily_rate") => void;
   onDailyRent: (n: number | undefined) => void;
-  onDailyUtilities: (n: number | undefined) => void;
 }) {
+  // Dense: proration toggle and its one all-in daily rate share a single row. There is
+  // deliberately no separate "daily utilities rate" — the daily rate is all-in.
   return (
-    <div className="space-y-2">
-      <FieldLabel>Proration</FieldLabel>
-      <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
-        {(["auto", "daily_rate"] as const).map((method) => {
-          const active = prorateMethod === method;
-          return (
-            <button
-              key={method}
-              type="button"
-              onClick={() => onMethod(method)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
-            >
-              {method === "auto" ? "Auto" : "Daily rate"}
-            </button>
-          );
-        })}
+    <div className="flex flex-wrap items-end gap-2">
+      <div>
+        <FieldLabel>Proration</FieldLabel>
+        <div className="mt-1 inline-flex rounded-lg border border-border bg-card p-0.5">
+          {(["auto", "daily_rate"] as const).map((method) => {
+            const active = prorateMethod === method;
+            return (
+              <button
+                key={method}
+                type="button"
+                onClick={() => onMethod(method)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
+              >
+                {method === "auto" ? "Auto" : "Daily rate"}
+              </button>
+            );
+          })}
+        </div>
       </div>
       {prorateMethod === "daily_rate" ? (
-        <div className="flex flex-wrap gap-3">
-          <div>
-            <FieldLabel>Daily rent rate</FieldLabel>
-            <MoneyInput
-              value={dailyRentRate ?? ""}
-              onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
-              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
-            />
-          </div>
-          <div>
-            <FieldLabel>{utilitiesLabel ?? "Daily utilities rate"}</FieldLabel>
-            <MoneyInput
-              value={dailyUtilitiesRate ?? ""}
-              onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
-              placeholder="6"
-            />
-          </div>
+        <div>
+          <FieldLabel hint="All-in — the daily rate already covers utilities.">Daily rate</FieldLabel>
+          <MoneyInput
+            value={dailyRentRate ?? ""}
+            onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
+            placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
+          />
         </div>
       ) : null}
     </div>
@@ -1775,7 +1767,9 @@ export function ManagerAddListingForm({
   };
 
   const addBundle = () => {
-    const next = emptyBundleRow();
+    // A custom bundle is a group offering — seed it with the group_bundle defaults
+    // (utilities model + estimate; deposit fills once a rent is entered).
+    const next = applyListingFeeContextDefaults(emptyBundleRow(), "group_bundle", 0);
     expandListingItem(listingItemKey("bundle", next.id));
     setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), next] }));
   };
@@ -1789,15 +1783,26 @@ export function ManagerAddListingForm({
           ? s.rooms.map((room) => room.id)
           : namedRooms.slice(0, Math.min(2, namedRooms.length)).map((room) => room.id);
       if (kind === "multi_room" && includedRoomIds.length < 2) return s;
-      const row: ManagerBundleRow = {
-        ...emptyBundleRow(),
-        label: kind === "whole_house" ? "Whole house lease" : "Group lease bundle",
-        price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
-        strikethrough: "",
-        promo: "",
-        roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
-        includedRoomIds,
-      };
+      // Different default fees per rental context (per_room vs group_bundle vs whole_house)
+      // come from the one tuning table in listing-fee-defaults. Deposit scales off this
+      // bundle's own monthly rent; only the new (empty) fields are filled.
+      const bundleRentSum = s.rooms
+        .filter((r) => includedRoomIds.includes(r.id))
+        .reduce((sum, r) => sum + (r.monthlyRent > 0 ? r.monthlyRent : 0), 0);
+      const bundleRent = kind === "whole_house" ? entireHomeMonthlyRentAmount(s) || bundleRentSum : bundleRentSum;
+      const row: ManagerBundleRow = applyListingFeeContextDefaults(
+        {
+          ...emptyBundleRow(),
+          label: kind === "whole_house" ? "Whole house lease" : "Group lease bundle",
+          price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
+          strikethrough: "",
+          promo: "",
+          roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
+          includedRoomIds,
+        },
+        feeContextForBundleKind(kind),
+        bundleRent,
+      );
       expandListingItem(listingItemKey("bundle", row.id));
       return { ...s, bundles: [...(s.bundles ?? []), row] };
     });
@@ -2619,7 +2624,7 @@ export function ManagerAddListingForm({
               hasError: Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent),
               toggleDataAttr: `listing-room-price-toggle-${room.id}`,
               detail: (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                   <GridField>
                     <FieldLabel>Monthly rent *</FieldLabel>
                     <div data-wizard-field={roomRentKey}>
@@ -2672,15 +2677,13 @@ export function ManagerAddListingForm({
                       />
                     </GridField>
                   ) : null}
-                  <div className="sm:col-span-2">
+                  <div className="w-full">
                     <ProrationMethodFields
                       prorateMethod={room.prorateMethod ?? "auto"}
                       monthlyRent={room.monthlyRent}
                       dailyRentRate={room.dailyRentRate}
-                      dailyUtilitiesRate={room.dailyUtilitiesRate}
                       onMethod={(m) => setRoom(i, { prorateMethod: m })}
                       onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
-                      onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
                     />
                   </div>
                 </div>
@@ -2748,7 +2751,7 @@ export function ManagerAddListingForm({
             onRemove: () => removeBundle(i),
             toggleDataAttr: `listing-bundle-toggle-${bundle.id}`,
             detail: (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                 <GridField>
                   <FieldLabel>Bundle name</FieldLabel>
                   <Input
@@ -2816,7 +2819,7 @@ export function ManagerAddListingForm({
                 ) : null}
                 {sub.shortTermRentalsAllowed ? (
                   <>
-                    <div className="sm:col-span-2">
+                    <div className="w-full">
                       <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
                         <input
                           type="checkbox"
@@ -2854,7 +2857,7 @@ export function ManagerAddListingForm({
                     ) : null}
                   </>
                 ) : null}
-                <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="w-full flex flex-wrap items-center justify-between gap-2">
                   <FieldLabel>Rooms in this bundle</FieldLabel>
                   <Button
                     type="button"
@@ -2865,7 +2868,7 @@ export function ManagerAddListingForm({
                     Clear rooms
                   </Button>
                 </div>
-                <div className="sm:col-span-2">
+                <div className="w-full">
                   <div className="grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
                     {sub.rooms.map((room) => (
                       <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm">
@@ -2932,11 +2935,8 @@ export function ManagerAddListingForm({
               prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
               monthlyRent={entireHomeRent}
               dailyRentRate={sub.entireHomeDailyRentRate}
-              dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
-              utilitiesLabel="Daily utilities rate (whole home)"
               onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
               onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
-              onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
             />
           </div>
         </div>
