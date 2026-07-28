@@ -1013,6 +1013,40 @@ function PresetCheckboxGroup({
   );
 }
 
+/**
+ * The select-all row for a room/item SELECTION group (bundle rooms, shared-space room
+ * access). It is the FIRST checkbox in the grid with a genuine `indeterminate` state and
+ * replaces the old "All rooms" / "Clear rooms" header buttons (round 18): one control that
+ * checks everything, clears everything, and shows the partial state — keyboard and
+ * screen-reader correct, matching PresetCheckboxGroup's own select-all above.
+ */
+function SelectAllCheckbox({
+  allChecked,
+  someChecked,
+  onToggle,
+  label = "Select all",
+}: {
+  allChecked: boolean;
+  someChecked: boolean;
+  onToggle: (checkAll: boolean) => void;
+  label?: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        className="h-4 w-4 shrink-0 rounded border-border"
+        checked={allChecked}
+        ref={(el) => {
+          if (el) el.indeterminate = someChecked;
+        }}
+        onChange={(e) => onToggle(e.target.checked)}
+      />
+      <span className="font-medium text-muted">{label}</span>
+    </label>
+  );
+}
+
 /** In CSS grid rows, bottom-aligns the control with siblings when label/hint blocks differ in height. */
 function GridField({ children, className }: { children: React.ReactNode; className?: string }) {
   const parts = Children.toArray(children);
@@ -2842,19 +2876,19 @@ export function ManagerAddListingForm({
                     </div>
                   </GridField>
                 ) : null}
-                <div className="w-full flex flex-wrap items-center justify-between gap-2">
+                <div className="w-full">
                   <FieldLabel>Rooms in this bundle</FieldLabel>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={LISTING_WIZARD_ACTION_BTN}
-                    onClick={() => applyBundleRoomScope(i, "none")}
-                  >
-                    Clear rooms
-                  </Button>
                 </div>
                 <div className="w-full">
                   <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {sub.rooms.length > 0 ? (
+                      <SelectAllCheckbox
+                        allChecked={sub.rooms.every((r) => selectedIds.has(r.id))}
+                        someChecked={selectedIds.size > 0 && !sub.rooms.every((r) => selectedIds.has(r.id))}
+                        onToggle={(checkAll) => applyBundleRoomScope(i, checkAll ? "all_named" : "none")}
+                        label="All rooms"
+                      />
+                    ) : null}
                     {sub.rooms.map((room) => (
                       <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
                         <input
@@ -4184,12 +4218,6 @@ export function ManagerAddListingForm({
                       toggleDataAttr={`listing-shared-toggle-${sp.id}`}
                       headerActions={
                         <>
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "all")}>
-                            All rooms
-                          </Button>
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "none")}>
-                            Clear rooms
-                          </Button>
                           <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeSharedSpace(i)}>
                             Remove
                           </Button>
@@ -4341,6 +4369,17 @@ export function ManagerAddListingForm({
                         <div className="sm:col-span-2">
                           <FieldLabel>Room access</FieldLabel>
                           <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                            {sub.rooms.length > 0 ? (
+                              <SelectAllCheckbox
+                                allChecked={sub.rooms.every((room) => (sp.roomAccessIds ?? []).includes(room.id))}
+                                someChecked={
+                                  (sp.roomAccessIds ?? []).length > 0 &&
+                                  !sub.rooms.every((room) => (sp.roomAccessIds ?? []).includes(room.id))
+                                }
+                                onToggle={(checkAll) => setSharedSpaceRoomAccess(i, checkAll ? "all" : "none")}
+                                label="All rooms"
+                              />
+                            ) : null}
                             {sub.rooms.map((room) => (
                               <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
                                 <input
