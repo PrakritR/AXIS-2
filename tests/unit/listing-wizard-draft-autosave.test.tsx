@@ -9,10 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
+import { LEASE_TEMPLATE_ROUTE } from "@/lib/lease-template-storage";
 import {
   createDefaultListingSubmission,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+
+/** The route mints the object folder from the authenticated user, so it is a real uuid. */
+const LEASE_TEMPLATE_OWNER_UUID = "b5809cf3-dcff-4e46-a0cc-5dcc53bc8910";
 
 // A fresh manager per test — the side-bucket draft store is module-level memory
 // that outlives a single test.
@@ -84,6 +88,19 @@ beforeEach(() => {
       if (typeof url === "string" && url.startsWith("data:")) {
         const mime = url.slice("data:".length, url.indexOf(";")) || "application/octet-stream";
         return { ok: true, blob: async () => new Blob(["bytes"], { type: mime }) } as unknown as Response;
+      }
+      // Lease templates do NOT go to the public photo bucket — they POST to the
+      // authorizing route, which 401s without a session and answers with the
+      // private object path.
+      if (typeof url === "string" && url.startsWith(LEASE_TEMPLATE_ROUTE)) {
+        if (!SESSION_USER_ID || uploadFails("application/pdf")) {
+          return { ok: false, status: 401, json: async () => ({ error: "Unauthorized." }) } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ path: `${LEASE_TEMPLATE_OWNER_UUID}/1753000000000-ab12cd.pdf` }),
+        } as unknown as Response;
       }
       const body = init?.body ? (JSON.parse(init.body) as RecordedCall) : ({} as RecordedCall);
       if (body.action) calls.push({ action: body.action, id: body.id, status: body.status });
@@ -317,7 +334,12 @@ describe("closing the add-listing wizard saves the work in progress", () => {
     const saved = readAdminPropertyRows(5, MANAGER_ID)[0]!.submission!;
     expect(saved.housePhotoDataUrls).toHaveLength(1);
     expect(saved.housePhotoDataUrls[0]).toMatch(/^https:\/\/storage\.test\//);
-    expect(saved.leaseTemplateDocUrl).toMatch(/^https:\/\/storage\.test\//);
+    // The template must NOT land beside the photos in the public bucket — it is
+    // stored as the authorizing route's URL onto the private one.
+    expect(saved.leaseTemplateDocUrl).toMatch(
+      new RegExp(`^${LEASE_TEMPLATE_ROUTE}\\?path=${LEASE_TEMPLATE_OWNER_UUID}`),
+    );
+    expect(saved.leaseTemplateDocUrl).not.toMatch(/storage\.test/);
     expect(JSON.stringify(saved)).not.toContain("data:");
     expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/attachments couldn't be saved/i));
   });

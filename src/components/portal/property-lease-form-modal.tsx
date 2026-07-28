@@ -81,6 +81,9 @@ export function PropertyLeaseFormModal({
   const [kind, setKind] = useState<PropertyLeaseTemplateKind>("room-rental");
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFieldsFromLeaseSource("axis_default"));
   const [error, setError] = useState<string | null>(null);
+  // The template picker uploads to the private bucket before it returns a URL;
+  // saving mid-upload would fail validation as if no file had been chosen.
+  const [templateUploading, setTemplateUploading] = useState(false);
 
   const source = leaseSourceFromDraft(draft);
   const typeMeta = useMemo(
@@ -138,6 +141,7 @@ export function PropertyLeaseFormModal({
         setDraft((d) => ({ ...d, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: fileName }));
       },
       showToast,
+      setTemplateUploading,
     );
   };
 
@@ -213,10 +217,11 @@ export function PropertyLeaseFormModal({
             type="button"
             variant="primary"
             className="rounded-full"
+            disabled={templateUploading}
             onClick={save}
             data-attr={mode === "add" ? "property-lease-add-save" : "property-lease-edit-save"}
           >
-            Save lease
+            {templateUploading ? "Uploading…" : "Save lease"}
           </Button>
         </ModalFooter>
       }

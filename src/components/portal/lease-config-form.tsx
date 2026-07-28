@@ -1,6 +1,8 @@
 "use client";
 
 import { Textarea, Select } from "@/components/ui/input";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { LEASE_TEMPLATE_MAX_BYTES, uploadLeaseTemplateFile } from "@/lib/lease-template-storage";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   PROPERTY_LEASE_SOURCE_OPTIONS,
@@ -9,7 +11,7 @@ import {
   type PropertyLeaseSource,
 } from "@/lib/property-lease-source";
 
-export const LEASE_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
+export { LEASE_TEMPLATE_MAX_BYTES };
 
 export type LeaseConfigDraft = Pick<
   ManagerListingSubmissionV1,
@@ -24,10 +26,27 @@ export function leaseKindFromDraft(draft: LeaseConfigDraft): "terms" | "document
   return draft.leaseCustomKind === "document" ? "document" : "terms";
 }
 
+/**
+ * The ONE funnel every lease-template picker goes through (the listing wizard's
+ * lease editor, the per-property lease form, the standalone upload modal). It
+ * uploads to the PRIVATE `lease-templates` bucket and hands back the authorizing
+ * route URL — it deliberately no longer produces a `data:` URL, because the
+ * callers persist whatever they are given straight into
+ * `manager_property_records.property_data`, which is a manager-owned blob that
+ * public surfaces read. A base64 PDF there was both a leak and a multi-megabyte
+ * row. A failed upload surfaces and stores nothing.
+ */
 export function readLeaseTemplateFile(
   file: File | null,
-  onSuccess: (dataUrl: string, fileName: string) => void,
+  onSuccess: (url: string, fileName: string) => void,
   showToast: (message: string) => void,
+  /**
+   * Upload in flight. The picker went from a FileReader (milliseconds) to an
+   * 8 MB POST (seconds), so without this a Save during the upload runs
+   * `validateLeaseDraft` against an empty draft and tells the manager to
+   * "upload the lease template" they are visibly already uploading.
+   */
+  onPending?: (busy: boolean) => void,
 ): void {
   if (!file) return;
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -39,17 +58,36 @@ export function readLeaseTemplateFile(
     showToast("Lease template is too large. Keep it under 8 MB.");
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = typeof reader.result === "string" ? reader.result : null;
-    if (!dataUrl) {
-      showToast("Could not read that file. Try again.");
-      return;
-    }
-    onSuccess(dataUrl, file.name);
-  };
-  reader.onerror = () => showToast("Could not read that file. Try again.");
-  reader.readAsDataURL(file);
+  // /demo has no signed-in session to upload against and must never write real
+  // rows, so it keeps the in-memory data URL — same escape hatch listing photos use.
+  if (isDemoModeActive()) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : null;
+      if (!dataUrl) {
+        showToast("Could not read that file. Try again.");
+        return;
+      }
+      onSuccess(dataUrl, file.name);
+    };
+    reader.onerror = () => showToast("Could not read that file. Try again.");
+    reader.readAsDataURL(file);
+    return;
+  }
+  // The upload is the only thing between picking a file and the row appearing,
+  // and an 8 MB PDF on a slow link is several silent seconds otherwise.
+  showToast("Uploading lease template…");
+  onPending?.(true);
+  // ponytail: uploaded on pick, so cancelling the modal strands the object.
+  // deleteSubmissionLeaseTemplates reclaims it when the listing goes; add an
+  // orphan sweep only if bucket growth ever shows up.
+  void uploadLeaseTemplateFile(file)
+    .then(({ url, name }) => onSuccess(url, name))
+    .catch((err) => {
+      console.error("lease-config-form: lease template upload failed", err);
+      showToast(err instanceof Error ? err.message : "Could not upload the lease template.");
+    })
+    .finally(() => onPending?.(false));
 }
 
 type LeaseConfigFormProps = {

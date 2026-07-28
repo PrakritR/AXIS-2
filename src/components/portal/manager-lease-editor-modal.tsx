@@ -99,6 +99,9 @@ export function ManagerLeaseEditorModal({
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFromSubmission(sub));
   const [templateLabel, setTemplateLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The template picker uploads to the private bucket before it returns a URL;
+  // saving mid-upload would fail validation as if no file had been chosen.
+  const [templateUploading, setTemplateUploading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -141,6 +144,7 @@ export function ManagerLeaseEditorModal({
         setDraft((d) => ({ ...d, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: fileName }));
       },
       showToast,
+      setTemplateUploading,
     );
   };
 
@@ -232,10 +236,11 @@ export function ManagerLeaseEditorModal({
             type="button"
             variant="primary"
             className="rounded-full"
+            disabled={templateUploading}
             onClick={() => save()}
             data-attr="property-lease-edit-save"
           >
-            Save lease
+            {templateUploading ? "Uploading…" : "Save lease"}
           </Button>
         </ModalFooter>
       }

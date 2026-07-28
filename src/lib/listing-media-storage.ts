@@ -1,4 +1,5 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { deleteSubmissionLeaseTemplates } from "@/lib/lease-template-storage";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 
 /** Storage bucket every listing photo/video/floor plan/lease template is uploaded to. */
@@ -39,7 +40,11 @@ export function collectSubmissionMediaUrls(sub: ManagerListingSubmissionV1): str
 
   pushAll(sub.housePhotoDataUrls);
   push(sub.houseVideoDataUrl);
+  // New templates live in the PRIVATE `lease-templates` bucket and are reclaimed
+  // by `deleteSubmissionLeaseTemplates`; this only still matches a LEGACY template
+  // uploaded to `listing-photos` before the split, which must not be stranded.
   push(sub.leaseTemplateDocUrl);
+  for (const template of sub.propertyLeaseTemplates ?? []) push(template?.leaseTemplateDocUrl);
   push(sub.propertyFloorPlanDataUrl);
   for (const url of Object.values(sub.floorPlanByLabel ?? {})) push(url);
   for (const room of sub.rooms ?? []) {
@@ -84,8 +89,12 @@ export async function deleteSubmissionMediaObjects(
   stillReferencedBy: Iterable<ManagerListingSubmissionV1 | null | undefined> = [],
 ): Promise<void> {
   if (!sub || typeof window === "undefined" || isDemoModeActive()) return;
+  const survivors = [...stillReferencedBy];
+  // Lease templates live in a separate private bucket the browser cannot touch,
+  // so they are reclaimed through their authorizing route — same skip rule.
+  await deleteSubmissionLeaseTemplates(sub, survivors);
   const retained = new Set<string>();
-  for (const other of stillReferencedBy) {
+  for (const other of survivors) {
     for (const path of collectSubmissionMediaPaths(other)) retained.add(path);
   }
   const paths = Array.from(collectSubmissionMediaPaths(sub)).filter((p) => !retained.has(p));

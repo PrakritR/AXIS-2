@@ -163,6 +163,19 @@ export function seedDemoManagerProperties(userId: string, extras: MockProperty[]
   }
 }
 
+/**
+ * `publicProjection` describes a browser-cache row, not the listing — it must
+ * never be written into `property_data`. Stripped at the one boundary every
+ * write crosses rather than at each of the dozen call sites that build a
+ * `MockProperty` by spreading a cached one.
+ */
+function propertyDataForServer(propertyData: unknown): unknown {
+  if (!propertyData || typeof propertyData !== "object" || Array.isArray(propertyData)) return propertyData ?? null;
+  const { publicProjection: _local, ...rest } = propertyData as MockProperty;
+  void _local;
+  return rest;
+}
+
 function mirrorPropertyRecord(input: {
   id: string;
   managerUserId: string | null;
@@ -181,7 +194,7 @@ function mirrorPropertyRecord(input: {
       managerUserId: input.managerUserId,
       status: input.status,
       rowData: input.rowData ?? null,
-      propertyData: input.propertyData ?? null,
+      propertyData: propertyDataForServer(input.propertyData),
       editRequestNote: input.editRequestNote ?? null,
     }),
   }).catch(() => {});
@@ -211,7 +224,7 @@ export async function upsertPropertyRecordToServer(input: {
         managerUserId: input.managerUserId,
         status: input.status,
         rowData: input.rowData ?? null,
-        propertyData: input.propertyData ?? null,
+        propertyData: propertyDataForServer(input.propertyData),
         editRequestNote: input.editRequestNote ?? null,
       }),
     });
@@ -255,7 +268,29 @@ export function cachePublicExtraListings(listings: MockProperty[], opts?: { sile
     const uid = listing.managerUserId?.trim() || LEGACY_MANAGER_SCOPE_USER_ID;
     const list = map[uid] ?? [];
     const idx = list.findIndex((p) => p.id === listing.id);
-    const next = { ...listing, managerUserId: uid };
+    const prev = idx === -1 ? null : list[idx];
+    // The public payload is an ALLOWLIST (`publicListingProjection`), not the
+    // stored blob, and this map is the SAME one the manager portal edits and
+    // mirrors back into `property_data`. Replacing an authoritative row with a
+    // projection would let one visit to /rent/browse — or a native app launch,
+    // which hydrates the public catalog for every role — strip the owner's own
+    // listing, and their next House-details save would persist it, destroying
+    // lease config, wifi, add-on services and the lease template this branch
+    // exists to protect.
+    //
+    // Only a projection landing on a NON-projection is refused, so a public
+    // refresh still replaces a public row and the owner's own sync still
+    // replaces anything: public fields update either way, the richer submission
+    // is simply never downgraded.
+    const keepPrevSubmission =
+      listing.publicProjection === true && Boolean(prev?.listingSubmission) && prev?.publicProjection !== true;
+    const next: MockProperty = {
+      ...listing,
+      managerUserId: uid,
+      ...(keepPrevSubmission
+        ? { listingSubmission: prev!.listingSubmission, publicProjection: false }
+        : {}),
+    };
     if (idx === -1) list.push(next);
     else list[idx] = next;
     map[uid] = list;
