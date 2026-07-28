@@ -71,6 +71,44 @@ function TermCheckbox({
   );
 }
 
+/**
+ * Standard rows are backed by fixed submission fields, but the unified migration
+ * also materializes each one as a preset-tagged row in `customFees` — which is
+ * where a fee's cadence actually lives. This maps a table row to that row so the
+ * long-term cadence control can read and write it.
+ */
+const PRESET_ID_FOR_ROW: Partial<Record<ListingFeeRowId, string>> = {
+  securityDeposit: "security_deposit",
+  moveInFee: "move_in_fee",
+  holdingDeposit: "holding_deposit",
+  parkingMonthly: "parking_monthly",
+  hoaMonthly: "hoa_monthly",
+  otherMonthlyFees: "other_monthly",
+  monthToMonthSurcharge: "mtm_surcharge",
+};
+
+function FeeCadenceSelect({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: "one-time" | "monthly";
+  onChange: (next: "one-time" | "monthly") => void;
+  ariaLabel: string;
+}) {
+  return (
+    <select
+      className="h-9 shrink-0 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+      value={value}
+      onChange={(e) => onChange(e.target.value === "one-time" ? "one-time" : "monthly")}
+      aria-label={ariaLabel}
+    >
+      <option value="monthly">Monthly</option>
+      <option value="one-time">One-time</option>
+    </select>
+  );
+}
+
 export function ListingUnifiedFeesTable({
   sub,
   isEntireHome,
@@ -184,6 +222,23 @@ export function ListingUnifiedFeesTable({
                       {ltOn && rentLtPerRoom ? (
                         <span className="text-xs text-muted">Per room below</span>
                       ) : null}
+                      {ltOn && !rentLtPerRoom
+                        ? (() => {
+                            const presetId = PRESET_ID_FOR_ROW[rowId];
+                            if (!presetId) return null;
+                            const idx = customFees.findIndex(
+                              (f) => (f as ListingFeeRow).presetId === presetId,
+                            );
+                            if (idx < 0) return null;
+                            return (
+                              <FeeCadenceSelect
+                                value={customFees[idx]!.frequency === "one-time" ? "one-time" : "monthly"}
+                                onChange={(next) => onCustomFeeChange(idx, { frequency: next })}
+                                ariaLabel={`${row.label} frequency`}
+                              />
+                            );
+                          })()
+                        : null}
                     </div>
                   ) : (
                     <span className="text-xs text-muted">—</span>
