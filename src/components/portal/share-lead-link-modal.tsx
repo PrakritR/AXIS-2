@@ -24,7 +24,7 @@ import {
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue, propertyAllowsShortTermRental } from "@/lib/rental-application/data";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
 
 const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
@@ -158,6 +158,28 @@ export function ShareLeadLinkModal({
     return getRoomOptionsForProperty(singlePropertyId, { includeUnavailable: true }).filter((o) => o.value);
   }, [kind, singlePropertyId]);
 
+  const shortTermApplyAvailable = useMemo(() => {
+    if (kind !== "apply" || propertyIds.length === 0) return false;
+    return propertyIds.every((id) => propertyAllowsShortTermRental(id));
+  }, [kind, propertyIds]);
+
+  const effectiveApplyRentalTypes = useMemo(
+    () =>
+      shortTermApplyAvailable
+        ? applyRentalTypes
+        : applyRentalTypes.filter((type) => type !== "short_term"),
+    [applyRentalTypes, shortTermApplyAvailable],
+  );
+
+  useEffect(() => {
+    if (!shortTermApplyAvailable) {
+      setApplyRentalTypes((prev) => {
+        const next = prev.filter((type) => type !== "short_term");
+        return next.length > 0 ? next : ["standard"];
+      });
+    }
+  }, [shortTermApplyAvailable]);
+
   const linkUrl = useMemo(() => {
     if (propertyIds.length === 0 || typeof window === "undefined") return "";
     const origin = window.location.origin;
@@ -165,7 +187,7 @@ export function ShareLeadLinkModal({
     if (isMultiListing) return buildManagerBrowseUrl(origin, propertyIds);
     if (isMultiApply) {
       return buildManagerPortfolioApplyUrl(origin, propertyIds, {
-        rentalType: applyLinkRentalType(applyRentalTypes),
+        rentalType: applyLinkRentalType(effectiveApplyRentalTypes),
       });
     }
     if (!singlePropertyId) return "";
@@ -177,9 +199,9 @@ export function ShareLeadLinkModal({
       propertyId: singlePropertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
-      rentalType: applyLinkRentalType(applyRentalTypes),
+      rentalType: applyLinkRentalType(effectiveApplyRentalTypes),
     });
-  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions, applyRentalTypes]);
+  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions, effectiveApplyRentalTypes]);
 
   const applyAllowsBothRentalTypes =
     kind === "apply" &&
@@ -284,7 +306,7 @@ export function ShareLeadLinkModal({
           listingRoomId: listingRoomId || undefined,
           roomName: roomName || undefined,
           note: note.trim() || undefined,
-          rentalType: kind === "apply" ? applyLinkRentalType(applyRentalTypes) : undefined,
+          rentalType: kind === "apply" ? applyLinkRentalType(effectiveApplyRentalTypes) : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
@@ -419,7 +441,7 @@ export function ShareLeadLinkModal({
                 </div>
               )}
 
-              {kind === "apply" && multiEnabled ? (
+              {kind === "apply" && multiEnabled && shortTermApplyAvailable ? (
                 <CheckboxMultiSelect
                   label="Application"
                   dataAttr="share-lead-application-multi"
@@ -433,7 +455,7 @@ export function ShareLeadLinkModal({
                 />
               ) : null}
 
-              {kind === "apply" && !multiEnabled ? (
+              {kind === "apply" && !multiEnabled && shortTermApplyAvailable ? (
                 <div>
                   <label htmlFor="share-lead-application-type" className={FIELD_LABEL_CLASS}>
                     Application

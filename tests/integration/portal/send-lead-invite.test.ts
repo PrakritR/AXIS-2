@@ -155,6 +155,35 @@ describe("POST /api/portal/send-lead-invite", () => {
     expect(sentBody.text).toContain("shared 3 homes");
   });
 
+  it("rejects short-term apply invites when the property does not allow short-term stays", async () => {
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", email: "mgr@example.com" } } }) },
+    } as never);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: { role: "manager" }, error: null }),
+          }),
+        }),
+      }),
+    } as never);
+    vi.mocked(getShareablePropertyForUser).mockResolvedValue({
+      id: "mgr-1",
+      title: "Test House",
+      adminPublishLive: true,
+      listingSubmission: { shortTermRentalsAllowed: false },
+    } as never);
+
+    const req = jsonRequest("http://localhost/api/portal/send-lead-invite", {
+      method: "POST",
+      body: { kind: "apply", to: "prospect@example.com", propertyId: "mgr-1", rentalType: "short_term" },
+    });
+    const res = await sendLeadInvite(req);
+    expect(res.status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("rejects the whole multi-send if any requested listing is not authorized", async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", email: "mgr@example.com" } } }) },
