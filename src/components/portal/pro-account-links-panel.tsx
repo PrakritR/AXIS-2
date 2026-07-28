@@ -342,6 +342,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     propertyIds: string[];
   } | null>(null);
 
+  const [teamLinkFilter, setTeamLinkFilter] = useState<"linked" | "pending">("linked");
+  const [teamPropertyFilter, setTeamPropertyFilter] = useState("");
+
   const [transferPropertyId, setTransferPropertyId] = useState<string | null>(null);
   const [transferCoManagerUserId, setTransferCoManagerUserId] = useState<string | null>(null);
   const [transferPermissions, setTransferPermissions] = useState<CoManagerPermissions>(EMPTY_CO_MANAGER_PERMISSIONS);
@@ -611,9 +614,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       cancelled = true;
     };
   }, []);
-
-  const [teamLinkFilter, setTeamLinkFilter] = useState<"linked" | "pending">("linked");
-  const [teamPropertyFilter, setTeamPropertyFilter] = useState("");
 
   const linkCap = maxAccountLinksForTier(skuTier);
   const participantUsedCount = remoteInvites.filter((i) => i.status === "pending" || i.status === "accepted").length;
