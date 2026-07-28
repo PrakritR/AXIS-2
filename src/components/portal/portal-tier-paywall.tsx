@@ -63,7 +63,7 @@ export function PortalTierPaywall({
             </Link>
           </div>
 
-          <p className="text-xs text-muted">
+          <p className="text-xs text-muted [html[data-native]_&]:hidden">
             {/* Web keeps the "Already upgraded?" framing; native shows only the link. */}
             <span className="native-hide">Already upgraded?{" "}</span>
             <Link href={`${basePath}/dashboard`} className="font-medium text-primary underline-offset-2 hover:underline">

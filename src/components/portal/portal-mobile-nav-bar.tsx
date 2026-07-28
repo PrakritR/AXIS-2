@@ -4,6 +4,7 @@ import { User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   portalDashboardMobileHeaderLabel,
+  portalMobileActiveSectionLabel,
   resolvePortalMobileBackTarget,
 } from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
@@ -65,8 +67,13 @@ export function PortalMobileNavBar({
     () => resolvePortalMobileBackTarget(pathname, definition, searchParams),
     [pathname, definition, searchParams],
   );
+  const nativeChrome = useNativeChrome();
   const dashboardLabel = useMemo(
     () => portalDashboardMobileHeaderLabel(pathname, definition),
+    [pathname, definition],
+  );
+  const sectionTitle = useMemo(
+    () => portalMobileActiveSectionLabel(pathname, definition),
     [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
@@ -78,7 +85,7 @@ export function PortalMobileNavBar({
         href={`${definition.basePath}/dashboard`}
         aria-label="Dashboard"
         data-attr="portal-mobile-brand-mark"
-        className="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80"
+        className="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 rounded-xl [html[data-native]_&]:hidden outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80"
       >
         <AxisLogoMark size="compact" />
       </Link>
@@ -95,6 +102,10 @@ export function PortalMobileNavBar({
       ) : dashboardLabel ? (
         <h1 className="min-w-0 max-w-[38%] truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
           {dashboardLabel}
+        </h1>
+      ) : sectionTitle ? (
+        <h1 className="min-w-0 max-w-[42%] truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
+          {sectionTitle}
         </h1>
       ) : null}
 
