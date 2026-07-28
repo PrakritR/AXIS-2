@@ -928,7 +928,7 @@ function findLeaseRowIndexForApprovedApp(
 
 function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
   const jointSync = syncJointBundleLeases(rows, managerUserId);
-  let next = jointSync.rows;
+  const next = jointSync.rows;
   const jointMemberAppIds = jointSync.jointMemberAppIds;
 
   const apps = readManagerApplicationRows().filter(
