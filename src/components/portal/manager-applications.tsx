@@ -828,7 +828,7 @@ export function ManagerApplications() {
             data-attr="application-settings-open"
             onClick={() => setApplicationSettingsOpen(true)}
           >
-            Application fee
+            Promo code
           </Button>
           <Button
             type="button"
