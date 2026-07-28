@@ -10,7 +10,7 @@
  *   npx tsx --env-file=.env.local scripts/backfill-manager-work-numbers.ts --dry-run
  *
  * One manager by email:
- *   npx tsx --env-file=.env.local scripts/backfill-manager-work-numbers.ts --email=manager@test.axis.local
+ *   npx tsx --env-file=.env.local scripts/backfill-manager-work-numbers.ts --email=manager@test.proplane.local
  *
  * Production (point env at prod Supabase + Twilio):
  *   npx tsx --env-file=.env.production.local scripts/backfill-manager-work-numbers.ts --limit=5

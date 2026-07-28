@@ -357,7 +357,7 @@ cross-catalog leasing agent (`src/lib/agent/leasing-sms-agent.server.ts` +
 `resolveRegisteredClawManagers()` / `resolveMappedManagerContacts()`
 (`claw-resident-messaging.server.ts`) are the single choke point that reads
 this: they exclude sandbox/demo accounts (`isPortalSandboxEmail` —
-`@axis.local` / `@test.axis.local`), require `profiles.role` to be one of
+`@axis.local` / `@test.proplane.local`), require `profiles.role` to be one of
 `manager`/`pro`/`admin`/`owner`, and only trust a manager's `profiles.phone`
 as their identity when `phone_verified_at` is set (an unverified phone is
 user-editable and forgeable). The role check matters because

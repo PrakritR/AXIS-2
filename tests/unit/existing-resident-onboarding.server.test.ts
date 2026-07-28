@@ -44,7 +44,7 @@ describe("runExistingResidentOnboarding", () => {
     const row: DemoApplicantRow = {
       id: "PROPLANE-TEST01",
       name: "Jane Smith",
-      email: "jane.onboard@test.axis.local",
+      email: "jane.onboard@test.proplane.local",
       property: "Ballard House",
       stage: "Active",
       bucket: "approved",
@@ -59,7 +59,7 @@ describe("runExistingResidentOnboarding", () => {
 
     const result = await runExistingResidentOnboarding(
       db as never,
-      { userId: "mgr-1", email: "manager@test.axis.local", managerName: "Alex Manager" },
+      { userId: "mgr-1", email: "manager@test.proplane.local", managerName: "Alex Manager" },
       row,
       { sendWelcomeEmail: true },
     );
@@ -83,11 +83,11 @@ describe("runExistingResidentOnboarding", () => {
 
     const result = await runExistingResidentOnboarding(
       db as never,
-      { userId: "mgr-attacker", email: "attacker@test.axis.local", managerName: "Mal" },
+      { userId: "mgr-attacker", email: "attacker@test.proplane.local", managerName: "Mal" },
       {
         id: "PROPLANE-TEST01",
         name: "Jane Smith",
-        email: "jane.onboard@test.axis.local",
+        email: "jane.onboard@test.proplane.local",
         property: "Ballard House",
         stage: "Active",
         bucket: "approved",
@@ -107,11 +107,11 @@ describe("runExistingResidentOnboarding", () => {
     const db = mockDb();
     const result = await runExistingResidentOnboarding(
       db as never,
-      { userId: "mgr-1", email: "manager@test.axis.local" },
+      { userId: "mgr-1", email: "manager@test.proplane.local" },
       {
         id: "PROPLANE-X",
         name: "Applicant",
-        email: "a@test.axis.local",
+        email: "a@test.proplane.local",
         property: "P",
         stage: "Pending",
         bucket: "pending",

@@ -22,7 +22,7 @@ function mkCharge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
     createdAt: "2026-01-01T00:00:00.000Z",
     propertyId: "prop-1",
     propertyLabel: "SoMa Loft House",
-    residentEmail: "resident@test.axis.local",
+    residentEmail: "resident@test.proplane.local",
     residentName: "Test Resident",
     residentUserId: "user-1",
     managerUserId: "mgr-1",

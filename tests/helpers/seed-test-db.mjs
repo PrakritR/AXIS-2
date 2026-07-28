@@ -9,7 +9,7 @@
  * Beyond the primary E2E manager/resident/property/charge, this seeds a coherent
  * browse catalog: every home the public browse/apply flow lists is a live
  * `manager_property_records` row OWNED by a test manager (manager@ / manager2@
- * test.axis.local), carries a full listingSubmission (v:1), and has at least one
+ * test.proplane.local), carries a full listingSubmission (v:1), and has at least one
  * application (manager_application_records) and one lease
  * (portal_lease_pipeline_records) in its pipeline — no orphaned properties.
  * Superseded rows from older seeds (seedwf_ / mgr- prefixes, ANY status) owned
@@ -42,24 +42,24 @@ const testRunId = process.argv[2]?.trim() || `seed-${Date.now()}`;
 
 // `?.trim() ||` (never `??`): CI injects a missing secret as an empty string,
 // which must fall back to the same defaults tests/fixtures/index.ts resolves.
-const adminEmail = (process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.axis.local").toLowerCase();
+const adminEmail = (process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.proplane.local").toLowerCase();
 const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || "TestAdmin123!";
-const managerEmail = (process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.axis.local").toLowerCase();
+const managerEmail = (process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.proplane.local").toLowerCase();
 const managerPassword = process.env.E2E_MANAGER_PASSWORD?.trim() || "TestManager123!";
-const residentEmail = (process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.axis.local").toLowerCase();
+const residentEmail = (process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.proplane.local").toLowerCase();
 const residentPassword = process.env.E2E_RESIDENT_PASSWORD?.trim() || "TestResident123!";
 // Must match E2E_RESIDENT_AXIS_ID in tests/fixtures/index.ts. The application
 // record id IS the resident's axis id (see normalizeApplicationAxisId), and the
 // resident's `profiles.manager_id` stores the same axis id — that is where the
 // app reads it (resident-portal-access.ts, resident-profile-panel.tsx).
 const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID?.trim() || "AXIS-TESTRSID";
-const vendorEmail = (process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.axis.local").toLowerCase();
+const vendorEmail = (process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.proplane.local").toLowerCase();
 const vendorPassword = process.env.E2E_VENDOR_PASSWORD?.trim() || "TestVendor123!";
 // All-portals sandbox account for manual testing: one login that can open every
 // portal (admin + manager + resident + vendor) via the sign-in role picker.
 // Matches CANONICAL_DEMO_ADMIN_EMAIL / CANONICAL_DEMO_GUIDED_EMAIL in
 // src/lib/demo/demo-canonical-accounts.ts.
-const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL?.trim() || "testeverything@test.axis.local").toLowerCase();
+const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL?.trim() || "testeverything@test.proplane.local").toLowerCase();
 const everythingPassword = process.env.E2E_EVERYTHING_PASSWORD?.trim() || "TestEverything123!";
 const EVERYTHING_NAME = "Test Everything";
 // Keep in sync with src/lib/demo/demo-canonical-accounts.ts (plain-node script
@@ -228,7 +228,7 @@ try {
   await ensureManagerStripeCustomer(stripe, supabase, { email: managerEmail, userId: managerUserId });
 
   // ── Second test manager (public browse catalog) ────────────────────────────
-  const manager2Email = (process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.axis.local").toLowerCase();
+  const manager2Email = (process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.proplane.local").toLowerCase();
   const manager2Password = process.env.E2E_MANAGER2_PASSWORD?.trim() || "TestManager123!";
   const existingManager2User = managerList?.users?.find((u) => u.email?.toLowerCase() === manager2Email);
   let manager2Id = "MGR-TESTE2E2";
@@ -428,7 +428,7 @@ try {
   // ══════════════════════════════════════════════════════════════════════════
   // Coherent browse catalog on manager2@: every home shown by the public
   // browse/apply flow is fully listed and has applications + leases.
-  // manager@test.axis.local carries the /demo idle portfolio only (see above).
+  // manager@test.proplane.local carries the /demo idle portfolio only (see above).
   // ══════════════════════════════════════════════════════════════════════════
 
   // ── Catalog properties (all Seattle — a supported lease jurisdiction) ─────
@@ -987,7 +987,7 @@ try {
       ...p,
       index: i,
       name: `${p.first} ${p.last}`,
-      email: `${p.first}.${p.last}.${suffix}@test.axis.local`.toLowerCase(),
+      email: `${p.first}.${p.last}.${suffix}@test.proplane.local`.toLowerCase(),
       prop,
       room: roomDef,
       rent: roomDef.rent,
@@ -1319,7 +1319,7 @@ try {
 
   // Canonical auth inboxes must never be auto-provisioned as residents — a stray
   // application row keyed by a manager business id (e.g. PROPLANE-…) can list
-  // manager@test.axis.local as resident_email and would otherwise reset the E2E
+  // manager@test.proplane.local as resident_email and would otherwise reset the E2E
   // manager password to AUTO_RESIDENT_PASSWORD during repair.
   const canonicalAuthEmails = new Set([
     adminEmail,

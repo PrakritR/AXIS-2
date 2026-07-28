@@ -34,7 +34,7 @@ export function buildApplicationRecordRow(managerId: string, testRunId: string) 
       id: `test-app-${testRunId}`,
       status: "submitted",
       applicantName: "Test Applicant",
-      email: `applicant-${testRunId}@test.axis.local`,
+      email: `applicant-${testRunId}@test.proplane.local`,
     },
   };
 }

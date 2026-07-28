@@ -143,7 +143,7 @@ test.describe('"Get started" while signed in', () => {
   test("signed-in manager can create a SECOND account with a different email", async ({ page }) => {
     await signIn(page, E2E_ACCOUNTS.manager.email, E2E_ACCOUNTS.manager.password);
 
-    const newEmail = `get-started-e2e-${Date.now()}@test.axis.local`;
+    const newEmail = `get-started-e2e-${Date.now()}@test.proplane.local`;
     await page.goto("/auth/create-account?mode=create&role=manager");
     await expect(
       page.getByText(new RegExp(`signed in as\\s*${E2E_ACCOUNTS.manager.email}`, "i")),

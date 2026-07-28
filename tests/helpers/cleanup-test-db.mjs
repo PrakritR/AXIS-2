@@ -59,11 +59,11 @@ try {
     }
   }
 
-  // Remove test auth users (resident@test.axis.local pattern or testRunId in email)
+  // Remove test auth users (resident@test.proplane.local pattern or testRunId in email)
   try {
     const { data: users } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     const testUsers = (users?.users ?? []).filter(
-      (u) => u.email?.includes("@test.axis.local") || u.email?.includes(testRunId),
+      (u) => u.email?.includes("@test.proplane.local") || u.email?.includes(testRunId),
     );
     for (const u of testUsers) {
       await supabase.auth.admin.deleteUser(u.id);

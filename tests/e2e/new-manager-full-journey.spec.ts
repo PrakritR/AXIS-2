@@ -49,7 +49,7 @@ test.describe("New manager — full journey from scratch", () => {
     await mockStripeAllRoutes(page);
 
     const stamp = Date.now();
-    const email = `fresh-manager-${stamp}@test.axis.local`;
+    const email = `fresh-manager-${stamp}@test.proplane.local`;
     const password = "FreshManager123!";
     const fullName = "Fresh Journey Manager";
     const phone = "2065550199";

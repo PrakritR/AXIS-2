@@ -7,7 +7,7 @@
  *
  * Usage (dev/test project):
  *   ALLOW_DEV_WIPE=1 node --env-file=.env.test scripts/wipe-dev-supabase.mjs
- *   ALLOW_DEV_WIPE=1 SEED_MANAGER_EMAIL=manager@test.axis.local node --env-file=.env.test scripts/wipe-dev-supabase.mjs
+ *   ALLOW_DEV_WIPE=1 SEED_MANAGER_EMAIL=manager@test.proplane.local node --env-file=.env.test scripts/wipe-dev-supabase.mjs
  *
  * Usage (dedicated demo project):
  *   ALLOW_DEV_WIPE=1 DEMO_SUPABASE_PROJECT_REF=<demo project ref> \
@@ -36,7 +36,7 @@ const serviceKey = useDemoProject
   : process.env.SUPABASE_SERVICE_ROLE_KEY;
 const targetEmail = (
   process.env.SEED_MANAGER_EMAIL ||
-  (useDemoProject ? PROD_DEMO_MANAGER_EMAIL : "manager@test.axis.local")
+  (useDemoProject ? PROD_DEMO_MANAGER_EMAIL : "manager@test.proplane.local")
 ).trim().toLowerCase();
 
 if (process.env.ALLOW_DEV_WIPE?.trim() !== "1") {

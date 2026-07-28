@@ -22,25 +22,25 @@ import path from "node:path";
  *     E2E manager, whose `listingSubmission` has `applicationFee: ""` and
  *     `allowMultiplePropertyApplications: true` (an entire-home listing, so no ranked
  *     room choice is asked);
- *   - two resident auth users + profiles: `group.organizer.e2e@test.axis.local` and
- *     `roommate.e2e@test.axis.local`.
+ *   - two resident auth users + profiles: `group.organizer.e2e@test.proplane.local` and
+ *     `roommate.e2e@test.proplane.local`.
  * Override any of these with the GROUP_E2E_* env vars below.
  */
 
 const PROPERTY_ID = process.env.GROUP_E2E_PROPERTY_ID ?? "mgr-test-willow-group";
 const ORGANIZER = {
-  email: process.env.GROUP_E2E_ORGANIZER_EMAIL ?? "group.organizer.e2e@test.axis.local",
+  email: process.env.GROUP_E2E_ORGANIZER_EMAIL ?? "group.organizer.e2e@test.proplane.local",
   password: process.env.GROUP_E2E_ORGANIZER_PASSWORD ?? "TestOrganizer123!",
   name: "Priya Raman",
 };
 const JOINER = {
-  email: process.env.GROUP_E2E_JOINER_EMAIL ?? "roommate.e2e@test.axis.local",
+  email: process.env.GROUP_E2E_JOINER_EMAIL ?? "roommate.e2e@test.proplane.local",
   password: process.env.GROUP_E2E_JOINER_PASSWORD ?? "TestRoommate123!",
   name: "Jordan Reyes",
 };
-const GUEST = { email: "sam.ortiz.group.e2e@test.axis.local", password: "", name: "Sam Ortiz" };
+const GUEST = { email: "sam.ortiz.group.e2e@test.proplane.local", password: "", name: "Sam Ortiz" };
 const MANAGER = {
-  email: process.env.E2E_MANAGER_EMAIL ?? "manager@test.axis.local",
+  email: process.env.E2E_MANAGER_EMAIL ?? "manager@test.proplane.local",
   password: process.env.E2E_MANAGER_PASSWORD ?? "TestManager123!",
 };
 

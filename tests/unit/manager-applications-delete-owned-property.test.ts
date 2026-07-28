@@ -154,12 +154,12 @@ function incompleteDraft(): StoredRecord {
 }
 
 function signInAs(userId: string) {
-  getUser.mockResolvedValue({ data: { user: { id: userId, email: "caller@test.axis.local", user_metadata: {} } }, error: null });
+  getUser.mockResolvedValue({ data: { user: { id: userId, email: "caller@test.proplane.local", user_metadata: {} } }, error: null });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  PROFILE = { role: "manager", email: "caller@test.axis.local" };
+  PROFILE = { role: "manager", email: "caller@test.proplane.local" };
   PROPERTIES = [{ id: OWNED_PROPERTY, manager_user_id: OWNER }];
   APP_ROWS = [incompleteDraft()];
   DELETED_IDS = [];

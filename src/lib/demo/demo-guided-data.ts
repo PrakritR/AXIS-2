@@ -9,7 +9,7 @@
  *
  * Two ways real data gets in — neither of them a static fixture:
  * - **Mirror.** `demo-portal-mirror.server.ts` overlays the canonical
- *   `@test.axis.local` accounts' real portal rows when they have any
+ *   `@test.proplane.local` accounts' real portal rows when they have any
  *   (`/api/demo/portal-snapshot`). That is where an accurate demo portfolio
  *   belongs — curate it by signing in as those accounts. Currently switched off
  *   at `DEMO_PORTAL_MIRROR_ENABLED` (`demo-mirror-flag.ts`).

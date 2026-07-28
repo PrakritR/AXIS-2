@@ -3,12 +3,12 @@
  * production→demo read mirror. These emails are sandbox-only
  * (`isPortalSandboxEmail`) and never trigger real outbound mail.
  */
-export const CANONICAL_DEMO_MANAGER_EMAIL = "manager@test.axis.local";
-export const CANONICAL_DEMO_RESIDENT_EMAIL = "resident@test.axis.local";
-export const CANONICAL_DEMO_VENDOR_EMAIL = "vendor@test.axis.local";
+export const CANONICAL_DEMO_MANAGER_EMAIL = "manager@test.proplane.local";
+export const CANONICAL_DEMO_RESIDENT_EMAIL = "resident@test.proplane.local";
+export const CANONICAL_DEMO_VENDOR_EMAIL = "vendor@test.proplane.local";
 
 /** Admin-only sandbox account — no portfolio data seeded or mirrored in idle mode. */
-export const CANONICAL_DEMO_ADMIN_EMAIL = "testeverything@test.axis.local";
+export const CANONICAL_DEMO_ADMIN_EMAIL = "testeverything@test.proplane.local";
 
 /** Guided tour autoplay mirrors this account's real portal data (blank when it has none). */
 export const CANONICAL_DEMO_GUIDED_EMAIL = CANONICAL_DEMO_ADMIN_EMAIL;

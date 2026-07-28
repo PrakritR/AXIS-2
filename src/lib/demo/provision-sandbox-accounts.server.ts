@@ -35,7 +35,7 @@ import { seedCanonicalDemoPortfolio } from "@/lib/demo/canonical-demo-portfolio-
  * tests/helpers/seed-test-db.mjs (the test-DB seed also prunes non-canonical
  * accounts; this route never deletes anything).
  *
- * The admin@test.axis.local account is deliberately NOT provisioned here — an
+ * The admin@test.proplane.local account is deliberately NOT provisioned here — an
  * admin-role account with a well-known password must never be auto-created in
  * production.
  */

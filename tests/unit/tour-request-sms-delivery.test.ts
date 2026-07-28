@@ -23,7 +23,7 @@ function makeDb() {
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
           maybeSingle: vi.fn(async () => ({
-            data: { id: "admin-1", email: "admin@test.axis.local", full_name: "admin" },
+            data: { id: "admin-1", email: "admin@test.proplane.local", full_name: "admin" },
           })),
         })),
       })),
@@ -51,8 +51,8 @@ describe("notifyManagerTourRequest SMS leg", () => {
 
   it("texts every recipient with a forward-enabled phone on file", async () => {
     recipients.push(
-      { userId: "admin-1", email: "admin@test.axis.local", fullName: "admin", phone: "+15103098345" },
-      { userId: "co-1", email: "co@test.axis.local", fullName: null, phone: "+12065551234" },
+      { userId: "admin-1", email: "admin@test.proplane.local", fullName: "admin", phone: "+15103098345" },
+      { userId: "co-1", email: "co@test.proplane.local", fullName: null, phone: "+12065551234" },
     );
 
     const res = await notifyManagerTourRequest(makeDb(), req, inquiry);
@@ -70,8 +70,8 @@ describe("notifyManagerTourRequest SMS leg", () => {
 
   it("skips recipients without a phone (none on file or sms_forward_inbound opt-out)", async () => {
     recipients.push(
-      { userId: "admin-1", email: "admin@test.axis.local", fullName: "admin", phone: "+15103098345" },
-      { userId: "co-optout", email: "optout@test.axis.local", fullName: null, phone: null },
+      { userId: "admin-1", email: "admin@test.proplane.local", fullName: "admin", phone: "+15103098345" },
+      { userId: "co-optout", email: "optout@test.proplane.local", fullName: null, phone: null },
     );
 
     const res = await notifyManagerTourRequest(makeDb(), req, inquiry);
@@ -81,7 +81,7 @@ describe("notifyManagerTourRequest SMS leg", () => {
   });
 
   it("still succeeds when no recipient has a phone (email-only path unchanged)", async () => {
-    recipients.push({ userId: "admin-1", email: "admin@test.axis.local", fullName: "admin", phone: null });
+    recipients.push({ userId: "admin-1", email: "admin@test.proplane.local", fullName: "admin", phone: null });
 
     const res = await notifyManagerTourRequest(makeDb(), req, inquiry);
     expect(res.ok).toBe(true);

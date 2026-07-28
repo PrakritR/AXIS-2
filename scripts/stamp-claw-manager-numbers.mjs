@@ -6,7 +6,7 @@
  *   node --env-file=.env.local scripts/stamp-claw-manager-numbers.mjs
  *
  * Emails come from CLAW_MESSENGER_MANAGER_EMAILS (comma-separated), defaulting
- * to testeverything@test.axis.local + ogambik2@gmail.com + manager@test.axis.local.
+ * to testeverything@test.proplane.local + ogambik2@gmail.com + manager@test.proplane.local.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -30,8 +30,8 @@ async function main() {
     .filter(Boolean);
   const emails = [
     ...fromEnv,
-    "testeverything@test.axis.local",
-    "manager@test.axis.local",
+    "testeverything@test.proplane.local",
+    "manager@test.proplane.local",
     "ogambik2@gmail.com",
   ];
   const uniqueEmails = [...new Set(emails)];

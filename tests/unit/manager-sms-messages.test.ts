@@ -29,7 +29,7 @@ describe("manager-sms-messages types", () => {
     };
     const resident: ManagerSmsResidentConversation = {
       residentUserId: "user-1",
-      residentEmail: "resident@test.axis.local",
+      residentEmail: "resident@test.proplane.local",
       name: "Test Resident",
       phone: "+12065550100",
       propertyLabel: "Unit A",
@@ -54,7 +54,7 @@ describe("manager-sms-messages types", () => {
       residents: [
         {
           residentUserId: null,
-          residentEmail: "resident@test.axis.local",
+          residentEmail: "resident@test.proplane.local",
           name: "",
           phone: null,
           propertyLabel: null,
@@ -63,7 +63,7 @@ describe("manager-sms-messages types", () => {
       ],
     });
     expect(payload.residents).toHaveLength(1);
-    expect(payload.residents[0]?.name).toBe("resident@test.axis.local");
+    expect(payload.residents[0]?.name).toBe("resident@test.proplane.local");
     expect(payload.residents[0]?.messages).toEqual([]);
   });
 

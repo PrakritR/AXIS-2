@@ -77,8 +77,8 @@ describe("resolveRegisteredClawManagers (DB-driven shared-line registration)", (
   it("excludes sandbox/demo accounts even when stamped with the shared line", async () => {
     queryQueue.push({
       data: [
-        profileRow({ id: "mgr-test", email: "testeverything@test.axis.local" }),
-        profileRow({ id: "mgr-demo", email: "manager@test.axis.local" }),
+        profileRow({ id: "mgr-test", email: "testeverything@test.proplane.local" }),
+        profileRow({ id: "mgr-demo", email: "manager@test.proplane.local" }),
         profileRow(),
       ],
     });
@@ -128,7 +128,7 @@ describe("resolveMappedManagerContacts", () => {
   });
 
   it("never re-admits a sandbox email via the explicit env override", async () => {
-    process.env.CLAW_MESSENGER_MANAGER_EMAILS = "testeverything@test.axis.local";
+    process.env.CLAW_MESSENGER_MANAGER_EMAILS = "testeverything@test.proplane.local";
     queryQueue.push({ data: [profileRow()] });
     const contacts = await resolveMappedManagerContacts();
     expect(contacts.map((c) => c.email)).toEqual(["real@landlord.com"]);

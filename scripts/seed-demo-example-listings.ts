@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Seed THREE example listings into the canonical demo manager (`manager@test.axis.local`)
+ * Seed THREE example listings into the canonical demo manager (`manager@test.proplane.local`)
  * so the demo portfolio exercises every rental model the Pricing step supports:
  *
  *   1. rent-by-bedroom (shared home) — each room has its OWN rent / deposit / utilities
