@@ -11,6 +11,7 @@ import {
 } from "@/lib/lead-invite.server";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
+import { leaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import { copyListingMediaBetweenSubmissions } from "@/lib/listing-media-copy";
 import {
   normalizeManagerListingSubmissionV1,
@@ -774,9 +775,18 @@ function validateLeaseConfigInput(input: {
       : "customLeaseTerms is required when leaseSource is custom_comments.";
   }
   if (input.leaseSource === "custom_format") {
-    return input.leaseTemplateDocUrl?.trim()
+    const url = input.leaseTemplateDocUrl?.trim();
+    if (!url) {
+      return "leaseTemplateDocUrl is required when leaseSource is custom_format (upload a PDF in chat or use the modal).";
+    }
+    // Only a template already stored in the private bucket is accepted. The
+    // model can otherwise be steered by prompt-injected applicant text into
+    // proposing a third-party URL or a base64 `data:` PDF behind a benign
+    // label, substituting the document residents sign — and the preview shows
+    // the file NAME, so the human at the confirm gate would not see it.
+    return leaseTemplateObjectPath(url)
       ? null
-      : "leaseTemplateDocUrl is required when leaseSource is custom_format (upload a PDF in chat or use the modal).";
+      : "leaseTemplateDocUrl must be a lease template uploaded through the Lease modal.";
   }
   return null;
 }
@@ -855,6 +865,10 @@ export const updatePropertyLeaseConfigTool = defineWriteTool({
     }
     if (input.leaseSource === "custom_format") {
       lines.push({ label: "PDF template", value: input.leaseTemplateDocName?.trim() || "Uploaded template" });
+      // The document itself, not just its label — a name is manager-supplied
+      // text and cannot tell the approver which file they are about to attach.
+      const path = leaseTemplateObjectPath(input.leaseTemplateDocUrl);
+      if (path) lines.push({ label: "Stored file", value: path });
     }
     return {
       kind: "update_property_lease_config",

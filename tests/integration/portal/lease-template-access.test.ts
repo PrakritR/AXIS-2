@@ -7,12 +7,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createSupabaseServiceRoleClient: vi.fn() }));
 vi.mock("@/lib/auth/co-manager-module-scope", () => ({ linkedPropertyIdsForModule: vi.fn() }));
-vi.mock("@/lib/resident-manager-scope", () => ({ resolveResidentFilingScope: vi.fn() }));
+vi.mock("@/lib/resident-manager-scope", () => ({
+  resolveResidentFilingScope: vi.fn(),
+  residentHasApprovedResidency: vi.fn(),
+}));
 vi.mock("@/lib/reports/auth", () => ({ getReportsAuthContext: vi.fn() }));
 
 import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { leaseTemplateUrlForPath } from "@/lib/lease-template-storage";
-import { resolveResidentFilingScope } from "@/lib/resident-manager-scope";
+import { residentHasApprovedResidency, resolveResidentFilingScope } from "@/lib/resident-manager-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { GET, DELETE } from "@/app/api/portal/lease-template/route";
@@ -27,20 +30,40 @@ const PROPERTY_ROW = {
   property_data: { listingSubmission: { leaseTemplateDocUrl: leaseTemplateUrlForPath(PATH) } },
 };
 
-function mockDb(propertyRows: unknown[] = [PROPERTY_ROW]) {
+/**
+ * Supabase-shaped mock. The route asks three distinct questions, so the mock
+ * answers them separately: properties the caller OWNS (`eq manager_user_id`),
+ * properties fetched by id (co-manager links and the resident's own), and lease
+ * pipeline rows. A `.eq()` / `.in()` result is both awaitable and chainable, the
+ * way the real builder is.
+ */
+function mockDb({
+  owned = [] as unknown[],
+  byId = [PROPERTY_ROW] as unknown[],
+  leases = [] as unknown[],
+} = {}) {
   const removed: string[][] = [];
   const downloaded: string[] = [];
+  const result = (data: unknown[]) => {
+    const value = { data, error: null };
+    return {
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve(value).then(resolve),
+      maybeSingle: async () => ({ data: data[0] ?? null, error: null }),
+    };
+  };
   return {
     removed,
     downloaded,
     client: {
       from: (table: string) => {
-        if (table === "profiles") {
-          return {
-            select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { email: "r@example.com" } }) }) }),
-          };
-        }
-        return { select: () => ({ in: async () => ({ data: propertyRows }) }) };
+        if (table === "profiles") return { select: () => ({ eq: () => result([{ email: "r@example.com" }]) }) };
+        if (table === "portal_lease_pipeline_records") return { select: () => ({ eq: () => result(leases) }) };
+        return {
+          select: () => ({
+            eq: () => result(owned),
+            in: () => result(byId),
+          }),
+        };
       },
       storage: {
         from: () => ({
@@ -73,6 +96,7 @@ describe("GET /api/portal/lease-template", () => {
     vi.clearAllMocks();
     vi.mocked(linkedPropertyIdsForModule).mockResolvedValue(new Set());
     vi.mocked(resolveResidentFilingScope).mockResolvedValue(null);
+    vi.mocked(residentHasApprovedResidency).mockResolvedValue(true);
   });
 
   it("denies an anonymous caller", async () => {
@@ -106,16 +130,31 @@ describe("GET /api/portal/lease-template", () => {
     vi.mocked(resolveResidentFilingScope).mockResolvedValue({ managerUserId: OWNER, propertyId: "mgr-2" });
     // Their property points at a different object.
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
-      mockDb([{ property_data: { listingSubmission: { leaseTemplateDocUrl: leaseTemplateUrlForPath(`${OWNER}/other.pdf`) } } }])
-        .client as never,
+      mockDb({
+        byId: [
+          { property_data: { listingSubmission: { leaseTemplateDocUrl: leaseTemplateUrlForPath(`${OWNER}/other.pdf`) } } },
+        ],
+      }).client as never,
     );
+
+    expect((await get(PATH)).status).toBe(404);
+  });
+
+  it("denies a PENDING applicant, who is not yet a resident", async () => {
+    // resolveResidentFilingScope falls back to unapproved rows when a person has
+    // no approved residency, so anyone who applied to a live listing would
+    // otherwise inherit the resident grant.
+    signedInAs(OTHER);
+    vi.mocked(resolveResidentFilingScope).mockResolvedValue({ managerUserId: OWNER, propertyId: "mgr-1" });
+    vi.mocked(residentHasApprovedResidency).mockResolvedValue(false);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(mockDb().client as never);
 
     expect((await get(PATH)).status).toBe(404);
   });
 
   it("denies a different manager with no relationship to the property", async () => {
     signedInAs(OTHER);
-    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(mockDb([]).client as never);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(mockDb({ byId: [] }).client as never);
     expect((await get(PATH)).status).toBe(404);
   });
 
@@ -124,6 +163,41 @@ describe("GET /api/portal/lease-template", () => {
     vi.mocked(linkedPropertyIdsForModule).mockResolvedValue(new Set(["mgr-1"]));
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(mockDb().client as never);
     expect((await get(PATH)).status).toBe(200);
+  });
+
+  it("serves the property's OWNER even when a co-manager uploaded it", async () => {
+    // POST always writes into the uploader's folder, so a co-manager's upload
+    // lands outside the owner's folder while the URL is stored on the owner's
+    // listing. Ownership is re-derived from manager_user_id, not the folder.
+    signedInAs(OTHER);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      mockDb({ owned: [PROPERTY_ROW], byId: [] }).client as never,
+    );
+    expect((await get(PATH)).status).toBe(200);
+  });
+
+  it("still serves a resident whose signed lease embeds a template the listing no longer references", async () => {
+    // Replacing a property's template leaves every already-generated lease
+    // pointing at the old object; the resident who signed it must not 404.
+    signedInAs(OTHER);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      mockDb({
+        byId: [],
+        leases: [{ row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(PATH)}">` } }],
+      }).client as never,
+    );
+    expect((await get(PATH)).status).toBe(200);
+  });
+
+  it("denies when an unrelated lease row exists but embeds a different template", async () => {
+    signedInAs(OTHER);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      mockDb({
+        byId: [],
+        leases: [{ row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(`${OWNER}/other.pdf`)}">` } }],
+      }).client as never,
+    );
+    expect((await get(PATH)).status).toBe(404);
   });
 
   it("rejects a traversal path before touching storage", async () => {

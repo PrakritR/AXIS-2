@@ -106,23 +106,39 @@ stored value resolves on localhost, previews, production, and inside the
 Capacitor WebView, including from the `srcDoc` iframes that render leases.
 
 **`GET /api/portal/lease-template?path=…`** streams the bytes (service-role
-`download()`, `Cache-Control: private, no-store`), the same shape as
-`/api/portal/application-photos` — not a 302, which the documents module already
-learned opens a new tab in the Capacitor WebView instead of rendering.
-Authorization is by RELATIONSHIP, not portal role, so a multi-role account is
-judged on each relationship it actually holds:
+`download()`, `Cache-Control: private, no-store`, `X-Content-Type-Options:
+nosniff`), the same shape as `/api/portal/application-photos` — not a 302, which
+the documents module already learned opens a new tab in the Capacitor WebView
+instead of rendering. Authorization is by RELATIONSHIP, not portal role, so a
+multi-role account is judged on each relationship it actually holds:
 
 1. the manager who uploaded it, by the object's own folder;
-2. a co-manager with the `properties` module on a property whose submission
-   references that exact path;
-3. the resident whose `resolveResidentFilingScope` property references that
-   exact path.
+2. the OWNING manager of a property whose submission references that exact path,
+   re-derived from `manager_user_id` and deliberately NOT from the folder — the
+   two genuinely differ, because a co-manager's upload lands in the co-manager's
+   folder while the URL is stored on the owner's listing, and a transferred
+   property changes hands without moving any object;
+3. a co-manager with the `properties` module on such a property;
+4. the APPROVED resident of such a property. Approval is checked explicitly
+   (`residentHasApprovedResidency`) because `resolveResidentFilingScope` falls
+   back to unapproved rows, which would hand the grant to anyone who merely
+   applied to a live listing. `/api/portal/resident-property` draws the same
+   line — it strips `listingSubmission` for an unapproved applicant — and the
+   two routes must not disagree about one trust boundary;
+5. either party to a lease document that already embeds the path. Required
+   because the generated lease HTML bakes the URL in permanently and is never
+   rewritten: when a manager REPLACES a property's template the listing stops
+   referencing the old object, and without this branch every resident who
+   already signed against it would 404 on their own lease — something the old
+   public URL never did.
 
 Membership is the control: an unreferenced path is never served, so the random
 filename is a second layer and not the gate. Every denial is a 404, never a 403,
 so the route never confirms a path exists. `POST` (multipart) uploads into the
-caller's own folder after a manager/admin role check; `DELETE` removes only
-paths whose folder is the caller's id.
+caller's own folder after a manager/admin role check and a per-user
+`rateLimit` — an uploaded object carries no property association, so nothing
+else bounds how many a manager can push into a free-plan storage budget.
+`DELETE` removes only paths whose folder is the caller's id.
 
 **Writes funnel through one function.** `readLeaseTemplateFile`
 (`lease-config-form.tsx`) is the single picker all three lease modals use; it now
@@ -177,16 +193,26 @@ rewrite the submission URL, rewrite every `generatedHtml` containing the old
 URL, then remove the public object — in that order, so a failure never strands a
 lease pointing at nothing.
 
-## Known gap, deliberately not closed here
+## The agent tool could re-open the hole one property at a time
 
-`update_property_lease_config` (`src/lib/tools/domains/properties.ts`) still
-accepts a model-supplied `leaseTemplateDocUrl` string and writes it to
-`manager_property_records` verbatim, with no scheme or host validation. It is
-behind the write-tool confirm gate, so a manager approves it, but it can still
-store a public or third-party URL and re-open this hole one property at a time.
-Closing it means validating the input against `isLeaseTemplatePath` /
-`leaseTemplateObjectPath` in that tool. Left out of this change to keep the agent
-registry, which other lanes are editing, out of the diff.
+`update_property_lease_config` (`src/lib/tools/domains/properties.ts`) accepted
+a model-supplied `leaseTemplateDocUrl` and wrote it to `manager_property_records`
+verbatim, with no scheme or host validation. It is behind the write-tool confirm
+gate, but the preview rendered only the file NAME — so the human approving it
+could not see what they were attaching. Applicant-submitted text is untrusted
+(AGENTS.md), so a prompt injection could steer the model into proposing a
+third-party URL or a base64 `data:` PDF behind a benign label and substitute the
+document residents sign.
+
+`validateLeaseConfigInput` now accepts only a value `leaseTemplateObjectPath()`
+parses — a template already in the private bucket — and the preview carries the
+resolved object path as a "Stored file" field. A legacy public URL is therefore
+no longer re-appliable through the agent; the Lease modal still handles it.
+Switching a property to `axis_default` / `custom_comments` is untouched.
+
+Two mitigations that already held, so this was never XSS: `escapeHtml`
+attribute-escapes the URL in `generated-lease.ts`, and every lease iframe is
+sandboxed without `allow-scripts`.
 
 ## Coverage
 
@@ -196,6 +222,9 @@ registry, which other lanes are editing, out of the diff.
   rejection, nested `propertyLeaseTemplates[]` collection, deletion skips a path
   a survivor references.
 - `tests/integration/portal/lease-template-access.test.ts` — anonymous denied,
-  owning manager served, co-manager served, resident served only when their
-  property references the path, a different manager denied, traversal rejected
-  before storage is touched, `DELETE` scoped to the caller's own folder.
+  folder owner served, property owner served when a co-manager uploaded it,
+  co-manager served, approved resident served only when their property
+  references the path, PENDING applicant denied, a resident whose signed lease
+  embeds a no-longer-referenced template still served, a different manager
+  denied, traversal rejected before storage is touched, `DELETE` scoped to the
+  caller's own folder.

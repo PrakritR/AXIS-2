@@ -5,10 +5,12 @@ import {
   isLeaseTemplatePath,
   LEASE_TEMPLATE_BUCKET,
   LEASE_TEMPLATE_MAX_BYTES,
+  leaseTemplateUrlForPath,
 } from "@/lib/lease-template-storage";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { rateLimit } from "@/lib/rate-limit";
 import { getReportsAuthContext } from "@/lib/reports/auth";
-import { resolveResidentFilingScope } from "@/lib/resident-manager-scope";
+import { residentHasApprovedResidency, resolveResidentFilingScope } from "@/lib/resident-manager-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -28,21 +30,94 @@ function submissionOf(propertyData: unknown): ManagerListingSubmissionV1 | null 
   return sub as ManagerListingSubmissionV1;
 }
 
+type PropertyRow = { property_data?: unknown };
+
+function rowsReferenceTemplate(rows: PropertyRow[] | null | undefined, path: string): boolean {
+  return (rows ?? []).some((row) => collectSubmissionLeaseTemplatePaths(submissionOf(row.property_data)).has(path));
+}
+
 /**
- * Does any of these property records reference this exact object path? Membership
- * is the authorization: a caller who may see the property may see the template
- * that property's own submission points at. An unreferenced path is never served,
- * so an unguessable filename is a second layer rather than the control itself.
+ * Does a property this caller may see still reference this exact object path?
+ * Membership is the authorization: a caller who may see the property may see the
+ * template that property's own submission points at. An unreferenced path is
+ * never served, so the unguessable filename is a second layer rather than the
+ * control itself.
+ *
+ * Ownership is re-derived from `manager_user_id` and NOT from the object's
+ * folder, because the two genuinely differ: a co-manager's upload lands in the
+ * co-manager's folder while the URL is stored on the owner's listing, and a
+ * transferred property changes hands without moving any object.
  */
-async function propertiesReferenceTemplate(
+async function accessiblePropertyReferencesTemplate(
   db: ServiceClient,
-  propertyIds: string[],
+  userId: string,
+  email: string,
   path: string,
 ): Promise<boolean> {
-  const ids = propertyIds.filter((id) => id.trim());
-  if (ids.length === 0) return false;
-  const { data } = await db.from("manager_property_records").select("property_data").in("id", ids);
-  return (data ?? []).some((row) => collectSubmissionLeaseTemplatePaths(submissionOf(row.property_data)).has(path));
+  const { data: owned } = await db
+    .from("manager_property_records")
+    .select("property_data")
+    .eq("manager_user_id", userId);
+  if (rowsReferenceTemplate(owned, path)) return true;
+
+  const linked = await linkedPropertyIdsForModule(db, userId, "properties");
+  if (linked.size > 0) {
+    const { data } = await db.from("manager_property_records").select("property_data").in("id", [...linked]);
+    if (rowsReferenceTemplate(data, path)) return true;
+  }
+
+  if (!email) return false;
+  const scope = await resolveResidentFilingScope(db, { residentEmail: email });
+  if (!scope?.propertyId) return false;
+  // A pending applicant is NOT a resident. `/api/portal/resident-property`
+  // draws the same line — it strips `listingSubmission` for an unapproved
+  // applicant so a prospect only ever sees what the public catalog shows — and
+  // the two routes must not disagree about the same trust boundary.
+  if (!(await residentHasApprovedResidency(db, { residentEmail: email, managerUserId: scope.managerUserId }))) {
+    return false;
+  }
+  const { data } = await db.from("manager_property_records").select("property_data").in("id", [scope.propertyId]);
+  return rowsReferenceTemplate(data, path);
+}
+
+/**
+ * Is this path embedded in a lease document the caller is a party to?
+ *
+ * Required because the generated lease HTML bakes the template URL in
+ * permanently (`generated-lease.ts`) and is never rewritten. When a manager
+ * replaces a property's template, the listing stops referencing the old object
+ * but every already-signed lease still points at it — without this branch the
+ * resident who signed that document would get a 404 on their own lease, which
+ * the public URL never did.
+ */
+async function leaseDocumentEmbedsTemplate(
+  db: ServiceClient,
+  userId: string,
+  email: string,
+  path: string,
+): Promise<boolean> {
+  const url = leaseTemplateUrlForPath(path);
+  const embedded = (rows: { row_data?: unknown }[] | null | undefined) =>
+    (rows ?? []).some((row) => {
+      const html = (row.row_data as { generatedHtml?: unknown } | null)?.generatedHtml;
+      return typeof html === "string" && html.includes(url);
+    });
+
+  const { data: asManager } = await db
+    .from("portal_lease_pipeline_records")
+    .select("row_data")
+    .eq("manager_user_id", userId);
+  if (embedded(asManager)) return true;
+
+  if (!email) return false;
+  // `.eq` on the already-lowercased email, never `.ilike` — an address may
+  // legally contain `_`, which ilike would treat as a wildcard and widen the
+  // match to other people's leases.
+  const { data: asResident } = await db
+    .from("portal_lease_pipeline_records")
+    .select("row_data")
+    .eq("resident_email", email);
+  return embedded(asResident);
 }
 
 /**
@@ -50,8 +125,9 @@ async function propertiesReferenceTemplate(
  * portal role, so a multi-role account (a manager who also rents somewhere) is
  * judged on each relationship it actually holds:
  *   - the manager who uploaded it, by the object's own folder
- *   - a co-manager assigned the property that references it
- *   - the resident whose linked property references it
+ *   - the owning manager or an assigned co-manager of a property referencing it
+ *   - the approved resident of such a property
+ *   - either party to a lease document that already embeds it
  */
 async function canReadLeaseTemplate(
   db: ServiceClient,
@@ -60,14 +136,8 @@ async function canReadLeaseTemplate(
   path: string,
 ): Promise<boolean> {
   if (path.split("/")[0] === userId) return true;
-
-  const linked = await linkedPropertyIdsForModule(db, userId, "properties");
-  if (linked.size > 0 && (await propertiesReferenceTemplate(db, [...linked], path))) return true;
-
-  if (!email) return false;
-  const scope = await resolveResidentFilingScope(db, { residentEmail: email });
-  if (!scope?.propertyId) return false;
-  return propertiesReferenceTemplate(db, [scope.propertyId], path);
+  if (await accessiblePropertyReferencesTemplate(db, userId, email, path)) return true;
+  return leaseDocumentEmbedsTemplate(db, userId, email, path);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +194,11 @@ export async function POST(req: Request) {
     if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     if (auth.role !== "manager" && auth.role !== "admin") {
       return NextResponse.json({ error: "Not allowed." }, { status: 403 });
+    }
+    // Uploaded objects carry no property association, so nothing else bounds how
+    // many a manager can push into a bucket on a free-plan storage budget.
+    if (!rateLimit(`lease-template-upload:${auth.userId}`, 20, 60_000).ok) {
+      return NextResponse.json({ error: "Too many uploads. Try again in a minute." }, { status: 429 });
     }
 
     const form = await req.formData();
