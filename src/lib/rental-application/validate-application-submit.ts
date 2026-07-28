@@ -30,6 +30,9 @@ function hasFilledWizardValue(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.trim().length > 0;
+  // Photo-attachment fields: an empty list / null slot is unfilled, so a
+  // disabled income-proof or ID-photo field with no upload is not flagged.
+  if (Array.isArray(value)) return value.length > 0;
   return true;
 }
 
@@ -74,6 +77,19 @@ export function sanitizeApplicationFormForListing(
       continue;
     }
     if (current === "yes" || current === "no") {
+      (next as Record<string, unknown>)[key] = null;
+      continue;
+    }
+    // Photo-attachment fields (idPhotoFront/idPhotoBack single, incomeProofPhotos
+    // list). Reset to their empty shape so a short-term submission never carries
+    // an ID photo (or income proof) that only the long-term form asked for. The
+    // bytes in storage are reclaimed by the applicant remove/retake path and the
+    // application delete cleanup — this strip is what keeps the SUBMISSION clean.
+    if (Array.isArray(current)) {
+      (next as Record<string, unknown>)[key] = [];
+      continue;
+    }
+    if (current !== null && typeof current === "object") {
       (next as Record<string, unknown>)[key] = null;
       continue;
     }

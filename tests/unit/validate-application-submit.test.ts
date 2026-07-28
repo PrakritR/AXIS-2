@@ -264,4 +264,59 @@ describe("validate-application-submit", () => {
     };
     expect(sanitizeApplicationFormForListing(longTerm, undefined)).toBe(longTerm);
   });
+
+  const sampleAttachment = {
+    storagePath: "application/PROPLANE-ABC123/idFront-1-uuid.jpg",
+    fileName: "front.jpg",
+    mimeType: "image/jpeg",
+    sizeBytes: 1234,
+    uploadedAt: "2026-07-27T00:00:00.000Z",
+  };
+
+  it("keeps ID + income photos on a long-term submission where those questions are enabled", () => {
+    const form = {
+      ...validSubmittedApplication(),
+      idPhotoFront: { ...sampleAttachment },
+      idPhotoBack: { ...sampleAttachment, storagePath: "application/PROPLANE-ABC123/idBack-1-uuid.jpg" },
+      incomeProofPhotos: [{ ...sampleAttachment, storagePath: "application/PROPLANE-ABC123/income-1-uuid.jpg" }],
+    };
+    const sanitized = sanitizeApplicationFormForListing(form, createDefaultListingSubmission());
+    expect(sanitized.idPhotoFront).not.toBeNull();
+    expect(sanitized.idPhotoBack).not.toBeNull();
+    expect(sanitized.incomeProofPhotos).toHaveLength(1);
+  });
+
+  it("strips ID + income photos from a SHORT-TERM submission (the other variant asked for them)", () => {
+    const form = {
+      ...validSubmittedApplication(),
+      rentalType: "short_term" as const,
+      idPhotoFront: { ...sampleAttachment },
+      idPhotoBack: { ...sampleAttachment, storagePath: "application/PROPLANE-ABC123/idBack-1-uuid.jpg" },
+      incomeProofPhotos: [{ ...sampleAttachment, storagePath: "application/PROPLANE-ABC123/income-1-uuid.jpg" }],
+    };
+    // Short-term default config disables the driver's-license and employment
+    // questions, which carry the photo wizard keys — so the photos strip too.
+    const sanitized = sanitizeApplicationFormForListing(form, createDefaultListingSubmission());
+    expect(sanitized.idPhotoFront).toBeNull();
+    expect(sanitized.idPhotoBack).toBeNull();
+    expect(sanitized.incomeProofPhotos).toEqual([]);
+  });
+
+  it("flags a short-term submission that still carries an ID photo, but not an empty income list", () => {
+    const sub = createDefaultListingSubmission();
+    // Start from a form already sanitized for short-term, so the ONLY disabled
+    // field left to (re)introduce is the photo — isolating the photo behavior
+    // from the many other fields short-term omits.
+    const cleanBase = sanitizeApplicationFormForListing(
+      { ...validSubmittedApplication(), rentalType: "short_term" as const },
+      sub,
+    );
+    expect(findDisabledApplicationFieldViolation(cleanBase, sub)).toBeNull();
+    // An empty income list stays unfilled (not a violation).
+    expect(findDisabledApplicationFieldViolation({ ...cleanBase, incomeProofPhotos: [] }, sub)).toBeNull();
+    // A populated ID photo on a short-term form IS a disallowed field.
+    expect(
+      findDisabledApplicationFieldViolation({ ...cleanBase, idPhotoFront: { ...sampleAttachment } }, sub),
+    ).not.toBeNull();
+  });
 });

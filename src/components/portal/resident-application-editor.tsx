@@ -318,6 +318,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
           setSsn={setSsn}
           goToStep={goToStep}
           editFromReview={editFromReview}
+          getApplicationId={() => row.id}
         />
       </div>
 

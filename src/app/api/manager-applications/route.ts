@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upsert";
+import { prepareGuestApplicationUpsert, resolveManagerUserIdForProperty } from "@/lib/auth/guest-application-upsert";
 import { buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
@@ -9,6 +9,7 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { reclaimApplicationPhotos } from "@/lib/rental-application/application-photos.server";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
@@ -442,7 +443,7 @@ async function assertCanDeleteApplicationRecords(
   return "Unauthorized.";
 }
 
-export async function GET() {
+export async function GET(req?: Request) {
   try {
     const user = await sessionUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -451,10 +452,23 @@ export async function GET() {
     const admin = await isAdminUser(user.id);
     const { role, email } = await resolvePortalRole(db, user);
 
+    // `?scope=self` returns ONLY the caller's own applicant rows (by their
+    // authenticated email), regardless of their primary role — a signed-in
+    // manager/vendor who applied somewhere as a guest resumes their own draft
+    // through this, since the manager read below is property-scoped and never
+    // includes their own applicant row.
+    let selfScope = false;
+    try {
+      selfScope = Boolean(req?.url) && new URL(req!.url).searchParams.get("scope") === "self";
+    } catch {
+      selfScope = false;
+    }
+    if (selfScope && !email) return NextResponse.json({ rows: [] });
+
     let data: { id: string; row_data: unknown }[] | null = null;
     let error: { message: string } | null = null;
 
-    if (!admin && role === "resident") {
+    if (selfScope || (!admin && role === "resident")) {
       const result = await db
         .from("manager_application_records")
         .select("id, row_data, updated_at")
@@ -616,6 +630,17 @@ export async function POST(req: Request) {
 
         const { error } = await db.from("manager_application_records").delete().in("id", [...idsToDelete]);
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+        // Reclaim the applicant's ID / income photos — a hard delete of the
+        // application takes its private uploads with it. Best-effort; never
+        // blocks the delete response.
+        const photoIds = new Set<string>();
+        for (const record of recordsToDelete ?? []) {
+          const row = record.row_data as Partial<DemoApplicantRow> | null;
+          const axisId = typeof row?.id === "string" ? row.id : record.id;
+          if (axisId) photoIds.add(axisId);
+        }
+        await Promise.allSettled([...photoIds].map((axisId) => reclaimApplicationPhotos(db, axisId)));
       }
       return NextResponse.json({ ok: true, deleted: idsToDelete.size });
     }
@@ -714,7 +739,28 @@ export async function POST(req: Request) {
       });
     }
     const { role, email } = await resolvePortalRole(db, user);
-    if (role === "resident") {
+    // SELF-APPLICATION by a signed-in NON-resident (a manager/owner/pro/vendor
+    // who continued as guest on the public apply page, or a multi-role login
+    // applying somewhere they do not manage): the write is the APPLICANT's own,
+    // keyed strictly on the authenticated email matching the row's email and the
+    // application still being pending — never on manager write access. The
+    // stored row (when one exists) must itself be pending AND carry the same
+    // email, so this path can never touch a DIFFERENT applicant's row or reopen
+    // a decided one; those still require manager edit access below.
+    let selfApplicationWrite = false;
+    if (role !== "resident") {
+      const rowEmail = (row.email ?? "").trim().toLowerCase();
+      if (Boolean(email) && rowEmail === email && row.bucket === "pending") {
+        const selfStored = await loadStoredApplicationRecord(db, row.id);
+        if (selfStored.error) {
+          return NextResponse.json({ error: "Could not load the existing application." }, { status: 500 });
+        }
+        const stored = (selfStored.record?.row_data ?? null) as DemoApplicantRow | null;
+        const storedEmail = (stored?.email ?? "").trim().toLowerCase();
+        selfApplicationWrite = !stored || (stored.bucket === "pending" && (!storedEmail || storedEmail === email));
+      }
+    }
+    if (role === "resident" || selfApplicationWrite) {
       const rowEmail = (row.email ?? "").trim().toLowerCase();
       if (!email || rowEmail !== email) {
         return NextResponse.json({ error: "You can only update your own application." }, { status: 403 });
@@ -758,16 +804,32 @@ export async function POST(req: Request) {
               }
             : row.application,
       };
-      const linked = await linkResidentOnApplicationSubmit(db, {
-        userId: user.id,
-        row,
-        isNewSubmit: !existing,
-        existingManagerUserId: existing?.managerUserId ?? null,
-      });
-      if (!linked.ok) {
-        return NextResponse.json({ error: linked.error }, { status: linked.status });
+      if (role === "resident") {
+        const linked = await linkResidentOnApplicationSubmit(db, {
+          userId: user.id,
+          row,
+          isNewSubmit: !existing,
+          existingManagerUserId: existing?.managerUserId ?? null,
+        });
+        if (!linked.ok) {
+          return NextResponse.json({ error: linked.error }, { status: linked.status });
+        }
+        row = linked.row;
+      } else {
+        // Self-application from a non-resident login: attribution comes from the
+        // LISTING (like the guest path) — never from the request body, and never
+        // from the caller's own manager identity.
+        const propertyId =
+          row.propertyId?.trim() || row.assignedPropertyId?.trim() || row.application?.propertyId?.trim() || "";
+        const managerUserId =
+          (propertyId ? await resolveManagerUserIdForProperty(db, propertyId) : null) ||
+          existing?.managerUserId?.trim() ||
+          null;
+        if (!managerUserId && !existing) {
+          return NextResponse.json({ error: "This listing cannot accept applications yet." }, { status: 400 });
+        }
+        row = { ...row, id: normalizeApplicationAxisId(row.id), managerUserId };
       }
-      row = linked.row;
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;

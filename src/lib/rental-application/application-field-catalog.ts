@@ -17,7 +17,10 @@ const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
   "personal:Full legal name": ["fullLegalName"],
   "personal:Date of birth": ["dateOfBirth"],
   "personal:Social Security number": ["ssn"],
-  "personal:Driver's license / ID": ["driversLicense"],
+  // The ID-photo attachments ride on the same question as the ID number: a
+  // listing that disables "Driver's license / ID" (and the short-term form,
+  // which disables it by default) hides AND strips the photos too.
+  "personal:Driver's license / ID": ["driversLicense", "idPhotoFront", "idPhotoBack"],
   "personal:Phone": ["phone"],
   "personal:Email": ["email"],
   "current_address:Street, city, state, ZIP": ["currentStreet", "currentCity", "currentState", "currentZip"],
@@ -31,7 +34,9 @@ const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
   "employment:Employer & employer address": ["employer", "employerAddress"],
   "employment:Supervisor name & phone": ["supervisorName", "supervisorPhone"],
   "employment:Job title & employment start": ["jobTitle", "employmentStart"],
-  "employment:Monthly / annual income": ["monthlyIncome", "annualIncome"],
+  // Proof-of-income attachments ride on the income question, so the short-term
+  // form (which omits the whole employment section) never shows or keeps them.
+  "employment:Monthly / annual income": ["monthlyIncome", "annualIncome", "incomeProofPhotos"],
   "employment:Other income": ["otherIncome"],
   "references:Reference 1 — name, relationship, phone": ["ref1Name", "ref1Relationship", "ref1Phone"],
   "references:Reference 2 — name, relationship, phone": ["ref2Name", "ref2Relationship", "ref2Phone"],

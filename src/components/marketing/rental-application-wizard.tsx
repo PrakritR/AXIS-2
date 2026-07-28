@@ -37,7 +37,16 @@ import {
   LISTING_ROOM_CHOICE_SEP,
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
-import { clearRentalWizardDraft, loadRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraft, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
+import {
+  clearRentalWizardDraft,
+  loadPublicApplyResumeAxisId,
+  loadRentalWizardDraft,
+  loadRentalWizardDraftAxisId,
+  rememberPublicApplyResumeAxisId,
+  saveRentalWizardDraft,
+  saveRentalWizardDraftAxisId,
+} from "@/lib/rental-application/drafts";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   applicationsForResidentEmail,
   residentApplicationFeeGate,
@@ -75,6 +84,7 @@ import {
 } from "@/lib/wizard-field-errors";
 import {
   APPLICATION_SAVE_STATUS_EVENT,
+  getApplicationSetupToken,
   replaceManagerApplicationRowInCache,
   syncManagerApplicationsFromServer,
   syncPublicApprovedApplicationsFromServer,
@@ -620,6 +630,10 @@ function RentalApplicationWizardInner({
     const pid = form.propertyId.trim();
     if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
     const axisId = ensureRentalWizardAxisId();
+    // The public flow's in-memory draft dies on a real reload — keep the axis id
+    // (only the id, no answers) in sessionStorage so the resume effect below can
+    // restore the saved application afterwards.
+    if (mode === "public" && !isDemoModeActive()) rememberPublicApplyResumeAxisId(axisId);
     // Persist the live step alongside the answers so a reload / return from an
     // external redirect resumes exactly here (the debounced, serialized upsert
     // in `scheduleApplicationRowUpsert` coalesces these writes).
@@ -743,6 +757,76 @@ function RentalApplicationWizardInner({
       cancelled = true;
     };
   }, [draftReady, form.email, mode, searchParams, sessionEmail]);
+
+  // PUBLIC apply: restore an in-progress application after a real page reload
+  // (or a return from an external redirect like Stripe checkout), which wipes
+  // the in-memory draft. Two reads, each scoped to the applicant's OWN
+  // application: a guest presents the axis id + freshest resident-setup token
+  // kept in sessionStorage (capability read — only the id and token ever touch
+  // disk, never answers/PII); a signed-in user of any role reads their own
+  // applicant rows by their authenticated email (`?scope=self`).
+  useEffect(() => {
+    if (!draftReady || mode !== "public" || isDemoModeActive()) return;
+    if (loadRentalWizardDraftAxisId()?.trim()) return; // live draft present — nothing was lost
+    const target = wizardTargetFromParam(searchParams);
+    let cancelled = false;
+    void (async () => {
+      let hit: DemoApplicantRow | null = null;
+      const resumeAxisId = loadPublicApplyResumeAxisId()?.trim();
+      const resumeToken = resumeAxisId ? getApplicationSetupToken(resumeAxisId) : null;
+      if (resumeAxisId && resumeToken) {
+        try {
+          const res = await fetch("/api/portal/application-resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: resumeAxisId, token: resumeToken }),
+          });
+          if (res.ok) {
+            const body = (await res.json().catch(() => null)) as { row?: DemoApplicantRow } | null;
+            if (body?.row?.application) hit = body.row;
+          }
+        } catch {
+          /* resume is best-effort */
+        }
+      }
+      if (!hit) {
+        try {
+          const res = await fetch("/api/manager-applications?scope=self", { credentials: "include" });
+          if (res.ok) {
+            const body = (await res.json().catch(() => null)) as { rows?: DemoApplicantRow[] } | null;
+            const rows = (Array.isArray(body?.rows) ? body.rows : []).filter(isInProgressApplicationRow);
+            hit = findInProgressRowForTarget(rows, target) ?? null;
+          }
+        } catch {
+          /* signed out or transient — nothing to resume */
+        }
+      }
+      if (cancelled || !hit?.application) return;
+      if (target && !targetMatchesApplication(target, hit)) return;
+      // A save may have landed while these reads were in flight — never clobber it.
+      if (loadRentalWizardDraftAxisId()?.trim()) return;
+      const email = (hit.email ?? "").trim();
+      const restored: RentalWizardFormState = {
+        ...createInitialRentalWizardState(),
+        ...hit.application,
+        ...(email ? { email } : {}),
+      };
+      saveRentalWizardDraftAxisId(hit.id);
+      saveRentalWizardDraft(restored);
+      setForm(restored);
+      const persistedStep = parsePersistedWizardStep(hit.application.wizardStep);
+      const persistedMax = parsePersistedWizardStep(hit.application.wizardMaxStepReached);
+      if (persistedStep) {
+        setStep(persistedStep);
+        setMaxStepReached((prev) => Math.max(prev, persistedMax ?? 0, persistedStep));
+      } else if (persistedMax) {
+        setMaxStepReached((prev) => Math.max(prev, persistedMax));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftReady, mode, searchParams]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -1715,6 +1799,9 @@ function RentalApplicationWizardInner({
                 setSsn={setSsn}
                 goToStep={goToStep}
                 editFromReview={editFromReview}
+                getApplicationId={ensureRentalWizardAxisId}
+                photoSetupTokenRequired={mode !== "portal" && !sessionEmail?.includes("@")}
+                getPhotoSetupToken={() => getApplicationSetupToken(ensureRentalWizardAxisId())}
               />
             </div>
 

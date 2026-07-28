@@ -330,6 +330,39 @@ function emitApplicationSaveStatus(ok: boolean, id: string): void {
   window.dispatchEvent(new CustomEvent(APPLICATION_SAVE_STATUS_EVENT, { detail: { ok, id } }));
 }
 
+/**
+ * Guest autosaves return a freshly-rotated resident-setup token for the row.
+ * The photo-capture fields use it as their write credential (a guest may only
+ * mint photo uploads with the row's current token), so remember the latest one
+ * per application id. sessionStorage so an in-tab reload keeps uploads working;
+ * it never outlives the tab.
+ */
+const APPLICATION_SETUP_TOKEN_STORE_PREFIX = "axis.applicationSetupToken.";
+
+function applicationSetupTokenKey(id: string): string {
+  return normalizeApplicationAxisId(id).toUpperCase();
+}
+
+export function rememberApplicationSetupToken(id: string, token: string): void {
+  const key = applicationSetupTokenKey(id);
+  if (!key || !token || typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(APPLICATION_SETUP_TOKEN_STORE_PREFIX + key, token);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getApplicationSetupToken(id: string): string | null {
+  const key = applicationSetupTokenKey(id);
+  if (!key || typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(APPLICATION_SETUP_TOKEN_STORE_PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+
 function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
   if (typeof window === "undefined" || isDemoModeActive()) return Promise.resolve();
   return fetch("/api/manager-applications", {
@@ -338,7 +371,13 @@ function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   })
-    .then((res) => {
+    .then(async (res) => {
+      if (res.ok) {
+        const body = (await res.json().catch(() => null)) as { setupToken?: string } | null;
+        if (typeof body?.setupToken === "string" && body.setupToken) {
+          rememberApplicationSetupToken(row.id, body.setupToken);
+        }
+      }
       emitApplicationSaveStatus(res.ok, row.id);
     })
     .catch(() => emitApplicationSaveStatus(false, row.id));
@@ -400,6 +439,24 @@ function registerUpsertUnloadFlush() {
  * until the previous one's request has actually landed, makes the server's
  * view monotonic with the user's edits again.
  */
+function startQueuedWrite(entry: UpsertQueueEntry): void {
+  const runNext = () => {
+    const pending = entry.latest;
+    entry.latest = null;
+    if (!pending) return;
+    entry.inFlight = mirrorApplicationRowToServer(pending).finally(() => {
+      entry.inFlight = null;
+      // A newer edit may have queued while this write was in flight.
+      if (entry.latest) runNext();
+    });
+  };
+  // Never overlap two writes for the same row — wait out any write already
+  // in flight (e.g. from the trailing edge of the previous debounce) so
+  // send order and landing order stay identical.
+  if (entry.inFlight) void entry.inFlight.then(runNext);
+  else runNext();
+}
+
 function scheduleApplicationRowUpsert(row: DemoApplicantRow) {
   const id = row.id.trim();
   if (!id) return;
@@ -413,22 +470,34 @@ function scheduleApplicationRowUpsert(row: DemoApplicantRow) {
   if (entry.timer) clearTimeout(entry.timer);
   entry.timer = setTimeout(() => {
     entry!.timer = null;
-    const runNext = () => {
-      const pending = entry!.latest;
-      entry!.latest = null;
-      if (!pending) return;
-      entry!.inFlight = mirrorApplicationRowToServer(pending).finally(() => {
-        entry!.inFlight = null;
-        // A newer edit may have queued while this write was in flight.
-        if (entry!.latest) runNext();
-      });
-    };
-    // Never overlap two writes for the same row — wait out any write already
-    // in flight (e.g. from the trailing edge of the previous debounce) so
-    // send order and landing order stay identical.
-    if (entry!.inFlight) void entry!.inFlight.then(runNext);
-    else runNext();
+    startQueuedWrite(entry!);
   }, UPSERT_DEBOUNCE_MS);
+}
+
+/**
+ * Drain this application's autosave queue NOW and wait for the writes to land.
+ * A guest's photo credential is the resident-setup token the LATEST autosave
+ * response carried, and every guest autosave rotates it — so a photo
+ * upload/remove issued while a save is queued or in flight would race the
+ * rotation and be refused. Settling first makes the stored token current at
+ * request time. Bounded so a pathological queue can never hang the caller.
+ */
+export async function settlePendingApplicationRowUpserts(id: string): Promise<void> {
+  if (typeof window === "undefined") return;
+  const target = normalizeApplicationAxisId(id).toUpperCase();
+  if (!target) return;
+  for (const [key, entry] of upsertQueues) {
+    if (normalizeApplicationAxisId(key).toUpperCase() !== target) continue;
+    for (let i = 0; i < 20 && (entry.latest || entry.timer || entry.inFlight); i += 1) {
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+        entry.timer = null;
+        startQueuedWrite(entry);
+      }
+      if (entry.inFlight) await entry.inFlight.catch(() => undefined);
+      else if (entry.latest) startQueuedWrite(entry);
+    }
+  }
 }
 
 export function upsertApplicationRowToServer(row: DemoApplicantRow): void {
@@ -506,6 +575,7 @@ export async function upsertApplicationRowToServerAwait(
         ? body.setupHref
         : undefined;
     const setupToken = typeof body?.setupToken === "string" && body.setupToken ? body.setupToken : undefined;
+    if (setupToken) rememberApplicationSetupToken(row.id, setupToken);
     const onboarding = body?.existingResidentOnboarding;
     return {
       ok: true,

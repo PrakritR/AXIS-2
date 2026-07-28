@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
+import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
 import {
@@ -183,6 +184,18 @@ export type WizardStepsProps = {
   setSsn: (next: string) => void;
   goToStep: (n: number) => void;
   editFromReview: (n: number) => void;
+  /**
+   * Lazily returns (minting on first call) the stable application id that
+   * ID/income photo uploads attach to — the SAME axis id the autosave uses, so
+   * an attached photo resumes with the rest of the answers.
+   */
+  getApplicationId?: () => string;
+  /**
+   * Guest (no-session) capture is gated on the row's resident-setup token —
+   * minted when the draft first autosaves — which authorizes the photo writes.
+   */
+  photoSetupTokenRequired?: boolean;
+  getPhotoSetupToken?: () => string | null;
 };
 
 function displayOrDash(v: string | null | undefined) {
@@ -312,6 +325,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   // can never disagree.
   const applicationConfig = applicationConfigForVariant(listingSub, form.rentalType);
   const showWizardField = (key: string) => isWizardFormFieldEnabled(applicationConfig, key);
+
+  // Photo uploads are read-only in the portal's editor (an already-submitted
+  // application is never re-uploaded). `getApplicationId` mints/returns the
+  // stable axis id an upload attaches to; falls back to the form email context.
+  const photosReadOnly = mode === "editor";
+  const getApplicationId = p.getApplicationId ?? (() => form.email.trim().toLowerCase() || "");
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
@@ -934,6 +953,47 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.driversLicense} />
             </div>
             </WizardFieldGate>
+            <WizardFieldGate fieldKey="idPhotoFront" enabled={showWizardField}>
+            <div className="space-y-3 sm:col-span-2 rounded-xl border border-border bg-card/60 p-4 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/5">
+              <div>
+                <Label>
+                  Photo of your driver&apos;s license or ID
+                  <span className="pl-1 font-normal text-muted/70">(optional)</span>
+                </Label>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  Add a clear photo of the front and back. On a phone you can take the photo directly. These images are
+                  shared only with the property manager for this application and are kept with your application record.
+                  They are stored privately and encrypted in transit, never shown publicly.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ApplicationPhotoField
+                  slot="idFront"
+                  label="Front of ID"
+                  attachment={form.idPhotoFront}
+                  onChange={(next) => patch({ idPhotoFront: next })}
+                  getApplicationId={getApplicationId}
+                  setupTokenRequired={p.photoSetupTokenRequired}
+                  getSetupToken={p.getPhotoSetupToken}
+                  hasApplicantEmail={Boolean(form.email.trim())}
+                  readOnly={photosReadOnly}
+                  dataAttr="application-id-photo-front"
+                />
+                <ApplicationPhotoField
+                  slot="idBack"
+                  label="Back of ID"
+                  attachment={form.idPhotoBack}
+                  onChange={(next) => patch({ idPhotoBack: next })}
+                  getApplicationId={getApplicationId}
+                  setupTokenRequired={p.photoSetupTokenRequired}
+                  getSetupToken={p.getPhotoSetupToken}
+                  hasApplicantEmail={Boolean(form.email.trim())}
+                  readOnly={photosReadOnly}
+                  dataAttr="application-id-photo-back"
+                />
+              </div>
+            </div>
+            </WizardFieldGate>
             <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="phone" required>
@@ -1383,6 +1443,30 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
             </WizardFieldGate>
           </div>
+          <WizardFieldGate fieldKey="incomeProofPhotos" enabled={showWizardField}>
+          <div className="space-y-3 border-t border-border pt-4 [html[data-theme=dark]_&]:border-white/12">
+            <div>
+              <Label>
+                Proof of income
+                <span className="pl-1 font-normal text-muted/70">(optional)</span>
+              </Label>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                Attach a recent pay stub, an offer letter, or a bank statement to back up the amounts above. Photos or
+                PDFs are fine. These are shared only with the property manager for this application and are kept with
+                your application record — stored privately, never public.
+              </p>
+            </div>
+            <IncomeProofPhotos
+              attachments={form.incomeProofPhotos}
+              onChange={(next) => patch({ incomeProofPhotos: next })}
+              getApplicationId={getApplicationId}
+              setupTokenRequired={p.photoSetupTokenRequired}
+              getSetupToken={p.getPhotoSetupToken}
+              hasApplicantEmail={Boolean(form.email.trim())}
+              readOnly={photosReadOnly}
+            />
+          </div>
+          </WizardFieldGate>
         </div>
         ) : null}
 
