@@ -88,10 +88,7 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
-import {
-  applyListingFeeContextDefaults,
-  feeContextForBundleKind,
-} from "@/lib/listing-fee-defaults";
+import { applyListingFeeContextDefaults } from "@/lib/listing-fee-defaults";
 import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
   LONG_TERM_UTILITIES_PAYMENT_OPTIONS,
@@ -505,40 +502,6 @@ function MediaPickTrigger({
   );
 }
 
-function PlaceCategoryPicker({
-  value,
-  onSelect,
-  hasError,
-  errorMsg,
-}: {
-  value: string | undefined;
-  onSelect: (id: string) => void;
-  hasError?: boolean;
-  errorMsg?: string;
-}) {
-  return (
-    <div
-      data-wizard-field="listingPlaceCategoryId"
-      className={wizardSectionErrorClass(Boolean(hasError))}
-    >
-      <FieldLabel>How is this property rented?</FieldLabel>
-      <Select
-        aria-label="Rental model"
-        className={wizardFieldErrorClass(Boolean(hasError), selectInputCls)}
-        value={value ?? ""}
-        onChange={(e) => onSelect(e.target.value)}
-      >
-        <option value="">Select</option>
-        {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </Select>
-      <StepFieldError msg={errorMsg} />
-    </div>
-  );
-}
 
 function LongTermUtilitiesPaymentPicker({
   value,
@@ -1198,6 +1161,57 @@ export function ManagerAddListingForm({
   // unchecking + re-checking restores their picks instead of wiping them.
   const [furnishedOpenRooms, setFurnishedOpenRooms] = useState<Set<string>>(() => new Set());
   const rememberedFurnitureRef = useRef<Map<string, string>>(new Map());
+  // "Rent by room" is the explicit stored signal that replaced the rental-model dropdown:
+  // checked ⟺ shared-home (rent by bedroom), unchecked ⟺ entire-place (one rent for the
+  // whole unit). Switching to entire-place syncs/zeroes per-room rents, so we remember each
+  // room's pricing here and restore it when the manager switches back — unticking never
+  // destroys amounts already entered.
+  const rememberedRoomPricingRef = useRef<Map<string, Partial<ManagerRoomSubmission>>>(new Map());
+  const handleRentByRoomToggle = (on: boolean) => {
+    clearListingFieldError("listingPlaceCategoryId");
+    clearListingFieldError("monthlyRent");
+    setSub((s) => {
+      if (on) {
+        // → shared-home. Restore any remembered per-room pricing, then clear entire-home fields.
+        const rooms = s.rooms.map((r) => {
+          const remembered = rememberedRoomPricingRef.current.get(r.id);
+          return remembered ? { ...r, ...remembered } : r;
+        });
+        return {
+          ...s,
+          rooms,
+          listingPlaceCategoryId: "shared_home",
+          rentalModelStamp: "shared_home",
+          entireHomeMonthlyRent: undefined,
+          entireHomeUtilitiesEstimate: undefined,
+          entireHomeUtilitiesPaymentModel: undefined,
+          entireHomeProrateMethod: undefined,
+          entireHomeDailyRentRate: undefined,
+          entireHomeDailyUtilitiesRate: undefined,
+        };
+      }
+      // → entire-place. Remember current per-room pricing first (syncEntireHomeRoomPricing
+      // will overwrite it), then seed the whole-home rent from the rooms.
+      for (const r of s.rooms) {
+        rememberedRoomPricingRef.current.set(r.id, {
+          monthlyRent: r.monthlyRent,
+          securityDeposit: r.securityDeposit,
+          utilitiesEstimate: r.utilitiesEstimate,
+          utilitiesPaymentModel: r.utilitiesPaymentModel,
+          prorateMethod: r.prorateMethod,
+          dailyRentRate: r.dailyRentRate,
+          rentBasis: r.rentBasis,
+          dailyRentPrice: r.dailyRentPrice,
+        });
+      }
+      const sum = s.rooms.reduce((acc, room) => acc + (room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
+      const rent = (s.entireHomeMonthlyRent ?? 0) > 0 ? s.entireHomeMonthlyRent! : sum > 0 ? sum : s.rooms[0]?.monthlyRent ?? 0;
+      return applyEntireHomeListingPricing(
+        { ...s, listingPlaceCategoryId: "entire_home", rentalModelStamp: "entire_home" },
+        { entireHomeMonthlyRent: rent },
+      );
+    });
+  };
   // Rooms where the "Other amenities" small text box is revealed even though it is still
   // empty (the manager just ticked Other). Rooms that already have custom amenity text
   // read as open without needing to be in this set.
@@ -1409,6 +1423,7 @@ export function ManagerAddListingForm({
   }, []);
 
   const isEntireHome = isEntireHomeListing(sub);
+  const rentByRoom = !isEntireHome;
   const entireHomeRent = entireHomeMonthlyRentAmount(sub);
 
   const clearListingFieldError = (key: string) => {
@@ -1808,40 +1823,6 @@ export function ManagerAddListingForm({
     const next = applyListingFeeContextDefaults(emptyBundleRow(), "group_bundle", 0);
     expandListingItem(listingItemKey("bundle", next.id));
     setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), next] }));
-  };
-
-  const addGeneratedBundle = (kind: "whole_house" | "multi_room") => {
-    setSub((s) => {
-      if (s.rooms.length === 0) return s;
-      const namedRooms = s.rooms.filter((room) => room.name.trim());
-      const includedRoomIds =
-        kind === "whole_house"
-          ? s.rooms.map((room) => room.id)
-          : namedRooms.slice(0, Math.min(2, namedRooms.length)).map((room) => room.id);
-      if (kind === "multi_room" && includedRoomIds.length < 2) return s;
-      // Different default fees per rental context (per_room vs group_bundle vs whole_house)
-      // come from the one tuning table in listing-fee-defaults. Deposit scales off this
-      // bundle's own monthly rent; only the new (empty) fields are filled.
-      const bundleRentSum = s.rooms
-        .filter((r) => includedRoomIds.includes(r.id))
-        .reduce((sum, r) => sum + (r.monthlyRent > 0 ? r.monthlyRent : 0), 0);
-      const bundleRent = kind === "whole_house" ? entireHomeMonthlyRentAmount(s) || bundleRentSum : bundleRentSum;
-      const row: ManagerBundleRow = applyListingFeeContextDefaults(
-        {
-          ...emptyBundleRow(),
-          label: kind === "whole_house" ? "Whole house lease" : "Group lease bundle",
-          price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
-          strikethrough: "",
-          promo: "",
-          roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
-          includedRoomIds,
-        },
-        feeContextForBundleKind(kind),
-        bundleRent,
-      );
-      expandListingItem(listingItemKey("bundle", row.id));
-      return { ...s, bundles: [...(s.bundles ?? []), row] };
-    });
   };
 
   const removeBundle = (i: number) => {
@@ -2732,31 +2713,22 @@ export function ManagerAddListingForm({
   const bundlesFeeSection: FeeExpandableSection | null = !isEntireHome
     ? {
         key: "bundles",
-        title: "Bundles",
-        hint: "Offer rooms together on one lease — optional.",
-        emptyHint: "Optional — per-room pricing works without bundles.",
+        title: "Grouped leases",
+        hint: "Optional — rent several rooms together on one lease.",
+        emptyHint: "Optional — group rooms onto one lease.",
         toolbar: (
           <>
+            {/* Grouping is folded into the rent-by-room view as one small affordance instead
+                of the old Whole house / Group / Custom pill row. A group can cover any rooms —
+                pick all of them for a whole-house lease. */}
             <Button
               type="button"
               variant="outline"
               className="rounded-full text-xs"
-              onClick={() => addGeneratedBundle("whole_house")}
-              disabled={sub.rooms.length === 0}
-            >
-              Whole house
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full text-xs"
-              onClick={() => addGeneratedBundle("multi_room")}
+              onClick={addBundle}
               disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
             >
-              Group
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
-              Custom
+              + Group rooms
             </Button>
           </>
         ),
@@ -3416,75 +3388,51 @@ export function ManagerAddListingForm({
           {stepIndex === 4 ? (
           <FormSection id="edit-lease" title="Pricing">
             <div className="space-y-5">
-              {/* Rental model and short-term sit on one row: both are single
-                  controls, so stacking them burned a full screen of height
-                  before the manager reached Fees. */}
-              <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
-              <ListingSubsection title="Rental model">
-                <PlaceCategoryPicker
-                  hasError={Boolean(stepFieldErrors.listingPlaceCategoryId)}
-                  errorMsg={stepFieldErrors.listingPlaceCategoryId}
-                  value={sub.listingPlaceCategoryId}
-                  onSelect={(id) => {
-                    clearListingFieldError("listingPlaceCategoryId");
-                    setSub((s) => {
-                      if (id === "entire_home") {
-                        const sum = s.rooms.reduce((acc, room) => acc + (room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
-                        const rent =
-                          (s.entireHomeMonthlyRent ?? 0) > 0 ? s.entireHomeMonthlyRent! : sum > 0 ? sum : s.rooms[0]?.monthlyRent ?? 0;
-                        return applyEntireHomeListingPricing({ ...s, listingPlaceCategoryId: id }, { entireHomeMonthlyRent: rent });
-                      }
-                      return { ...s, listingPlaceCategoryId: id, entireHomeMonthlyRent: undefined, entireHomeUtilitiesEstimate: undefined, entireHomeProrateMethod: undefined, entireHomeDailyRentRate: undefined, entireHomeDailyUtilitiesRate: undefined };
-                    });
-                  }}
-                />
-              </ListingSubsection>
-
-              <ListingSubsection title="Short-term rentals">
-                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-border"
-                    checked={Boolean(sub.shortTermRentalsAllowed)}
-                    onChange={(e) => {
-                      clearListingFieldError("allowedLeaseTerms");
-                      const on = e.target.checked;
-                      setSub((s) => {
-                        const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
-                        const next = syncShortTermLeaseTermInAllowed(standard, on);
-                        const bundles = on
-                          ? s.bundles
-                          : (s.bundles ?? []).map((b) => ({
-                              ...b,
-                              shortTermEnabled: false,
-                              shortTermNightlyRent: "",
-                            }));
-                        return syncPropertyLeaseTemplatesFromListing({
-                          ...s,
-                          shortTermRentalsAllowed: on,
-                          allowedLeaseTerms: next,
-                          leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                          bundles,
-                        });
-                      });
-                    }}
-                  />
-                  Enable short-term rentals
-                </label>
-                {sub.shortTermRentalsAllowed ? (
-                  <p className="text-xs text-muted">
-                    Set short-term pricing per fee in <span className="font-medium text-foreground">Fees</span> below, or enable short-term on individual lease bundles.
-                  </p>
-                ) : null}
-              </ListingSubsection>
-              </div>
-
               <ListingSubsection title="Leasing">
                 <div className="space-y-3">
                   <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
                     <FieldLabel required>Lease lengths</FieldLabel>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {[...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM), CUSTOM_LEASE_TERM].map((term) => {
+                    {/* Standard lengths, then Short-term (a listing-wide toggle, not a lease
+                        term), then Custom last — Short-term sits with the other lease-length
+                        choices instead of a separate titled block. */}
+                    {[...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM), "__short_term__", CUSTOM_LEASE_TERM].map((term) => {
+                      if (term === "__short_term__") {
+                        const on = Boolean(sub.shortTermRentalsAllowed);
+                        return (
+                          <label
+                            key="__short_term__"
+                            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
+                              on ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border"
+                              checked={on}
+                              onChange={(e) => {
+                                clearListingFieldError("allowedLeaseTerms");
+                                const enabled = e.target.checked;
+                                setSub((s) => {
+                                  const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                                  const next = syncShortTermLeaseTermInAllowed(standard, enabled);
+                                  const bundles = enabled
+                                    ? s.bundles
+                                    : (s.bundles ?? []).map((b) => ({ ...b, shortTermEnabled: false, shortTermNightlyRent: "" }));
+                                  return syncPropertyLeaseTemplatesFromListing({
+                                    ...s,
+                                    shortTermRentalsAllowed: enabled,
+                                    allowedLeaseTerms: next,
+                                    leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                                    bundles,
+                                  });
+                                });
+                              }}
+                            />
+                            <span className="font-medium text-foreground">Short-term</span>
+                          </label>
+                        );
+                      }
                       const selected = resolveAllowedLeaseTerms(sub).includes(term);
                       return (
                         <label
@@ -3527,7 +3475,17 @@ export function ManagerAddListingForm({
                 </div>
               </ListingSubsection>
 
-              <ListingSubsection title="Fees">
+              <ListingSubsection title="Rent">
+                <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border"
+                    checked={rentByRoom}
+                    onChange={(e) => handleRentByRoomToggle(e.target.checked)}
+                  />
+                  Rent by room
+                  <span className="text-xs font-normal text-muted">— a rent row per room; off = one rent for the whole place</span>
+                </label>
                 <div data-wizard-field="monthlyRent">
                 <ListingUnifiedFeesTable
                   expandableSections={feeExpandableSections}
