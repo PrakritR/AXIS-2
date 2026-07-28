@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { track } from "@/lib/analytics/track-client";
+import { ASSISTANT_DOCK_INPUT_ID } from "@/components/portal/assistant-dock-input-id";
 import { openAxisAssistant } from "@/lib/axis-assistant/open-store";
 import type { PortalKind } from "@/lib/portal-types";
 
@@ -22,9 +23,20 @@ import type { PortalKind } from "@/lib/portal-types";
  * assistant FAB drives ({@link openAxisAssistant}), so the two triggers stay in
  * lockstep. Mirrors the FAB's `assistant_opened` analytics + transition so the
  * panel mount stays off the interaction's critical path (INP budget).
+ *
+ * When the manager has pinned the assistant to the right rail it is ALREADY on
+ * screen, so this focuses that input instead of stacking a modal popup (and a
+ * second, separate conversation) on top of it. The rail is `hidden lg:flex`, so
+ * `offsetParent` is the check: below `lg` the input exists but is not laid out,
+ * and the popup is still the right answer.
  */
 function openAskProPlane() {
   track("assistant_opened");
+  const dockInput = document.getElementById(ASSISTANT_DOCK_INPUT_ID) as HTMLTextAreaElement | null;
+  if (dockInput?.offsetParent) {
+    dockInput.focus();
+    return;
+  }
   startTransition(() => {
     openAxisAssistant();
   });

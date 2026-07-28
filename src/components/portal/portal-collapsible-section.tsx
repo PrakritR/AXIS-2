@@ -83,9 +83,13 @@ export function PortalCollapsibleSection({
       } ${className}`.trim()}
     >
       <div
-        className={`flex items-center justify-between gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
-          canCollapse ? "cursor-pointer" : ""
-        }`}
+        className={cn(
+          "gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2",
+          headerActionsInline
+            ? "flex flex-col items-stretch max-sm:gap-2.5 sm:flex-row sm:items-center sm:justify-between"
+            : "flex items-center justify-between",
+          canCollapse ? "cursor-pointer" : "",
+        )}
         role={canCollapse ? "button" : undefined}
         tabIndex={canCollapse ? 0 : undefined}
         aria-expanded={canCollapse ? expanded : undefined}
@@ -99,9 +103,9 @@ export function PortalCollapsibleSection({
           }
         }}
       >
-        <div className="min-w-0 flex-1">
+        <div className={cn("min-w-0", headerActionsInline ? "flex-none sm:flex-1" : "flex-1")}>
           <div className={titleClass}>
-            <span className="min-w-0">{title}</span>
+            <span className={headerActionsInline ? "whitespace-nowrap" : "min-w-0"}>{title}</span>
             {titleAddon ? <span className="shrink-0">{titleAddon}</span> : null}
             {canCollapse ? (
               <ChevronDown
@@ -115,8 +119,10 @@ export function PortalCollapsibleSection({
         {headerActions ? (
           <div
             className={cn(
-              "flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2",
-              headerActionsInline ? "ml-2" : "w-full lg:ml-auto lg:w-auto lg:max-w-[70%] lg:justify-end",
+              "flex min-w-0 items-center gap-2",
+              headerActionsInline
+                ? "w-full max-w-full shrink-0 flex-nowrap justify-start overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:ml-2 sm:w-auto sm:max-w-[70%] sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0"
+                : "w-full shrink-0 flex-wrap justify-end lg:ml-auto lg:w-auto lg:max-w-[70%]",
             )}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}

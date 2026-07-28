@@ -219,17 +219,17 @@ dark unless `SMS_RELAY_POOL_AUTOBUY=1` — the current Sole Proprietor A2P brand
 allows exactly ONE local number, so extra buys would be carrier-filtered.
 Bought numbers must join the Messaging Service
 (`TWILIO_MESSAGING_SERVICE_SID`) to inherit the A2P campaign; a failed attach
-releases the number. A2P compliance pages: `/sms-terms` + the SMS opt-in
-section on `/privacy`.
+releases the number. A2P compliance pages: `/sms-terms`, the SMS opt-in
+section on `/privacy`, and the public consent page `/sms-consent` (owner
+section: "Public SMS consent page" below).
 
-**Web opt-in consent (carrier-required).** The public tours-contact page
-(`/rent/tours-contact`) is what Twilio's A2P reviewer inspects, so every public
-form there that collects a phone renders a carrier-compliant SMS consent
-checkbox (`SmsConsentCheckbox` in
-`src/components/marketing/sms-consent-checkbox.tsx`): unchecked by default,
-optional (submitting without it still works), not bundled with any other
-agreement, naming sender + message types + STOP/HELP and linking `/privacy` +
-`/tos`. The decision is persisted two ways: `smsConsent` + a SERVER-stamped
+**Web opt-in consent (carrier-required).** Every public form that collects a
+phone and can lead to an outbound text renders the shared `SmsConsentCheckbox`
+— its wording, invariants, and the reviewer-facing `/sms-consent` page are
+owned by the "Public SMS consent page" section below (the tours-contact page
+gates anonymous visitors behind a manager link, so it is NOT the page a
+carrier reviewer can inspect cold). On the tours-contact page
+(`/rent/tours-contact`), the decision is persisted two ways: `smsConsent` + a SERVER-stamped
 `smsConsentAt` on the `PartnerInquiry` record (the route coerces the flag to a
 strict boolean and ignores any client-supplied timestamp, so per-lead consent is
 provable), and a positive opt-in written to the `sms_consent` ledger via
@@ -453,3 +453,43 @@ a sandbox manager in the first place. Do not add a second, independent
 sandbox filter inside the listing tools themselves (`leasing-sms.ts`) — the
 registration choke point is the intended single source of truth; duplicating
 the check there would just be another place to forget to update.
+
+## Public SMS consent page (A2P 10DLC carrier review)
+
+Carrier reviewers open a declared consent URL and look for the opt-in with their
+own eyes, so PropLane keeps a **public, no-login** consent page at **`/sms-consent`**
+(`src/app/(public)/sms-consent/`). Invariants — breaking any of them gets the A2P
+campaign rejected on resubmit:
+
+- It must stay **ungated**: no sign-in, no manager link, no required query param.
+  It is a plain server component (renders every disclosure with JS off) plus one
+  client island (`sms-opt-in-form.tsx`) whose SSR HTML shows the phone field and
+  an **unchecked** checkbox. Middleware does not gate top-level paths — keep it
+  that way; do not add a `next.config.ts` redirect for it.
+- The consent wording lives in **exactly one place**, `SmsConsentCheckbox`
+  (`src/components/marketing/sms-consent-checkbox.tsx`), and must match the
+  campaign declaration **verbatim** ("…about my rental application and account.
+  Msg & data rates may apply. Message frequency varies. Reply STOP to opt out,
+  HELP for help."). It is unchecked by default and consent is optional (never a
+  precondition for applying). Locked by `tests/unit/tours-contact-sms-consent-ui.test.tsx`
+  and `tests/unit/sms-consent-page-form.test.tsx`.
+- The **real** opt-in lives in the rental application flow: the same checkbox
+  renders in the wizard Contact step (`rental-wizard-steps.tsx`, step 4), gated
+  on the same Phone question as the phone input (no phone collected → no consent
+  control), and persists `smsConsent` / `smsConsentAt` /
+  `smsConsentWordingVersion` on the submitted application snapshot
+  (`RentalWizardFormState`). The number the applicant enters is the one that
+  receives texts. The timestamp + wording version are **server-owned**
+  compliance evidence: `POST /api/manager-applications` stamps them
+  (`anchorServerOwnedSmsConsent`), preserving the first server stamp across
+  draft re-upserts and clearing both only on an EXPLICIT `smsConsent: false`
+  (a blob that merely omits the field — a legacy client or pre-deploy manager
+  mirror — preserves the stored evidence) — client-supplied values are never
+  trusted. The wording version constant lives in
+  `src/lib/rental-application/sms-consent.ts` (plain TS, imported by both the
+  checkbox and the route); **bump `SMS_CONSENT_WORDING_VERSION` whenever the
+  checkbox wording changes**. Coverage:
+  `tests/unit/manager-applications-sms-consent-stamp.test.ts`.
+- Privacy (`/privacy`) and Terms (`/tos`) must name **PropLane** at
+  **prop-lane.space** (they do) — the consent page and the campaign both link to
+  them; a brand/domain mismatch invites a second rejection.

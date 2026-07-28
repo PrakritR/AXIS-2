@@ -46,15 +46,16 @@ test.describe("Manager signup and login", () => {
 
   test("sign in page has email and password fields", async ({ page }) => {
     await page.goto("/auth/sign-in");
-    await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+    // Placeholder-only inputs (NativeAuthHub), matching tests/helpers/auth.ts.
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByPlaceholder("Password")).toBeVisible();
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
   });
 
   test("wrong password shows error", async ({ page }) => {
     await page.goto("/auth/sign-in");
-    await page.getByLabel("Email", { exact: true }).fill(E2E_ACCOUNTS.manager.email);
-    await page.getByLabel("Password", { exact: true }).fill("WrongPass999!");
+    await page.getByPlaceholder("Email").fill(E2E_ACCOUNTS.manager.email);
+    await page.getByPlaceholder("Password").fill("WrongPass999!");
     await page.getByRole("button", { name: /sign in/i }).click();
     // Should stay on sign-in page and show an error
     await expect(page).toHaveURL(/\/auth\/sign-in/, { timeout: 10_000 });
