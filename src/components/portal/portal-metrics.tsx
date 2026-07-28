@@ -6,6 +6,7 @@ import { Fragment, type ReactNode } from "react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
+import { cn } from "@/lib/utils";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 
 /** Dashboard / KPI link tiles (manager, resident, admin). */
@@ -578,13 +579,13 @@ export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
 /** Status bucket pills with optional right-aligned filters on the same row (Payments-style). */
 export function ManagerPortalStatusFilterRow({
   children,
-  className = "mb-4",
+  className,
 }: {
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={`flex w-full min-w-0 flex-wrap items-center gap-3 ${className}`.trim()}>{children}</div>
+    <div className={cn("mb-3 flex w-full min-w-0 flex-wrap items-center gap-3", className)}>{children}</div>
   );
 }
 

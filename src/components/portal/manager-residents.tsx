@@ -15,6 +15,7 @@ import {
   ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
@@ -35,24 +36,29 @@ import {
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
+import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
+import {
+  ReminderSettingsModal,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
+import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
-  chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
-  markHouseholdChargePaid,
-  markHouseholdChargePending,
+  compareDueDateMs,
+  householdChargeToLedgerRow,
   readChargesForManagerResident,
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
-  updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
   type HouseholdCharge,
 } from "@/lib/household-charges";
@@ -171,7 +177,7 @@ import {
   type ManagerServiceRequestBucket,
 } from "@/components/portal/manager-service-request-detail";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
-import { compareChargesByDueDate, isHouseholdChargeOverdue } from "@/lib/household-charges";
+
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
 import {
   ManagerCreateServiceRequestModal,
@@ -209,6 +215,7 @@ function ResidentDetailSection({
         if (open !== expanded) onToggle();
       }}
       headerActions={headerAction}
+      headerActionsInline={Boolean(headerAction)}
       contentClassName="pb-6"
       surfaceMuted={false}
       toggleDataAttr="resident-section-toggle"
@@ -256,6 +263,16 @@ export function ManagerResidents({
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
+  const {
+    messages: scheduledPaymentMessages,
+    settings: residentReminderSettings,
+    reload: reloadResidentPaymentSchedule,
+    setSettings: setResidentReminderSettings,
+  } = useScheduledPaymentMessages({ includeHidden: true });
+  const residentReminderScheduleSummary = useMemo(
+    () => (residentReminderSettings ? formatFriendlyReminderSchedule(residentReminderSettings) : undefined),
+    [residentReminderSettings],
+  );
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -266,7 +283,8 @@ export function ManagerResidents({
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
+  const [chargeBucket, setChargeBucket] = useState<ManagerPaymentBucket>("pending");
+  const [residentReminderSettingsOpen, setResidentReminderSettingsOpen] = useState(false);
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
@@ -315,10 +333,6 @@ export function ManagerResidents({
     "application" | "lease" | "payments" | "services" | "communication" | null
   >(null);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
-  const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
-  const [editingChargeId, setEditingChargeId] = useState<string | null>(null);
-  const [editChargeTitleDraft, setEditChargeTitleDraft] = useState("");
-  const [editChargeAmountDraft, setEditChargeAmountDraft] = useState("");
   const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
   const [addResidentPaymentOpen, setAddResidentPaymentOpen] = useState(false);
   const [addResidentRequestOpen, setAddResidentRequestOpen] = useState(false);
@@ -688,13 +702,13 @@ export function ManagerResidents({
   if (selectedId !== prevSelectedId) {
     setPrevSelectedId(selectedId);
     if (selectedId) {
-      setChargeTab("pending");
+      setChargeBucket("pending");
       setSvcSubTab("requests");
       setSvcReqBucket("pending");
       setSvcWoBucket("open");
       setSvcExpandedId(null);
       setExpandedResidentSection(null);
-      setChargeExpandedId(null);
+      ;
     }
   }
 
@@ -787,38 +801,22 @@ export function ManagerResidents({
     );
   }, [selected, inboxTick]);
 
-  const chargeCounts = useMemo(
-    () => ({
-      pending: residentCharges.filter((c) => c.status === "pending").length,
-      paid: residentCharges.filter((c) => c.status === "paid").length,
-    }),
+  const residentLedgerRows = useMemo(
+    () => residentCharges.map((charge) => householdChargeToLedgerRow(charge)),
     [residentCharges],
   );
 
-  const visibleCharges = useMemo(
-    () =>
-      residentCharges
-        .filter((c) => c.status === chargeTab)
-        // Paid history most-recent-first; anything still owed soonest-due first.
-        .sort((a, b) => compareChargesByDueDate(a, b, chargeTab === "paid" ? "desc" : "asc")),
-    [residentCharges, chargeTab],
-  );
+  const residentChargeCounts = useMemo(() => {
+    const counts: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
+    for (const row of residentLedgerRows) counts[row.bucket] += 1;
+    return counts;
+  }, [residentLedgerRows]);
 
-  const residentChargeById = useMemo(() => new Map(residentCharges.map((c) => [c.id, c])), [residentCharges]);
-
-  const residentChargeTableRows = useMemo((): PortalPaymentTableRow[] => {
-    if (!selected) return [];
-    const payee = selected.name.trim() || "Resident";
-    const property = selected.propertyLabel || "—";
-    return visibleCharges.map((c) => ({
-      id: c.id,
-      charge: c.title,
-      property,
-      payee,
-      dueDate: chargeDueLabel(c),
-      amount: c.balanceLabel,
-    }));
-  }, [visibleCharges, selected]);
+  const residentLedgerRowsForBucket = useMemo(() => {
+    const filtered = residentLedgerRows.filter((row) => row.bucket === chargeBucket);
+    const direction = chargeBucket === "paid" ? "desc" : "asc";
+    return [...filtered].sort((a, b) => compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, direction));
+  }, [residentLedgerRows, chargeBucket]);
 
   const selectedApplicationRow = useMemo<DemoApplicantRow | null>(() => {
     void hcTick;
@@ -1294,7 +1292,7 @@ export function ManagerResidents({
           syncLeasePipelineFromServer(userId ?? null, { force: true }),
           syncHouseholdChargesFromServer(true),
         ]);
-        setChargeTab("pending");
+        setChargeBucket("pending");
         setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm(""); setArLeaseTermCustomMode(false);
         setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
         setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
@@ -1749,66 +1747,68 @@ export function ManagerResidents({
                                 setExpandedResidentSection((cur) => (cur === "application" ? null : "application"))
                               }
                               headerAction={
-                                selectedApplicationRow?.application ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-8 rounded-full px-3 text-xs"
-                                    data-attr="resident-application-edit"
-                                    onClick={() => setApplicationEditOpen(true)}
-                                  >
-                                    Edit
-                                  </Button>
-                                ) : undefined
-                              }
-                            >
-                              {selectedApplicationRow ? (
-                                <div className="space-y-8">
-                                  <PortalTableDetailActions placement="top">
+                                selectedApplicationRow ? (
+                                  <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
                                     {selectedApplicationRow.bucket === "pending" ? (
-                                      // A withdrawn application keeps `bucket === "pending"` but is
-                                      // not approvable (the shared transition refuses it), so Approve
-                                      // is hidden here too rather than rendering a silent no-op.
                                       <>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_HEADER_ACTION_BTN}
+                                          data-attr="resident-application-reject"
+                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                        >
+                                          Reject
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                          data-attr="resident-application-delete"
+                                          onClick={() => void deleteSelectedResident()}
+                                        >
+                                          Delete
+                                        </Button>
                                         {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
                                           <Button
                                             type="button"
                                             variant="primary"
-                                            className={PORTAL_DETAIL_BTN}
+                                            className={PORTAL_HEADER_ACTION_BTN}
+                                            data-attr="resident-application-approve"
                                             onClick={() => setApprovePreviewRow(selectedApplicationRow)}
                                           >
                                             Approve
                                           </Button>
                                         )}
+                                      </>
+                                    ) : (
+                                      <>
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                          className={PORTAL_HEADER_ACTION_BTN}
+                                          data-attr="resident-application-move-pending"
+                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
                                         >
-                                          Reject
+                                          Move to pending
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                          data-attr="resident-application-delete"
+                                          onClick={() => void deleteSelectedResident()}
+                                        >
+                                          Delete
                                         </Button>
                                       </>
-                                    ) : (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
-                                      >
-                                        Move to pending
-                                      </Button>
                                     )}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      data-attr="resident-application-delete"
-                                      onClick={() => void deleteSelectedResident()}
-                                    >
-                                      Delete
-                                    </Button>
-                                  </PortalTableDetailActions>
+                                  </div>
+                                ) : undefined
+                              }
+                            >
+                              {selectedApplicationRow ? (
+                                <div className="space-y-8">
                                   {selectedApplicationGroup ? (
                                     <ApplicationGroupSection
                                       group={selectedApplicationGroup}
@@ -1838,6 +1838,43 @@ export function ManagerResidents({
                               }
                               expanded={expandedResidentSection === "lease"}
                               onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
+                              headerAction={
+                                residentLease ? (
+                                  <LeasePrimaryHeaderActions
+                                    row={residentLease}
+                                    downloadDataAttr="resident-lease-download"
+                                    signManagerDataAttr="resident-lease-sign-manager"
+                                    signingReminderDataAttr="resident-lease-signing-reminder"
+                                    deleteDataAttr="resident-lease-delete"
+                                    onDownload={() => {
+                                      if (residentLease.managerUploadedPdf?.dataUrl) {
+                                        downloadLeaseFromRow(residentLease);
+                                      } else if (residentLease.generatedHtml) {
+                                        printLeaseAsPdf(residentLease);
+                                      }
+                                      showToast("Lease download started.");
+                                    }}
+                                    onSignManager={() => signLeaseAsManager(residentLease)}
+                                    onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
+                                    signingReminderBusy={leaseReminderBusy}
+                                    onDelete={() => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
+                                        )
+                                      ) {
+                                        return;
+                                      }
+                                      if (deleteLeasePipelineRow(residentLease.id, userId)) {
+                                        setLeaseTick((n) => n + 1);
+                                        showToast("Lease document deleted.");
+                                      } else {
+                                        showToast("Could not delete lease document.");
+                                      }
+                                    }}
+                                  />
+                                ) : undefined
+                              }
                             >
                               {residentLease ? (
                                 <>
@@ -1883,36 +1920,6 @@ export function ManagerResidents({
                                         </label>
                                       </>
                                     ) : null}
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        disabled={
-                                          !residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl
-                                        }
-                                        onClick={() => signLeaseAsManager(residentLease)}
-                                      >
-                                        Sign as manager
-                                      </Button>
-                                    ) : null}
-                                    {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        onClick={() => {
-                                          if (residentLease.managerUploadedPdf?.dataUrl) {
-                                            downloadLeaseFromRow(residentLease);
-                                          } else if (residentLease.generatedHtml) {
-                                            printLeaseAsPdf(residentLease);
-                                          }
-                                          showToast("Lease download started.");
-                                        }}
-                                      >
-                                        Download lease
-                                      </Button>
-                                    ) : null}
                                     {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
                                       <Button
                                         type="button"
@@ -1925,15 +1932,6 @@ export function ManagerResidents({
                                       </Button>
                                     ) : residentLease.status === "Resident Signature Pending" ? (
                                       <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          disabled={leaseReminderBusy}
-                                          onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
-                                        >
-                                          {leaseReminderBusy ? "Sending…" : "Send signing reminder"}
-                                        </Button>
                                         <Button
                                           type="button"
                                           variant="outline"
@@ -1958,28 +1956,6 @@ export function ManagerResidents({
                                         </Button>
                                       </>
                                     ) : null}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      onClick={() => {
-                                        if (
-                                          !window.confirm(
-                                            `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
-                                          )
-                                        ) {
-                                          return;
-                                        }
-                                        if (deleteLeasePipelineRow(residentLease.id, userId)) {
-                                          setLeaseTick((n) => n + 1);
-                                          showToast("Lease document deleted.");
-                                        } else {
-                                          showToast("Could not delete lease document.");
-                                        }
-                                      }}
-                                    >
-                                      Delete lease
-                                    </Button>
                                   </PortalTableDetailActions>
                                   <LeaseDocumentPreview
                                     row={residentLease}
@@ -2026,9 +2002,11 @@ export function ManagerResidents({
                               summary={
                                 residentCharges.length === 0
                                   ? "No charges yet."
-                                  : chargeTab === "pending"
-                                    ? "Unpaid charges"
-                                    : "Paid charges"
+                                  : chargeBucket === "paid"
+                                    ? "Paid charges"
+                                    : chargeBucket === "overdue"
+                                      ? "Overdue charges"
+                                      : "Pending charges"
                               }
                               expanded={expandedResidentSection === "payments"}
                               onToggle={() =>
@@ -2036,6 +2014,15 @@ export function ManagerResidents({
                               }
                               headerAction={
                                 <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className={PORTAL_HEADER_ACTION_BTN}
+                                    onClick={() => setResidentReminderSettingsOpen(true)}
+                                    data-attr="resident-payments-reminder-settings"
+                                  >
+                                    Reminders
+                                  </Button>
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -2057,187 +2044,27 @@ export function ManagerResidents({
                                 </div>
                               }
                             >
-                              <div className="flex flex-wrap items-center gap-2">
+                              <ManagerPortalStatusFilterRow className="mt-3">
                                 <ManagerPortalStatusPills
                                   tabs={[
-                                    { id: "pending", label: "Unpaid", count: chargeCounts.pending },
-                                    { id: "paid", label: "Paid", count: chargeCounts.paid },
+                                    { id: "pending", label: "Pending", count: residentChargeCounts.pending },
+                                    { id: "overdue", label: "Overdue", count: residentChargeCounts.overdue },
+                                    { id: "paid", label: "Paid", count: residentChargeCounts.paid },
                                   ]}
-                                  activeId={chargeTab}
-                                  onChange={(id) => setChargeTab(id as "pending" | "paid")}
+                                  activeId={chargeBucket}
+                                  onChange={(id) => setChargeBucket(id as ManagerPaymentBucket)}
                                 />
-                              </div>
-                              {visibleCharges.length === 0 ? (
-                                <div className="mt-3">
-                                  <PortalDataTableEmpty
-                                    icon="payment"
-                                    message={
-                                      residentCharges.length === 0
-                                        ? "No charges yet."
-                                        : chargeTab === "pending"
-                                          ? "No unpaid charges yet."
-                                          : "No paid charges yet."
-                                    }
-                                  />
-                                </div>
-                              ) : (
-                                <div className="mt-3">
-                                  <PortalPaymentsTable
-                                    rows={residentChargeTableRows}
-                                    expandedId={chargeExpandedId}
-                                    onExpand={setChargeExpandedId}
-                                    renderChargeCell={(tr) => {
-                                      const c = residentChargeById.get(tr.id);
-                                      if (!c) return tr.charge;
-                                      const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
-                                      if (!overdue) return tr.charge;
-                                      return (
-                                        <span className="inline-flex flex-wrap items-center gap-2">
-                                          <span>{tr.charge}</span>
-                                          <Badge tone="overdue">Overdue</Badge>
-                                        </span>
-                                      );
-                                    }}
-                                    renderAmountCell={(tr) => (
-                                      <span className="tabular-nums font-semibold text-foreground">{tr.amount}</span>
-                                    )}
-                                    renderExpandedDetail={(tr) => {
-                                      const c = residentChargeById.get(tr.id);
-                                      if (!c || !selected) return null;
-                                      return (
-                                        <div className="space-y-1 text-sm text-muted">
-                                          <p>
-                                            Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
-                                          </p>
-                                          <p>
-                                            Due: <span className="text-foreground">{chargeDueLabel(c)}</span>
-                                          </p>
-                                          <p>
-                                            Amount: <span className="tabular-nums text-foreground">{c.amountLabel}</span> · Balance:{" "}
-                                            <span className="tabular-nums font-semibold text-foreground">{c.balanceLabel}</span>
-                                          </p>
-                                        </div>
-                                      );
-                                    }}
-                                    renderExpandedActions={(tr) => {
-                                      const c = residentChargeById.get(tr.id);
-                                      if (!c) return null;
-                                      return c.status !== "paid" ? (
-                                        editingChargeId === c.id ? (
-                                          <div className="flex flex-wrap items-end gap-2">
-                                            <div className="min-w-[12rem] flex-1">
-                                              <p className="mb-1 text-[11px] font-medium text-muted">Charge title</p>
-                                              <Input
-                                                value={editChargeTitleDraft}
-                                                onChange={(e) => setEditChargeTitleDraft(e.target.value)}
-                                                className="h-8 rounded-lg text-sm"
-                                              />
-                                            </div>
-                                            <div className="w-28">
-                                              <p className="mb-1 text-[11px] font-medium text-muted">Amount</p>
-                                              <div className="flex items-center gap-1">
-                                                <span className="text-sm text-muted">$</span>
-                                                <Input
-                                                  value={editChargeAmountDraft}
-                                                  onChange={(e) => setEditChargeAmountDraft(e.target.value)}
-                                                  inputMode="decimal"
-                                                  className="h-8 rounded-lg px-2 text-sm"
-                                                />
-                                              </div>
-                                            </div>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN_PRIMARY}
-                                              onClick={() => {
-                                                const amt = parseFloat(editChargeAmountDraft.replace(/[^\d.]/g, ""));
-                                                if (!editChargeTitleDraft.trim()) {
-                                                  showToast("Enter a charge title.");
-                                                  return;
-                                                }
-                                                if (!Number.isFinite(amt) || amt < 0) {
-                                                  showToast("Enter a valid amount.");
-                                                  return;
-                                                }
-                                                if (
-                                                  updateHouseholdChargeAmount(
-                                                    c.id,
-                                                    amt,
-                                                    userId,
-                                                    editChargeTitleDraft,
-                                                  )
-                                                ) {
-                                                  showToast("Payment updated.");
-                                                  setEditingChargeId(null);
-                                                } else {
-                                                  showToast("Could not update this charge.");
-                                                }
-                                              }}
-                                            >
-                                              Save
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN}
-                                              onClick={() => setEditingChargeId(null)}
-                                            >
-                                              Cancel
-                                            </Button>
-                                          </div>
-                                        ) : (
-                                          <>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN_PRIMARY}
-                                              onClick={() => {
-                                                if (markHouseholdChargePaid(c.id, userId)) {
-                                                  showToast("Marked as paid.");
-                                                  setChargeExpandedId(null);
-                                                } else {
-                                                  showToast("Could not update this charge.");
-                                                }
-                                              }}
-                                            >
-                                              Mark as paid
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN}
-                                              data-attr="resident-charge-edit"
-                                              onClick={() => {
-                                                setEditingChargeId(c.id);
-                                                setEditChargeTitleDraft(c.title);
-                                                setEditChargeAmountDraft(c.balanceLabel.replace(/[^\d.]/g, ""));
-                                              }}
-                                            >
-                                              Edit payment
-                                            </Button>
-                                          </>
-                                        )
-                                      ) : (
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => {
-                                            if (markHouseholdChargePending(c.id, userId)) {
-                                              showToast("Moved to unpaid.");
-                                              setChargeExpandedId(null);
-                                            } else {
-                                              showToast("Could not update this charge.");
-                                            }
-                                          }}
-                                        >
-                                          Move to unpaid
-                                        </Button>
-                                      );
-                                    }}
-                                  />
-                                </div>
-                              )}
+                              </ManagerPortalStatusFilterRow>
+                              <ManagerPaymentsLedgerPanel
+                                rows={residentLedgerRowsForBucket}
+                                managerUserId={userId ?? null}
+                                activeBucket={chargeBucket}
+                                scheduledMessages={scheduledPaymentMessages}
+                                reminderScheduleSummary={residentReminderScheduleSummary}
+                                onOpenReminderSettings={() => setResidentReminderSettingsOpen(true)}
+                                onScheduleChanged={() => void reloadResidentPaymentSchedule()}
+                                onRowsChanged={() => setHcTick((n) => n + 1)}
+                              />
                             </ResidentDetailSection>
 
                             <ResidentDetailSection
@@ -2563,6 +2390,16 @@ export function ManagerResidents({
       </>
       )}
 
+      <ReminderSettingsModal
+        open={residentReminderSettingsOpen}
+        onClose={() => setResidentReminderSettingsOpen(false)}
+        settings={residentReminderSettings}
+        onSaved={(next) => {
+          setResidentReminderSettings(next);
+          void reloadResidentPaymentSchedule();
+          setResidentReminderSettingsOpen(false);
+        }}
+      />
       <ManagerAddPaymentModal
         open={addResidentPaymentOpen}
         onClose={() => setAddResidentPaymentOpen(false)}

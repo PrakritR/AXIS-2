@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
@@ -89,11 +90,16 @@ export function ApplicationScreeningPanel({
   row,
   onUpdated,
   onOpenScreeningModal,
+  headerActionsPlacement = "section",
+  onHeaderActionsChange,
 }: {
   row: DemoApplicantRow;
   onUpdated?: () => void;
   /** Opens the cost-confirmation modal (billed to the manager) to start/re-run the Checkr check. */
   onOpenScreeningModal?: () => void;
+  /** When `parent`, header buttons render via `onHeaderActionsChange` instead of the Screening sub-section. */
+  headerActionsPlacement?: "section" | "parent";
+  onHeaderActionsChange?: (actions: React.ReactNode) => void;
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
@@ -199,10 +205,10 @@ export function ApplicationScreeningPanel({
     downloadBackgroundCheckPdf(row.id);
   }, [bg, demo, row, showToast]);
 
-  if (!applicationShowsBackgroundCheck(row)) return null;
-
+  const showsBackgroundCheck = applicationShowsBackgroundCheck(row);
   const screening = row.screening;
   const canOrder =
+    showsBackgroundCheck &&
     !demo &&
     screeningAllowed &&
     configured &&
@@ -213,6 +219,7 @@ export function ApplicationScreeningPanel({
     screening?.status !== "complete";
 
   const canRunBackgroundCheck =
+    showsBackgroundCheck &&
     screeningAllowed &&
     bgConfigured &&
     Boolean(row.application?.consentCredit) &&
@@ -220,42 +227,72 @@ export function ApplicationScreeningPanel({
     Boolean(onOpenScreeningModal);
 
   const testButtonLabel = demo ? "Test" : bg ? "Re-run background check" : "Run background check";
+  const headerActionBtnClass =
+    headerActionsPlacement === "parent" ? PORTAL_HEADER_ACTION_BTN : "h-8 rounded-full px-4 text-xs";
 
-  const headerActions = (
-    <>
-      {bg?.status === "complete" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 rounded-full px-4 text-xs"
-          data-attr="screening-pdf-download"
-          onClick={handleDownload}
-        >
-          Download PDF
-        </Button>
-      ) : null}
-      {canRunBackgroundCheck ? (
-        <Button
-          type="button"
-          data-attr="run-background-check"
-          className="h-8 rounded-full px-4 text-xs"
-          onClick={onOpenScreeningModal}
-        >
-          {testButtonLabel}
-        </Button>
-      ) : null}
-      {canOrder ? (
-        <Button
-          type="button"
-          className="h-8 rounded-full px-4 text-xs"
-          disabled={busy}
-          onClick={() => void runScreening()}
-        >
-          {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
-        </Button>
-      ) : null}
-    </>
+  const headerActions = useMemo(
+    () => (
+      <>
+        {bg?.status === "complete" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={headerActionBtnClass}
+            data-attr="screening-pdf-download"
+            onClick={handleDownload}
+          >
+            Download PDF
+          </Button>
+        ) : null}
+        {canRunBackgroundCheck ? (
+          <Button
+            type="button"
+            variant="primary"
+            data-attr="run-background-check"
+            className={headerActionBtnClass}
+            onClick={onOpenScreeningModal}
+          >
+            {testButtonLabel}
+          </Button>
+        ) : null}
+        {canOrder ? (
+          <Button
+            type="button"
+            variant="primary"
+            className={headerActionBtnClass}
+            disabled={busy}
+            onClick={() => void runScreening()}
+          >
+            {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
+          </Button>
+        ) : null}
+      </>
+    ),
+    [
+      bg?.status,
+      busy,
+      canOrder,
+      canRunBackgroundCheck,
+      handleDownload,
+      headerActionBtnClass,
+      onOpenScreeningModal,
+      runScreening,
+      screening?.status,
+      testButtonLabel,
+    ],
   );
+
+  useEffect(() => {
+    if (headerActionsPlacement !== "parent" || !onHeaderActionsChange) return;
+    if (!showsBackgroundCheck) {
+      onHeaderActionsChange(null);
+      return;
+    }
+    onHeaderActionsChange(headerActions);
+    return () => onHeaderActionsChange(null);
+  }, [headerActions, headerActionsPlacement, onHeaderActionsChange, showsBackgroundCheck]);
+
+  if (!showsBackgroundCheck) return null;
 
   return (
     <PortalCollapsibleSection
@@ -265,7 +302,8 @@ export function ApplicationScreeningPanel({
       className="mt-4"
       contentClassName="p-4 pt-0"
       toggleDataAttr="application-screening-toggle"
-      headerActions={headerActions}
+      headerActions={headerActionsPlacement === "section" ? headerActions : undefined}
+      headerActionsInline={headerActionsPlacement === "section"}
     >
       {!screeningAllowed && !demo ? (
         <>

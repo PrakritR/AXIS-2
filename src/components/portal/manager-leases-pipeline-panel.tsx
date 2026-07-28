@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -20,6 +20,7 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
 import { applySignedLeaseRenewal } from "@/lib/lease-renewal-payments";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
@@ -383,6 +384,22 @@ export function ManagerLeasesPipelinePanel({
 
     return (
     <>
+      <div className="mb-3 flex justify-end">
+        <LeasePrimaryHeaderActions
+          row={row}
+          btnClass={PORTAL_HEADER_ACTION_BTN}
+          downloadLabel="Download"
+          downloadDataAttr="lease-download"
+          signManagerDataAttr="lease-manager-sign"
+          signingReminderDataAttr="lease-signing-reminder"
+          deleteDataAttr="lease-delete"
+          onDownload={() => onDownload(row)}
+          onSignManager={() => onManagerSign(row)}
+          onSigningReminder={() => openLeaseSigningReminderPreview(row)}
+          signingReminderBusy={reminderBusyForRow === row.id}
+          onDelete={row.status !== "Fully Signed" ? () => onDeleteLease(row) : undefined}
+        />
+      </div>
       <PortalTableDetailActions placement="top">
             {showGenerate ? (
               <>
@@ -401,16 +418,6 @@ export function ManagerLeasesPipelinePanel({
                 <p className="max-w-xl text-xs leading-relaxed text-amber-800">{generation.error}</p>
               ) : null}
               </>
-            ) : null}
-            {hasLeaseDocument(row) ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => onDownload(row)}
-            >
-              Download lease
-            </Button>
             ) : null}
             {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
               <>
@@ -432,18 +439,6 @@ export function ManagerLeasesPipelinePanel({
                   Extend move-out date
                 </Button>
               </>
-            ) : null}
-            {!row.managerSignature && residentHasSignedLease(row) ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="lease-manager-sign"
-                onClick={() => onManagerSign(row)}
-                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
-              >
-                Sign as manager
-              </Button>
             ) : null}
             {canEditDocument ? (
             <Button
@@ -495,48 +490,15 @@ export function ManagerLeasesPipelinePanel({
                 </Button>
               </>
             ) : null}
-            {row.status === "Manager Signature Pending" ? (
+            {row.status === "Resident Signature Pending" ? (
               <Button
                 type="button"
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
-                data-attr="lease-manager-sign"
-                onClick={() => onManagerSign(row)}
-                disabled={!residentHasSignedLease(row) || (!getLeaseDocumentHtml(row) && !row.managerUploadedPdf?.dataUrl)}
+                onClick={() => onMoveToManagerReview(row)}
               >
-                Manager sign lease
+                Move to manager review
               </Button>
-            ) : null}
-            {row.status === "Resident Signature Pending" ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  disabled={reminderBusyForRow === row.id}
-                  onClick={() => openLeaseSigningReminderPreview(row)}
-                >
-                  {reminderBusyForRow === row.id ? "Sending…" : "Send signing reminder"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  onClick={() => onMoveToManagerReview(row)}
-                >
-                  Move to manager review
-                </Button>
-              </>
-            ) : null}
-            {row.status !== "Fully Signed" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-              onClick={() => onDeleteLease(row)}
-            >
-              Delete lease
-            </Button>
             ) : null}
       </PortalTableDetailActions>
 

@@ -247,6 +247,7 @@ export function ApplicationDocumentPreview({
       contentClassName="p-4 pt-0"
       toggleDataAttr="application-document-toggle"
       headerActions={downloadButton ?? undefined}
+      headerActionsInline={Boolean(downloadButton)}
     >
       {previewBody}
     </PortalCollapsibleSection>
