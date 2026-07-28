@@ -974,7 +974,7 @@ export function PortalCalendarPanels({
       <div
         className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
-      <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
+      <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
           {selectedBlock.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
         </h3>
@@ -1245,7 +1245,7 @@ export function PortalCalendarPanels({
                     </Button>
                   </>
                 ) : null}
-                {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+                {!readOnly && otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
                   <Button
                     type="button"
                     variant="ghost"

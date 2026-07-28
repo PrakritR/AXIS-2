@@ -573,6 +573,25 @@ export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
   );
 }
 
+/** Right-aligned property / resident / sort controls inside {@link ManagerPortalFilterRow}. */
+
+/** Status bucket pills with optional right-aligned filters on the same row (Payments-style). */
+export function ManagerPortalStatusFilterRow({
+  children,
+  className = "mb-4",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex w-full min-w-0 flex-wrap items-center gap-3 ${className}`.trim()}>{children}</div>
+  );
+}
+
+export function ManagerPortalFilterActions({ children }: { children: ReactNode }) {
+  return <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">{children}</div>;
+}
+
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */
 export const PORTAL_KPI_CHIP_INACTIVE =
   "rounded-xl border border-border/60 bg-accent/30 px-4 py-3 text-left transition-colors duration-150 hover:border-border hover:bg-card";

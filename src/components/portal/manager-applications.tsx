@@ -11,6 +11,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
@@ -807,11 +808,13 @@ export function ManagerApplications() {
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
+<ManagerPortalFilterActions>
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
+          </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }
     >

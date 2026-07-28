@@ -7,7 +7,9 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalStatusFilterRow,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PillTabs } from "@/components/ui/tabs";
@@ -401,6 +403,21 @@ export function ManagerPayments() {
     return [...filtered].sort((a, b) => compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, direction));
   }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
 
+  const propertyFilterPill = (
+    <PortalPropertyFilterPill
+      propertyOptions={propertyOptions}
+      propertyValue={propertyFilter}
+      onPropertyChange={(nextProperty) => {
+        setPropertyFilter(nextProperty);
+        setResidentFilter("");
+      }}
+      residents={direction === "incoming"}
+      residentOptions={residentOptions}
+      residentValue={activeResidentFilter}
+      onResidentChange={setResidentFilter}
+    />
+  );
+
   const filterRow = (
     <ManagerPortalFilterRow>
       <PillTabs
@@ -412,20 +429,6 @@ export function ManagerPayments() {
           setResidentFilter("");
         }}
       />
-      <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={(nextProperty) => {
-            setPropertyFilter(nextProperty);
-            setResidentFilter("");
-          }}
-          residents={direction === "incoming"}
-          residentOptions={residentOptions}
-          residentValue={activeResidentFilter}
-          onResidentChange={setResidentFilter}
-        />
-      </div>
     </ManagerPortalFilterRow>
   );
 
@@ -468,13 +471,14 @@ export function ManagerPayments() {
       filterRow={filterRow}
     >
       <div className="mt-1">
-        <div className="mb-4">
+        <ManagerPortalStatusFilterRow>
           <ManagerPortalStatusPills
             tabs={tabs}
             activeId={bucket}
             onChange={(id) => setBucket(id as ManagerPaymentBucket)}
           />
-        </div>
+          <ManagerPortalFilterActions>{propertyFilterPill}</ManagerPortalFilterActions>
+        </ManagerPortalStatusFilterRow>
         {direction === "incoming" ? (
           <ManagerPaymentsLedgerPanel
             rows={rowsForBucket}

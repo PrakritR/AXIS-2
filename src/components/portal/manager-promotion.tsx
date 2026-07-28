@@ -5,7 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ManagerPortalPageShell,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalStatusPills,
+  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -695,18 +697,20 @@ export function ManagerPromotion() {
         </Button>
       }
       filterRow={
-        <ManagerPortalFilterRow>
+        <ManagerPortalStatusFilterRow className="mb-0">
           <ManagerPortalStatusPills
             tabs={contentTabs}
             activeId={contentFilter}
             onChange={(id) => setContentFilter(id as PromotionContentFilter)}
           />
-          <PortalPropertyFilterPill
-            propertyOptions={filterPropertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
-        </ManagerPortalFilterRow>
+          <ManagerPortalFilterActions>
+            <PortalPropertyFilterPill
+              propertyOptions={filterPropertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+          </ManagerPortalFilterActions>
+        </ManagerPortalStatusFilterRow>
       }
     >
       <div data-attr="promotion-content-direct">

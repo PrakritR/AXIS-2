@@ -10,6 +10,7 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -204,11 +205,13 @@ export function ManagerLeases() {
             activeId={tab}
             onChange={(id) => setTab(id as ManagerLeaseTab)}
           />
+<ManagerPortalFilterActions>
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
             onPropertyChange={setPropertyFilter}
           />
+          </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }
     >

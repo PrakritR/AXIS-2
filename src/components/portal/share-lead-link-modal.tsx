@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
@@ -26,6 +26,44 @@ import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access
 import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
 
+const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
+
+function ShareLinkCopyRow({
+  label,
+  url,
+  copyLabel,
+  onCopy,
+  hint,
+}: {
+  label: string;
+  url: string;
+  copyLabel: string;
+  onCopy: () => void;
+  hint?: ReactNode;
+}) {
+  return (
+    <div>
+      <p className={FIELD_LABEL_CLASS}>{label}</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs leading-relaxed text-muted break-all">
+          {url || "Select a property to generate a link."}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 shrink-0 rounded-full px-4 sm:h-auto sm:self-stretch"
+          disabled={!url}
+          onClick={onCopy}
+        >
+          {copyLabel}
+        </Button>
+      </div>
+      {hint ? <div className="mt-1.5 text-xs leading-relaxed text-muted">{hint}</div> : null}
+    </div>
+  );
+}
+
+
 export function ShareLeadLinkModal({
   open,
   onClose,
@@ -40,7 +78,7 @@ export function ShareLeadLinkModal({
   preselectedPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
-  const multiEnabled = properties.length > 0;
+  const multiEnabled = properties.length > 1;
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
   const [applyRentalType, setApplyRentalType] = useState<"standard" | "short_term">("standard");
@@ -265,15 +303,12 @@ export function ShareLeadLinkModal({
             </p>
           ) : (
             <>
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <label
-                    htmlFor="share-lead-property"
-                    className="block text-xs font-semibold uppercase tracking-wide text-muted"
-                  >
-                    {multiEnabled ? "Properties" : "Property"}
-                  </label>
-                  {multiEnabled ? (
+              {multiEnabled ? (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <label htmlFor="share-lead-property-multi" className={FIELD_LABEL_CLASS}>
+                      Properties
+                    </label>
                     <div className="flex items-center gap-3 text-[11px] font-semibold">
                       <button
                         type="button"
@@ -300,9 +335,7 @@ export function ShareLeadLinkModal({
                         Clear
                       </button>
                     </div>
-                  ) : null}
-                </div>
-                {multiEnabled ? (
+                  </div>
                   <CheckboxMultiSelect
                     label="Properties"
                     dataAttr="share-lead-property-multi"
@@ -315,12 +348,54 @@ export function ShareLeadLinkModal({
                       setRoomChoice("");
                     }}
                   />
-                ) : null}
-              </div>
+                </div>
+              ) : (
+                <div
+                  className={
+                    kind === "apply" && roomOptions.length > 0 ? "grid gap-3 sm:grid-cols-2" : undefined
+                  }
+                >
+                  <div>
+                    <label htmlFor="share-lead-property" className={FIELD_LABEL_CLASS}>
+                      Property
+                    </label>
+                    <Select
+                      id="share-lead-property"
+                      value={singlePropertyId}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setPropertyIds(next ? [next] : []);
+                        setRoomChoice("");
+                      }}
+                    >
+                      {properties.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  {kind === "apply" && roomOptions.length > 0 ? (
+                    <div>
+                      <label htmlFor="share-lead-room" className={FIELD_LABEL_CLASS}>
+                        Room (optional)
+                      </label>
+                      <Select id="share-lead-room" value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)}>
+                        <option value="">Any room</option>
+                        {roomOptions.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
               {kind === "apply" && !isMultiApply ? (
                 <div>
-                  <label htmlFor="share-lead-application-type" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                  <label htmlFor="share-lead-application-type" className={FIELD_LABEL_CLASS}>
                     Application
                   </label>
                   <Select
@@ -334,70 +409,32 @@ export function ShareLeadLinkModal({
                 </div>
               ) : null}
 
-              {kind === "apply" && !isMultiApply && roomOptions.length > 0 ? (
-                <div>
-                  <label htmlFor="share-lead-room" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-                    Room (optional)
-                  </label>
-                  <Select id="share-lead-room" value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)}>
-                    <option value="">Any room</option>
-                    {roomOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              ) : null}
-
               {kind === "listing" ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    {isMultiListing ? "Public browse link" : "Public listing link"}
-                  </p>
-                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                    {linkUrl || "Select a property to generate a link."}
-                  </div>
-                  {isMultiListing ? (
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                      Opens the browse page filtered to the {propertyIds.length} homes you selected.
-                    </p>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2 rounded-full"
-                    disabled={!linkUrl}
-                    onClick={() =>
-                      void handleCopy(linkUrl, isMultiListing ? "Browse link copied." : "Listing link copied.")
-                    }
-                  >
-                    {isMultiListing ? "Copy browse link" : "Copy listing link"}
-                  </Button>
-                </div>
+                <ShareLinkCopyRow
+                  label={isMultiListing ? "Public browse link" : "Public listing link"}
+                  url={linkUrl}
+                  copyLabel={isMultiListing ? "Copy browse link" : "Copy listing link"}
+                  onCopy={() =>
+                    void handleCopy(linkUrl, isMultiListing ? "Browse link copied." : "Listing link copied.")
+                  }
+                  hint={
+                    isMultiListing
+                      ? `Opens the browse page filtered to the ${propertyIds.length} homes you selected.`
+                      : undefined
+                  }
+                />
               ) : null}
 
               {kind === "tour" ? (
                 <div className="space-y-4">
                   {isPortfolioTour ? (
-                    <div>
-                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Generic tour link</p>
-                      <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                        {portfolioTourUrl}
-                      </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                        Prospects pick which property to tour before choosing a time.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="mt-2 rounded-full"
-                        disabled={!portfolioTourUrl}
-                        onClick={() => void handleCopy(portfolioTourUrl, "Generic tour link copied.")}
-                      >
-                        Copy generic tour link
-                      </Button>
-                    </div>
+                    <ShareLinkCopyRow
+                      label="Generic tour link"
+                      url={portfolioTourUrl}
+                      copyLabel="Copy generic tour link"
+                      onCopy={() => void handleCopy(portfolioTourUrl, "Generic tour link copied.")}
+                      hint="Prospects pick which property to tour before choosing a time."
+                    />
                   ) : null}
 
                   {isPortfolioTour ? (
@@ -406,70 +443,51 @@ export function ShareLeadLinkModal({
                       <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                         {individualTourLinks.map((entry) => (
                           <div key={entry.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
-                            <p className="text-sm font-semibold text-foreground">{entry.label}</p>
-                            <p className="mt-1 text-xs leading-relaxed text-muted break-all">{entry.url}</p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="mt-2 rounded-full"
-                              onClick={() => void handleCopy(entry.url, "Tour link copied.")}
-                            >
-                              Copy link
-                            </Button>
+                            <p className="mb-2 text-sm font-semibold text-foreground">{entry.label}</p>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                              <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted break-all">
+                                {entry.url}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 shrink-0 rounded-full px-4 sm:h-auto sm:self-stretch"
+                                onClick={() => void handleCopy(entry.url, "Tour link copied.")}
+                              >
+                                Copy link
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : (
-                    <div>
-                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public tour link</p>
-                      <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                        {linkUrl || "Select a property to generate a link."}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="mt-2 rounded-full"
-                        disabled={!linkUrl}
-                        onClick={() => void handleCopy(linkUrl, "Tour link copied.")}
-                      >
-                        Copy tour link
-                      </Button>
-                    </div>
+                    <ShareLinkCopyRow
+                      label="Public tour link"
+                      url={linkUrl}
+                      copyLabel="Copy tour link"
+                      onCopy={() => void handleCopy(linkUrl, "Tour link copied.")}
+                    />
                   )}
                 </div>
               ) : null}
 
               {kind === "apply" ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    {isMultiApply ? "Public browse link" : "Public application link"}
-                  </p>
-                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                    {linkUrl || "Select a property to generate a link."}
-                  </div>
-                  {isMultiApply ? (
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                      Opens the browse page filtered to the {propertyIds.length} homes you selected.
-                    </p>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2 rounded-full"
-                    disabled={!linkUrl}
-                    onClick={() =>
-                      void handleCopy(linkUrl, isMultiApply ? "Browse link copied." : "Application link copied.")
-                    }
-                  >
-                    {isMultiApply ? "Copy browse link" : "Copy application link"}
-                  </Button>
-                  {!isMultiApply ? (
-                    <p className="mt-2 text-xs leading-relaxed text-muted">
-                      Applicants create a resident account first, then complete the application in their portal.
-                    </p>
-                  ) : null}
-                </div>
+                <ShareLinkCopyRow
+                  label={isMultiApply ? "Public browse link" : "Public application link"}
+                  url={linkUrl}
+                  copyLabel={isMultiApply ? "Copy browse link" : "Copy application link"}
+                  onCopy={() =>
+                    void handleCopy(linkUrl, isMultiApply ? "Browse link copied." : "Application link copied.")
+                  }
+                  hint={
+                    isMultiApply
+                      ? `Opens the browse page filtered to the ${propertyIds.length} homes you selected.`
+                      : !isMultiApply
+                        ? "Applicants create a resident account first, then complete the application in their portal."
+                        : undefined
+                  }
+                />
               ) : null}
 
               <div className="border-t border-border pt-4">
@@ -481,7 +499,7 @@ export function ShareLeadLinkModal({
                 ) : null}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="share-lead-name" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    <label htmlFor="share-lead-name" className={FIELD_LABEL_CLASS}>
                       Name (optional)
                     </label>
                     <Input
@@ -492,7 +510,7 @@ export function ShareLeadLinkModal({
                     />
                   </div>
                   <div>
-                    <label htmlFor="share-lead-email" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    <label htmlFor="share-lead-email" className={FIELD_LABEL_CLASS}>
                       Email
                     </label>
                     <Input
@@ -505,7 +523,7 @@ export function ShareLeadLinkModal({
                   </div>
                 </div>
                 <div className="mt-3">
-                  <label htmlFor="share-lead-note" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                  <label htmlFor="share-lead-note" className={FIELD_LABEL_CLASS}>
                     Note (optional)
                   </label>
                   <textarea
