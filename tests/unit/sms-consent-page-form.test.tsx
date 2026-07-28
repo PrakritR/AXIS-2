@@ -48,7 +48,7 @@ describe("SmsOptInForm (public /sms-consent)", () => {
     });
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /opt in to text messages/i }));
-    expect(screen.getByText(/consent recorded/i)).toBeTruthy();
+    expect(screen.getByText(/consent confirmed/i)).toBeTruthy();
     expect(screen.getByText(/rental application and account/i)).toBeTruthy();
   });
 });

@@ -27,7 +27,7 @@ export function SmsOptInForm() {
   if (submitted) {
     return (
       <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 px-5 py-5 text-sm text-foreground [html[data-theme=dark]_&]:bg-emerald-500/10">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Consent recorded</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Consent confirmed</p>
         <p className="mt-2 leading-relaxed">
           Thanks — you opted in for texts about your rental application and account at{" "}
           <span className="font-semibold">{phoneTrimmed}</span>. Enter this number on a PropLane rental

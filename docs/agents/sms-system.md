@@ -474,10 +474,20 @@ campaign rejected on resubmit:
   precondition for applying). Locked by `tests/unit/tours-contact-sms-consent-ui.test.tsx`
   and `tests/unit/sms-consent-page-form.test.tsx`.
 - The **real** opt-in lives in the rental application flow: the same checkbox
-  renders in the wizard Contact step (`rental-wizard-steps.tsx`, step 4) and
-  persists `smsConsent` / `smsConsentAt` on the submitted application snapshot
+  renders in the wizard Contact step (`rental-wizard-steps.tsx`, step 4), gated
+  on the same Phone question as the phone input (no phone collected → no consent
+  control), and persists `smsConsent` / `smsConsentAt` /
+  `smsConsentWordingVersion` on the submitted application snapshot
   (`RentalWizardFormState`). The number the applicant enters is the one that
-  receives texts.
+  receives texts. The timestamp + wording version are **server-owned**
+  compliance evidence: `POST /api/manager-applications` stamps them
+  (`anchorServerOwnedSmsConsent`), preserving the first server stamp across
+  draft re-upserts and clearing both when consent is off — client-supplied
+  values are never trusted. The wording version constant lives in
+  `src/lib/rental-application/sms-consent.ts` (plain TS, imported by both the
+  checkbox and the route); **bump `SMS_CONSENT_WORDING_VERSION` whenever the
+  checkbox wording changes**. Coverage:
+  `tests/unit/manager-applications-sms-consent-stamp.test.ts`.
 - Privacy (`/privacy`) and Terms (`/tos`) must name **PropLane** at
   **prop-lane.space** (they do) — the consent page and the campaign both link to
   them; a brand/domain mismatch invites a second rejection.

@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SMS_CONSENT_WORDING_VERSION } from "@/lib/rental-application/sms-consent";
+
 /**
  * Carrier-compliant (A2P 10DLC / CTIA) SMS opt-in control. Rendered on every
  * public form that collects a phone number and can lead to an outbound text.
@@ -24,6 +26,7 @@ export function SmsConsentCheckbox({
     <label
       htmlFor={inputId}
       data-attr="sms-consent-checkbox"
+      data-wording-version={SMS_CONSENT_WORDING_VERSION}
       className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-accent/20 px-4 py-3"
     >
       <input
