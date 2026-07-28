@@ -104,7 +104,11 @@ describe("create listing wizard", () => {
     sub.securityDeposit = "";
     const errs = validateListingWizardStep(4, sub);
     expect(errs.allowedLeaseTerms).toMatch(/lease term/i);
-    expect(errs.securityDeposit).toMatch(/security deposit/i);
+
+    sub.allowedLeaseTerms = ["12-Month"];
+    sub.securityDeposit = "";
+    const feeErrs = validateListingWizardStep(4, sub);
+    expect(feeErrs.securityDeposit).toMatch(/security deposit/i);
   });
 
   it("does NOT require an application fee on the pricing step (it is set per-manager in Application settings)", () => {
