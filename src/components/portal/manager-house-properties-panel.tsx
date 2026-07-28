@@ -337,7 +337,7 @@ function ManagerPropertyInlineDetails({
     ) : null;
 
   const previewHeaderActions = (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-nowrap items-center gap-2 sm:flex-wrap sm:justify-end">
       {bucket === 2 && listingId ? (
         <>
           <Button

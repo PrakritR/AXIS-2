@@ -45,10 +45,12 @@ async function smokeSignIn(
     await page.getByPlaceholder("Email").fill(email);
     await page.getByPlaceholder("Password").fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
-    await page.waitForURL(
-      (url) => url.pathname === next || url.pathname.startsWith(`${next}/`),
-      { timeout: SMOKE_TIMEOUT_MS },
-    );
+    // Smoke check only: confirm the credentials authenticate. The exact landing
+    // varies by account shape — a single-role account goes straight to its
+    // portal, a multi-role account (a shipped feature) may pass through
+    // /auth/continue or /auth/choose-portal — so assert only that we left the
+    // sign-in page.
+    await page.waitForURL((url) => url.pathname !== "/auth/sign-in", { timeout: SMOKE_TIMEOUT_MS });
   } finally {
     await context.close();
   }

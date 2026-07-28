@@ -81,7 +81,7 @@ async function expectFullCreateForm(page: Page) {
 test.describe('"Get started" while signed in', () => {
   test.skip(!hasSupabase, "Requires the dev/test Supabase project");
 
-  test("signed-in manager clicking Get started lands on the full create form", async ({ page }) => {
+  test("signed-in manager reaching Get started can still create another account", async ({ page }) => {
     await signIn(page, E2E_ACCOUNTS.manager.email, E2E_ACCOUNTS.manager.password);
 
     // Enter from the marketing home page exactly like an end user would.
@@ -95,17 +95,24 @@ test.describe('"Get started" while signed in', () => {
     await page.waitForLoadState("networkidle").catch(() => {});
 
     const chain = redirectChain(response, page.url());
-    // No bounce to a portal or a "continue" screen.
-    expect(chain.join(" -> ")).not.toMatch(/\/portal|\/auth\/continue/);
+    // No silent bounce to a portal — the create surface always loads.
+    expect(chain.join(" -> ")).not.toMatch(/\/portal/);
     expect(new URL(page.url()).pathname).toBe("/auth/create-account");
 
-    // The whole create form is present, not a single convert-my-session button.
-    await expectFullCreateForm(page);
-
-    // ...plus the informational notice naming the current session.
+    // A signed-in manager who ALREADY holds manager access now gets the
+    // already-have-access panel (AuthAlreadyHaveRolePanel: a "signed in as …"
+    // notice + a "Go to your portal" link), with the create form deliberately
+    // behind an explicit "Create a different property account" reveal — rather
+    // than a session-converting single button. That reveal is what still lets a
+    // signed-in manager make a SECOND account, the regression this suite guards.
     await expect(
       page.getByText(new RegExp(`signed in as\\s*${E2E_ACCOUNTS.manager.email}`, "i")),
     ).toBeVisible();
+    await expect(page.getByRole("link", { name: /go to your portal/i })).toBeVisible();
+    await page.getByRole("button", { name: /create a different property account/i }).click();
+
+    // Revealed: the whole create form, not a single convert-my-session button.
+    await expectFullCreateForm(page);
 
     await page.screenshot({ path: shot("signed-in-get-started"), fullPage: true });
     console.log(`redirect chain (signed in): ${chain.join(" -> ")}`);
@@ -119,12 +126,18 @@ test.describe('"Get started" while signed in', () => {
     await page.screenshot({ path: shot("signed-out-get-started"), fullPage: true });
   });
 
-  test("role=resident is still blocked with the setup-link message", async ({ page }) => {
+  test("role=resident now offers self-serve resident signup (no setup-link block)", async ({ page }) => {
+    // Resident self-serve signup is enabled (POST /api/auth/resident-register;
+    // captain decision, Jul 2026). The old emailed setup-link block is gone —
+    // generic `role=resident` (no legacy axis_id) renders the resident create
+    // form directly via the unified hub (create-account-router.tsx).
     await page.goto("/auth/create-account?mode=create&role=resident");
     await page.waitForLoadState("networkidle").catch(() => {});
-    await expect(page.getByText(/setup link/i).first()).toBeVisible();
-    await expect(page.getByPlaceholder("Full name")).toHaveCount(0);
-    await page.screenshot({ path: shot("resident-blocked"), fullPage: true });
+    await expect(page.getByPlaceholder("Full name")).toBeVisible();
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: /create resident account/i })).toBeVisible();
+    await expect(page.getByText(/setup link/i)).toHaveCount(0);
+    await page.screenshot({ path: shot("resident-self-serve"), fullPage: true });
   });
 
   test("signed-in manager can create a SECOND account with a different email", async ({ page }) => {
@@ -135,6 +148,8 @@ test.describe('"Get started" while signed in', () => {
     await expect(
       page.getByText(new RegExp(`signed in as\\s*${E2E_ACCOUNTS.manager.email}`, "i")),
     ).toBeVisible();
+    // The already-have-access panel hides the form behind this reveal.
+    await page.getByRole("button", { name: /create a different property account/i }).click();
 
     await page.getByPlaceholder("Full name").fill("Second Account Manager");
     await page.getByPlaceholder("Email").fill(newEmail);

@@ -500,3 +500,68 @@ describe("resuming a saved draft", () => {
     expect(currentStep.textContent).toMatch(/Bathrooms/);
   });
 });
+
+describe("disclosure trigger fields survive a draft save and resume", () => {
+  it("persists what the manager entered and renders it back on resume", async () => {
+    const { onClose } = renderWizard();
+
+    typePropertyName("Ravenna Craftsman");
+    // A Seattle address, so the Seattle-only RRIO input is offered.
+    typeAddress("5200 Ravenna Ave NE, Seattle, WA");
+    fireEvent.change(screen.getByPlaceholderText("e.g. 1962"), { target: { value: "1962" } });
+    fireEvent.change(screen.getByPlaceholderText("MM/DD/YYYY"), { target: { value: "06/01/1978" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /utility meter also serves/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /periodic pest control/i }));
+    fireEvent.change(screen.getByPlaceholderText("e.g. RRIO-123456"), { target: { value: "RRIO-987654" } });
+
+    clickClose();
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+
+    const draft = readAdminPropertyRows(5, MANAGER_ID)[0]!;
+    expect(draft.submission).toMatchObject({
+      yearBuilt: 1962,
+      sharedUtilityMetering: true,
+      hasPeriodicPestService: true,
+      certificateOfOccupancyDate: "1978-06-01",
+      rrioRegistrationNumber: "RRIO-987654",
+    });
+    cleanup();
+
+    const resumed = renderWizard({
+      initialSubmission: draft.submission,
+      editDraftId: draft.adminRefId,
+      initialStepIndex: 0,
+      initialMaxStepReached: 0,
+    });
+    expect(screen.getByPlaceholderText("e.g. 1962")).toHaveValue("1962");
+    expect(screen.getByPlaceholderText("MM/DD/YYYY")).toHaveValue("06/01/1978");
+    expect(screen.getByRole("checkbox", { name: /utility meter also serves/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /periodic pest control/i })).toBeChecked();
+    expect(screen.getByPlaceholderText("e.g. RRIO-123456")).toHaveValue("RRIO-987654");
+    void resumed;
+  });
+
+  it("shows no phantom defaults for a submission created before the fields existed", () => {
+    // `createDefaultListingSubmission()` carries none of the new keys, which is
+    // exactly the shape of every listing stored before this change.
+    renderWizard({ initialSubmission: createDefaultListingSubmission() });
+
+    expect(screen.getByPlaceholderText("e.g. 1962")).toHaveValue("");
+    expect(screen.getByPlaceholderText("MM/DD/YYYY")).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: /utility meter also serves/i })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /periodic pest control/i })).not.toBeChecked();
+  });
+
+  it("hides the Seattle-only RRIO input for a non-Seattle address, but never one holding a value", () => {
+    const { view } = renderWizard();
+    typeAddress("1200 Market St, San Francisco, CA");
+    expect(screen.queryByPlaceholderText("e.g. RRIO-123456")).toBeNull();
+    view.unmount();
+
+    renderWizard({
+      initialSubmission: { ...createDefaultListingSubmission(), rrioRegistrationNumber: "RRIO-987654" },
+    });
+    typeAddress("1200 Market St, San Francisco, CA");
+    expect(screen.getByPlaceholderText("e.g. RRIO-123456")).toHaveValue("RRIO-987654");
+  });
+});

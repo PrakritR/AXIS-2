@@ -6,6 +6,7 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
 import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
+import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
 import {
@@ -946,6 +947,20 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
             </WizardFieldGate>
           </div>
+          {/* A2P 10DLC SMS opt-in. Optional (never required to apply); the number
+              entered above is the one that would receive texts, so the control
+              follows the Phone question's gate. Unchecked by default; consent +
+              timestamp persist on the submitted snapshot (the server re-stamps
+              the timestamp + wording version on upsert). */}
+          <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
+            <SmsConsentCheckbox
+              inputId="sms-consent"
+              checked={Boolean(form.smsConsent)}
+              onChange={(next) =>
+                patch({ smsConsent: next, smsConsentAt: next ? new Date().toISOString() : undefined })
+              }
+            />
+          </WizardFieldGate>
         </div>
 
         <div className="space-y-5">

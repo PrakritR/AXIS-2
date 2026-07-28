@@ -442,7 +442,9 @@ export function ManagerPortalPageShell({
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="min-w-0 shrink-0">
+        {/* min-w-0 (not shrink-0) so a long title/subtitle shrinks + wraps within
+            the viewport on mobile instead of forcing horizontal overflow. */}
+        <div className="min-w-0">
           <h1
             className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
               hideTitleOnNative ? "[html[data-native]_&]:sr-only" : ""
@@ -457,7 +459,11 @@ export function ManagerPortalPageShell({
           ) : null}
         </div>
         {titleAside ? (
-          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
+          // min-w-0 (not shrink-0): the action group can shrink, so when it is
+          // too wide for the title row on a phone the whole group wraps to its
+          // own line (header is flex-wrap) and its buttons wrap within the
+          // viewport, instead of overflowing and clipping the last action.
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
         ) : null}
       </div>
       {filterRow ? (

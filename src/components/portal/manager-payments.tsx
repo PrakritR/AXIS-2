@@ -28,8 +28,8 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerPaymentSetupModal } from "@/components/portal/manager-payment-setup-modal";
-import { formatGmailPaymentsConnectError } from "@/lib/gmail-payments/connect-errors";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -106,8 +106,6 @@ export function ManagerPayments() {
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
-  const [paymentSetupInitialChannel, setPaymentSetupInitialChannel] = useState<"zelle" | "venmo" | null>(null);
-  const [paymentSetupGmailErrorReason, setPaymentSetupGmailErrorReason] = useState<string | null>(null);
   const [bankLinkBanner, setBankLinkBanner] = useState(false);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
@@ -203,30 +201,6 @@ export function ManagerPayments() {
     const params = new URLSearchParams(window.location.search);
     const payouts = params.get("payouts");
     const connect = params.get("connect");
-    const gmailPay = params.get("gmail-pay");
-    if (gmailPay === "connected") {
-      setPaymentSetupOpen(true);
-      setPaymentSetupInitialChannel("venmo");
-      setPaymentSetupGmailErrorReason(null);
-      showToast("Gmail linked for payment tracking.");
-      const url = new URL(window.location.href);
-      url.searchParams.delete("gmail-pay");
-      url.searchParams.delete("reason");
-      window.history.replaceState({}, "", url.pathname + url.search);
-      return;
-    }
-    if (gmailPay === "error") {
-      const reason = params.get("reason");
-      setPaymentSetupOpen(true);
-      setPaymentSetupInitialChannel("venmo");
-      setPaymentSetupGmailErrorReason(reason);
-      showToast(formatGmailPaymentsConnectError(reason));
-      const url = new URL(window.location.href);
-      url.searchParams.delete("gmail-pay");
-      url.searchParams.delete("reason");
-      window.history.replaceState({}, "", url.pathname + url.search);
-      return;
-    }
     if (connect === "done" || connect === "refresh") {
       if (window.opener && !window.opener.closed) {
         try {
@@ -239,18 +213,14 @@ export function ManagerPayments() {
       }
       if (connect === "done") {
         setBankLinkBanner(true);
-        showToast("Bank account linked. You're ready to receive resident payments.");
-      } else if (connect === "refresh") {
-        showToast("Setup link expired. Open Payment setup to try again.");
       }
-      window.history.replaceState({}, "", `${portalBase}/payments`);
-      window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
+      // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
       return;
     }
     if (payouts === "1") {
       window.location.replace(`${portalBase}/payments`);
     }
-  }, [portalBase, showToast]);
+  }, [portalBase]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -472,6 +442,12 @@ export function ManagerPayments() {
               Reminders
             </Button>
           ) : null}
+          <PortalStripeConnectPanel
+            basePath={portalBase}
+            variant="header"
+            onConnectDone={() => setBankLinkBanner(true)}
+            onOpenPaymentSetup={() => setPaymentSetupOpen(true)}
+          />
           <Button
             type="button"
             variant="outline"
@@ -574,14 +550,8 @@ export function ManagerPayments() {
       />
       <ManagerPaymentSetupModal
         open={paymentSetupOpen}
-        onClose={() => {
-          setPaymentSetupOpen(false);
-          setPaymentSetupInitialChannel(null);
-          setPaymentSetupGmailErrorReason(null);
-        }}
+        onClose={() => setPaymentSetupOpen(false)}
         portalBase={portalBase}
-        initialChannel={paymentSetupInitialChannel}
-        gmailConnectErrorReason={paymentSetupGmailErrorReason}
       />
 
     </ManagerPortalPageShell>
