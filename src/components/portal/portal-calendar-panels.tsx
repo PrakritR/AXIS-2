@@ -225,6 +225,7 @@ export function PortalCalendarPanels({
   eventSummaryLabel,
   vendorDayFlexibility,
   vendorCalendarActions,
+  preferEventCountsInDayHeader = false,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -253,6 +254,7 @@ export function PortalCalendarPanels({
     onOpenFlexibleSettings: () => void;
   };
   /** Vendor calendar: click empty slots to add personal work blocks; edit vendor-owned meetings. */
+  preferEventCountsInDayHeader?: boolean;
   vendorCalendarActions?: {
     onAddFromSlot: (dateStr: string, slotIdx: number) => void;
     canEditMeeting: (meeting: DemoMeeting) => boolean;
@@ -1445,7 +1447,7 @@ export function PortalCalendarPanels({
                             {d.toLocaleDateString(undefined, { weekday: "short" })}
                           </span>
                           <span className="text-sm font-semibold">{d.toLocaleDateString(undefined, { day: "numeric" })}</span>
-                          <span className="text-[9px] font-medium opacity-80">{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</span>
+                          <span className="text-[9px] font-medium opacity-80">{readOnly || preferEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}</span>
                         </button>
                       );
                     })}
@@ -1479,7 +1481,7 @@ export function PortalCalendarPanels({
                         <div className={`px-1.5 py-2 sm:px-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                         {activeBlockDates.map((d) => {
                           const ds = toLocalDateStr(d);
-                          const count = readOnly
+                          const count = readOnly || preferEventCountsInDayHeader
                             ? meetings.filter((meeting) => meeting.dateStr === ds).length
                             : visibleSlotIndices.reduce(
                                 (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
@@ -1494,7 +1496,7 @@ export function PortalCalendarPanels({
                                 {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                               </p>
                               <p className={`mt-0.5 text-[10px] font-medium sm:text-[11px] ${CALENDAR_OPEN_COUNT}`}>
-                                {readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}
+                                {readOnly || preferEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}
                               </p>
                               {renderFlexibleToggle(d.getDay())}
                             </div>

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import {
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "./portal-metrics";
+import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -50,36 +51,6 @@ import {
 } from "@/lib/demo-admin-scheduling";
 
 type ManagerCalendarView = "all" | "tours" | "services";
-
-function ManagerCalendarPropertyFilter({
-  properties,
-  value,
-  onChange,
-  emptyLabel = "All properties",
-}: {
-  properties: { id: string; name: string }[];
-  value: string;
-  onChange: (propertyId: string) => void;
-  emptyLabel?: string;
-}) {
-  return (
-    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-      <FieldSingleSelect
-        hideLabel
-        label="Property"
-        variant="pill"
-        className="min-w-[12rem] max-w-full"
-        value={value}
-        onChange={onChange}
-        options={[
-          { value: "", label: emptyLabel },
-          ...properties.map((p) => ({ value: p.id, label: p.name })),
-        ]}
-        dataAttr="portal-calendar-property"
-      />
-    </div>
-  );
-}
 
 export function PortalCalendar({
   portal,
@@ -183,14 +154,16 @@ export function PortalCalendar({
     };
   }, [portal, authReady, userId]);
 
-  const managerProperties = useMemo(() => {
+  const managerPropertyFilterOptions = useMemo(() => {
     if (portal !== "manager" || !userId) return [];
     void propertyTick;
-    return buildManagerPropertyFilterOptions(userId).map((property) => ({
-      id: property.id,
-      name: property.label,
-    }));
+    return buildManagerPropertyFilterOptions(userId);
   }, [portal, userId, propertyTick]);
+
+  const managerProperties = useMemo(
+    () => managerPropertyFilterOptions.map((property) => ({ id: property.id, name: property.label })),
+    [managerPropertyFilterOptions],
+  );
 
   // In the /demo sandbox, pre-select the first property so the calendar opens
   // populated (availability + tours) instead of on the "Select a house" blank.
@@ -386,7 +359,19 @@ export function PortalCalendar({
       <ManagerPortalPageShell
         title={pageTitle}
         filterRow={
-          <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} emptyLabel={calendarView === "tours" ? "Select a house" : "All properties"} />
+          <ManagerPortalFilterRow>
+              <ManagerPortalStatusPills
+                tabs={calendarTabs}
+                activeId={calendarView}
+                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+              />
+              <PortalPropertyFilterPill
+                propertyOptions={managerPropertyFilterOptions}
+                propertyValue={activeCalendarPropertyId}
+                onPropertyChange={setCalendarPropertyId}
+                propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
+              />
+          </ManagerPortalFilterRow>
         }
       >
         <p className="text-sm text-muted">{propertiesLoading ? "Loading houses…" : "Loading calendar…"}</p>
@@ -398,7 +383,19 @@ export function PortalCalendar({
       <ManagerPortalPageShell
         title={pageTitle}
         filterRow={
-          <ManagerCalendarPropertyFilter properties={managerProperties} value={activeCalendarPropertyId} onChange={setCalendarPropertyId} emptyLabel={calendarView === "tours" ? "Select a house" : "All properties"} />
+          <ManagerPortalFilterRow>
+              <ManagerPortalStatusPills
+                tabs={calendarTabs}
+                activeId={calendarView}
+                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
+              />
+              <PortalPropertyFilterPill
+                propertyOptions={managerPropertyFilterOptions}
+                propertyValue={activeCalendarPropertyId}
+                onPropertyChange={setCalendarPropertyId}
+                propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
+              />
+          </ManagerPortalFilterRow>
         }
       >
         <p className="text-sm text-muted">Sign in to manage your availability.</p>
@@ -438,18 +435,19 @@ export function PortalCalendar({
         filterRow={
           portal === "manager" ? (
             <div className="flex w-full min-w-0 flex-col gap-3">
+            <ManagerPortalFilterRow>
               <ManagerPortalStatusPills
                 tabs={calendarTabs}
                 activeId={calendarView}
                 onChange={(id) => setCalendarView(id as ManagerCalendarView)}
-                compact
               />
-              <ManagerCalendarPropertyFilter
-                properties={managerProperties}
-                value={activeCalendarPropertyId}
-                onChange={setCalendarPropertyId}
-                emptyLabel={calendarView === "tours" ? "Select a house" : "All properties"}
+              <PortalPropertyFilterPill
+                propertyOptions={managerPropertyFilterOptions}
+                propertyValue={activeCalendarPropertyId}
+                onPropertyChange={setCalendarPropertyId}
+                propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All your properties"}
               />
+            </ManagerPortalFilterRow>
               {showCoManagerCoordination ? (
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
                   <input
@@ -508,6 +506,7 @@ export function PortalCalendar({
             externalMeetings={portal === "manager" ? mergedExternalMeetings : undefined}
             readOnly={portal === "manager" ? calendarPanelsReadOnly : false}
             eventSummaryLabel={servicesOnlyView ? "visit" : calendarView === "all" ? "event" : "tour"}
+            preferEventCountsInDayHeader={calendarView !== "tours"}
             otherProperties={
               portal === "manager" && activeCalendarPropertyId
                 ? managerProperties.filter((p) => p.id !== activeCalendarPropertyId)
