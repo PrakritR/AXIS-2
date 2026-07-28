@@ -168,6 +168,39 @@ describe("POST /api/manager-applications — server-owned SMS consent stamp", ()
     expect(app.smsConsentWordingVersion).toBe("2026-01-01.1");
   });
 
+  it("preserves stored consent evidence when the blob omits smsConsent entirely", async () => {
+    const firstStamp = "2026-07-01T12:00:00.000Z";
+    STORED_ROWS = [
+      {
+        id: "AXIS-90210",
+        row_data: residentRow({
+          managerUserId: OWNER,
+          application: application({
+            smsConsent: true,
+            smsConsentAt: firstStamp,
+            smsConsentWordingVersion: "2026-01-01.1",
+          }),
+        }),
+      },
+    ];
+
+    const res = await submit(
+      residentRow({
+        application: application({
+          smsConsent: undefined,
+          smsConsentAt: undefined,
+          smsConsentWordingVersion: undefined,
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const app = UPSERTS[0].row_data.application!;
+    expect(app.smsConsent).toBe(true);
+    expect(app.smsConsentAt).toBe(firstStamp);
+    expect(app.smsConsentWordingVersion).toBe("2026-01-01.1");
+  });
+
   it("clears the stamp and wording version when consent is off", async () => {
     STORED_ROWS = [
       {

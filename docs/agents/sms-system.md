@@ -482,8 +482,10 @@ campaign rejected on resubmit:
   receives texts. The timestamp + wording version are **server-owned**
   compliance evidence: `POST /api/manager-applications` stamps them
   (`anchorServerOwnedSmsConsent`), preserving the first server stamp across
-  draft re-upserts and clearing both when consent is off — client-supplied
-  values are never trusted. The wording version constant lives in
+  draft re-upserts and clearing both only on an EXPLICIT `smsConsent: false`
+  (a blob that merely omits the field — a legacy client or pre-deploy manager
+  mirror — preserves the stored evidence) — client-supplied values are never
+  trusted. The wording version constant lives in
   `src/lib/rental-application/sms-consent.ts` (plain TS, imported by both the
   checkbox and the route); **bump `SMS_CONSENT_WORDING_VERSION` whenever the
   checkbox wording changes**. Coverage:

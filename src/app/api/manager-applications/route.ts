@@ -255,8 +255,11 @@ function anchorServerOwnedWithdrawal(
  * mirrors a client blob wholesale, so the client-supplied `smsConsentAt` /
  * `smsConsentWordingVersion` are never trusted: while `smsConsent` is true the
  * server keeps the FIRST stamp it recorded (draft rows re-upsert on every
- * keystroke) or mints a fresh timestamp + current wording version; when consent
- * is off, both are cleared.
+ * keystroke) or mints a fresh timestamp + current wording version; an EXPLICIT
+ * `smsConsent: false` (a genuine uncheck/opt-out) clears both. A blob that
+ * simply lacks the field (a legacy client, a manager mirror captured before the
+ * field existed, an unrelated re-upsert) preserves whatever the server already
+ * recorded — absence is not an opt-out and must never destroy evidence.
  */
 function anchorServerOwnedSmsConsent(
   row: DemoApplicantRow,
@@ -273,6 +276,18 @@ function anchorServerOwnedSmsConsent(
         smsConsentAt: firstStampAt ?? new Date().toISOString(),
         smsConsentWordingVersion:
           (firstStampAt ? storedApp?.smsConsentWordingVersion : undefined) ?? SMS_CONSENT_WORDING_VERSION,
+      },
+    };
+  }
+  const storedApp = stored?.application;
+  if (row.application.smsConsent === undefined && storedApp?.smsConsent !== undefined) {
+    return {
+      ...row,
+      application: {
+        ...row.application,
+        smsConsent: storedApp.smsConsent,
+        smsConsentAt: storedApp.smsConsentAt,
+        smsConsentWordingVersion: storedApp.smsConsentWordingVersion,
       },
     };
   }
