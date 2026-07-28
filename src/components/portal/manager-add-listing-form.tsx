@@ -2420,6 +2420,10 @@ export function ManagerAddListingForm({
                   key={step.id}
                   type="button"
                   disabled={!reachable}
+                  // The pills are the wizard's only step indicator, so the current
+                  // one must be exposed to assistive tech (and to anything reading
+                  // the resumed step of a saved draft), not signalled by colour alone.
+                  aria-current={i === stepIndex ? "step" : undefined}
                   onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
                   className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     i === stepIndex

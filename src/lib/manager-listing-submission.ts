@@ -1,5 +1,8 @@
 /** Full manager “add listing” payload — drives generated listing detail page (localStorage-backed). */
 
+// listing-fees.ts imports only TYPES from this module, so this runtime import
+// back into it is not a cycle.
+import { resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
 import {
   LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
@@ -929,12 +932,24 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let customFees = sub.customFees;
   if (!Array.isArray(customFees)) customFees = [];
+  // Spread the row first so the unified-fee metadata (presetId, cadence,
+  // dueAtSigning, shortTermOnly, creditsTowardSecurity) survives normalization.
+  // Stripping each row to the four legacy fields is what stopped unified fees
+  // from ever persisting through a save.
   customFees = customFees.map((f) => ({
+    ...f,
     id: f.id ?? rid("fee"),
     label: typeof f.label === "string" ? f.label.trim() : "",
     amount: typeof f.amount === "string" ? f.amount.trim() : "",
     frequency: f.frequency === "one-time" ? "one-time" : "monthly",
   }));
+  // A submission still carrying only the old individual fee fields (securityDeposit,
+  // moveInFee, parkingMonthly, …) is migrated to unified preset rows on read, which
+  // is the "legacy dual-write" half that was never wired up. Already-unified rows
+  // are left alone.
+  if (!submissionUsesUnifiedListingFees(customFees)) {
+    customFees = resolveListingFees({ ...sub, customFees });
+  }
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
     ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
