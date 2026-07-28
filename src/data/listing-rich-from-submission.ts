@@ -545,6 +545,7 @@ function deriveQuickFacts(
 }
 
 function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSubmission[], property: MockProperty): BundleCard[] {
+  if (isEntireHomeListing(sub)) return [];
   const custom = (sub.bundles ?? []).filter(bundleRowHasContent);
   if (custom.length > 0) {
     return custom.map((b) => {
