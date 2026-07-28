@@ -662,7 +662,8 @@ fixture (a $55/day room in Fremont CA, an 11-day stay), before the fix:
 
 1. Daily room, short-term rentals **unticked**: the ledger billed **$605.00** correctly, but
    the document was the long-form residential lease quoting `$1200.00 / month` in Exhibit A.
-   Right charge, wrong document, wrong number.
+   Right charge, wrong number. Such a placement still takes the long-form lease (see the
+   `shortTermRentalsAllowed` gate below) — it now quotes `$55.00 / day`.
 2. Room `$55/day` vs listing `shortTermDailyCost` `$40`, explicit short-term application: the
    ledger billed **$440.00**, the listing rate. Both sides ignored the room.
 3. Listing short-term fields blank: the document rendered `— per day` and `—` for both totals.
@@ -686,23 +687,58 @@ Precedence, in order:
 2. **Negotiated monthly rent** (`managerRentOverride`, then `signedMonthlyRent`) beats the
    room's daily basis, exactly as it already beat the room's listing monthly rent. Mirrors
    `residentNegotiatedMonthlyRent` in `household-charges.ts`.
-3. **A room priced by the day is a short stay ONLY when the stay is actually short**, i.e.
-   `isIntraMonthStay(leaseStart, leaseEnd)` (`short-term-stay-pricing.ts`), which mirrors the
-   ledger's `intraMonthLeaseSpan` and is exactly when the charges settle as ONE up-front stay
-   total. This clause is the fix that makes the short-term agreement reachable for a
-   daily-priced room whose manager never ticked `shortTermRentalsAllowed`.
+3. **A room priced by the day is a short stay ONLY when BOTH gates pass**: the listing's
+   `shortTermRentalsAllowed` is ticked, AND `isIntraMonthStay(leaseStart, leaseEnd)`
+   (`intraMonthStaySpan`, `short-term-stay-pricing.ts` — the same function the ledger uses),
+   which is exactly when the charges settle as ONE up-front stay total.
 
-   **The duration bound is load-bearing, do not remove it.** `rentBasis:"daily"` is a BILLING
-   BASIS, and AGENTS.md defines it as a supported way to bill a normal tenancy (first month,
-   each recurring month, partial last month). Gating the document type on the basis alone
-   handed a 12-month daily-priced resident a lodger agreement that disclaims tenancy, drops the
-   federally required lead-paint disclosure, deposit-return terms, entry notice and Addenda
-   A-E, and states a single up-front total the ledger never bills. Both ship-gate reviews
-   caught this independently. With unknown or open-ended dates the resolver returns `"long"`:
-   the expensive mistake is giving a real tenant a document that denies their tenancy.
+   **Both gates are load-bearing, do not remove either.**
 
-   `basis` stays `"daily"` in both outcomes, so rent labels follow the real rate either way.
+   - *The duration bound.* `rentBasis:"daily"` is a BILLING BASIS, and AGENTS.md defines it as
+     a supported way to bill a normal tenancy (first month, each recurring month, partial last
+     month). Gating the document type on the basis alone handed a 12-month daily-priced
+     resident a lodger agreement that disclaims tenancy, drops the federally required
+     lead-paint disclosure, deposit-return terms, entry notice and Addenda A-E, and states a
+     single up-front total the ledger never bills. With unknown or open-ended dates the
+     resolver returns `"long"`: the expensive mistake is giving a real tenant a document that
+     denies their tenancy.
+   - *The `shortTermRentalsAllowed` tick.* The short-term document asserts
+     `Owner-Occupied Residence` in its header and `Owner/Host lives on or controls the
+     property` in Section 10, and disclaims tenancy. A billing-basis flag plus two dates
+     establishes none of that, so an EXPLICIT manager signal is required before the lodger
+     document can render. **This deliberately overrides the original task brief**, whose
+     acceptance criterion said an unticked listing should still produce the short-term
+     agreement; the user reviewed the finding and chose the override, because asserting
+     owner-occupancy on the strength of a pricing flag is a legal claim the data does not
+     support. An unticked daily-priced listing now gets the full residential lease, which is
+     safe because that lease quotes the daily rate (see "The long form is daily-aware" below).
+   - `rentalType === "short_term"` is itself an explicit declaration, so clause 1 above still
+     wins outright regardless of either gate.
+
+   `basis` stays `"daily"` in every outcome, so rent labels follow the real rate either way.
 4. Otherwise the room's monthly rent. Byte-identical to legacy behavior.
+
+**`stayKind` chooses only the DOCUMENT; it never moves a charge.** The ledger's `dailyBasisRate`
+path is keyed on the room, not on `stayKind`, so flipping the tick changes which agreement
+renders and nothing about what the resident owes. `tests/unit/daily-rent-charges.test.ts` is the
+guard and passes unmodified.
+
+### The long form is daily-aware
+
+Because a daily-priced room is now routed to the residential lease far more often, that branch
+consumes `stay` too. When `stay.basis === "daily"`:
+
+- the rent figure is the daily rate (`$55.00 / day`), and every rent label follows the basis
+  (`Daily base rent`, never `Monthly base rent` over a per-day figure), in Section 4 and in
+  Exhibit A;
+- the **Total monthly payment** row is omitted. Adding a per-day rate to a monthly utilities
+  figure is meaningless, and `DAILY_RENT_MONTH_ESTIMATE_DAYS` is display/sort-only and must
+  never reach a lease. A prose sentence states the real rule instead: each month bills the
+  actual days of the term in that month × the daily rate, plus utilities;
+- Section 5 **Prorated First Month** is suppressed — it prorates a MONTHLY rent (it would read
+  `55` as a monthly figure) and every month already bills by real days;
+- a month-to-month surcharge is NOT folded into the rate (that would print a daily rate $25 too
+  high); it stays its own monthly line.
 
 **The deposit keys on `rentalType`, not on the resolved `stayKind`.** That asymmetry is
 deliberate and load-bearing: only an explicit short-term application is charged
@@ -724,6 +760,81 @@ bare `new Date("YYYY-MM-DD")`, which parses as UTC and could land a day away fro
 
 `room-pricing.ts` must **never** import `generated-lease.ts`, which imports it. It may import
 `parse-money` and `short-term-stay-pricing` (both verified acyclic).
+
+### One rule, one implementation — the three dedups
+
+A resolver that both sides call is worthless if either side can feed it different inputs, so
+the inputs are shared too. Never re-add a second copy of any of these.
+
+| Rule | The ONE implementation | Was duplicated in |
+| --- | --- | --- |
+| Is this lease a single intra-month billing span? | `intraMonthStaySpan` (`short-term-stay-pricing.ts`) | a private `intraMonthLeaseSpan` in `household-charges.ts` |
+| Which room of the submission is this application on? | `resolveSubmissionRoom` (`listing-room-resolution.ts`) | inline chains in `household-charges.ts` and `build-lease-html.ts` |
+| What is this room's rent line? | `submissionRoomRentLabel` (same module) | `findSubmissionRoomRent` / `submissionRoomRentFromChoice`, once in `generated-lease.ts` (daily-aware) and again in `build-lease-html.ts` (monthly-only) |
+
+**`resolveSubmissionRoom` precedence** is the ledger's original chain with the document's
+unit-label match inserted after the id lookups: room-choice ids in the order given → unit-label
+name match (exact, then partial) → unique `signedMonthlyRent` match → the only room → the only
+`daily_rate` room. The ledger passes no `unitLabel`, so that step is inert for it and its
+precedence is unchanged. Callers pass an ALREADY-NORMALIZED submission.
+
+Two knock-on notes in `build-lease-html.ts`: `wholeHome` is now derived from the LISTING
+(`isEntireHomeListing` / no named rooms) rather than from "no room record resolved", because the
+shared chain can match a single unnamed room on an entire-home listing; and the whole-home label
+is checked before the room name so entire-home premises still read `Entire home`.
+
+**Money-path behavior change from the span dedup:** the ledger used to split lease dates strictly
+on `-`, so a non-ISO date (which `manualResidentDetails.moveInDate` / `moveOutDate` can
+legitimately be, e.g. `3/10/2026`) silently fell out of the intra-month collapse and was billed a
+first-month AND a last-month charge for the same days. Both sides now parse through
+`parseFlexibleLocalDate`, so such a lease collapses to one charge. Coverage:
+`stay-pricing-repro.test.ts` case 14.
+
+### Utilities on a stay follow the ledger's two branches
+
+`rentBasis: "daily"` and `prorateMethod: "daily_rate"` are independent per-room fields that
+AGENTS.md says coexist. The ledger prorates a stay's utilities as
+`billableDays × dailyUtilitiesRate` when the room has `prorateMethod === "daily_rate"` and a
+positive `dailyUtilitiesRate`, and as `monthlyEstimate × (billableDays / daysInMonth)` otherwise.
+The short-term document's `Utilities estimate` row implements the same two branches, or its
+`Total due` disagrees with the charges for any room carrying both fields.
+Coverage: `stay-pricing-repro.test.ts` case 11.
+
+### The holding-deposit credit is threaded in, never guessed
+
+The approval charges bill `Math.max(0, securityDeposit - paidHoldingDepositCredit)`, so a
+document quoting the gross deposit overstates what the resident owes. `buildLeaseHtml` is pure
+and cannot read the charge store, so the credit arrives as an OPTIONAL
+`LeaseGenerationContext.holdingDepositCreditUsd`:
+
+- `leaseContextFromApplication(app, { applicationId })` populates it via
+  `paidHoldingDepositCreditUsd` (`household-charges.ts`), which returns `undefined` off-browser.
+  Wired at the call paths that know the id — `lease-pipeline-storage.ts` (`row.axisId`),
+  `resident-lease-panel.tsx`, `lease-document-preview.tsx`.
+- Server-side callers (`lease-amendment.server.ts`) and `property-lease-preview.ts` leave it
+  undefined on purpose.
+- **`undefined` means UNKNOWN, never "zero credit".** Absent → the gross deposit is quoted,
+  byte-identical to before. Present and > 0 → a `Less holding deposit paid` row renders and the
+  total nets it, capped at the deposit so it can never go negative.
+- It applies on both branches, but never to an explicit `short_term` application, whose ledger
+  branch does not apply the credit either.
+Coverage: `stay-pricing-repro.test.ts` cases 12 and 13.
+
+### Executed short-term clauses added in this change (user-approved)
+
+These are new contract terms a guest signs, not a pricing change, and they were approved
+explicitly and separately from the stay-pricing work (Jul 2026):
+
+- **8. Revocation of Permission** — permission-based occupancy, revocation for enumerated
+  conduct, and law-enforcement removal after check-out.
+- **9. Damages and Liability** — guest liability for damage beyond ordinary wear, and a
+  limitation of the host's liability for the guest's belongings.
+- Section 5 retitled **Purpose of Stay → Lodger Status**.
+
+Every obligation and every liability limitation in those sections carries an explicit
+"to the extent permitted by applicable law" qualifier plus a non-waiver sentence, so nothing
+reads as an unqualified waiver of a resident's statutory rights. No statute is cited.
+**Any future edit to executed-contract wording needs the same explicit approval.**
 
 ### Charge path change, and its live-data consequence
 
@@ -807,9 +918,10 @@ without the city-ordinance clause. Every statute reference carried over is alrea
   rent LABEL there now follows the resolved basis, but the document shape does not.
 - **`bundle.shortTermNightlyRent` is advertised but never billed.** Listing cards show it;
   neither the ledger nor the lease uses it. Both fall back to the listing default.
-- **Drifted duplicate helpers.** `escapeHtml`, `dash`, `findSubmissionRoomRent`, and
-  `submissionRoomRentFromChoice` exist in both `generated-lease.ts` and `build-lease-html.ts`.
-  Only the `generated-lease.ts` copies are daily-price aware. Same name, two answers.
+- **Drifted duplicate helpers.** `escapeHtml` and `dash` still exist in both
+  `generated-lease.ts` and `build-lease-html.ts`. They are pure formatters that have not
+  drifted, so they were left alone; the room-rent pair that HAD drifted is now the shared
+  `listing-room-resolution.ts` (see "One rule, one implementation" above).
 - **Short-term default check-in time is `"10:00 PM"`** (`build-lease-html.ts`), which reads like
   a typo for an afternoon check-in such as 3:00 PM.
 - **`parseMoneyAmount` concatenates every digit run**: `"500 refundable + $100 cleaning"` parses
@@ -831,8 +943,8 @@ without the city-ordinance clause. Every statute reference carried over is alrea
 
 | Test | What it pins |
 | --- | --- |
-| `tests/unit/stay-pricing.test.ts` | the resolver in isolation: all four precedence rules, both deposit branches, monthly no-ops |
-| `tests/unit/stay-pricing-repro.test.ts` | document and ledger agree, end to end, on one fixture. This is the reproduction, flipped |
+| `tests/unit/stay-pricing.test.ts` | the resolver in isolation: all four precedence rules, both `stayKind` gates, both deposit branches, monthly no-ops |
+| `tests/unit/stay-pricing-repro.test.ts` | document and ledger agree, end to end, on one fixture. This is the reproduction, flipped. Also the daily long form (8), daily utilities (11), the holding credit (12, 13), and the non-ISO span (14) |
 | `tests/unit/daily-rent-charges.test.ts` | the monthly charge path is unmoved (`$851.61`, `Rent — April 2026`, no `/day`) |
 | `tests/unit/lease-jurisdiction.test.ts` | address to jurisdiction, including the statewide fallbacks |
 | `tests/unit/generated-lease.test.ts` | long-form document content |

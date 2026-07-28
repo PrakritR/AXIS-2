@@ -12,10 +12,15 @@ type Props = {
   className?: string;
 };
 
-function draftHtmlFromApplication(application: Partial<RentalWizardFormState> | undefined): string | null {
+function draftHtmlFromApplication(
+  application: Partial<RentalWizardFormState> | undefined,
+  applicationId: string | undefined,
+): string | null {
   if (!application || !Object.keys(application).length) return null;
   try {
-    return buildAiGeneratedLeaseHtml(leaseContextFromApplication(application as RentalWizardFormState));
+    return buildAiGeneratedLeaseHtml(
+      leaseContextFromApplication(application as RentalWizardFormState, { applicationId }),
+    );
   } catch {
     return null;
   }
@@ -33,8 +38,8 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
 
   const syntheticHtml = useMemo(() => {
     if (pdfSrc || html || row.leaseDocumentRemovedAt) return null;
-    return draftHtmlFromApplication(row.application ?? undefined);
-  }, [pdfSrc, html, row.application, row.leaseDocumentRemovedAt]);
+    return draftHtmlFromApplication(row.application ?? undefined, row.axisId);
+  }, [pdfSrc, html, row.application, row.axisId, row.leaseDocumentRemovedAt]);
 
   const showSynthetic = Boolean(syntheticHtml);
 

@@ -9,6 +9,7 @@ import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { formatRoomPriceAmount, resolveStayPricing, roomDailyRentPrice } from "@/lib/room-pricing";
+import { resolveSubmissionRoom } from "@/lib/listing-room-resolution";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
@@ -25,6 +26,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
 import {
+  intraMonthStaySpan,
   shortTermStayChargeTitle,
   shortTermStayNightCount,
   shortTermStayTotalAmount,
@@ -992,28 +994,6 @@ function leaseEndProration(leaseEnd: string | undefined): LeaseBoundaryProration
 }
 
 /**
- * Billable span of a lease that both starts AND ends inside one calendar month, or
- * null when it does not (or when it covers the whole month, which needs no proration).
- * Such a lease is a SINGLE billing span: the first-month charge covers all of it, so
- * the caller must skip the last-month charge or the same days get billed twice.
- */
-function intraMonthLeaseSpan(
-  leaseStart: string | undefined,
-  leaseEnd: string | undefined,
-): { billableDays: number; daysInMonth: number } | null {
-  if (!leaseStart?.trim() || !leaseEnd?.trim()) return null;
-  const [startYear, startMonth, startDay] = leaseStart.split("-").map(Number);
-  const [endYear, endMonth, endDay] = leaseEnd.split("-").map(Number);
-  if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) return null;
-  if (startYear !== endYear || startMonth !== endMonth) return null;
-  const daysInMonth = new Date(startYear, startMonth, 0).getDate();
-  if (!Number.isFinite(daysInMonth) || daysInMonth <= 0) return null;
-  const billableDays = Math.min(daysInMonth, endDay) - startDay + 1;
-  if (billableDays <= 0 || billableDays >= daysInMonth) return null;
-  return { billableDays, daysInMonth };
-}
-
-/**
  * Proration for the FIRST billed period. Normally that is the partial month from the
  * lease start; for a lease that also ends in the same month it is the whole lease term.
  *
@@ -1026,7 +1006,7 @@ function leaseFirstPeriodProration(
   leaseEnd: string | undefined,
   collapseIntraMonth: boolean,
 ): ReturnType<typeof leaseStartProration> {
-  const span = collapseIntraMonth ? intraMonthLeaseSpan(leaseStart, leaseEnd) : null;
+  const span = collapseIntraMonth ? intraMonthStaySpan(leaseStart, leaseEnd) : null;
   if (!span) return leaseStartProration(leaseStart);
   return {
     prorated: true,
@@ -1514,6 +1494,19 @@ function paidHoldingDepositCreditCents(applicationId: string): number {
   const charge = readAll().find((c) => c.applicationId === appId && c.kind === "holding_deposit" && c.status === "paid");
   if (!charge) return 0;
   return Math.round(parseMoneyAmount(charge.amountLabel) * 100);
+}
+
+/**
+ * Holding deposit already paid for this application, in dollars, which the approval charges
+ * credit against the security deposit. `undefined` means UNKNOWN (no charge store to read, or
+ * no application id) — never "no credit". The lease document quotes the gross deposit when it
+ * is undefined and nets it when it is a number, so it can never silently assert a zero credit.
+ */
+export function paidHoldingDepositCreditUsd(applicationId: string | null | undefined): number | undefined {
+  if (!isBrowser()) return undefined;
+  const appId = applicationId?.trim();
+  if (!appId) return undefined;
+  return paidHoldingDepositCreditCents(appId) / 100;
 }
 
 /**
@@ -2390,33 +2383,18 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
-  // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
-  // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
-  // a second property lookup and to catch stale room IDs in assignedRoomChoice.
+  // Resolve room for proration through the SHARED chain the lease document also uses, so the
+  // same application can never be priced off two different rooms. Uses the sub already
+  // resolved above to avoid a second property lookup and to catch stale room IDs in
+  // assignedRoomChoice.
   // Resolved BEFORE the short-term branch: that branch prices the stay from the room the
   // applicant selected, so it cannot be resolved after the branch returns.
-  const room = (() => {
-    if (!sub) return selectedRoom(row);
-    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-      const trimmed = c?.trim();
-      if (!trimmed) continue;
-      const { listingRoomId } = parseRoomChoiceValue(trimmed);
-      if (listingRoomId) {
-        const byId = sub.rooms.find((r) => r.id === listingRoomId);
-        if (byId) return byId;
-      }
-    }
-    const signedRent = Number(row.signedMonthlyRent ?? 0);
-    if (signedRent > 0) {
-      const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
-      if (byRent.length === 1) return byRent[0] ?? null;
-    }
-    if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
-    // Last resort: only one room is configured with daily_rate → it must be the right room
-    const drRooms = sub.rooms.filter((r) => r.prorateMethod === "daily_rate" && r.dailyRentRate && r.dailyRentRate > 0);
-    if (drRooms.length === 1) return drRooms[0] ?? null;
-    return null;
-  })();
+  const room = sub
+    ? resolveSubmissionRoom(sub, {
+        roomChoices: [row.assignedRoomChoice, row.application?.roomChoice1],
+        signedMonthlyRent: row.signedMonthlyRent,
+      }) ?? null
+    : selectedRoom(row);
 
   const isShortTermStay = row.application?.rentalType === "short_term";
 
@@ -2495,7 +2473,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   // first-period charges below; its last-month charges would re-bill the same days. Monthly
   // rooms are left on their legacy two-charge path so their billing is unchanged.
   const endsInsideFirstMonth =
-    (dailyBasisRate ?? 0) > 0 && intraMonthLeaseSpan(leaseStart, leaseEnd) !== null;
+    (dailyBasisRate ?? 0) > 0 && intraMonthStaySpan(leaseStart, leaseEnd) !== null;
 
   const rentAmount = selectedRoomRentAmount(row);
   if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {

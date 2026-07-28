@@ -11,6 +11,8 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  ensurePendingHoldingDepositCharge,
+  markHoldingDepositPaidAfterStripe,
   readHouseholdCharges,
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
@@ -133,12 +135,12 @@ beforeEach(() => {
 });
 
 describe("stay pricing: document and ledger agree", () => {
-  it("1. daily-priced room with short-term rentals UNTICKED still gets the short-term stay agreement", () => {
-    const email = "untick@example.com";
+  it("1. daily-priced room with short-term rentals TICKED gets the short-term stay agreement", () => {
+    const email = "ticked@example.com";
     removeResidentHouseholdPaymentData(email);
-    const propertyId = "prop-stay-untick";
+    const propertyId = "prop-stay-ticked";
     seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
-      shortTermRentalsAllowed: false,
+      shortTermRentalsAllowed: true,
     });
     const app = application(propertyId);
 
@@ -150,6 +152,31 @@ describe("stay pricing: document and ledger agree", () => {
     expect(html).toContain("SHORT-TERM ROOM STAY AGREEMENT (11-Day Stay)");
     expect(html).toContain("$55.00 per day");
     expect(html).toContain("$605.00");
+  });
+
+  it("1b. the SAME stay on a listing that never offered short stays gets the residential lease at the daily rate", () => {
+    // The lodger agreement asserts an owner-occupied residence and disclaims tenancy. A
+    // billing-basis flag plus two dates does not establish that, so it needs the manager's
+    // own "short-term rentals allowed" declaration. The charges are identical either way.
+    const email = "untick@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-stay-untick";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
+      shortTermRentalsAllowed: false,
+    });
+    const app = application(propertyId);
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, email, app), MANAGER_ID, true);
+    expect(rentCharges(email)[0]?.amount).toBe("$605.00");
+
+    const html = leaseHtml(app);
+    expect(html).toContain("RESIDENTIAL ROOM RENTAL AGREEMENT");
+    expect(html).not.toContain("SHORT-TERM ROOM STAY AGREEMENT");
+    expect(html).toContain("Lead-Based Paint Disclosure");
+    // The rate the ledger bills, under a label that says "day".
+    expect(html).toContain("$55.00 / day");
+    expect(html).toContain("Daily base rent");
+    expect(html).not.toContain("Monthly base rent");
   });
 
   it("2. room daily price beats the listing shortTermDailyCost on BOTH sides", () => {
@@ -239,6 +266,7 @@ describe("stay pricing: document and ledger agree", () => {
     removeResidentHouseholdPaymentData(email);
     const propertyId = "prop-stay-total";
     seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55, utilitiesEstimate: "120" }), {
+      shortTermRentalsAllowed: true,
       securityDeposit: "900",
       moveInFee: "300",
       applicationFee: "",
@@ -303,6 +331,134 @@ describe("stay pricing: document and ledger agree", () => {
     expect(html).not.toContain("Lodger Status");
     // The federally required disclosure that the short-term document does not carry.
     expect(html).toContain("Lead-Based Paint Disclosure");
+
+    // The long form must quote the rate the ledger actually bills, under a label that says
+    // "day", and must NOT invent a monthly total by adding a day rate to monthly utilities.
+    expect(html).toContain("$55.00 / day");
+    expect(html).toContain("Daily base rent");
+    expect(html).not.toContain("Monthly base rent");
+    expect(html).not.toContain("Total monthly payment");
+    expect(html).not.toContain("$1200.00 / month");
+    // 30 is the display-only monthly estimate; it must never reach a lease.
+    expect(html).not.toContain("$1,650.00");
+    // Prorating a monthly rent is nonsense when every month bills by real days.
+    expect(html).not.toContain("Prorated First Month");
+  });
+
+  it("11. the stay total uses the room's DAILY utilities rate when it has one", () => {
+    // rentBasis "daily" and prorateMethod "daily_rate" are independent fields that coexist.
+    // The ledger prorates utilities at dailyUtilitiesRate × days, so the document must too.
+    const email = "dailyutils@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-stay-dailyutils";
+    seedListing(
+      propertyId,
+      room({
+        rentBasis: "daily",
+        dailyRentPrice: 55,
+        utilitiesEstimate: "120",
+        prorateMethod: "daily_rate",
+        dailyUtilitiesRate: 6,
+      }),
+      { shortTermRentalsAllowed: true, securityDeposit: "900", moveInFee: "300", applicationFee: "" },
+    );
+
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+    const ym = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}`;
+    const app = application(propertyId, { leaseStart: `${ym}-03`, leaseEnd: `${ym}-13` });
+
+    recordApprovedApplicationCharges(applicantRow(propertyId, email, app), MANAGER_ID, true);
+
+    // 11 days × $6/day = $66.00, NOT the flat 120 × (11/daysInMonth).
+    const expected = Number((11 * 55 + 11 * 6 + 900 + 300).toFixed(2));
+    expect(documentTotalDue(leaseHtml(app))).toBe(ledgerTotal(email));
+    expect(documentTotalDue(leaseHtml(app))).toBe(expected);
+  });
+
+  it("12. a paid holding deposit is credited on the document exactly as the ledger credits it", () => {
+    const email = "holding@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-stay-holding";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
+      shortTermRentalsAllowed: true,
+      securityDeposit: "900",
+      holdingDeposit: "250",
+      moveInFee: "",
+      applicationFee: "",
+    });
+    const app = application(propertyId);
+    const row = applicantRow(propertyId, email, app);
+
+    // ABSENT credit means UNKNOWN, never "zero credit": the gross deposit is quoted, as before.
+    const gross = leaseHtml(app);
+    expect(gross).toContain("$900.00");
+    expect(gross).not.toContain("Less holding deposit paid");
+    expect(documentTotalDue(gross)).toBe(605 + 900);
+
+    ensurePendingHoldingDepositCharge({
+      residentEmail: email,
+      residentName: "Dana Tenant",
+      residentUserId: null,
+      propertyId,
+      applicationId: row.id,
+      managerUserId: MANAGER_ID,
+    });
+    markHoldingDepositPaidAfterStripe(email, propertyId, null);
+    recordApprovedApplicationCharges(row, MANAGER_ID, true);
+
+    // The ledger charges the NET deposit, so the document has to state the same net.
+    const securityCharge = readHouseholdCharges().find(
+      (c) => c.residentEmail.toLowerCase() === email && c.kind === "security_deposit",
+    );
+    expect(securityCharge?.amountLabel).toBe("$650.00");
+
+    const credited = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app, { applicationId: row.id }));
+    expect(credited).toContain("Less holding deposit paid");
+    expect(credited).toContain("-$250.00");
+    expect(documentTotalDue(credited)).toBe(605 + 650);
+  });
+
+  it("13. a holding deposit larger than the security deposit floors the credit, never goes negative", () => {
+    const propertyId = "prop-stay-holding-big";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
+      shortTermRentalsAllowed: true,
+      securityDeposit: "900",
+      moveInFee: "",
+      applicationFee: "",
+    });
+    const app = application(propertyId);
+
+    const html = buildAiGeneratedLeaseHtml({
+      ...leaseContextFromApplication(app),
+      holdingDepositCreditUsd: 5000,
+    });
+    // Credit is capped at the deposit, mirroring the ledger's Math.max(0, deposit - credit).
+    expect(html).toContain("-$900.00");
+    // 11 nights × $55, deposit fully covered, nothing else configured.
+    expect(documentTotalDue(html)).toBe(605);
+  });
+
+  it("14. a non-ISO intra-month lease collapses to ONE charge, like its ISO twin", () => {
+    // The ledger used to split lease dates strictly on "-", so a manually added resident whose
+    // move-in/out dates are not ISO fell out of the intra-month collapse and was billed a
+    // first-month AND a last-month charge for the same days. Both sides now parse the same way.
+    const email = "nonisodates@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-stay-noniso";
+    seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
+      shortTermRentalsAllowed: true,
+    });
+
+    const row = {
+      ...applicantRow(propertyId, email, application(propertyId, { leaseStart: "", leaseEnd: "" })),
+      manualResidentDetails: { moveInDate: "3/10/2026", moveOutDate: "3/20/2026" },
+    } as unknown as DemoApplicantRow;
+
+    recordApprovedApplicationCharges(row, MANAGER_ID, true);
+    const charges = rentCharges(email);
+    expect(charges).toHaveLength(1);
+    expect(charges[0]?.amount).toBe("$605.00");
   });
 
   it("7. a California property outside San Francisco does not claim San Francisco", () => {

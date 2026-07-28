@@ -120,7 +120,7 @@ export function ResidentLeasePanel() {
 
   const leaseCtx = useMemo(() => {
     if (pipelineRow?.application && Object.keys(pipelineRow.application).length > 0) {
-      return leaseContextFromApplication(pipelineRow.application);
+      return leaseContextFromApplication(pipelineRow.application, { applicationId: pipelineRow.axisId });
     }
     return gatherLeaseGenerationContext();
   }, [pipelineRow]);

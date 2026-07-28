@@ -8,12 +8,18 @@ import { resolveStayPricing, type RoomPricingLike } from "@/lib/room-pricing";
 
 const DAILY_ROOM: RoomPricingLike = { monthlyRent: 1200, rentBasis: "daily", dailyRentPrice: 55 };
 const MONTHLY_ROOM: RoomPricingLike = { monthlyRent: 1200, rentBasis: "monthly" };
-const SUB = { shortTermDailyCost: "40", shortTermDeposit: "300", securityDeposit: "900" };
+/** Short stays are OFFERED here; the deposit/rate fallbacks are the same as SUB. */
+const SUB = {
+  shortTermDailyCost: "40",
+  shortTermDeposit: "300",
+  securityDeposit: "900",
+  shortTermRentalsAllowed: true,
+};
+/** Identical listing, except the manager never ticked "short-term rentals allowed". */
+const SUB_NO_SHORT_STAYS = { ...SUB, shortTermRentalsAllowed: false };
 
 describe("resolveStayPricing", () => {
-  it("treats a SHORT daily-priced stay as short even when the application is standard", () => {
-    // This is the headline fix: the manager never ticked shortTermRentalsAllowed, so
-    // rentalType is "standard", but an 11-day daily-priced booking is still a stay.
+  it("treats a SHORT daily-priced stay on a short-stay listing as short, even on a standard application", () => {
     const stay = resolveStayPricing({
       room: DAILY_ROOM,
       submission: SUB,
@@ -133,6 +139,31 @@ describe("resolveStayPricing: the daily basis is not by itself a short stay", ()
 
   it("an intra-month daily lease IS a short stay (the ledger bills it once, up front)", () => {
     expect(span("2026-03-10", "2026-03-20").stayKind).toBe("short");
+  });
+
+  it("a short daily stay on a listing that does NOT offer short stays is a tenancy", () => {
+    // A billing-basis flag plus two dates cannot establish an owner-occupied residence or
+    // support disclaiming tenancy, so the lodger document needs the manager's own declaration.
+    // The rate is unaffected — the residential lease quotes the same $55/day.
+    const stay = resolveStayPricing({
+      room: DAILY_ROOM,
+      submission: SUB_NO_SHORT_STAYS,
+      application: { rentalType: "standard", leaseStart: "2026-03-10", leaseEnd: "2026-03-20" },
+    });
+    expect(stay.stayKind).toBe("long");
+    expect(stay.basis).toBe("daily");
+    expect(stay.dailyRate).toBe(55);
+  });
+
+  it("an EXPLICIT short-term application is short even on a listing with the tick off", () => {
+    // rentalType is the manager's declaration in its own right, and it is the ledger's key.
+    expect(
+      resolveStayPricing({
+        room: DAILY_ROOM,
+        submission: SUB_NO_SHORT_STAYS,
+        application: { rentalType: "short_term", leaseStart: "2026-03-10", leaseEnd: "2026-03-20" },
+      }).stayKind,
+    ).toBe("short");
   });
 
   it("a multi-month daily lease is a TENANCY, not a lodger stay", () => {

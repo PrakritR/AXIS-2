@@ -9,7 +9,7 @@
  */
 
 import type { MockProperty } from "@/data/types";
-import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { resolvePlacementLeaseDates } from "@/lib/rental-application/lease-dates";
 import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
@@ -20,7 +20,8 @@ import {
 } from "@/lib/manager-listing-submission";
 import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
 import { leaseCss } from "@/lib/lease-templates/types";
-import { roomDailyRentPrice } from "@/lib/room-pricing";
+import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
+import { paidHoldingDepositCreditUsd } from "@/lib/household-charges";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveLeaseJurisdiction, unsupportedJurisdictionMessage } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
@@ -67,47 +68,24 @@ function submissionFor(prop: MockProperty | undefined): ManagerListingSubmission
   return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
 }
 
-function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, unitLabel: string): string | undefined {
-  if (!sub?.rooms?.length) return undefined;
-  const u = unitLabel.trim().toLowerCase();
-  const hit = sub.rooms.find((r) => {
-    const rn = (r.name ?? "").trim().toLowerCase();
-    if (!rn) return false;
-    return rn.includes(u) || u.includes(rn);
-  });
-  if (hit) {
-    const daily = roomDailyRentPrice(hit);
-    if (daily !== undefined) return `$${daily.toFixed(2)} / day`;
-    if (hit.monthlyRent > 0) return `$${hit.monthlyRent.toFixed(2)} / month`;
-  }
-  return undefined;
-}
-
-function submissionRoomRentFromChoice(
-  sub: ManagerListingSubmissionV1 | undefined,
-  roomChoice1: string | undefined | null,
-): string | undefined {
-  if (!sub?.rooms?.length || !roomChoice1) return undefined;
-  const { listingRoomId } = parseRoomChoiceValue(String(roomChoice1));
-  if (!listingRoomId) return undefined;
-  const normalized = normalizeManagerListingSubmissionV1(sub);
-  const hit = normalized.rooms.find((r) => r.id === listingRoomId);
-  if (!hit) return undefined;
-  const daily = roomDailyRentPrice(hit);
-  if (daily !== undefined) return `$${daily.toFixed(2)} / day`;
-  if (hit.monthlyRent <= 0) return undefined;
-  return `$${hit.monthlyRent.toFixed(2)} / month`;
-}
-
 export type LeaseGenerationContext = {
   application: Partial<RentalWizardFormState>;
   leasedRoom: MockProperty | undefined;
   listingProperty: MockProperty | undefined;
   submission: ManagerListingSubmissionV1 | undefined;
   generatedAtIso: string;
+  /**
+   * Holding deposit already paid and credited against the security deposit, in dollars.
+   * Populate ONLY from a call path that can really resolve it; `undefined` means unknown and
+   * the document quotes the gross deposit, exactly as it always has.
+   */
+  holdingDepositCreditUsd?: number;
 };
 
-export function leaseContextFromApplication(application: Partial<RentalWizardFormState>): LeaseGenerationContext {
+export function leaseContextFromApplication(
+  application: Partial<RentalWizardFormState>,
+  options?: { applicationId?: string | null },
+): LeaseGenerationContext {
   const dates = resolvePlacementLeaseDates({
     leaseTerm: application.leaseTerm,
     leaseStart: application.leaseStart,
@@ -140,6 +118,7 @@ export function leaseContextFromApplication(application: Partial<RentalWizardFor
     listingProperty,
     submission,
     generatedAtIso: new Date().toISOString(),
+    holdingDepositCreditUsd: paidHoldingDepositCreditUsd(options?.applicationId),
   };
 }
 
@@ -153,8 +132,12 @@ export function rentSummaryFromApplication(application: Partial<RentalWizardForm
     const room = ctx.leasedRoom;
     const list = ctx.listingProperty;
     const monthlyRent =
-      submissionRoomRentFromChoice(ctx.submission, application.roomChoice1) ??
-      (room && findSubmissionRoomRent(ctx.submission, room.unitLabel)) ??
+      submissionRoomRentLabel(
+        resolveSubmissionRoom(ctx.submission, {
+          roomChoices: [application.roomChoice1],
+          unitLabel: room?.unitLabel,
+        }),
+      ) ??
       room?.rentLabel ??
       list?.rentLabel ??
       null;

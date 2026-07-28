@@ -142,7 +142,13 @@ export type StayPricing = {
 export type StayPricingInput = {
   room: RoomPricingLike | null | undefined;
   submission:
-    | { shortTermDailyCost?: string; shortTermDeposit?: string; securityDeposit?: string }
+    | {
+        shortTermDailyCost?: string;
+        shortTermDeposit?: string;
+        securityDeposit?: string;
+        /** The manager's own declaration that this listing offers short stays. */
+        shortTermRentalsAllowed?: boolean;
+      }
     | null
     | undefined;
   application:
@@ -197,16 +203,19 @@ function negotiatedMonthlyRent(application: StayPricingInput["application"]): nu
  *     the short-term charge path does not consult it either, and letting the document do so
  *     would recreate the document/ledger disagreement this resolver exists to remove.
  *  2. Otherwise a negotiated monthly rent (manager override, then signed/renewed rent) wins.
- *  3. Otherwise a room priced by the day is a short stay. This clause is what makes the
- *     short-term document reachable for a daily-priced room whose manager never ticked
- *     `shortTermRentalsAllowed`.
+ *  3. Otherwise a room priced by the day is a short stay ONLY when the manager offers short
+ *     stays on this listing (`shortTermRentalsAllowed`) AND the stay fits inside one calendar
+ *     month. Both signals are required: the short-term agreement asserts an owner-occupied
+ *     residence and disclaims tenancy, which a billing-basis flag plus two dates cannot
+ *     establish. Without the tick the placement keeps the full residential lease, which now
+ *     quotes the daily rate.
  *  4. Otherwise the room's monthly rent, byte-identical to legacy behavior.
  *
  * The deposit deliberately keys on `rentalType`, NOT on the resolved `stayKind`, because it
  * has to agree with the ledger branch that actually charges it: only an explicit short-term
- * application is billed `shortTermDeposit`. A daily-priced room on a standard application
- * therefore gets the short-term DOCUMENT but the standard `securityDeposit`, which is what
- * the resident is really charged.
+ * application is billed `shortTermDeposit`. A daily-priced room on a standard application that
+ * reaches the short-term DOCUMENT is therefore still quoted the standard `securityDeposit`,
+ * which is what the resident is really charged.
  *
  * `leaseStart` / `leaseEnd` are accepted for call-site convenience and intentionally unused:
  * night counting stays in `shortTermStayNightCount`, the one implementation the ledger bills
@@ -249,11 +258,14 @@ export function resolveStayPricing(input: StayPricingInput): StayPricing {
   if (roomDaily !== undefined) {
     // The daily basis alone does NOT make this a short stay. A daily-priced room is a
     // supported way to bill a normal tenancy (see RecurringRentProfile.dailyRentPrice), and
-    // those bill monthly and recurring. Only a stay the ledger settles as ONE up-front total
-    // may take the lodger document; anything longer keeps the full residential lease and just
-    // quotes the daily rate. Basis stays "daily" either way, so rent labels follow the rate.
+    // those bill monthly and recurring. The lodger document needs an EXPLICIT manager signal
+    // that this listing hosts short stays, plus a span the ledger settles as ONE up-front
+    // total; anything else keeps the full residential lease and just quotes the daily rate.
+    // Basis stays "daily" either way, so rent labels follow the rate.
+    const offersShortStays = Boolean(sub?.shortTermRentalsAllowed);
     return {
-      stayKind: isIntraMonthStay(app?.leaseStart, app?.leaseEnd) ? "short" : "long",
+      stayKind:
+        offersShortStays && isIntraMonthStay(app?.leaseStart, app?.leaseEnd) ? "short" : "long",
       basis: "daily",
       dailyRate: roomDaily,
       monthlyRate: undefined,
