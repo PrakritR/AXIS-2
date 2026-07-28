@@ -470,7 +470,9 @@ function ProrationMethodFields({
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div>
-        <FieldLabel hint="Auto = (rent + utilities) ÷ days in the month.">Prorated rent</FieldLabel>
+        <FieldLabel hint={prorateMethod === "auto" ? "Auto = (rent + utilities) ÷ days in the month." : undefined}>
+          Prorated rent
+        </FieldLabel>
         <div className="mt-1 inline-flex rounded-lg border border-border bg-card p-0.5">
           {(["auto", "daily_rate"] as const).map((method) => {
             const active = prorateMethod === method;
@@ -2652,27 +2654,28 @@ export function ManagerAddListingForm({
                     />
                   </GridField>
                   <GridField>
-                    <LongTermUtilitiesPaymentPicker
-                      value={room.utilitiesPaymentModel}
-                      onSelect={(model) =>
-                        setRoom(i, {
-                          utilitiesPaymentModel: model,
-                          ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
-                        })
-                      }
-                    />
-                  </GridField>
-                  {longTermUtilitiesEstimateRequired(room.utilitiesPaymentModel) ? (
-                    <GridField>
-                      <FieldLabel>Utilities amount</FieldLabel>
-                      <MoneyInput
-                        ariaLabel={`Utilities amount for ${roomLabel}`}
-                        value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                        onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                        placeholder="175"
+                    {/* Picker + amount on one inline row (no inference: who-pays is set only
+                        by the picker, so no billing change). */}
+                    <div className="flex flex-wrap items-end gap-2">
+                      <LongTermUtilitiesPaymentPicker
+                        value={room.utilitiesPaymentModel}
+                        onSelect={(model) =>
+                          setRoom(i, {
+                            utilitiesPaymentModel: model,
+                            ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
+                          })
+                        }
                       />
-                    </GridField>
-                  ) : null}
+                      {longTermUtilitiesEstimateRequired(room.utilitiesPaymentModel) ? (
+                        <MoneyInput
+                          ariaLabel={`Utilities amount for ${roomLabel}`}
+                          value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                          onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                          placeholder="175"
+                        />
+                      ) : null}
+                    </div>
+                  </GridField>
                   <div className="w-full">
                     <ProrationMethodFields
                       prorateMethod={room.prorateMethod ?? "auto"}
@@ -2691,12 +2694,15 @@ export function ManagerAddListingForm({
         }
       : null;
 
-  const bundlesFeeSection: FeeExpandableSection | null = !isEntireHome
+  // Grouped leases always render, regardless of Rent-by-room (round 18 #1): rent-by-room OFF
+  // shows this as the primary way to price the place, ON keeps it as the grouping affordance.
+  const bundlesFeeSection: FeeExpandableSection | null = true
     ? {
         key: "bundles",
         title: "Grouped leases",
         hint: "Optional — rent several rooms together on one lease.",
-        emptyHint: "Optional — group rooms onto one lease.",
+        // No emptyHint: the header hint already says this; a second copy read as a duplicate.
+        emptyHint: undefined,
         toolbar: (
           <>
             {/* Grouping is folded into the rent-by-room view as one small affordance instead
@@ -2794,27 +2800,26 @@ export function ManagerAddListingForm({
                   />
                 </GridField>
                 <GridField>
-                  <LongTermUtilitiesPaymentPicker
-                    value={bundle.utilitiesPaymentModel}
-                    onSelect={(model) =>
-                      setBundle(i, {
-                        utilitiesPaymentModel: model,
-                        ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
-                      })
-                    }
-                  />
-                </GridField>
-                {longTermUtilitiesEstimateRequired(bundle.utilitiesPaymentModel) ? (
-                  <GridField>
-                    <FieldLabel>Utilities amount</FieldLabel>
-                    <MoneyInput
-                      ariaLabel={`Utilities amount for ${bundle.label.trim() || "bundle"}`}
-                      value={(bundle.utilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                      onChange={(e) => setBundle(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                      placeholder="200"
+                  <div className="flex flex-wrap items-end gap-2">
+                    <LongTermUtilitiesPaymentPicker
+                      value={bundle.utilitiesPaymentModel}
+                      onSelect={(model) =>
+                        setBundle(i, {
+                          utilitiesPaymentModel: model,
+                          ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
+                        })
+                      }
                     />
-                  </GridField>
-                ) : null}
+                    {longTermUtilitiesEstimateRequired(bundle.utilitiesPaymentModel) ? (
+                      <MoneyInput
+                        ariaLabel={`Utilities amount for ${bundle.label.trim() || "bundle"}`}
+                        value={(bundle.utilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                        onChange={(e) => setBundle(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                        placeholder="200"
+                      />
+                    ) : null}
+                  </div>
+                </GridField>
                 {sub.shortTermRentalsAllowed ? (
                   <GridField>
                     {/* Short-term is decided once in Lease lengths; here the rate field just
@@ -2885,31 +2890,30 @@ export function ManagerAddListingForm({
         <FieldLabel optional>Utilities & proration</FieldLabel>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <GridField>
-            <LongTermUtilitiesPaymentPicker
-              value={sub.entireHomeUtilitiesPaymentModel}
-              onSelect={(model) =>
-                setSub((s) =>
-                  applyEntireHomeListingPricing(s, {
-                    entireHomeUtilitiesPaymentModel: model,
-                    ...(model === "tenant_direct" ? { entireHomeUtilitiesEstimate: "" } : {}),
-                  }),
-                )
-              }
-            />
-          </GridField>
-          {longTermUtilitiesEstimateRequired(sub.entireHomeUtilitiesPaymentModel) ? (
-            <GridField>
-              <FieldLabel>Utilities amount</FieldLabel>
-              <MoneyInput
-                ariaLabel="Utilities amount (whole home)"
-                value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                onChange={(e) =>
-                  setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
+            <div className="flex flex-wrap items-end gap-2">
+              <LongTermUtilitiesPaymentPicker
+                value={sub.entireHomeUtilitiesPaymentModel}
+                onSelect={(model) =>
+                  setSub((s) =>
+                    applyEntireHomeListingPricing(s, {
+                      entireHomeUtilitiesPaymentModel: model,
+                      ...(model === "tenant_direct" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                    }),
+                  )
                 }
-                placeholder="175"
               />
-            </GridField>
-          ) : null}
+              {longTermUtilitiesEstimateRequired(sub.entireHomeUtilitiesPaymentModel) ? (
+                <MoneyInput
+                  ariaLabel="Utilities amount (whole home)"
+                  value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                  onChange={(e) =>
+                    setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
+                  }
+                  placeholder="175"
+                />
+              ) : null}
+            </div>
+          </GridField>
           <div className="sm:col-span-2">
             <ProrationMethodFields
               prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
