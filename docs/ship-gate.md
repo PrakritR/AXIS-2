@@ -59,7 +59,32 @@ Automated tests: <commands + result>
 
 Do **not** use `/demo` as the only proof for production-like flows.
 
-## Promote
+## Promote prakrit → main (Vercel Preview)
+
+Captain yes required. Never push `fm/*` branches.
+
+```bash
+bin/fm-proplane-promote-prakrit-to-main.sh
+```
+
+Pipeline order:
+
+1. Local branch `integrate/prakrit-to-main` from `origin/main` + merge `origin/prakrit`
+2. `bin/fm-proplane-security-review.sh` — blocks Critical/High (report under `state/`)
+3. `no-mistakes axi run --skip=push,pr,ci` on the integrate branch (review, test, document, lint)
+4. Fast-forward `main` and `git push origin main` only after captain approves localhost test:
+
+```bash
+bin/fm-proplane-promote-prakrit-to-main.sh --push-main
+```
+
+Never open a GitHub PR unless the captain explicitly asks.
+
+Scripts restart dev servers and open the browser via `bin/fm-proplane-open-localhost.sh`.
+
+If no-mistakes parks at a gate, drive `no-mistakes axi respond` then re-run with `--validate-only`.
+
+## Promote main → production (live)
 
 ```bash
 git checkout main
