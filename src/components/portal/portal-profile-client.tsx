@@ -2,17 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { AssistantDisplayModeSetting } from "@/components/portal/assistant-display-mode-setting";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
+import {
+  PortalSettingsField,
+  PortalSettingsFormBody,
+  PortalSettingsGroup,
+  PortalSettingsProfileHeader,
+  PortalSettingsSection,
+  PortalSettingsSections,
+} from "@/components/portal/portal-settings-ui";
 import { ManagerPlan } from "@/components/portal/manager-plan";
+import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { PortalKind } from "@/lib/portal-types";
 
@@ -23,46 +29,6 @@ function dashToEmpty(v: string) {
 function emptyToDash(v: string) {
   const t = v.trim();
   return t.length ? t : "—";
-}
-
-function ProfileReadonlyField({
-  label,
-  value,
-  mono,
-  compact,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  compact?: boolean;
-}) {
-  if (compact) {
-    return (
-      <div className="flex items-start justify-between gap-4 border-b border-border/80 py-3 last:border-0">
-        <p className="shrink-0 text-[13px] font-medium text-muted">{label}</p>
-        <p
-          className={`min-w-0 text-right text-[15px] font-medium text-foreground ${
-            mono ? "break-all font-mono text-xs leading-relaxed" : ""
-          }`}
-        >
-          {value}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium text-muted">{label}</p>
-      <div
-        className={`rounded-xl border border-border bg-accent/30 px-4 py-3 text-[15px] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ${
-          mono ? "break-all font-mono text-sm leading-relaxed" : ""
-        }`}
-      >
-        {value}
-      </div>
-    </div>
-  );
 }
 
 export function PortalProfileClient({
@@ -88,7 +54,6 @@ export function PortalProfileClient({
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
   const [saving, setSaving] = useState(false);
-  /** Skip one sync from server props after save so we don't overwrite local state before RSC catches up. */
   const skipNextServerPropsSync = useRef(false);
   const [pendingSkipServerPropsSync, setPendingSkipServerPropsSync] = useState(false);
 
@@ -138,7 +103,6 @@ export function PortalProfileClient({
       showToast("Profile saved.");
       setPendingSkipServerPropsSync(true);
       setEditing(false);
-      // Full RSC refresh can 500 on some hosts; next navigation will re-sync from server. Local state is already correct.
     } catch {
       showToast("Network error.");
     } finally {
@@ -152,142 +116,114 @@ export function PortalProfileClient({
     setEditing(false);
   }, [initialFullName, initialPhone]);
 
-  const compactNative = useNativeChrome();
+  const editAction = editing ? (
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={cancel}>
+        Cancel
+      </Button>
+      <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={saving} onClick={() => void save()}>
+        {saving ? "Saving…" : "Save"}
+      </Button>
+    </div>
+  ) : (
+    <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={() => setEditing(true)}>
+      Edit
+    </Button>
+  );
 
-  const headerActions = editing
-    ? [
-        {
-          label: "Cancel",
-          variant: "outline" as const,
-          onClick: cancel,
-        },
-        {
-          label: saving ? "Saving…" : "Save",
-          variant: "primary" as const,
-          onClick: () => void save(),
-          disabled: saving,
-        },
-      ]
-    : [
-        {
-          label: "Edit info",
-          variant: "outline" as const,
-          onClick: () => setEditing(true),
-        },
-      ];
-
-  const inner = (
-    <>
-      <div
-        className={
-          compactNative
-            ? "divide-y divide-border/80 rounded-2xl border border-border bg-card/50 px-4 py-1"
-            : `grid grid-cols-1 gap-x-10 gap-y-8 md:grid-cols-2 ${variant === "admin" ? "mt-8" : ""}`
-        }
-      >
+  const personalInfoSection = (
+    <PortalSettingsSection
+      title="Personal information"
+      description="Your name and contact details."
+      action={editAction}
+    >
+      <PortalSettingsGroup>
         {editing ? (
-          <>
-            <div className={compactNative ? "py-3" : "space-y-2"}>
-              <label className="text-sm font-semibold text-foreground" htmlFor="pf-name">
-                Full name
-              </label>
-              <Input id="pf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-2 rounded-xl" autoComplete="name" />
+          <PortalSettingsFormBody>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="pf-name">
+                  Full name
+                </label>
+                <Input id="pf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="pf-email">
+                  Email
+                </label>
+                <Input id="pf-email" value={initialEmail} readOnly className="bg-muted/40" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="pf-phone">
+                  Phone
+                </label>
+                <Input
+                  id="pf-phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  inputMode="tel"
+                  autoComplete="tel"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="pf-id">
+                  {idLabel}
+                </label>
+                <Input id="pf-id" value={idValue} readOnly className="bg-muted/40 font-mono text-sm" />
+              </div>
             </div>
-            <ProfileReadonlyField label="Email" value={initialEmail} compact={compactNative} />
-            <div className={compactNative ? "py-3" : "space-y-2"}>
-              <label className="text-sm font-semibold text-foreground" htmlFor="pf-phone">
-                Phone
-              </label>
-              <Input
-                id="pf-phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="mt-2 rounded-xl"
-                inputMode="tel"
-                autoComplete="tel"
-              />
-            </div>
-            <ProfileReadonlyField label={idLabel} value={idValue} mono compact={compactNative} />
-          </>
+          </PortalSettingsFormBody>
         ) : (
           <>
-            <ProfileReadonlyField label="Full name" value={emptyToDash(fullName)} compact={compactNative} />
-            <ProfileReadonlyField label="Email" value={initialEmail} compact={compactNative} />
-            <ProfileReadonlyField label="Phone" value={emptyToDash(phone)} compact={compactNative} />
-            <ProfileReadonlyField label={idLabel} value={idValue} mono compact={compactNative} />
+            <PortalSettingsField label="Full name" value={emptyToDash(fullName)} />
+            <PortalSettingsField label="Email" value={initialEmail} />
+            <PortalSettingsField label="Phone" value={emptyToDash(phone)} />
+            <PortalSettingsField label={idLabel} value={idValue} mono />
           </>
         )}
-      </div>
-    </>
+      </PortalSettingsGroup>
+    </PortalSettingsSection>
+  );
+
+  const settingsBody = (
+    <PortalSettingsSections>
+      <PortalSettingsProfileHeader name={emptyToDash(fullName)} email={initialEmail} />
+      {personalInfoSection}
+      {variant === "manager" && !demo ? (
+        <PortalSettingsSection title="Billing & plan" description="Subscription and payment details.">
+          <PortalSettingsGroup>
+            <div className="p-4">
+              <ManagerPlan embedded showCurrentPlan={false} />
+            </div>
+          </PortalSettingsGroup>
+        </PortalSettingsSection>
+      ) : null}
+      {variant === "manager" ? <AssistantDisplaySetting /> : null}
+      <NotificationsToggle />
+      <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
+      <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      <PortalSettingsExtras currentKind={portalKind} />
+    </PortalSettingsSections>
   );
 
   if (variant === "manager") {
     return (
       <ManagerPortalPageShell
         title="Settings"
-        titleAside={
-          <div className="flex flex-wrap gap-2">
-            {headerActions.map((a) => (
-              <Button
-                key={a.label}
-                type="button"
-                variant={a.variant === "primary" ? "primary" : "outline"}
-                className="shrink-0 rounded-full border-border px-5 py-2.5 text-sm font-semibold"
-                disabled={(saving && a.label !== "Cancel") || Boolean((a as { disabled?: boolean }).disabled)}
-                onClick={a.onClick}
-              >
-                {a.label}
-              </Button>
-            ))}
-          </div>
-        }
+        subtitle="Manage your account settings and preferences."
       >
-        <div className="space-y-3 [html[data-native]_&]:space-y-2.5">
-          <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">{inner}</Card>
-          {demo ? null : (
-            <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
-              <ManagerPlan embedded showCurrentPlan={false} />
-            </Card>
-          )}
-          <AssistantDisplayModeSetting />
-          <NotificationsToggle />
-          <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-          <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
-          <PortalSettingsExtras currentKind={portalKind} />
-        </div>
+        {settingsBody}
       </ManagerPortalPageShell>
     );
   }
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex items-center justify-between gap-4">
+      <div className="mb-8">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
-        <div className="flex flex-wrap gap-2">
-          {headerActions.map((a) => (
-            <Button
-              key={a.label}
-              type="button"
-              variant={a.variant === "primary" ? "primary" : "outline"}
-              className="shrink-0 rounded-full border-border px-5 py-2.5 text-sm font-semibold"
-              disabled={saving && a.label !== "Cancel"}
-              onClick={a.onClick}
-            >
-              {a.label}
-            </Button>
-          ))}
-        </div>
+        <p className="mt-1 text-sm text-muted">Manage your account settings and preferences.</p>
       </div>
-      {inner}
-      <div className="mt-6">
-        <NotificationsToggle />
-      </div>
-      <div className="mt-6">
-        <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-      </div>
-      <div className="mt-6">
-        <PortalSettingsExtras currentKind={portalKind} />
-      </div>
+      {settingsBody}
     </div>
   );
 }
