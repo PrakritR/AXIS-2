@@ -239,8 +239,8 @@ function dbWith(managerFeeCents: number | null, listingFee: string): SupabaseCli
   } as unknown as SupabaseClient;
 }
 
-describe("resolveApplicationFeeProperty — manager fee is authoritative; $0 is a normal preview answer", () => {
-  it("resolves a NEW listing (empty per-listing fee) to the manager-level fee", async () => {
+describe("resolveApplicationFeeProperty — the listing's own fee is authoritative; per-listing $0 is free", () => {
+  it("resolves a NEW listing (empty per-listing fee) to the account-wide fee (a default)", async () => {
     const res = await resolveApplicationFeeProperty(dbWith(7500, ""), {
       propertyId: "p1",
       managerUserId: MANAGER_ID,
@@ -249,18 +249,18 @@ describe("resolveApplicationFeeProperty — manager fee is authoritative; $0 is 
     if (res.ok) expect(res.value.applicationFeeCents).toBe(7500);
   });
 
-  it("the manager fee beats a grandfathered per-listing fee when they differ", async () => {
+  it("the listing's own fee WINS over a differing account-wide fee", async () => {
     const res = await resolveApplicationFeeProperty(dbWith(7500, "$50"), {
       propertyId: "p1",
       managerUserId: MANAGER_ID,
     });
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.value.applicationFeeCents).toBe(7500);
+    if (res.ok) expect(res.value.applicationFeeCents).toBe(5000);
   });
 
-  it("the preview answers an explicit manager $0 as ok/0, overriding a grandfathered listing fee", async () => {
+  it("the preview answers an explicit per-listing $0 as ok/0 (free), ignoring a non-zero account-wide default", async () => {
     const res = await resolveApplicationFeeProperty(
-      dbWith(0, "$50"),
+      dbWith(7500, "$0"),
       { propertyId: "p1", managerUserId: MANAGER_ID },
       { allowZeroFee: true },
     );
@@ -268,8 +268,8 @@ describe("resolveApplicationFeeProperty — manager fee is authoritative; $0 is 
     if (res.ok) expect(res.value.applicationFeeCents).toBe(0);
   });
 
-  it("the checkout mint still refuses a $0 fee (it is simply never called for one)", async () => {
-    const res = await resolveApplicationFeeProperty(dbWith(0, "$50"), {
+  it("the checkout mint refuses a per-listing $0 — free must NOT fall through to the account-wide fee", async () => {
+    const res = await resolveApplicationFeeProperty(dbWith(7500, "$0"), {
       propertyId: "p1",
       managerUserId: MANAGER_ID,
     });

@@ -102,13 +102,14 @@ export async function resolveApplicationFeeProperty(
   }
 
   const listing = listingFromPropertyData(propertyRow?.property_data);
-  // Manager-level fee (set once in Application settings) is authoritative for
-  // every listing; a listing's own stored `applicationFee` is only the
-  // grandfathered fallback for managers who have not configured one yet, so a
-  // live listing never silently changes what it charges on deploy. See
-  // `src/lib/manager-application-settings.ts`.
+  // The listing's OWN application fee is authoritative ([app-fee-authority] option B); the
+  // account-wide setting is only a default for listings that set nothing. An empty string is
+  // "unset" → fall back to the account-wide default; any set value (INCLUDING "0" = free) is
+  // charged as-is and must never fall through. See `src/lib/manager-application-settings.ts`.
   const managerSettings = await loadManagerApplicationSettings(db, ownerUserId);
-  const listingFeeCents = clampAmountCents(parseMoneyAmount(listing?.applicationFee ?? "") * 100);
+  const rawListingFee = String(listing?.applicationFee ?? "").trim();
+  const listingFeeCents =
+    rawListingFee === "" ? null : clampAmountCents(parseMoneyAmount(rawListingFee) * 100);
   const applicationFeeCents = clampAmountCents(
     effectiveApplicationFeeCents({
       managerFeeCents: managerSettings.applicationFeeCents,
