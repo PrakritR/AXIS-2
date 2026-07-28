@@ -176,6 +176,10 @@ const PUBLIC_BATHROOM_KEYS = [
   "bathtub",
   "assignedRoomIds",
   "allResidents",
+  // Read by `listing-bathroom-layout.ts` on the public detail page: without it a
+  // bathroom the manager explicitly marked "hall" silently renders under the
+  // derived "shared with A, B" heuristic instead. Carries no internal data.
+  "accessKindByRoomId",
 ] as const satisfies readonly (keyof ManagerBathroomSubmission)[];
 
 const PUBLIC_SHARED_SPACE_KEYS = [
@@ -266,6 +270,10 @@ export function publicListingProjection(property: MockProperty): MockProperty {
   return {
     ...pick(property, PUBLIC_PROPERTY_KEYS),
     ...(sub && sub.v === 1 ? { listingSubmission: publicSubmission(sub) } : {}),
+    // Says what this payload IS, so the browser cache it lands in can tell it
+    // apart from the owner's authoritative copy of the same listing. See
+    // `cachePublicExtraListings`.
+    publicProjection: true,
   } as MockProperty;
 }
 

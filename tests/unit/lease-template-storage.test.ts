@@ -45,6 +45,19 @@ describe("lease template object paths", () => {
     expect(leaseTemplateObjectPath("data:application/pdf;base64,AAAA")).toBeNull();
   });
 
+  it("does not match a foreign URL that merely contains the route", () => {
+    // A substring match would let an attacker-supplied host resolve to a real
+    // object path, which both the agent tool's validation and the read route's
+    // "does a property reference this path" check would then trust.
+    for (const foreign of [
+      `https://evil.example/api/portal/lease-template?path=${encodeURIComponent(PATH)}`,
+      `//evil.example/api/portal/lease-template?path=${encodeURIComponent(PATH)}`,
+      `data:text/html,/api/portal/lease-template?path=${encodeURIComponent(PATH)}`,
+    ]) {
+      expect(leaseTemplateObjectPath(foreign), foreign).toBeNull();
+    }
+  });
+
   it("collects nested propertyLeaseTemplates, not just the top-level field", () => {
     const second = `${UID}/1753000000001-ef34gh.pdf`;
     const paths = collectSubmissionLeaseTemplatePaths(

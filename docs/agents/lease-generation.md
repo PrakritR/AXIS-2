@@ -132,9 +132,18 @@ multi-role account is judged on each relationship it actually holds:
    already signed against it would 404 on their own lease — something the old
    public URL never did.
 
-Membership is the control: an unreferenced path is never served, so the random
-filename is a second layer and not the gate. Every denial is a 404, never a 403,
-so the route never confirms a path exists. `POST` (multipart) uploads into the
+Membership is **two** conditions, and both are load-bearing: a property (or
+lease row) must reference the path AND the object's FOLDER OWNER must be someone
+who could have attached it there — the row's own manager, or a co-manager of it.
+"A property I can see references this path" alone is not authorization, because
+`leaseTemplateDocUrl` is a manager-editable blob field: a manager can write any
+string onto their OWN listing and the wizard mirrors `property_data` verbatim,
+so without the second condition they could paste another manager's path onto
+their own property and read the document back. The folder id is not secret
+either — `managerUserId` ships in the public listing payload — so the path is a
+weak secret and never the gate. The same pair applies to the lease-row branch,
+since a lease row is client-writable too. Every denial is a 404, never a 403, so
+the route never confirms a path exists. `POST` (multipart) uploads into the
 caller's own folder after a manager/admin role check and a per-user
 `rateLimit` — an uploaded object carries no property association, so nothing
 else bounds how many a manager can push into a free-plan storage budget.
@@ -158,6 +167,26 @@ from the property-drafts notes in AGENTS.md, which matters most for the two draf
 rows a partially-failed id re-key leaves behind. `collectSubmissionMediaUrls`
 still pushes `leaseTemplateDocUrl` and now walks `propertyLeaseTemplates[]`,
 which is what reclaims a LEGACY template still sitting in `listing-photos`.
+
+## The projection and the manager's own catalog share one localStorage map
+
+`cachePublicExtraListings` (`demo-property-pipeline.ts`) writes every public
+fetch into `axis_manager_extras_by_user_v1` keyed by `managerUserId` — the SAME
+map the manager portal reads, edits, and mirrors back into `property_data` via
+`updateExtraListingFromSubmission`. That was harmless while the public payload
+equalled the stored blob. The allowlist made it lossy: one visit to
+`/rent/browse`, or a native app launch (which hydrates the public catalog for
+every role), would replace the owner's own row with the stripped copy, and their
+next House-details save would persist it — silently destroying lease config,
+wifi, add-on services, room move-in instructions, and the lease template this
+whole change exists to protect.
+
+The cache now **merges**: public scalar fields refresh, but an existing row's
+`listingSubmission` is never downgraded. Residual, accepted: a listing cached
+for the first time from the public route before the owner's authoritative sync
+runs (TTL 15s) is a projection until that sync fires. Coverage:
+`tests/unit/public-listing-cache-merge.test.ts`. If you add another consumer of
+the public payload, ask whether it writes anywhere the owner later saves from.
 
 ## Legacy objects: read-through, knowingly, with a backfill plan
 
@@ -204,11 +233,17 @@ could not see what they were attaching. Applicant-submitted text is untrusted
 third-party URL or a base64 `data:` PDF behind a benign label and substitute the
 document residents sign.
 
-`validateLeaseConfigInput` now accepts only a value `leaseTemplateObjectPath()`
-parses — a template already in the private bucket — and the preview carries the
-resolved object path as a "Stored file" field. A legacy public URL is therefore
-no longer re-appliable through the agent; the Lease modal still handles it.
-Switching a property to `axis_default` / `custom_comments` is untouched.
+`validateLeaseConfigInput` now accepts only a value that resolves to a stored
+object — `leaseTemplateObjectPath()` (private bucket) or `listingMediaObjectPath()`
+(a legacy `listing-photos` template a property may still carry and legitimately
+re-apply) — and the preview carries the resolved path as a "Stored file" field.
+`data:` URLs and arbitrary links are rejected. Switching a property to
+`axis_default` / `custom_comments` is untouched.
+
+`leaseTemplateObjectPath` is anchored (`startsWith`), not a substring match: a
+loose match would let `https://evil.example/api/portal/lease-template?path=…`
+resolve to a real object path, which both this validation and the read route's
+membership check would then have treated as genuine.
 
 Two mitigations that already held, so this was never XSS: `escapeHtml`
 attribute-escapes the URL in `generated-lease.ts`, and every lease iframe is
@@ -218,6 +253,8 @@ sandboxed without `allow-scripts`.
 
 - `tests/unit/public-listing-projection.test.ts` — secrets dropped at any depth,
   a newly added field is not published, every load-bearing field survives.
+- `tests/unit/public-listing-cache-merge.test.ts` — caching the projection never
+  downgrades the owner's stored submission, but still refreshes public fields.
 - `tests/unit/lease-template-storage.test.ts` — path round-trip, traversal
   rejection, nested `propertyLeaseTemplates[]` collection, deletion skips a path
   a survivor references.
@@ -226,5 +263,8 @@ sandboxed without `allow-scripts`.
   co-manager served, approved resident served only when their property
   references the path, PENDING applicant denied, a resident whose signed lease
   embeds a no-longer-referenced template still served, a different manager
-  denied, traversal rejected before storage is touched, `DELETE` scoped to the
-  caller's own folder.
+  denied, a manager who planted another manager's path on their own listing or
+  in their own lease row denied, traversal rejected before storage is touched,
+  `DELETE` scoped to the caller's own folder.
+- `tests/unit/lease-template-storage.test.ts` also asserts a foreign URL merely
+  containing the route resolves to null.

@@ -40,6 +40,13 @@ export function readLeaseTemplateFile(
   file: File | null,
   onSuccess: (url: string, fileName: string) => void,
   showToast: (message: string) => void,
+  /**
+   * Upload in flight. The picker went from a FileReader (milliseconds) to an
+   * 8 MB POST (seconds), so without this a Save during the upload runs
+   * `validateLeaseDraft` against an empty draft and tells the manager to
+   * "upload the lease template" they are visibly already uploading.
+   */
+  onPending?: (busy: boolean) => void,
 ): void {
   if (!file) return;
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -70,6 +77,7 @@ export function readLeaseTemplateFile(
   // The upload is the only thing between picking a file and the row appearing,
   // and an 8 MB PDF on a slow link is several silent seconds otherwise.
   showToast("Uploading lease template…");
+  onPending?.(true);
   // ponytail: uploaded on pick, so cancelling the modal strands the object.
   // deleteSubmissionLeaseTemplates reclaims it when the listing goes; add an
   // orphan sweep only if bucket growth ever shows up.
@@ -78,7 +86,8 @@ export function readLeaseTemplateFile(
     .catch((err) => {
       console.error("lease-config-form: lease template upload failed", err);
       showToast(err instanceof Error ? err.message : "Could not upload the lease template.");
-    });
+    })
+    .finally(() => onPending?.(false));
 }
 
 type LeaseConfigFormProps = {

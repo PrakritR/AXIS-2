@@ -31,6 +31,14 @@ export type MockProperty = {
   contactSmsPhone?: string;
   /** When true, listing is admin-approved for live rent display; property portal inventory only shows extras with this set. */
   adminPublishLive?: boolean;
+  /**
+   * Set by `publicListingProjection` on anonymous payloads: this row's
+   * `listingSubmission` is the public ALLOWLIST, not the stored blob. The public
+   * catalog and the manager's own editable catalog share one localStorage map,
+   * so `cachePublicExtraListings` reads this to refuse to downgrade an
+   * authoritative row it already holds. Never persisted back to `property_data`.
+   */
+  publicProjection?: boolean;
 };
 
 export type MockRow = Record<string, string>;

@@ -30,18 +30,37 @@ function submissionOf(propertyData: unknown): ManagerListingSubmissionV1 | null 
   return sub as ManagerListingSubmissionV1;
 }
 
-type PropertyRow = { property_data?: unknown };
+type PropertyRow = { id?: string; manager_user_id?: string | null; property_data?: unknown };
+const PROPERTY_COLUMNS = "id, manager_user_id, property_data";
 
-function rowsReferenceTemplate(rows: PropertyRow[] | null | undefined, path: string): boolean {
-  return (rows ?? []).some((row) => collectSubmissionLeaseTemplatePaths(submissionOf(row.property_data)).has(path));
+/**
+ * Rows that reference this exact object path AND that the object's FOLDER OWNER
+ * could legitimately have attached it to — their own listing, or one they
+ * co-manage.
+ *
+ * Both halves are load-bearing. "A property I can see references this path" is
+ * not sufficient on its own, because the submission is a manager-editable blob:
+ * a manager can write any string into `leaseTemplateDocUrl` on their OWN listing
+ * (the wizard mirrors `property_data` verbatim), so without the folder-owner
+ * half they could paste another manager's path onto their own property and read
+ * the document back. The folder id is not even secret — `managerUserId` ships in
+ * the public listing payload — so the path is a weak secret and never the gate.
+ */
+function rowsLegitimatelyReference(
+  rows: PropertyRow[] | null | undefined,
+  path: string,
+  folderOwner: string,
+  folderOwnerCoManages: Set<string>,
+): boolean {
+  return (rows ?? []).some((row) => {
+    const attachable =
+      row.manager_user_id === folderOwner || (row.id ? folderOwnerCoManages.has(row.id) : false);
+    return attachable && collectSubmissionLeaseTemplatePaths(submissionOf(row.property_data)).has(path);
+  });
 }
 
 /**
  * Does a property this caller may see still reference this exact object path?
- * Membership is the authorization: a caller who may see the property may see the
- * template that property's own submission points at. An unreferenced path is
- * never served, so the unguessable filename is a second layer rather than the
- * control itself.
  *
  * Ownership is re-derived from `manager_user_id` and NOT from the object's
  * folder, because the two genuinely differ: a co-manager's upload lands in the
@@ -54,16 +73,21 @@ async function accessiblePropertyReferencesTemplate(
   email: string,
   path: string,
 ): Promise<boolean> {
+  const folderOwner = path.split("/")[0] ?? "";
+  const folderOwnerCoManages = await linkedPropertyIdsForModule(db, folderOwner, "properties");
+  const references = (rows: PropertyRow[] | null | undefined) =>
+    rowsLegitimatelyReference(rows, path, folderOwner, folderOwnerCoManages);
+
   const { data: owned } = await db
     .from("manager_property_records")
-    .select("property_data")
+    .select(PROPERTY_COLUMNS)
     .eq("manager_user_id", userId);
-  if (rowsReferenceTemplate(owned, path)) return true;
+  if (references(owned)) return true;
 
   const linked = await linkedPropertyIdsForModule(db, userId, "properties");
   if (linked.size > 0) {
-    const { data } = await db.from("manager_property_records").select("property_data").in("id", [...linked]);
-    if (rowsReferenceTemplate(data, path)) return true;
+    const { data } = await db.from("manager_property_records").select(PROPERTY_COLUMNS).in("id", [...linked]);
+    if (references(data)) return true;
   }
 
   if (!email) return false;
@@ -76,8 +100,8 @@ async function accessiblePropertyReferencesTemplate(
   if (!(await residentHasApprovedResidency(db, { residentEmail: email, managerUserId: scope.managerUserId }))) {
     return false;
   }
-  const { data } = await db.from("manager_property_records").select("property_data").in("id", [scope.propertyId]);
-  return rowsReferenceTemplate(data, path);
+  const { data } = await db.from("manager_property_records").select(PROPERTY_COLUMNS).in("id", [scope.propertyId]);
+  return references(data);
 }
 
 /**
@@ -97,15 +121,27 @@ async function leaseDocumentEmbedsTemplate(
   path: string,
 ): Promise<boolean> {
   const url = leaseTemplateUrlForPath(path);
-  const embedded = (rows: { row_data?: unknown }[] | null | undefined) =>
+  const folderOwner = path.split("/")[0] ?? "";
+  const folderOwnerCoManages = await linkedPropertyIdsForModule(db, folderOwner, "properties");
+  // Same two halves as the property check: a lease row is manager-editable and
+  // mirrored to the server, so "a lease of mine embeds this URL" alone would let
+  // a manager mint a row quoting someone else's path. The lease must belong to
+  // the folder owner's own book of business.
+  const embedded = (
+    rows: { manager_user_id?: string | null; property_id?: string | null; row_data?: unknown }[] | null | undefined,
+  ) =>
     (rows ?? []).some((row) => {
+      const attachable =
+        row.manager_user_id === folderOwner || (row.property_id ? folderOwnerCoManages.has(row.property_id) : false);
+      if (!attachable) return false;
       const html = (row.row_data as { generatedHtml?: unknown } | null)?.generatedHtml;
       return typeof html === "string" && html.includes(url);
     });
 
+  const columns = "manager_user_id, property_id, row_data";
   const { data: asManager } = await db
     .from("portal_lease_pipeline_records")
-    .select("row_data")
+    .select(columns)
     .eq("manager_user_id", userId);
   if (embedded(asManager)) return true;
 
@@ -115,7 +151,7 @@ async function leaseDocumentEmbedsTemplate(
   // match to other people's leases.
   const { data: asResident } = await db
     .from("portal_lease_pipeline_records")
-    .select("row_data")
+    .select(columns)
     .eq("resident_email", email);
   return embedded(asResident);
 }

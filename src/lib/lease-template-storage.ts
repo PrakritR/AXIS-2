@@ -51,11 +51,14 @@ export function leaseTemplateUrlForPath(path: string): string {
  */
 export function leaseTemplateObjectPath(url: string | null | undefined): string | null {
   const raw = url?.trim();
-  if (!raw) return null;
-  const at = raw.indexOf(`${LEASE_TEMPLATE_ROUTE}?`);
-  if (at === -1) return null;
-  const query = raw.slice(raw.indexOf("?", at) + 1);
-  const path = new URLSearchParams(query).get("path")?.trim() ?? "";
+  // Anchored, never a substring match: `leaseTemplateUrlForPath` only ever emits
+  // a root-relative URL, so anything else is a foreign link that merely contains
+  // our route. Matching it loosely would let
+  // `https://evil.example/api/portal/lease-template?path=…` resolve to a real
+  // object path, which both the agent tool's validation and the read route's
+  // "does a property reference this path" check would then treat as genuine.
+  if (!raw?.startsWith(`${LEASE_TEMPLATE_ROUTE}?`)) return null;
+  const path = new URLSearchParams(raw.slice(raw.indexOf("?") + 1)).get("path")?.trim() ?? "";
   return isLeaseTemplatePath(path) ? path : null;
 }
 

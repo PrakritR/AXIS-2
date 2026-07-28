@@ -27,6 +27,8 @@ const PDF = Buffer.from("%PDF-1.7 lease");
 
 /** The listing whose submission references the template under test. */
 const PROPERTY_ROW = {
+  id: "mgr-1",
+  manager_user_id: OWNER,
   property_data: { listingSubmission: { leaseTemplateDocUrl: leaseTemplateUrlForPath(PATH) } },
 };
 
@@ -183,10 +185,56 @@ describe("GET /api/portal/lease-template", () => {
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
       mockDb({
         byId: [],
-        leases: [{ row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(PATH)}">` } }],
+        leases: [
+          {
+            manager_user_id: OWNER,
+            property_id: "mgr-1",
+            row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(PATH)}">` },
+          },
+        ],
       }).client as never,
     );
     expect((await get(PATH)).status).toBe(200);
+  });
+
+  it("denies a manager who planted another manager's path on their OWN listing", async () => {
+    // `leaseTemplateDocUrl` is a manager-editable blob field and the folder id
+    // is public (`managerUserId` ships in the listing payload), so "a property I
+    // own references this path" cannot be authorization on its own.
+    signedInAs(OTHER);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      mockDb({
+        owned: [
+          {
+            id: "mgr-attacker",
+            manager_user_id: OTHER,
+            property_data: { listingSubmission: { leaseTemplateDocUrl: leaseTemplateUrlForPath(PATH) } },
+          },
+        ],
+        byId: [],
+      }).client as never,
+    );
+
+    expect((await get(PATH)).status).toBe(404);
+  });
+
+  it("denies a manager who planted another manager's path in their OWN lease row", async () => {
+    signedInAs(OTHER);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      mockDb({
+        owned: [],
+        byId: [],
+        leases: [
+          {
+            manager_user_id: OTHER,
+            property_id: "mgr-attacker",
+            row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(PATH)}">` },
+          },
+        ],
+      }).client as never,
+    );
+
+    expect((await get(PATH)).status).toBe(404);
   });
 
   it("denies when an unrelated lease row exists but embeds a different template", async () => {
@@ -194,7 +242,13 @@ describe("GET /api/portal/lease-template", () => {
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
       mockDb({
         byId: [],
-        leases: [{ row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(`${OWNER}/other.pdf`)}">` } }],
+        leases: [
+          {
+            manager_user_id: OWNER,
+            property_id: "mgr-1",
+            row_data: { generatedHtml: `<object data="${leaseTemplateUrlForPath(`${OWNER}/other.pdf`)}">` },
+          },
+        ],
       }).client as never,
     );
     expect((await get(PATH)).status).toBe(404);

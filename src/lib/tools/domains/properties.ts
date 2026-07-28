@@ -13,6 +13,7 @@ import { getShareablePropertyForUser } from "@/lib/manager-property-share-access
 import { acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
 import { leaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import { copyListingMediaBetweenSubmissions } from "@/lib/listing-media-copy";
+import { listingMediaObjectPath } from "@/lib/listing-media-storage";
 import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
@@ -779,14 +780,16 @@ function validateLeaseConfigInput(input: {
     if (!url) {
       return "leaseTemplateDocUrl is required when leaseSource is custom_format (upload a PDF in chat or use the modal).";
     }
-    // Only a template already stored in the private bucket is accepted. The
-    // model can otherwise be steered by prompt-injected applicant text into
-    // proposing a third-party URL or a base64 `data:` PDF behind a benign
-    // label, substituting the document residents sign — and the preview shows
-    // the file NAME, so the human at the confirm gate would not see it.
-    return leaseTemplateObjectPath(url)
+    // Only a template already in storage is accepted: the private bucket, or a
+    // legacy `listing-photos` object from before the split, which a property may
+    // still legitimately carry and re-apply. The model can otherwise be steered
+    // by prompt-injected applicant text into proposing a third-party URL or a
+    // base64 `data:` PDF behind a benign label, substituting the document
+    // residents sign — and the preview shows the file NAME, so the human at the
+    // confirm gate would never see it.
+    return leaseTemplateObjectPath(url) || listingMediaObjectPath(url)
       ? null
-      : "leaseTemplateDocUrl must be a lease template uploaded through the Lease modal.";
+      : "leaseTemplateDocUrl must be a lease template already uploaded through the Lease modal.";
   }
   return null;
 }
@@ -867,7 +870,8 @@ export const updatePropertyLeaseConfigTool = defineWriteTool({
       lines.push({ label: "PDF template", value: input.leaseTemplateDocName?.trim() || "Uploaded template" });
       // The document itself, not just its label — a name is manager-supplied
       // text and cannot tell the approver which file they are about to attach.
-      const path = leaseTemplateObjectPath(input.leaseTemplateDocUrl);
+      const path =
+        leaseTemplateObjectPath(input.leaseTemplateDocUrl) ?? listingMediaObjectPath(input.leaseTemplateDocUrl);
       if (path) lines.push({ label: "Stored file", value: path });
     }
     return {

@@ -55,6 +55,10 @@ export function PropertyLeaseUploadModal({
         setLabel(leaseNameFromFileName(name));
       },
       showToast,
+      // The picker uploads to the private bucket before it hands back a URL;
+      // reuse the existing Save gate so the button waits instead of claiming no
+      // file was chosen.
+      setBusy,
     );
   };
 
