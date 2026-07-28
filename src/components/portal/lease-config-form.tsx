@@ -67,6 +67,9 @@ export function readLeaseTemplateFile(
     reader.readAsDataURL(file);
     return;
   }
+  // The upload is the only thing between picking a file and the row appearing,
+  // and an 8 MB PDF on a slow link is several silent seconds otherwise.
+  showToast("Uploading lease template…");
   // ponytail: uploaded on pick, so cancelling the modal strands the object.
   // deleteSubmissionLeaseTemplates reclaims it when the listing goes; add an
   // orphan sweep only if bucket growth ever shows up.

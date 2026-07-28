@@ -25,8 +25,14 @@ export const LEASE_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
  */
 export const LEASE_TEMPLATE_ROUTE = "/api/portal/lease-template";
 
-/** `<manager user id>/<unique>.pdf` — the only object-path shape the route serves. */
-const LEASE_TEMPLATE_PATH_RE = /^[0-9a-fA-F-]{36}\/[A-Za-z0-9._-]+\.pdf$/;
+/**
+ * `<manager user id>/<unique>.pdf` — the only object-path shape the route
+ * serves. The folder must be a real UUID (the route compares it against the
+ * authenticated caller's id) and the filename allows no `/`, so there is no
+ * path outside one manager's own folder to express.
+ */
+const LEASE_TEMPLATE_PATH_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9._-]+\.pdf$/i;
 
 export function isLeaseTemplatePath(path: string | null | undefined): boolean {
   const raw = path?.trim() ?? "";

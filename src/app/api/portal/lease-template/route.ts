@@ -101,7 +101,12 @@ export async function GET(req: Request) {
     return new NextResponse(Buffer.from(await data.arrayBuffer()), {
       headers: {
         "Content-Type": "application/pdf",
+        // Constant, never the stored filename — nothing manager-supplied builds
+        // this header. `nosniff` because these bytes are uploaded by one account
+        // and rendered inline in another's browser (a resident opening their
+        // lease), so a mislabelled upload must not be sniffed into markup.
         "Content-Disposition": 'inline; filename="lease-template.pdf"',
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
       },
     });
