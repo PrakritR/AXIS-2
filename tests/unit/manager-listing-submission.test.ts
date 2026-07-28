@@ -187,3 +187,46 @@ describe("manager-listing-submission", () => {
     });
   });
 });
+
+describe("disclosure trigger fields", () => {
+  const norm = (patch: Record<string, unknown>) =>
+    normalizeManagerListingSubmissionV1({ ...createDefaultListingSubmission(), ...patch } as never);
+
+  it("leaves every trigger absent on a legacy submission that never had them", () => {
+    const sub = norm({});
+    // Absent, never a guessed value: a defaulted yearBuilt would make an
+    // unknown-age building read as post-1978 and suppress the lead-paint rule.
+    expect(sub.yearBuilt).toBeUndefined();
+    expect(sub.sharedUtilityMetering).toBeUndefined();
+    expect(sub.hasPeriodicPestService).toBeUndefined();
+    expect(sub.certificateOfOccupancyDate).toBeUndefined();
+    expect(sub.rrioRegistrationNumber).toBeUndefined();
+    // Nothing new is written into stored JSON for an existing listing.
+    expect(JSON.parse(JSON.stringify(sub))).not.toHaveProperty("yearBuilt");
+  });
+
+  it("keeps a real pre-1978 year and drops junk rather than guessing", () => {
+    expect(norm({ yearBuilt: 1962 }).yearBuilt).toBe(1962);
+    expect(norm({ yearBuilt: "1962" }).yearBuilt).toBe(1962);
+    expect(norm({ yearBuilt: 19 }).yearBuilt).toBeUndefined();
+    expect(norm({ yearBuilt: 1977.5 }).yearBuilt).toBeUndefined();
+    expect(norm({ yearBuilt: "not a year" }).yearBuilt).toBeUndefined();
+  });
+
+  it("only records an affirmatively checked boolean", () => {
+    expect(norm({ sharedUtilityMetering: true }).sharedUtilityMetering).toBe(true);
+    expect(norm({ sharedUtilityMetering: false }).sharedUtilityMetering).toBeUndefined();
+    expect(norm({ hasPeriodicPestService: true }).hasPeriodicPestService).toBe(true);
+    expect(norm({ hasPeriodicPestService: false }).hasPeriodicPestService).toBeUndefined();
+  });
+
+  it("keeps an ISO occupancy date and a trimmed RRIO number", () => {
+    expect(norm({ certificateOfOccupancyDate: "1978-06-01" }).certificateOfOccupancyDate).toBe("1978-06-01");
+    expect(norm({ certificateOfOccupancyDate: "06/01/1978" }).certificateOfOccupancyDate).toBeUndefined();
+    // Right shape, impossible calendar date — the rules engine must never read one.
+    expect(norm({ certificateOfOccupancyDate: "9999-99-99" }).certificateOfOccupancyDate).toBeUndefined();
+    expect(norm({ certificateOfOccupancyDate: "1978-02-30" }).certificateOfOccupancyDate).toBeUndefined();
+    expect(norm({ rrioRegistrationNumber: "  RRIO-123456 " }).rrioRegistrationNumber).toBe("RRIO-123456");
+    expect(norm({ rrioRegistrationNumber: "   " }).rrioRegistrationNumber).toBeUndefined();
+  });
+});
