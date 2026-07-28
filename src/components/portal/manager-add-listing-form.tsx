@@ -2978,6 +2978,10 @@ export function ManagerAddListingForm({
           {stepIndex === 4 ? (
           <FormSection id="edit-lease" title="Pricing">
             <div className="space-y-5">
+              {/* Rental model and short-term sit on one row: both are single
+                  controls, so stacking them burned a full screen of height
+                  before the manager reached Fees. */}
+              <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
               <ListingSubsection title="Rental model">
                 <PlaceCategoryPicker
                   hasError={Boolean(stepFieldErrors.listingPlaceCategoryId)}
@@ -3035,6 +3039,7 @@ export function ManagerAddListingForm({
                   </p>
                 ) : null}
               </ListingSubsection>
+              </div>
 
               <ListingSubsection title="Leasing">
                 <div className="space-y-3">
