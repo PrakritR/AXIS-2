@@ -884,14 +884,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">Signer information</h2>
           <StepIntro className="mt-3">
-            Enter your legal name and contact details exactly as they appear on your ID. This section is encrypted in transit in
-            production environments.
+            Start with how we can reach you, then confirm your identity exactly as it appears on your ID. This section is
+            encrypted in transit in production environments.
           </StepIntro>
         </div>
 
-        <div className="rounded-2xl border border-border bg-accent/30/40 p-5 sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity & contact</p>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+        <div className="space-y-5 rounded-2xl border border-border p-5 sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Contact</p>
+          <div className="grid gap-4 sm:grid-cols-2">
             <WizardFieldGate fieldKey="fullLegalName" enabled={showWizardField}>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="fullLegalName" required>
@@ -908,6 +908,49 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <FieldError msg={errors.fullLegalName} />
             </div>
             </WizardFieldGate>
+            <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
+            <div className="space-y-2">
+              <Label htmlFor="phone" required>
+                Phone number
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={form.phone}
+                onChange={(e) => p.setPhone(e.target.value)}
+                placeholder="(###) ###-####"
+                className={errors.phone ? "border-red-400 ring-2 ring-red-100" : ""}
+              />
+              <FieldError msg={errors.phone} />
+            </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="email" enabled={showWizardField}>
+            <div className="space-y-2">
+              <Label htmlFor="email" required>
+                Email address
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={(e) => patch({ email: e.target.value })}
+                placeholder="you@example.com"
+                readOnly={Boolean(p.emailLocked)}
+                disabled={Boolean(p.emailLocked)}
+                className={errors.email ? "border-red-400 ring-2 ring-red-100" : ""}
+              />
+              <FieldError msg={errors.email} />
+            </div>
+            </WizardFieldGate>
+          </div>
+        </div>
+
+        <div className="space-y-5 rounded-2xl border border-border p-5 sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity</p>
+          <div className="grid gap-4 sm:grid-cols-2">
             <WizardFieldGate fieldKey="dateOfBirth" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="dateOfBirth" required>
@@ -940,7 +983,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
             </WizardFieldGate>
             <WizardFieldGate fieldKey="driversLicense" enabled={showWizardField}>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="driversLicense" required>
                 Driver&apos;s license or ID number
               </Label>
@@ -954,16 +997,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
             </WizardFieldGate>
             <WizardFieldGate fieldKey="idPhotoFront" enabled={showWizardField}>
-            <div className="space-y-3 sm:col-span-2 rounded-xl border border-border bg-card/60 p-4 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/5">
+            <div className="space-y-3 sm:col-span-2">
               <div>
                 <Label>
                   Photo of your driver&apos;s license or ID
                   <span className="pl-1 font-normal text-muted/70">(optional)</span>
                 </Label>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Add a clear photo of the front and back. On a phone you can take the photo directly. These images are
-                  shared only with the property manager for this application and are kept with your application record.
-                  They are stored privately and encrypted in transit, never shown publicly.
+                <p className="mt-1 text-xs text-muted">
+                  Clear front and back photos — shared only with the property manager for this application.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -992,43 +1033,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   dataAttr="application-id-photo-back"
                 />
               </div>
-            </div>
-            </WizardFieldGate>
-            <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
-            <div className="space-y-2">
-              <Label htmlFor="phone" required>
-                Phone number
-              </Label>
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={form.phone}
-                onChange={(e) => p.setPhone(e.target.value)}
-                placeholder="(###) ###-####"
-                className={errors.phone ? "border-red-400 ring-2 ring-red-100" : ""}
-              />
-              <FieldError msg={errors.phone} />
-            </div>
-            </WizardFieldGate>
-            <WizardFieldGate fieldKey="email" enabled={showWizardField}>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="email" required>
-                Email address
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={(e) => patch({ email: e.target.value })}
-                placeholder="you@example.com"
-                readOnly={Boolean(p.emailLocked)}
-                disabled={Boolean(p.emailLocked)}
-                className={errors.email ? "border-red-400 ring-2 ring-red-100" : ""}
-              />
-              <FieldError msg={errors.email} />
             </div>
             </WizardFieldGate>
           </div>
@@ -1838,11 +1842,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           )}
           <ReviewSection title="Personal information" stepTarget={4} onEdit={editFromReview}>
             <ReviewRow k="Legal name" v={displayOrDash(form.fullLegalName)} />
+            <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
+            <ReviewRow k="Email" v={displayOrDash(form.email)} />
             <ReviewRow k="Date of birth" v={displayOrDash(form.dateOfBirth)} />
             <ReviewRow k="SSN" v={maskSsnReview(form.ssn)} />
             <ReviewRow k="ID number" v={displayOrDash(form.driversLicense)} />
-            <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
-            <ReviewRow k="Email" v={displayOrDash(form.email)} />
           </ReviewSection>
           {activeStepSet.has(5) || activeStepSet.has(6) ? (
           <ReviewSection title="Address history" stepTarget={5} onEdit={editFromReview}>
