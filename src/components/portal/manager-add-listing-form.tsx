@@ -2741,9 +2741,9 @@ export function ManagerAddListingForm({
                   </Button>
                 </div>
                 <div className="w-full">
-                  <div className="grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
                     {sub.rooms.map((room) => (
-                      <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                      <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
                         <input
                           type="checkbox"
                           className="h-4 w-4 rounded border-border"
@@ -3906,40 +3906,30 @@ export function ManagerAddListingForm({
                         <input type="checkbox" checked={b.bathtub} onChange={(e) => setBath(i, { bathtub: e.target.checked })} />
                         Bathtub
                       </label>
-                      <div className="sm:col-span-2">
-                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
-                          <input
-                            type="checkbox"
-                            className="mt-1 h-4 w-4 rounded border-border"
-                            checked={Boolean(b.allResidents)}
-                            onChange={(e) => {
-                              const on = e.target.checked;
-                              setBath(i, {
-                                allResidents: on,
-                                assignedRoomIds: on ? [] : (b.assignedRoomIds ?? []),
-                                accessKindByRoomId: on ? undefined : b.accessKindByRoomId,
-                              });
-                            }}
-                          />
-                          <span className="text-sm font-medium text-foreground">
-                            Whole-house / hall bathroom — all listed bedrooms use it (no per-room checkboxes)
-                          </span>
-                        </label>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="For non–whole-house baths: checking a room here removes it from other bath rows (except whole-house). Use the situation menu for en suite vs shared wording on the listing.">
-                          Used by these rooms
-                        </FieldLabel>
-                        {b.allResidents ? (
-                          <p className="mt-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-muted">
-                            This bathroom applies to every named room on the listing. Add another bathroom row for suite or shared setups between specific rooms.
-                          </p>
-                        ) : (
-                          <div className="mt-2 space-y-3 rounded-xl border border-border bg-accent/30 p-3">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 rounded border-border"
+                          checked={Boolean(b.allResidents)}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setBath(i, {
+                              allResidents: on,
+                              assignedRoomIds: on ? [] : (b.assignedRoomIds ?? []),
+                              accessKindByRoomId: on ? undefined : b.accessKindByRoomId,
+                            });
+                          }}
+                        />
+                        <span className="font-medium text-foreground">Whole-house bathroom</span>
+                      </label>
+                      {!b.allResidents ? (
+                        <div className="sm:col-span-2">
+                          <FieldLabel>Used by rooms</FieldLabel>
+                          <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
                             {sub.rooms.map((room) => {
                               const checked = (b.assignedRoomIds ?? []).includes(room.id);
                               return (
-                                <div key={`${b.id}-${room.id}`} className="rounded-lg border border-border bg-card p-2.5">
+                                <div key={`${b.id}-${room.id}`} className="min-w-0">
                                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                                     <input
                                       type="checkbox"
@@ -3947,31 +3937,29 @@ export function ManagerAddListingForm({
                                       checked={checked}
                                       onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
                                     />
-                                    <span className="font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                                    <span className="truncate font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
                                   </label>
                                   {checked ? (
-                                    <div className="mt-2 pl-6">
-                                      <label className="block text-[11px] font-semibold text-muted">Bathroom situation for this room</label>
-                                      <Select
-                                        className={`${selectInputCls} mt-1 text-xs`}
-                                        value={b.accessKindByRoomId?.[room.id] ?? ""}
-                                        onChange={(e) =>
-                                          setBathRoomAccessKind(i, room.id, e.target.value as "" | ManagerBathroomRoomAccessKind)
-                                        }
-                                      >
-                                        <option value="">Optional — auto from shared vs private</option>
-                                        <option value="ensuite">En suite (private to this room)</option>
-                                        <option value="shared">Shared (other checked rooms use it too)</option>
-                                        <option value="hall">Hall / common (not private to this room)</option>
-                                      </Select>
-                                    </div>
+                                    <Select
+                                      aria-label={`Bathroom situation for ${room.name.trim() || "room"}`}
+                                      className={`${selectInputCls} mt-1 h-8 text-xs`}
+                                      value={b.accessKindByRoomId?.[room.id] ?? ""}
+                                      onChange={(e) =>
+                                        setBathRoomAccessKind(i, room.id, e.target.value as "" | ManagerBathroomRoomAccessKind)
+                                      }
+                                    >
+                                      <option value="">Auto</option>
+                                      <option value="ensuite">En suite</option>
+                                      <option value="shared">Shared</option>
+                                      <option value="hall">Hall</option>
+                                    </Select>
                                   ) : null}
                                 </div>
                               );
                             })}
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      ) : null}
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Finishes and fixtures for this bathroom only (beyond shower / toilet / tub above).">
                           Bathroom amenities
@@ -4003,8 +3991,9 @@ export function ManagerAddListingForm({
                           placeholder="Add custom amenities not listed above (one per line)."
                         />
                       </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Upload up to 8 bathroom photos.">Bathroom photos</FieldLabel>
+                      <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <FieldLabel hint="Up to 8 images, auto-compressed.">Photos</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `bath-photos-${b.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `bath-photos-${b.id}`)}
@@ -4019,7 +4008,7 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </MediaPickTrigger>
-                          <p className="mt-3 text-sm text-muted">Drag and drop bathroom photos here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop photos here or use the button.</p>
                           {(b.photoDataUrls?.length ?? 0) > 0 ? (
                             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {b.photoDataUrls.map((src, pi) => (
@@ -4036,13 +4025,11 @@ export function ManagerAddListingForm({
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Optional short clip (~14 MB max).">Bathroom video</FieldLabel>
+                      <div>
+                        <FieldLabel hint="One short clip, ~14 MB max.">Video</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `bath-video-${b.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `bath-video-${b.id}`)}
@@ -4058,9 +4045,9 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            <p className="mt-2 text-xs text-primary">Uploading…</p>
                           ) : (
-                          <p className="mt-3 text-sm text-muted">Drag and drop one bathroom video here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
                           )}
                           {b.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
@@ -4078,10 +4065,9 @@ export function ManagerAddListingForm({
                                 Remove video
                               </button>
                             </div>
-                          ) : (
-                            <p className="mt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
-                          )}
+                          ) : null}
                         </div>
+                      </div>
                       </div>
                   </ListingWizardCollapsibleCard>
                   );
@@ -4268,8 +4254,9 @@ export function ManagerAddListingForm({
                             placeholder="Other amenities not listed above (one per line)."
                           />
                         </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel hint="Upload up to 8 shared-space photos.">Photos</FieldLabel>
+                        <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <FieldLabel hint="Up to 8 images.">Photos</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-photos-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
@@ -4301,13 +4288,11 @@ export function ManagerAddListingForm({
                                   </div>
                                 ))}
                               </div>
-                            ) : (
-                              <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
-                            )}
+                            ) : null}
                           </div>
                         </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel hint="One short clip per shared space (~14 MB max).">Video</FieldLabel>
+                        <div>
+                          <FieldLabel hint="One short clip, ~14 MB max.">Video</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-video-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
@@ -4323,9 +4308,9 @@ export function ManagerAddListingForm({
                               {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
                             </MediaPickTrigger>
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
-                              <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                              <p className="mt-2 text-xs text-primary">Uploading…</p>
                             ) : (
-                              <p className="mt-3 text-sm text-muted">Drag and drop one video here, or use the button above.</p>
+                              <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
                             )}
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
@@ -4346,11 +4331,12 @@ export function ManagerAddListingForm({
                             ) : null}
                           </div>
                         </div>
+                        </div>
                         <div className="sm:col-span-2">
                           <FieldLabel>Room access</FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
                             {sub.rooms.map((room) => (
-                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 rounded border-border"
