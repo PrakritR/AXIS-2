@@ -1634,9 +1634,9 @@ export function ManagerResidents({
     setSigningLease(row);
   }
 
-  async function handleManagerModalSign(signatureName: string) {
+  async function handleManagerModalSign(signatureName: string, consentVersion: string) {
     if (!signingLease) return false;
-    const ok = await managerSignLease(signingLease.id, signatureName.trim(), userId);
+    const ok = await managerSignLease(signingLease.id, signatureName.trim(), userId, consentVersion);
     if (ok) {
       setLeaseTick((n) => n + 1);
       showToast(

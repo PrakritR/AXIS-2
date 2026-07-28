@@ -12,11 +12,17 @@ vi.mock("@/lib/resident-welcome.server", () => ({
 
 import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
 
-function mockDb() {
+/** `existingLease` is what the lease row already stored under this id, if any. */
+function mockDb(existingLease: { id: string; manager_user_id: string | null } | null = null) {
   const upsert = vi.fn().mockResolvedValue({ error: null });
   return {
     from: vi.fn(() => ({
       upsert,
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: existingLease, error: null }),
+        })),
+      })),
       update: vi.fn(() => ({
         eq: vi.fn(() => ({
           eq: vi.fn().mockResolvedValue({ error: null }),
@@ -66,6 +72,35 @@ describe("runExistingResidentOnboarding", () => {
     expect(deliverExistingResidentWelcome).toHaveBeenCalled();
     const welcomeArgs = deliverExistingResidentWelcome.mock.calls[0]?.[2] as { axisId?: string };
     expect(welcomeArgs?.axisId).toBe("PROPLANE-TEST01");
+  });
+
+  it("refuses to upsert onto a lease record another manager owns", async () => {
+    // `leaseId` is derived from the application axis id — the same id space real
+    // approved-application leases use — and the route falls back to a
+    // client-supplied `row`. Without this check a colliding id would replace
+    // another manager's executed lease and re-parent it to the caller.
+    const db = mockDb({ id: "lease_app_PROPLANE-TEST01", manager_user_id: "mgr-victim" });
+
+    const result = await runExistingResidentOnboarding(
+      db as never,
+      { userId: "mgr-attacker", email: "attacker@test.axis.local", managerName: "Mal" },
+      {
+        id: "PROPLANE-TEST01",
+        name: "Jane Smith",
+        email: "jane.onboard@test.axis.local",
+        property: "Ballard House",
+        stage: "Active",
+        bucket: "approved",
+        detail: "",
+        manuallyAdded: true,
+      },
+      { sendWelcomeEmail: false },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(409);
+    expect(db._upsert).not.toHaveBeenCalled();
   });
 
   it("rejects non-manual residents", async () => {

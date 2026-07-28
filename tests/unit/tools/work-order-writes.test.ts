@@ -160,9 +160,12 @@ class FakeTableQuery {
 // avoid a registry import cycle). Transforming that module graph on first touch
 // costs seconds and was billed to whichever test executed a write first, timing
 // it out. Warm it once, outside any per-test timeout.
+// Generous: this is transform cost under whatever contention the full parallel
+// suite creates, not a correctness wait. A hook timeout here means something is
+// actually wrong, not that the machine was busy.
 beforeAll(async () => {
   await import("@/lib/work-order-dispatch.server");
-}, 60_000);
+}, 180_000);
 
 function makeCtx(tables: Record<string, Row[]>): AgentContext {
   const db = {

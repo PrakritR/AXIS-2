@@ -20,6 +20,9 @@ import {
 
 const MANAGER_ID = "manager-evidence";
 const LEASE_HTML = "<html><body>LEASE BODY v1</body></html>";
+// A stored hash is only rendered when it is really a SHA-256 digest.
+const HASH_A = "3f9ac21088d14e77" + "a".repeat(48);
+const HASH_B = "b".repeat(64);
 
 function independentSha256(text: string): string {
   return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
@@ -65,19 +68,63 @@ describe("lease document hashing", () => {
   });
 
   it("formats a readable fingerprint prefix and tolerates an absent hash", () => {
-    expect(documentFingerprintLabel("3f9ac21088d14e7712345")).toBe("3F9A C210 88D1 4E77");
+    expect(documentFingerprintLabel(HASH_A)).toBe("3F9A C210 88D1 4E77");
     expect(documentFingerprintLabel(null)).toBeNull();
     expect(documentFingerprintLabel(undefined)).toBeNull();
   });
 
+  it("refuses to carry a stored value that is not a SHA-256 digest", () => {
+    // row_data is client-writable and this value is printed on a legal
+    // certificate — "CAFEBABE" must never render as a fingerprint.
+    const row = baseRow({
+      residentSignature: {
+        role: "resident",
+        name: "R",
+        signedAtIso: "2026-07-01T00:00:00.000Z",
+        documentSha256: "cafebabe" as string,
+      },
+    });
+
+    expect(row.residentSignature?.documentSha256).toBeNull();
+    expect(row.documentSha256).toBeNull();
+    expect(applyLeaseSignaturesToHtml(row, LEASE_HTML)).not.toContain("CAFE BABE");
+  });
+
+  it("derives the row hash from the first signature, so a replaced document cannot leave a stale one", () => {
+    // A stored row-level hash is ignored: every reset path spreads `...row` and
+    // nulls only the signature fields, so a carried-forward copy went stale the
+    // moment the document was replaced and the row re-signed.
+    const row = baseRow({
+      documentSha256: "f".repeat(64),
+      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: HASH_A },
+      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: HASH_B },
+    });
+
+    expect(row.documentSha256).toBe(HASH_A);
+    expect(baseRow({ residentSignature: null, managerSignature: null, documentSha256: HASH_A }).documentSha256).toBeNull();
+  });
+
+  it("treats an unrecognized consent version as no consent at all", () => {
+    const row = baseRow({
+      residentSignature: {
+        role: "resident",
+        name: "R",
+        signedAtIso: "2026-07-01T00:00:00.000Z",
+        consentVersion: "made-up-v9",
+      },
+    });
+
+    expect(applyLeaseSignaturesToHtml(row, LEASE_HTML)).not.toContain("Consented to transact electronically");
+  });
+
   it("flags a document that changed between the two signatures", () => {
     const diverged = baseRow({
-      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: "aaa" },
-      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: "bbb" },
+      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: HASH_A },
+      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: HASH_B },
     });
     const agreed = baseRow({
-      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: "aaa" },
-      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: "aaa" },
+      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: HASH_A },
+      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: HASH_A },
     });
 
     expect(signedDocumentHashesDiverge(diverged)).toBe(true);
@@ -90,20 +137,21 @@ describe("lease document hashing", () => {
 describe("signature certificate", () => {
   it("shows the fingerprint, consent and provenance when present", () => {
     const row = baseRow({
-      documentSha256: "3f9ac21088d14e77",
+      documentSha256: HASH_A,
       templateVersion: "ca-residential@1.2.0",
       executedJurisdiction: "US-CA/san_francisco",
       residentSignature: {
         role: "resident",
         name: "Jordan Lee",
         signedAtIso: "2026-07-01T00:00:00.000Z",
-        documentSha256: "3f9ac21088d14e77",
+        documentSha256: HASH_A,
         consentVersion: LEASE_ESIGN_CONSENT_VERSION,
       },
     });
 
     const html = applyLeaseSignaturesToHtml(row, LEASE_HTML)!;
-    expect(html).toContain("3F9A C210 88D1 4E77");
+    expect(html).toContain(HASH_A); // full digest in the provenance list
+    expect(html).toContain("3F9A C210 88D1 4E77"); // readable prefix on the signature card
     expect(html).toContain("ca-residential@1.2.0");
     expect(html).toContain("US-CA/san_francisco");
     expect(html).toContain("Consented to transact electronically");
@@ -131,8 +179,8 @@ describe("signature certificate", () => {
 
   it("warns on the certificate when the parties signed different documents", () => {
     const row = baseRow({
-      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: "aaa" },
-      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: "bbb" },
+      residentSignature: { role: "resident", name: "R", signedAtIso: "2026-07-01T00:00:00.000Z", documentSha256: HASH_A },
+      managerSignature: { role: "manager", name: "M", signedAtIso: "2026-07-02T00:00:00.000Z", documentSha256: HASH_B },
     });
 
     expect(applyLeaseSignaturesToHtml(row, LEASE_HTML)).toContain("did not sign identical documents");
@@ -158,7 +206,7 @@ describe("signing records the hash of what was signed", () => {
       RESIDENT_SCOPE,
     );
 
-    expect(await residentSignLease("jordan.lee@example.com", "Jordan Lee")).toBe(true);
+    expect(await residentSignLease("jordan.lee@example.com", "Jordan Lee", LEASE_ESIGN_CONSENT_VERSION)).toBe(true);
 
     const row = readLeasePipeline().find((r) => r.id === "lease_evidence")!;
     expect(row.residentSignature?.documentSha256).toBe(independentSha256(LEASE_HTML));
@@ -188,7 +236,7 @@ describe("signing records the hash of what was signed", () => {
       MANAGER_ID,
     );
 
-    expect(await managerSignLease("lease_evidence", "Pat Manager", MANAGER_ID)).toBe(true);
+    expect(await managerSignLease("lease_evidence", "Pat Manager", MANAGER_ID, LEASE_ESIGN_CONSENT_VERSION)).toBe(true);
 
     const row = readLeasePipeline(MANAGER_ID).find((r) => r.id === "lease_evidence")!;
     expect(row.status).toBe("Fully Signed");

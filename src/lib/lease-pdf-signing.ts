@@ -34,8 +34,9 @@ function signatureEvidenceLines(row: LeasePipelineRow, role: "resident" | "manag
   if (!sig?.name) return [];
   const fingerprint = documentFingerprintLabel(sig.documentSha256);
   return [
-    fingerprint ? `Document signed: ${fingerprint}` : "",
-    sig.consentVersion ? "Consented to transact electronically before signing." : "",
+    fingerprint ? `Document signed (fingerprint begins) ${fingerprint}` : "",
+    // Only a version we can quote back counts as an attestation.
+    sig.consentVersion === LEASE_ESIGN_CONSENT_VERSION ? "Consented to transact electronically before signing." : "",
   ].filter(Boolean);
 }
 
@@ -48,27 +49,33 @@ export async function buildLeaseSignaturePagePdf(row: LeasePipelineRow): Promise
   const maxWidth = 612 - margin * 2;
   let y = 720;
 
-  const draw = (text: string, size: number, font = regular) => {
-    page.drawText(text, { x: margin, y, size, font, color: rgb(0.1, 0.1, 0.1) });
-    y -= size + 10;
+  // The standard fonts are WinAnsi-only and pdf-lib THROWS on anything outside
+  // it. Resident names, unit labels and (soon) template ids are free text, so an
+  // emoji or a CJK character would abort the whole certificate — and the caller
+  // swallows that, silently shipping a signed PDF with no certificate page.
+  // Losing one glyph beats losing the evidence.
+  const winAnsiSafe = (text: string) => text.replace(/[^\x20-\x7E\xA0-\xFF]/g, "?");
+
+  const put = (text: string, size: number, font: typeof regular, lead: number) => {
+    if (y < margin) return; // never draw off the bottom of the page
+    page.drawText(winAnsiSafe(text), { x: margin, y, size, font, color: rgb(0.1, 0.1, 0.1) });
+    y -= size + lead;
   };
+
+  const draw = (text: string, size: number, font = regular) => put(text, size, font, 10);
 
   const drawWrapped = (text: string, size: number, font = regular) => {
     let line = "";
-    for (const word of text.split(/\s+/)) {
+    for (const word of winAnsiSafe(text).split(/\s+/)) {
       const candidate = line ? `${line} ${word}` : word;
       if (line && font.widthOfTextAtSize(candidate, size) > maxWidth) {
-        page.drawText(line, { x: margin, y, size, font, color: rgb(0.1, 0.1, 0.1) });
-        y -= size + 3;
+        put(line, size, font, 3);
         line = word;
         continue;
       }
       line = candidate;
     }
-    if (line) {
-      page.drawText(line, { x: margin, y, size, font, color: rgb(0.1, 0.1, 0.1) });
-      y -= size + 10;
-    }
+    if (line) put(line, size, font, 10);
   };
 
   draw("Electronic Signature Certificate", 16, bold);
@@ -97,15 +104,17 @@ export async function buildLeaseSignaturePagePdf(row: LeasePipelineRow): Promise
     );
   }
 
-  const fingerprint = documentFingerprintLabel(row.documentSha256);
+  // The FULL digest, not the readable prefix — a 64-bit prefix is a convenience
+  // for comparing two certificates by eye, not something to stand behind.
   const provenance = [
-    fingerprint ? `Document fingerprint (SHA-256): ${fingerprint}` : "",
+    row.documentSha256 ? `Document fingerprint (SHA-256): ${row.documentSha256}` : "",
     row.templateVersion ? `Lease template: ${row.templateVersion}` : "",
     row.executedJurisdiction ? `Executed under: ${row.executedJurisdiction}` : "",
   ].filter(Boolean);
   if (provenance.length > 0) {
     y -= 6;
-    for (const line of provenance) draw(line, 9);
+    // Wrapped, not `draw`: template id and jurisdiction are free strings.
+    for (const line of provenance) drawWrapped(line, 9);
     drawWrapped(
       "The fingerprint is a SHA-256 checksum of the lease document exactly as it was presented for signature; it does not cover this certificate page. Any later change to the document, however small, produces a different fingerprint.",
       8,

@@ -50,8 +50,23 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string | null> {
 
 /** SHA-256 of the document as presented for signature, or null when there is none. */
 export async function leaseDocumentSha256(row: LeasePipelineRow): Promise<string | null> {
-  const bytes = leaseSignedDocumentBytes(row);
-  return bytes ? sha256Hex(bytes) : null;
+  try {
+    const bytes = leaseSignedDocumentBytes(row);
+    return bytes ? sha256Hex(bytes) : null;
+  } catch {
+    // A malformed data URL makes `atob` throw. Signing must not fail with it.
+    return null;
+  }
+}
+
+/**
+ * A stored hash is data, not a computation — it arrives from `row_data` and is
+ * printed on a legal certificate, so anything that is not a SHA-256 digest is
+ * rejected rather than rendered as one.
+ */
+export function asDocumentSha256(value: unknown): string | null {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^[0-9a-f]{64}$/.test(v) ? v : null;
 }
 
 /** Readable prefix for a non-technical reader: "3F9A C210 88D1 4E77". */
@@ -70,6 +85,44 @@ export function signedDocumentHashesDiverge(row: LeasePipelineRow): boolean {
   const resident = row.residentSignature?.documentSha256?.trim();
   const manager = row.managerSignature?.documentSha256?.trim();
   return Boolean(resident && manager && resident !== manager);
+}
+
+/**
+ * Pure signature predicate, defined here rather than in the storage module so
+ * server routes can enforce the immutability rule without importing 1700 lines
+ * of browser-oriented store. `hasAnyLeaseSignature` delegates to it — one
+ * definition, so the client guard and the server guard can never disagree.
+ */
+export function rowHasAnySignature(row: Pick<LeasePipelineRow, "managerSignature" | "residentSignature" | "signatureName" | "signedAtIso">): boolean {
+  return Boolean(row.managerSignature || row.residentSignature || (row.signatureName && row.signedAtIso));
+}
+
+/**
+ * The agreement bytes, excluding the certificate page that signing appends into
+ * `managerUploadedPdf.dataUrl`. That page is derived from the signatures, so it
+ * legitimately changes as parties sign; the base document must not.
+ */
+export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null; pdf: string | null } {
+  return {
+    html: row.generatedHtml ?? null,
+    pdf: row.managerUploadedPdf?.originalDataUrl ?? row.managerUploadedPdf?.dataUrl ?? null,
+  };
+}
+
+/**
+ * True when `next` replaces the document body of an already-signed `stored`
+ * row. Clearing the signatures drops out by design — that is a superseding
+ * document (void, send back, renew, amend), not a silent edit to an executed
+ * one. Filling in an absent body on an `externallySignedLease` row is how
+ * existing-resident onboarding files an already-executed off-platform PDF.
+ */
+export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
+  if (!rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
+  const before = leaseDocumentBody(stored);
+  const after = leaseDocumentBody(next);
+  if (before.html === after.html && before.pdf === after.pdf) return false;
+  if (!before.html && !before.pdf && stored.externallySignedLease) return false;
+  return true;
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {

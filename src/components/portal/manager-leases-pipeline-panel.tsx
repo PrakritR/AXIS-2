@@ -334,9 +334,9 @@ export function ManagerLeasesPipelinePanel({
     setSigningRow(row);
   };
 
-  const handleManagerModalSign = async (signatureName: string) => {
+  const handleManagerModalSign = async (signatureName: string, consentVersion: string) => {
     if (!signingRow) return false;
-    const ok = await managerSignLease(signingRow.id, signatureName.trim(), managerUserId);
+    const ok = await managerSignLease(signingRow.id, signatureName.trim(), managerUserId, consentVersion);
     if (ok) {
       const fullySigned = hasBothLeaseSignatures({
         ...signingRow,

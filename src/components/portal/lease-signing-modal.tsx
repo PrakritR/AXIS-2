@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 import { DEMO_LEASE_SIGN_PREPARE_EVENT } from "@/lib/demo/demo-playback";
-import { LEASE_ESIGN_CONSENT_TEXT } from "@/lib/lease-execution-evidence";
+import { LEASE_ESIGN_CONSENT_TEXT, LEASE_ESIGN_CONSENT_VERSION } from "@/lib/lease-execution-evidence";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
@@ -20,7 +20,8 @@ export function LeaseSigningModal({
   row: LeasePipelineRow;
   signerName: string;
   signerRoleLabel: string;
-  onSign: (signatureName: string) => boolean | Promise<boolean>;
+  /** `consentVersion` is the affirmation the signer accepted to reach this call. */
+  onSign: (signatureName: string, consentVersion: string) => boolean | Promise<boolean>;
   onClose: () => void;
 }) {
   const isClient = useIsClient();
@@ -50,7 +51,7 @@ export function LeaseSigningModal({
   const handleSign = async () => {
     if (!canSign) return;
     setSubmitting(true);
-    const ok = await Promise.resolve(onSign(sigName.trim()));
+    const ok = await Promise.resolve(onSign(sigName.trim(), LEASE_ESIGN_CONSENT_VERSION));
     setSubmitting(false);
     if (!ok) return;
     setSigned(true);

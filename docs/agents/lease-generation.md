@@ -10,7 +10,12 @@ was no way to prove which version a party agreed to. Everything below exists to
 close that.
 
 Owner files: `src/lib/lease-execution-evidence.ts`,
-`src/lib/lease-pipeline-storage.ts`, `src/lib/lease-pdf-signing.ts`.
+`src/lib/lease-pipeline-storage.ts`, `src/lib/lease-pdf-signing.ts`, and the
+guard in `src/app/api/portal-lease-pipeline/route.ts`.
+
+`lease-execution-evidence.ts` is deliberately PURE — its only import from the
+storage module is a type, so a server route can enforce the same rules without
+pulling in 1700 lines of browser store. Keep it that way.
 
 ### Fields (fixed contract)
 
@@ -22,7 +27,7 @@ On `LeasePipelineRow`:
 
 | Field | Type | Written by |
 | --- | --- | --- |
-| `documentSha256` | `string \| null` | this agent, at first signature |
+| `documentSha256` | `string \| null` | DERIVED (see below), never stored independently |
 | `executedJurisdiction` | `string \| null` | a later agent — `"US-CA"` or `"US-CA/san_francisco"` |
 | `templateVersion` | `string \| null` | a later agent — template id plus semver, e.g. `"ca-residential@1.2.0"` |
 
@@ -33,8 +38,26 @@ On `LeaseSignature` (per party):
 | `documentSha256` | `string \| null` | SHA-256 of the document **this** party was shown |
 | `consentVersion` | `string \| null` | version of the consent text they accepted (`esign-consent-v1`) |
 
+`row.documentSha256` is **derived on every normalize** from the first signature
+that recorded one (`residentSignature ?? managerSignature`), never carried
+forward from storage. It has to be: every path that resets a lease spreads
+`...row` and nulls only the signature fields, so a stored copy survived the
+document being replaced and the row re-signed — and the certificate then printed
+a fingerprint matching no document anyone signed. A row with no signature has no
+executed document, so the value is `null`.
+
+Precisely, it is the hash recorded by the earliest signature that recorded one.
+For a lease whose resident signed before this change (no hash) and whose manager
+countersigns today, that is the manager's hash, not the first execution.
+
 All five are optional, and `normalizeLeasePipelineRow` resolves an absent value
-to `null`. A lease signed before this change has none of them and renders,
+to `null`. A per-signature hash is validated as a real SHA-256 digest
+(`asDocumentSha256`) before it is stored or rendered — `row_data` is
+client-writable and the value is printed on a legal certificate, so
+`"CAFEBABE"` must never render as a fingerprint. Likewise a `consentVersion`
+only asserts consent when it matches the current constant.
+
+A lease signed before this change has none of these fields and renders,
 downloads, and displays exactly as before. **Do not backfill a guessed value** —
 absent means unknown, and unknown is honest.
 
@@ -46,8 +69,13 @@ jurisdiction; the fields are ready for the agents that will.
 
 At **signature time**, never at generation time, in `residentSignLease` and
 `managerSignLease` (`lease-pipeline-storage.ts`) via `leaseDocumentSha256`.
-Each party's hash is taken from the pre-signature row — the exact document
-`LeaseSigningModal` rendered for them.
+Each party's hash is taken from the pre-signature row.
+
+That is the document the signer was shown, with one deliberate exception worth
+stating plainly: on the PDF path the countersigning manager previews
+`managerUploadedPdf.dataUrl`, which by then is the base document plus the
+resident's certificate page, while the hash covers `originalDataUrl`. Both
+parties therefore hash the same comparable bytes.
 
 | Document | Bytes hashed |
 | --- | --- |
@@ -71,8 +99,8 @@ an absent hash is recorded as absent.
 **Represented as a per-signature hash, not one row-level value.** Each
 `LeaseSignature` carries its own `documentSha256`, so if the two parties signed
 different bytes both facts survive instead of the second silently overwriting
-the first. `row.documentSha256` is set at the **first** signature and never
-overwritten, so it always means "the document as first executed".
+the first. `row.documentSha256` reads the earliest of them, so the row-level
+field never has to pick a winner between two disagreeing signatures.
 
 When the two differ, `signedDocumentHashesDiverge(row)` is true and both the
 HTML certificate block and the PDF certificate page print a warning naming each
@@ -99,13 +127,26 @@ outside this agent's files. Flagged, not attempted.
 
 ### Signed documents are immutable in practice
 
-`preserveSignedLeaseDocuments(prev, next)` (exported from
-`lease-pipeline-storage.ts`) is the choke point, applied in `write()` and in
-`materializeLeasePipeline()` — the only two paths that persist rows. A row that
-carries a signature keeps its stored document body; a replacement is reverted,
-not trusted. Putting it there rather than in each mutation means a new write
-path inherits the guarantee instead of having to remember to call
-`leaseAllowsManagerDocumentEdits`.
+**The server check is the one that matters.** `POST /api/portal-lease-pipeline`
+stores whatever `row_data` the caller sends, so a browser-side guard on a
+browser-owned store is advisory at best: anyone with devtools could POST a
+rewritten executed lease. The route now loads the stored row and answers **409**
+when the request would replace the document body of a row that still carries a
+signature. It refuses rather than silently restoring, because a legitimate
+client never makes that request, and it does not exempt admins — the point is
+that executed text cannot change, not that only strangers may not change it.
+
+`preserveSignedLeaseDocuments(prev, next)` (`lease-pipeline-storage.ts`) is the
+client-side second line, applied in `write()`, `materializeLeasePipeline()`, and
+the merge inside `syncLeasePipelineFromServer` (so a tampered server row cannot
+land in memory and then *become* the body every later write preserves). It
+reverts rather than throwing, and logs when it does. `write()` rehydrates from
+session storage before comparing, because `ensureLeasePipelineScope` blanks
+`memoryRows` on a scope change and an empty baseline would disable the guard —
+resident-side writes pass no scope at all.
+
+Both sides share one predicate, `replacesSignedLeaseDocument`, so they cannot
+drift.
 
 Three deliberate exemptions:
 
@@ -123,8 +164,16 @@ Three deliberate exemptions:
   existing-resident onboarding files an already-executed off-platform PDF onto
   a row that never carried a document.
 
-Coverage: `tests/unit/lease-signed-document-immutability.test.ts` — deleting the
-guard call from `write()` turns its first test red.
+Coverage, both verified by deleting the guard and watching them go red:
+`tests/unit/lease-pipeline-route-signed-document.test.ts` drives the real route
+handler (manager and resident), and
+`tests/unit/lease-signed-document-immutability.test.ts` drives the client store.
+
+One related fix in `syncApprovedApplications`: the off-platform PDF is filed only
+onto a row carrying no document at all. It used to key on `!managerUploadedPdf`
+alone, so a manually-added resident whose manager then generated and signed a
+lease in-portal would have the paper lease swapped in on every materialize, be
+reverted by the guard, and churn forever instead of converging.
 
 ### Removed: `regenerateAllLeaseHtml`
 
@@ -138,6 +187,20 @@ signature.
 
 ### Known gaps, for the agents that come next
 
+- **The lease-pipeline route is guarded; other service-role writers are not.**
+  `amendLeaseMoveOutDate` / `renewLease` write with their own client (they clear
+  the signatures, so they are exempt anyway), and
+  `runExistingResidentOnboarding` now refuses to upsert onto a lease row owned by
+  another manager — its `leaseId` is derived from the application axis id, the
+  same id space real leases use, and the route falls back to a client-supplied
+  `row`, so a colliding id could otherwise have replaced another manager's
+  executed lease and re-parented it. That client-supplied `row` fallback is
+  still an unscoped input and belongs to the onboarding lane to remove.
+- **`deleteLeasePipelineRow` wipes a fully executed lease behind one
+  `window.confirm`**, with no status gate. It clears the signatures in the same
+  write, so it is outside the guard by construction. Not silent, so not fixed
+  here, but "Delete lease" destroying an execution record with no archive is a
+  product decision someone should make deliberately.
 - **A renewal or amendment discards the superseded executed document.**
   `amendLeaseMoveOutDate` and `renewLease` (`src/lib/lease-amendment.server.ts`,
   not this agent's files) overwrite `generatedHtml` on a fully signed row while

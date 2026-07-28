@@ -16,8 +16,11 @@ import {
 import {
   LEASE_ESIGN_CONSENT_TEXT,
   LEASE_ESIGN_CONSENT_VERSION,
+  asDocumentSha256,
   documentFingerprintLabel,
   leaseDocumentSha256,
+  replacesSignedLeaseDocument,
+  rowHasAnySignature,
   signedDocumentHashesDiverge,
 } from "@/lib/lease-execution-evidence";
 import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
@@ -53,6 +56,11 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** A consent version is an attestation, so only a version we can quote back counts. */
+function asConsentVersion(value: unknown): string | null {
+  return value === LEASE_ESIGN_CONSENT_VERSION ? LEASE_ESIGN_CONSENT_VERSION : null;
+}
+
 function optionalTrimmedString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -67,7 +75,7 @@ function normalizeLeaseSignature(raw: unknown, role: "manager" | "resident"): Le
     name,
     signedAtIso,
     role,
-    documentSha256: optionalTrimmedString(r.documentSha256),
+    documentSha256: asDocumentSha256(r.documentSha256),
     consentVersion: optionalTrimmedString(r.consentVersion),
   };
 }
@@ -99,17 +107,24 @@ function electronicSignatureBlock(row: LeasePipelineRow): string {
         sig
           ? `<p class="axis-esign-name">${escapeHtml(sig.name)}</p><p class="axis-esign-meta">Electronically signed ${escapeHtml(signatureDateLabel(sig.signedAtIso))}</p>` +
             (fingerprint
-              ? `<p class="axis-esign-meta">Document signed: <span class="axis-esign-mono">${escapeHtml(fingerprint)}</span></p>`
+              ? `<p class="axis-esign-meta">Document signed (fingerprint begins) <span class="axis-esign-mono">${escapeHtml(fingerprint)}</span></p>`
               : "") +
-            (sig.consentVersion ? `<p class="axis-esign-meta">Consented to transact electronically</p>` : "")
+            // Only a version we can actually quote back counts as an
+            // attestation; an unrecognized string asserts nothing.
+            (sig.consentVersion === LEASE_ESIGN_CONSENT_VERSION
+              ? `<p class="axis-esign-meta">Consented to transact electronically</p>`
+              : "")
           : `<p class="axis-esign-pending">Pending signature</p>`
       }
     </div>`;
   };
 
   const provenance = [
-    documentFingerprintLabel(row.documentSha256)
-      ? `<li>Document fingerprint (SHA-256): <span class="axis-esign-mono">${escapeHtml(documentFingerprintLabel(row.documentSha256)!)}</span></li>`
+    // The FULL digest, not the readable prefix. A 64-bit prefix is a
+    // convenience for a human comparing two certificates; it is not enough to
+    // stand behind in a dispute, and the counterparty has no other copy.
+    row.documentSha256
+      ? `<li>Document fingerprint (SHA-256): <span class="axis-esign-mono">${escapeHtml(row.documentSha256)}</span></li>`
       : "",
     row.templateVersion ? `<li>Lease template: ${escapeHtml(row.templateVersion)}</li>` : "",
     row.executedJurisdiction ? `<li>Executed under: ${escapeHtml(row.executedJurisdiction)}</li>` : "",
@@ -150,7 +165,9 @@ function electronicSignatureBlock(row: LeasePipelineRow): string {
 }
 
 export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
-  return Boolean(row.managerSignature || row.residentSignature || (row.signatureName && row.signedAtIso));
+  // One definition, shared with the server-side guard — the client and the
+  // route can never disagree about what counts as a signed row.
+  return rowHasAnySignature(row);
 }
 
 /** True when the manager may generate, upload, or replace the lease document (manager review only). */
@@ -161,19 +178,6 @@ export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean 
 }
 
 /**
- * The agreement bytes, excluding the signature certificate page that signing
- * appends into `managerUploadedPdf.dataUrl`. That page is derived from the
- * signatures, so it legitimately changes as parties sign; the base document
- * must not.
- */
-function leaseDocumentBody(row: LeasePipelineRow): { html: string | null; pdf: string | null } {
-  return {
-    html: row.generatedHtml ?? null,
-    pdf: row.managerUploadedPdf?.originalDataUrl ?? row.managerUploadedPdf?.dataUrl ?? null,
-  };
-}
-
-/**
  * A row carrying a signature IS the evidence of what was signed, so its
  * document body can never be replaced in place. Returns `next` with any such
  * replacement reverted to the stored body.
@@ -181,9 +185,12 @@ function leaseDocumentBody(row: LeasePipelineRow): { html: string | null; pdf: s
  * This is the choke point rather than a per-mutation check: every mutation in
  * this module funnels through `write`, so a new write path inherits the
  * guarantee instead of having to remember `leaseAllowsManagerDocumentEdits`.
- * Clearing the signatures (void, send back to manager, renew, amend) drops the
- * row out of the guard by design — that is a superseding document, not a
- * silent edit to an executed one.
+ *
+ * It is the SECOND line of defence, not the only one. This runs in the browser
+ * against a store the browser controls, so the authoritative check is the same
+ * predicate applied server-side in `POST /api/portal-lease-pipeline`, which
+ * refuses the write outright. See `replacesSignedLeaseDocument` for the exempt
+ * cases.
  */
 export function preserveSignedLeaseDocuments(
   prev: LeasePipelineRow[],
@@ -194,15 +201,9 @@ export function preserveSignedLeaseDocuments(
   let reverted = false;
   const guarded = next.map((row) => {
     const before = prevById.get(row.id);
-    if (!before || !hasAnyLeaseSignature(before) || !hasAnyLeaseSignature(row)) return row;
-    const stored = leaseDocumentBody(before);
-    const incoming = leaseDocumentBody(row);
-    if (stored.html === incoming.html && stored.pdf === incoming.pdf) return row;
-    // Attaching an off-platform lease to a row that never carried a document is
-    // not a replacement — that is how existing-resident onboarding files the
-    // already-executed PDF it was given.
-    if (!stored.html && !stored.pdf && before.externallySignedLease) return row;
+    if (!before || !replacesSignedLeaseDocument(before, row)) return row;
     reverted = true;
+    console.warn(`[lease] refused to replace the document of signed lease ${row.id}; kept the executed copy.`);
     return {
       ...row,
       generatedHtml: before.generatedHtml ?? null,
@@ -486,7 +487,13 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     externallySignedLease: r.externallySignedLease === true,
     executedJurisdiction: optionalTrimmedString(r.executedJurisdiction),
     templateVersion: optionalTrimmedString(r.templateVersion),
-    documentSha256: optionalTrimmedString(r.documentSha256) ?? residentSignature?.documentSha256 ?? null,
+    // DERIVED, never carried forward from storage: it is the hash recorded by
+    // the FIRST signature currently on the row. A stored copy went stale the
+    // moment a document was replaced and the row re-signed (every reset path
+    // spreads `...row` and nulls only the signature fields), which made the
+    // certificate print a fingerprint matching no document anyone signed.
+    // No signature on the row means nothing has been executed — null.
+    documentSha256: residentSignature?.documentSha256 ?? managerSignature?.documentSha256 ?? null,
   };
 }
 
@@ -690,6 +697,10 @@ function readRaw(scopeUserId?: string | null): LeasePipelineRow[] | null {
 function write(unguardedRows: LeasePipelineRow[], scopeUserId?: string | null) {
   if (!canUseStorage()) return;
   ensureLeasePipelineScope(scopeUserId);
+  // `ensureLeasePipelineScope` blanks `memoryRows` on a scope change, and an
+  // empty baseline disables the guard. Resident-side writes pass no scope at
+  // all, so rehydrate before comparing.
+  hydrateLeasePipelineFromSession(scopeUserId ?? activeLeasePipelineScopeUserId);
   const rows = preserveSignedLeaseDocuments(memoryRows, unguardedRows);
   if (!leaseRowsChanged(memoryRows, rows)) return;
   memoryRows = rows;
@@ -849,7 +860,12 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       const uploadedPdf = existing?.managerUploadedPdf ?? manualPdf ?? null;
       const needsSignedLease =
         !existing || !hasBothLeaseSignatures(existing) || existing.externallySignedLease !== true;
-      const needsPdf = Boolean(manualPdf && !existing?.managerUploadedPdf);
+      // Only file the off-platform PDF onto a row that carries NO document yet.
+      // A row that already has one (the manager generated and signed in-portal
+      // after adding the resident) must not have it swapped for the paper lease
+      // — the immutability guard would revert that write, and this reseed runs
+      // on every materialize, so it would churn forever instead of converging.
+      const needsPdf = Boolean(manualPdf && !existing?.managerUploadedPdf && !existing?.generatedHtml);
 
       if (!needsSignedLease && !needsPdf && existing) {
         const merged = normalizeLeasePipelineRow({
@@ -1056,7 +1072,14 @@ export async function syncLeasePipelineFromServer(managerUserId?: string | null,
       if (!res.ok) return localSnapshot;
       const body = (await res.json()) as { rows?: unknown[] };
       const fetched = filterLeasesForManager((body.rows ?? []).map(normalizeLeasePipelineRow), managerUserId);
-      const merged = dedupeLeasePipelineRows(mergeLeasePipelineRows(localSnapshot, fetched));
+      // A server row is not automatically more trustworthy than the executed
+      // copy already in hand, so the merge result is guarded too — otherwise a
+      // tampered row would land in memory unchallenged and then BECOME the
+      // stored body every later write preserves.
+      const merged = preserveSignedLeaseDocuments(
+        localSnapshot,
+        dedupeLeasePipelineRows(mergeLeasePipelineRows(localSnapshot, fetched)),
+      );
       memoryRows = merged;
       persistLeasePipelineToSession(merged, managerUserId);
       leasePipelineLastSyncedAt = Date.now();
@@ -1598,7 +1621,11 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
 }
 
 /** Resident electronically signs; row always moves to **signed** (awaiting manager countersign unless already fully executed). */
-export async function residentSignLease(email: string, signatureName?: string): Promise<boolean> {
+export async function residentSignLease(
+  email: string,
+  signatureName?: string,
+  consentVersion?: string | null,
+): Promise<boolean> {
   const rows = [...(readRaw() ?? readLeasePipeline())];
   const idx = findActiveResidentLeaseRawIndex(email);
   if (idx === -1) return false;
@@ -1614,7 +1641,10 @@ export async function residentSignLease(email: string, signatureName?: string): 
     name: trimmedSignature,
     signedAtIso: iso,
     documentSha256,
-    consentVersion: LEASE_ESIGN_CONSENT_VERSION,
+    // Only what the signer was actually shown. A programmatic caller (the demo
+    // playback) renders no consent text, so it records none — a certificate
+    // must never attest to a consent nobody gave.
+    consentVersion: asConsentVersion(consentVersion),
   };
   const sigMsg = `Resident signed electronically — ${trimmedSignature}.`;
   const thread = [...(row.thread ?? []), makeMsg("resident", sigMsg)];
@@ -1623,7 +1653,6 @@ export async function residentSignLease(email: string, signatureName?: string): 
     residentSignature,
     signatureName: trimmedSignature,
     signedAtIso: iso,
-    documentSha256: row.documentSha256 ?? documentSha256,
   });
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
   const mergedPdf = await refreshUploadedPdfSignatures(nextRowBase);
@@ -1646,7 +1675,12 @@ export async function residentSignLease(email: string, signatureName?: string): 
 }
 
 /** Manager / authorized agent electronically countersigns (only after the resident has signed). */
-export async function managerSignLease(rowId: string, signatureName: string, managerUserId?: string | null): Promise<boolean> {
+export async function managerSignLease(
+  rowId: string,
+  signatureName: string,
+  managerUserId?: string | null,
+  consentVersion?: string | null,
+): Promise<boolean> {
   const rows = readLeasePipeline(managerUserId);
   const idx = rows.findIndex((r) => r.id === rowId);
   if (idx === -1) return false;
@@ -1665,12 +1699,11 @@ export async function managerSignLease(rowId: string, signatureName: string, man
     name: trimmedSignature,
     signedAtIso: iso,
     documentSha256,
-    consentVersion: LEASE_ESIGN_CONSENT_VERSION,
+    consentVersion: asConsentVersion(consentVersion),
   };
   const nextRowBase = normalizeLeasePipelineRow({
     ...row,
     managerSignature,
-    documentSha256: row.documentSha256 ?? documentSha256,
   });
   const bothSigned = hasBothLeaseSignatures(nextRowBase);
   const mergedPdf = await refreshUploadedPdfSignatures(nextRowBase);
