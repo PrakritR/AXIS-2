@@ -106,6 +106,24 @@ describe("resolvePortalMobileBackTarget", () => {
       label: "Dashboard",
     });
   });
+
+  it("returns null for an alternate section tab (tab pills handle navigation)", () => {
+    const portalWithResidents: PortalDefinition = {
+      ...managerPortal,
+      sections: [
+        ...managerPortal.sections,
+        {
+          section: "residents",
+          label: "Residents",
+          tabs: [
+            { id: "current", label: "Current" },
+            { id: "previous", label: "Previous" },
+          ],
+        },
+      ],
+    };
+    expect(resolvePortalMobileBackTarget("/portal/residents/previous", portalWithResidents)).toBeNull();
+  });
 });
 describe("portalDashboardMobileHeaderLabel", () => {
   it("returns the dashboard label on the dashboard route", () => {

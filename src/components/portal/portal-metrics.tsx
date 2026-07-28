@@ -431,6 +431,7 @@ export function ManagerPortalPageShell({
   filterRow,
   children,
   hideTitleOnNative = false,
+  hideTitleOnMobileNav = true,
 }: {
   title: string;
   subtitle?: string;
@@ -439,6 +440,8 @@ export function ManagerPortalPageShell({
   children: ReactNode;
   /** Visually hide the page title in the native app (bottom nav shows the section). */
   hideTitleOnNative?: boolean;
+  /** Hide duplicate page title on mobile when {@link PortalMobileNavBar} shows the section name. */
+  hideTitleOnMobileNav?: boolean;
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
@@ -449,7 +452,7 @@ export function ManagerPortalPageShell({
           <h1
             className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
               hideTitleOnNative ? "[html[data-native]_&]:sr-only" : ""
-            }`}
+            } ${hideTitleOnMobileNav ? "max-md:sr-only" : ""}`}
           >
             {title}
           </h1>
@@ -589,8 +592,18 @@ export function ManagerPortalStatusFilterRow({
   );
 }
 
-export function ManagerPortalFilterActions({ children }: { children: ReactNode }) {
-  return <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">{children}</div>;
+export function ManagerPortalFilterActions({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3", className)}>
+      {children}
+    </div>
+  );
 }
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */

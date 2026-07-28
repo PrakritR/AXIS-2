@@ -2277,7 +2277,7 @@ export function ManagerResidents({
                 navigate(`${portalBase}/residents/${next}`);
               }}
             />
-<ManagerPortalFilterActions>
+<ManagerPortalFilterActions className="hidden md:flex">
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}

@@ -73,10 +73,8 @@ export function resolvePortalMobileBackTarget(
   }
 
   if (tabId && firstTabId && tabId !== firstTabId) {
-    return {
-      href: `${definition.basePath}/${section}/${firstTabId}`,
-      label: meta?.label ?? section,
-    };
+    // Alternate section tab (e.g. Previous residents) — pills switch tabs; no chevron row.
+    return null;
   }
 
   const dashboard = definition.sections.find((entry) => entry.section === "dashboard");
