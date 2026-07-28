@@ -106,6 +106,13 @@ vi.mock("@/lib/demo-property-pipeline", () => ({
   PROPERTY_PIPELINE_EVENT: "property-pipeline-changed",
   syncPropertyPipelineFromServer: () => Promise.resolve(),
   hasCachedPropertyPipeline: () => true,
+  // The merged-in ApplicationGroupSection resolves its listing via getPropertyById,
+  // which reads these; the roster/badges under test don't depend on the listing, so
+  // empty lookups are fine — they just must exist on the mock.
+  readAllExtraListings: () => [],
+  readExtraListings: () => [],
+  readAllPendingManagerProperties: () => [],
+  cachePublicExtraListings: () => {},
 }));
 vi.mock("@/lib/cosigner-submissions-storage", () => ({
   fetchCosignerSubmissionsForSignerAppId: () => Promise.resolve([]),

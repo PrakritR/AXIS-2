@@ -11,6 +11,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
@@ -54,6 +55,8 @@ import {
   fetchCosignerSubmissionsForSignerAppId,
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
+import { buildApplicationHtml } from "@/lib/manager-application-html";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   inProgressApplicationResumeUrl,
@@ -62,7 +65,9 @@ import {
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { ApplicationGroupSection, applicationStatusPill, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
-  buildApplicationGroups,
+  buildBundleApplicationGroups,
+} from "@/lib/bundle-group/bundle-group-application";
+import {
   describeGroupBadge,
   groupForRow,
 } from "@/lib/rental-application/application-groups";
@@ -149,8 +154,8 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
 }
 
 /**
- * Inline application preview — the same PDF bytes as Download PDF, embedded without
- * opening a new tab (demo builds the PDF locally; production uses the API route).
+ * Inline application preview — rendered from the application answers already on
+ * the row (same HTML as the Documents tab). Download PDF still uses the API route.
  */
 export function ApplicationDocumentPreview({
   row,
@@ -162,85 +167,42 @@ export function ApplicationDocumentPreview({
   showDownload?: boolean;
 }) {
   const demo = isDemoModeActive();
-  const [pdfSrc, setPdfSrc] = useState<string | null>(null);
-  const [pdfError, setPdfError] = useState(false);
-  // Every sync/autosave tick re-mints the row OBJECT (new refs for identical
-  // data), so the fetch must key on the values the PDF actually derives from —
-  // otherwise an open preview re-generates the PDF server-side and remounts the
-  // iframe on every background tick. The ref keeps the latest row for the
-  // fetch body without widening the dependency back to object identity.
-  const rowRef = useRef(row);
-  // Updated in an effect (never during render); declared BEFORE the fetch
-  // effect so it always sees this commit's row.
-  useEffect(() => {
-    rowRef.current = row;
-  });
+  const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
   const previewKey = [
     row.id,
     row.bucket,
     applicationRoomLabel(row),
     row.application?.hasCosigner === "yes" ? "cosigner" : "",
+    row.application?.rentalType ?? "",
   ].join("|");
 
   useEffect(() => {
-    let cancelled = false;
-    const row = rowRef.current;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale error/preview when the row changes
-    setPdfError(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when the row changes
+    setCosignerSubmissions([]);
+    if (row.application?.hasCosigner !== "yes") return;
     if (demo) {
-      void (async () => {
-        const cosignerSubmissions =
-          row.application?.hasCosigner === "yes"
-            ? await fetchCosignerSubmissionsForSignerAppId(row.id).catch(() =>
-                readCosignerSubmissionsForSignerAppId(row.id),
-              )
-            : [];
-        const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-        const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
-        if (!cancelled) setPdfSrc(url);
-      })();
-      return () => {
-        cancelled = true;
-      };
+      setCosignerSubmissions(readCosignerSubmissionsForSignerAppId(row.id));
+      return;
     }
-    // Fetch the PDF ourselves rather than pointing the frame at the API URL: an
-    // error response (403/404) is a JSON body, and an <iframe> would render that
-    // raw JSON straight into the UI. Validate it's really a PDF, embed it via a
-    // blob URL, and on any failure show a plain message + log the detail.
-    let objectUrl: string | null = null;
-    setPdfSrc(null);
-    void (async () => {
-      try {
-        const res = await fetch(applicationPdfHref(row, { inline: true }), { credentials: "include" });
-        const contentType = res.headers.get("content-type") ?? "";
-        if (!res.ok || !contentType.includes("application/pdf")) {
-          let detail = `HTTP ${res.status}`;
-          try {
-            detail = (await res.clone().text()).slice(0, 300) || detail;
-          } catch {
-            /* body already consumed / unavailable */
-          }
-          console.error("Application document preview failed", { applicationId: row.id, status: res.status, detail });
-          if (!cancelled) setPdfError(true);
-          return;
-        }
-        const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        setPdfSrc(`${objectUrl}#toolbar=0&navpanes=0`);
-      } catch (e) {
-        console.error("Application document preview error", e);
-        if (!cancelled) setPdfError(true);
-      }
-    })();
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(row.id)
+      .catch(() => readCosignerSubmissionsForSignerAppId(row.id))
+      .then((rows) => {
+        if (!cancelled) setCosignerSubmissions(rows);
+      });
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [previewKey, demo]);
+  }, [previewKey, demo, row.application?.hasCosigner, row.id]);
+
+  const previewHtml = useMemo(
+    () =>
+      buildApplicationHtml(row, {
+        roomLabel: applicationRoomLabel(row) || undefined,
+        cosignerSubmissions,
+      }),
+    [row, cosignerSubmissions, previewKey],
+  );
 
   const downloadButton = showDownload ? (
     <Button
@@ -256,23 +218,14 @@ export function ApplicationDocumentPreview({
 
   const previewBody = (
     <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-      {pdfError ? (
-        <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-          Couldn&apos;t load this application document. Refresh and try again.
-        </div>
-      ) : pdfSrc ? (
-        <iframe
-          key={pdfSrc}
-          src={pdfSrc}
-          title="Application document"
-          loading="lazy"
-          className="h-[min(52vh,420px)] w-full border-0 bg-white"
-        />
-      ) : (
-        <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-          Loading application PDF…
-        </div>
-      )}
+      <iframe
+        key={previewKey}
+        srcDoc={previewHtml}
+        title="Application document"
+        sandbox="allow-same-origin"
+        loading="lazy"
+        className="h-[min(52vh,420px)] w-full border-0 bg-white"
+      />
     </div>
   );
 
@@ -452,7 +405,7 @@ export function ManagerApplications() {
   // Reconcile group applications across every bucket (a group can span pending / approved /
   // in-progress) so the whole household is visible from any one member's row.
   const applicationGroups = useMemo(
-    () => buildApplicationGroups(scopedRows.map(groupRowInputForRow)),
+    () => buildBundleApplicationGroups(scopedRows.map(groupRowInputForRow)),
     [scopedRows],
   );
 
@@ -468,8 +421,8 @@ export function ManagerApplications() {
   const tabs = useMemo(
     () =>
       [
-        { id: "pending" as const, label: "Pending", count: pendingReviewCount },
         { id: "incomplete" as const, label: "Incomplete", count: incompleteCount },
+        { id: "pending" as const, label: "Pending", count: pendingReviewCount },
         { id: "approved" as const, label: "Approved", count: counts.approved },
         { id: "rejected" as const, label: "Rejected", count: counts.rejected },
       ] as const,
@@ -792,7 +745,9 @@ export function ManagerApplications() {
         </Button>
       </PortalTableDetailActions>
 
-      {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
+      {group ? (
+        <ApplicationGroupSection group={group} bundleGroup={group} currentRowId={row.id} />
+      ) : null}
 
       <ApplicationDocumentPreview row={row} />
 
@@ -824,7 +779,7 @@ export function ManagerApplications() {
             data-attr="application-settings-open"
             onClick={() => setApplicationSettingsOpen(true)}
           >
-            Application fee
+            Promo code
           </Button>
           <Button
             type="button"
@@ -853,11 +808,13 @@ export function ManagerApplications() {
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
+<ManagerPortalFilterActions>
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
+          </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }
     >

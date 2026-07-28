@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import { PublicApplyAccountPrompt } from "@/components/marketing/public-apply-account-prompt";
 import { SignedInResidentAccountPrompt } from "@/components/marketing/signed-in-resident-account-prompt";
+import { ApplyPropertyPicker } from "@/components/marketing/apply-property-picker";
+import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { getPropertyForPublicLink } from "@/lib/rental-application/data";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { BROWSE_IDS_PARAM, parseBrowseIdsParam } from "@/lib/manager-property-links";
+import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import {
   hasPublicApplyGuestContinue,
   resolvePublicApplyView,
@@ -22,12 +27,44 @@ import {
  */
 export function PublicApplyClient({ signedInNonResident = false }: { signedInNonResident?: boolean }) {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const propertyId = searchParams.get("propertyId")?.trim() ?? "";
+  const portfolioPropertyIds = useMemo(() => {
+    if (propertyId) return [];
+    return parseBrowseIdsParam(searchParams.get(BROWSE_IDS_PARAM));
+  }, [propertyId, searchParams]);
+  const [extrasTick, setExtrasTick] = useState(0);
+
+  useEffect(() => {
+    if (!portfolioPropertyIds.length) return;
+    void Promise.all(portfolioPropertyIds.map((id) => loadPublicPropertyLeadFromServer(id))).then(() => {
+      setExtrasTick((n) => n + 1);
+    });
+  }, [portfolioPropertyIds]);
+
+  useEffect(() => {
+    const on = () => setExtrasTick((n) => n + 1);
+    if (propertyId) {
+      void loadPublicPropertyLeadFromServer(propertyId).then(() => on());
+    }
+    window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+  }, [propertyId]);
+
+  const portfolioProperties = useMemo(() => {
+    void extrasTick;
+    if (!portfolioPropertyIds.length) return [];
+    return portfolioPropertyIds
+      .map((id) => getPropertyForPublicLink(id))
+      .filter((property): property is NonNullable<typeof property> => Boolean(property));
+  }, [extrasTick, portfolioPropertyIds]);
+
   const propertyTitle = useMemo(() => {
     if (!propertyId) return undefined;
     return getPropertyForPublicLink(propertyId)?.title?.trim();
-  }, [propertyId]);
+  }, [propertyId, extrasTick]);
+
   const [guestGateOpen, setGuestGateOpen] = useState(() =>
     propertyId ? !hasPublicApplyGuestContinue(propertyId) : false,
   );
@@ -37,6 +74,34 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     guestContinue: !guestGateOpen,
     signedInNonResident,
   });
+
+  if (portfolioPropertyIds.length > 0 && !propertyId) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Rental application</h1>
+        <div className="mt-8">
+          {portfolioProperties.length === 0 ? (
+            <ManagerLinkGate
+              title="Open your manager’s application link"
+              body="This application link is invalid or no longer active. Ask your property manager for a new link."
+            />
+          ) : (
+            <ApplyPropertyPicker
+              properties={portfolioProperties}
+              onSelectProperty={(selectedId) => {
+                const rentalType = searchParams.get("rentalType")?.trim();
+                const path = buildRentalApplyHref({
+                  propertyId: selectedId,
+                  rentalType: rentalType === "short_term" ? "short_term" : undefined,
+                });
+                router.push(path);
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">

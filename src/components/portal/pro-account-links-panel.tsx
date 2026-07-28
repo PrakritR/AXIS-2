@@ -5,9 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import {
   ManagerPortalPageShell,
+  ManagerPortalFilterActions,
+  ManagerPortalStatusFilterRow,
+  ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -44,9 +48,11 @@ import {
   readExtraListingsForUser,
 } from "@/lib/demo-property-pipeline";
 import {
+  buildManagerPropertyFilterOptions,
   readLinkedListingsForUser,
   resolvePropertyLabelForId,
   safePropertyOptionLabel,
+  samePropertyId,
   syncManagerPortfolioFromServer,
 } from "@/lib/manager-portfolio-access";
 import {
@@ -74,14 +80,13 @@ import { syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
 import { Input, Select } from "@/components/ui/input";
 
+const TEAM_MEMBER_ROLE_LABEL = "Team";
+
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
 const LINKED_COUNT_TRIGGER =
   "inline-flex items-center gap-1 rounded-full text-xs font-semibold text-foreground transition hover:text-primary";
-
-const OWNER_ROLE_BADGE =
-  "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
 const PENDING_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -185,7 +190,7 @@ function CoManagerPermissionsEditor({
       </div>
       {isEmpty ? (
         <p className="rounded-lg border border-dashed border-border bg-accent/20 px-3 py-2 text-xs text-muted">
-          No restrictions. This co-manager has full access to every module on this property.
+          No restrictions. This team member has full access to every module on this property.
           Check modules below to restrict them. (To remove the property entirely, use
           &ldquo;Remove access&rdquo;.)
         </p>
@@ -337,6 +342,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     propertyIds: string[];
   } | null>(null);
 
+  const [teamLinkFilter, setTeamLinkFilter] = useState<"linked" | "pending">("linked");
+  const [teamPropertyFilter, setTeamPropertyFilter] = useState("");
+
   const [transferPropertyId, setTransferPropertyId] = useState<string | null>(null);
   const [transferCoManagerUserId, setTransferCoManagerUserId] = useState<string | null>(null);
   const [transferPermissions, setTransferPermissions] = useState<CoManagerPermissions>(EMPTY_CO_MANAGER_PERMISSIONS);
@@ -487,6 +495,54 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     () => remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing"),
     [remoteInvites],
   );
+
+  const teamFilterPropertyOptions = useMemo(() => {
+    void localTick;
+    return buildManagerPropertyFilterOptions(userId);
+  }, [userId, localTick]);
+
+  const passesTeamPropertyFilter = useCallback((assignedPropertyIds: string[]) => {
+    if (!teamPropertyFilter) return true;
+    return assignedPropertyIds.some((id) => samePropertyId(id, teamPropertyFilter));
+  }, [teamPropertyFilter]);
+
+  const teamLinkTabs = useMemo(
+    () => [
+      {
+        id: "linked",
+        label: "Linked",
+        count: (useRemote ? activeRemote.length : 0) + localRows.length,
+        dataAttr: "team-filter-linked",
+      },
+      {
+        id: "pending",
+        label: "Pending",
+        count: useRemote ? incomingPending.length + outgoingPending.length : 0,
+        dataAttr: "team-filter-pending",
+      },
+    ],
+    [useRemote, activeRemote.length, localRows.length, incomingPending.length, outgoingPending.length],
+  );
+
+  const visibleIncomingPending = useMemo(() => {
+    if (teamLinkFilter !== "pending" || !useRemote) return [];
+    return incomingPending.filter((inv) => passesTeamPropertyFilter(inv.assignedPropertyIds));
+  }, [teamLinkFilter, useRemote, incomingPending, passesTeamPropertyFilter]);
+
+  const visibleOutgoingPending = useMemo(() => {
+    if (teamLinkFilter !== "pending" || !useRemote) return [];
+    return outgoingPending.filter((inv) => passesTeamPropertyFilter(inv.assignedPropertyIds));
+  }, [teamLinkFilter, useRemote, outgoingPending, passesTeamPropertyFilter]);
+
+  const visibleActiveRemote = useMemo(() => {
+    if (teamLinkFilter !== "linked" || !useRemote) return [];
+    return activeRemote.filter((inv) => passesTeamPropertyFilter(inv.assignedPropertyIds));
+  }, [teamLinkFilter, useRemote, activeRemote, passesTeamPropertyFilter]);
+
+  const visibleLocalRows = useMemo(() => {
+    if (teamLinkFilter !== "linked") return [];
+    return localRows.filter((r) => passesTeamPropertyFilter(r.assignedPropertyIds));
+  }, [teamLinkFilter, localRows, passesTeamPropertyFilter]);
 
   const propertyOptions = useMemo(() => {
     void localTick;
@@ -945,7 +1001,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       seedAccountLinksCache(nextInvites);
       writeProRelationships(userId, proRelationshipRowsFromInvites(nextInvites.filter((i) => i.status === "accepted")));
       scheduleInviteSave(inv.id, { assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms });
-      showToast("Property removed from this co-manager.");
+      showToast("Property removed from this team member.");
       return;
     }
     const all = readProRelationships(userId);
@@ -955,7 +1011,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     });
     writeProRelationships(userId, next);
     refreshLocal();
-    showToast("Property removed from this co-manager.");
+    showToast("Property removed from this team member.");
   };
 
   const removePropertyFromLocalRow = (rowId: string, propId: string) => {
@@ -981,7 +1037,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       ),
     );
     refreshLocal();
-    showToast("Property removed from this co-manager.");
+    showToast("Property removed from this team member.");
   };
 
   const openTransferForProperty = (propertyId: string, coManagerUserId: string) => {
@@ -1003,7 +1059,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         });
         const body = (await res.json()) as { ok?: boolean; userId?: string; error?: string };
         if (!res.ok || !body.ok || !body.userId) {
-          showToast(body.error ?? "Could not resolve co-manager account.");
+          showToast(body.error ?? "Could not resolve team account.");
           return;
         }
         coManagerUserId = body.userId;
@@ -1234,86 +1290,17 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   }, [activeRemote, remoteLoaded, useRemote, userId]);
 
   const activeCards = useRemote ? activeRemote : localRows;
-  const hasTeamRows =
-    managedPropertyCount > 0 ||
+  const hasCoManagerLinks =
     activeCards.length > 0 ||
     (useRemote && (incomingPending.length > 0 || outgoingPending.length > 0));
+  const hasVisibleTeamRows =
+    visibleIncomingPending.length > 0 ||
+    visibleOutgoingPending.length > 0 ||
+    visibleActiveRemote.length > 0 ||
+    visibleLocalRows.length > 0;
   const selectedPropIds = Object.entries(selectedProps)
     .filter(([, v]) => v)
     .map(([k]) => k);
-
-  const renderSelfDetail = () => (
-    <>
-      {ownedProperties.map((prop) => {
-        const coManagers = coManagersForProperty(prop.id);
-        return (
-          <PortalCollapsibleSection
-            key={prop.id}
-            title={prop.label}
-            subtitle={
-              coManagers.length === 0
-                ? "No co-managers on this property"
-                : `${coManagers.length} co-manager${coManagers.length === 1 ? "" : "s"}`
-            }
-            defaultExpanded={false}
-            surfaceMuted={false}
-            className="mt-4 first:mt-0"
-            toggleDataAttr="owner-property-toggle"
-          >
-            <div className="space-y-3 px-4 pb-4">
-              {coManagers.length === 0 ? (
-                <p className="text-sm text-muted">No co-managers on this property yet.</p>
-              ) : (
-                coManagers.map((link) => {
-                  const assignedId =
-                    resolveAssignedPropertyId(prop.id, link.assignedPropertyIds) ?? prop.id;
-                  const perms = permissionsForProperty(link.propertyCoManagerPermissions, assignedId);
-                  return (
-                  <PortalCollapsibleSection
-                    key={link.id}
-                    title={link.linkedDisplayName ?? link.linkedAxisId}
-                    subtitle={summarizePropertyCoManagerPermissions({ [assignedId]: perms })}
-                    defaultExpanded={false}
-                    surfaceMuted={false}
-                    titleVariant="resident"
-                    toggleDataAttr="owner-co-manager-toggle"
-                    headerActions={renderCoManagerPropertyActions(prop.id, link, false)}
-                  >
-                    <p className="px-4 pb-4 text-xs text-muted">
-                      {summarizePropertyCoManagerPermissions({ [assignedId]: perms })}
-                    </p>
-                  </PortalCollapsibleSection>
-                  );
-                })
-              )}
-            </div>
-          </PortalCollapsibleSection>
-        );
-      })}
-      {coManagedProperties.length > 0 ? (
-        <div className="mt-4 space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-            Co-managing (linked to you)
-          </p>
-          {coManagedProperties.map((prop) => (
-            <div
-              key={`linked-${prop.id}`}
-              className="rounded-xl border border-border bg-accent/20 px-4 py-3"
-              data-attr="co-managed-property"
-            >
-              <p className="text-sm font-medium text-foreground">{prop.label}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                You manage this listing through a co-manager link. It is not in your owned portfolio.
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {ownedProperties.length === 0 && coManagedProperties.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No properties in your portfolio yet.</p>
-      ) : null}
-    </>
-  );
 
   const renderInviteDetail = (inv: AccountLinkInviteDto) => {
     const draft = getInviteDraft(inv);
@@ -1356,7 +1343,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             onClick={() => void removeLink(inv.id)}
             data-attr="co-manager-remove-link"
           >
-            {readOnly ? "Leave this co-manager link" : "Remove co-manager link"}
+            {readOnly ? "Leave this team link" : "Remove team link"}
           </Button>
         </div>
       </>
@@ -1388,7 +1375,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
   return (
     <ManagerPortalPageShell
-      title="Co-managers"
+      title="Team"
       titleAside={
         <div className="flex flex-wrap items-center justify-end gap-3">
           {linkCap != null ? (
@@ -1402,7 +1389,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           <Button
             type="button"
             variant="primary"
-            className={PORTAL_HEADER_ACTION_BTN}
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             disabled={atLinkCap}
             onClick={openLinkModal}
             title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
@@ -1411,6 +1398,22 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             Link account
           </Button>
         </div>
+      }
+      filterRow={
+        <ManagerPortalStatusFilterRow className="mb-0">
+          <ManagerPortalStatusPills
+            tabs={teamLinkTabs}
+            activeId={teamLinkFilter}
+            onChange={(id) => setTeamLinkFilter(id === "pending" ? "pending" : "linked")}
+          />
+          <ManagerPortalFilterActions>
+            <PortalPropertyFilterPill
+              propertyOptions={teamFilterPropertyOptions}
+              propertyValue={teamPropertyFilter}
+              onPropertyChange={setTeamPropertyFilter}
+            />
+          </ManagerPortalFilterActions>
+        </ManagerPortalStatusFilterRow>
       }
     >
       <div className="space-y-4" data-attr="co-manager-unified-view">
@@ -1441,13 +1444,15 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </p>
         ) : null}
 
-        {!hasTeamRows ? (
-          <PortalDataTableEmpty message="No team members yet." icon="team" />
+        {!hasCoManagerLinks ? (
+          <PortalDataTableEmpty message="No co-managers yet." icon="data" />
+        ) : !hasVisibleTeamRows ? (
+          <PortalDataTableEmpty message="No links match these filters." icon="data" />
         ) : (
           <>
             <div className="space-y-2 lg:hidden">
               {useRemote
-                ? incomingPending.map((inv) => (
+                ? visibleIncomingPending.map((inv) => (
                     <PortalMobileSummaryCard
                       key={`pending-in-${inv.id}`}
                       title={inv.linkedDisplayName ?? inv.linkedAxisId}
@@ -1467,26 +1472,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   ))
                 : null}
 
-              {managedPropertyCount > 0 ? (
-                <PortalMobileSummaryCard
-                  key="__self__"
-                  title="You"
-                  subtitle="Main manager"
-                  meta={
-                    coManagedProperties.length > 0
-                      ? `${ownedProperties.length} owned · ${coManagedProperties.length} co-managing`
-                      : `${ownedProperties.length} owned`
-                  }
-                  badge={<span className={OWNER_ROLE_BADGE}>Owner</span>}
-                  expanded={expandedLinkId === "__self__"}
-                  onClick={() => setExpandedLinkId((cur) => (cur === "__self__" ? null : "__self__"))}
-                >
-                  {expandedLinkId === "__self__" ? renderSelfDetail() : null}
-                </PortalMobileSummaryCard>
-              ) : null}
-
               {useRemote
-                ? activeRemote.map((inv) => {
+                ? visibleActiveRemote.map((inv) => {
                     const draft = getInviteDraft(inv);
                     const readOnly = inv.direction === "incoming";
                     const expanded = expandedLinkId === inv.id;
@@ -1494,7 +1481,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       <PortalMobileSummaryCard
                         key={inv.id}
                         title={inv.linkedDisplayName ?? inv.linkedAxisId}
-                        subtitle={readOnly ? "Linked to you" : "Co-manager"}
+                        subtitle={readOnly ? "Linked to you" : TEAM_MEMBER_ROLE_LABEL}
                         trailing={
                           <button
                             type="button"
@@ -1512,7 +1499,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           </button>
                         }
                         badge={
-                          <span className={CO_MANAGER_ROLE_BADGE}>{readOnly ? "Linked to you" : "Co-manager"}</span>
+                          <span className={CO_MANAGER_ROLE_BADGE}>{readOnly ? "Linked to you" : TEAM_MEMBER_ROLE_LABEL}</span>
                         }
                         expanded={expanded}
                         onClick={() => setExpandedLinkId((cur) => (cur === inv.id ? null : inv.id))}
@@ -1521,13 +1508,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       </PortalMobileSummaryCard>
                     );
                   })
-                : localRows.map((r) => {
+                : visibleLocalRows.map((r) => {
                     const expanded = expandedLinkId === r.id;
                     return (
                       <PortalMobileSummaryCard
                         key={r.id}
                         title={r.linkedDisplayName ?? r.linkedAxisId}
-                        subtitle="Co-manager"
+                        subtitle={TEAM_MEMBER_ROLE_LABEL}
                         trailing={
                           <button
                             type="button"
@@ -1544,7 +1531,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <span>linked</span>
                           </button>
                         }
-                        badge={<span className={CO_MANAGER_ROLE_BADGE}>Co-manager</span>}
+                        badge={<span className={CO_MANAGER_ROLE_BADGE}>{TEAM_MEMBER_ROLE_LABEL}</span>}
                         expanded={expanded}
                         onClick={() => setExpandedLinkId((cur) => (cur === r.id ? null : r.id))}
                       >
@@ -1554,7 +1541,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   })}
 
               {useRemote
-                ? outgoingPending.map((inv) => (
+                ? visibleOutgoingPending.map((inv) => (
                     <PortalMobileSummaryCard
                       key={`pending-out-${inv.id}`}
                       title={inv.linkedDisplayName ?? inv.linkedAxisId}
@@ -1582,7 +1569,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   </thead>
                   <tbody>
                     {useRemote
-                      ? incomingPending.map((inv) => (
+                      ? visibleIncomingPending.map((inv) => (
                           <tr key={`pending-in-${inv.id}`}>
                             <td className={PORTAL_TABLE_TD}>
                               <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
@@ -1608,51 +1595,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                         ))
                       : null}
 
-                    {managedPropertyCount > 0 ? (
-                      <Fragment key="__self__">
-                        <tr
-                          className={PORTAL_TABLE_TR_EXPANDABLE}
-                          onClick={createPortalRowExpandClick(() =>
-                            setExpandedLinkId((cur) => (cur === "__self__" ? null : "__self__")),
-                          )}
-                          aria-expanded={expandedLinkId === "__self__"}
-                        >
-                          <td className={PORTAL_TABLE_TD}>
-                            <PortalTableInlineExpand
-                              expanded={expandedLinkId === "__self__"}
-                              className="font-medium text-foreground"
-                            >
-                              You
-                            </PortalTableInlineExpand>
-                            <p className="mt-0.5 text-xs text-muted">Main manager</p>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <span className={OWNER_ROLE_BADGE}>Owner</span>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <span className="tabular-nums">{ownedProperties.length}</span>
-                            <span className="text-muted"> owned</span>
-                            {coManagedProperties.length > 0 ? (
-                              <>
-                                <span className="text-muted"> · </span>
-                                <span className="tabular-nums">{coManagedProperties.length}</span>
-                                <span className="text-muted"> co-managing</span>
-                              </>
-                            ) : null}
-                          </td>
-                        </tr>
-                        {expandedLinkId === "__self__" ? (
-                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                              {renderSelfDetail()}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    ) : null}
-
                     {useRemote
-                      ? activeRemote.map((inv) => {
+                      ? visibleActiveRemote.map((inv) => {
                           const draft = getInviteDraft(inv);
                           const readOnly = inv.direction === "incoming";
                           return (
@@ -1675,7 +1619,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
                                   <span className={CO_MANAGER_ROLE_BADGE}>
-                                    {readOnly ? "Linked to you" : "Co-manager"}
+                                    {readOnly ? "Linked to you" : TEAM_MEMBER_ROLE_LABEL}
                                   </span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1705,7 +1649,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             </Fragment>
                           );
                         })
-                      : localRows.map((r) => {
+                      : visibleLocalRows.map((r) => {
                           return (
                             <Fragment key={r.id}>
                               <tr
@@ -1725,7 +1669,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                   <p className="mt-0.5 font-mono text-xs text-muted">{r.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
-                                  <span className={CO_MANAGER_ROLE_BADGE}>Co-manager</span>
+                                  <span className={CO_MANAGER_ROLE_BADGE}>{TEAM_MEMBER_ROLE_LABEL}</span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
                                   <button
@@ -1756,7 +1700,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                         })}
 
                     {useRemote
-                      ? outgoingPending.map((inv) => (
+                      ? visibleOutgoingPending.map((inv) => (
                           <tr key={`pending-out-${inv.id}`}>
                             <td className={PORTAL_TABLE_TD}>
                               <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
@@ -1923,11 +1867,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
               <p className="text-lg font-semibold text-foreground">Transfer ownership</p>
               <p className="mt-2 text-sm text-muted">
-                Promote a co-manager to main manager of{" "}
+                Promote a team member to main manager of{" "}
                 <span className="font-medium text-foreground">
                   {resolvePropertyLabel(transferPropertyId, transferPropertyId)}
                 </span>
-                . Choose the permissions you keep as co-manager.
+                . Choose the permissions you keep as a team member.
               </p>
 
               <label className="mt-4 block text-xs font-semibold text-muted">
@@ -1946,7 +1890,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               </label>
 
               <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your co-manager permissions</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Your team permissions</p>
                 <div className="mt-2">
                   <CoManagerPermissionsEditor value={transferPermissions} onChange={setTransferPermissions} />
                 </div>

@@ -11,6 +11,7 @@ import {
   FIELD_SELECT_MENU_OPTION_CLASS,
   FIELD_SELECT_TRIGGER_CLASS,
   FIELD_SELECT_TRIGGER_COMPACT_CLASS,
+  FIELD_SELECT_TRIGGER_PILL_CLASS,
   FIELD_SELECT_TRIGGER_INLINE_CLASS,
   partitionFieldSelectClasses,
 } from "@/components/ui/field-select-styles";
@@ -39,7 +40,7 @@ function summarizeSelection(
 function triggerClassForVariant(variant: "field" | "pill", hideLabel: boolean, extra?: string) {
   const base =
     variant === "pill"
-      ? FIELD_SELECT_TRIGGER_COMPACT_CLASS
+      ? FIELD_SELECT_TRIGGER_PILL_CLASS
       : hideLabel
         ? FIELD_SELECT_TRIGGER_INLINE_CLASS
         : FIELD_SELECT_TRIGGER_CLASS;
@@ -342,10 +343,13 @@ export function FieldSingleSelect({
         // menu is portaled to document.body as a sibling of the modal, so a lower
         // value renders it *behind* the modal and every option click lands on the
         // modal instead — the dropdowns then silently refuse selections.
-        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${
+          pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
+        }`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
+          minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
           backgroundColor: "#ffffff",
         }}
@@ -393,7 +397,7 @@ export function FieldSingleSelect({
         className={triggerClassForVariant(variant, hideLabel || pill, triggerClassName)}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={`min-w-0 truncate ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
+        <span className={`min-w-0 ${pill ? "whitespace-nowrap" : "truncate"} ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 

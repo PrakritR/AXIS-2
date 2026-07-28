@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { portalDashboardMobileHeaderLabel, resolvePortalMobileBackTarget } from "@/lib/portal-mobile-back";
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  portalDashboardMobileHeaderLabel,
+  portalMobileActiveSectionLabel,
+  resolvePortalMobileBackTarget,
+} from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { vendorPortal } from "@/lib/portals/vendor";
 
@@ -11,6 +16,7 @@ const residentPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
+    { section: "payments", label: "Payments", tabs: [] },
     {
       section: "communication",
       label: "Communication",
@@ -116,5 +122,36 @@ describe("portalDashboardMobileHeaderLabel", () => {
 
   it("returns Dashboard for vendor portal dashboard route", () => {
     expect(portalDashboardMobileHeaderLabel("/vendor/dashboard", vendorPortal)).toBe("Dashboard");
+  });
+});
+
+
+describe("resolvePortalMobileBackTarget on native shell", () => {
+  beforeEach(() => {
+    document.documentElement.setAttribute("data-native", "ios");
+  });
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-native");
+  });
+
+  it("suppresses dashboard back from a top-level section", () => {
+    expect(resolvePortalMobileBackTarget("/resident/applications", residentPortal)).toBeNull();
+  });
+
+  it("still returns communication folder back targets", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/email/sent", residentPortal)).toEqual({
+      href: "/resident/communication/email/unopened",
+      label: "Communication",
+    });
+  });
+});
+
+describe("portalMobileActiveSectionLabel", () => {
+  it("returns the section label off dashboard", () => {
+    expect(portalMobileActiveSectionLabel("/resident/applications", residentPortal)).toBe("Applications");
+  });
+
+  it("returns null on dashboard", () => {
+    expect(portalMobileActiveSectionLabel("/resident/dashboard", residentPortal)).toBeNull();
   });
 });

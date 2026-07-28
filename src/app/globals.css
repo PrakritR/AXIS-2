@@ -1364,6 +1364,8 @@ html[data-native] #portal-main-content {
 html[data-native]:has(.portal-shell) {
   height: 100%;
   overflow: hidden;
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 html[data-native]:has(.portal-shell) body {

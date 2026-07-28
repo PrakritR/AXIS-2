@@ -148,20 +148,45 @@ function rid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * Rows saved before fee rows carried preset metadata were stripped to
+ * {id,label,amount,frequency}, so they come back untagged and look "custom"
+ * even though they ARE the preset fee. Re-tagging them by their label is what
+ * stops a listing showing "Security deposit" twice — once as the standard row
+ * and again as a custom one — and is what lets the standard row find its
+ * cadence.
+ */
+const PRESET_ID_BY_DEFAULT_LABEL = new Map<string, ListingFeePresetId>(
+  LISTING_FEE_PRESETS.map((p) => [p.defaultLabel.trim().toLowerCase(), p.presetId]),
+);
+
+function recoverPresetIdFromLabel(label: unknown): ListingFeePresetId | undefined {
+  if (typeof label !== "string") return undefined;
+  return PRESET_ID_BY_DEFAULT_LABEL.get(label.trim().toLowerCase());
+}
+
 export function normalizeListingFeeRow(raw: ListingFeeRow): ListingFeeRow {
   const row = raw;
   const cadence = listingFeeCadence(row);
-  const preset = row.presetId && row.presetId !== "custom" ? PRESET_BY_ID.get(row.presetId) : undefined;
+  const resolvedPresetId =
+    row.presetId && row.presetId !== "custom" ? row.presetId : recoverPresetIdFromLabel(row.label);
+  const preset = resolvedPresetId ? PRESET_BY_ID.get(resolvedPresetId) : undefined;
   return {
     id: row.id || rid("fee"),
     label: typeof row.label === "string" ? row.label.trim() : preset?.defaultLabel ?? "",
     amount: typeof row.amount === "string" ? row.amount.trim() : "",
     cadence,
     frequency: cadenceToLegacyFrequency(cadence === "nightly" ? "one-time" : cadence),
-    presetId: row.presetId ?? "custom",
+    presetId: resolvedPresetId ?? "custom",
     dueAtSigning: row.dueAtSigning ?? preset?.dueAtSigning ?? false,
     shortTermOnly: row.shortTermOnly ?? preset?.shortTermOnly ?? false,
     creditsTowardSecurity: row.creditsTowardSecurity ?? preset?.creditsTowardSecurity ?? false,
+    // Preserve the optional per-fee short-term amount (custom-fee short-term billing) — the
+    // literal below would otherwise drop it, unbilling a fee the manager set for short-term.
+    shortTermAmount:
+      typeof row.shortTermAmount === "string" && row.shortTermAmount.trim()
+        ? row.shortTermAmount.trim()
+        : undefined,
   };
 }
 
@@ -488,6 +513,16 @@ function legacyFieldKeyForPreset(presetId: ListingFeePresetId): keyof ManagerLis
 export function feeMeaningfulForPublicListing(amount: string): boolean {
   const n = parseMoneyAmount(amount);
   return n > 0;
+}
+
+/** Canonical dollar amount for a built-in listing fee preset (unified fees + legacy scalars). */
+export function listingPresetFeeAmount(
+  sub: ManagerListingSubmissionV1,
+  presetId: ListingFeePresetId,
+): number {
+  const row = resolveListingFees(sub).find((fee) => fee.presetId === presetId);
+  if (!row || !isListingFeeAmountFilled(row.amount)) return 0;
+  return parseMoneyAmount(row.amount);
 }
 
 export type ListingFeeDisplayRow = {

@@ -137,6 +137,7 @@ export function ApplicationQuestionEditModal({
   onClose,
   onSaved,
   showToast,
+  deferPersist = false,
 }: {
   open: boolean;
   field: ResolvedApplicationField | null;
@@ -152,6 +153,13 @@ export function ApplicationQuestionEditModal({
   onClose: () => void;
   onSaved: (next: ManagerListingSubmissionV1) => void;
   showToast: (m: string) => void;
+  /**
+   * When true, this editor DOES NOT persist. It validates, computes the next submission,
+   * and hands it up via `onSaved` for the parent to hold locally until an explicit Save
+   * (round 31 — the bulk application editor must not commit on every change). saveTarget /
+   * propertyIds are unused in this mode.
+   */
+  deferPersist?: boolean;
 }) {
   const [draft, setDraft] = useState<ResolvedApplicationField>(() =>
     field ?? { ...emptyCustomApplicationField(sectionId), isStandard: false },
@@ -219,6 +227,13 @@ export function ApplicationQuestionEditModal({
       ...sub,
       ...mergeApplicationConfigForVariant(variant, editedSlice),
     };
+
+    // Deferred mode: hand the edit up, persist nothing. The parent buffers it until Save.
+    if (deferPersist) {
+      onClose();
+      onSaved(next);
+      return;
+    }
 
     const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
     if (bulkIds.length > 0) {

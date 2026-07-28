@@ -101,6 +101,10 @@ const LEGACY_FINANCIALS_TO_DOCUMENTS: Record<string, string> = {
   "lease-expiration": "income-documents",
 };
 
+function legacyTabMapLookup<T extends string>(map: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 async function renderManagerFinancesSection(
   section: string,
   tabParts: string[] | undefined,
@@ -115,9 +119,9 @@ async function renderManagerFinancesSection(
   if (tabParts.length > 1) notFound();
   const finTab = tabParts[0]!;
   if (!FINANCIALS_TABS.includes(finTab as (typeof FINANCIALS_TABS)[number])) {
-    const docsRedirect = LEGACY_FINANCIALS_TO_DOCUMENTS[finTab];
+    const docsRedirect = legacyTabMapLookup(LEGACY_FINANCIALS_TO_DOCUMENTS, finTab);
     if (docsRedirect) redirect(`${basePath}/documents/${docsRedirect}`);
-    const mapped = LEGACY_FINANCIALS_TAB_MAP[finTab];
+    const mapped = legacyTabMapLookup(LEGACY_FINANCIALS_TAB_MAP, finTab);
     if (mapped) redirect(`${basePath}/financials/${mapped}`);
     notFound();
   }
@@ -143,9 +147,9 @@ async function renderManagerDocumentsSection(
   }
   if (tabParts.length > 1) notFound();
   const docTab = tabParts[0]!;
-  const legacyDocTab = LEGACY_DOCUMENTS_TAB_MAP[docTab];
+  const legacyDocTab = legacyTabMapLookup(LEGACY_DOCUMENTS_TAB_MAP, docTab);
   if (legacyDocTab) redirect(`${basePath}/documents/${legacyDocTab}`);
-  const financesRedirect = LEGACY_DOCUMENTS_TO_FINANCIALS[docTab];
+  const financesRedirect = legacyTabMapLookup(LEGACY_DOCUMENTS_TO_FINANCIALS, docTab);
   if (financesRedirect) {
     redirect(`${basePath}/financials/${financesRedirect}`);
   }

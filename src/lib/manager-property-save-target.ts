@@ -7,6 +7,11 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import {
+  readPropertyLeaseTemplates,
+  syncLegacyLeaseFieldsFromTemplates,
+  type PropertyLeaseTemplateKind,
+} from "@/lib/property-lease-templates";
 import type { MockProperty } from "@/data/types";
 import type { ManagerPendingPropertyRow } from "@/lib/demo-property-pipeline";
 
@@ -86,6 +91,7 @@ export function persistLeaseConfigToPropertyIds(
   managerUserId: string,
   propertyIds: string[],
   leaseFields: LeaseConfigFields,
+  leaseKind?: PropertyLeaseTemplateKind,
 ): { saved: number; failed: number } {
   let saved = 0;
   let failed = 0;
@@ -95,10 +101,20 @@ export function persistLeaseConfigToPropertyIds(
       failed += 1;
       continue;
     }
-    const next: ManagerListingSubmissionV1 = {
+    let next: ManagerListingSubmissionV1 = {
       ...hit.sub,
       ...leaseFields,
     };
+    if (leaseKind) {
+      const templates = readPropertyLeaseTemplates(next);
+      if (templates.length > 0) {
+        const [primary, ...rest] = templates;
+        next = syncLegacyLeaseFieldsFromTemplates(next, [
+          { ...primary!, kind: leaseKind, updatedAt: new Date().toISOString() },
+          ...rest,
+        ]);
+      }
+    }
     if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) {
       saved += 1;
     } else {

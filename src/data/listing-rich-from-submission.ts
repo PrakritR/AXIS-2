@@ -38,7 +38,6 @@ import {
   utilitiesListingEstimateDetail,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
-import { listingFeeDisplayRows } from "@/lib/listing-fees";
 
 function filterLeaseBasicsRows(
   rows: LeaseBasicRow[],
@@ -848,15 +847,53 @@ export function listingRichFromManagerSubmission(
       body: sub.houseCostsDetail.trim(),
     });
   }
-  for (const row of listingFeeDisplayRows(sub, formatListingFeeDisplay)) {
+  if (feeMeaningfulForListing(sub.parkingMonthly)) {
     houseCostRows.push({
-      id: row.id,
-      icon: row.icon,
-      title: row.title,
-      detail: row.detail,
-      price: row.price,
-      status: row.status,
-      body: row.body,
+      id: "parking",
+      icon: "🅿️",
+      title: "Parking",
+      detail: "If applicable",
+      price: sub.parkingMonthly.trim(),
+      status: "Monthly",
+      body: `Parking: ${sub.parkingMonthly.trim()} per month.`,
+    });
+  }
+  if (feeMeaningfulForListing(sub.hoaMonthly)) {
+    houseCostRows.push({
+      id: "hoa",
+      icon: "🏛️",
+      title: "HOA / community",
+      detail: "If applicable",
+      price: sub.hoaMonthly.trim(),
+      status: "Monthly",
+      body: `HOA or community fee: ${sub.hoaMonthly.trim()}.`,
+    });
+  }
+  if (feeMeaningfulForListing(sub.otherMonthlyFees)) {
+    houseCostRows.push({
+      id: "other-fees",
+      icon: "➕",
+      title: "Other fees",
+      detail: "As submitted",
+      price: sub.otherMonthlyFees.trim(),
+      status: "See notes",
+      body: sub.otherMonthlyFees.trim(),
+    });
+  }
+  for (const fee of sub.customFees ?? []) {
+    if (!fee.label.trim() || !feeMeaningfulForListing(fee.amount)) continue;
+    const price = formatListingFeeDisplay(fee.amount);
+    const monthly = fee.frequency !== "one-time";
+    houseCostRows.push({
+      id: `custom-fee-${fee.id}`,
+      icon: "💵",
+      title: fee.label.trim(),
+      detail: monthly ? "Additional monthly charge" : "One-time charge",
+      price,
+      status: monthly ? "Monthly" : "One-time",
+      body: monthly
+        ? `${fee.label.trim()}: ${price} per month.`
+        : `${fee.label.trim()}: ${price} (one-time).`,
     });
   }
 

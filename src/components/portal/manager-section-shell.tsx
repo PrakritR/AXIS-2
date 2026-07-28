@@ -34,12 +34,12 @@ function PortalFilterSelect({
   );
 
   return (
-    <div className="w-full min-w-0 max-w-full sm:w-fit">
+    <div className="w-fit max-w-full shrink-0">
       <FieldSingleSelect
         hideLabel
         label={ariaLabel}
         variant="pill"
-        wrapperClassName="w-full min-w-0 max-w-full sm:w-fit"
+        wrapperClassName="w-fit max-w-full"
         value={value}
         placeholder={placeholder}
         options={selectOptions}
@@ -57,6 +57,7 @@ export function PortalPropertyFilterPill({
   propertyOptions,
   propertyValue,
   onPropertyChange,
+  propertyPlaceholder,
   residentOptions,
   residentValue,
   onResidentChange,
@@ -75,6 +76,7 @@ export function PortalPropertyFilterPill({
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
+  propertyPlaceholder?: string;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -98,6 +100,7 @@ export function PortalPropertyFilterPill({
       applicationOptions={applicationOptions}
       applicationValue={applicationValue}
       onApplicationChange={onApplicationChange}
+      propertyPlaceholder={propertyPlaceholder}
     />
   );
 }
@@ -115,6 +118,7 @@ export function PortalPropertyFilter({
   applicationOptions,
   applicationValue = "",
   onApplicationChange,
+  propertyPlaceholder,
 }: {
   applications?: boolean;
   residents?: boolean;
@@ -127,19 +131,20 @@ export function PortalPropertyFilter({
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
+  propertyPlaceholder?: string;
 }) {
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="flex w-fit max-w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
       {hasPropertyPick ? (
         <PortalFilterSelect
           aria-label="Properties"
           value={propertyValue}
           onChange={(next) => onPropertyChange?.(next)}
-          placeholder="All your properties"
+          placeholder={propertyPlaceholder ?? "All properties"}
           options={propertyOptions ?? []}
         />
       ) : null}

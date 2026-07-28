@@ -3,9 +3,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
+  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -83,6 +85,7 @@ export function ManagerAllServicesPanel({
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [residentFilter, setResidentFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
@@ -153,11 +156,46 @@ export function ManagerAllServicesPanel({
     return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [propertyOptions, workOrders, serviceRequests]);
 
+  const residentOptions = useMemo(() => {
+    if (typeFilter === "vendors") return [];
+    const seen = new Map<string, string>();
+    const consider = (name: string | undefined) => {
+      const trimmed = name?.trim();
+      if (!trimmed || seen.has(trimmed)) return;
+      seen.set(trimmed, trimmed);
+    };
+    if (typeFilter === "requests") {
+      for (const row of serviceRequests) {
+        if (propertyFilter && !samePropertyId(row.propertyId, propertyFilter) && row.propertyId?.trim()) continue;
+        consider(row.residentName);
+      }
+    } else if (typeFilter === "work-orders") {
+      for (const row of workOrders) {
+        if (
+          propertyFilter &&
+          row.propertyId !== propertyFilter &&
+          row.assignedPropertyId !== propertyFilter
+        ) {
+          continue;
+        }
+        consider(row.residentName);
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [typeFilter, serviceRequests, workOrders, propertyFilter]);
+
+  const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter)
+    ? residentFilter
+    : "";
+
   const filteredWorkOrders = useMemo(() => {
     let rows = workOrders;
     if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
+    if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
     return rows;
-  }, [workOrders, propertyFilter]);
+  }, [workOrders, propertyFilter, activeResidentFilter]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
@@ -166,8 +204,9 @@ export function ManagerAllServicesPanel({
         (r) => samePropertyId(r.propertyId, propertyFilter) || !r.propertyId?.trim(),
       );
     }
+    if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
     return rows;
-  }, [serviceRequests, propertyFilter]);
+  }, [serviceRequests, propertyFilter, activeResidentFilter]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -234,6 +273,23 @@ export function ManagerAllServicesPanel({
     [reqCounts],
   );
 
+  const portfolioScopeFilters = (
+    <ManagerPortalFilterActions>
+      <PortalPropertyFilterPill
+        propertyOptions={filterPropertyOptions}
+        propertyValue={propertyFilter}
+        onPropertyChange={(nextProperty) => {
+          setPropertyFilter(nextProperty);
+          setResidentFilter("");
+        }}
+        residents={typeFilter !== "vendors"}
+        residentOptions={residentOptions}
+        residentValue={activeResidentFilter}
+        onResidentChange={setResidentFilter}
+      />
+    </ManagerPortalFilterActions>
+  );
+
   const renderRequestDetail = (req: ServiceRequest) => {
     return (
       <ManagerServiceRequestDetail
@@ -298,26 +354,25 @@ export function ManagerAllServicesPanel({
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
             ]}
           />
-          <PortalPropertyFilterPill
-            propertyOptions={filterPropertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
         </ManagerPortalFilterRow>
       }
     >
       <div className="mt-1">
         {typeFilter === "vendors" ? (
-          <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
+          <>
+            <div className="mb-4 flex w-full justify-end">{portfolioScopeFilters}</div>
+            <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
+          </>
         ) : typeFilter === "work-orders" ? (
           <>
-            <div className="mb-4">
+            <ManagerPortalStatusFilterRow>
               <ManagerPortalStatusPills
                 tabs={woTabs}
                 activeId={woBucket}
                 onChange={(id) => setWoBucket(id as ManagerWorkOrderBucket)}
               />
-            </div>
+              {portfolioScopeFilters}
+            </ManagerPortalStatusFilterRow>
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
               bucket={woBucket}
@@ -326,13 +381,14 @@ export function ManagerAllServicesPanel({
           </>
         ) : (
           <>
-            <div className="mb-4">
+            <ManagerPortalStatusFilterRow>
               <ManagerPortalStatusPills
                 tabs={reqTabs}
                 activeId={reqBucket}
                 onChange={(id) => setReqBucket(id as RequestBucket)}
               />
-            </div>
+              {portfolioScopeFilters}
+            </ManagerPortalStatusFilterRow>
             {bucketedRequests.length === 0 ? (
               <PortalDataTableEmpty
                 message={filteredRequests.length === 0 ? "No add-on services requested yet." : "No add-on services in this bucket yet."}

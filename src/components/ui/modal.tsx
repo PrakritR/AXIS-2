@@ -17,7 +17,7 @@ export { MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_PANEL_CLASS, MO
 
 /** Top-right dismiss control — Carbon / Primer / Watson pattern (icon, 44px target). */
 export const MODAL_HEADER_CLOSE_CLASS =
-  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-10 sm:w-10";
 
 /**
  * Sticky footer action row: secondary actions first, primary action last (rightmost).
@@ -121,26 +121,29 @@ export function Modal({
         >
           <div
             className={cn(
-              "flex shrink-0 items-start justify-between gap-3 border-b border-border",
-              dense ? "gap-2 pb-2" : "gap-4 pb-4",
+              "flex shrink-0 flex-col border-b border-border",
+              dense ? "gap-2 pb-2" : "gap-3 pb-4",
             )}
           >
-            <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
               <h3
                 id="modal-title"
-                className={cn("font-semibold text-foreground", dense ? "text-base" : "text-lg")}
+                className={cn(
+                  "min-w-0 flex-1 font-semibold leading-tight text-foreground",
+                  dense ? "text-base" : "text-lg",
+                )}
               >
                 {title}
               </h3>
-              {description ? (
-                <p id="modal-description" className="mt-1 text-sm leading-relaxed text-muted">
-                  {description}
-                </p>
-              ) : null}
+              <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
+                <X className="h-5 w-5" aria-hidden />
+              </button>
             </div>
-            <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
-              <X className="h-5 w-5" aria-hidden />
-            </button>
+            {description ? (
+              <p id="modal-description" className="text-sm leading-relaxed text-muted">
+                {description}
+              </p>
+            ) : null}
           </div>
           {/* `@container` lives on the dialog panel above (a container cannot query
               its own size for its own layout), so this row/column switch below it

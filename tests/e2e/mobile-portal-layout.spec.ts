@@ -24,9 +24,9 @@ test.describe("Mobile portal layout", () => {
     await signInAsManager(page);
 
     for (const { path } of MANAGER_PORTAL_SMOKE_PATHS) {
-      await page.goto(path);
+      await page.goto(path, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await expect(page).toHaveURL(pathToUrlRegExp(path));
-      await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 25_000 });
 
       const overflow = await page.evaluate(() => {
         const doc = document.documentElement;

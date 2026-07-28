@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signInAsResident, mockStripeCheckoutRoutes } from "../helpers/auth";
+import { e2eToursContactUrl } from "../helpers/public-urls";
 
 const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 
@@ -7,22 +8,19 @@ test.describe("Resident login and application flow", () => {
   test.skip(!portalTestsEnabled, "Set E2E_TESTS_ENABLED=1 after running npm run test:seed");
 
   test("public apply page loads with required fields", async ({ page }) => {
-    await page.goto("/rent/apply");
-    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
-    // Should have email and/or name field
-    const emailField = page.getByLabel(/email/i).first();
-    await expect(emailField).toBeVisible({ timeout: 10_000 });
+    await page.goto("/rent/apply?propertyId=mgr-test-fir");
+    await page.getByRole("button", { name: /continue without an account/i }).click();
+    await expect(page.getByRole("heading", { name: /rental application/i })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/applying as part of a group/i)).toBeVisible();
   });
 
   test("public tours-contact page loads with form", async ({ page }) => {
-    await page.goto("/rent/tours-contact");
-    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
-    // Should have some form fields
-    const formInput = page.getByRole("textbox").first();
-    await expect(formInput).toBeVisible({ timeout: 10_000 });
-    // Submit button should be present
-    const submitBtn = page.getByRole("button", { name: /submit|send|request|schedule/i }).first();
-    await expect(submitBtn).toBeVisible({ timeout: 10_000 });
+    await page.goto(e2eToursContactUrl());
+    await expect(page.getByRole("heading", { name: /schedule tour/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("searchbox").first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /^continue$/i })).toBeVisible({ timeout: 10_000 });
   });
 
   test("resident can sign in and reach dashboard", async ({ page }) => {

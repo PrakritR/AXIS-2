@@ -7,7 +7,9 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
+  ManagerPortalStatusFilterRow,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PillTabs } from "@/components/ui/tabs";
@@ -28,7 +30,6 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerPaymentSetupModal } from "@/components/portal/manager-payment-setup-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
@@ -106,7 +107,6 @@ export function ManagerPayments() {
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
-  const [bankLinkBanner, setBankLinkBanner] = useState(false);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
@@ -212,15 +212,21 @@ export function ManagerPayments() {
         return;
       }
       if (connect === "done") {
-        setBankLinkBanner(true);
+        showToast("Bank account linked. You're ready to receive resident payments.");
+      } else if (connect === "refresh") {
+        showToast("Setup link expired. Open Payment setup to try again.");
       }
-      // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connect");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next);
+      window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
       return;
     }
     if (payouts === "1") {
       window.location.replace(`${portalBase}/payments`);
     }
-  }, [portalBase]);
+  }, [portalBase, showToast]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -228,9 +234,8 @@ export function ManagerPayments() {
       if (e.data?.type !== "axis-stripe-connect") return;
       if (e.data?.connect === "done") {
         showToast("Bank account linked. You're ready to receive resident payments.");
-        setBankLinkBanner(true);
       } else if (e.data?.connect === "refresh") {
-        showToast("Setup link expired. Click Finish setup to try again.");
+        showToast("Setup link expired. Open Payment setup to try again.");
       }
       window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
     };
@@ -398,6 +403,21 @@ export function ManagerPayments() {
     return [...filtered].sort((a, b) => compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, direction));
   }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
 
+  const propertyFilterPill = (
+    <PortalPropertyFilterPill
+      propertyOptions={propertyOptions}
+      propertyValue={propertyFilter}
+      onPropertyChange={(nextProperty) => {
+        setPropertyFilter(nextProperty);
+        setResidentFilter("");
+      }}
+      residents={direction === "incoming"}
+      residentOptions={residentOptions}
+      residentValue={activeResidentFilter}
+      onResidentChange={setResidentFilter}
+    />
+  );
+
   const filterRow = (
     <ManagerPortalFilterRow>
       <PillTabs
@@ -409,20 +429,6 @@ export function ManagerPayments() {
           setResidentFilter("");
         }}
       />
-      <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={(nextProperty) => {
-            setPropertyFilter(nextProperty);
-            setResidentFilter("");
-          }}
-          residents={direction === "incoming"}
-          residentOptions={residentOptions}
-          residentValue={activeResidentFilter}
-          onResidentChange={setResidentFilter}
-        />
-      </div>
     </ManagerPortalFilterRow>
   );
 
@@ -442,12 +448,6 @@ export function ManagerPayments() {
               Reminders
             </Button>
           ) : null}
-          <PortalStripeConnectPanel
-            basePath={portalBase}
-            variant="header"
-            onConnectDone={() => setBankLinkBanner(true)}
-            onOpenPaymentSetup={() => setPaymentSetupOpen(true)}
-          />
           <Button
             type="button"
             variant="outline"
@@ -471,29 +471,14 @@ export function ManagerPayments() {
       filterRow={filterRow}
     >
       <div className="mt-1">
-        <div className="mb-4">
+        <ManagerPortalStatusFilterRow>
           <ManagerPortalStatusPills
             tabs={tabs}
             activeId={bucket}
             onChange={(id) => setBucket(id as ManagerPaymentBucket)}
           />
-        </div>
-        {bankLinkBanner ? (
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-success">
-            <p>
-              <span className="font-semibold text-foreground">Bank account linked.</span> Resident payments will deposit to
-              your connected account. You can update bank details anytime with Update.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 rounded-full px-3 py-1 text-xs"
-              onClick={() => setBankLinkBanner(false)}
-            >
-              Dismiss
-            </Button>
-          </div>
-        ) : null}
+          <ManagerPortalFilterActions>{propertyFilterPill}</ManagerPortalFilterActions>
+        </ManagerPortalStatusFilterRow>
         {direction === "incoming" ? (
           <ManagerPaymentsLedgerPanel
             rows={rowsForBucket}

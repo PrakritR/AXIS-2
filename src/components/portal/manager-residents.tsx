@@ -12,6 +12,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
@@ -74,6 +75,16 @@ import {
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  isResidentMonthToMonthLease,
+  listingLeaseTermToResidentValue,
+  RESIDENT_LEASE_TERM_CUSTOM,
+  residentLeaseTermOptionsForProperty,
+  residentLeaseTermSelectValue,
+  residentLeaseTermToApplicationFields,
+  shouldUseResidentLeaseCustomMode,
+} from "@/lib/resident-manual-lease-terms";
+
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import {
   buildMockPropertyFromDraft,
@@ -234,10 +245,6 @@ function shortDateLabel(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 }
 
-const AR_LEASE_TERM_CUSTOM = "__custom__";
-const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 months"] as const;
-
-
 export function ManagerResidents({
   tabId = "current",
   smsUiEnabled = false,
@@ -334,6 +341,7 @@ export function ManagerResidents({
   const [arPropertyId, setArPropertyId] = useState("");
   const [arRoomId, setArRoomId] = useState("");
   const [arLeaseTerm, setArLeaseTerm] = useState("");
+  const [arLeaseTermCustomMode, setArLeaseTermCustomMode] = useState(false);
   const [arMoveInDate, setArMoveInDate] = useState("");
   const [arMoveOutDate, setArMoveOutDate] = useState("");
   const [arRent, setArRent] = useState("");
@@ -353,6 +361,7 @@ export function ManagerResidents({
   const [erPropertyId, setErPropertyId] = useState("");
   const [erRoomId, setErRoomId] = useState("");
   const [erLeaseTerm, setErLeaseTerm] = useState("");
+  const [erLeaseTermCustomMode, setErLeaseTermCustomMode] = useState(false);
   const [erMoveInDate, setErMoveInDate] = useState("");
   const [erMoveOutDate, setErMoveOutDate] = useState("");
   const [erRent, setErRent] = useState("");
@@ -611,23 +620,36 @@ export function ManagerResidents({
     return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
   }, [erPropertyId, userId, propertyTick]);
 
-  const arLeaseTermSelectValue = useMemo(() => {
-    if (!arLeaseTerm.trim()) return "";
-    return AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
-      ? arLeaseTerm
-      : AR_LEASE_TERM_CUSTOM;
-  }, [arLeaseTerm]);
+  const arLeaseTermOptions = useMemo(
+    () => residentLeaseTermOptionsForProperty(arPropertyId),
+    [arPropertyId, propertyTick],
+  );
+  const arLeaseTermPresetValues = useMemo(
+    () => arLeaseTermOptions.map((o) => o.value),
+    [arLeaseTermOptions],
+  );
+  const erLeaseTermOptions = useMemo(
+    () => residentLeaseTermOptionsForProperty(erPropertyId),
+    [erPropertyId, propertyTick],
+  );
+  const erLeaseTermPresetValues = useMemo(
+    () => erLeaseTermOptions.map((o) => o.value),
+    [erLeaseTermOptions],
+  );
 
-  const isMonthToMonthLease = arLeaseTerm === "Month-to-month";
+  const arLeaseTermSelectValue = useMemo(
+    () => residentLeaseTermSelectValue(arLeaseTerm, arLeaseTermCustomMode, arLeaseTermPresetValues),
+    [arLeaseTerm, arLeaseTermCustomMode, arLeaseTermPresetValues],
+  );
 
-  const erLeaseTermSelectValue = useMemo(() => {
-    if (!erLeaseTerm.trim()) return "";
-    return AR_LEASE_TERM_PRESETS.includes(erLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
-      ? erLeaseTerm
-      : AR_LEASE_TERM_CUSTOM;
-  }, [erLeaseTerm]);
+  const isMonthToMonthLease = isResidentMonthToMonthLease(arLeaseTerm);
 
-  const isEditMonthToMonthLease = erLeaseTerm === "Month-to-month";
+  const erLeaseTermSelectValue = useMemo(
+    () => residentLeaseTermSelectValue(erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues),
+    [erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues],
+  );
+
+  const isEditMonthToMonthLease = isResidentMonthToMonthLease(erLeaseTerm);
 
   if (isMonthToMonthLease && arMoveOutDate) {
     setArMoveOutDate("");
@@ -1200,6 +1222,7 @@ export function ManagerResidents({
         ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
         : "—";
       const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
+      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode);
       const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
       const nextRow: DemoApplicantRow = {
         id: axisId,
@@ -1221,13 +1244,27 @@ export function ManagerResidents({
           moveInFee: moveInFee ?? undefined,
           securityDeposit: secDeposit ?? undefined,
           roomNumber: selectedRoomLabel || undefined,
-          leaseTerm: arLeaseTerm || undefined,
+          leaseTerm: arLeaseTerm.trim() || undefined,
           notes: arNotes.trim() || undefined,
           signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
           signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
           signedLeaseUploadedAt,
           externallySignedLease: true,
         },
+        application: arAppLeaseFields.leaseTerm
+          ? // Manual add-resident supplies only the lease-relevant fields; the rest of the
+            // wizard form state is not collected here (cast keeps this intentional partial).
+            ({
+              propertyId: arPropertyId || undefined,
+              roomChoice1: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+              leaseTerm: arAppLeaseFields.leaseTerm,
+              rentalType: arAppLeaseFields.rentalType,
+              leaseStart: arMoveInDate || undefined,
+              leaseEnd: arMoveOutDate || undefined,
+              fullLegalName: arName.trim(),
+              email: arEmail.trim(),
+            } as unknown as DemoApplicantRow["application"])
+          : undefined,
       };
       setArSaving(true);
       try {
@@ -1243,7 +1280,7 @@ export function ManagerResidents({
           showToast(persisted.error ?? "Could not complete resident onboarding.");
           return;
         }
-        recordApprovedApplicationCharges(nextRow, userId ?? null);
+        recordApprovedApplicationCharges(nextRow, userId ?? null, true);
         syncLeasePipelineFromApplications(userId ?? null);
 
         showToast(
@@ -1258,7 +1295,7 @@ export function ManagerResidents({
           syncHouseholdChargesFromServer(true),
         ]);
         setChargeTab("pending");
-        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
+        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm(""); setArLeaseTermCustomMode(false);
         setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
         setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
         setArSignedLeaseFileName(""); setArSignedLeaseDataUrl(""); setArSendWelcome(true);
@@ -1289,7 +1326,12 @@ export function ManagerResidents({
     setErEmail(row.email?.trim() || app?.email?.trim() || "");
     setErPropertyId(assignedPropId);
     setErRoomId(assignedRoomId);
-    setErLeaseTerm(row.manualResidentDetails?.leaseTerm || app?.leaseTerm || "");
+    const assignedPropIdForLease = assignedPropId;
+    const storedLeaseTerm = row.manualResidentDetails?.leaseTerm || app?.leaseTerm || "";
+    const erDisplayLeaseTerm = listingLeaseTermToResidentValue(storedLeaseTerm) || storedLeaseTerm;
+    const erOpts = residentLeaseTermOptionsForProperty(assignedPropIdForLease).map((o) => o.value);
+    setErLeaseTerm(erDisplayLeaseTerm);
+    setErLeaseTermCustomMode(shouldUseResidentLeaseCustomMode(erDisplayLeaseTerm, erOpts));
     setErMoveInDate(row.manualResidentDetails?.moveInDate || app?.leaseStart || "");
     setErMoveOutDate(row.manualResidentDetails?.moveOutDate || app?.leaseEnd || "");
     const savedRent = Number.isFinite(row.signedMonthlyRent ?? NaN) ? String(row.signedMonthlyRent ?? "") : "";
@@ -1324,6 +1366,7 @@ export function ManagerResidents({
     const propLabel = propId ? propertyOptions.find((p) => p.id === propId)?.label ?? rows[idx]!.property : rows[idx]!.property;
     const selectedRoomLabel = erRoomId ? erRoomOptions.find((room) => room.id === erRoomId)?.name?.trim() ?? "" : "";
 
+    const appLeaseFields = residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode);
     const existing = rows[idx]!;
     const newRoomChoice = propId && erRoomId ? `${propId}${LISTING_ROOM_CHOICE_SEP}${erRoomId}` : undefined;
     const nextRow: DemoApplicantRow = {
@@ -1342,7 +1385,7 @@ export function ManagerResidents({
         moveInFee: moveInFee ?? undefined,
         securityDeposit: secDeposit ?? undefined,
         roomNumber: selectedRoomLabel || undefined,
-        leaseTerm: erLeaseTerm || undefined,
+        leaseTerm: erLeaseTerm.trim() || undefined,
         notes: erNotes.trim() || undefined,
       },
       // Mirror all edits back into the application so both views stay consistent.
@@ -1353,7 +1396,8 @@ export function ManagerResidents({
             email: erEmail.trim() || existing.application.email,
             propertyId: propId || existing.application.propertyId,
             roomChoice1: newRoomChoice ?? existing.application.roomChoice1,
-            leaseTerm: erLeaseTerm || existing.application.leaseTerm,
+            leaseTerm: appLeaseFields.leaseTerm || existing.application.leaseTerm,
+            rentalType: appLeaseFields.leaseTerm ? appLeaseFields.rentalType : existing.application.rentalType,
             leaseStart: erMoveInDate || existing.application.leaseStart,
             leaseEnd: erMoveOutDate || existing.application.leaseEnd,
             managerRentOverride: erRent.trim() || existing.application.managerRentOverride,
@@ -1375,7 +1419,7 @@ export function ManagerResidents({
     if (propId && residentEmail && rent != null && Number.isFinite(rent)) {
       updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
     }
-    recordApprovedApplicationCharges(nextRow, userId ?? null);
+    recordApprovedApplicationCharges(nextRow, userId ?? null, true);
 
     // Auto-regenerate any unsigned leases so room/rent/rules changes are reflected immediately
     if (residentEmail && nextRow.application) {
@@ -2046,12 +2090,11 @@ export function ManagerResidents({
                                       const c = residentChargeById.get(tr.id);
                                       if (!c) return tr.charge;
                                       const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
+                                      if (!overdue) return tr.charge;
                                       return (
                                         <span className="inline-flex flex-wrap items-center gap-2">
                                           <span>{tr.charge}</span>
-                                          <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                            {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
-                                          </Badge>
+                                          <Badge tone="overdue">Overdue</Badge>
                                         </span>
                                       );
                                     }}
@@ -2420,11 +2463,13 @@ export function ManagerResidents({
                 navigate(`${portalBase}/residents/${next}`);
               }}
             />
+<ManagerPortalFilterActions>
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}
               onPropertyChange={setPropertyFilter}
             />
+          </ManagerPortalFilterActions>
           </ManagerPortalFilterRow>
         }
       >
@@ -2759,24 +2804,27 @@ export function ManagerResidents({
                 value={arLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
-                  if (selected === AR_LEASE_TERM_CUSTOM) {
-                    if (AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])) {
+                  if (selected === RESIDENT_LEASE_TERM_CUSTOM) {
+                    setArLeaseTermCustomMode(true);
+                    if (arLeaseTermPresetValues.includes(arLeaseTerm)) {
                       setArLeaseTerm("");
                     }
                     return;
                   }
+                  setArLeaseTermCustomMode(false);
                   setArLeaseTerm(selected);
                 }}
                
               >
                 <option value="">Select…</option>
-                <option value="Month-to-month">Month-to-month</option>
-                <option value="12 months">12 months</option>
-                <option value="6 months">6 months</option>
-                <option value="3 months">3 months</option>
-                <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
+                {arLeaseTermOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+                <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
               </Select>
-              {arLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
+              {arLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
                   value={arLeaseTerm}
@@ -2938,24 +2986,27 @@ export function ManagerResidents({
                 value={erLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
-                  if (selected === AR_LEASE_TERM_CUSTOM) {
-                    if (AR_LEASE_TERM_PRESETS.includes(erLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])) {
+                  if (selected === RESIDENT_LEASE_TERM_CUSTOM) {
+                    setErLeaseTermCustomMode(true);
+                    if (erLeaseTermPresetValues.includes(erLeaseTerm)) {
                       setErLeaseTerm("");
                     }
                     return;
                   }
+                  setErLeaseTermCustomMode(false);
                   setErLeaseTerm(selected);
                 }}
                
               >
                 <option value="">Select…</option>
-                <option value="Month-to-month">Month-to-month</option>
-                <option value="12 months">12 months</option>
-                <option value="6 months">6 months</option>
-                <option value="3 months">3 months</option>
-                <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
+                {erLeaseTermOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+                <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
               </Select>
-              {erLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
+              {erLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
                   value={erLeaseTerm}

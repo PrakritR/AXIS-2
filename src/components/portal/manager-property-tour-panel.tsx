@@ -18,7 +18,7 @@ export function ManagerPropertyTourPanel({
   propertyLabel: string;
   showToast?: (message: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [sendTourOpen, setSendTourOpen] = useState(false);
 
   const storageKey = useMemo(() => {

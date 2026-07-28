@@ -28,19 +28,23 @@ export const UTILITIES_PAYMENT_MODEL_OPTIONS: ReadonlyArray<{
   },
 ] as const;
 
-/** Long-term listing wizard — two clear choices only. */
+/** Long-term listing wizard — the three utilities states, in plain manager language. */
 export const LONG_TERM_UTILITIES_PAYMENT_OPTIONS: ReadonlyArray<{
-  id: Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct">;
+  id: UtilitiesPaymentModel;
   label: string;
 }> = [
   { id: "manager_billed", label: "Payment amount" },
   { id: "tenant_direct", label: "Paid by resident" },
+  { id: "included_in_rent", label: "Included in rent" },
 ] as const;
 
-export function longTermUtilitiesPickerValue(model: UtilitiesPaymentModel | undefined): Extract<UtilitiesPaymentModel, "manager_billed" | "tenant_direct"> {
-  return model === "tenant_direct" ? "tenant_direct" : "manager_billed";
+export function longTermUtilitiesPickerValue(model: UtilitiesPaymentModel | undefined): UtilitiesPaymentModel {
+  if (model === "tenant_direct" || model === "included_in_rent") return model;
+  return "manager_billed";
 }
 
+/** Only "Payment amount" (manager-billed) needs an amount. Both "Paid by resident" and
+ *  "Included in rent" have no separate utilities charge, so the amount input is hidden. */
 export function longTermUtilitiesEstimateRequired(model: UtilitiesPaymentModel | undefined): boolean {
   return longTermUtilitiesPickerValue(model) === "manager_billed";
 }

@@ -2,24 +2,17 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
-import { PortalEditRow } from "@/components/portal/portal-edit-row";
-import {
-  ManagerApplicationQuestionsEditorModal,
-  applicationQuestionTypeLabel,
-} from "@/components/portal/manager-application-questions-editor-modal";
+import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
 import {
   normalizeCustomApplicationFields,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 import {
-  removeListingApplicationField,
+  applicationConfigForVariant,
   resolveListingApplicationFields,
-  type ResolvedApplicationField,
+  type ApplicationFormVariant,
 } from "@/lib/rental-application/application-field-catalog";
-import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
 type QuestionsSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -27,27 +20,34 @@ type QuestionsSaveTarget =
   | { mode: "requestChange"; saveId: string }
   | null;
 
-function shortenOptions(options: string[], max = 3): string {
-  if (options.length === 0) return "";
-  if (options.length <= max) return options.join(" / ");
-  return `${options.slice(0, max).join(" / ")} +${options.length - max} more`;
-}
+const APPLICATION_STAY_ROWS: ReadonlyArray<{
+  id: ApplicationFormVariant;
+  label: string;
+  summary: string;
+}> = [
+  { id: "standard", label: "Long-term lease", summary: "Standard rental application" },
+  { id: "short_term", label: "Short-term stay", summary: "Short-term stay application" },
+];
 
-function questionSubtitle(field: ResolvedApplicationField): string {
-  return [
-    applicationQuestionTypeLabel(field.type),
-    field.required ? "Required" : "Optional",
-    field.type === "select" && field.options.length > 0 ? shortenOptions(field.options) : null,
-    field.isStandard ? "Built-in" : "Custom",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+function applicationStaySubtitle(
+  variant: ApplicationFormVariant,
+  sub: ManagerListingSubmissionV1,
+  questionCount: number,
+): string {
+  const slice = applicationConfigForVariant(sub, variant);
+  const mode =
+    variant === "short_term"
+      ? slice.applicationConfigMode === "custom"
+        ? "Custom questions"
+        : "PropLane default"
+      : slice.applicationConfigMode === "custom"
+        ? "Custom questions"
+        : "PropLane default";
+  return `${questionCount} question${questionCount === 1 ? "" : "s"} · ${mode}`;
 }
 
 /**
- * Per-property application editor — custom questions applicants answer in the
- * rental application (Additional details step). Stored on the listing submission
- * (`customApplicationFields`) so they persist with the property record.
+ * Per-property application — two stay types, same row layout as the Lease section.
  */
 export function ManagerPropertyApplicationQuestionsPanel({
   sub,
@@ -62,119 +62,74 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
-  /** Share / link actions shown in the section header (visible when collapsed). */
   headerActionsExtra?: ReactNode;
 }) {
   const [listModalOpen, setListModalOpen] = useState(false);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
+  const [listModalVariant, setListModalVariant] = useState<ApplicationFormVariant>("standard");
+  const [sectionExpanded, setSectionExpanded] = useState(false);
 
-  const applicationFields = useMemo(
-    () => resolveListingApplicationFields(sub, normalizeCustomApplicationFields),
-    [sub],
-  );
-  const hasPreview = applicationFields.length > 0;
+  const stayRows = useMemo(() => {
+    return APPLICATION_STAY_ROWS.map((row) => {
+      const slice = applicationConfigForVariant(sub, row.id);
+      const count = resolveListingApplicationFields(slice, normalizeCustomApplicationFields).length;
+      return {
+        ...row,
+        questionCount: count,
+        subtitle: applicationStaySubtitle(row.id, sub, count),
+      };
+    });
+  }, [sub]);
 
   if (!saveTarget || !managerUserId) return null;
 
-  const openEdit = (field: ResolvedApplicationField) => {
-    setEditingField(field);
-    setEditOpen(true);
-  };
-
-  const closeEdit = () => {
-    setEditOpen(false);
-    setEditingField(null);
-  };
-
-  const removeField = (field: ResolvedApplicationField) => {
-    const patch = removeListingApplicationField(sub, field);
-    const next: ManagerListingSubmissionV1 = { ...sub, ...patch };
-    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not remove question.");
-      return;
-    }
-    showToast("Question removed.");
-    onUpdated();
+  const openListModal = (variant: ApplicationFormVariant) => {
+    setListModalVariant(variant);
+    setListModalOpen(true);
   };
 
   return (
     <>
       <PortalCollapsibleSection
         title="Application"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
-        collapsible={hasPreview}
+        expanded={sectionExpanded}
+        onExpandedChange={setSectionExpanded}
+        collapsible
         headerActionsInline
         toggleDataAttr="application-section-toggle"
-        headerActions={
-          <>
-            {headerActionsExtra}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="application-questions-add"
-              onClick={(e) => {
-                e.stopPropagation();
-                setListModalOpen(true);
-              }}
-            >
-              Edit
-            </Button>
-          </>
-        }
-        contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
+        headerActions={headerActionsExtra}
+        contentClassName="px-4 py-2"
       >
-        {hasPreview ? (
-          <div className="space-y-2">
-            {RENTAL_APPLICATION_SECTIONS.map((section) => {
-              const sectionQuestions = applicationFields.filter(
-                (f) => (f.section ?? "additional") === section.id,
-              );
-              if (sectionQuestions.length === 0) return null;
-              return (
-                <div key={section.id} className="space-y-2">
-                  <p className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">
-                    {section.title}
-                  </p>
-                  {sectionQuestions.map((field) => (
-                    <PortalEditRow
-                      key={field.id}
-                      title={field.label}
-                      subtitle={questionSubtitle(field)}
-                      clickDataAttr={`application-preview-edit-${field.id}`}
-                      onClick={() => openEdit(field)}
-                      onRemove={() => removeField(field)}
-                      removeTitle={`Remove ${field.label}`}
-                      removeDataAttr="application-question-remove-one"
-                    />
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
+        <div className="space-y-2">
+          {stayRows.map((row) => (
+            <div
+              key={row.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-3 py-2.5"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{row.label}</p>
+                <p className="text-xs text-muted">{row.subtitle}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 shrink-0 rounded-full px-3 text-xs"
+                data-attr={`application-stay-edit-${row.id}`}
+                onClick={() => openListModal(row.id)}
+              >
+                Edit
+              </Button>
+            </div>
+          ))}
+        </div>
       </PortalCollapsibleSection>
 
       <ManagerApplicationQuestionsEditorModal
         open={listModalOpen}
+        initialVariant={listModalVariant}
         sub={sub}
         saveTarget={saveTarget}
         managerUserId={managerUserId}
         onClose={() => setListModalOpen(false)}
-        onSaved={onUpdated}
-        showToast={showToast}
-      />
-
-      <ApplicationQuestionEditModal
-        open={editOpen}
-        field={editingField}
-        sub={sub}
-        saveTarget={saveTarget}
-        managerUserId={managerUserId}
-        onClose={closeEdit}
         onSaved={onUpdated}
         showToast={showToast}
       />

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalCollapsibleEditRow } from "@/components/portal/portal-collapsible-edit-row";
 import { PortalEditRow } from "@/components/portal/portal-edit-row";
 import {
@@ -114,6 +114,7 @@ export function ManagerApplicationQuestionsEditorModal({
   saveTarget,
   propertyIds,
   managerUserId,
+  initialVariant = "standard",
   onClose,
   onSaved,
   showToast,
@@ -125,6 +126,8 @@ export function ManagerApplicationQuestionsEditorModal({
   /** When set, each save applies the same application config to every id (bulk edit). */
   propertyIds?: string[];
   managerUserId: string;
+  /** Which stay-type form opens first (long-term vs short-term). */
+  initialVariant?: ApplicationFormVariant;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
@@ -136,16 +139,22 @@ export function ManagerApplicationQuestionsEditorModal({
   const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
   const [isNewField, setIsNewField] = useState(false);
   const [newFieldSectionId, setNewFieldSectionId] = useState("additional");
+  // Round 31: every edit stays local until an explicit Save. `dirty` gates the Save button
+  // and drives the discard confirmation so a stray click can never overwrite properties.
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setLocalSub(sub);
-    setVariant("standard");
+    setVariant(initialVariant);
     setExpandedSectionId(null);
     setEditOpen(false);
     setEditingField(null);
     setIsNewField(false);
-  }, [open, sub]);
+    setDirty(false);
+    setSaving(false);
+  }, [open, sub, initialVariant]);
 
   const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
   const isBulkSave = bulkIds.length > 0;
@@ -162,25 +171,10 @@ export function ManagerApplicationQuestionsEditorModal({
   );
   const disabledFields = useMemo(() => resolveDisabledStandardApplicationFields(configSlice), [configSlice]);
 
-  const persistSlice = (nextSlice: ApplicationConfigSlice, singleSuccessMessage: string): boolean => {
-    const next: ManagerListingSubmissionV1 = {
-      ...localSub,
-      ...mergeApplicationConfigForVariant(variant, nextSlice),
-    };
-    if (
-      !persistApplicationConfig({
-        next,
-        saveTarget,
-        propertyIds: isBulkSave ? bulkIds : undefined,
-        managerUserId,
-        showToast,
-        singleSuccessMessage,
-      })
-    ) {
-      return false;
-    }
-    setLocalSub(next);
-    return true;
+  // Apply an edit to LOCAL state only — nothing is persisted until Save.
+  const applySlice = (nextSlice: ApplicationConfigSlice): void => {
+    setLocalSub((prev) => ({ ...prev, ...mergeApplicationConfigForVariant(variant, nextSlice) }));
+    setDirty(true);
   };
 
   // An EDIT to the short-term form must STICK even when it leaves the slice
@@ -188,13 +182,40 @@ export function ManagerApplicationQuestionsEditorModal({
   // custom question after doing so. `applicationConfigForVariant` treats a
   // non-"custom" short-term slice as the curated DEFAULT, so a mode that
   // collapsed to "standard" would silently revert the manager's choices. Pin
-  // "custom" on edits; only "Restore PropLane defaults" (plain `persistSlice`
+  // "custom" on edits; only "Restore PropLane defaults" (plain `applySlice`
   // with a fresh default) intentionally returns short-term to the curated set.
-  const persistEditedSlice = (nextSlice: ApplicationConfigSlice, singleSuccessMessage: string): boolean =>
-    persistSlice(
-      variant === "short_term" ? { ...nextSlice, applicationConfigMode: "custom" } : nextSlice,
-      singleSuccessMessage,
-    );
+  const applyEditedSlice = (nextSlice: ApplicationConfigSlice): void =>
+    applySlice(variant === "short_term" ? { ...nextSlice, applicationConfigMode: "custom" } : nextSlice);
+
+  const commitSave = () => {
+    if (isBulkSave) {
+      // Overwriting every selected property is destructive — name the count at the moment
+      // of saving (round 31), not only in a subtitle above.
+      const ok = window.confirm(
+        `Apply these application settings to ${bulkIds.length} properties? Existing per-property differences will be replaced.`,
+      );
+      if (!ok) return;
+    }
+    setSaving(true);
+    const okSaved = persistApplicationConfig({
+      next: localSub,
+      saveTarget,
+      propertyIds: isBulkSave ? bulkIds : undefined,
+      managerUserId,
+      showToast,
+      singleSuccessMessage: "Application settings saved.",
+    });
+    setSaving(false);
+    if (!okSaved) return;
+    setDirty(false);
+    onSaved();
+    onClose();
+  };
+
+  const requestClose = () => {
+    if (dirty && !window.confirm("Discard unsaved changes to this application?")) return;
+    onClose();
+  };
 
   const openEdit = (field: ResolvedApplicationField) => {
     setEditingField(field);
@@ -217,47 +238,56 @@ export function ManagerApplicationQuestionsEditorModal({
   };
 
   const removeField = (field: ResolvedApplicationField) => {
-    if (!persistEditedSlice(removeListingApplicationField(configSlice, field), "Question removed.")) return;
-    onSaved();
+    applyEditedSlice(removeListingApplicationField(configSlice, field));
   };
 
   const reenableField = (field: ResolvedApplicationField) => {
     if (!field.standardKey) return;
-    if (!persistEditedSlice(reenableListingApplicationField(configSlice, field.standardKey), "Question added back.")) return;
-    onSaved();
+    applyEditedSlice(reenableListingApplicationField(configSlice, field.standardKey));
   };
 
   const removeSection = (sectionId: string) => {
     const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === sectionId);
     if (sectionQuestions.length === 0) return;
-    if (!persistEditedSlice(applyFieldRemovals(configSlice, sectionQuestions), "Section questions removed.")) return;
+    applyEditedSlice(applyFieldRemovals(configSlice, sectionQuestions));
     if (expandedSectionId === sectionId) setExpandedSectionId(null);
-    onSaved();
   };
 
   const restoreDefaults = () => {
-    if (
-      !persistSlice(
-        restoreDefaultApplicationConfig(),
-        variant === "short_term"
-          ? "Short-term application restored to PropLane defaults."
-          : "Application restored to PropLane defaults.",
-      )
-    ) {
-      return;
-    }
+    applySlice(restoreDefaultApplicationConfig());
     setExpandedSectionId(null);
-    onSaved();
   };
 
   const onQuestionSaved = (next: ManagerListingSubmissionV1) => {
     setLocalSub(next);
-    onSaved();
+    setDirty(true);
   };
 
   return (
     <>
-      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
+      <Modal
+        open={open}
+        title={title}
+        onClose={requestClose}
+        panelClassName="max-w-2xl"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={requestClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              data-attr="application-questions-save"
+              disabled={!dirty || saving}
+              onClick={commitSave}
+            >
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </ModalFooter>
+        }
+      >
         {isBulkSave ? (
           <p className="mb-4 text-sm text-muted">
             These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
@@ -406,6 +436,7 @@ export function ManagerApplicationQuestionsEditorModal({
         onClose={closeEdit}
         onSaved={onQuestionSaved}
         showToast={showToast}
+        deferPersist
       />
     </>
   );

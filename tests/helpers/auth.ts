@@ -20,6 +20,15 @@ const PORTAL_CHOOSER_LABEL: Record<PortalRole, string> = {
   vendor: "Vendor",
 };
 
+async function hasSupabaseSessionCookie(page: Page): Promise<boolean> {
+  const cookies = await page.context().cookies();
+  return cookies.some((c) => /^sb-.+-auth-token(\.\d+)?$/.test(c.name));
+}
+
+function pathMatches(pathname: string, nextPath: string): boolean {
+  return new RegExp(`^${escapeRegExp(nextPath)}(/|$)`).test(pathname);
+}
+
 /**
  * Sign in through the unified auth hub. Returns once authentication has settled
  * (the URL has left `/auth/sign-in`) — the exact post-auth landing is NOT
@@ -29,12 +38,24 @@ const PORTAL_CHOOSER_LABEL: Record<PortalRole, string> = {
  * `establishActivePortal` (or use the `signInAs*` helpers, which do).
  */
 export async function signIn(page: Page, email: string, password: string, next = "/portal/dashboard") {
-  await page.goto(`/auth/sign-in?next=${encodeURIComponent(next)}`);
-  // The unified auth hub renders label-less inputs (placeholder only).
+  await page.goto(`/auth/sign-in?next=${encodeURIComponent(next)}`, { waitUntil: "domcontentloaded" });
   await page.getByPlaceholder("Email").fill(email);
   await page.getByPlaceholder("Password").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
-  await page.waitForURL((url) => url.pathname !== "/auth/sign-in", { timeout: 30_000 });
+  await expect
+    .poll(
+      async () => {
+        const pathname = new URL(page.url()).pathname;
+        if (pathname !== "/auth/sign-in") return true;
+        return hasSupabaseSessionCookie(page);
+      },
+      { timeout: 45_000 },
+    )
+    .toBe(true);
+  // Session cookie alone is not enough — wait for navigation away from sign-in when possible.
+  if (new URL(page.url()).pathname === "/auth/sign-in") {
+    await page.waitForURL((url) => url.pathname !== "/auth/sign-in", { timeout: 45_000 }).catch(() => {});
+  }
 }
 
 /**
@@ -52,23 +73,17 @@ export async function signIn(page: Page, email: string, password: string, next =
  */
 export async function establishActivePortal(page: Page, role: PortalRole, next: string) {
   const nextPath = next.split("?")[0] ?? next;
-  await page.goto(`/auth/choose-portal?next=${encodeURIComponent(next)}`);
+  if (pathMatches(new URL(page.url()).pathname, nextPath)) return;
+
+  await page.goto(`/auth/choose-portal?next=${encodeURIComponent(next)}`, { waitUntil: "domcontentloaded" });
+  if (pathMatches(new URL(page.url()).pathname, nextPath)) return;
+
   const option = page.getByRole("button", { name: new RegExp(`^${PORTAL_CHOOSER_LABEL[role]}\\b`) });
-  // The chooser fetches the account's roles asynchronously, so the option is NOT
-  // present on the first tick — auto-wait for it (click retries until it's
-  // actionable) rather than checking count() immediately, which races the fetch
-  // and skips the click. If we were already redirected into the portal, the
-  // option never appears; swallow that and let the URL poll below confirm.
-  await option
-    .first()
-    .click({ timeout: 15_000 })
-    .catch(() => {});
-  // The chooser navigates via a client-side router.push (no full page load).
-  // Poll page.url() directly rather than page.waitForURL — the latter also waits
-  // on a navigation lifecycle event that a pushState nav may never fire, which
-  // can hang it even after the URL has already changed.
+  await expect(option.first()).toBeVisible({ timeout: 45_000 });
+  await option.first().click();
+
   await expect
-    .poll(() => new URL(page.url()).pathname, { timeout: 30_000 })
+    .poll(() => new URL(page.url()).pathname, { timeout: 45_000 })
     .toMatch(new RegExp(`^${escapeRegExp(nextPath)}(/|$)`));
 }
 

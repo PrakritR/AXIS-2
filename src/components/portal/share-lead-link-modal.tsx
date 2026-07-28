@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
@@ -17,13 +17,67 @@ import {
 import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
+  buildManagerPortfolioApplyUrl,
   buildManagerListingUrl,
+  buildManagerPortfolioTourUrl,
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue, propertyAllowsShortTermRental } from "@/lib/rental-application/data";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
+
+const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
+
+const APPLY_RENTAL_TYPE_OPTIONS = [
+  { value: "standard", label: "Long-term lease" },
+  { value: "short_term", label: "Short-term stay" },
+] as const;
+
+/** Omit `rentalType` when both products are allowed or only long-term is selected. */
+function applyLinkRentalType(types: string[]): "short_term" | undefined {
+  const hasStandard = types.includes("standard");
+  const hasShort = types.includes("short_term");
+  if (hasStandard && hasShort) return undefined;
+  if (hasShort && !hasStandard) return "short_term";
+  return undefined;
+}
+
+function ShareLinkCopyRow({
+  label,
+  url,
+  copyLabel,
+  onCopy,
+  hint,
+}: {
+  label: string;
+  url: string;
+  copyLabel: string;
+  onCopy: () => void;
+  hint?: ReactNode;
+}) {
+  return (
+    <div>
+      <p className={FIELD_LABEL_CLASS}>{label}</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs leading-relaxed text-muted break-all">
+          {url || "Select a property to generate a link."}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 shrink-0 rounded-full px-4 sm:h-auto sm:self-stretch"
+          disabled={!url}
+          onClick={onCopy}
+        >
+          {copyLabel}
+        </Button>
+      </div>
+      {hint ? <div className="mt-1.5 text-xs leading-relaxed text-muted">{hint}</div> : null}
+    </div>
+  );
+}
+
 
 export function ShareLeadLinkModal({
   open,
@@ -39,10 +93,10 @@ export function ShareLeadLinkModal({
   preselectedPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
-  // Listing sends support several/all properties at once; apply/tour stay single.
-  const multiEnabled = kind === "listing";
+  const multiEnabled = properties.length > 1;
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
+  const [applyRentalTypes, setApplyRentalTypes] = useState<string[]>(["standard"]);
   const [prospectName, setProspectName] = useState("");
   const [prospectEmail, setProspectEmail] = useState("");
   const [note, setNote] = useState("");
@@ -52,12 +106,13 @@ export function ShareLeadLinkModal({
   useEffect(() => {
     if (!open) return;
     void Promise.resolve().then(() => {
-      const initial =
+      const initialId =
         preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
           ? preselectedPropertyId
           : properties[0]?.id ?? "";
-      setPropertyIds(initial ? [initial] : []);
+      setPropertyIds(initialId ? [initialId] : []);
       setRoomChoice("");
+      setApplyRentalTypes(["standard"]);
       setProspectName("");
       setProspectEmail("");
       setNote("");
@@ -66,25 +121,75 @@ export function ShareLeadLinkModal({
     });
   }, [open, kind, preselectedPropertyId, properties]);
 
-  // Room pre-selection applies to apply invites only; listing sends link to the whole property.
   const singlePropertyId = propertyIds.length === 1 ? propertyIds[0] : "";
-  const isMultiListing = multiEnabled && propertyIds.length > 1;
+  const isMultiProperty = propertyIds.length > 1;
+  const isMultiListing = kind === "listing" && isMultiProperty;
+  const isMultiApply = kind === "apply" && isMultiProperty;
+  const isPortfolioTour = kind === "tour" && isMultiProperty;
 
   const propertyTitle = useMemo(() => {
-    if (isMultiListing) return `${propertyIds.length} homes`;
+    if (isMultiProperty) {
+      return kind === "tour" ? `${propertyIds.length} properties` : `${propertyIds.length} homes`;
+    }
     if (!singlePropertyId) return "";
     return properties.find((p) => p.id === singlePropertyId)?.label ?? singlePropertyId;
-  }, [properties, singlePropertyId, isMultiListing, propertyIds.length]);
+  }, [properties, singlePropertyId, isMultiProperty, propertyIds.length, kind]);
+
+  const portfolioTourUrl = useMemo(() => {
+    if (!isPortfolioTour || typeof window === "undefined") return "";
+    return buildManagerPortfolioTourUrl(window.location.origin, propertyIds);
+  }, [isPortfolioTour, propertyIds]);
+
+  const individualTourLinks = useMemo(() => {
+    if (kind !== "tour" || typeof window === "undefined") return [];
+    const origin = window.location.origin;
+    const selected = new Set(propertyIds);
+    return properties
+      .filter((property) => selected.has(property.id))
+      .map((property) => ({
+        id: property.id,
+        label: property.label,
+        url: buildManagerTourUrl(origin, property.id),
+      }));
+  }, [kind, properties, propertyIds]);
 
   const roomOptions = useMemo(() => {
     if (kind !== "apply" || !singlePropertyId) return [];
     return getRoomOptionsForProperty(singlePropertyId, { includeUnavailable: true }).filter((o) => o.value);
   }, [kind, singlePropertyId]);
 
+  const shortTermApplyAvailable = useMemo(() => {
+    if (kind !== "apply" || propertyIds.length === 0) return false;
+    return propertyIds.every((id) => propertyAllowsShortTermRental(id));
+  }, [kind, propertyIds]);
+
+  const effectiveApplyRentalTypes = useMemo(
+    () =>
+      shortTermApplyAvailable
+        ? applyRentalTypes
+        : applyRentalTypes.filter((type) => type !== "short_term"),
+    [applyRentalTypes, shortTermApplyAvailable],
+  );
+
+  useEffect(() => {
+    if (!shortTermApplyAvailable) {
+      setApplyRentalTypes((prev) => {
+        const next = prev.filter((type) => type !== "short_term");
+        return next.length > 0 ? next : ["standard"];
+      });
+    }
+  }, [shortTermApplyAvailable]);
+
   const linkUrl = useMemo(() => {
     if (propertyIds.length === 0 || typeof window === "undefined") return "";
     const origin = window.location.origin;
+    if (isPortfolioTour) return portfolioTourUrl;
     if (isMultiListing) return buildManagerBrowseUrl(origin, propertyIds);
+    if (isMultiApply) {
+      return buildManagerPortfolioApplyUrl(origin, propertyIds, {
+        rentalType: applyLinkRentalType(effectiveApplyRentalTypes),
+      });
+    }
     if (!singlePropertyId) return "";
     if (kind === "tour") return buildManagerTourUrl(origin, singlePropertyId);
     if (kind === "listing") return buildManagerListingUrl(origin, singlePropertyId);
@@ -94,8 +199,14 @@ export function ShareLeadLinkModal({
       propertyId: singlePropertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
+      rentalType: applyLinkRentalType(effectiveApplyRentalTypes),
     });
-  }, [kind, propertyIds, singlePropertyId, isMultiListing, roomChoice, roomOptions]);
+  }, [kind, propertyIds, singlePropertyId, isMultiListing, isMultiApply, isPortfolioTour, portfolioTourUrl, roomChoice, roomOptions, effectiveApplyRentalTypes]);
+
+  const applyAllowsBothRentalTypes =
+    kind === "apply" &&
+    applyRentalTypes.includes("standard") &&
+    applyRentalTypes.includes("short_term");
 
   const listingSummary = useMemo(() => {
     if (kind !== "listing" || isMultiListing || !singlePropertyId) return null;
@@ -106,13 +217,14 @@ export function ShareLeadLinkModal({
 
   const invitePreviewBody = useMemo(() => {
     if (!linkUrl) return "";
-    if (isMultiListing) {
+    if (isMultiProperty) {
       return buildLeadInviteEmailBody({
         kind,
         prospectName: prospectName.trim() || undefined,
         propertyTitle,
         linkUrl,
-        listingCount: propertyIds.length,
+        listingCount: isMultiListing || isMultiApply ? propertyIds.length : undefined,
+        tourCount: isPortfolioTour ? propertyIds.length : undefined,
         managerNote: note.trim() || undefined,
       });
     }
@@ -131,10 +243,10 @@ export function ShareLeadLinkModal({
       listingSummary: listingSummary ?? undefined,
       managerNote: note.trim() || undefined,
     });
-  }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiListing, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
+  }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiProperty, isMultiListing, isPortfolioTour, isMultiApply, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
 
   const sendListingRoomParams = useMemo(() => {
-    if (kind === "listing" || isMultiListing) {
+    if (kind === "listing" || isMultiListing || isMultiApply) {
       return { listingRoomId: undefined, roomName: undefined };
     }
     if (!roomChoice) return { listingRoomId: undefined, roomName: undefined };
@@ -143,15 +255,15 @@ export function ShareLeadLinkModal({
       listingRoomId: listingRoomId || undefined,
       roomName: roomOptions.find((o) => o.value === roomChoice)?.label,
     };
-  }, [kind, isMultiListing, roomChoice, roomOptions]);
+  }, [kind, isMultiListing, isMultiApply, roomChoice, roomOptions]);
 
-  const handleCopy = async () => {
-    if (!linkUrl) {
+  const handleCopy = async (text: string, successMessage: string) => {
+    if (!text) {
       showToast("Select a property first.");
       return;
     }
-    const ok = await copyTextToClipboard(linkUrl);
-    showToast(ok ? (kind === "tour" ? "Tour link copied." : kind === "apply" ? "Application link copied." : "Link copied.") : "Could not copy link.");
+    const ok = await copyTextToClipboard(text);
+    showToast(ok ? successMessage : "Could not copy link.");
   };
 
   const openSendPreview = () => {
@@ -174,7 +286,7 @@ export function ShareLeadLinkModal({
       if (isDemoModeActive()) {
         logDemoOutboundEmail(
           prospectEmail.trim(),
-          leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined),
+          leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined),
           invitePreviewBody,
         );
         showToast(kind === "listing" ? "Listing sent (demo)." : "Invite sent (demo).");
@@ -194,6 +306,7 @@ export function ShareLeadLinkModal({
           listingRoomId: listingRoomId || undefined,
           roomName: roomName || undefined,
           note: note.trim() || undefined,
+          rentalType: kind === "apply" ? applyLinkRentalType(effectiveApplyRentalTypes) : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
@@ -238,15 +351,12 @@ export function ShareLeadLinkModal({
             </p>
           ) : (
             <>
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <label
-                    htmlFor="share-lead-property"
-                    className="block text-xs font-semibold uppercase tracking-wide text-muted"
-                  >
-                    {multiEnabled ? "Properties" : "Property"}
-                  </label>
-                  {multiEnabled ? (
+              {multiEnabled ? (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <label htmlFor="share-lead-property-multi" className={FIELD_LABEL_CLASS}>
+                      Properties
+                    </label>
                     <div className="flex items-center gap-3 text-[11px] font-semibold">
                       <button
                         type="button"
@@ -273,9 +383,7 @@ export function ShareLeadLinkModal({
                         Clear
                       </button>
                     </div>
-                  ) : null}
-                </div>
-                {multiEnabled ? (
+                  </div>
                   <CheckboxMultiSelect
                     label="Properties"
                     dataAttr="share-lead-property-multi"
@@ -288,102 +396,164 @@ export function ShareLeadLinkModal({
                       setRoomChoice("");
                     }}
                   />
-                ) : (
-                  <Select
-                    id="share-lead-property"
-                    value={singlePropertyId}
-                    onChange={(e) => {
-                      setPropertyIds(e.target.value ? [e.target.value] : []);
-                      setRoomChoice("");
-                    }}
-                  >
-                    {properties.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div
+                  className={
+                    kind === "apply" && roomOptions.length > 0 ? "grid gap-3 sm:grid-cols-2" : undefined
+                  }
+                >
+                  <div>
+                    <label htmlFor="share-lead-property" className={FIELD_LABEL_CLASS}>
+                      Property
+                    </label>
+                    <Select
+                      id="share-lead-property"
+                      value={singlePropertyId}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setPropertyIds(next ? [next] : []);
+                        setRoomChoice("");
+                      }}
+                    >
+                      {properties.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  {kind === "apply" && roomOptions.length > 0 ? (
+                    <div>
+                      <label htmlFor="share-lead-room" className={FIELD_LABEL_CLASS}>
+                        Room (optional)
+                      </label>
+                      <Select id="share-lead-room" value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)}>
+                        <option value="">Any room</option>
+                        {roomOptions.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
-              {kind === "apply" && !isMultiListing && roomOptions.length > 0 ? (
+              {kind === "apply" && multiEnabled && shortTermApplyAvailable ? (
+                <CheckboxMultiSelect
+                  label="Application"
+                  dataAttr="share-lead-application-multi"
+                  emptyLabel="Select application type"
+                  emptyMenuText="No options"
+                  options={[...APPLY_RENTAL_TYPE_OPTIONS]}
+                  selected={applyRentalTypes}
+                  onChange={(next) => {
+                    setApplyRentalTypes(next.length > 0 ? next : ["standard"]);
+                  }}
+                />
+              ) : null}
+
+              {kind === "apply" && !multiEnabled && shortTermApplyAvailable ? (
                 <div>
-                  <label htmlFor="share-lead-room" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-                    Room (optional)
+                  <label htmlFor="share-lead-application-type" className={FIELD_LABEL_CLASS}>
+                    Application
                   </label>
-                  <Select id="share-lead-room" value={roomChoice} onChange={(e) => setRoomChoice(e.target.value)}>
-                    <option value="">Any room</option>
-                    {roomOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
+                  <Select
+                    id="share-lead-application-type"
+                    value={applyRentalTypes[0] === "short_term" ? "short_term" : "standard"}
+                    onChange={(e) =>
+                      setApplyRentalTypes([e.target.value === "short_term" ? "short_term" : "standard"])
+                    }
+                  >
+                    <option value="standard">Long-term lease</option>
+                    <option value="short_term">Short-term stay</option>
                   </Select>
                 </div>
               ) : null}
 
               {kind === "listing" ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    {isMultiListing ? "Public browse link" : "Public listing link"}
-                  </p>
-                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                    {linkUrl || "Select a property to generate a link."}
-                  </div>
-                  {isMultiListing ? (
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                      Opens the browse page filtered to the {propertyIds.length} homes you selected.
-                    </p>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2 rounded-full"
-                    disabled={!linkUrl}
-                    onClick={() => void handleCopy()}
-                  >
-                    {isMultiListing ? "Copy browse link" : "Copy listing link"}
-                  </Button>
-                </div>
+                <ShareLinkCopyRow
+                  label={isMultiListing ? "Public browse link" : "Public listing link"}
+                  url={linkUrl}
+                  copyLabel={isMultiListing ? "Copy browse link" : "Copy listing link"}
+                  onCopy={() =>
+                    void handleCopy(linkUrl, isMultiListing ? "Browse link copied." : "Listing link copied.")
+                  }
+                  hint={
+                    isMultiListing
+                      ? `Opens the browse page filtered to the ${propertyIds.length} homes you selected.`
+                      : undefined
+                  }
+                />
               ) : null}
 
               {kind === "tour" ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public tour link</p>
-                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                    {linkUrl || "Select a property to generate a link."}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2 rounded-full"
-                    disabled={!linkUrl}
-                    onClick={() => void handleCopy()}
-                  >
-                    Copy tour link
-                  </Button>
+                <div className="space-y-4">
+                  {isPortfolioTour ? (
+                    <ShareLinkCopyRow
+                      label="Generic tour link"
+                      url={portfolioTourUrl}
+                      copyLabel="Copy generic tour link"
+                      onCopy={() => void handleCopy(portfolioTourUrl, "Generic tour link copied.")}
+                      hint="Prospects pick which property to tour before choosing a time."
+                    />
+                  ) : null}
+
+                  {isPortfolioTour ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Property tour links</p>
+                      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                        {individualTourLinks.map((entry) => (
+                          <div key={entry.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
+                            <p className="mb-2 text-sm font-semibold text-foreground">{entry.label}</p>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                              <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted break-all">
+                                {entry.url}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 shrink-0 rounded-full px-4 sm:h-auto sm:self-stretch"
+                                onClick={() => void handleCopy(entry.url, "Tour link copied.")}
+                              >
+                                Copy link
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <ShareLinkCopyRow
+                      label="Public tour link"
+                      url={linkUrl}
+                      copyLabel="Copy tour link"
+                      onCopy={() => void handleCopy(linkUrl, "Tour link copied.")}
+                    />
+                  )}
                 </div>
               ) : null}
 
               {kind === "apply" ? (
-                <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public application link</p>
-                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                    {linkUrl || "Select a property to generate a link."}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2 rounded-full"
-                    disabled={!linkUrl}
-                    onClick={() => void handleCopy()}
-                  >
-                    Copy application link
-                  </Button>
-                  <p className="mt-2 text-xs leading-relaxed text-muted">
-                    Applicants create a resident account first, then complete the application in their portal.
-                  </p>
-                </div>
+                <ShareLinkCopyRow
+                  label="Public application link"
+                  url={linkUrl}
+                  copyLabel="Copy application link"
+                  onCopy={() =>
+                    void handleCopy(linkUrl, "Application link copied.")
+                  }
+                  hint={
+                    isMultiApply
+                      ? applyAllowsBothRentalTypes
+                        ? `Opens the application flow so the prospect can choose one of the ${propertyIds.length} homes you selected, then long-term or short-term.`
+                        : `Opens the application flow so the prospect can choose one of the ${propertyIds.length} homes you selected.`
+                      : applyAllowsBothRentalTypes
+                        ? "Applicants choose long-term or short-term in the application after signing in or continuing as a guest."
+                        : "Applicants create a resident account first, then complete the application in their portal."
+                  }
+                />
               ) : null}
 
               <div className="border-t border-border pt-4">
@@ -395,7 +565,7 @@ export function ShareLeadLinkModal({
                 ) : null}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="share-lead-name" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    <label htmlFor="share-lead-name" className={FIELD_LABEL_CLASS}>
                       Name (optional)
                     </label>
                     <Input
@@ -406,7 +576,7 @@ export function ShareLeadLinkModal({
                     />
                   </div>
                   <div>
-                    <label htmlFor="share-lead-email" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    <label htmlFor="share-lead-email" className={FIELD_LABEL_CLASS}>
                       Email
                     </label>
                     <Input
@@ -419,7 +589,7 @@ export function ShareLeadLinkModal({
                   </div>
                 </div>
                 <div className="mt-3">
-                  <label htmlFor="share-lead-note" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                  <label htmlFor="share-lead-note" className={FIELD_LABEL_CLASS}>
                     Note (optional)
                   </label>
                   <textarea
@@ -442,7 +612,7 @@ export function ShareLeadLinkModal({
         title={kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link"}
         onClose={() => setSendPreviewOpen(false)}
         recipient={prospectEmail.trim()}
-        subject={leadInviteSubject(kind, propertyTitle, isMultiListing ? propertyIds.length : undefined)}
+        subject={leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined)}
         body={invitePreviewBody}
         intro="Review the email before sending."
         footerNote="Sent via PropLane when email delivery is configured."

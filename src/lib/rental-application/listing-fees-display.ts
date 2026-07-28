@@ -2,7 +2,11 @@ import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1, PAYMENT_AT_SIGNING_OPTIONS, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
-import { utilitiesListingSummaryLabel } from "@/lib/listing-utilities-payment";
+import {
+  formatUtilitiesListingLine,
+  resolveRoomUtilitiesPaymentModel,
+  utilitiesListingSummaryLabel,
+} from "@/lib/listing-utilities-payment";
 import { roomDailyRentPrice, roomIsDailyPriced, roomMonthlyEquivalent } from "@/lib/room-pricing";
 
 export type ListingSigningComputationInput = ManagerListingSubmissionV1 | undefined;
@@ -157,6 +161,11 @@ export function utilitiesListingEstimateDetail(sub: ManagerListingSubmissionV1 |
   const n = normalizeManagerListingSubmissionV1(sub);
   const lines = n.rooms
     .filter((r) => r.name.trim())
-    .map((r) => `${r.name.trim()}: ${r.utilitiesEstimate?.trim() || "—"}`);
+    .map(
+      (r) =>
+        `${r.name.trim()}: ${
+          formatUtilitiesListingLine(resolveRoomUtilitiesPaymentModel(r), r.utilitiesEstimate) || "—"
+        }`,
+    );
   return lines.length ? lines.join("\n") : "Utilities TBD.";
 }

@@ -36,7 +36,7 @@ export function ListingAddressAutocomplete({
       return;
     }
     const q = value.trim();
-    if (q.length < 3) {
+    if (q.length < 4) {
       setSuggestions([]);
       setLoading(false);
       return;

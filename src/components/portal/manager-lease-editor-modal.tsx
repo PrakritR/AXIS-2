@@ -6,6 +6,7 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import {
   LeaseConfigForm,
+  LeaseDocumentAndTypeFields,
   readLeaseTemplateFile,
   type LeaseConfigDraft,
 } from "@/components/portal/lease-config-form";
@@ -19,10 +20,14 @@ import {
 } from "@/lib/manager-property-save-target";
 import { buildLeaseModalAssistantContext } from "@/lib/lease-assistant-context";
 import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
-import { leaseSourceFromDraft, type PropertyLeaseSource } from "@/lib/property-lease-source";
+import { leaseSourceFromDraft, draftFieldsFromLeaseSource, type PropertyLeaseSource } from "@/lib/property-lease-source";
 import {
+  normalizeLeaseTemplateKind,
+  readPropertyLeaseTemplates,
+  syncLegacyLeaseFieldsFromTemplates,
   updatePropertyLeaseTemplate,
   type PropertyLeaseTemplate,
+  type PropertyLeaseTemplateKind,
 } from "@/lib/property-lease-templates";
 
 function draftFromSubmission(sub: ManagerListingSubmissionV1): LeaseConfigDraft {
@@ -97,6 +102,7 @@ export function ManagerLeaseEditorModal({
   showToast: (m: string) => void;
 }) {
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFromSubmission(sub));
+  const [leaseKind, setLeaseKind] = useState<PropertyLeaseTemplateKind>("room-rental");
   const [templateLabel, setTemplateLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   // The template picker uploads to the private bucket before it returns a URL;
@@ -107,6 +113,10 @@ export function ManagerLeaseEditorModal({
     if (!open) return;
     setDraft(draftFromSubmission(sub));
     setError(null);
+    const primary = templateId && templates
+      ? templates.find((t) => t.id === templateId)
+      : readPropertyLeaseTemplates(sub)[0];
+    setLeaseKind(normalizeLeaseTemplateKind(primary?.kind));
     if (templateId && templates) {
       setTemplateLabel(templates.find((t) => t.id === templateId)?.label ?? "");
     } else {
@@ -115,6 +125,25 @@ export function ManagerLeaseEditorModal({
   }, [open, sub, templateId, templates]);
 
   const source = leaseSourceFromDraft(draft);
+
+  const setSource = (next: PropertyLeaseSource) => {
+    setError(null);
+    setDraft((d) => ({ ...d, ...draftFieldsFromLeaseSource(next) }));
+  };
+
+  function applyLeaseConfigAndKind(
+    base: ManagerListingSubmissionV1,
+    leaseFields: LeaseConfigFields,
+  ): ManagerListingSubmissionV1 {
+    const withFields: ManagerListingSubmissionV1 = { ...base, ...leaseFields };
+    const templates = readPropertyLeaseTemplates(withFields);
+    if (templates.length === 0) return withFields;
+    const [primary, ...rest] = templates;
+    return syncLegacyLeaseFieldsFromTemplates(withFields, [
+      { ...primary!, kind: leaseKind, updatedAt: new Date().toISOString() },
+      ...rest,
+    ]);
+  }
 
   const previewSub = useMemo(
     (): ManagerListingSubmissionV1 => ({
@@ -161,7 +190,7 @@ export function ManagerLeaseEditorModal({
     const leaseFields = leaseFieldsFromDraft(draft);
 
     if (isBulkSave) {
-      const { saved, failed } = persistLeaseConfigToPropertyIds(managerUserId, bulkIds, leaseFields);
+      const { saved, failed } = persistLeaseConfigToPropertyIds(managerUserId, bulkIds, leaseFields, leaseKind);
       if (saved === 0) {
         showToast("Could not save lease settings.");
         return false;
@@ -186,6 +215,7 @@ export function ManagerLeaseEditorModal({
     if (templateId && templates && onTemplatesSaved) {
       const nextTemplates = updatePropertyLeaseTemplate(templates, templateId, {
         label: templateLabel.trim() || templates.find((t) => t.id === templateId)?.label || "Lease",
+        kind: leaseKind,
         leaseConfigMode: leaseFields.leaseConfigMode,
         leaseCustomKind: leaseFields.leaseCustomKind,
         customLeaseTerms: leaseFields.customLeaseTerms,
@@ -199,7 +229,7 @@ export function ManagerLeaseEditorModal({
       return true;
     }
 
-    const next: ManagerListingSubmissionV1 = { ...sub, ...leaseFields };
+    const next = applyLeaseConfigAndKind(sub, leaseFields);
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not save lease settings.");
       return false;
@@ -268,20 +298,35 @@ export function ManagerLeaseEditorModal({
             />
           </div>
         ) : null}
-        <LeaseConfigForm
-          variant="modal"
-          dataAttrPrefix="property"
-          draft={draft}
-          onDraftChange={(patch) => {
+        <LeaseDocumentAndTypeFields
+          source={source}
+          onSourceChange={setSource}
+          kind={leaseKind}
+          onKindChange={(next) => {
             setError(null);
-            setDraft((d) => ({ ...d, ...patch }));
+            setLeaseKind(next);
           }}
-          onStandardToggle={() => setError(null)}
-          onCustomTermsChange={() => setError(null)}
-          onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
-          customTermsError={customTermsError}
-          leaseTemplateError={leaseTemplateError}
+          dataAttrPrefix="property"
         />
+        {source !== "axis_default" ? (
+          <LeaseConfigForm
+            variant="modal"
+            embedded
+            hideDocumentDropdown
+            forcedSource={source}
+            dataAttrPrefix="property"
+            draft={draft}
+            onDraftChange={(patch) => {
+              setError(null);
+              setDraft((d) => ({ ...d, ...patch }));
+            }}
+            onStandardToggle={() => setError(null)}
+            onCustomTermsChange={() => setError(null)}
+            onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
+            customTermsError={customTermsError}
+            leaseTemplateError={leaseTemplateError}
+          />
+        ) : null}
 
         {showGeneratedPreview ? (
           <div>

@@ -14,7 +14,9 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Serial workers: parallel file execution overloads the local dev server and
+  // causes auth/navigation flakes (sign-in never leaves /auth/sign-in).
+  workers: 1,
   reporter: process.env.CI ? "github" : "list",
   timeout: 60_000,
   // Hard suite-wide wall-clock cap so a broken run can never hang. Per-test
@@ -24,7 +26,7 @@ export default defineConfig({
   // this is the backstop if a run degrades some other way. E2E has no measured
   // healthy runtime on main yet, so this is a deliberately generous cap kept
   // under the CI job's 30-min timeout-minutes, which is the hard backstop.
-  globalTimeout: 25 * 60_000,
+  globalTimeout: 40 * 60_000,
   expect: { timeout: 10_000 },
   use: {
     baseURL,

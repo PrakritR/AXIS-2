@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
   EMPTY_DRAFT,
   PromotionForm,
@@ -43,6 +44,7 @@ import {
   nextPromotionAssetDefaultTitle,
   sortPromotionAssets,
   type PromotionAsset,
+  type PromotionAssetKind,
 } from "@/lib/promotion-assets";
 import {
   FLYER_IMAGE_LIMIT,
@@ -123,6 +125,7 @@ export function ManagerPropertyPromotionPanel({
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionExpanded, setSectionExpanded] = useState(false);
+  const [contentFilter, setContentFilter] = useState<"text" | "image">("text");
 
   useEffect(() => {
     if (!authReady) return;
@@ -156,6 +159,29 @@ export function ManagerPropertyPromotionPanel({
     const rows = readManagerPromotionRows().filter((row) => row.propertyId === propertyId);
     return sortPromotionAssets(flattenPromotionAssets(rows), "newest");
   }, [propertyId, tick]);
+
+  const contentCounts = useMemo(() => {
+    let text = 0;
+    let image = 0;
+    for (const a of assets) {
+      if (a.kind === "text") text += 1;
+      else image += 1;
+    }
+    return { text, image };
+  }, [assets]);
+
+  const contentTabs = useMemo(
+    () => [
+      { id: "text", label: "Text", count: contentCounts.text, dataAttr: "property-promotion-filter-text" },
+      { id: "image", label: "Flyers", count: contentCounts.image, dataAttr: "property-promotion-filter-image" },
+    ],
+    [contentCounts],
+  );
+
+  const filteredAssets = useMemo(() => {
+    const wantedKind: PromotionAssetKind = contentFilter === "image" ? "flyer" : "text";
+    return assets.filter((a) => a.kind === wantedKind);
+  }, [assets, contentFilter]);
 
   // Open the unified "New promotion" modal (type dropdown + inline form, no
   // separate "Continue" step) seeded to this property.
@@ -573,14 +599,25 @@ export function ManagerPropertyPromotionPanel({
         }
         contentClassName="px-4 py-3"
       >
+        <div className="mb-4">
+          <ManagerPortalStatusPills
+            tabs={contentTabs}
+            activeId={contentFilter}
+            onChange={(id) => setContentFilter(id as "text" | "image")}
+          />
+        </div>
         <PromotionAssetStack
-          assets={assets}
+          assets={filteredAssets}
           expandedId={expandedId}
           onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
           onSaveTitle={saveAssetTitle}
           renderHeaderActions={renderHeaderActions}
           renderExpanded={renderExpanded}
-          emptyMessage="No promotions for this property yet."
+          emptyMessage={
+            assets.length === 0
+              ? "No promotions for this property yet."
+              : "No promotions match this filter."
+          }
         />
       </PortalCollapsibleSection>
 

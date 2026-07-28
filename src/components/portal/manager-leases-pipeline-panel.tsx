@@ -634,6 +634,9 @@ export function ManagerLeasesPipelinePanel({
               <div className="min-w-0 flex-1">
                 <PortalTableInlineExpand expanded={expandedId === row.id} className="font-semibold text-foreground">
                   <span className="truncate">{row.residentName}</span>
+                  {row.leaseKind === "joint_bundle" ? (
+                    <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground">Joint bundle</span>
+                  ) : null}
                 </PortalTableInlineExpand>
                 <p className="mt-0.5 truncate text-xs text-muted">{row.unit}</p>
                 <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
