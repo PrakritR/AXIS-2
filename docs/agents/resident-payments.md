@@ -72,6 +72,19 @@ path is still supported for callers that ask for it.
 `/api/public/application-fee-waiver`) can waive the application fee entirely**
 — a redeemed code skips Stripe altogether (no $0 charge, no session).
 
+**The fee is also collected only ONCE per resident PER MANAGER** (captain
+decision, 2026-07-27): `shouldWaiveApplicationFeeForResident`
+(`src/lib/rental-application/application-policy.ts`) waives a repeat applicant
+— one who already submitted an application to, or already paid an application
+fee billed by, this property's manager — on any of that manager's listings.
+First-timers pay; history with a DIFFERENT manager never waives. This replaced
+the per-listing `applicationFeeOnlyFirstApplication` toggle (now inert on
+`ManagerListingSubmissionV1`, kept only so stored submissions normalize); its
+sibling `allowMultiplePropertyApplications` is likewise inert —
+`residentApplicationSubmitBlocked` always allows applying to multiple
+properties/rooms and blocks only an exact same-property + same-room PENDING
+duplicate. Coverage: `tests/unit/application-policy.test.ts`.
+
 **The application fee is configured ONCE per manager, in Application settings —
 NOT per listing** (captain decision, 2026-07-26: "manager sets cost of
 application in application rather than in the property listing"). The
