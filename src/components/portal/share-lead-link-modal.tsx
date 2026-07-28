@@ -17,6 +17,7 @@ import {
 import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
+  buildManagerPortfolioApplyUrl,
   buildManagerListingUrl,
   buildManagerPortfolioTourUrl,
   buildManagerTourUrl,
@@ -147,7 +148,12 @@ export function ShareLeadLinkModal({
     if (propertyIds.length === 0 || typeof window === "undefined") return "";
     const origin = window.location.origin;
     if (isPortfolioTour) return portfolioTourUrl;
-    if (isMultiListing || isMultiApply) return buildManagerBrowseUrl(origin, propertyIds);
+    if (isMultiListing) return buildManagerBrowseUrl(origin, propertyIds);
+    if (isMultiApply) {
+      return buildManagerPortfolioApplyUrl(origin, propertyIds, {
+        rentalType: applyRentalType === "short_term" ? "short_term" : undefined,
+      });
+    }
     if (!singlePropertyId) return "";
     if (kind === "tour") return buildManagerTourUrl(origin, singlePropertyId);
     if (kind === "listing") return buildManagerListingUrl(origin, singlePropertyId);
@@ -259,6 +265,7 @@ export function ShareLeadLinkModal({
           listingRoomId: listingRoomId || undefined,
           roomName: roomName || undefined,
           note: note.trim() || undefined,
+          rentalType: kind === "apply" && applyRentalType === "short_term" ? "short_term" : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
@@ -474,18 +481,16 @@ export function ShareLeadLinkModal({
 
               {kind === "apply" ? (
                 <ShareLinkCopyRow
-                  label={isMultiApply ? "Public browse link" : "Public application link"}
+                  label="Public application link"
                   url={linkUrl}
-                  copyLabel={isMultiApply ? "Copy browse link" : "Copy application link"}
+                  copyLabel="Copy application link"
                   onCopy={() =>
-                    void handleCopy(linkUrl, isMultiApply ? "Browse link copied." : "Application link copied.")
+                    void handleCopy(linkUrl, "Application link copied.")
                   }
                   hint={
                     isMultiApply
-                      ? `Opens the browse page filtered to the ${propertyIds.length} homes you selected.`
-                      : !isMultiApply
-                        ? "Applicants create a resident account first, then complete the application in their portal."
-                        : undefined
+                      ? `Opens the application flow so the prospect can choose one of the ${propertyIds.length} homes you selected.`
+                      : "Applicants create a resident account first, then complete the application in their portal."
                   }
                 />
               ) : null}

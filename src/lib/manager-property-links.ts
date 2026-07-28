@@ -72,6 +72,31 @@ export function buildManagerListingUrl(origin: string, propertyId: string): stri
   return `${base}/rent/listings/${encodeURIComponent(id)}`;
 }
 
+
+/**
+ * Portfolio application link — prospect picks a home from the manager's selection,
+ * then continues into the rental application wizard for that property.
+ */
+export function buildPortfolioApplyHref(
+  propertyIds: string[],
+  opts?: { rentalType?: "standard" | "short_term" },
+): string {
+  const ids = parseBrowseIdsParam(propertyIds.join(","));
+  if (ids.length === 0) return "/rent/apply";
+  const q = new URLSearchParams({ [BROWSE_IDS_PARAM]: ids.join(",") });
+  if (opts?.rentalType === "short_term") q.set("rentalType", "short_term");
+  return `/rent/apply?${q.toString()}`;
+}
+
+export function buildManagerPortfolioApplyUrl(
+  origin: string,
+  propertyIds: string[],
+  opts?: { rentalType?: "standard" | "short_term" },
+): string {
+  const base = origin.replace(/\/$/, "");
+  return `${base}${buildPortfolioApplyHref(propertyIds, opts)}`;
+}
+
 /** Query param on `/rent/browse` that pre-filters the grid to a set of listings. */
 export const BROWSE_IDS_PARAM = "ids";
 

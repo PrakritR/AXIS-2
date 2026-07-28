@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
+  buildManagerPortfolioApplyUrl,
   buildManagerPortfolioTourUrl,
+  buildPortfolioApplyHref,
   buildManagerTourUrl,
   buildPortfolioTourContactHref,
   buildPropertyMessageHref,
@@ -83,5 +85,15 @@ describe("manager-property-links", () => {
 
   it("falls back to the plain tours page when no ids are given", () => {
     expect(buildPortfolioTourContactHref([])).toBe("/rent/tours-contact");
+  });
+
+  it("builds a portfolio application link so prospects can choose a home", () => {
+    expect(buildPortfolioApplyHref(["mgr-1", "mgr-2"])).toBe("/rent/apply?ids=mgr-1%2Cmgr-2");
+    const url = buildManagerPortfolioApplyUrl(origin, ["mgr-1", "mgr-2"], { rentalType: "short_term" });
+    expect(url).toBe("https://app.example.com/rent/apply?ids=mgr-1%2Cmgr-2&rentalType=short_term");
+  });
+
+  it("falls back to the plain apply page when no ids are given", () => {
+    expect(buildPortfolioApplyHref([])).toBe("/rent/apply");
   });
 });
