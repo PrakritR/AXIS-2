@@ -901,9 +901,12 @@ function FieldLabel({
   required?: boolean;
   optional?: boolean;
 }) {
+  // The hint sits INLINE on the same line as the label (round 17) so every field header is
+  // one line tall — this keeps controls laid out in a row on a shared baseline instead of
+  // some being pushed down by a two-line header.
   return (
     <div className="mb-1.5">
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+      <p className="flex flex-wrap items-baseline gap-x-1.5 text-xs font-semibold text-foreground">
         <span>
           {children}
           {required ? <span className="text-red-600"> *</span> : null}
@@ -913,8 +916,8 @@ function FieldLabel({
             Optional
           </span>
         ) : null}
+        {hint ? <span className="text-[11px] font-normal text-muted">{hint}</span> : null}
       </p>
-      {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -4007,13 +4010,39 @@ export function ManagerAddListingForm({
                               </label>
                             );
                           })}
+                          {(() => {
+                            const presetSet = new Set(dedupedPresets.bathroom.map((p) => p.label));
+                            const custom = splitLineList(b.amenitiesText ?? "").filter((l) => !presetSet.has(l));
+                            const open = otherAmenitiesOpenRooms.has(`bath-${b.id}`) || custom.length > 0;
+                            return (
+                              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-border"
+                                  checked={open}
+                                  onChange={(e) => toggleOtherAmenitiesOpen(`bath-${b.id}`, e.target.checked)}
+                                />
+                                <span className="font-medium text-foreground">Other</span>
+                              </label>
+                            );
+                          })()}
                         </div>
-                        <Textarea
-                          className="mt-2"
-                          value={b.amenitiesText ?? ""}
-                          onChange={(e) => setBath(i, { amenitiesText: e.target.value })}
-                          placeholder="Add custom amenities not listed above (one per line)."
-                        />
+                        {(() => {
+                          const presetSet = new Set(dedupedPresets.bathroom.map((p) => p.label));
+                          const custom = splitLineList(b.amenitiesText ?? "").filter((l) => !presetSet.has(l));
+                          if (!(otherAmenitiesOpenRooms.has(`bath-${b.id}`) || custom.length > 0)) return null;
+                          return (
+                            <Input
+                              className="mt-2 h-9 text-sm"
+                              value={custom.join(", ")}
+                              onChange={(e) => {
+                                const presets = splitLineList(b.amenitiesText ?? "").filter((l) => presetSet.has(l));
+                                setBath(i, { amenitiesText: [...presets, ...splitLineList(e.target.value)].join("\n") });
+                              }}
+                              placeholder="Other amenities, comma-separated"
+                            />
+                          );
+                        })()}
                       </div>
                       <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
                       <div>
@@ -4263,20 +4292,29 @@ export function ManagerAddListingForm({
                                 </label>
                               );
                             })}
+                            <label className="flex cursor-pointer items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-border"
+                                checked={otherAmenitiesOpenRooms.has(`space-${sp.id}`) || customAmenitiesText.trim() !== ""}
+                                onChange={(e) => toggleOtherAmenitiesOpen(`space-${sp.id}`, e.target.checked)}
+                              />
+                              <span className="font-medium text-foreground">Other</span>
+                            </label>
                           </div>
-                          <Textarea
-                            className="mt-2"
-                            rows={2}
-                            value={customAmenitiesText}
-                            onChange={(e) => {
-                              const presetLines = splitLineList(sp.amenitiesText ?? "").filter((line) =>
-                                kindPresetLabels.has(line),
-                              );
-                              const customLines = splitLineList(e.target.value);
-                              setSharedSpace(i, { amenitiesText: [...presetLines, ...customLines].join("\n") });
-                            }}
-                            placeholder="Other amenities not listed above (one per line)."
-                          />
+                          {otherAmenitiesOpenRooms.has(`space-${sp.id}`) || customAmenitiesText.trim() !== "" ? (
+                            <Input
+                              className="mt-2 h-9 text-sm"
+                              value={customAmenitiesText}
+                              onChange={(e) => {
+                                const presetLines = splitLineList(sp.amenitiesText ?? "").filter((line) =>
+                                  kindPresetLabels.has(line),
+                                );
+                                setSharedSpace(i, { amenitiesText: [...presetLines, ...splitLineList(e.target.value)].join("\n") });
+                              }}
+                              placeholder="Other amenities, comma-separated"
+                            />
+                          ) : null}
                         </div>
                         <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
                         <div>
