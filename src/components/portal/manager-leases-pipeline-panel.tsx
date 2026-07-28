@@ -397,6 +397,15 @@ export function ManagerLeasesPipelinePanel({
           onSignManager={() => onManagerSign(row)}
           onSigningReminder={() => openLeaseSigningReminderPreview(row)}
           signingReminderBusy={reminderBusyForRow === row.id}
+          sendToResidentDataAttr="lease-send-resident"
+          moveToManagerReviewDataAttr="lease-move-manager-review"
+          onSendToResident={() => openSendLeasePreview(row)}
+          sendToResidentBusy={sendingToResidentRowId === row.id}
+          sendToResidentDisabled={
+            !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
+            (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
+          }
+          onMoveToManagerReview={() => onMoveToManagerReview(row)}
           onDelete={row.status !== "Fully Signed" ? () => onDeleteLease(row) : undefined}
         />
       </div>
@@ -456,8 +465,7 @@ export function ManagerLeasesPipelinePanel({
             ) : null}
 
             {row.status === "Manager Review" || row.status === "Draft" ? (
-              <>
-                {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
+              !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
                   <div className="flex flex-wrap items-start gap-2">
                     <p className="max-w-xl text-xs leading-relaxed text-amber-800">
                       This lease cannot be sent yet. The resident must first create their PropLane resident account using their
@@ -473,32 +481,7 @@ export function ManagerLeasesPipelinePanel({
                       {emailBusyForRow === row.id ? "Sending…" : "Email account setup"}
                     </Button>
                   </div>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  data-attr="lease-send-resident"
-                  onClick={() => openSendLeasePreview(row)}
-                  disabled={
-                    sendingToResidentRowId === row.id ||
-                    !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-                    (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
-                  }
-                >
-                  {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
-                </Button>
-              </>
-            ) : null}
-            {row.status === "Resident Signature Pending" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => onMoveToManagerReview(row)}
-              >
-                Move to manager review
-              </Button>
+                ) : null
             ) : null}
       </PortalTableDetailActions>
 

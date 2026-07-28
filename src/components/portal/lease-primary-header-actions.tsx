@@ -15,10 +15,16 @@ type LeasePrimaryHeaderActionsProps = {
   onSigningReminder?: () => void;
   signingReminderBusy?: boolean;
   onDelete?: () => void;
+  onSendToResident?: () => void;
+  sendToResidentBusy?: boolean;
+  sendToResidentDisabled?: boolean;
+  onMoveToManagerReview?: () => void;
   downloadDataAttr?: string;
   signManagerDataAttr?: string;
   signingReminderDataAttr?: string;
   deleteDataAttr?: string;
+  sendToResidentDataAttr?: string;
+  moveToManagerReviewDataAttr?: string;
 };
 
 /** Download, Sign, and Delete lease — aligned top-right on resident LEASE and leases table rows. */
@@ -32,10 +38,16 @@ export function LeasePrimaryHeaderActions({
   onSigningReminder,
   signingReminderBusy = false,
   onDelete,
+  onSendToResident,
+  sendToResidentBusy = false,
+  sendToResidentDisabled = false,
+  onMoveToManagerReview,
   downloadDataAttr = "lease-primary-download",
   signManagerDataAttr = "lease-primary-sign-manager",
   signingReminderDataAttr = "lease-primary-signing-reminder",
   deleteDataAttr = "lease-primary-delete",
+  sendToResidentDataAttr = "lease-primary-send-resident",
+  moveToManagerReviewDataAttr = "lease-primary-move-manager-review",
 }: LeasePrimaryHeaderActionsProps) {
   const hasDocument = Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
 
@@ -44,6 +56,29 @@ export function LeasePrimaryHeaderActions({
       {hasDocument ? (
         <Button type="button" variant="outline" className={btnClass} data-attr={downloadDataAttr} onClick={onDownload}>
           {downloadLabel}
+        </Button>
+      ) : null}
+      {(row.status === "Manager Review" || row.status === "Draft") && onSendToResident ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={btnClass}
+          data-attr={sendToResidentDataAttr}
+          disabled={sendToResidentBusy || sendToResidentDisabled}
+          onClick={onSendToResident}
+        >
+          {sendToResidentBusy ? "Sending…" : "Send to resident"}
+        </Button>
+      ) : null}
+      {row.status === "Resident Signature Pending" && onMoveToManagerReview ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={btnClass}
+          data-attr={moveToManagerReviewDataAttr}
+          onClick={onMoveToManagerReview}
+        >
+          Move to manager review
         </Button>
       ) : null}
       {!row.managerSignature && residentHasSignedLease(row) && onSignManager ? (

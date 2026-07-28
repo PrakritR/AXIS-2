@@ -1857,6 +1857,29 @@ export function ManagerResidents({
                                     onSignManager={() => signLeaseAsManager(residentLease)}
                                     onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
                                     signingReminderBusy={leaseReminderBusy}
+                                    sendToResidentDataAttr="resident-lease-send"
+                                    moveToManagerReviewDataAttr="resident-lease-move-manager-review"
+                                    onSendToResident={() => openLeaseSendPreview(selected, residentLease)}
+                                    sendToResidentBusy={leaseSendBusy}
+                                    sendToResidentDisabled={
+                                      !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
+                                      (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl)
+                                    }
+                                    onMoveToManagerReview={() => {
+                                      const moveResult = sendLeaseBackToManager(residentLease.id, userId);
+                                      if (!moveResult.ok) {
+                                        showToast(moveResult.error);
+                                        return;
+                                      }
+                                      appendLeaseThreadMessage(
+                                        residentLease.id,
+                                        "manager",
+                                        "Moved lease back to manager review.",
+                                        userId,
+                                      );
+                                      setLeaseTick((n) => n + 1);
+                                      showToast("Lease moved to Manager Review.");
+                                    }}
                                     onDelete={() => {
                                       if (
                                         !window.confirm(
@@ -1918,42 +1941,6 @@ export function ManagerResidents({
                                             }}
                                           />
                                         </label>
-                                      </>
-                                    ) : null}
-                                    {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        disabled={leaseSendBusy}
-                                        onClick={() => openLeaseSendPreview(selected, residentLease)}
-                                      >
-                                        {leaseSendBusy ? "Sending…" : "Send to resident"}
-                                      </Button>
-                                    ) : residentLease.status === "Resident Signature Pending" ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => {
-                                            const moveResult = sendLeaseBackToManager(residentLease.id, userId);
-                                            if (!moveResult.ok) {
-                                              showToast(moveResult.error);
-                                              return;
-                                            }
-                                            appendLeaseThreadMessage(
-                                              residentLease.id,
-                                              "manager",
-                                              "Moved lease back to manager review.",
-                                              userId,
-                                            );
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease moved to Manager Review.");
-                                          }}
-                                        >
-                                          Move to manager review
-                                        </Button>
                                       </>
                                     ) : null}
                                   </PortalTableDetailActions>
