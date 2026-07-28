@@ -134,11 +134,14 @@ import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
+  listingRoomDailyRentKey,
+  listingRoomHasRent,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
   validateListingWizardStep,
 } from "@/lib/listing-wizard-validation";
+import { roomHeadlinePriceLabel } from "@/lib/room-pricing";
 import {
   scrollToFirstWizardFieldError,
   wizardFieldErrorClass,
@@ -2968,8 +2971,9 @@ export function ManagerAddListingForm({
                     {sub.rooms.map((room, i) => {
                       const roomRentKey = listingRoomRentKey(room.id);
                       const roomRentErr = stepFieldErrors[roomRentKey];
+                      const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
                       const roomLabel = room.name.trim() || `Room ${i + 1}`;
-                      const priced = room.monthlyRent > 0;
+                      const priced = listingRoomHasRent(room);
                       const utilModel = resolveRoomUtilitiesPaymentModel(room);
                       const utilShort =
                         utilModel === "manager_billed"
@@ -2981,15 +2985,17 @@ export function ManagerAddListingForm({
                       // A room whose rent is still unset can never be collapsed away — the
                       // required field must stay on screen. Priced rooms collapse to a
                       // one-line summary; an errored one force-expands so it can be fixed.
-                      const expanded = priced ? isListingItemExpanded(priceKey) || Boolean(roomRentErr) : true;
+                      const expanded = priced
+                        ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
+                        : true;
                       return (
                         <ListingWizardCollapsibleCard
                           key={room.id}
                           expanded={expanded}
                           onToggle={() => toggleListingItem(priceKey)}
                           title={roomLabel}
-                          subtitle={`${priced ? `$${room.monthlyRent}/mo` : "Rent not set"} · ${utilShort}`}
-                          hasError={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
+                          subtitle={`${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`}
+                          hasError={Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent)}
                           bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5"
                           toggleDataAttr={`listing-room-price-toggle-${room.id}`}
                         >
@@ -3003,6 +3009,7 @@ export function ManagerAddListingForm({
                                 onChange={(e) => {
                                   clearListingFieldError("monthlyRent");
                                   clearListingFieldError(roomRentKey);
+                                  expandListingItem(priceKey);
                                   setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
                                 }}
                                 placeholder="800"
