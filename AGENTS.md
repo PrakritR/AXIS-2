@@ -145,26 +145,45 @@ Framework invariants worth knowing before you touch `src/lib/tools/registry.ts`:
   `tests/unit/tools/confirm-gate-portal-scope.test.ts`.
 
 **One conversation loop, multiple surfaces.** The floating popup
-(`axis-assistant.tsx`) and the portal-wide right rail
-(`portal-assistant-rail.tsx`, desktop only — it hides below `lg`, so small
-screens always get the FAB/popup) both drive the SAME send/confirm transport,
-`useAssistantConversation(endpoint)`, and share the suggestion chips +
-preview/confirm card from `assistant-shared.tsx`. Which of the two renders is
-ONE cookie-backed preference in `src/lib/axis-assistant/dock-store.ts` (popup by
-default, SSR-seeded from the cookie by `assistant-dock-state.ts`); the
-in-assistant pin, the rail's unpin, and the manager Settings picker
-(`assistant-display-setting.tsx`) are all drivers of that same store. Add a new
-entry point by calling `dockAssistantToRail()` / `undockAssistantFromRail()` and
-reading `useAssistantDocked()` — never a second persistence layer, which would
-let two controls disagree about the same preference. A dashboard-initiated
-approval is NOT a new send path: proposed writes surface as "AI drafts" chips in
-Needs attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
+(`axis-assistant.tsx`) and the right-side dock (`assistant-dock.tsx`) both drive
+the SAME send/confirm transport, `useAssistantConversation(endpoint)`, and share
+the suggestion chips + preview/confirm card from `assistant-shared.tsx`. A
+dashboard-initiated approval
+is NOT a new send path: proposed writes surface as "AI drafts" chips in Needs
+attention (`AiDraftsGroup` in `manager-dashboard.tsx`, fed by
 `useAgentPendingActions` off owner-scoped `GET /api/agent/pending-actions`), and
 Approve/Discard POST ONLY the action id to `/api/agent/chat` →
 `claimPendingAction` re-validates the stored input server-side. Never add a
 one-click execute that skips that gate; the list route returns only the preview,
 never the stored input. `aiDrafts` is a `MANAGER_DASHBOARD_SECTIONS` entry gated
 on `visibility.aiDrafts` like every other dashboard section.
+
+**Which surface a manager sees is a preference, and the DEFAULT IS THE POPUP.**
+`src/lib/assistant-display-preferences.ts` stores `popup` (default) or `docked`
+per user in localStorage, override-only, exactly like
+`dashboard-preferences.ts`; `useAssistantDisplayMode` reads it reactively. It is
+a pure UI preference with no server consumer, so it is deliberately NOT a
+`notification-preferences.ts`-style row — the cost is that it is per-device.
+Rules:
+
+- **`docked` renders the portal-wide rail** (`PortalAssistantDockRail`, the last
+  flex child of `src/app/portal/layout.tsx`'s `lg:flex-row`), not a
+  dashboard-only column — so it spans every manager section. It is
+  `hidden lg:flex`: below `lg` the FAB/popup is the assistant no matter what is
+  stored, and the FAB only steps aside (`lg:hidden`) when docked.
+- **The rail is opt-in per portal** via `<AxisAssistant dockable>`, and
+  `dockable` additionally requires a resolved session and `!isDemoModeActive()`.
+  Every dock affordance reads that one flag through `useAxisAssistantDock`, so
+  /demo and the resident/vendor/admin portals show no control that leads nowhere.
+- **All three entry points write the same preference**: the popup header's pin,
+  the dock header's unpin, and the Settings radio group
+  (`assistant-display-mode-setting.tsx`). Add a fourth the same way; never a
+  second store.
+- The top bar's "Ask PropLane" / ⌘K focuses the dock's composer
+  (`ASSISTANT_DOCK_INPUT_ID`) when one is laid out, instead of stacking a popup —
+  and a second, separate conversation — on top of it.
+- Coverage: `tests/unit/assistant-display-preferences.test.ts`,
+  `tests/unit/assistant-display-mode-toggle.test.tsx`.
 
 **One registry + one context resolver per role.** The assistant is mounted in
 every portal, so each role needs its own three-piece set — resolver, registry,
@@ -389,104 +408,75 @@ internal-inconsistency failure as a Pending tab showing an `Approved` badge.
 ## Brand assets (PropLane)
 
 The product is **PropLane**; the `Axis*` component names are historical, not a
-second brand. Anything user-visible reads PropLane, and the mark is a rounded
-house/chevron outline with a crossing X inside — single-colour line art, round
-caps and joins, no fill — never the legacy paper-plane glyph or the "AX" letters.
-
-**Canonical geometry lives in exactly one place:**
-[`src/lib/brand/proplane-mark.ts`](src/lib/brand/proplane-mark.ts) (the `d`
-path strings + viewBox + stroke width every renderer imports or, for the one
-plain-JS generator script, copies verbatim under a drift-guard test). The
-fixed-colour (`#2F6BFF`) reference file is
-[`public/brand/proplane-mark.svg`](public/brand/proplane-mark.svg).
-`tests/unit/proplane-mark.test.ts` asserts the reference SVG, the generator
-script, and the React glyph never drift apart. In-app renders use the
-`stroke-primary` Tailwind utility (theme variable — blue in light theme,
-purple in dark theme; `src/app/globals.css`), never a hardcoded hex, so the
-mark always matches the surrounding UI's brand accent.
+second brand. Anything user-visible reads PropLane, and the mark is the
+paper-plane glyph — never the legacy "AX" letters.
 
 | Surface | File |
 | --- | --- |
 | Browser tab / bookmarks | `src/app/icon.svg` and `src/app/favicon.ico` (Next file conventions — keep the two in sync) |
 | Header / footer lockup | `AxisLogoLink` in `src/components/brand/axis-logo.tsx` (mark + `AxisLogoWordmark`) |
-| Favicon, PWA manifest icons, iOS app icon + launch screen, PDF export logo | all generated in one pass by `scripts/generate-brand-assets.mjs` — details in [`docs/mobile-app.md`](docs/mobile-app.md). Android's launcher icon is still the legacy "AX" lettermark (known gap, tracked there — regenerating it needs the full adaptive-icon mipmap set, out of scope for a mark swap). |
+| iOS app icon + launch screen | generated by `scripts/generate-ios-brand-assets.mjs` — details in [`docs/mobile-app.md`](docs/mobile-app.md). Android's launcher icon is still the legacy "AX" lettermark (known gap, tracked there). |
 
-Regenerate every derived raster with `node scripts/generate-brand-assets.mjs`
-whenever the canonical geometry changes — stale PNGs/ICOs leave the old mark
-visible even after the SVG/TS source is edited.
-
-**Google OAuth consent-screen branding needs `public/googled830824c3903ffb3.html`
-to stay forever.** It is a Google Search Console domain-ownership proof for
-`prop-lane.space` (served verbatim at the site root, no rewrite/redirect
-touches it — `public/` files are static passthrough). Google's OAuth consent
-screen only shows the "PropLane" app name + logo instead of the raw Supabase
-hostname while that domain stays verified; deleting the file revokes
-verification and the sign-in screen reverts to showing the database hostname.
-Never delete it during a "clean up unused public files" pass.
+`favicon.ico` has no generator script checked in; it is built from `icon.svg`
+with `sharp` (16/32/48 as 32-bit BMP entries plus a 256 PNG entry). Regenerate
+it whenever `icon.svg` changes — a stale `.ico` wins in the tab on browsers
+that prefer it, so editing only the SVG leaves the old mark visible.
 
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
-**Production Branch is `production`** (flipped from `main` on Jul 25, 2026).
+**Production Branch is `main`**. There is **no `production` branch** — it was
+deleted after the production branch was migrated to `main`; don't recreate it.
 Two branches, two roles:
 
-- **`production` — the live site.** Every push here triggers a **production
-  deploy** to the real domains: the canonical `prop-lane.space` /
-  `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
-  `www.axis-seattle-housing.com` (still live, still recognized as production by
-  `isProductionAxisHost`), and `axis-2.vercel.app`. A push to `production`
-  **also** ships an iOS TestFlight build (see below). Outbound email/SMS and
-  shareable links use the canonical origin (`PRODUCTION_APP_ORIGIN` in
-  `src/lib/app-url.ts`). Only ship-ready code reaches this branch. Never commit
-  straight to it.
-- **`main` — dev/integration.** Day-to-day work merges here. Pushes to `main`
-  build **Preview** deployments — the staging surface for ship-gate
-  verification. Feature branches do not build. **`prakrit` is retired** — do
-  not merge new work into it.
+- **`main` — the live site.** Every push here triggers a **production deploy** to
+  the real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
+  legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
+  still recognized as production by `isProductionAxisHost`), and
+  `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
+  (see below). Outbound email/SMS and shareable links use the canonical origin
+  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
+  this branch. Never commit straight to it.
+- **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
+  produces a **preview deploy**, and Vercel keeps a stable branch alias that
+  always points at the latest `prakrit` build —
+  `axis-2-git-prakrit-prakritramachandran-6082s-projects.vercel.app`. That URL is
+  the staging preview the ship gate asks you to verify. Feature branches also get
+  their own preview URLs.
 
-**Promote `main` → `production` to ship.** When `main` is verified on its
-preview and you want it live:
+**Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
+you want it live:
 
 ```
-git checkout production
-git pull
-git merge --ff-only main      # production should stay a fast-forward of main
-git push origin production    # Vercel auto-deploys web + triggers iOS TestFlight
 git checkout main
+git pull
+git merge --ff-only prakrit   # main should stay a fast-forward of prakrit
+git push origin main          # Vercel auto-deploys web + triggers iOS TestFlight
+git checkout prakrit
 ```
 
-Keep `production` a strict fast-forward of `main` (never commit unique work to
-`production`); this keeps history linear and makes rollbacks obvious. To roll
-back, point `production` at the previous known-good commit and push, or use
-Vercel's **Instant Rollback** in the dashboard.
+Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
+`main`); this keeps history linear and makes rollbacks obvious. To roll back,
+point `main` at the previous known-good commit and push, or use Vercel's
+**Instant Rollback** in the dashboard.
 
-Only `main` (previews) and `production` (production) deploy. Enforcement is
-**three layers** (do not weaken):
-
-1. **Vercel project** `axis-2` → Settings → Git → **Ignored Build Step**:
-   `[ "$VERCEL_GIT_COMMIT_REF" != "main" ] && [ "$VERCEL_GIT_COMMIT_REF" != "production" ]`
-   (skips every other push, even old branches without current `vercel.json`).
-2. **`vercel.json`** `git.deploymentEnabled`: only `main` and `production` are `true`.
-3. **`vercel.json`** `ignoreCommand`: `scripts/vercel-should-build.sh` (same rule).
-
-Do not widen the deployable-branch set or remove the Ignored Build Step without
-an explicit captain decision.
+Deploying `prakrit` as a staging step is standard practice on Vercel: its
+preview/branch alias is your staging environment, and `main` is the gated
+promotion target. Don't add a separate Vercel project for staging — the branch
+model above already gives you prod + staging from one project.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. It is `production`; don't change it.
-
-See **`docs/agents/deployment-workflow.md`** for the branch ladder every agent
-must follow.
+Git**. It is `main`; don't change it.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
-Every push to `production` must update **both** the live website **and** the
-mobile app pipeline:
+Every push to `main` must update **both** the live website **and** the mobile app
+pipeline:
 
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
-   runs on `push` to `production`: `npx cap sync ios` with
-   `CAP_SERVER_URL=https://prop-lane.space`, then
+   runs on `push` to `main`: `npx cap sync ios` with
+   `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
    `bundle exec fastlane beta` uploads a new build to **TestFlight**. The
    workflow also exposes `workflow_dispatch` for an on-demand build.
 
@@ -494,7 +484,7 @@ Agents promoting to production **must**:
 
 - Confirm ASC secrets exist (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`) so the
   macOS job does not self-skip.
-- After `git push origin production`, watch the **iOS TestFlight** workflow until green
+- After `git push origin main`, watch the **iOS TestFlight** workflow until green
   (or report the failure). Do not treat “web deployed” as done.
 - If native shell files changed (`ios/`, `capacitor.config.ts`, plugins,
   permissions), call out that TestFlight + App Store review may be required
@@ -510,8 +500,8 @@ Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).
 
 # Mandatory ship / change gate (agents)
 
-Before marking feature work done, and **always** before promoting `main` →
-`production`, agents must complete this gate. Skipping is not allowed unless the user
+Before marking feature work done, and **always** before promoting `prakrit` →
+`main`, agents must complete this gate. Skipping is not allowed unless the user
 explicitly waives a named step.
 
 ## 1. Reviews (run in parallel when possible)
@@ -552,8 +542,8 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Reviews complete (security + bugbot + cache/rendering as applicable)
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
-[ ] main verified on its Vercel preview (or localhost / dev worktree)
-[ ] ff-only merge main → production + push
+[ ] prakrit verified on staging preview
+[ ] ff-only merge prakrit → main + push
 [ ] Vercel production deploy healthy
 [ ] iOS TestFlight workflow green (or secrets gap reported)
 ```
@@ -765,25 +755,14 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Vendor portal (roles, bids, Connect payouts) | `docs/agents/vendor-portal.md` | Vendor reads scope by `vendor_user_id = auth.uid()`; writes go through service-role routes; an accepted bid's `amount_cents` is the immutable payout anchor. |
 | Financials (ledger, GL, deposits, AP, NSF) | `docs/agents/financials.md` | Every charge/payment write MUST call `syncLedgerChargeEntry`/`syncLedgerPaymentEntry` + GL posting next to the DB write — the ledger is write-through only, never read-time backfill. `security_deposit` books to liability, not income. |
 | Vendor invoicing (Phase 4) | `docs/agents/vendor-invoicing.md` | Invoice totals recomputed server-side from line items; vendor tools live in `vendorAgentRegistry`, never the manager registry. |
-| Resident payments (plan-based service fee, ACH clearing) | `docs/agents/resident-payments.md` | Who pays the service fee (Stripe's cost) depends on the manager's plan — Free: resident; Pro: manager's `serviceFeePayer` choice; Business: PropLane. `resolveServiceFeePayer` + `residentServiceFeeBreakdown` place it on a destination charge that ALWAYS pays the manager's own account (never a direct charge / `on_behalf_of`); resident checkout itemizes any fee they pay. The rental **application fee follows the SAME plan-based rule** (no longer always face-value) and is configured ONCE per manager in Application settings (`manager-application-settings.ts`, not per listing — a configured value is authoritative, else each listing's stored fee is grandfathered so no live listing silently re-prices); it is the ONLY fee collected during the application (deposit is billed under Payments after approval) and is paid INLINE (embedded Stripe, `mode:"embedded"`), not via a hosted redirect. `processing` charges are ignored by late fees/reminders/re-pay. |
-| Zelle/Venmo receipt detection (mark charge paid) | `docs/agents/manual-payment-detection.md` | Only genuine Venmo/Zelle (or allow-listed bank) senders are trusted; `PL-XXXXXX` code is the strong match, the reference-less fallback (`receipt-fallback-match.ts`) needs amount plus a payer-name or property/unit signal and biases to `ambiguous` — amount alone NEVER auto-credits; source email id makes marking idempotent. |
-| Apple In-App Purchase (iOS manager subscription) | `docs/agents/apple-iap.md` | Apple is a fifth `manager_purchases` grant source (`billing='apple'` + `apple_original_transaction_id`), driven by the RevenueCat webhook — NEVER a rebuild. The revoke sweep (`revokeUnauthorizedManagerPaidTier`) and date-expiry MUST whitelist Apple grants or paying iOS users are silently downgraded. Entitlement is the union of Apple + Stripe; never auto-cancel/refund either side. |
+| Resident payments (resident-paid processing, ACH clearing) | `docs/agents/resident-payments.md` | The resident pays the processing/service fee on every method (card/Link and ACH) so the manager's payout equals the subtotal; `processing` charges are ignored by late fees/reminders/re-pay. |
 | Documents module | `docs/agents/documents-module.md` | `manager-documents` bucket is PRIVATE — bytes only via server-minted signed URLs after an ownership check. |
 | Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. The static snapshot ships EMPTY; a demo portfolio comes from the canonical `@test.axis.local` accounts via the mirror, never a fictional fixture in code. |
 | Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 | Manager account creation ("Get started") | `docs/agents/manager-account-creation.md` | `/auth/create-account` NEVER auto-redirects to a portal — a signed-in user still gets the full create form, and the partner-pricing OAuth callback returns there on every branch (free tier included, `account_ready=1` when provisioned) instead of resolving a portal path. Entering a portal is always an explicit click. The email/password form must send `fullName` + `phone`; `/api/auth/manager-register` 400s without them. |
-| Resident account creation | `docs/agents/resident-onboarding.md` | A prospective resident CREATES AN ACCOUNT then APPLIES FROM INSIDE THEIR PORTAL (captain decision, Jul 2026). `POST /api/auth/resident-register` is ENABLED — self-serve email/phone/password signup via `provisionResidentAccountByEmail` (service-role; `role=resident`, no elevated role — manager still approves). **DEFAULT-DENY inheritance:** resident-register passes `inheritFromApplication:false`, so signup mints a CLEAN profile (`application_approved=false`, no application PII, no link to a prior guest application) regardless of any matching row; a verification email (the reused setup-link token) gates re-inheritance — only using that link links/inherits, and signup/apply are NOT blocked on it. `provisionResidentAccountByEmail` keeps inheriting ONLY for the token/OAuth callers (they prove control). ROUTING: anonymous apply gate (`public-apply-account-prompt.tsx`) offers Create account (primary)+Sign in+guest → self-serve register, carrying `next=/rent/apply?propertyId=…` so the renter lands ON that application (`ResidentSignupForm` goes straight to `next`, not the post-auth resolver; the `next` check rejects `//`/`/\` open-redirects). A signed-in manager/vendor gets the additive `create-resident-account` path instead — via `resolvePublicApplyView` at the apply surface and a guard in `ResidentSignupForm` (never a second auth user). Legacy `register-resident` + `resident-setup` token POST stay gated. Phone required. Mismatched Google email RELINKS. |
-| Inbound email → inboxes (support + conversation replies) | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Support threads are receive-only — an in-app reply never emails the sender. Conversation emails carry a pair-HMAC `reply+…@RESEND_REPLY_DOMAIN` Reply-To; a verified emailed reply routes into both sides of the portal thread (message id `email_<email_id>` dedupes redelivery), anything unverified falls back to the admin inbox. Never widen the founder identity — attribute TO it. |
-| Multiple resident applications (one per property/room) | this section | A resident may hold several in-progress applications at once — one per (property, room-or-bundle), never one per person. `ApplicationRequestTarget` + `targetMatchesApplication` (`src/lib/rental-application/in-progress-application.ts`) are the ONE comparator for "is this apply request the SAME application as that existing one" — asymmetric on purpose: a request naming no room/bundle matches any in-progress draft for that property, but a request naming one only matches that exact room/bundle. Both `resident-applications-panel.tsx` (which in-progress row to show/resume) and `rental-application-wizard.tsx` (which draft to load) use it; do not reintroduce a plain string-key match, it can't express that asymmetry. The wizard gates its sync-to-server effect behind a `reconciledSignature` that requires a saved axis id (`loadRentalWizardDraftAxisId()`), not just a draft that happens to match — a fresh, unsaved local draft auto-populated from the URL looks like a match too, and trusting it skips the server lookup that finds (or rules out) a real existing application, creating a duplicate on reload. The resident Applications page's top-right "Apply to a property" button sends users through `residentBrowseFromApplicationHref()` to `/rent/browse` to pick a property first, never straight into `/resident/applications/apply` with no id. **Withdrawal is FINAL for the applicant** (captain decision, Jul 2026 — Option A): `findInProgressRowForTarget` excludes withdrawn rows and `confirmWithdraw` (`resident-applications-panel.tsx`) cancels the queued autosave and clears the local wizard draft + axis id, so reapplying to the same property mints a brand-new application; the manager keeps the withdrawn record (withdraw stamps `withdrawnAt`, never deletes). Do not reintroduce a sticky `withdrawnAt` merge stamp — it would permanently hide the reapplied row (rationale in `mergeApplicationRow`, `manager-applications-storage.ts`). Coverage: `tests/unit/in-progress-application.test.ts`, `tests/unit/manager-applications-merge-rows.test.ts`. |
-| Mobile-card + desktop-table dual mount: a stateful/side-effecting component must never be one of the duplicated halves | this section | Every responsive list in the portal UI system (`docs/portal-ui-system.md`) renders TWO parallel DOM trees for the same rows — a `lg:hidden` mobile card list and a `hidden lg:block` desktop table — with CSS, not React, deciding which is visible. That's harmless for plain markup, but `ResidentApplicationsPanel` embeds a live, stateful `RentalApplicationWizard` in an expanded in-progress row's detail, and that JSX is reused in BOTH trees, so the wizard was mounting TWICE simultaneously, each a fully independent `RentalApplicationWizardInner` with its own `step` state. Only the on-screen copy ever receives clicks, so the OFF-screen copy's `step` sat frozen — and its copy of the wizard's own `?wizardStep=` URL-sync effect kept re-firing on every `searchParams` change (fired by the OTHER copy's writes) and stomping the URL back down to its stale value: an unthrottled `router.replace` loop, hundreds of times per second, hammering the browser. That measured, uncapped loop is the real mechanism behind "the application glitches and jumps back to start" — not a one-off remount. It also raced the per-keystroke draft-save and server-upsert effects (both keyed to the SAME shared axis id / row id across both copies), so the off-screen copy's stale `form` could overwrite a room the resident had just picked in the visible one. Fix: `isElementOnScreen(el)` (`rental-application-wizard.tsx`, via `el.offsetParent`, which is null for a `display:none` ancestor and its descendants) gates the URL-sync effect, the draft-save effect, and the per-keystroke server-sync effect — only the instance actually on screen may touch any of that shared state. Any future component that is BOTH stateful/side-effecting AND embedded inside one of these dual-mount lists needs the same guard; a purely presentational duplicate does not. Coverage: `tests/unit/rental-wizard-step-resume.test.ts`. |
-| Rental wizard step resume across a real reload (`?wizardStep=`) | this section | The wizard writes `?wizardStep=N` to the URL for steps 1-3 only (deleted above 3) so a resumed session can land back where it left off, but for a long time NOTHING read it back — `step` always started at `useState(1)`. `initialWizardStepFromRequest` (`rental-application-wizard.tsx`) is the synchronous fast path: it only trusts the URL param when the in-memory draft (module-level, wiped by a real page reload) still matches this request's target, so a stale param from a different property/room can never skip a fresh application ahead. That draft is null after a genuine reload, so the reconciliation effect (the one that re-fetches from the server to find an existing in-progress application) ALSO restores `step`/`maxStepReached` once it confirms a real match — but it must read the URL's `wizardStep` from a `useRef` frozen at first render (`initialWizardStepParamRef`), never a live `searchParams.get(...)` call: the URL-sync effect fires on the very first render (since `step` starts at 1 whenever the fast path didn't apply) and immediately overwrites the live param to match, so by the time the async server fetch resolves, a live read would only ever see that already-clobbered "1". The URL param only carries steps 1-3, so it CANNOT resume a resident who returns from an EXTERNAL redirect (a Stripe checkout) deep in the form — that reload wipes the in-memory draft entirely. The live step (any 1..12) is therefore ALSO persisted on the server application record (`application.wizardStep` / `wizardMaxStepReached`, injected fresh at every debounced in-progress sync in `buildInProgressApplicationRow`); the reconciliation effect prefers that persisted value (`parsePersistedWizardStep`) over the URL param, which is what lands a returning-from-payment resident back at step 12 instead of step 1. These two fields are wizard-resume metadata on `RentalWizardFormState`, NOT application answers — validation, charges, and the manager view ignore them. |
-| Resident applications list: apply entry point is always visible; autosave surfaces failures | this section | `ResidentApplicationsPanel` (`resident-applications-panel.tsx`) must render the list page — with its `titleAside` "Apply to a property" action and the "No applications yet" empty state — for a signed-in resident REGARDLESS of how many applications exist; there is deliberately NO auto-redirect to `/apply` on an empty list (that redirect is what hid the reported-missing entry point). Note the button lives in `titleAside`, which only the NON-embedded `ManagerPortalPageShell` branch renders, and `render-portal-section.tsx` mounts this panel non-embedded — do not flip it to embedded without moving the action. Autosave: the wizard's per-keystroke draft sync goes through the debounced+serialized `scheduleApplicationRowUpsert` (never a raw per-keystroke fetch); a failed background save now emits `APPLICATION_SAVE_STATUS_EVENT` (`manager-applications-storage.ts`) which the wizard turns into a "couldn't save" banner (cleared on the next successful save) — a failed autosave must surface, never vanish silently. |
-| Rental wizard lease term carries short-term (no separate Application-type toggle) | this section | Step 3's "Lease term" `Select` is the SINGLE control for both the term AND whether this is a short-term stay: its options come from `listingAllowedLeaseTerms(propertyId)` (→ `resolveAllowedLeaseTerms`/`syncShortTermLeaseTermInAllowed` in `manager-listing-submission.ts`), which include `SHORT_TERM_LEASE_TERM` exactly when the listing's `shortTermRentalsAllowed` is set — the single gate; validation re-checks it via `propertyAllowsShortTermRental` — and its `onChange` keeps `rentalType` (`"standard"`/`"short_term"`) in lock-step so every downstream consumer (charges, `lease-dates.ts`, `validate.ts`) stays consistent. There is NO longer a separate "Application type" pill toggle — it contradicted the dropdown. Short-term fees render inline below the dropdown like the Month-to-Month note. Dates across the whole wizard use `DateField` (`components/ui/date-field.tsx`), a typing-friendly free-text `MM/DD/YYYY` input (`maskTypedDate` honours both digit-only and slash/dash/dot entry, single-digit month/day included) backed by a hidden native picker for the calendar icon; a future date of birth is rejected on its own terms (`isFutureLocalDate` in `validate.ts`) before the age check, not with the "must be 18" message. Coverage: `tests/unit/date-field-typing.test.ts`, `tests/unit/rental-application-validate.test.ts`. |
-| Two application forms (short-term vs long-term), configured independently, with no step count shown | this section | There is ONE wizard (`rental-application-wizard.tsx`) that renders as TWO products keyed on `form.rentalType` (still derived from the step-3 lease-term dropdown — PR148's single `shortTermRentalsAllowed` gate; do NOT add a second gate). The split lives entirely in `application-field-catalog.ts`: `applicationConfigForVariant(sub, variant)` returns the config slice for one form — long-term reads the top-level `disabledStandardApplicationKeys`/`customApplicationFields`/`applicationConfigMode` triplet UNCHANGED (byte-identical to before, so existing configs migrate for free), short-term reads a parallel `shortTerm*` triplet on the submission JSON (no DB migration — it rides in `property_data`), and while short-term is still `"standard"`/unset it resolves to `SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS` (a curated set: current/previous address, employment, references, additional, plus SSN, driver's license, credit-consent all OFF). `mergeApplicationConfigForVariant` writes a slice back to the right fields. The catalog mutation helpers (`patch`/`remove`/`add`/`reenableListingApplicationField`) take a slice and are variant-agnostic — pass them a slice, never the raw submission, when editing a specific form. Wizard/validate/manager-editor all call `applicationConfigForVariant` with the active variant; passing the raw `sub` (as legacy callers still do) means the long-term form, which is the intended default. **Active steps are DERIVED, not hardcoded**: `activeApplicationWizardSteps(slice)` returns the step ids that still carry a visible question (1/2/11/12 always; section steps 3-10 only when they have an enabled field), so short-term quietly skips its off-by-default sections and re-enabling a question brings its step back. The wizard shell navigates by `nextActiveStep`/`prevActiveStep` over that list and the Review step gates each section on `activeStepSet`. **No step total is ever shown** — the "Step N of M" eyebrow and the numbered 1..N pills were removed (eyebrow now names the form; progress bar + Back/Continue remain); the internal `step`/`maxStepReached`/`?wizardStep=` resume machinery (PR146) is untouched. Manager edits each form via a Long-term/Short-term tab in `ManagerApplicationQuestionsEditorModal` (off-by-default built-ins show with an "Add back" affordance; "Restore PropLane defaults" resets the active variant's slice). Short-term adds one field, `shortTermRulesAck` (house-rules acknowledgement, required only for short-term). **Final submit sanitizes cross-variant answers**: the wizard's submit path runs the form through `sanitizeApplicationFormForListing` (`validate-application-submit.ts`), which resolves the slice from the submitted form's OWN `rentalType` — so answers only the OTHER form asks (a long-term SSN/license/employment on a short-term stay, or the other variant's custom-field answers) never ride into the stored snapshot. Lease-term display order pins `CUSTOM_LEASE_TERM` last (after Short-Term Stay) via `syncShortTermLeaseTermInAllowed`. Coverage: `tests/unit/application-form-variants.test.ts`, `tests/unit/validate-application-submit.test.ts`, `tests/unit/rental-application-validate.test.ts`, `tests/unit/create-listing-wizard.test.ts`. |
-| Manager Applications: Incomplete vs Pending tabs, and the owned-property visibility fallback | this section | `ManagerApplications` (`manager-applications.tsx`) has 4 tabs — Pending / Incomplete / Approved / Rejected — but the DATA model (`DemoApplicantRow.bucket`) still only has three buckets (`ManagerApplicationBucket`: pending/approved/rejected). "Incomplete" is a UI-only split of the pending bucket (`tabForRow()`: `bucket==="pending" && isInProgressApplicationRow(row)` → incomplete, else → pending); never add a 4th value to the stored bucket. Separately, `GET /api/manager-applications`'s `fetchApplicationsForManagerUser` matches a row by property ownership (`manager_property_records.manager_user_id = caller`, unioned with co-manager-linked ids) IN ADDITION to the row's stored `manager_user_id` — an application's attribution is resolved once at submit (`linkResidentOnApplicationSubmit`) and never re-resolved once the resident stops touching an abandoned "Incomplete" draft, so a property that changed hands (transfer, re-assigned grant, or a one-off resolution gap) would otherwise permanently hide that resident's application from the property's CURRENT owner — exactly the "manager's own empty-state copy promises Incomplete shows up here, and it doesn't" bug. This is safe to be read-side only because the WRITE path (`resolveApplicationWriteOwner` → `managerHasCoManagerPermissionForProperty`) already has the same direct-ownership check baked in (`propertyRow.manager_user_id === userId` short-circuits before the co-manager grant lookup) — so a manager who can now SEE a stale-attribution row could already act on it; nothing needed to change there. Coverage: `tests/unit/manager-applications-owned-property-fallback.test.ts`. |
-| Multi-role accounts (one person, manager + resident + vendor) | this section | One login holds many roles ADDITIVELY: `profile_roles` (composite PK `user_id,role`) + idempotent service-role-only `ensureProfileRoleRow`; `primaryRoleWhenAdding*` keeps the higher legacy `profiles.role` so adding a role never converts/downgrades the existing one; `PortalRoleSwitcher` + `POST /api/auth/set-active-portal` switch portals without re-login. NEVER build a second, separate-auth-user model. A signed-in NON-resident (manager/vendor) hitting `/rent/apply` creates a resident account via `POST /api/auth/create-resident-account` (adds the resident role to the SAME login, never touches `manager_id`/other profile fields, flips the active-portal cookie to `resident`), then applies from `/resident/applications/apply`. The apply surface's single decision point is `resolvePublicApplyView` in `public-apply-session.ts` — it MUST resolve a real surface for every (signed-in-non-resident, guest-chosen) combo; the historical blank page was a signed-in non-resident matching no branch. Do NOT edit the anonymous `public-apply-account-prompt.tsx` gate for this; the signed-in prompt is a separate component (`signed-in-resident-account-prompt.tsx`). Isolation coverage: `tests/unit/multi-role-account-isolation.test.ts`, `tests/unit/public-apply-view.test.ts`, `tests/integration/auth/create-resident-account.test.ts`. |
+| Inbound support email → admin inbox | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Receive-only — an in-app reply never emails the sender. Never widen the founder identity — attribute TO it. |
 
 ## Per-room rent basis: monthly (default) vs daily
 
@@ -965,14 +944,10 @@ portal, and identity while the household reads as one unit.
 
 **Single Button component.** `src/components/ui/radix-button.tsx` (shadcn/CVA, with a filled-red
 `destructive` variant) was deleted — `src/components/ui/button.tsx` is the only Button, and it now
-supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop
-(do not reintroduce one); translate an old `size="sm"` into `px-4 text-[13px]` at the call site —
-horizontal padding + text size only. Never add `h-9 min-h-0`: `min-h-0` defeats the Button's
-default `min-h-[44px]`, breaking the 44px touch-target minimum (`docs/design.md`) on buttons that
-ship in the Capacitor WebView. Explicit sub-44px heights (`h-9 min-h-0 …`, icon
-`h-10 w-10 min-h-0 px-0`) are reserved for deliberately compact desktop chrome (marketing navbar
-CTAs, inbox toolbar) — never portal action buttons. `danger` stays text-only red per
-`docs/design.md` — never reintroduce a filled-red destructive variant.
+supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has no `size` prop;
+translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
+`h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
+never reintroduce a filled-red destructive variant.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both

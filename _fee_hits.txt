@@ -1,0 +1,7 @@
+/Users/prakrit/firstmate/projects/proplane/_search_fee_strings.py
+/Users/prakrit/firstmate/projects/proplane/src/components/marketing/rental-application-wizard.tsx
+/Users/prakrit/firstmate/projects/proplane/src/lib/resident-check-manual-payment.server.ts
+/Users/prakrit/firstmate/projects/proplane/src/components/marketing/rental-wizard-steps.tsx
+/Users/prakrit/firstmate/projects/proplane/tests/unit/resident-check-manual-payment.test.ts
+/Users/prakrit/firstmate/projects/proplane/src/components/portal/resident-payments-panel.tsx
+done
