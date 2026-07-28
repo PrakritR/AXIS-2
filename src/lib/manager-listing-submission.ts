@@ -18,6 +18,12 @@ import {
 import { roomIsDailyPriced } from "@/lib/room-pricing";
 import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
 import { parseMoneyAmount } from "@/lib/parse-money";
+import {
+  defaultCoreListingFeeRows,
+  ensureSubmissionListingFees,
+  normalizeListingFeeRow,
+} from "@/lib/listing-fees";
+export { isListingFeeAmountFilled } from "@/lib/listing-fees";
 import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
@@ -100,13 +106,18 @@ export type ManagerQuickFactRow = {
   value: string;
 };
 
-/** Optional extra fees beyond the standard application / deposit / parking fields. */
+/** Listing fee row — preset slots plus custom fees (see `listing-fees.ts`). */
 export type ManagerCustomFeeRow = {
   id: string;
   label: string;
   amount: string;
-  /** Default monthly when unset. */
+  /** Default monthly when unset. Kept in sync with `cadence` for older readers. */
   frequency?: "one-time" | "monthly";
+  cadence?: import("@/lib/listing-fees").ListingFeeCadence;
+  presetId?: import("@/lib/listing-fees").ListingFeePresetId | "custom";
+  dueAtSigning?: boolean;
+  shortTermOnly?: boolean;
+  creditsTowardSecurity?: boolean;
 };
 
 /** Rows for the public “Bundles & leasing” table (optional — defaults are generated from rooms). */
@@ -408,18 +419,6 @@ export type ManagerListingSubmissionV1 = {
   /** Multiple lease templates per property (standard, month-to-month, short-term, custom). */
   propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
 };
-
-/** Fee fields must be filled with a dollar amount; use 0 when there is no charge. */
-export function isListingFeeAmountFilled(raw: string): boolean {
-  const t = String(raw ?? "")
-    .replace(/^\$/, "")
-    .trim();
-  if (!t) return false;
-  if (/^waived$/i.test(t)) return false;
-  if (!/[\d]/.test(t)) return false;
-  const n = parseMoneyAmount(t);
-  return Number.isFinite(n) && n >= 0;
-}
 
 export function formatLeaseTermsBodyFromAllowed(terms: string[]): string {
   const clean = terms.filter((t) => LISTING_LEASE_TERM_OPTION_SET.has(t));
@@ -929,12 +928,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let customFees = sub.customFees;
   if (!Array.isArray(customFees)) customFees = [];
-  customFees = customFees.map((f) => ({
-    id: f.id ?? rid("fee"),
-    label: typeof f.label === "string" ? f.label.trim() : "",
-    amount: typeof f.amount === "string" ? f.amount.trim() : "",
-    frequency: f.frequency === "one-time" ? "one-time" : "monthly",
-  }));
+  customFees = customFees.map((f) => normalizeListingFeeRow(f));
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
     ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
@@ -1289,7 +1283,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
   delete (next as Record<string, unknown>).utilitiesMonthly;
-  return next as ManagerListingSubmissionV1;
+  return ensureSubmissionListingFees(next as ManagerListingSubmissionV1);
 }
 
 export function emptyRoom(index: number): ManagerRoomSubmission {
@@ -1335,12 +1329,13 @@ export function emptyQuickFactRow(): ManagerQuickFactRow {
 }
 
 export function emptyCustomFeeRow(): ManagerCustomFeeRow {
-  return {
+  return normalizeListingFeeRow({
     id: rid("fee"),
     label: "",
     amount: "",
     frequency: "monthly",
-  };
+    presetId: "custom",
+  });
 }
 
 export function emptyCustomApplicationField(section?: string): ManagerCustomApplicationField {
@@ -1670,7 +1665,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     bathrooms: [],
     bundles: [],
     quickFacts: [],
-    customFees: [],
+    customFees: defaultCoreListingFeeRows(),
     serviceRequestOptions: [],
     customApplicationFields: [],
     disabledStandardApplicationKeys: [],

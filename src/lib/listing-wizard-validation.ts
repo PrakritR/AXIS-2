@@ -1,15 +1,9 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
-import {
-  deriveListingLtFeeToggles,
-  validateListingLtFeeToggles,
-  validateListingStFeeToggles,
-  type ListingLtFeeToggles,
-  type ListingStFeeToggles,
-} from "@/lib/listing-fee-term-toggles";
-import { validateListingBundleShortTermPricing } from "@/lib/listing-bundle-short-term";
 import { isEntireHomeListing, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
+import { listingFeesForWizard, validateListingFeeRows } from "@/lib/listing-fees";
+import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
+import { parseMoneyAmount } from "@/lib/parse-money";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
-import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 
 export function listingRoomNameKey(roomId: string): string {
   return `room-${roomId}-name`;
@@ -48,10 +42,6 @@ export function listingCustomQuestionErrorKey(fieldId: string): string {
 export type ListingWizardValidateOptions = {
   isEditMode?: boolean;
   entireHomeRent?: number;
-  /** ST fee checkbox state from the unified Fees table (defaults derived from submission). */
-  stFeeToggles?: ListingStFeeToggles;
-  /** LT fee checkbox state from the unified Fees table (defaults derived from submission). */
-  ltFeeToggles?: ListingLtFeeToggles;
 };
 
 export function validateListingWizardStep(
@@ -95,39 +85,38 @@ export function validateListingWizardStep(
     if (!sub.listingPlaceCategoryId?.trim()) {
       errs.listingPlaceCategoryId = "Select how this property is rented (individual rooms or entire place).";
     }
-    const allowedTerms = resolveAllowedLeaseTerms(sub);
-    const longTermTerms = allowedTerms.filter((t) => t !== SHORT_TERM_LEASE_TERM);
-    const hasLongTerm = longTermTerms.length > 0;
-    const hasShortTerm = Boolean(sub.shortTermRentalsAllowed);
-
-    if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term or enable short-term stays.";
-
-    const ltToggles = opts.ltFeeToggles ?? deriveListingLtFeeToggles(sub);
-
-    if (hasLongTerm) {
-      Object.assign(
-        errs,
-        validateListingLtFeeToggles(sub, ltToggles, true, { isEntireHome, entireHomeRent }),
-      );
-      if (ltToggles.rent && !isEntireHome) {
-        const anyRent = sub.rooms.some(listingRoomHasRent);
-        if (!anyRent && sub.rooms.length > 0) {
-          errs.monthlyRent = "Set a monthly or daily rent for at least one room (leave others at 0 if not offered).";
-        }
-        for (const room of sub.rooms) {
-          if (room.rentBasis === "daily" && !((room.dailyRentPrice ?? 0) > 0)) {
-            errs[listingRoomDailyRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
-          }
+    if (isEntireHome && entireHomeRent <= 0) {
+      errs.monthlyRent = "Enter the monthly rent for the entire home.";
+    }
+    if (!isEntireHome) {
+      const anyRent = sub.rooms.some(listingRoomHasRent);
+      if (!anyRent && sub.rooms.length > 0) {
+        errs.monthlyRent = "Set a monthly or daily rent for at least one room (leave others at 0 if not offered).";
+      }
+      // A room switched to daily pricing must carry a positive daily rate.
+      for (const room of sub.rooms) {
+        if (room.rentBasis === "daily" && !((room.dailyRentPrice ?? 0) > 0)) {
+          errs[listingRoomDailyRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
         }
       }
     }
-
-    if (hasShortTerm && opts.stFeeToggles) {
-      Object.assign(errs, validateListingStFeeToggles(sub, opts.stFeeToggles, true));
+    const allowedTerms = resolveAllowedLeaseTerms(sub);
+    if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term.";
+    const feeRows = listingFeesForWizard(sub);
+    Object.assign(errs, validateListingFeeRows(feeRows, { shortTermRentalsAllowed: sub.shortTermRentalsAllowed }));
+    if (sub.zellePaymentsEnabled && !sub.zelleContact?.trim()) {
+      errs.zelleContact = "Enter a Zelle phone or email for resident payments.";
     }
-    Object.assign(errs, validateListingBundleShortTermPricing(sub));
-    // Resident payment methods (Stripe ACH / Zelle / Venmo) are configured once
-    // in Payment setup and synced onto listings — not validated on the Pricing step.
+    if (sub.venmoPaymentsEnabled && !sub.venmoContact?.trim()) {
+      errs.venmoContact = "Enter a Venmo username, phone, or email for resident payments.";
+    }
+    const appFeeAmount = parseMoneyAmount(sub.applicationFee);
+    if (appFeeAmount > 0) {
+      const channels = listingApplicationFeeChannels(sub);
+      if (!channels.ach && !channels.zelle && !channels.venmo && !channels.other) {
+        errs.residentPaymentMethods = "Enable at least one resident payment method — applicants use the same options for the application fee.";
+      }
+    }
   }
 
   return errs;
