@@ -6,7 +6,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent, type R
 import { Select } from "@/components/ui/input";
 
 const MOBILE_PILL_TAB_SELECT_CLASS =
-  "h-9 w-full min-w-0 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground";
+  "h-9 w-auto max-w-[min(100%,18rem)] shrink-0 rounded-full border border-border bg-card px-2.5 pr-8 text-sm font-semibold text-foreground";
 
 export type TabItem = { href: string; label: string; id: string; dataAttr?: string };
 
@@ -134,7 +134,7 @@ export function TabNav({
 
   return (
     <>
-      <label className="flex min-w-0 flex-1 md:hidden">
+      <label className="flex shrink-0 md:hidden">
         <span className="sr-only">{selectAriaLabel}</span>
         <Select
           className={MOBILE_PILL_TAB_SELECT_CLASS}
@@ -239,7 +239,7 @@ export function PillTabs({
 
   return (
     <>
-      <label className="flex min-w-0 flex-1 md:hidden">
+      <label className="flex shrink-0 md:hidden">
         <span className="sr-only">{selectAriaLabel}</span>
         <Select
           className={MOBILE_PILL_TAB_SELECT_CLASS}

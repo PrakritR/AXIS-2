@@ -82,7 +82,7 @@ export function PortalMobileNavBar({
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
 
   return (
-    <div className="portal-mobile-nav-bar relative mb-3 flex min-h-11 w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
+    <div className="portal-mobile-nav-bar relative mb-1 flex min-h-11 w-full items-center justify-between gap-2 md:mb-3 md:hidden [html[data-native]_&]:mb-0">
       {/* Brand mark on tablet-only; phones use centered section/dashboard titles. */}
       <Link
         href={`${definition.basePath}/dashboard`}
@@ -102,18 +102,10 @@ export function PortalMobileNavBar({
           <ChevronLeftIcon />
           <span className="truncate">{back!.label}</span>
         </button>
-      ) : dashboardLabel ? (
-        <h1 className="pointer-events-none absolute left-1/2 top-1/2 z-[5] w-full max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 truncate px-2 text-center text-sm font-semibold text-foreground">
-          {dashboardLabel}
-        </h1>
-      ) : sectionTitle ? (
+      ) : dashboardLabel || sectionTitle ? (
         <h1 className="min-w-0 flex-1 truncate px-1 text-left text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
-          {sectionTitle}
+          {dashboardLabel ?? sectionTitle}
         </h1>
-      ) : null}
-
-      {dashboardLabel && !showBack ? (
-        <div className="min-h-9 min-w-[2.75rem] shrink-0" aria-hidden />
       ) : null}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">

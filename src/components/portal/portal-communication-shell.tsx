@@ -17,6 +17,7 @@ export function PortalCommunicationShell({
   hideMobileFilterRow = false,
   compactFilterRow = true,
   hideMobileTitleActions = false,
+  mobileThreadReading = false,
 }: {
   title: string;
   titleAside?: ReactNode;
@@ -30,6 +31,8 @@ export function PortalCommunicationShell({
   hideMobileFilterRow?: boolean;
   compactFilterRow?: boolean;
   hideMobileTitleActions?: boolean;
+  /** Full-bleed inbox thread on phones — less outer padding and card chrome. */
+  mobileThreadReading?: boolean;
 }) {
   const aside =
     titleAside && hideMobileTitleActions ? (
@@ -44,16 +47,17 @@ export function PortalCommunicationShell({
       titleAside={aside}
       compactFilterRow={compactFilterRow}
       mobileHideFilterRow={hideMobileFilterRow}
+      mobileFlush={mobileThreadReading}
       filterRow={
         threadFilters || channelNav ? (
-          <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
+          <ManagerPortalFilterRow className="mb-0 max-md:min-w-0 max-md:flex-1 max-md:flex-nowrap max-md:gap-2">
             {channelNav ? <div className="w-fit shrink-0">{channelNav}</div> : null}
             {threadFilters}
           </ManagerPortalFilterRow>
         ) : undefined
       }
     >
-      <div className="portal-communication-inbox max-md:mt-0 md:mt-1">
+      <div className="portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1">
         {statusPills ? <div className="mb-4">{statusPills}</div> : null}
         {children}
       </div>

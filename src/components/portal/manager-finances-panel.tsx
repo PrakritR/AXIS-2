@@ -32,7 +32,27 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
 import type { ReportColumn, ReportResult, ReportRow } from "@/lib/reports/types";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import { MonthlyProfitChart } from "@/components/portal/monthly-profit-chart";
+import {
+  readChargesForManager,
+  syncHouseholdChargesFromServer,
+  HOUSEHOLD_CHARGES_EVENT,
+} from "@/lib/household-charges";
+import {
+  buildManagerPropertyFilterOptions,
+  collectLinkedPropertyIdsForModule,
+} from "@/lib/manager-portfolio-access";
+import {
+  MANAGER_OUTGOING_PAYMENTS_EVENT,
+  readManagerOutgoingExpenses,
+  syncManagerOutgoingExpensesFromServer,
+} from "@/lib/manager-outgoing-payments";
+import {
+  bucketByMonth,
+  lastNMonths,
+  mergeMonthlyProfit,
+  parseMoneyLabel,
+} from "@/lib/portal-monthly-profit";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { expenseTaxStatusLabel, isCategoryDeductible, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
@@ -466,6 +486,7 @@ export function ManagerFinancesPanel({
   const { userId, ready } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [vendorTick, setVendorTick] = useState(0);
+  const [cashflowChartTick, setCashflowChartTick] = useState(0);
   const [filters, setFilters] = useState(defaultFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -499,6 +520,48 @@ export function ManagerFinancesPanel({
     () => (report ? filterFinanceReport(report, tabId, rowFilters) : null),
     [report, tabId, rowFilters],
   );
+
+  const monthlyProfitPoints = useMemo(() => {
+    void cashflowChartTick;
+    if (!userId || tabId !== "cash-flow-statement") return [];
+    const months = lastNMonths(Date.now(), 6);
+    const charges = readChargesForManager(userId, {
+      linkedPropertyIds: collectLinkedPropertyIdsForModule(userId, "payments"),
+    }).filter((c) => c.status === "paid");
+    const scopedCharges = filters.propertyId
+      ? charges.filter((c) => c.propertyId === filters.propertyId)
+      : charges;
+    const expenses = readManagerOutgoingExpenses().filter((e) =>
+      filters.propertyId ? e.propertyId === filters.propertyId : true,
+    );
+    const paymentsByMonth = bucketByMonth(
+      scopedCharges,
+      months,
+      (c) => c.paidAt ?? c.createdAt,
+      (c) => parseMoneyLabel(c.amountLabel || c.balanceLabel),
+    );
+    const expensesByMonth = bucketByMonth(
+      expenses,
+      months,
+      (e) => e.expenseDate,
+      (e) => e.amountCents / 100,
+    );
+    return mergeMonthlyProfit(paymentsByMonth, expensesByMonth);
+  }, [userId, tabId, cashflowChartTick, filters.propertyId]);
+
+  useEffect(() => {
+    if (!ready || tabId !== "cash-flow-statement") return;
+    void Promise.all([syncHouseholdChargesFromServer(true), syncManagerOutgoingExpensesFromServer()]).then(() =>
+      setCashflowChartTick((n) => n + 1),
+    );
+    const bump = () => setCashflowChartTick((n) => n + 1);
+    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
+    window.addEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, bump);
+    return () => {
+      window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
+      window.removeEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, bump);
+    };
+  }, [ready, tabId, userId]);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -747,6 +810,9 @@ export function ManagerFinancesPanel({
       ) : (
       <div className="space-y-5">
         {tabId === "budget-vs-actual" ? <ManagerBudgetsPanel /> : null}
+        {tabId === "cash-flow-statement" ? (
+          <MonthlyProfitChart points={monthlyProfitPoints} subtitle="Last 6 months" />
+        ) : null}
         <ReportFilterBar
           showProperty
           showDateRange

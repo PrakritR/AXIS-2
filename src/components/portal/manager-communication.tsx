@@ -208,11 +208,11 @@ export function ManagerCommunication({
 
   const threadFilters = (
     <>
-      <div className="flex w-full min-w-0 md:hidden">
+      <div className="flex min-w-0 flex-1 md:hidden">
         <Button
           type="button"
           variant="outline"
-          className="h-9 w-full rounded-full text-xs font-semibold"
+          className="h-9 min-w-0 flex-1 rounded-full text-xs font-semibold"
           data-attr="communication-filter-sheet-open"
           onClick={() => setFilterSheetOpen(true)}
         >
@@ -277,6 +277,7 @@ export function ManagerCommunication({
       threadFilters={threadFilters}
       hideMobileFilterRow={threadOpen}
       hideMobileTitleActions={threadOpen}
+      mobileThreadReading={threadOpen}
     >
       <ManagerCommunicationComposeModal
         open={composeOpen}

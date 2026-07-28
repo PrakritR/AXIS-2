@@ -9,6 +9,7 @@ import {
   InboxListSegmentTabs,
   InboxThreadEmpty,
   InboxTwoPane,
+  PORTAL_INBOX_LIST_TOOLBAR_CLASS,
   PortalInboxEmptyState,
   type InboxListSegment,
 } from "@/components/portal/portal-inbox-ui";
@@ -361,7 +362,7 @@ export function ManagerUnifiedInbox({
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="portal-inbox-list-toolbar shrink-0 space-y-2.5 border-b border-border p-2.5">
+      <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
         <InboxListSegmentTabs
           value={listSegment}
           onChange={setListSegment}
@@ -379,7 +380,7 @@ export function ManagerUnifiedInbox({
           />
         </div>
         {mergedRows.length > 0 ? (
-          <p className="px-1 text-[11px] text-muted">
+          <p className="hidden px-1 text-[11px] text-muted sm:block">
             {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
             {query.trim() ? ` matching “${query.trim()}”` : ""}
           </p>

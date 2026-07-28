@@ -145,7 +145,7 @@ export const PORTAL_TABLE_TD = "max-w-0 break-words px-4 py-4 align-middle text-
 
 /** Compact card shell for mobile portal lists (pair with {@link PortalResponsiveDataView}). */
 export const PORTAL_MOBILE_CARD_CLASS =
-  "rounded-2xl border border-border bg-card p-3.5 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3";
+  "rounded-2xl border border-border bg-card p-3.5 max-lg:rounded-xl max-lg:p-3 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-2.5";
 
 /** Expanded detail block below a mobile summary card row. */
 export const PORTAL_MOBILE_DETAIL_EXPAND =
