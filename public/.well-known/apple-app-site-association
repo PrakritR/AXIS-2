@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "8FH3GVHCZ9.com.axisseattlehousing.app",
+        "appID": "8FH3GVHCZ9.space.proplane.app",
         "paths": ["/auth/callback", "/auth/callback/*"]
       }
     ]

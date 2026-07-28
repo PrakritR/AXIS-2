@@ -34,7 +34,7 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
     stubNativeShell();
     expect(
       resolveOAuthCallbackRedirectUrl("http://192.168.5.121:3000", "/auth/callback/partner-pricing"),
-    ).toBe("com.axisseattlehousing.app://auth/callback/partner-pricing");
+    ).toBe("space.proplane.app://auth/callback/partner-pricing");
   });
 
   it("keeps the https bridge flow for production native (unchanged)", () => {

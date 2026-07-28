@@ -36,11 +36,39 @@ Per-surface pay methods come from `residentPaymentMethodsForSurface()` (`src/lib
 
 ---
 
+## App identity (iOS rebranded to PropLane; Android deferred)
+
+The **iOS** bundle identifier is `space.proplane.app` (Team `8FH3GVHCZ9`) — rebranded
+from the legacy `com.axisseattlehousing.app`. The old App Store Connect record is
+abandoned deliberately (the app is TestFlight-only, never publicly launched), so there
+are no compatibility shims. The identity lives in `capacitor.config.ts` (`appId`),
+`ios/App/App.xcodeproj/project.pbxproj` (`PRODUCT_BUNDLE_IDENTIFIER`, both configs),
+`ios/App/App/Info.plist` (the custom URL scheme), `ios/App/fastlane/{Appfile,Fastfile}`,
+`public/.well-known/apple-app-site-association` (`8FH3GVHCZ9.space.proplane.app`), and
+the shared `NATIVE_OAUTH_SCHEME` / `IOS_BUNDLE_ID` constants under `src/lib/auth/`.
+
+**Android still uses `com.axisseattlehousing.app`** — `android/app/build.gradle`
+(`applicationId` + `namespace`), `AndroidManifest.xml` (deep-link scheme),
+`MainActivity.java`'s package, and `public/.well-known/assetlinks.json`. Android is not
+shipping (its `assetlinks.json` still holds a placeholder keystore fingerprint), and a
+correct rename requires moving the Java source package and minting a new Play identity,
+so it was left intact and internally consistent. Rename it as one unit when Android ships.
+
+**Console-side follow-ups the bundle-id change requires** (repo code cannot do these):
+add `space.proplane.app` to Supabase → Auth → Providers → **Apple** Client IDs; add
+`space.proplane.app://auth/callback/**` to Supabase → Auth → URL configuration → Redirect
+URLs (native Google/Apple OAuth returns via this custom scheme — there is no Google
+reversed-client scheme in this repo); register the new App ID `space.proplane.app` in
+Apple Developer with Sign in with Apple + Associated Domains + Push enabled; and create
+the App Store Connect record + IAP products for the new id (the `com.axisseattlehousing.app.pro/.business.*`
+product ids and the `com.axisseattlehousing.app.web` Services ID are separate identifiers,
+left unchanged in-repo pending that console work).
+
 ## What's already in the repo
 
 | Path | Purpose |
 | --- | --- |
-| `capacitor.config.ts` | App id `com.axisseattlehousing.app`, name **PropLane**, points the WebView at production. |
+| `capacitor.config.ts` | App id `space.proplane.app`, name **PropLane**, points the WebView at production. |
 | `native-shell/index.html` | Branded "you're offline" fallback (Capacitor's required `webDir`). |
 | `src/components/native/native-bridge.tsx` | Mounted in the root layout. On native only: hides splash, styles the status bar, registers push, opens deep links. No-ops on the web. |
 | `src/app/api/native/register-push-token/route.ts` | Stores a device token for the signed-in user. |
@@ -264,9 +292,10 @@ send path. Firebase relays to Apple devices via an APNs key you upload.
 
 ### 1. Firebase project
 1. Create a project at https://console.firebase.google.com.
-2. **Add an Android app** with package `com.axisseattlehousing.app`. Download
+2. **Add an Android app** with package `com.axisseattlehousing.app` (the Android
+   project still uses the legacy id — see the iOS-rebrand note below). Download
    `google-services.json` → place in `android/app/`.
-3. **Add an iOS app** with bundle id `com.axisseattlehousing.app`. Download
+3. **Add an iOS app** with bundle id `space.proplane.app`. Download
    `GoogleService-Info.plist` → add to `ios/App/App/` (drag into Xcode).
 4. **Project settings → Cloud Messaging → Apple app config**: upload your **APNs
    Auth Key** (`.p8` from the Apple Developer portal → Keys → enable APNs).
@@ -324,8 +353,8 @@ The native app uses these HTTPS callbacks (same as web). A small bridge page bou
 **Optional** (direct scheme return without the bridge page):
 
 ```
-com.axisseattlehousing.app://auth/callback
-com.axisseattlehousing.app://auth/callback/**
+space.proplane.app://auth/callback
+space.proplane.app://auth/callback/**
 ```
 
 If the HTTPS callback is missing, Supabase falls back to the **Site URL** and Google sign-in opens the marketing homepage in the system browser instead of the portal.
@@ -372,7 +401,7 @@ user-visible at the permission prompt, so they must read **PropLane**.
 - **Google Play Console** — one-time $25 (https://play.google.com/console).
 
 ### iOS
-1. In Xcode, set the team and a unique bundle id (`com.axisseattlehousing.app`).
+1. In Xcode, set the team and a unique bundle id (`space.proplane.app`).
 2. Product → Archive → distribute to **App Store Connect**.
 3. In App Store Connect: create the app, add screenshots, description, privacy
    details (declare camera + push usage), then submit for review.

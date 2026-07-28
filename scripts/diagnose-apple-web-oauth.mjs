@@ -14,7 +14,7 @@ import { resolve } from "node:path";
 
 const TEAM_ID = "8FH3GVHCZ9";
 const KEY_ID = "9872GVCALV";
-const BUNDLE_ID = "com.axisseattlehousing.app";
+const BUNDLE_ID = "space.proplane.app";
 const SERVICES_ID = "com.axisseattlehousing.app.web";
 const DEV_PROJECT_REF = "emstjswhotsnyksqhqyf";
 

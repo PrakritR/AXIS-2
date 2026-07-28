@@ -3,7 +3,7 @@ import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 /** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
-export const NATIVE_OAUTH_SCHEME = "com.axisseattlehousing.app";
+export const NATIVE_OAUTH_SCHEME = "space.proplane.app";
 
 export const NATIVE_OAUTH_CALLBACK_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
 

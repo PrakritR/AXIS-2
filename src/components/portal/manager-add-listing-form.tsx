@@ -4203,7 +4203,6 @@ export function ManagerAddListingForm({
             title="Bathrooms"
             description="Name, location, and amenities for each bathroom on the public listing."
           >
-              <p className="mb-4 text-sm text-muted">Shown in the Bathrooms section on the public listing.</p>
               <div
                 className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
                 data-wizard-field="bathrooms"
@@ -4276,18 +4275,23 @@ export function ManagerAddListingForm({
                           ))}
                         </Select>
                       </div>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={b.shower} onChange={(e) => setBath(i, { shower: e.target.checked })} />
-                        Shower
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={b.toilet} onChange={(e) => setBath(i, { toilet: e.target.checked })} />
-                        Toilet
-                      </label>
-                      <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                        <input type="checkbox" checked={b.bathtub} onChange={(e) => setBath(i, { bathtub: e.target.checked })} />
-                        Bathtub
-                      </label>
+                      <div className="sm:col-span-2">
+                        <FieldLabel>Fixtures</FieldLabel>
+                        <div className="mt-1 flex flex-wrap gap-x-6 gap-y-2">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="h-4 w-4 rounded border-border" checked={b.shower} onChange={(e) => setBath(i, { shower: e.target.checked })} />
+                            Shower
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="h-4 w-4 rounded border-border" checked={b.toilet} onChange={(e) => setBath(i, { toilet: e.target.checked })} />
+                            Toilet
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="h-4 w-4 rounded border-border" checked={b.bathtub} onChange={(e) => setBath(i, { bathtub: e.target.checked })} />
+                            Bathtub
+                          </label>
+                        </div>
+                      </div>
                       <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
                         <input
                           type="checkbox"
@@ -4619,7 +4623,7 @@ export function ManagerAddListingForm({
                             >
                               Add photos
                             </MediaPickTrigger>
-                            <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
+                            <p className="mt-2 text-xs text-muted">Drop photos here or use the button.</p>
                             {(sp.photoDataUrls?.length ?? 0) > 0 ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {sp.photoDataUrls.map((src, pi) => (
