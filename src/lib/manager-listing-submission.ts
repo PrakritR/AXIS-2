@@ -22,6 +22,7 @@ import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
 import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
+import { resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -929,12 +930,20 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let customFees = sub.customFees;
   if (!Array.isArray(customFees)) customFees = [];
-  customFees = customFees.map((f) => ({
-    id: f.id ?? rid("fee"),
-    label: typeof f.label === "string" ? f.label.trim() : "",
-    amount: typeof f.amount === "string" ? f.amount.trim() : "",
-    frequency: f.frequency === "one-time" ? "one-time" : "monthly",
-  }));
+  if (!submissionUsesUnifiedListingFees(customFees)) {
+    customFees = resolveListingFees({
+      ...sub,
+      customFees,
+      paymentAtSigningIncludes,
+    });
+  } else {
+    customFees = customFees.map((f) => ({
+      id: f.id ?? rid("fee"),
+      label: typeof f.label === "string" ? f.label.trim() : "",
+      amount: typeof f.amount === "string" ? f.amount.trim() : "",
+      frequency: f.frequency === "one-time" ? "one-time" : "monthly",
+    }));
+  }
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
     ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
