@@ -38,7 +38,6 @@ export function buildResidentSetupHref(token: string, axisId: string): string {
   const params = new URLSearchParams({
     token: token.trim(),
     proplane_id: id,
-    axis_id: id,
   });
   return `/auth/resident-setup?${params.toString()}`;
 }

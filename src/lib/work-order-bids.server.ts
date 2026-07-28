@@ -428,7 +428,7 @@ export async function acceptWorkOrderBid(
       await deliverPortalInboxMessage(db, {
         senderUserId: actor.userId,
         senderEmail: actor.email,
-        fromName: actor.fullName || "Axis Portal",
+        fromName: actor.fullName || "PropLane Portal",
         subject,
         text: messageBody,
         toUserIds: [record.vendor_user_id],
@@ -450,7 +450,7 @@ export async function acceptWorkOrderBid(
       await deliverPortalInboxMessage(db, {
         senderUserId: actor.userId,
         senderEmail: actor.email,
-        fromName: actor.fullName || "Axis Portal",
+        fromName: actor.fullName || "PropLane Portal",
         subject,
         text: messageBody,
         toUserIds: [other.vendor_user_id],
@@ -616,7 +616,7 @@ export async function markWorkOrderDoneByVendor(
   await deliverPortalInboxMessage(db, {
     senderUserId: actor.userId,
     senderEmail: actor.email,
-    fromName: actor.fullName || "Axis Portal",
+    fromName: actor.fullName || "PropLane Portal",
     subject: `${rowData.title || "Work order"} marked done — approval needed`,
     text: `${actor.fullName || "Your vendor"} marked "${rowData.title || "the work order"}"${
       rowData.propertyName ? ` at ${rowData.propertyName}` : ""

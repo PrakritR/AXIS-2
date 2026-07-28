@@ -157,7 +157,7 @@ export async function deliverResidentWelcome(
       };
     }
 
-    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -190,7 +190,7 @@ export async function deliverResidentWelcome(
     const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     const ts = Date.now();
     const rand = Math.random().toString(36).slice(2, 6);
-    const senderName = actor.email ?? "Axis";
+    const senderName = actor.email ?? "PropLane";
     const senderLower = senderEmail || "manager@example.com";
     const preview = text.slice(0, 100).replace(/\n/g, " ");
 
@@ -260,7 +260,7 @@ export async function deliverResidentWelcome(
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
         const senderName = String(managerProfile?.full_name ?? actor.email ?? "Your property manager").trim() || "Your property manager";
-        const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your Axis resident portal is ready. Your Axis ID: ${axisId}. — ${senderName}`;
+        const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your PropLane resident portal is ready. Your PropLane ID: ${axisId}. — ${senderName}`;
         await sendSms(residentPhone, smsBody, smsFromNumber);
       }
     }
@@ -322,7 +322,7 @@ export async function deliverExistingResidentWelcome(
       };
     }
 
-    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -354,7 +354,7 @@ export async function deliverExistingResidentWelcome(
     const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     const ts = Date.now();
     const rand = Math.random().toString(36).slice(2, 6);
-    const senderName = actor.email ?? "Axis";
+    const senderName = actor.email ?? "PropLane";
     const senderLower = senderEmail || "manager@example.com";
     const preview = text.slice(0, 100).replace(/\n/g, " ");
 

@@ -411,7 +411,7 @@ export const sendLeaseForSignatureTool = defineWriteTool({
         senderEmail: ctx.email,
         fromName,
         subject: "Your lease is ready to sign",
-        text: `Your lease${row.unit && row.unit !== "—" ? ` for ${row.unit}` : ""} is ready for your electronic signature. Log in to your Axis resident portal to review and sign it.`,
+        text: `Your lease${row.unit && row.unit !== "—" ? ` for ${row.unit}` : ""} is ready for your electronic signature. Log in to your PropLane resident portal to review and sign it.`,
         toEmails: [residentEmail],
         deliverToPortalInbox: true,
         deliverViaEmail: true,

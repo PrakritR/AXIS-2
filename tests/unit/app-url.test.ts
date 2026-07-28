@@ -55,6 +55,12 @@ describe("resolveEmailLinkBaseUrl", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://axis-2.vercel.app";
     expect(resolveEmailLinkBaseUrl()).toBe("https://prop-lane.space");
   });
+
+  it("never returns the legacy axis-seattle-housing.com host", () => {
+    process.env.NEXT_PUBLIC_CANONICAL_APP_URL = "https://www.axis-seattle-housing.com";
+    process.env.NEXT_PUBLIC_APP_URL = "https://www.axis-seattle-housing.com";
+    expect(resolveEmailLinkBaseUrl()).toBe("https://prop-lane.space");
+  });
 });
 
 describe("resolveAppOrigin", () => {
