@@ -30,6 +30,22 @@ import {
   shortTermStayNightCount,
   shortTermStayTotalAmount,
 } from "@/lib/short-term-stay-pricing";
+import {
+  normalizeGroupId,
+} from "@/lib/rental-application/application-groups";
+import {
+  buildBundleApplicationGroups,
+  bundleIdForApplication,
+  isBundleGroupApplication,
+  memberIndexInBundleGroup,
+  type BundleGroupRowInput,
+} from "@/lib/bundle-group/bundle-group-application";
+import {
+  resolveBundleFinancialTotals,
+  splitMoneyEvenly,
+  splitShareLabel,
+  moneyLabel,
+} from "@/lib/bundle-group/bundle-cost-split";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
@@ -136,6 +152,12 @@ export type HouseholdCharge = {
   cancelledReminders?: Array<"7d" | "5d" | "3d" | "12h" | "overdue_daily">;
   /** Late fee assessed against this original charge id. */
   sourceChargeId?: string;
+  /** Bundle group cost split metadata (equal shares of household totals). */
+  bundleGroupId?: string;
+  bundleId?: string;
+  splitMemberIndex?: number;
+  splitMemberCount?: number;
+  splitTotalAmountLabel?: string;
 };
 
 export type RecurringRentProfile = {
@@ -1162,6 +1184,13 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   if (!sub) return { raw: "", amount: 0 };
+  const bundleId = bundleIdForApplication(row.application);
+  if (bundleId) {
+    const totals = resolveBundleFinancialTotals(sub, bundleId);
+    if (totals && totals.monthlyUtilities > 0) {
+      return { raw: String(totals.monthlyUtilities), amount: totals.monthlyUtilities };
+    }
+  }
   // Try both assignedRoomChoice and roomChoice1 for ID lookup before falling back
   let room = null;
   for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
@@ -1210,13 +1239,87 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const negotiated = residentNegotiatedMonthlyRent(row);
   if (negotiated > 0) return negotiated;
   if (row.manuallyAdded) return 0;
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
   const prop = getPropertyById(propertyId);
   const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   if (!sub) return 0;
+  const bundleId = bundleIdForApplication(row.application);
+  if (bundleId) {
+    const totals = resolveBundleFinancialTotals(sub, bundleId);
+    if (totals && totals.monthlyRent > 0) return totals.monthlyRent;
+  }
+  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
+}
+
+type BundleGroupChargeContext = {
+  groupId: string;
+  bundleId: string;
+  memberIndex: number;
+  memberCount: number;
+};
+
+function resolveBundleGroupChargeContext(row: DemoApplicantRow): BundleGroupChargeContext | null {
+  if (!isBundleGroupApplication(row.application)) return null;
+  const groupId = normalizeGroupId(row.application?.groupId);
+  const bundleId = bundleIdForApplication(row.application);
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!groupId || !bundleId || !propertyId) return null;
+
+  const inputs: BundleGroupRowInput[] = readManagerApplicationRows()
+    .filter((a) => {
+      const pid = a.assignedPropertyId?.trim() || a.propertyId?.trim() || a.application?.propertyId?.trim() || "";
+      return (
+        normalizeGroupId(a.application?.groupId) === groupId &&
+        bundleIdForApplication(a.application) === bundleId &&
+        pid === propertyId
+      );
+    })
+    .map((a) => ({
+      id: a.id,
+      name: a.name || a.email || "Applicant",
+      email: a.email || "",
+      role: a.application?.groupRole ?? null,
+      groupId,
+      groupSize: a.application?.groupSize ?? "",
+      status: a.bucket === "approved" ? "approved" : "submitted",
+      bundleId,
+      propertyId,
+    }));
+
+  const groups = buildBundleApplicationGroups(inputs);
+  const group = groups.get(groupId);
+  if (!group) return null;
+  const memberCount = group.expectedSize ?? group.totalCount;
+  if (!(memberCount > 1)) return null;
+  return {
+    groupId,
+    bundleId,
+    memberIndex: memberIndexInBundleGroup(group, row.id),
+    memberCount,
+  };
+}
+
+function applyBundleGroupSplit(
+  amount: number,
+  title: string,
+  ctx: BundleGroupChargeContext | null,
+): { amount: number; title: string; split?: Pick<HouseholdCharge, "bundleGroupId" | "bundleId" | "splitMemberIndex" | "splitMemberCount" | "splitTotalAmountLabel"> } {
+  if (!ctx || !(amount > 0)) return { amount, title };
+  const memberAmount = splitMoneyEvenly(amount, ctx.memberCount, ctx.memberIndex);
+  const share = splitShareLabel(ctx.memberIndex, ctx.memberCount, moneyLabel(amount));
+  return {
+    amount: memberAmount,
+    title: `${title} (${share})`,
+    split: {
+      bundleGroupId: ctx.groupId,
+      bundleId: ctx.bundleId,
+      splitMemberIndex: ctx.memberIndex,
+      splitMemberCount: ctx.memberCount,
+      splitTotalAmountLabel: moneyLabel(amount),
+    },
+  };
 }
 
 export function findWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
@@ -2350,6 +2453,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   });
   const existingKeys = new Set(rows.map((charge) => chargeBusinessKey(charge)));
   const created: HouseholdCharge[] = [];
+  const bundleGroupCtx = resolveBundleGroupChargeContext(row);
 
   const pushCharge = (
     kind: HouseholdChargeKind,
@@ -2359,7 +2463,10 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     dueDateLabel = moveInDue,
   ) => {
     if (!(amount > 0)) return;
-    const label = moneyAmountLabel(Number(amount.toFixed(2)));
+    const split = applyBundleGroupSplit(amount, title, bundleGroupCtx);
+    const finalAmount = split.amount;
+    if (!(finalAmount > 0)) return;
+    const label = moneyAmountLabel(Number(finalAmount.toFixed(2)));
     const charge: HouseholdCharge = withPaymentReference({
       id: approvedChargeId(applicationId, kind),
       createdAt: new Date().toISOString(),
@@ -2371,7 +2478,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       propertyLabel,
       managerUserId: effectiveManagerUserId,
       kind,
-      title,
+      title: split.title,
       amountLabel: label,
       balanceLabel: label,
       status: "pending",
@@ -2379,6 +2486,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       venmoContactSnapshot: venmoSnap,
       blocksLeaseUntilPaid,
       dueDateLabel,
+      ...split.split,
     });
     const key = chargeBusinessKey(charge);
     if (existingKeys.has(key)) return;

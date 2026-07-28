@@ -62,7 +62,9 @@ import {
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { ApplicationGroupSection, applicationStatusPill, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
-  buildApplicationGroups,
+  buildBundleApplicationGroups,
+} from "@/lib/bundle-group/bundle-group-application";
+import {
   describeGroupBadge,
   groupForRow,
 } from "@/lib/rental-application/application-groups";
@@ -452,7 +454,7 @@ export function ManagerApplications() {
   // Reconcile group applications across every bucket (a group can span pending / approved /
   // in-progress) so the whole household is visible from any one member's row.
   const applicationGroups = useMemo(
-    () => buildApplicationGroups(scopedRows.map(groupRowInputForRow)),
+    () => buildBundleApplicationGroups(scopedRows.map(groupRowInputForRow)),
     [scopedRows],
   );
 
@@ -792,7 +794,9 @@ export function ManagerApplications() {
         </Button>
       </PortalTableDetailActions>
 
-      {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
+      {group ? (
+        <ApplicationGroupSection group={group} bundleGroup={group} currentRowId={row.id} />
+      ) : null}
 
       <ApplicationDocumentPreview row={row} />
 

@@ -20,6 +20,7 @@ import {
 } from "@/lib/lease-utilities";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
+import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
@@ -244,7 +245,16 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
   // ── Identity ──────────────────────────────────────────────────────────────
   const tenantRaw = (a.fullLegalName ?? "").trim() || "Resident";
-  const tenantName = escapeHtml(tenantRaw);
+  const jointTenants =
+    ctx.leaseKind === "joint_bundle" && ctx.jointLeaseMembers?.length
+      ? ctx.jointLeaseMembers.map((m) => m.residentName).filter(Boolean)
+      : [];
+  const tenantName =
+    jointTenants.length > 0 ? escapeHtml(jointTenants.join(", ")) : escapeHtml(tenantRaw);
+  const jointPartiesNote =
+    jointTenants.length > 0 && ctx.jointLeaseMembers
+      ? jointLeasePartiesParagraph(ctx.jointLeaseMembers)
+      : "";
   const tenantPhone = dash(a.phone);
   const tenantEmail = dash(a.email);
   const tenantDob = dash(a.dateOfBirth);
@@ -486,6 +496,7 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
   <tr><th width="35%">Landlord / Operator</th><td><strong>${landlordEntity}</strong><br/>Mailing address: ${landlordMailing}<br/>For notices, use PropLane portal messaging or the address above.</td></tr>
   <tr><th>Resident / Tenant</th><td><strong>${tenantName}</strong><br/>Phone: ${tenantPhone} &nbsp;·&nbsp; Email: ${tenantEmail}<br/>Date of birth: ${tenantDob}</td></tr>
 </table>
+${jointPartiesNote ? `<p>${jointPartiesNote}</p>` : ""}
 
 <h2>2. Premises</h2>
 <p>Landlord leases to Resident the following private room and appurtenant shared-area rights:</p>

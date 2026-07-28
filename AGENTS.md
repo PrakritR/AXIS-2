@@ -931,14 +931,20 @@ portal, and identity while the household reads as one unit.
   per-application "Group application" roster (`ApplicationGroupSection`).
 - **No silent deadlock.** A group never *blocks* — approvals stay per-member.
   An unfinished member surfaces as "waiting on N", it does not gate the others.
-- **Money-adjacent surfaces are untouched.** Screening stays per-person (each
-  member fills the full wizard), and deposits / rent / charges are still
-  generated per approved application — there is **no** bundle-level split,
-  proration, or shared-signature lease document. Add those deliberately if ever
-  needed; do not infer them from group membership.
+- **Money-adjacent surfaces for bundle+group households.** When applicants apply as a
+  group **and** select the same `bundleId`, move-in charges split equally across the
+  declared household size (`src/lib/bundle-group/bundle-cost-split.ts` →
+  `household-charges.ts`). Each member still has their own charge rows with split
+  metadata; amounts are equal shares of bundle totals (deposit, utilities, rent,
+  move-in fee).
+- **Joint bundle lease.** When every member of a complete bundle group is approved,
+  `lease-pipeline-storage.ts` creates one `leaseKind: "joint_bundle"` row (not one
+  lease per person). All co-tenants appear on the lease document; the manager reviews
+  and sends a single household lease. Per-member lease rows are suppressed for joint
+  members.
 - The listing-side `ManagerBundleRow` (grouped rooms at one price, applicant's
-  `bundleId`) is a **separate** concept from group *applications* — a bundle is a
-  room offering, a group is a set of applicants. Do not conflate them.
+  `bundleId`) and group applications (`groupId`) are linked when both are present —
+  use `src/lib/bundle-group/` for reconciliation, split math, and joint lease helpers.
 
 # Financials UI cleanup (Blue Steel consolidation)
 
