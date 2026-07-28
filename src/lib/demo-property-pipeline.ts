@@ -163,6 +163,19 @@ export function seedDemoManagerProperties(userId: string, extras: MockProperty[]
   }
 }
 
+/**
+ * `publicProjection` describes a browser-cache row, not the listing — it must
+ * never be written into `property_data`. Stripped at the one boundary every
+ * write crosses rather than at each of the dozen call sites that build a
+ * `MockProperty` by spreading a cached one.
+ */
+function propertyDataForServer(propertyData: unknown): unknown {
+  if (!propertyData || typeof propertyData !== "object" || Array.isArray(propertyData)) return propertyData ?? null;
+  const { publicProjection: _local, ...rest } = propertyData as MockProperty;
+  void _local;
+  return rest;
+}
+
 function mirrorPropertyRecord(input: {
   id: string;
   managerUserId: string | null;
@@ -181,7 +194,7 @@ function mirrorPropertyRecord(input: {
       managerUserId: input.managerUserId,
       status: input.status,
       rowData: input.rowData ?? null,
-      propertyData: input.propertyData ?? null,
+      propertyData: propertyDataForServer(input.propertyData),
       editRequestNote: input.editRequestNote ?? null,
     }),
   }).catch(() => {});
@@ -211,7 +224,7 @@ export async function upsertPropertyRecordToServer(input: {
         managerUserId: input.managerUserId,
         status: input.status,
         rowData: input.rowData ?? null,
-        propertyData: input.propertyData ?? null,
+        propertyData: propertyDataForServer(input.propertyData),
         editRequestNote: input.editRequestNote ?? null,
       }),
     });
