@@ -698,7 +698,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
   bathrooms:   "Bathroom name, location, and amenities for the public listing.",
   spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
-  lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
+  lease:       "Rent, utilities, lease lengths, deposits, and fees.",
   finish:      "Sidebar quick facts and final submit.",
 };
 
@@ -3072,7 +3072,7 @@ export function ManagerAddListingForm({
 
               <ListingSubsection
                 title="Lease terms"
-                description="Choose which lease lengths applicants can select. PropLane creates a lease template for each option — edit them later under Lease on the property panel."
+                description="Pick the lengths applicants can choose. PropLane builds a lease template for each."
               >
                 <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
                   <FieldLabel required>Lease lengths offered</FieldLabel>
@@ -3165,7 +3165,7 @@ export function ManagerAddListingForm({
                     <div className="space-y-1">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Short-term pricing</p>
                       <p className="text-xs leading-relaxed text-muted">
-                        Temporary guest or lodger stays with nightly pricing. Applicants pick “{SHORT_TERM_LEASE_TERM}” as their lease term when this is on.
+                        Nightly rates for “{SHORT_TERM_LEASE_TERM}” applicants.
                       </p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -3227,15 +3227,15 @@ export function ManagerAddListingForm({
                 title="Lease bundles"
                 description={
                   isEntireHome
-                    ? "Optional — the public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
-                    : "Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
+                    ? "Optional — add only for promo pricing or extra listing copy."
+                    : "Optional packages (whole house, roommate groups). Skip to use per-room pricing."
                 }
               >
                 {!isEntireHome ? (
                 <div className="rounded-xl border border-border p-4 sm:p-5">
                   <p className="text-sm font-semibold text-foreground">Build from your rooms</p>
                   <p className="mt-1 text-xs leading-5 text-muted">
-                    Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
+                    Rent defaults to the sum of selected rooms — edit for discounts or promos.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
