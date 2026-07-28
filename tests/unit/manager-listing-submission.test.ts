@@ -223,6 +223,9 @@ describe("disclosure trigger fields", () => {
   it("keeps an ISO occupancy date and a trimmed RRIO number", () => {
     expect(norm({ certificateOfOccupancyDate: "1978-06-01" }).certificateOfOccupancyDate).toBe("1978-06-01");
     expect(norm({ certificateOfOccupancyDate: "06/01/1978" }).certificateOfOccupancyDate).toBeUndefined();
+    // Right shape, impossible calendar date — the rules engine must never read one.
+    expect(norm({ certificateOfOccupancyDate: "9999-99-99" }).certificateOfOccupancyDate).toBeUndefined();
+    expect(norm({ certificateOfOccupancyDate: "1978-02-30" }).certificateOfOccupancyDate).toBeUndefined();
     expect(norm({ rrioRegistrationNumber: "  RRIO-123456 " }).rrioRegistrationNumber).toBe("RRIO-123456");
     expect(norm({ rrioRegistrationNumber: "   " }).rrioRegistrationNumber).toBeUndefined();
   });

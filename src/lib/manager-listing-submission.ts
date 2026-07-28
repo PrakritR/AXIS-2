@@ -1338,7 +1338,13 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     certificateOfOccupancyDate: (() => {
       const raw = (sub as { certificateOfOccupancyDate?: unknown }).certificateOfOccupancyDate;
       const trimmed = typeof raw === "string" ? raw.trim() : "";
-      return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : undefined;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined;
+      // Shape alone would accept "9999-99-99". Round-tripping through Date also
+      // rejects impossible calendar dates, so the rules engine never reads one.
+      const parsed = new Date(`${trimmed}T00:00:00Z`);
+      return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === trimmed
+        ? trimmed
+        : undefined;
     })(),
     rrioRegistrationNumber: (() => {
       const raw = (sub as { rrioRegistrationNumber?: unknown }).rrioRegistrationNumber;
