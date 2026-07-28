@@ -8,7 +8,7 @@ import {
   type ListingStFeeToggles,
   readListingFeeCellAmount,
 } from "@/lib/listing-fee-term-toggles";
-import type { ListingFeeRow } from "@/lib/listing-fees";
+import { LISTING_FEE_PRESETS, type ListingFeeRow } from "@/lib/listing-fees";
 import { sanitizeMoneyInput } from "@/lib/listing-form-inputs";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -124,6 +124,7 @@ export function ListingUnifiedFeesTable({
   onAddCustomFee,
   onRemoveCustomFee,
   onCustomFeeChange,
+  onPresetCadenceChange,
 }: {
   sub: ManagerListingSubmissionV1;
   isEntireHome: boolean;
@@ -139,6 +140,8 @@ export function ListingUnifiedFeesTable({
   onAddCustomFee: () => void;
   onRemoveCustomFee: (index: number) => void;
   onCustomFeeChange: (index: number, patch: Partial<ManagerCustomFeeRow>) => void;
+  /** Set cadence for a preset fee that has no materialized row yet (new listing). */
+  onPresetCadenceChange?: (presetId: string, next: "one-time" | "monthly") => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
@@ -148,8 +151,6 @@ export function ListingUnifiedFeesTable({
             <th className="px-3 py-2.5 font-semibold normal-case tracking-normal text-foreground">Fee</th>
             <th className="px-3 py-2.5">Short-term</th>
             <th className="px-3 py-2.5">Long-term</th>
-            <th className="px-3 py-2.5">Payment</th>
-            <th className="px-3 py-2.5 sr-only">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -224,6 +225,40 @@ export function ListingUnifiedFeesTable({
                       {ltOn && rentLtPerRoom ? (
                         <span className="text-xs text-muted">Per room below</span>
                       ) : null}
+                      {ltOn && !rentLtPerRoom
+                        ? (() => {
+                            const presetId = PRESET_ID_FOR_ROW[rowId];
+                            if (!presetId) return null;
+                            const idx = customFees.findIndex(
+                              (f) => (f as ListingFeeRow).presetId === presetId,
+                            );
+                            // A brand-new listing has no materialized fee rows yet, so
+                            // fall back to the preset's own cadence instead of hiding
+                            // the control until the listing has been saved once.
+                            const presetCadence = LISTING_FEE_PRESETS.find(
+                              (p) => p.presetId === presetId,
+                            )?.cadence;
+                            const fallback: "one-time" | "monthly" =
+                              presetCadence === "monthly" ? "monthly" : "one-time";
+                            const current =
+                              idx >= 0
+                                ? customFees[idx]!.frequency === "one-time"
+                                  ? "one-time"
+                                  : "monthly"
+                                : fallback;
+                            return (
+                              <FeeCadenceSelect
+                                value={current}
+                                onChange={(next) =>
+                                  idx >= 0
+                                    ? onCustomFeeChange(idx, { frequency: next })
+                                    : onPresetCadenceChange?.(presetId, next)
+                                }
+                                ariaLabel={`${row.label} payment frequency`}
+                              />
+                            );
+                          })()
+                        : null}
                     </div>
                   ) : (
                     <span className="text-xs text-muted">—</span>
@@ -236,24 +271,6 @@ export function ListingUnifiedFeesTable({
                     </p>
                   ) : null}
                 </td>
-                <td className="px-3 py-3 align-middle">
-                  {(() => {
-                    const presetId = PRESET_ID_FOR_ROW[rowId];
-                    if (!presetId) return <span className="text-xs text-muted">—</span>;
-                    const idx = customFees.findIndex(
-                      (f) => (f as ListingFeeRow).presetId === presetId,
-                    );
-                    if (idx < 0) return <span className="text-xs text-muted">—</span>;
-                    return (
-                      <FeeCadenceSelect
-                        value={customFees[idx]!.frequency === "one-time" ? "one-time" : "monthly"}
-                        onChange={(next) => onCustomFeeChange(idx, { frequency: next })}
-                        ariaLabel={`${row.label} payment frequency`}
-                      />
-                    );
-                  })()}
-                </td>
-                <td className="px-3 py-3 align-middle" />
               </tr>
             );
           })}
@@ -290,24 +307,20 @@ export function ListingUnifiedFeesTable({
                     onChange={(v) => onCustomFeeChange(i, { amount: v })}
                     ariaLabel={`Custom fee ${i + 1} amount`}
                   />
+                  <FeeCadenceSelect
+                    value={fee.frequency === "one-time" ? "one-time" : "monthly"}
+                    onChange={(next) => onCustomFeeChange(i, { frequency: next })}
+                    ariaLabel={`Custom fee ${i + 1} payment frequency`}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 shrink-0 rounded-lg px-2.5 text-xs"
+                    onClick={() => onRemoveCustomFee(i)}
+                  >
+                    Remove
+                  </Button>
                 </div>
-              </td>
-              <td className="px-3 py-3 align-middle">
-                <FeeCadenceSelect
-                  value={fee.frequency === "one-time" ? "one-time" : "monthly"}
-                  onChange={(next) => onCustomFeeChange(i, { frequency: next })}
-                  ariaLabel={`Custom fee ${i + 1} payment frequency`}
-                />
-              </td>
-              <td className="px-3 py-3 align-middle">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 shrink-0 rounded-lg px-2.5 text-xs"
-                  onClick={() => onRemoveCustomFee(i)}
-                >
-                  Remove
-                </Button>
               </td>
             </tr>
           ))}

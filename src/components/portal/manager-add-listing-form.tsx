@@ -19,6 +19,7 @@ import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } f
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import { ListingUnifiedFeesTable } from "@/components/portal/listing-unified-fees-table";
+import { LISTING_FEE_PRESETS } from "@/lib/listing-fees";
 import {
   submitManagerPendingPropertyToServer,
   syncPropertyPipelineFromServer,
@@ -3293,6 +3294,30 @@ export function ManagerAddListingForm({
                       return;
                     }
                     setCustomFee(i, patch);
+                  }}
+                  onPresetCadenceChange={(presetId, next) => {
+                    // A new listing has no materialized fee rows yet, so the first
+                    // cadence change creates the preset's row rather than silently
+                    // doing nothing.
+                    setSub((s) => {
+                      const rows = [...(s.customFees ?? [])];
+                      const existing = rows.findIndex(
+                        (f) => (f as { presetId?: string }).presetId === presetId,
+                      );
+                      if (existing >= 0) {
+                        rows[existing] = { ...rows[existing]!, frequency: next };
+                        return { ...s, customFees: rows };
+                      }
+                      const preset = LISTING_FEE_PRESETS.find((pr) => pr.presetId === presetId);
+                      rows.push({
+                        id: `fee-${presetId}`,
+                        label: preset?.defaultLabel ?? presetId,
+                        amount: "",
+                        frequency: next,
+                        presetId,
+                      } as (typeof rows)[number]);
+                      return { ...s, customFees: rows };
+                    });
                   }}
                 />
 
