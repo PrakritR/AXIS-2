@@ -21,7 +21,7 @@ export function ListingPreviewScrollShell({
       <ListingStickySubnav mode="modal" pinned className="shrink-0 rounded-none border-x-0 shadow-none sm:rounded-none" />
       <div
         data-listing-preview-scroll
-        className={`min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background ${scrollClassName}`}
+        className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-background ${scrollClassName}`}
       >
         {children}
       </div>
