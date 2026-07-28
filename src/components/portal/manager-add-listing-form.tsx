@@ -40,7 +40,7 @@ import {
   stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
-import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
+import { sortRoomIndicesByFloor } from "@/lib/listing-floor-order";
 import {
   scoreRoomMedia,
   shouldWarnOnPublish,
@@ -103,12 +103,11 @@ import {
   LISTING_BEDROOM_SLOT_OPTIONS,
   LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
-  LISTING_ROOM_FLOOR_LEVEL_OPTIONS,
   LISTING_STORIES_OPTIONS,
   LISTING_TOTAL_BATH_OPTIONS,
   ROOM_AMENITY_PRESETS,
-  ROOM_FLOOR_LEVEL_CUSTOM,
   ROOM_FURNITURE_PRESETS,
+  floorLevelSelectOptions,
   ROOM_FURNISHING_OPTIONS,
   SHARED_SPACE_AMENITY_PRESETS,
   SHARED_SPACE_KIND_OPTIONS,
@@ -129,7 +128,6 @@ import {
   parseSanitizedInteger,
   parseSanitizedMoneyNumber,
   sanitizeBuildingNameInput,
-  sanitizeFloorLabelInput,
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
@@ -189,87 +187,6 @@ function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
     out.push(item);
   }
   return out;
-}
-
-function roomFloorOptionsFromStories(storiesId: string | undefined): { id: string; label: string }[] {
-  if (storiesId === "1") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "2") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "2", label: "2nd floor" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "3") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "2", label: "2nd floor" },
-      { id: "3", label: "3rd floor" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "4") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "2", label: "2nd floor" },
-      { id: "3", label: "3rd floor" },
-      { id: "4plus", label: "4th floor or higher" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "split") {
-    return [
-      { id: "split-main", label: "Main split level" },
-      { id: "split-upper", label: "Upper split level" },
-      { id: "split-lower", label: "Lower split level" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  return LISTING_ROOM_FLOOR_LEVEL_OPTIONS.map((o) => ({ id: o.id, label: o.label }));
-}
-
-function roomFloorSelectValueFromOptions(floor: string, options: readonly { id: string; label: string }[]): string {
-  const hit = options.find((o) => o.label === floor);
-  if (hit) return hit.id;
-  if (!floor.trim()) return "";
-  return ROOM_FLOOR_LEVEL_CUSTOM;
-}
-
-function uniqueRoomFloorLabels(rooms: { floor: string }[]): string[] {
-  return sortUniqueFloorLabels(rooms.map((r) => r.floor));
-}
-
-const LOCATION_LEVEL_CUSTOM = "__location_custom__";
-
-function locationOptionsFromStories(storiesId: string | undefined): string[] {
-  if (storiesId === "1") return ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "2") return ["1st / main floor", "2nd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "3") return ["1st / main floor", "2nd floor", "3rd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "4") return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "split") return ["Main split level", "Upper split level", "Lower split level", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  // Default: all standard floors (stories not yet set)
-  return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-}
-
-function locationSelectValue(location: string, options: readonly string[]): string {
-  const t = location.trim();
-  if (!t) return "";
-  return options.includes(t) ? t : LOCATION_LEVEL_CUSTOM;
 }
 
 const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
@@ -1278,9 +1195,6 @@ export function ManagerAddListingForm({
     }),
     [listingPresets],
   );
-  const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
-  const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
-  const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
   // The draft record this wizard owns. It starts as the resumed draft's id (if
@@ -2153,58 +2067,8 @@ export function ManagerAddListingForm({
     }));
   };
 
-  const onPickPropertyFloorPlan = async (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showToast("Images only for floor plans.");
-      return;
-    }
-    try {
-      const url = await fileToDataUrl(file, MAX_IMG_BYTES);
-      if (!url) {
-        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${file.name}`);
-        return;
-      }
-      setSub((s) => ({ ...s, propertyFloorPlanDataUrl: url }));
-    } catch {
-      showToast("Could not process image. Please try a different file.");
-    }
-  };
-
-  const clearPropertyFloorPlan = () => {
-    setSub((s) => ({ ...s, propertyFloorPlanDataUrl: null }));
-  };
-
-  const onPickFloorPlanForLabel = async (floorLabel: string, files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showToast("Images only for floor plans.");
-      return;
-    }
-    try {
-      const url = await fileToDataUrl(file, MAX_IMG_BYTES);
-      if (!url) {
-        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${file.name}`);
-        return;
-      }
-      setSub((s) => ({
-        ...s,
-        floorPlanByLabel: { ...(s.floorPlanByLabel ?? {}), [floorLabel]: url },
-      }));
-    } catch {
-      showToast("Could not process image. Please try a different file.");
-    }
-  };
-
-  const removeFloorPlanForLabel = (floorLabel: string) => {
-    setSub((s) => {
-      const next = { ...(s.floorPlanByLabel ?? {}) };
-      delete next[floorLabel];
-      return { ...s, floorPlanByLabel: Object.keys(next).length > 0 ? next : undefined };
-    });
-  };
+  // Floor-plan upload handlers removed with the Floor plans section (data intentionally
+  // kept on the submission: propertyFloorPlanDataUrl + floorPlanByLabel).
 
   const clearRoomVideo = (roomIndex: number) => {
     const roomId = sub.rooms[roomIndex]?.id;
@@ -3729,43 +3593,20 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="Preset or custom wording.">Floor / level</FieldLabel>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Select
-                              aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
-                              className={`${selectInputCls}`}
-                              value={roomFloorSelectValueFromOptions(room.floor, roomFloorOptions)}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (v === ROOM_FLOOR_LEVEL_CUSTOM) {
-                                  if (roomFloorOptions.some((o) => o.label === room.floor)) {
-                                    setRoom(i, { floor: "" });
-                                  }
-                                  return;
-                                }
-                                const label = roomFloorOptions.find((o) => o.id === v)?.label ?? "";
-                                setRoom(i, { floor: label });
-                              }}
-                            >
-                              <option value="">Select floor</option>
-                              {roomFloorOptions.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.label}
-                                </option>
-                              ))}
-                              <option value={ROOM_FLOOR_LEVEL_CUSTOM}>Custom…</option>
-                            </Select>
-                          </div>
-                          {roomFloorSelectValueFromOptions(room.floor, roomFloorOptions) === ROOM_FLOOR_LEVEL_CUSTOM ? (
-                            <Input
-                              value={room.floor}
-                              onChange={(e) => setRoom(i, { floor: sanitizeFloorLabelInput(e.target.value) })}
-                              placeholder="e.g. Garden level, half-basement"
-                              aria-label="Custom floor"
-                            />
-                          ) : null}
-                        </div>
+                        <FieldLabel>Floor</FieldLabel>
+                        <Select
+                          aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
+                          className={selectInputCls}
+                          value={room.floor}
+                          onChange={(e) => setRoom(i, { floor: e.target.value })}
+                        >
+                          <option value="">Select floor</option>
+                          {floorLevelSelectOptions(sub.listingStoriesId, room.floor).map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
                       </GridField>
                       <div className="sm:col-span-2">
                         <FieldLabel hint="Check Furnished to list included items.">Furnishing</FieldLabel>
@@ -3963,77 +3804,11 @@ export function ManagerAddListingForm({
                 underlying summarizePropertyMediaReadiness still backs the publish-time
                 warning (shouldWarnOnPublish) below, which is a separate safety gate. */}
 
-            <ListingSubsection
-              title="Floor plans"
-              description="Upload a layout image for each floor / level (or one property-wide plan). Residents open it from Details on the public listing."
-            >
-              <div className="mt-3 space-y-4">
-                <div className="rounded-xl border border-border bg-accent/20 p-4">
-                  <FieldLabel hint="Used when you do not upload separate plans per floor.">
-                    Property-wide floor plan
-                  </FieldLabel>
-                  <MediaPickTrigger accept="image/*" onFiles={(files) => { void onPickPropertyFloorPlan(files); }}>
-                    {sub.propertyFloorPlanDataUrl ? "Replace property floor plan" : "Upload property floor plan"}
-                  </MediaPickTrigger>
-                  {sub.propertyFloorPlanDataUrl ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="relative max-w-md overflow-hidden rounded-lg border border-border bg-accent/30">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={sub.propertyFloorPlanDataUrl} alt="" className="max-h-56 w-full object-contain" />
-                      </div>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-rose-600 hover:underline"
-                        onClick={clearPropertyFloorPlan}
-                      >
-                        Remove property floor plan
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[11px] text-muted">Optional — JPG or PNG, up to 10 MB.</p>
-                  )}
-                </div>
-
-                {roomFloorLabelsForPlans.length > 0 ? (
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-foreground">Per-floor plans</p>
-                    {roomFloorLabelsForPlans.map((floorLabel) => {
-                      const planUrl = sub.floorPlanByLabel?.[floorLabel];
-                      return (
-                        <div key={floorLabel} className="rounded-xl border border-border bg-accent/20 p-4">
-                          <FieldLabel hint={`Floor plan for bedrooms on ${floorLabel}.`}>{floorLabel}</FieldLabel>
-                          <MediaPickTrigger
-                            accept="image/*"
-                            onFiles={(files) => { void onPickFloorPlanForLabel(floorLabel, files); }}
-                          >
-                            {planUrl ? "Replace floor plan" : "Upload floor plan"}
-                          </MediaPickTrigger>
-                          {planUrl ? (
-                            <div className="mt-3 space-y-2">
-                              <div className="relative max-w-md overflow-hidden rounded-lg border border-border bg-accent/30">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={planUrl} alt="" className="max-h-56 w-full object-contain" />
-                              </div>
-                              <button
-                                type="button"
-                                className="text-xs font-semibold text-rose-600 hover:underline"
-                                onClick={() => removeFloorPlanForLabel(floorLabel)}
-                              >
-                                Remove floor plan
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-[11px] text-muted">Recommended before you go live.</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted">Set a floor / level on each room above to upload per-floor plans.</p>
-                )}
-              </div>
-            </ListingSubsection>
+            {/* Floor plans section removed from the wizard at the captain's request ("for
+                now" — may return). The stored images are intentionally KEPT: the submission
+                still carries propertyFloorPlanDataUrl + floorPlanByLabel, and the public
+                listing / resident detail continues to display them. Only this upload UI is
+                gone. Re-add this ListingSubsection to bring the editor back. */}
           </FormSection>
           ) : null}
 
@@ -4101,44 +3876,20 @@ export function ManagerAddListingForm({
                         <StepFieldError msg={bathNameErr} />
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel>Location in building</FieldLabel>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Select
-                              aria-label={`Bathroom ${i + 1} location`}
-                              className={`${selectInputCls}`}
-                              value={locationSelectValue(b.location ?? "", locationLevelOptions)}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (!v) {
-                                  setBath(i, { location: "" });
-                                  return;
-                                }
-                                if (v === LOCATION_LEVEL_CUSTOM) {
-                                  if (locationLevelOptions.includes((b.location ?? "").trim())) setBath(i, { location: "" });
-                                  return;
-                                }
-                                setBath(i, { location: v });
-                              }}
-                            >
-                              <option value="">Select location</option>
-                              {locationLevelOptions.map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                              <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
-                            </Select>
-                          </div>
-                          {locationSelectValue(b.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
-                            <Input
-                              value={b.location ?? ""}
-                              onChange={(e) => setBath(i, { location: e.target.value })}
-                              placeholder="Custom location"
-                              aria-label={`Bathroom ${i + 1} custom location`}
-                            />
-                          ) : null}
-                        </div>
+                        <FieldLabel>Floor</FieldLabel>
+                        <Select
+                          aria-label={`Bathroom ${i + 1} floor`}
+                          className={selectInputCls}
+                          value={b.location ?? ""}
+                          onChange={(e) => setBath(i, { location: e.target.value })}
+                        >
+                          <option value="">Select floor</option>
+                          {floorLevelSelectOptions(sub.listingStoriesId, b.location ?? "").map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
                       </div>
                       <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={b.shower} onChange={(e) => setBath(i, { shower: e.target.checked })} />
@@ -4461,44 +4212,20 @@ export function ManagerAddListingForm({
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel>Location / level</FieldLabel>
-                          <div className="space-y-2">
-                            <div className="relative">
-                              <Select
-                                aria-label={`Shared space ${i + 1} location`}
-                                className={`${selectInputCls}`}
-                                value={locationSelectValue(sp.location ?? "", locationLevelOptions)}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  if (!v) {
-                                    setSharedSpace(i, { location: "" });
-                                    return;
-                                  }
-                                  if (v === LOCATION_LEVEL_CUSTOM) {
-                                    if (locationLevelOptions.includes((sp.location ?? "").trim())) setSharedSpace(i, { location: "" });
-                                    return;
-                                  }
-                                  setSharedSpace(i, { location: v });
-                                }}
-                              >
-                                <option value="">Select location</option>
-                                {locationLevelOptions.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
-                                <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
-                              </Select>
-                            </div>
-                            {locationSelectValue(sp.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
-                              <Input
-                                value={sp.location ?? ""}
-                                onChange={(e) => setSharedSpace(i, { location: e.target.value })}
-                                placeholder="Custom location"
-                                aria-label={`Shared space ${i + 1} custom location`}
-                              />
-                            ) : null}
-                          </div>
+                          <FieldLabel>Floor</FieldLabel>
+                          <Select
+                            aria-label={`Shared space ${i + 1} floor`}
+                            className={selectInputCls}
+                            value={sp.location ?? ""}
+                            onChange={(e) => setSharedSpace(i, { location: e.target.value })}
+                          >
+                            <option value="">Select floor</option>
+                            {floorLevelSelectOptions(sub.listingStoriesId, sp.location ?? "").map((label) => (
+                              <option key={label} value={label}>
+                                {label}
+                              </option>
+                            ))}
+                          </Select>
                         </div>
                         <div className="sm:col-span-2">
                           <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()} — check all that apply.`}>
