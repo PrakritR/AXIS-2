@@ -80,9 +80,6 @@ const CO_MANAGER_ROLE_BADGE =
 const LINKED_COUNT_TRIGGER =
   "inline-flex items-center gap-1 rounded-full text-xs font-semibold text-foreground transition hover:text-primary";
 
-const OWNER_ROLE_BADGE =
-  "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-
 const PENDING_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
@@ -1242,79 +1239,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     .filter(([, v]) => v)
     .map(([k]) => k);
 
-  const renderSelfDetail = () => (
-    <>
-      {ownedProperties.map((prop) => {
-        const coManagers = coManagersForProperty(prop.id);
-        return (
-          <PortalCollapsibleSection
-            key={prop.id}
-            title={prop.label}
-            subtitle={
-              coManagers.length === 0
-                ? "No co-managers on this property"
-                : `${coManagers.length} co-manager${coManagers.length === 1 ? "" : "s"}`
-            }
-            defaultExpanded={false}
-            surfaceMuted={false}
-            className="mt-4 first:mt-0"
-            toggleDataAttr="owner-property-toggle"
-          >
-            <div className="space-y-3 px-4 pb-4">
-              {coManagers.length === 0 ? (
-                <p className="text-sm text-muted">No co-managers on this property yet.</p>
-              ) : (
-                coManagers.map((link) => {
-                  const assignedId =
-                    resolveAssignedPropertyId(prop.id, link.assignedPropertyIds) ?? prop.id;
-                  const perms = permissionsForProperty(link.propertyCoManagerPermissions, assignedId);
-                  return (
-                  <PortalCollapsibleSection
-                    key={link.id}
-                    title={link.linkedDisplayName ?? link.linkedAxisId}
-                    subtitle={summarizePropertyCoManagerPermissions({ [assignedId]: perms })}
-                    defaultExpanded={false}
-                    surfaceMuted={false}
-                    titleVariant="resident"
-                    toggleDataAttr="owner-co-manager-toggle"
-                    headerActions={renderCoManagerPropertyActions(prop.id, link, false)}
-                  >
-                    <p className="px-4 pb-4 text-xs text-muted">
-                      {summarizePropertyCoManagerPermissions({ [assignedId]: perms })}
-                    </p>
-                  </PortalCollapsibleSection>
-                  );
-                })
-              )}
-            </div>
-          </PortalCollapsibleSection>
-        );
-      })}
-      {coManagedProperties.length > 0 ? (
-        <div className="mt-4 space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-            Co-managing (linked to you)
-          </p>
-          {coManagedProperties.map((prop) => (
-            <div
-              key={`linked-${prop.id}`}
-              className="rounded-xl border border-border bg-accent/20 px-4 py-3"
-              data-attr="co-managed-property"
-            >
-              <p className="text-sm font-medium text-foreground">{prop.label}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                You manage this listing through a co-manager link. It is not in your owned portfolio.
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {ownedProperties.length === 0 && coManagedProperties.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No properties in your portfolio yet.</p>
-      ) : null}
-    </>
-  );
-
   const renderInviteDetail = (inv: AccountLinkInviteDto) => {
     const draft = getInviteDraft(inv);
     const readOnly = inv.direction === "incoming";
@@ -1442,7 +1366,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {!hasTeamRows ? (
-          <PortalDataTableEmpty message="No team members yet." icon="team" />
+          <PortalDataTableEmpty message="No co-managers yet." icon="data" />
         ) : (
           <>
             <div className="space-y-2 lg:hidden">
@@ -1466,24 +1390,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                     </PortalMobileSummaryCard>
                   ))
                 : null}
-
-              {managedPropertyCount > 0 ? (
-                <PortalMobileSummaryCard
-                  key="__self__"
-                  title="You"
-                  subtitle="Main manager"
-                  meta={
-                    coManagedProperties.length > 0
-                      ? `${ownedProperties.length} owned · ${coManagedProperties.length} co-managing`
-                      : `${ownedProperties.length} owned`
-                  }
-                  badge={<span className={OWNER_ROLE_BADGE}>Owner</span>}
-                  expanded={expandedLinkId === "__self__"}
-                  onClick={() => setExpandedLinkId((cur) => (cur === "__self__" ? null : "__self__"))}
-                >
-                  {expandedLinkId === "__self__" ? renderSelfDetail() : null}
-                </PortalMobileSummaryCard>
-              ) : null}
 
               {useRemote
                 ? activeRemote.map((inv) => {
@@ -1607,49 +1513,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           </tr>
                         ))
                       : null}
-
-                    {managedPropertyCount > 0 ? (
-                      <Fragment key="__self__">
-                        <tr
-                          className={PORTAL_TABLE_TR_EXPANDABLE}
-                          onClick={createPortalRowExpandClick(() =>
-                            setExpandedLinkId((cur) => (cur === "__self__" ? null : "__self__")),
-                          )}
-                          aria-expanded={expandedLinkId === "__self__"}
-                        >
-                          <td className={PORTAL_TABLE_TD}>
-                            <PortalTableInlineExpand
-                              expanded={expandedLinkId === "__self__"}
-                              className="font-medium text-foreground"
-                            >
-                              You
-                            </PortalTableInlineExpand>
-                            <p className="mt-0.5 text-xs text-muted">Main manager</p>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <span className={OWNER_ROLE_BADGE}>Owner</span>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <span className="tabular-nums">{ownedProperties.length}</span>
-                            <span className="text-muted"> owned</span>
-                            {coManagedProperties.length > 0 ? (
-                              <>
-                                <span className="text-muted"> · </span>
-                                <span className="tabular-nums">{coManagedProperties.length}</span>
-                                <span className="text-muted"> co-managing</span>
-                              </>
-                            ) : null}
-                          </td>
-                        </tr>
-                        {expandedLinkId === "__self__" ? (
-                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                              {renderSelfDetail()}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    ) : null}
 
                     {useRemote
                       ? activeRemote.map((inv) => {
