@@ -1,5 +1,5 @@
 /**
- * Vendor invite email content — a manager inviting a vendor to create their Axis
+ * Vendor invite email content — a manager inviting a vendor to create their PropLane
  * vendor account and link to the manager's vendor directory row.
  */
 

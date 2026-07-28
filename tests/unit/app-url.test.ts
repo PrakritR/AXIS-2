@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
+import { leadInviteAppOrigin } from "@/lib/lead-invite.server";
 import { resolveAppOrigin, resolveEmailLinkBaseUrl, resolveShareableAppOrigin } from "@/lib/app-url";
 
 describe("resolveShareableAppOrigin", () => {
@@ -60,6 +61,28 @@ describe("resolveEmailLinkBaseUrl", () => {
     process.env.NEXT_PUBLIC_CANONICAL_APP_URL = "https://www.axis-seattle-housing.com";
     process.env.NEXT_PUBLIC_APP_URL = "https://www.axis-seattle-housing.com";
     expect(resolveEmailLinkBaseUrl()).toBe("https://prop-lane.space");
+  });
+
+  it("prefers a configured PropLane host over legacy env values", () => {
+    process.env.NEXT_PUBLIC_CANONICAL_APP_URL = "https://prop-lane.space";
+    process.env.NEXT_PUBLIC_APP_URL = "https://www.axis-seattle-housing.com";
+    expect(resolveEmailLinkBaseUrl()).toBe("https://prop-lane.space");
+  });
+});
+
+describe("leadInviteAppOrigin", () => {
+  const prevCanonical = process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+  const prevApp = process.env.NEXT_PUBLIC_APP_URL;
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_CANONICAL_APP_URL = prevCanonical;
+    process.env.NEXT_PUBLIC_APP_URL = prevApp;
+  });
+
+  it("uses the same canonical base as outbound emails", () => {
+    delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://www.axis-seattle-housing.com";
+    expect(leadInviteAppOrigin("https://preview.vercel.app")).toBe("https://prop-lane.space");
   });
 });
 

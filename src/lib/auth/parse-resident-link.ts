@@ -47,7 +47,7 @@ export function parseManagerApplicationLink(input: string): ParsedManagerApplica
 
 /** @deprecated Prefer buildResidentSetupHref from resident-setup-token — residents create accounts via emailed setup links. */
 export function buildResidentCreateAccountHref(axisId: string, email?: string): string {
-  const params = new URLSearchParams({ axis_id: axisId.trim() });
+  const params = new URLSearchParams({ proplane_id: axisId.trim() });
   if (email?.includes("@")) params.set("email", email.trim().toLowerCase());
   return `/auth/resident-setup?${params.toString()}`;
 }
