@@ -10,6 +10,7 @@ import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
   buildManagerListingUrl,
+  buildManagerPortfolioApplyUrl,
   buildManagerPortfolioTourUrl,
   buildManagerTourUrl,
 } from "@/lib/manager-property-links";
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       listingRoomId?: unknown;
       roomName?: unknown;
       note?: unknown;
+      rentalType?: unknown;
     };
     try {
       body = (await req.json()) as typeof body;
@@ -71,6 +73,7 @@ export async function POST(req: Request) {
     const listingRoomId = typeof body.listingRoomId === "string" ? body.listingRoomId.trim() : "";
     const roomName = typeof body.roomName === "string" ? body.roomName.trim() : "";
     const note = typeof body.note === "string" ? body.note.trim() : "";
+    const rentalType = body.rentalType === "short_term" ? "short_term" : "standard";
 
     if (!kind) return NextResponse.json({ error: "kind must be apply, tour, or listing." }, { status: 400 });
     if (!to || !EMAIL_RE.test(to)) return NextResponse.json({ error: "A valid recipient email is required." }, { status: 400 });
@@ -144,15 +147,20 @@ export async function POST(req: Request) {
       propertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
+      rentalType: rentalType === "short_term" ? "short_term" : undefined,
     });
     const tourUrl = buildManagerTourUrl(origin, propertyId);
     const listingPageUrl = buildManagerListingUrl(origin, propertyId);
     const listingCount = isMultiListing || isMultiApply ? authorized.length : undefined;
     const tourCount = isPortfolioTour ? authorized.length : undefined;
     const authorizedIds = authorized.map((entry) => entry.id);
-    const linkUrl = isMultiListing || isMultiApply
+    const linkUrl = isMultiListing
       ? buildManagerBrowseUrl(origin, authorizedIds)
-      : isPortfolioTour
+      : isMultiApply
+        ? buildManagerPortfolioApplyUrl(origin, authorizedIds, {
+            rentalType: rentalType === "short_term" ? "short_term" : undefined,
+          })
+        : isPortfolioTour
         ? buildManagerPortfolioTourUrl(origin, authorizedIds)
         : kind === "tour"
           ? tourUrl
