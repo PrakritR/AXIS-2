@@ -29,6 +29,25 @@ For manager/resident/admin portal E2E tests, run `npm run test:seed` then set `E
 > message instead of letting 131 specs grind for hours. Only turn the flag on
 > where the accounts actually exist.
 
+## Multi-role accounts & the portal chooser
+
+One login can hold several portal roles (a shipped feature). For a multi-role
+account, `effectiveRole` is derived **only** from the `axis_active_portal` cookie
+(`src/lib/auth/portal-access.ts`), and sign-in does **not** set that cookie — so
+every direct navigation to `/portal/*` (etc.) bounces to `/auth/choose-portal`
+(`portal-layout-guard.ts`). The `signInAs*` helpers therefore call
+`establishActivePortal` (`tests/helpers/auth.ts`), which drives the chooser to
+pin the cookie; do the same in any new signed-in spec rather than asserting the
+account is single-role. The seed marks `manager@` `onlyRole: true`, but it can
+still acquire a `resident` role by applying from its own portal — that is
+legitimate, and the helpers handle it.
+
+> **The `e2e` CI job does NOT run `test:seed`.** It signs in as whatever the
+> shared test project currently holds, so account state (including the roles
+> above) persists between runs. If a role goes missing or an account's state
+> drifts, re-run `npm run test:seed`. Adding a seed step to the `e2e` workflow is
+> a sensible follow-up.
+
 ## GitHub Actions secrets
 
 Configure these in your repository settings for CI:

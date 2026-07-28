@@ -87,6 +87,21 @@ export async function runExistingResidentOnboarding(
     thread: [],
   });
 
+  // `leaseId` is derived from the application's axis id, which is the SAME id
+  // space real approved-application leases use, and the route falls back to a
+  // client-supplied `row` when the scoped application lookup misses. Without
+  // this check an upsert on a colliding id would replace another manager's
+  // fully executed lease (document, signatures and all) and re-parent the row
+  // to the caller. Never write onto a lease record somebody else owns.
+  const { data: existingLease } = await db
+    .from("portal_lease_pipeline_records")
+    .select("id, manager_user_id")
+    .eq("id", leaseId)
+    .maybeSingle();
+  if (existingLease && existingLease.manager_user_id && existingLease.manager_user_id !== actor.userId) {
+    return { ok: false, status: 409, error: "That resident record belongs to another manager.", leaseId };
+  }
+
   const { error: leaseError } = await db
     .from("portal_lease_pipeline_records")
     .upsert(buildLeaseUpsert(leaseRow as unknown as Record<string, unknown>), { onConflict: "id" });

@@ -935,7 +935,12 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
     >
-      <div className={PORTAL_DASHBOARD_STACK}>
+      {/* Full width: the assistant is the floating popup by default, and a
+          manager who pins it gets the portal-wide rail from the shell layout
+          (`PortalAssistantDockRail`) rather than a dashboard-only column.
+          `min-w-0` keeps the horizontally-scrolling KPI row from forcing page
+          overflow. */}
+      <div className={`min-w-0 ${PORTAL_DASHBOARD_STACK}`}>
         {showDocExpiryBanner ? (
           <Link
             href={docExpiryHref}
@@ -966,13 +971,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-vacant"
             />
             <KpiTile
-              label="Applicants to review"
-              value={pendingApps.length}
-              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
-              href={`${BASE}/applications`}
-              dataAttr="dashboard-kpi-applications"
-            />
-            <KpiTile
               label="Leases to sign"
               value={pendingLeaseRows.length}
               sub={
@@ -985,6 +983,13 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               accent={managerSignatureLeaseCount > 0}
               href={`${BASE}/leases`}
               dataAttr="dashboard-kpi-leases"
+            />
+            <KpiTile
+              label="Applicants to review"
+              value={pendingApps.length}
+              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
+              href={`${BASE}/applications`}
+              dataAttr="dashboard-kpi-applications"
             />
             <KpiTile
               label="Overdue balance"

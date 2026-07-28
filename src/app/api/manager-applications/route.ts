@@ -13,6 +13,7 @@ import { reclaimApplicationPhotos } from "@/lib/rental-application/application-p
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
+import { SMS_CONSENT_WORDING_VERSION } from "@/lib/rental-application/sms-consent";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -247,6 +248,56 @@ function anchorServerOwnedWithdrawal(
   const blockedApproval =
     next.bucket === "approved" && storedRow?.bucket !== "approved" && isWithdrawnApplicationRow(next);
   return { row: next, blockedApproval };
+}
+
+/**
+ * SMS consent evidence is SERVER-owned, like `withdrawnAt`. Every write path
+ * mirrors a client blob wholesale, so the client-supplied `smsConsentAt` /
+ * `smsConsentWordingVersion` are never trusted: while `smsConsent` is true the
+ * server keeps the FIRST stamp it recorded (draft rows re-upsert on every
+ * keystroke) or mints a fresh timestamp + current wording version; an EXPLICIT
+ * `smsConsent: false` (a genuine uncheck/opt-out) clears both. A blob that
+ * simply lacks the field (a legacy client, a manager mirror captured before the
+ * field existed, an unrelated re-upsert) preserves whatever the server already
+ * recorded — absence is not an opt-out and must never destroy evidence.
+ */
+function anchorServerOwnedSmsConsent(
+  row: DemoApplicantRow,
+  stored: DemoApplicantRow | null,
+): DemoApplicantRow {
+  if (!row.application) return row;
+  if (row.application.smsConsent === true) {
+    const storedApp = stored?.application;
+    const firstStampAt = storedApp?.smsConsent === true ? storedApp.smsConsentAt?.trim() || undefined : undefined;
+    return {
+      ...row,
+      application: {
+        ...row.application,
+        smsConsentAt: firstStampAt ?? new Date().toISOString(),
+        smsConsentWordingVersion:
+          (firstStampAt ? storedApp?.smsConsentWordingVersion : undefined) ?? SMS_CONSENT_WORDING_VERSION,
+      },
+    };
+  }
+  const storedApp = stored?.application;
+  if (row.application.smsConsent === undefined && storedApp?.smsConsent !== undefined) {
+    return {
+      ...row,
+      application: {
+        ...row.application,
+        smsConsent: storedApp.smsConsent,
+        smsConsentAt: storedApp.smsConsentAt,
+        smsConsentWordingVersion: storedApp.smsConsentWordingVersion,
+      },
+    };
+  }
+  if (row.application.smsConsentAt === undefined && row.application.smsConsentWordingVersion === undefined) {
+    return row;
+  }
+  return {
+    ...row,
+    application: { ...row.application, smsConsentAt: undefined, smsConsentWordingVersion: undefined },
+  };
 }
 
 /**
@@ -573,9 +624,13 @@ export async function POST(req: Request) {
           blockedWithdrawnApprovals += 1;
           continue;
         }
-        await persistNormalizedRow(db, guarded.row.id, guarded.row);
-        if (guarded.row.bucket === "pending" && guarded.row.application?.consentCredit) {
-          void tryAutoOrderScreening(db, guarded.row);
+        const anchored = anchorServerOwnedSmsConsent(
+          guarded.row,
+          (stored?.row_data ?? null) as DemoApplicantRow | null,
+        );
+        await persistNormalizedRow(db, anchored.id, anchored);
+        if (anchored.bucket === "pending" && anchored.application?.consentCredit) {
+          void tryAutoOrderScreening(db, anchored);
         }
       }
       if (blockedWithdrawnApprovals > 0) {
@@ -722,7 +777,7 @@ export async function POST(req: Request) {
       if (!guest.ok) {
         return NextResponse.json({ error: guest.error }, { status: guest.status });
       }
-      row = guest.row;
+      row = anchorServerOwnedSmsConsent(guest.row, existing ?? null);
       await persistNormalizedRow(db, row.id, row);
       if (row.bucket === "pending" && row.application?.consentCredit) {
         void tryAutoOrderScreening(db, row);
@@ -830,6 +885,7 @@ export async function POST(req: Request) {
         }
         row = { ...row, id: normalizeApplicationAxisId(row.id), managerUserId };
       }
+      row = anchorServerOwnedSmsConsent(row, existing ?? null);
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;
@@ -854,7 +910,10 @@ export async function POST(req: Request) {
           { status: 409 },
         );
       }
-      row = guarded.row;
+      row = anchorServerOwnedSmsConsent(
+        guarded.row,
+        (storedLoad.record?.row_data ?? null) as DemoApplicantRow | null,
+      );
     }
     await persistNormalizedRow(db, row.id, row);
     if (row.bucket === "pending" && row.application?.consentCredit) {

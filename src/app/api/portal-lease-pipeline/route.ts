@@ -6,6 +6,8 @@ import {
   type LeaseScopeRecord,
 } from "@/lib/auth/manager-lease-scope";
 import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
+import { replacesSignedLeaseDocument } from "@/lib/lease-execution-evidence";
+import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -158,6 +160,22 @@ export async function POST(req: Request) {
 
       const recordExists = Array.isArray(existing) && existing.length > 0;
       const existingRecord = (existing ?? [])[0] as (LeaseScopeRecord & { row_data?: Record<string, unknown> }) | undefined;
+
+      // Evidence integrity, authoritative copy. The client store runs the same
+      // predicate, but it runs IN the browser against a store the browser owns,
+      // so it is advisory: this route is where a signed lease's document body
+      // actually becomes immutable. Refuse rather than silently restore, because a
+      // legitimate client never replaces the body of a row that still carries a
+      // signature, so a request that does is either tampering or a bug, and
+      // both deserve to surface. Admins are not exempt; the point is that the
+      // executed text cannot change, not that only strangers may not change it.
+      const storedRow = existingRecord?.row_data as LeasePipelineRow | undefined;
+      if (storedRow && replacesSignedLeaseDocument(storedRow, normalized as unknown as LeasePipelineRow)) {
+        return NextResponse.json(
+          { error: "This lease already carries a signature; its document cannot be replaced." },
+          { status: 409 },
+        );
+      }
 
       if (recordExists && ctx.user.role !== "admin") {
         if (ctx.user.role === "resident") {

@@ -13,7 +13,10 @@ test.describe("Auth redirects", () => {
 
   test("sign-in page loads", async ({ page }) => {
     await page.goto("/auth/sign-in");
-    await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+    // The unified auth hub (NativeAuthHub) renders label-less inputs (placeholder
+    // only), matching tests/helpers/auth.ts — never a <label>, so getByLabel finds
+    // nothing here.
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByPlaceholder("Password")).toBeVisible();
   });
 });

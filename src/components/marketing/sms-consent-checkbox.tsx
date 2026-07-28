@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SMS_CONSENT_WORDING_VERSION } from "@/lib/rental-application/sms-consent";
+
 /**
  * Carrier-compliant (A2P 10DLC / CTIA) SMS opt-in control. Rendered on every
  * public form that collects a phone number and can lead to an outbound text.
@@ -24,6 +26,7 @@ export function SmsConsentCheckbox({
     <label
       htmlFor={inputId}
       data-attr="sms-consent-checkbox"
+      data-wording-version={SMS_CONSENT_WORDING_VERSION}
       className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-accent/20 px-4 py-3"
     >
       <input
@@ -34,9 +37,8 @@ export function SmsConsentCheckbox({
         className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/30"
       />
       <span className="text-xs leading-relaxed text-muted">
-        I agree to receive text messages from PropLane about tour scheduling and my rental inquiry at the
-        number provided. Message frequency varies. Message and data rates may apply. Reply STOP to opt out,
-        HELP for help. See our{" "}
+        I agree to receive text messages from PropLane about my rental application and account. Msg &amp; data
+        rates may apply. Message frequency varies. Reply STOP to opt out, HELP for help. See our{" "}
         <Link href="/privacy" target="_blank" className="font-semibold text-primary hover:underline">
           Privacy Policy
         </Link>{" "}
@@ -44,7 +46,7 @@ export function SmsConsentCheckbox({
         <Link href="/tos" target="_blank" className="font-semibold text-primary hover:underline">
           Terms of Service
         </Link>
-        . Consent is optional and not required to book a tour or send a message.
+        . Consent is optional and not required to submit an application, book a tour, or send a message.
       </span>
     </label>
   );

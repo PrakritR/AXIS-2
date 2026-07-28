@@ -1,5 +1,8 @@
 /** Full manager “add listing” payload — drives generated listing detail page (localStorage-backed). */
 
+// listing-fees.ts imports only TYPES from this module, so this runtime import
+// back into it is not a cycle.
+import { resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
 import {
   LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
@@ -407,6 +410,43 @@ export type ManagerListingSubmissionV1 = {
   leaseTemplateDocName?: string;
   /** Multiple lease templates per property (standard, month-to-month, short-term, custom). */
   propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
+
+  // ---------------------------------------------------------------------------
+  // Disclosure trigger fields (building-level compliance inputs)
+  //
+  // These back `trigger_logic.field` lookups in `leases/disclosure-clause-rules.json`
+  // and are named after that file's `trigger_field_dictionary` (camelCased), so the
+  // rules engine can read them without a translation layer. They are internal
+  // compliance inputs, NOT marketing copy — never render them on a public listing.
+  //
+  // Every one is optional and normalizes to `undefined` when unset. UNKNOWN IS NOT
+  // "NO": a guessed value here can suppress a legally required disclosure, so the
+  // rules engine must treat an absent value as unknown and fail toward disclosing.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Year of construction / first certificate of occupancy. Gates the federal
+   * lead-based paint rule (`fed-lead-paint`, triggers below 1978). Absent means
+   * unknown — it must never be read as "built after 1978".
+   */
+  yearBuilt?: number;
+  /**
+   * The resident's utility meter also serves areas outside their unit. Gates the
+   * California shared-utility disclosure (`ca-shared-utility`).
+   */
+  sharedUtilityMetering?: boolean;
+  /**
+   * The property is on a contracted periodic pest control service. Gates the
+   * California pest-control disclosure (`ca-pest-control`).
+   */
+  hasPeriodicPestService?: boolean;
+  /**
+   * Certificate of occupancy date (YYYY-MM-DD). Feeds SF Rent Ordinance coverage
+   * (`sf-coverage-determination`) and the CA AB 1482 exemption test.
+   */
+  certificateOfOccupancyDate?: string;
+  /** Seattle Rental Registration and Inspection Ordinance number (`seattle-rrio`). */
+  rrioRegistrationNumber?: string;
 };
 
 /** Fee fields must be filled with a dollar amount; use 0 when there is no charge. */
@@ -929,12 +969,24 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let customFees = sub.customFees;
   if (!Array.isArray(customFees)) customFees = [];
+  // Spread the row first so the unified-fee metadata (presetId, cadence,
+  // dueAtSigning, shortTermOnly, creditsTowardSecurity) survives normalization.
+  // Stripping each row to the four legacy fields is what stopped unified fees
+  // from ever persisting through a save.
   customFees = customFees.map((f) => ({
+    ...f,
     id: f.id ?? rid("fee"),
     label: typeof f.label === "string" ? f.label.trim() : "",
     amount: typeof f.amount === "string" ? f.amount.trim() : "",
     frequency: f.frequency === "one-time" ? "one-time" : "monthly",
   }));
+  // A submission still carrying only the old individual fee fields (securityDeposit,
+  // moveInFee, parkingMonthly, …) is migrated to unified preset rows on read, which
+  // is the "legacy dual-write" half that was never wired up. Already-unified rows
+  // are left alone.
+  if (!submissionUsesUnifiedListingFees(customFees)) {
+    customFees = resolveListingFees({ ...sub, customFees });
+  }
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
     ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
@@ -1285,6 +1337,35 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       typeof sub.propertyFloorPlanDataUrl === "string" && sub.propertyFloorPlanDataUrl.trim()
         ? sub.propertyFloorPlanDataUrl.trim()
         : null,
+    // Disclosure triggers: every one falls back to `undefined` (absent), never to a
+    // guessed value. A defaulted `yearBuilt` would make an unknown-age building look
+    // post-1978 and silently suppress the federal lead-paint disclosure; a defaulted
+    // `false` on either boolean would assert a fact the manager never told us.
+    yearBuilt: (() => {
+      const raw = (sub as { yearBuilt?: unknown }).yearBuilt;
+      const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw.trim()) : NaN;
+      return Number.isInteger(n) && n >= 1600 && n <= 2100 ? n : undefined;
+    })(),
+    sharedUtilityMetering:
+      (sub as { sharedUtilityMetering?: unknown }).sharedUtilityMetering === true ? true : undefined,
+    hasPeriodicPestService:
+      (sub as { hasPeriodicPestService?: unknown }).hasPeriodicPestService === true ? true : undefined,
+    certificateOfOccupancyDate: (() => {
+      const raw = (sub as { certificateOfOccupancyDate?: unknown }).certificateOfOccupancyDate;
+      const trimmed = typeof raw === "string" ? raw.trim() : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined;
+      // Shape alone would accept "9999-99-99". Round-tripping through Date also
+      // rejects impossible calendar dates, so the rules engine never reads one.
+      const parsed = new Date(`${trimmed}T00:00:00Z`);
+      return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === trimmed
+        ? trimmed
+        : undefined;
+    })(),
+    rrioRegistrationNumber: (() => {
+      const raw = (sub as { rrioRegistrationNumber?: unknown }).rrioRegistrationNumber;
+      const trimmed = typeof raw === "string" ? raw.trim() : "";
+      return trimmed || undefined;
+    })(),
   };
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;

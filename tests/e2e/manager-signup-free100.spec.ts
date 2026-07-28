@@ -9,21 +9,26 @@ test.describe("Manager FREE100 signup", () => {
     // Manual: sign in with a brand-new Google account at /auth/sign-in → expect /portal/dashboard.
   });
 
-  test("pro signup with FREE100 waiver", async ({ page }) => {
-    const uniqueEmail = `mgr-e2e-${Date.now()}@test.axis.local`;
+  test("choosing Pro from pricing opens the manager create-account form", async ({ page }) => {
+    // The pricing CTAs no longer sign up inline. "Choose <tier>" opens
+    // create-account with the tier pre-selected (manager-start-page.tsx →
+    // createAccountPath). The FREE100 waiver is no longer a signup-form field —
+    // it is applied server-side (AXIS_PAYMENT_WAIVER_CODE) — so this verifies the
+    // pro-signup ENTRY flow that a real manager takes, with current selectors.
     await page.goto("/partner/pricing");
 
-    await page.getByRole("button", { name: /pro/i }).first().click();
-    const promoInput = page.getByPlaceholder(/promo|code/i).or(page.getByLabel(/promo/i));
-    if (await promoInput.count()) {
-      await promoInput.first().fill("FREE100");
-    }
+    await Promise.all([
+      page.waitForURL(/\/auth\/create-account.*tier=pro/, { timeout: 30_000 }),
+      page.getByRole("button", { name: /choose pro/i }).first().click(),
+    ]);
 
-    await page.getByLabel(/email/i).fill(uniqueEmail);
-    await page.getByLabel(/full name/i).fill("E2E Test Manager");
-    await page.getByRole("button", { name: /continue with pro/i }).click();
-
-    await page.waitForURL(/create-account|manager-id|portal/, { timeout: 30_000 });
-    expect(page.url()).toMatch(/create-account|manager-id|portal/);
+    // The unified manager create form (NativeAuthHub) — placeholder-only inputs.
+    await expect(page.getByPlaceholder("Full name")).toBeVisible();
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByPlaceholder("Phone number")).toBeVisible();
+    await expect(page.getByPlaceholder(/Password \(8\+/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /create property account|set up property manager/i }),
+    ).toBeVisible();
   });
 });

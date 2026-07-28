@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 import { DEMO_LEASE_SIGN_PREPARE_EVENT } from "@/lib/demo/demo-playback";
+import { LEASE_ESIGN_CONSENT_TEXT, LEASE_ESIGN_CONSENT_VERSION } from "@/lib/lease-execution-evidence";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
@@ -13,15 +14,14 @@ export function LeaseSigningModal({
   row,
   signerName,
   signerRoleLabel,
-  agreementLabel,
   onSign,
   onClose,
 }: {
   row: LeasePipelineRow;
   signerName: string;
   signerRoleLabel: string;
-  agreementLabel: string;
-  onSign: (signatureName: string) => boolean | Promise<boolean>;
+  /** `consentVersion` is the affirmation the signer accepted to reach this call. */
+  onSign: (signatureName: string, consentVersion: string) => boolean | Promise<boolean>;
   onClose: () => void;
 }) {
   const isClient = useIsClient();
@@ -51,7 +51,7 @@ export function LeaseSigningModal({
   const handleSign = async () => {
     if (!canSign) return;
     setSubmitting(true);
-    const ok = await Promise.resolve(onSign(sigName.trim()));
+    const ok = await Promise.resolve(onSign(sigName.trim(), LEASE_ESIGN_CONSENT_VERSION));
     setSubmitting(false);
     if (!ok) return;
     setSigned(true);
@@ -151,10 +151,8 @@ export function LeaseSigningModal({
                     data-attr="lease-sign-agree"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary"
                   />
-                  <span>
-                    I agree to sign this {agreementLabel} electronically. I understand that my typed name above constitutes my legally
-                    binding electronic signature, equivalent to a handwritten signature.
-                  </span>
+                  {/* Recorded verbatim on the signature (consentVersion) and quoted on the certificate. */}
+                  <span>{LEASE_ESIGN_CONSENT_TEXT}</span>
                 </label>
               </>
             )}

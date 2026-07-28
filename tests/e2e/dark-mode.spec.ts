@@ -60,7 +60,9 @@ test.describe("Public marketing — light theme only", () => {
 
   test("marketing home stays light even when dark is saved", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /run and fill your properties/i })).toBeVisible();
+    // Anchor on the current hero (landing-demo-hero.tsx). The three block spans
+    // concatenate without whitespace in the accessible name, so match the start.
+    await expect(page.getByRole("heading", { name: /the ai does/i })).toBeVisible();
     const theme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
     expect(theme).toBe("light");
   });
@@ -79,30 +81,27 @@ test.describe("Dark mode — auth surfaces", () => {
 
   test("auth sign-in card respects dark theme", async ({ page }) => {
     await page.goto("/auth/sign-in");
-    await expect(page.getByRole("heading", { name: /portal sign-in/i })).toBeVisible();
+    // The unified auth hub (NativeAuthHub) renders no heading and placeholder-only
+    // inputs, inside a blend AuthCard (`.auth-card`, no `.glass-card`).
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
     await assertDarkThemeActive(page);
-    const cardBg = await page.locator(".glass-card").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const cardBg = await page
+      .locator(".auth-card")
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    // The card must not be an opaque white panel in dark mode (transparent is fine).
     expect(cardBg).not.toMatch(/rgb\(255,\s*255,\s*255/);
   });
 
-  test("auth create-account labels and callouts are readable in dark mode", async ({ page }) => {
+  test("auth create-account is readable in dark mode", async ({ page }) => {
     await page.goto("/auth/create-account");
-    await expect(page.getByRole("heading", { name: /create account/i })).toBeVisible();
+    // NativeAuthHub create surface: a Resident/Property/Vendor role toggle and
+    // placeholder-only inputs — no heading, no "Portal type" label, no
+    // `.portal-banner-neutral` callout (those only render on the legacy
+    // `?session_id=` checkout surface).
+    await expect(page.getByPlaceholder("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Property" })).toBeVisible();
     await assertDarkThemeActive(page);
-
-    const portalTypeLabel = page.getByText("Portal type", { exact: true });
-    await expect(portalTypeLabel).toBeVisible();
-    const labelColor = await portalTypeLabel.evaluate((el) => getComputedStyle(el).color);
-    expect(labelColor).not.toMatch(/rgb\(51,\s*65,\s*85\)/);
-
-    const infoCallout = page.locator(".portal-banner-neutral").first();
-    await expect(infoCallout).toBeVisible();
-    const calloutStyle = await infoCallout.evaluate((el) => {
-      const style = getComputedStyle(el);
-      return { color: style.color, backgroundColor: style.backgroundColor };
-    });
-    expect(calloutStyle.backgroundColor).not.toMatch(/rgb\(248,\s*250,\s*252\)/);
-
     await assertMainContentNotLightThemed(page, 0);
   });
 });
@@ -159,7 +158,7 @@ test.describe("Dark mode — admin portal", () => {
     await signInAsAdmin(page);
   });
 
-  const routes = ["/admin/dashboard", "/admin/properties", "/admin/axis-users", "/admin/events", "/admin/communication/email/unopened"] as const;
+  const routes = ["/admin/dashboard", "/admin/properties", "/admin/axis-users", "/admin/events", "/admin/communication/inbox/unopened"] as const;
 
   for (const route of routes) {
     test(`${route} has no light-themed main content`, async ({ page }) => {

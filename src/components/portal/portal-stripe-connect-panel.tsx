@@ -254,7 +254,7 @@ export function PortalStripeConnectPanel({
     }
 
     const needsFinish = Boolean(status?.connected);
-    const label = needsFinish ? "Finish setup" : "Link payment";
+    const label = needsFinish ? "Finish setup" : "Link bank";
     const openSetup = onOpenPaymentSetup ?? (() => void startConnect());
 
     return (
@@ -400,7 +400,7 @@ export function PortalStripeConnectPanel({
                 disabled={busy}
                 onClick={() => void startConnect()}
               >
-                {busy ? "Opening…" : "Link payment"}
+                {busy ? "Opening…" : "Link bank account"}
               </Button>
             </div>
           )}
