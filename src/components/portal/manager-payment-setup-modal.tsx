@@ -15,7 +15,6 @@ import {
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 import type { ProServiceFeeChoice } from "@/lib/payment-policy";
 import { useGmailPaymentTrack } from "@/components/portal/gmail-payment-auto-track-panel";
-import { ManagerApplicationFeeWaiverCodesModal } from "@/components/portal/manager-application-fee-waiver-codes-modal";
 import {
   formatGmailPaymentsConnectError,
   isGmailPaymentsOAuthBlocked,
@@ -39,6 +38,9 @@ function HubRow({
   linkLabel = "Link",
   pending = false,
   pendingLabel = "Finish setup",
+  allowed,
+  onAllowedChange,
+  allowDataAttr,
 }: {
   label: string;
   connected: boolean;
@@ -49,16 +51,29 @@ function HubRow({
   /** Account exists but Stripe reports it cannot yet receive money (onboarding incomplete). */
   pending?: boolean;
   pendingLabel?: string;
+  /** Whether residents may use this method. */
+  allowed: boolean;
+  onAllowedChange: (allowed: boolean) => void;
+  allowDataAttr: string;
 }) {
   return (
     <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
-      <span className="text-sm font-semibold text-foreground">{label}</span>
+      <label className="flex min-w-0 cursor-pointer items-center gap-3">
+        <input
+          type="checkbox"
+          className="h-4 w-4 shrink-0 rounded border-border"
+          checked={allowed}
+          onChange={(e) => onAllowedChange(e.target.checked)}
+          data-attr={allowDataAttr}
+        />
+        <span className="text-sm font-semibold text-foreground">{label}</span>
+      </label>
       {connected ? (
         <button
           type="button"
           onClick={onLink}
           data-attr={dataAttr}
-          className="text-sm font-medium text-[var(--status-confirmed-fg)] hover:underline"
+          className="shrink-0 text-sm font-medium text-[var(--status-confirmed-fg)] hover:underline"
         >
           Connected · Manage
         </button>
@@ -68,7 +83,7 @@ function HubRow({
           onClick={onLink}
           disabled={busy}
           data-attr={dataAttr}
-          className="text-sm font-medium text-[var(--status-pending-fg)] hover:underline disabled:opacity-50"
+          className="shrink-0 text-sm font-medium text-[var(--status-pending-fg)] hover:underline disabled:opacity-50"
         >
           {busy ? "Opening…" : `${pendingLabel} →`}
         </button>
@@ -78,7 +93,7 @@ function HubRow({
           onClick={onLink}
           disabled={busy}
           data-attr={dataAttr}
-          className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+          className="shrink-0 text-sm font-medium text-primary hover:underline disabled:opacity-50"
         >
           {busy ? "Opening…" : linkLabel}
         </button>
@@ -363,7 +378,6 @@ export function ManagerPaymentSetupModal({
   const [activeChannel, setActiveChannel] = useState<PaymentChannel | null>(null);
   const [skuTier, setSkuTier] = useState<ManagerSkuTier | null>(null);
   const [savingFeePayer, setSavingFeePayer] = useState(false);
-  const [waiverCodesOpen, setWaiverCodesOpen] = useState(false);
 
   const { gmailStatus, gmailBusy, gmailSyncBusy, linkGmail, syncGmail } = useGmailPaymentTrack({
     role: "manager",
@@ -567,16 +581,20 @@ export function ManagerPaymentSetupModal({
           {loading ? <p className="text-sm text-muted">Loading…</p> : null}
           <p className="text-xs text-muted">
             Stripe deposits resident payments into your own connected Stripe account and pays out to your bank, not to
-            PropLane. Each manager links their own account.
+            PropLane. Each manager links their own account. Check a method to allow residents to use it; use Link to
+            finish setup.
           </p>
           <HubRow
-            label="Stripe"
+            label="Stripe (ACH)"
             connected={stripeState === "ready"}
             pending={stripeState === "incomplete"}
             pendingLabel="Finish setup"
             onLink={() => void linkStripe()}
             dataAttr="manager-payment-stripe-link"
             busy={stripeBusy}
+            allowed={draft.axisPaymentsEnabled !== false}
+            allowDataAttr="manager-payment-stripe-allowed"
+            onAllowedChange={(allowed) => void persistSettings({ axisPaymentsEnabled: allowed })}
           />
           {stripeState === "incomplete" ? (
             <p className="text-xs text-[var(--status-pending-fg)]">
@@ -638,6 +656,19 @@ export function ManagerPaymentSetupModal({
             onLink={() => setActiveChannel("zelle")}
             dataAttr="manager-payment-zelle-link"
             linkLabel="Link Zelle"
+            allowed={zelleContactConnected}
+            allowDataAttr="manager-payment-zelle-allowed"
+            onAllowedChange={(allowed) => {
+              if (allowed) {
+                if (!draft.zelleContact.trim()) {
+                  setActiveChannel("zelle");
+                  return;
+                }
+                void persistSettings({ zellePaymentsEnabled: true, zelleContact: draft.zelleContact.trim() }, "zelle");
+                return;
+              }
+              void persistSettings({ zellePaymentsEnabled: false }, "zelle");
+            }}
           />
           <HubRow
             label="Venmo"
@@ -645,25 +676,22 @@ export function ManagerPaymentSetupModal({
             onLink={() => setActiveChannel("venmo")}
             dataAttr="manager-payment-venmo-link"
             linkLabel="Link Venmo"
+            allowed={venmoContactConnected}
+            allowDataAttr="manager-payment-venmo-allowed"
+            onAllowedChange={(allowed) => {
+              if (allowed) {
+                if (!draft.venmoContact.trim()) {
+                  setActiveChannel("venmo");
+                  return;
+                }
+                void persistSettings({ venmoPaymentsEnabled: true, venmoContact: draft.venmoContact.trim() }, "venmo");
+                return;
+              }
+              void persistSettings({ venmoPaymentsEnabled: false }, "venmo");
+            }}
           />
-          <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
-            <div>
-              <span className="text-sm font-semibold text-foreground">Application fee waiver codes</span>
-              <p className="text-xs text-muted">Let specific applicants skip the application fee entirely.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setWaiverCodesOpen(true)}
-              data-attr="manager-payment-waiver-codes-link"
-              className="shrink-0 text-sm font-medium text-primary hover:underline"
-            >
-              Manage
-            </button>
-          </div>
         </div>
       </Modal>
-
-      <ManagerApplicationFeeWaiverCodesModal open={waiverCodesOpen} onClose={() => setWaiverCodesOpen(false)} />
 
       {activeChannel ? (
         <ChannelPaymentSetupModal

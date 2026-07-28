@@ -4,6 +4,11 @@ import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import { normalizeProServiceFeeChoice, type ProServiceFeeChoice } from "@/lib/payment-policy";
 
 export type ManagerManualPaymentSettings = {
+  /**
+   * Allow residents/applicants to pay via Stripe ACH (bank). Defaults on —
+   * managers turn it off from Payment setup when they only want Zelle/Venmo.
+   */
+  axisPaymentsEnabled: boolean;
   zellePaymentsEnabled: boolean;
   zelleContact: string;
   venmoPaymentsEnabled: boolean;
@@ -26,6 +31,7 @@ export type ManagerManualPaymentSettingsView = ManagerManualPaymentSettings & {
 };
 
 export const DEFAULT_MANAGER_MANUAL_PAYMENT_SETTINGS: ManagerManualPaymentSettings = {
+  axisPaymentsEnabled: true,
   zellePaymentsEnabled: false,
   zelleContact: "",
   venmoPaymentsEnabled: false,
@@ -40,15 +46,18 @@ export function normalizeManagerManualPaymentSettings(raw: unknown): ManagerManu
   const row = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const zelleContact = sanitizePaymentContactInput(String(row.zelleContact ?? "")).trim();
   const venmoContact = sanitizePaymentContactInput(String(row.venmoContact ?? "")).trim();
+  // Allowed only when a contact is present — keep the contact when the method is
+  // toggled off so re-enabling does not force the manager to re-link.
   const zellePaymentsEnabled = row.zellePaymentsEnabled === true && zelleContact.length > 0;
   const venmoPaymentsEnabled = row.venmoPaymentsEnabled === true && venmoContact.length > 0;
   const paymentInboxTokenRaw = String(row.paymentInboxToken ?? "").trim();
   const paymentInboxToken = /^[a-zA-Z0-9_-]{8,24}$/.test(paymentInboxTokenRaw) ? paymentInboxTokenRaw : undefined;
   return {
+    axisPaymentsEnabled: row.axisPaymentsEnabled !== false,
     zellePaymentsEnabled,
-    zelleContact: zellePaymentsEnabled ? zelleContact : "",
+    zelleContact,
     venmoPaymentsEnabled,
-    venmoContact: venmoPaymentsEnabled ? venmoContact : "",
+    venmoContact,
     ...(paymentInboxToken ? { paymentInboxToken } : {}),
     receiptAutoMarkEnabled: row.receiptAutoMarkEnabled === false ? false : true,
     serviceFeePayer: normalizeProServiceFeeChoice(row.serviceFeePayer),

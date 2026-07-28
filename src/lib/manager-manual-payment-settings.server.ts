@@ -13,10 +13,12 @@ function patchSubmission(
 ): ManagerListingSubmissionV1 {
   return {
     ...submission,
+    axisPaymentsEnabled: settings.axisPaymentsEnabled,
     zellePaymentsEnabled: settings.zellePaymentsEnabled,
     zelleContact: settings.zelleContact,
     venmoPaymentsEnabled: settings.venmoPaymentsEnabled,
     venmoContact: settings.venmoContact,
+    applicationFeeStripeEnabled: settings.axisPaymentsEnabled,
     applicationFeeZelleEnabled: settings.zellePaymentsEnabled,
     applicationFeeVenmoEnabled: settings.venmoPaymentsEnabled,
   };

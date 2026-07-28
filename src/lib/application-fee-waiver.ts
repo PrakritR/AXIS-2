@@ -353,3 +353,64 @@ export async function previewApplicationFeeWaiverCode(
   }
   return { ok: true };
 }
+
+/**
+ * The single "primary" active code for the simplified Application settings UI.
+ * When multiple actives exist (legacy multi-code Manage UI), prefer the oldest
+ * so a standing code is not silently swapped for a newer one-off.
+ */
+export function pickPrimaryApplicationFeeWaiverCode(
+  codes: ApplicationFeeWaiverCode[],
+): ApplicationFeeWaiverCode | null {
+  const active = codes.filter((c) => c.status === "active");
+  if (active.length === 0) return null;
+  return [...active].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))[0] ?? null;
+}
+
+export type SetPrimaryWaiverCodeResult =
+  | { ok: true; code: ApplicationFeeWaiverCode | null }
+  | { ok: false; error: string };
+
+/**
+ * Collapse the manager's waiver codes to at most one unlimited primary code.
+ * Compatible with the multi-code table: extras are revoked, not deleted.
+ * Empty/`null` clears every active code.
+ */
+export async function setPrimaryApplicationFeeWaiverCode(
+  db: SupabaseClient,
+  managerUserId: string,
+  rawCode: string | null | undefined,
+): Promise<SetPrimaryWaiverCodeResult> {
+  const trimmed = (rawCode ?? "").trim();
+  const existing = await listApplicationFeeWaiverCodes(db, managerUserId);
+  const active = existing.filter((c) => c.status === "active");
+
+  if (!trimmed) {
+    for (const c of active) {
+      const revoked = await revokeApplicationFeeWaiverCode(db, managerUserId, c.id);
+      if (!revoked.ok) return { ok: false, error: revoked.error };
+    }
+    return { ok: true, code: null };
+  }
+
+  if (!isValidWaiverCodeFormat(trimmed)) {
+    return { ok: false, error: "Codes must be 4-32 letters, numbers, or hyphens." };
+  }
+  const normalized = normalizeWaiverCode(trimmed);
+  const matching = active.find((c) => c.code === normalized) ?? null;
+
+  for (const c of active) {
+    if (matching && c.id === matching.id) continue;
+    const revoked = await revokeApplicationFeeWaiverCode(db, managerUserId, c.id);
+    if (!revoked.ok) return { ok: false, error: revoked.error };
+  }
+
+  if (matching) return { ok: true, code: matching };
+
+  const created = await createApplicationFeeWaiverCode(db, managerUserId, {
+    code: normalized,
+    maxUses: null,
+  });
+  if (!created.ok) return { ok: false, error: created.error };
+  return { ok: true, code: created.code };
+}
