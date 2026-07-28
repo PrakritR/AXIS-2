@@ -1795,6 +1795,22 @@ export function resolveServiceOfferPricing(offer: {
   return { price: preset?.price?.trim() ?? "", deposit: preset?.deposit?.trim() ?? "" };
 }
 
+/**
+ * A brand-new listing the manager opens in the wizard — the blank
+ * {@link createDefaultListingSubmission} (which stays a truly-empty base for tests and
+ * back-compat) plus the sensible starting defaults that let the common case publish with
+ * minimal typing: a 12-Month long-term lease (the most common term, and one is required to
+ * publish) is pre-selected. Everything else already has a good default on the base
+ * (holding deposit $100, late fee on, PropLane payments on, auto proration), and the
+ * manager-specific fields (address, rent) are the only ones left to type.
+ */
+export function createNewListingWizardSubmission(): ManagerListingSubmissionV1 {
+  return {
+    ...createDefaultListingSubmission(),
+    allowedLeaseTerms: ["12-Month"],
+  };
+}
+
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
   return {
     v: 1,

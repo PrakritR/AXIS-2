@@ -3,6 +3,7 @@ import {
   applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
+  createNewListingWizardSubmission,
   entireHomeMonthlyRentAmount,
   isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
@@ -209,5 +210,14 @@ describe("manager-listing-submission", () => {
       } as never);
       expect(sub.holdingDepositTiming).toBe("after_approval");
     });
+  });
+});
+
+describe("createNewListingWizardSubmission — pre-filled new-listing defaults", () => {
+  it("pre-selects a 12-Month lease so the common case publishes with minimal typing", () => {
+    expect(createNewListingWizardSubmission().allowedLeaseTerms).toEqual(["12-Month"]);
+  });
+  it("does not change the blank base used by tests / back-compat", () => {
+    expect(createDefaultListingSubmission().allowedLeaseTerms).toEqual([]);
   });
 });

@@ -29,11 +29,12 @@ describe("custom fees in the generated lease", () => {
     expect(html).toMatch(/Cleaning fee<\/td><td>\$125\.00<\/td><td>One-time<\/td>/);
   });
 
-  it("does NOT list a monthly custom fee (it does not bill yet — no unbilled fee on the lease)", () => {
+  it("lists a monthly custom fee in Exhibit A as a Monthly item (it now bills recurring)", () => {
     const html = leaseHtmlWithCustomFees([
       { id: "cf1", label: "Parking spot", amount: "100", frequency: "monthly" },
     ]);
-    expect(html).not.toContain("Parking spot");
+    expect(html).toContain("Parking spot");
+    expect(html).toMatch(/Parking spot<\/td><td>\$100\.00<\/td><td>Monthly<\/td>/);
   });
 
   it("lists a short-term custom fee in the short-term stay's Payment table", () => {

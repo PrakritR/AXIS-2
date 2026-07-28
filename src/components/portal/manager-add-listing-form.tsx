@@ -61,6 +61,7 @@ import {
   listingTotalBathroomsIdFromCount,
   applyEntireHomeListingPricing,
   createDefaultListingSubmission,
+  createNewListingWizardSubmission,
   customApplicationFieldKeyFromLabel,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
@@ -1269,7 +1270,9 @@ export function ManagerAddListingForm({
   onSaved?: () => void;
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => {
-    const base = initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission();
+    const base = initialSubmission
+      ? normalizeManagerListingSubmissionV1(initialSubmission)
+      : createNewListingWizardSubmission();
     if (!noteKey || base.houseRulesText?.trim()) return base;
     const legacy = getPortalListingNote(noteKey);
     return {
