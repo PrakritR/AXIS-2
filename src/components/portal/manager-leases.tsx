@@ -24,7 +24,8 @@ import {
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
-import { buildManagerPropertyFilterOptions, buildManagerShareablePropertyOptions } from "@/lib/manager-portfolio-access";
+import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
 
