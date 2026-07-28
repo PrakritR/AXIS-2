@@ -2832,7 +2832,7 @@ export function ManagerAddListingForm({
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
-          <div className="flex items-start justify-between gap-3">
+          <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}
@@ -2915,6 +2915,9 @@ export function ManagerAddListingForm({
           )}
         >
         <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
+          {/* Constrained, centered content column so fields sit in the middle of the wide
+              modal instead of hugging the left edge — consistent on every step. */}
+          <div className="mx-auto w-full max-w-3xl">
           {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
@@ -3095,8 +3098,8 @@ export function ManagerAddListingForm({
                   <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
               </GridField>
-              <div className="flex items-end pb-1">
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <div className="sm:col-span-2">
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground">
                   <input
                     type="checkbox"
                     checked={sub.petFriendly}
@@ -4424,6 +4427,7 @@ export function ManagerAddListingForm({
             </div>
           </FormSection>
           ) : null}
+          </div>
         </div>
 
           <ModalAssistantStrip
@@ -4440,6 +4444,7 @@ export function ManagerAddListingForm({
         </div>
 
         <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+          <div className="mx-auto w-full max-w-3xl">
           {draftSaveError ? (
             <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
               {draftSaveError}
@@ -4500,6 +4505,7 @@ export function ManagerAddListingForm({
                 </Button>
               )}
             </div>
+          </div>
           </div>
         </div>
       </div>
