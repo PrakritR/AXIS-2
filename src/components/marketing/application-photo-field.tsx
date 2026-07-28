@@ -227,6 +227,7 @@ export function ApplicationPhotoField({
   // announces itself via the save-status event — re-check then.
   useEffect(() => {
     if (!setupTokenRequired) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- lift the gate when no token is required
       setSetupTokenReady(true);
       return;
     }

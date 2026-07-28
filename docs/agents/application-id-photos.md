@@ -78,8 +78,12 @@ Two pure decisions in `application-photos.server.ts`, both unit-provable
   frozen attribution stamp — is authoritative, so a transferred property still
   resolves to the current owner.
 - **Applicant** — resident by authenticated session email matching the stored
-  applicant email. **Reads never accept a guest** (a guest can't server-resume
-  answers either; live capture uses the in-memory preview).
+  applicant email. **Reads never accept a guest.** A guest CAN server-resume
+  their *answers* (the token-gated `/api/portal/application-resume` route —
+  axis id + freshest setup token from sessionStorage), but the photo BYTES
+  still require a session: a resumed guest's stored attachment falls back to
+  the "File attached" chip via the `<img>` `onError` path, and live capture
+  uses the in-memory preview.
 - **Admin** — always.
 
 `authorizeApplicationPhotoWrite({actor, row, setupToken, sessionEmail})` —
@@ -120,13 +124,15 @@ without a new captain decision.
 Two invariants follow from that choice and MUST hold:
 
 - **Deleting an application removes the BYTES, not just the row.** A hard delete
-  is now the only thing that removes these images, so it calls
-  `reclaimApplicationPhotos` (wired into the manager-applications `delete`
-  action) to list + remove every object under the application's folder. The
+  is now the only thing that removes these images, so EVERY row hard-delete path
+  calls `reclaimApplicationPhotos` — the manager-applications `delete` action
+  AND the account purges (`purgeResidentPortalData` / `purgeManagerPortalData`
+  in `purge-portal-account-data.ts`, best-effort after the rows are gone) — to
+  list + remove every object under the application's folder. The
   folder key is uppercased (`applicationPhotoFolderKey`) so upload-time and
   delete-time ids can't drift by case and orphan the files. Coverage:
   `tests/unit/application-photo-access.test.ts` (“an application delete removes
-  the bytes”). Applicant remove/retake also deletes the replaced object — but
+  the bytes”), `tests/unit/purge-resident-portal-data.test.ts`. Applicant remove/retake also deletes the replaced object — but
   only while the row is still **pending**; the API refuses destructive writes on
   a decided application for every actor except admin, so an applicant cannot
   strip the record after a decision. There is **no periodic orphan sweep** — an

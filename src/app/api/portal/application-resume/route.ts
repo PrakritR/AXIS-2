@@ -76,12 +76,8 @@ export async function POST(req: Request) {
     if (!isInProgressApplicationRow(guarded) || isWithdrawnApplicationRow(guarded)) return denied();
 
     // The token fields are the row's write credential material — never echo them.
-    const {
-      setupTokenHash: _hash,
-      setupTokenExpiresAt: _expires,
-      setupTokenConsumedAt: _consumed,
-      ...row
-    } = stored;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- rest-destructure strips the credential fields
+    const { setupTokenHash: _hash, setupTokenExpiresAt: _expires, setupTokenConsumedAt: _consumed, ...row } = stored;
     return NextResponse.json({ row: { ...row, id: normalizeApplicationAxisId(stored.id) } });
   } catch {
     return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
