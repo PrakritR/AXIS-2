@@ -1,0 +1,210 @@
+import { describe, expect, it, vi } from "vitest";
+
+// The projection itself is pure; the module it lives in reaches for Supabase at
+// import time for the catalog query it also exports.
+vi.mock("@/lib/supabase/service", () => ({ createSupabaseServiceRoleClient: vi.fn() }));
+
+import { publicListingProjection } from "@/lib/public-listings.server";
+import type { MockProperty } from "@/data/types";
+
+/** A stored listing carrying both prospect-facing copy and manager-internal data. */
+function storedListing(): MockProperty {
+  return {
+    id: "mgr-1",
+    title: "Ballard House",
+    tagline: "Bright rooms",
+    address: "1 Main St",
+    zip: "98107",
+    neighborhood: "Ballard",
+    beds: 3,
+    baths: 2,
+    rentLabel: "from $900/mo",
+    available: "Now",
+    petFriendly: true,
+    buildingId: "b1",
+    buildingName: "Ballard House",
+    unitLabel: "Room A",
+    managerUserId: "mgr-user",
+    adminPublishLive: true,
+    listingSubmission: {
+      v: 1,
+      buildingName: "Ballard House",
+      address: "1 Main St",
+      zip: "98107",
+      neighborhood: "Ballard",
+      homeStructureNote: "3-story",
+      tagline: "Bright rooms",
+      petFriendly: true,
+      houseOverview: "Lovely",
+      houseRulesText: "No smoking",
+      amenitiesText: "Laundry",
+      housePhotoDataUrls: ["https://cdn/photo.jpg"],
+      leaseTermsBody: "12-Month",
+      applicationFee: "45",
+      securityDeposit: "500",
+      moveInFee: "100",
+      paymentAtSigningIncludes: [],
+      houseCostsDetail: "",
+      parkingMonthly: "0",
+      hoaMonthly: "0",
+      otherMonthlyFees: "0",
+      quickFacts: [{ id: "q1", label: "Built", value: "1998" }],
+      bundles: [{ id: "b1", label: "Rooms A+B", price: "$1700", strikethrough: "", promo: "", roomsLine: "" }],
+      sharedSpaces: [],
+      bathrooms: [],
+      rooms: [
+        {
+          id: "r1",
+          name: "Room A",
+          floor: "2",
+          monthlyRent: 900,
+          availability: "Now",
+          moveInAvailableDate: "2026-08-01",
+          // Manager/resident-internal: door codes and key handoff.
+          moveInInstructions: "Lockbox code 4821, keys under the mat",
+          manualUnavailableRanges: [],
+          detail: "Sunny",
+          furnishing: "Furnished",
+          roomAmenitiesText: "Desk",
+          photoDataUrls: [],
+          videoDataUrl: null,
+          utilitiesEstimate: "60",
+        },
+      ],
+      // None of the following may reach a prospect.
+      wifiNetworkName: "AxisHome-5G",
+      wifiPassword: "welcome-home-2026",
+      generalHouseInfo: "Owner lives upstairs",
+      houseMoveInInstructions: "Garage remote in kitchen drawer",
+      leaseConfigMode: "custom",
+      leaseCustomKind: "document",
+      leaseTemplateDocName: "Attorney lease 2026.pdf",
+      leaseTemplateDocUrl: "/api/portal/lease-template?path=abc/1.pdf",
+      customLeaseTerms: "Tenant waives...",
+      propertyLeaseTemplates: [
+        {
+          id: "t1",
+          kind: "custom",
+          label: "Corporate lease",
+          leaseTemplateDocUrl: "/api/portal/lease-template?path=abc/2.pdf",
+        },
+      ],
+      serviceRequestOptions: [
+        {
+          id: "s1",
+          name: "Parking",
+          description: "",
+          price: "100",
+          deposit: "0",
+          available: true,
+          residentEmails: ["resident@example.com"],
+          createdAt: "2026-01-01",
+        },
+      ],
+      lateFeeAmount: "75",
+      achPaymentLink: "https://bank.example/pay/secret-token",
+    },
+  } as unknown as MockProperty;
+}
+
+/** Every key in the projected payload, at any depth. */
+function allKeys(value: unknown, out = new Set<string>()): Set<string> {
+  if (!value || typeof value !== "object") return out;
+  if (Array.isArray(value)) {
+    for (const item of value) allKeys(item, out);
+    return out;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    out.add(key);
+    allKeys(child, out);
+  }
+  return out;
+}
+
+describe("publicListingProjection", () => {
+  it("drops every manager- and resident-internal field, at any depth", () => {
+    const keys = allKeys(publicListingProjection(storedListing()));
+    for (const secret of [
+      "wifiPassword",
+      "wifiNetworkName",
+      "generalHouseInfo",
+      "houseMoveInInstructions",
+      "leaseTemplateDocUrl",
+      "leaseTemplateDocName",
+      "propertyLeaseTemplates",
+      "customLeaseTerms",
+      "leaseConfigMode",
+      "leaseCustomKind",
+      "serviceRequestOptions",
+      "residentEmails",
+      "lateFeeAmount",
+      "achPaymentLink",
+      "moveInInstructions",
+    ]) {
+      expect(keys.has(secret), `${secret} must not reach an anonymous caller`).toBe(false);
+    }
+  });
+
+  it("denies by default: a field added to the submission later is not published", () => {
+    const listing = storedListing();
+    (listing.listingSubmission as unknown as Record<string, unknown>).yearBuilt = "1962";
+    (listing as unknown as Record<string, unknown>).internalOwnerNote = "seller is motivated";
+
+    const projected = publicListingProjection(listing);
+    expect(allKeys(projected).has("yearBuilt")).toBe(false);
+    expect(allKeys(projected).has("internalOwnerNote")).toBe(false);
+  });
+
+  it("keeps what browse, listing detail and the apply wizard read", () => {
+    const projected = publicListingProjection(storedListing());
+    const sub = projected.listingSubmission!;
+
+    // Every required submission field survives — the listing renderers call
+    // .trim()/.map() on these unguarded and fall back to a generic demo listing
+    // when one is missing.
+    for (const required of [
+      "v",
+      "buildingName",
+      "address",
+      "zip",
+      "neighborhood",
+      "homeStructureNote",
+      "tagline",
+      "petFriendly",
+      "houseOverview",
+      "houseRulesText",
+      "amenitiesText",
+      "housePhotoDataUrls",
+      "leaseTermsBody",
+      "applicationFee",
+      "securityDeposit",
+      "moveInFee",
+      "paymentAtSigningIncludes",
+      "houseCostsDetail",
+      "parkingMonthly",
+      "hoaMonthly",
+      "otherMonthlyFees",
+      "rooms",
+      "bathrooms",
+      "sharedSpaces",
+      "bundles",
+      "quickFacts",
+    ]) {
+      expect(sub, `${required} is load-bearing for the public listing`).toHaveProperty(required);
+    }
+
+    expect(projected.contactSmsPhone).toBeUndefined();
+    expect(projected.managerUserId).toBe("mgr-user");
+    expect(projected.adminPublishLive).toBe(true);
+    expect(sub.rooms[0]).toMatchObject({ id: "r1", monthlyRent: 900, availability: "Now" });
+    expect(sub.quickFacts[0]).toEqual({ id: "q1", label: "Built", value: "1998" });
+  });
+
+  it("passes through a listing with no submission", () => {
+    const listing = storedListing();
+    delete (listing as { listingSubmission?: unknown }).listingSubmission;
+    const projected = publicListingProjection(listing);
+    expect(projected.listingSubmission).toBeUndefined();
+    expect(projected.title).toBe("Ballard House");
+  });
+});

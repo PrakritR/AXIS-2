@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { MockProperty } from "@/data/types";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
 import { resolveListingCtaSmsPhone } from "@/lib/listing-cta-phone.server";
+import { publicListingProjection } from "@/lib/public-listings.server";
 import { isSandboxPublicListing } from "@/lib/public-sandbox-listings";
 import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -76,9 +77,12 @@ export async function GET(req: Request) {
       }
     }
 
-    // Public per-property detail: CDN-cacheable, same for everyone.
+    // Public per-property detail: CDN-cacheable, same for everyone. Same
+    // allowlist as the catalog — this route reaches the SAME stored blob from
+    // the SAME anonymous audience, so a projection on only one of the two is
+    // trivially bypassed by asking for the property by id.
     return NextResponse.json(
-      { property: resolved },
+      { property: publicListingProjection(resolved) },
       { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600" } },
     );
   } catch (error) {
