@@ -147,15 +147,7 @@ function TeamAssignedPropertySummary({ propertyIds, max = 3 }: { propertyIds: st
   );
 }
 
-function TeamLinksEmptyPanel({
-  variant,
-  atLinkCap,
-  onLinkAccount,
-}: {
-  variant: "none" | "linked" | "pending" | "filtered";
-  atLinkCap: boolean;
-  onLinkAccount: () => void;
-}) {
+function TeamLinksEmptyPanel({ variant }: { variant: "none" | "linked" | "pending" | "filtered" }) {
   const message =
     variant === "none"
       ? "No co-managers yet. Invite another manager with their PropLane ID. You choose which properties they can access and what they can do on each."
@@ -165,24 +157,9 @@ function TeamLinksEmptyPanel({
           ? "No pending invites. Requests waiting for your approval and invites you've sent will show up here."
           : "No team members match this property filter. Try All properties or pick another listing.";
 
-  const showLinkCta = (variant === "none" || variant === "linked") && !atLinkCap;
-
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <PortalEmptyState title={message} icon="team" />
-      {showLinkCta ? (
-        <div className="-mt-6 flex justify-center pb-10">
-          <Button
-            type="button"
-            variant="primary"
-            className={`${PORTAL_HEADER_ACTION_BTN} shrink-0`}
-            onClick={onLinkAccount}
-            data-attr="co-manager-empty-link-account"
-          >
-            Link account
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1562,7 +1539,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {!hasCoManagerLinks ? (
-          <TeamLinksEmptyPanel variant="none" atLinkCap={atLinkCap} onLinkAccount={openLinkModal} />
+          <TeamLinksEmptyPanel variant="none" />
         ) : !hasVisibleTeamRows ? (
           <TeamLinksEmptyPanel
             variant={
@@ -1572,8 +1549,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   ? "pending"
                   : "linked"
             }
-            atLinkCap={atLinkCap}
-            onLinkAccount={openLinkModal}
           />
         ) : (
           <>
