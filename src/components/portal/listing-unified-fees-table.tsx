@@ -275,16 +275,14 @@ export function ListingUnifiedFeesTable({
   /** Show the Short-term column. When false the whole column (header + cells) is gone. */
   showShortTerm: boolean;
 }) {
+  // Rent is NEVER an "Other fee" (round 27): it lives in the Rent section above — per room
+  // when renting by room, as the whole-place row otherwise — and is re-added there, not here.
   const visibleRows = LISTING_STANDARD_FEE_ROWS.filter(
-    (row) => !hiddenRowIds?.has(row.id) && !removedRowIds.has(row.id),
+    (row) => row.id !== "rent" && !hiddenRowIds?.has(row.id) && !removedRowIds.has(row.id),
   );
-  // Rent is re-added from its own control (below), never the "+ Add fee" picker — rent is
-  // not an "other fee". This keeps a manager who removed rent from being stranded while
-  // keeping rent out of the fee list.
   const readdableRows = LISTING_STANDARD_FEE_ROWS.filter(
     (row) => row.id !== "rent" && rowIsRemovable(row.id) && removedRowIds.has(row.id) && !hiddenRowIds?.has(row.id),
   );
-  const rentRemoved = removedRowIds.has("rent");
   const sections = expandableSections ?? [];
   const colCount = showShortTerm ? 4 : 3;
 
@@ -522,16 +520,6 @@ export function ListingUnifiedFeesTable({
               </option>
             ))}
           </select>
-        ) : null}
-        {rentRemoved ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full text-xs"
-            onClick={() => onAddStandardRow("rent")}
-          >
-            + Add rent
-          </Button>
         ) : null}
         <Button type="button" variant="outline" className="rounded-full text-xs" onClick={onAddCustomFee}>
           + Add custom fee

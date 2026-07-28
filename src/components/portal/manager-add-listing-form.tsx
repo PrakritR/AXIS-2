@@ -3033,54 +3033,122 @@ export function ManagerAddListingForm({
       }
     : null;
 
-  const feeExpandableSections: FeeExpandableSection[] = [roomsFeeSection, bundlesFeeSection].filter(
-    (s): s is FeeExpandableSection => s !== null,
-  );
+  // Entire-home rent now lives in the Rent section as its own "Whole place" row (round 27),
+  // not in Other fees. It carries the whole-place monthly rent plus utilities & proration
+  // (folded in from the old standalone block). Removing it routes through the SAME
+  // removedFeeRows("rent") flag the fees table used, and "+ Add rent" comes back here in the
+  // Rent section — never in Other fees — so a manager who removes rent is never stranded.
+  const wholePlaceRentRemoved = removedFeeRows.has("rent");
+  const wholePlaceKey = listingItemKey("wholeplace", "main");
+  const entireHomeUtilShort =
+    sub.entireHomeUtilitiesPaymentModel === "tenant_direct"
+      ? "Paid by resident"
+      : sub.entireHomeUtilitiesPaymentModel === "included_in_rent"
+        ? "Utilities included"
+        : "Payment amount";
+  const wholePlaceFeeSection: FeeExpandableSection | null = isEntireHome
+    ? {
+        key: "wholeplace",
+        title: "Whole place",
+        hint: "One lease for the entire place.",
+        toolbar: wholePlaceRentRemoved ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full text-xs"
+            onClick={() => handleAddStandardRow("rent")}
+          >
+            + Add rent
+          </Button>
+        ) : undefined,
+        emptyHint: wholePlaceRentRemoved ? "Rent removed — add it back to set a price and publish." : undefined,
+        rows: wholePlaceRentRemoved
+          ? []
+          : [
+              {
+                id: "whole-place",
+                title: "Whole place lease",
+                summary: `${entireHomeRent > 0 ? `$${entireHomeRent}/mo` : "Rent not set"} · ${entireHomeUtilShort}`,
+                expanded: isListingItemExpanded(wholePlaceKey) || Boolean(stepFieldErrors.monthlyRent),
+                onToggle: () => toggleListingItem(wholePlaceKey),
+                onRemove: () => handleRemoveStandardRow("rent"),
+                hasError: Boolean(stepFieldErrors.monthlyRent),
+                toggleDataAttr: "listing-wholeplace-toggle",
+                detail: (
+                  <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+                    <GridField>
+                      <FieldLabel>Monthly rent *</FieldLabel>
+                      <div data-wizard-field="monthlyRent">
+                        <MoneyInput
+                          invalid={Boolean(stepFieldErrors.monthlyRent)}
+                          ariaLabel="Monthly rent for the whole place"
+                          value={entireHomeRent || ""}
+                          onChange={(e) => {
+                            clearListingFieldError("monthlyRent");
+                            expandListingItem(wholePlaceKey);
+                            const n = parseSanitizedMoneyNumber(e.target.value);
+                            setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: n }));
+                            if (n > 0) setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+                          }}
+                          placeholder="4500"
+                        />
+                        <StepFieldError msg={stepFieldErrors.monthlyRent} />
+                      </div>
+                    </GridField>
+                    {longTermLeaseEnabled ? (
+                      <>
+                        <GridField>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <LongTermUtilitiesPaymentPicker
+                              value={sub.entireHomeUtilitiesPaymentModel}
+                              onSelect={(model) =>
+                                setSub((s) =>
+                                  applyEntireHomeListingPricing(s, {
+                                    entireHomeUtilitiesPaymentModel: model,
+                                    ...(model === "tenant_direct" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                                  }),
+                                )
+                              }
+                            />
+                            {longTermUtilitiesEstimateRequired(sub.entireHomeUtilitiesPaymentModel) ? (
+                              <MoneyInput
+                                ariaLabel="Utilities amount (whole home)"
+                                value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                onChange={(e) =>
+                                  setSub((s) =>
+                                    applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }),
+                                  )
+                                }
+                                placeholder="175"
+                              />
+                            ) : null}
+                          </div>
+                        </GridField>
+                        <div className="w-full">
+                          <ProrationMethodFields
+                            prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
+                            monthlyRent={entireHomeRent}
+                            dailyRentRate={sub.entireHomeDailyRentRate}
+                            dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
+                            onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
+                            onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+                            onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ),
+              },
+            ],
+      }
+    : null;
 
-  const entireHomeUtilitiesBlock =
-    longTermLeaseEnabled && isEntireHome ? (
-      <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-        <FieldLabel optional>Utilities & proration</FieldLabel>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <GridField>
-            <div className="flex flex-wrap items-end gap-2">
-              <LongTermUtilitiesPaymentPicker
-                value={sub.entireHomeUtilitiesPaymentModel}
-                onSelect={(model) =>
-                  setSub((s) =>
-                    applyEntireHomeListingPricing(s, {
-                      entireHomeUtilitiesPaymentModel: model,
-                      ...(model === "tenant_direct" ? { entireHomeUtilitiesEstimate: "" } : {}),
-                    }),
-                  )
-                }
-              />
-              {longTermUtilitiesEstimateRequired(sub.entireHomeUtilitiesPaymentModel) ? (
-                <MoneyInput
-                  ariaLabel="Utilities amount (whole home)"
-                  value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                  onChange={(e) =>
-                    setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
-                  }
-                  placeholder="175"
-                />
-              ) : null}
-            </div>
-          </GridField>
-          <div className="sm:col-span-2">
-            <ProrationMethodFields
-              prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
-              monthlyRent={entireHomeRent}
-              dailyRentRate={sub.entireHomeDailyRentRate}
-              dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
-              onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
-              onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
-              onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
-            />
-          </div>
-        </div>
-      </div>
-    ) : null;
+  const feeExpandableSections: FeeExpandableSection[] = [
+    wholePlaceFeeSection,
+    roomsFeeSection,
+    bundlesFeeSection,
+  ].filter((s): s is FeeExpandableSection => s !== null);
 
   return createPortal(
     <div
@@ -3655,8 +3723,6 @@ export function ManagerAddListingForm({
                   }}
                 />
                 </div>
-
-                {entireHomeUtilitiesBlock}
 
                 <div className="mt-4 space-y-3 border-t border-border pt-4">
                   <FieldLabel optional>Payment at signing</FieldLabel>
