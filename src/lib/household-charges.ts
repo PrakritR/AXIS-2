@@ -2497,7 +2497,25 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const isShortTermStay = row.application?.rentalType === "short_term";
 
   if (isShortTermStay) {
-    const nightlyRate = shortTermNightlyRate(sub?.shortTermDailyCost);
+    // The short-term set is now per rent row (round 20): when the booked room carries its
+    // own short-term rent/deposit/move-in, those win over the listing-level fields. A stay
+    // is still ALL-IN — this branch never bills a utilities line — so preferring the room's
+    // figures changes which short-term amounts bill, never whether utilities are added.
+    const stRoom = (() => {
+      if (!sub) return null;
+      for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+        const trimmed = c?.trim();
+        if (!trimmed) continue;
+        const { listingRoomId } = parseRoomChoiceValue(trimmed);
+        if (listingRoomId) {
+          const byId = sub.rooms.find((r) => r.id === listingRoomId);
+          if (byId) return byId;
+        }
+      }
+      return sub.rooms.length === 1 ? (sub.rooms[0] ?? null) : null;
+    })();
+    const stRent = (stRoom?.shortTermRent ?? "").trim() || sub?.shortTermDailyCost;
+    const nightlyRate = shortTermNightlyRate(stRent);
     const nights = shortTermStayNightCount(leaseStart, leaseEnd);
     if (nightlyRate > 0 && nights) {
       pushCharge(
@@ -2514,7 +2532,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       row.manualResidentDetails?.securityDeposit != null
         ? String(row.manualResidentDetails.securityDeposit)
         : allowListingDefaults
-          ? sub?.shortTermDeposit
+          ? (stRoom?.shortTermDeposit ?? "").trim() || sub?.shortTermDeposit
           : undefined,
     );
     if (shortDeposit > 0) {
@@ -2526,7 +2544,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       row.manualResidentDetails?.moveInFee != null
         ? String(row.manualResidentDetails.moveInFee)
         : allowListingDefaults
-          ? sub?.shortTermMoveInFee
+          ? (stRoom?.shortTermMoveInFee ?? "").trim() || sub?.shortTermMoveInFee
           : undefined,
     );
     pushCharge("move_in_fee", shortMoveIn, chargeTitle("move_in_fee"), false, "Before check-in");

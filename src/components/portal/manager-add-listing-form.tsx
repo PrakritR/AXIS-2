@@ -514,6 +514,70 @@ function ProrationMethodFields({
 }
 
 /**
+ * The dedicated SHORT-TERM section on every rent row (round 20) — room, grouped lease, and
+ * whole-place. It appears only when the listing offers short-term stays and holds an ALL-IN
+ * nightly rent plus a short-term move-in fee and deposit. There is NO utilities control here
+ * by design: the short-term rate is all-in, so a short-term booking never bills a separate
+ * utilities line. Long-term values on the same row are untouched — these are a separate set.
+ */
+function ShortTermRentSection({
+  labelFor,
+  rent,
+  moveInFee,
+  deposit,
+  onRent,
+  onMoveIn,
+  onDeposit,
+  rentInvalid,
+}: {
+  labelFor?: string;
+  rent: string;
+  moveInFee: string;
+  deposit: string;
+  onRent: (sanitized: string) => void;
+  onMoveIn: (sanitized: string) => void;
+  onDeposit: (sanitized: string) => void;
+  rentInvalid?: boolean;
+}) {
+  const suffix = labelFor ? ` for ${labelFor}` : "";
+  return (
+    <div className="w-full rounded-lg border border-dashed border-border bg-accent/10 p-3">
+      <FieldLabel hint="All-in nightly rate — no separate utilities.">Short-term</FieldLabel>
+      <div className="mt-1 flex flex-wrap items-end gap-x-4 gap-y-2">
+        <GridField>
+          <FieldLabel>Rent / night</FieldLabel>
+          <MoneyInput
+            ariaLabel={`Short-term nightly rent${suffix}`}
+            invalid={rentInvalid}
+            value={rent}
+            onChange={(e) => onRent(sanitizeMoneyInput(e.target.value))}
+            placeholder="85"
+          />
+        </GridField>
+        <GridField>
+          <FieldLabel>Move-in fee</FieldLabel>
+          <MoneyInput
+            ariaLabel={`Short-term move-in fee${suffix}`}
+            value={moveInFee}
+            onChange={(e) => onMoveIn(sanitizeMoneyInput(e.target.value))}
+            placeholder="150"
+          />
+        </GridField>
+        <GridField>
+          <FieldLabel>Deposit</FieldLabel>
+          <MoneyInput
+            ariaLabel={`Short-term deposit${suffix}`}
+            value={deposit}
+            onChange={(e) => onDeposit(sanitizeMoneyInput(e.target.value))}
+            placeholder="300"
+          />
+        </GridField>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Compact dollar-amount input — a short value should look like one. Fixed narrow
  * width with an inline `$` affix, used across the Pricing step's amount fields.
  */
@@ -2641,6 +2705,9 @@ export function ManagerAddListingForm({
               id: room.id,
               title: roomLabel,
               summary: `${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`,
+              shortTermSummary: (room.shortTermRent ?? "").replace(/^\$/, "").trim()
+                ? `$${(room.shortTermRent ?? "").replace(/^\$/, "").trim()}/night`
+                : undefined,
               expanded,
               onToggle: () => toggleListingItem(priceKey),
               onRemove: sub.rooms.length > 1 ? () => removeRoom(i) : undefined,
@@ -2721,6 +2788,17 @@ export function ManagerAddListingForm({
                       onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
                     />
                   </div>
+                  {sub.shortTermRentalsAllowed ? (
+                    <ShortTermRentSection
+                      labelFor={roomLabel}
+                      rent={(room.shortTermRent ?? "").replace(/^\$/, "").trim()}
+                      moveInFee={(room.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                      deposit={(room.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                      onRent={(v) => setRoom(i, { shortTermRent: v })}
+                      onMoveIn={(v) => setRoom(i, { shortTermMoveInFee: v })}
+                      onDeposit={(v) => setRoom(i, { shortTermDeposit: v })}
+                    />
+                  ) : null}
                 </div>
               ),
             };
@@ -2855,26 +2933,19 @@ export function ManagerAddListingForm({
                   </div>
                 </GridField>
                 {sub.shortTermRentalsAllowed ? (
-                  <GridField>
-                    {/* Short-term is decided once in Lease lengths; here the rate field just
-                        appears (no redundant per-row checkbox). A non-empty rate offers this
-                        unit for short-term stays. */}
-                    <FieldLabel hint="Nightly rate → stay total at checkout.">Short-term rent / night</FieldLabel>
-                    <div data-wizard-field={stNightlyKey}>
-                      <MoneyInput
-                        invalid={Boolean(stNightlyErr)}
-                        ariaLabel={`Short-term nightly rent for ${bundle.label.trim() || "bundle"}`}
-                        value={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
-                        onChange={(e) => {
-                          clearListingFieldError(stNightlyKey);
-                          const v = sanitizeMoneyInput(e.target.value);
-                          setBundle(i, { shortTermNightlyRent: v, shortTermEnabled: v.trim() !== "" });
-                        }}
-                        placeholder="85"
-                      />
-                      <StepFieldError msg={stNightlyErr} />
-                    </div>
-                  </GridField>
+                  <ShortTermRentSection
+                    labelFor={bundle.label.trim() || "bundle"}
+                    rentInvalid={Boolean(stNightlyErr)}
+                    rent={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
+                    moveInFee={(bundle.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                    deposit={(bundle.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                    onRent={(v) => {
+                      clearListingFieldError(stNightlyKey);
+                      setBundle(i, { shortTermNightlyRent: v, shortTermEnabled: v.trim() !== "" });
+                    }}
+                    onMoveIn={(v) => setBundle(i, { shortTermMoveInFee: v })}
+                    onDeposit={(v) => setBundle(i, { shortTermDeposit: v })}
+                  />
                 ) : null}
                 <div className="w-full">
                   <FieldLabel>Rooms in this bundle</FieldLabel>

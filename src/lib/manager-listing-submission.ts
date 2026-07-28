@@ -85,6 +85,18 @@ export type ManagerRoomSubmission = {
    * bill for the same move-in.
    */
   moveInFee?: string;
+  /**
+   * Per-room SHORT-TERM set (money strings) — the dedicated short-term section on each
+   * rent row (round 20). A short-term stay booked on this room bills the ALL-IN nightly
+   * {@link shortTermRent} × nights plus {@link shortTermMoveInFee} and
+   * {@link shortTermDeposit}, and NEVER a separate utilities line — the short-term rate
+   * is all-in by design. Separate from the long-term set on the same room; toggling
+   * short-term off does not erase them. When unset, the short-term branch falls back to
+   * the listing-level short-term fields (whole-place / entire-home stays).
+   */
+  shortTermRent?: string;
+  shortTermMoveInFee?: string;
+  shortTermDeposit?: string;
   /** Estimated monthly utilities for this room (shown on listing). */
   utilitiesEstimate: string;
   /** Who pays utilities — defaults to manager-billed estimate through the portal. */
@@ -148,6 +160,10 @@ export type ManagerBundleRow = {
   shortTermEnabled?: boolean;
   /** Nightly rate for short-term stays on this bundle (stay total = rate × nights). */
   shortTermNightlyRent?: string;
+  /** Per-bundle short-term move-in fee and deposit (round 20 dedicated short-term section).
+   *  Advertised default for a grouped short-term stay; no separate utilities (all-in rate). */
+  shortTermMoveInFee?: string;
+  shortTermDeposit?: string;
   /**
    * Per-bundle security deposit (money string) shown in the bundle's Fees dropdown.
    * Presentation/default only — bundles have never been read by charge generation
@@ -927,6 +943,21 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof legacyRoom.moveInFee === "string" && legacyRoom.moveInFee.trim()
           ? legacyRoom.moveInFee.trim()
           : undefined,
+      // Per-room short-term set (round 20) — undefined when absent so rooms that never
+      // offered short-term stay byte-identical. Charge generation prefers these over the
+      // listing-level short-term fields when the booked room has them.
+      shortTermRent:
+        typeof legacyRoom.shortTermRent === "string" && legacyRoom.shortTermRent.trim()
+          ? legacyRoom.shortTermRent.trim()
+          : undefined,
+      shortTermMoveInFee:
+        typeof legacyRoom.shortTermMoveInFee === "string" && legacyRoom.shortTermMoveInFee.trim()
+          ? legacyRoom.shortTermMoveInFee.trim()
+          : undefined,
+      shortTermDeposit:
+        typeof legacyRoom.shortTermDeposit === "string" && legacyRoom.shortTermDeposit.trim()
+          ? legacyRoom.shortTermDeposit.trim()
+          : undefined,
       furnishing: (() => {
         const f = typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "";
         return f.trim().length === 0 ? "" : f;
@@ -1021,6 +1052,14 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           : undefined,
       moveInFee:
         typeof b.moveInFee === "string" && b.moveInFee.trim() ? b.moveInFee.trim() : undefined,
+      shortTermMoveInFee:
+        typeof b.shortTermMoveInFee === "string" && b.shortTermMoveInFee.trim()
+          ? b.shortTermMoveInFee.trim()
+          : undefined,
+      shortTermDeposit:
+        typeof b.shortTermDeposit === "string" && b.shortTermDeposit.trim()
+          ? b.shortTermDeposit.trim()
+          : undefined,
       utilitiesPaymentModel: b.utilitiesPaymentModel
         ? normalizeUtilitiesPaymentModel(b.utilitiesPaymentModel)
         : undefined,
