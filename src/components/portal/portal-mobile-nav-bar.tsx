@@ -80,15 +80,16 @@ export function PortalMobileNavBar({
     [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+  const mobileHeaderTitle = dashboardLabel ?? sectionTitle;
 
   return (
-    <div className="portal-mobile-nav-bar relative mb-3 flex w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
-      {/* Brand mark, centered in the bar for every portal; links home. */}
+    <div className="portal-mobile-nav-bar relative mb-3 flex min-h-11 w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
+      {/* Brand mark on tablet-only; phones use centered section/dashboard titles. */}
       <Link
         href={`${definition.basePath}/dashboard`}
         aria-label="Dashboard"
         data-attr="portal-mobile-brand-mark"
-        className="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 rounded-xl [html[data-native]_&]:hidden outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80"
+        className="absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80 md:inline-flex"
       >
         <AxisLogoMark size="compact" />
       </Link>
@@ -103,13 +104,18 @@ export function PortalMobileNavBar({
           <span className="truncate">{back!.label}</span>
         </button>
       ) : dashboardLabel ? (
-        <h1 className="min-w-0 max-w-[38%] truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
+        <h1 className="pointer-events-none absolute left-1/2 top-1/2 z-[5] w-full max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 truncate px-2 text-center text-sm font-semibold text-foreground">
           {dashboardLabel}
         </h1>
       ) : sectionTitle ? (
-        <h1 className="min-w-0 max-w-[42%] truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
+        <h1 className="pointer-events-none absolute left-1/2 top-1/2 z-[5] w-full max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 truncate px-2 text-center text-sm font-semibold text-foreground">
           {sectionTitle}
         </h1>
+      ) : null}
+
+      {/* Balance spacer so centered titles sit between back (left) and profile (right). */}
+      {mobileHeaderTitle && !showBack ? (
+        <div className="min-h-9 min-w-[2.75rem] shrink-0" aria-hidden />
       ) : null}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">

@@ -355,6 +355,15 @@ export const PORTAL_DASHBOARD_SECTION_CARD =
 /** Vertical stack spacing for dashboard sections — tighter on native. */
 export const PORTAL_DASHBOARD_STACK = "space-y-5 [html[data-native]_&]:space-y-3";
 
+/** KPI row: 2-column grid on phones (no sideways scroll); horizontal strip from `sm` up. */
+export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 max-md:[&>*]:min-w-0 sm:-mx-1 sm:flex sm:gap-2.5 sm:overflow-x-auto sm:px-1 sm:pb-1 sm:[&>*]:min-w-[8.75rem] [-ms-overflow-style:none] sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
+      {children}
+    </div>
+  );
+}
+
 /** Compact list row used in dashboard section previews. */
 export function PortalDashboardCompactRow({
   title,
@@ -432,6 +441,7 @@ export function ManagerPortalPageShell({
   children,
   hideTitleOnNative = false,
   hideTitleOnMobileNav = true,
+  welcomeSubtitle = false,
 }: {
   title: string;
   subtitle?: string;
@@ -442,6 +452,8 @@ export function ManagerPortalPageShell({
   hideTitleOnNative?: boolean;
   /** Hide duplicate page title on mobile when {@link PortalMobileNavBar} shows the section name. */
   hideTitleOnMobileNav?: boolean;
+  /** Larger welcome line under the title (portal dashboards). */
+  welcomeSubtitle?: boolean;
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
@@ -457,7 +469,13 @@ export function ManagerPortalPageShell({
             {title}
           </h1>
           {subtitle ? (
-            <p className="mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:mt-0.5 [html[data-native]_&]:text-xs">
+            <p
+              className={
+                welcomeSubtitle
+                  ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-center max-md:text-lg [html[data-native]_&]:mt-1 [html[data-native]_&]:text-base"
+                  : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:mt-0.5 [html[data-native]_&]:text-xs"
+              }
+            >
               {subtitle}
             </p>
           ) : null}
