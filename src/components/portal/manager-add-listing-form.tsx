@@ -18,6 +18,7 @@ import { buildListingModalAssistantContext } from "@/lib/listing-assistant-conte
 import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
+import { ListingFeesEditor } from "@/components/portal/listing-fees-editor";
 import {
   submitManagerPendingPropertyToServer,
   syncPropertyPipelineFromServer,
@@ -67,7 +68,6 @@ import {
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
-  emptyCustomFeeRow,
   emptyQuickFactRow,
   emptyRoom,
   emptySharedSpace,
@@ -76,7 +76,6 @@ import {
   type ManagerBathroomSubmission,
   type ManagerBundleRow,
   type ManagerCustomApplicationField,
-  type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
   type ManagerListingServiceOption,
   type ManagerQuickFactRow,
@@ -85,6 +84,7 @@ import {
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
 import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
+import { withShortTermListingFees } from "@/lib/listing-fees";
 import {
   UTILITIES_PAYMENT_MODEL_OPTIONS,
   resolveRoomUtilitiesPaymentModel,
@@ -1718,27 +1718,6 @@ export function ManagerAddListingForm({
     }));
   };
 
-  const setCustomFee = (i: number, patch: Partial<ManagerCustomFeeRow>) => {
-    setSub((s) => {
-      const customFees = [...(s.customFees ?? [])];
-      customFees[i] = { ...customFees[i]!, ...patch };
-      return { ...s, customFees };
-    });
-  };
-
-  const addCustomFee = () => {
-    const next = emptyCustomFeeRow();
-    expandListingItem(listingItemKey("fee", next.id));
-    setSub((s) => ({ ...s, customFees: [...(s.customFees ?? []), next] }));
-  };
-
-  const removeCustomFee = (i: number) => {
-    setSub((s) => ({
-      ...s,
-      customFees: (s.customFees ?? []).filter((_, j) => j !== i),
-    }));
-  };
-
   const onPickRoomPhotos = async (roomIndex: number, files: FileList | null) => {
     if (!files?.length) return;
     const fileArray = Array.from(files);
@@ -3106,12 +3085,13 @@ export function ManagerAddListingForm({
                                 setSub((s) => {
                                   const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
                                   const next = syncShortTermLeaseTermInAllowed(standard, on);
-                                  return syncPropertyLeaseTemplatesFromListing({
+                                  const base = syncPropertyLeaseTemplatesFromListing({
                                     ...s,
                                     shortTermRentalsAllowed: on,
                                     allowedLeaseTerms: next,
                                     leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
                                   });
+                                  return withShortTermListingFees(base, on);
                                 });
                               }}
                             />
@@ -3161,64 +3141,18 @@ export function ManagerAddListingForm({
 
                 {/* Short-term pricing only appears once short-term stays are offered above. */}
                 {sub.shortTermRentalsAllowed ? (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Short-term pricing</p>
-                      <p className="text-xs leading-relaxed text-muted">
-                        Nightly rates for “{SHORT_TERM_LEASE_TERM}” applicants.
-                      </p>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <GridField>
-                        <FieldLabel hint="Nightly rate shown on the listing and application.">Daily cost</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className="pl-8"
-                            inputMode="decimal"
-                            value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
-                            placeholder="40"
-                          />
-                        </div>
-                      </GridField>
-                      <GridField>
-                        <FieldLabel>Short-term deposit</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className="pl-8"
-                            inputMode="decimal"
-                            value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
-                            placeholder="100"
-                          />
-                        </div>
-                      </GridField>
-                      <GridField>
-                        <FieldLabel hint="Move-in fee for short-term stays, used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className="pl-8"
-                            inputMode="decimal"
-                            value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
-                            placeholder="50"
-                          />
-                        </div>
-                      </GridField>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
-                          Requirements / house rules for short-term stays
-                        </FieldLabel>
-                        <Textarea
-                          value={sub.shortTermRequirements ?? ""}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
-                          placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted">
+                      Nightly rate, deposit, and move-in for {SHORT_TERM_LEASE_TERM} are in Fees below.
+                    </p>
+                    <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
+                      Requirements for short-term stays
+                    </FieldLabel>
+                    <Textarea
+                      value={sub.shortTermRequirements ?? ""}
+                      onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
+                      placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout."
+                    />
                   </div>
                 ) : null}
               </ListingSubsection>
@@ -3389,212 +3323,27 @@ export function ManagerAddListingForm({
                 )}
               </ListingSubsection>
 
-              <ListingSubsection
-                title="Fees & deposits"
-                description="Enter 0 for anything you don't charge — it stays off the public listing."
-              >
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Holding deposit</p>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {(
-                        [
-                          [
-                            "holdingDeposit",
-                            "Holding deposit",
-                            (sub.holdingDeposit ?? "").replace(/^\$/, "").trim(),
-                            false,
-                          ],
-                        ] as const
-                      ).map(([key, label, value, required]) => (
-                        <GridField key={key}>
-                          <div data-wizard-field={key}>
-                            <FieldLabel required={required} hint={key === "holdingDeposit" ? "One-time — credits toward the security deposit; defaults to $100 if blank." : undefined}>
-                              {label}
-                            </FieldLabel>
-                          </div>
-                          <div>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
-                                $
-                              </span>
-                              <Input
-                                className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
-                                inputMode="decimal"
-                                value={value}
-                                onChange={(e) => {
-                                  clearListingFieldError(key);
-                                  setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
-                                }}
-                                placeholder={key === "holdingDeposit" ? "100" : "0"}
-                              />
-                            </div>
-                            <StepFieldError msg={stepFieldErrors[key]} />
-                          </div>
-                        </GridField>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Move-in & security</p>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {(
-                        [
-                          ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
-                          ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
-                        ] as const
-                      ).map(([key, label, value]) => (
-                        <GridField key={key}>
-                          <div data-wizard-field={key}>
-                            <FieldLabel required>{label}</FieldLabel>
-                          </div>
-                          <div>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
-                                $
-                              </span>
-                              <Input
-                                className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
-                                inputMode="decimal"
-                                value={value}
-                                onChange={(e) => {
-                                  clearListingFieldError(key);
-                                  setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
-                                }}
-                                placeholder="0"
-                              />
-                            </div>
-                            <StepFieldError msg={stepFieldErrors[key]} />
-                          </div>
-                        </GridField>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Monthly add-ons</p>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {(
-                        [
-                          ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
-                          ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim()],
-                          ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim()],
-                          [
-                            "monthToMonthSurcharge",
-                            "Month-to-month surcharge",
-                            (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim(),
-                          ],
-                        ] as const
-                      ).map(([key, label, value]) => (
-                        <GridField key={key}>
-                          <div data-wizard-field={key}>
-                            <FieldLabel required>{label}</FieldLabel>
-                          </div>
-                          <div>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
-                                $
-                              </span>
-                              <Input
-                                className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
-                                inputMode="decimal"
-                                value={value}
-                                onChange={(e) => {
-                                  clearListingFieldError(key);
-                                  setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
-                                }}
-                                placeholder="0"
-                              />
-                            </div>
-                            <StepFieldError msg={stepFieldErrors[key]} />
-                          </div>
-                        </GridField>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Other fees</p>
-                      <p className="text-xs leading-relaxed text-muted">
-                        Anything not already captured above, like a pet or cleaning fee. The holding deposit and security deposit have their own fields above, so enter them there, not here.
-                      </p>
-                    </div>
-                    {(sub.customFees ?? []).length > 0 ? (
-                      <div className="space-y-3">
-                    {(sub.customFees ?? []).map((fee, i) => (
-                      <ListingWizardCollapsibleCard
-                        key={fee.id}
-                        expanded={isListingItemExpanded(listingItemKey("fee", fee.id))}
-                        onToggle={() => toggleListingItem(listingItemKey("fee", fee.id))}
-                        title={fee.label.trim() || `Fee ${i + 1}`}
-                        subtitle={`$${fee.amount.replace(/^\$/, "").trim() || "0"} · ${fee.frequency === "one-time" ? "One-time" : "Monthly"}`}
-                        bodyClassName="grid gap-3 sm:grid-cols-2"
-                        toggleDataAttr={`listing-fee-toggle-${fee.id}`}
-                        headerActions={
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeCustomFee(i)}>
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <div className="sm:col-span-2 sm:grid sm:grid-cols-2 sm:gap-3">
-                        <div>
-                          <FieldLabel>Fee name</FieldLabel>
-                          <Input
-                            value={fee.label}
-                            onChange={(e) => setCustomFee(i, { label: sanitizePlaceNameInput(e.target.value) })}
-                            placeholder="e.g. Pet fee, Cleaning fee"
-                          />
-                        </div>
-                        <div>
-                          <FieldLabel>Amount</FieldLabel>
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                            <Input
-                              className="pl-8"
-                              inputMode="decimal"
-                              value={fee.amount.replace(/^\$/, "").trim()}
-                              onChange={(e) => setCustomFee(i, { amount: sanitizeMoneyInput(e.target.value) })}
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel>Type</FieldLabel>
-                          <div className="relative">
-                            <Select
-                              aria-label={`Additional fee ${i + 1} type`}
-                              className={`${selectInputCls}`}
-                              value={fee.frequency ?? "monthly"}
-                              onChange={(e) =>
-                                setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
-                              }
-                            >
-                              <option value="monthly">Monthly</option>
-                              <option value="one-time">One-time</option>
-                            </Select>
-                          </div>
-                        </div>
-                        </div>
-                      </ListingWizardCollapsibleCard>
-                    ))}
-                      </div>
-                    ) : null}
-                    <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addCustomFee}>
-                      + Add fee
-                    </Button>
-                  </div>
-                </div>
+              <ListingSubsection title="Fees" description="Deposits, recurring charges, and custom fees — one list for the whole listing.">
+                <ListingFeesEditor
+                  sub={sub}
+                  setSub={setSub}
+                  stepFieldErrors={stepFieldErrors}
+                  clearListingFieldError={clearListingFieldError}
+                  listingItemKey={listingItemKey}
+                  isListingItemExpanded={isListingItemExpanded}
+                  toggleListingItem={toggleListingItem}
+                  expandListingItem={expandListingItem}
+                  wizardFieldErrorClass={wizardFieldErrorClass}
+                />
               </ListingSubsection>
 
               <ListingSubsection
                 title="Payment at signing"
-                description="Select every charge collected when the lease is signed."
+                description="Security deposit and move-in follow the Due at signing flags on those fee rows. Add rent or utilities here if you collect them at signing."
               >
-                <div className="grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
-                  {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
-                    <label key={opt.id} className="flex cursor-pointer items-center gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {PAYMENT_AT_SIGNING_OPTIONS.filter((opt) => opt.id === "first_month_rent" || opt.id === "first_month_utilities").map((opt) => (
+                    <label key={opt.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm">
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-border"
@@ -3606,7 +3355,7 @@ export function ManagerAddListingForm({
                           }))
                         }
                       />
-                      <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                      <span className="font-medium text-foreground">{opt.label}</span>
                     </label>
                   ))}
                 </div>
@@ -3615,103 +3364,83 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Resident payment methods"
-                description="How residents and applicants pay rent, utilities, application fees, and other charges."
+                description="ACH, Zelle, and Venmo for rent and application payments."
               >
                 <div
                   data-wizard-field="residentPaymentMethods"
-                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
+                  className={`space-y-3 rounded-xl border bg-card p-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
                 >
                   <StepFieldError msg={stepFieldErrors.residentPaymentMethods} />
-                  <label className="flex cursor-pointer items-center gap-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-border"
                       checked={sub.axisPaymentsEnabled !== false}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          axisPaymentsEnabled: e.target.checked,
-                        }))
-                      }
+                      onChange={(e) => setSub((s) => ({ ...s, axisPaymentsEnabled: e.target.checked }))}
                     />
-                    <span className="text-sm font-medium text-foreground">
-                      Bank (ACH) with Stripe — no added fees, PropLane covers processing
-                    </span>
+                    <span className="font-medium text-foreground">Bank (ACH) with Stripe</span>
                   </label>
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.zellePaymentsEnabled)}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setSub((s) => ({
-                            ...s,
-                            zellePaymentsEnabled: on,
-                          }));
-                        }}
-                      />
-                      <span className="text-sm font-medium text-foreground">Zelle</span>
-                    </label>
-                    {sub.zellePaymentsEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="zelleContact">
-                        <FieldLabel required>Zelle phone or email</FieldLabel>
-                        <Input
-                          value={sub.zelleContact ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("zelleContact");
-                            setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
-                          placeholder="+1 555 010 8899 or name@email.com"
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-2 rounded-lg border border-border/80 p-2.5">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          checked={Boolean(sub.zellePaymentsEnabled)}
+                          onChange={(e) => setSub((s) => ({ ...s, zellePaymentsEnabled: e.target.checked }))}
                         />
-                        <StepFieldError msg={stepFieldErrors.zelleContact} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.venmoPaymentsEnabled)}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setSub((s) => ({
-                            ...s,
-                            venmoPaymentsEnabled: on,
-                          }));
-                        }}
-                      />
-                      <span className="text-sm font-medium text-foreground">Venmo</span>
-                    </label>
-                    {sub.venmoPaymentsEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="venmoContact">
-                        <FieldLabel required>Venmo username, phone, or email</FieldLabel>
-                        <Input
-                          value={sub.venmoContact ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("venmoContact");
-                            setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
-                          placeholder="@username, +1 555 010 8899, or name@email.com"
+                        <span className="font-medium">Zelle</span>
+                      </label>
+                      {sub.zellePaymentsEnabled ? (
+                        <div data-wizard-field="zelleContact">
+                          <Input
+                            aria-label="Zelle phone or email"
+                            value={sub.zelleContact ?? ""}
+                            onChange={(e) => {
+                              clearListingFieldError("zelleContact");
+                              setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
+                            }}
+                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
+                            placeholder="Phone or email"
+                          />
+                          <StepFieldError msg={stepFieldErrors.zelleContact} />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="space-y-2 rounded-lg border border-border/80 p-2.5">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          checked={Boolean(sub.venmoPaymentsEnabled)}
+                          onChange={(e) => setSub((s) => ({ ...s, venmoPaymentsEnabled: e.target.checked }))}
                         />
-                        <StepFieldError msg={stepFieldErrors.venmoContact} />
-                      </div>
-                    ) : null}
+                        <span className="font-medium">Venmo</span>
+                      </label>
+                      {sub.venmoPaymentsEnabled ? (
+                        <div data-wizard-field="venmoContact">
+                          <Input
+                            aria-label="Venmo contact"
+                            value={sub.venmoContact ?? ""}
+                            onChange={(e) => {
+                              clearListingFieldError("venmoContact");
+                              setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
+                            }}
+                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
+                            placeholder="@username or phone"
+                          />
+                          <StepFieldError msg={stepFieldErrors.venmoContact} />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </ListingSubsection>
 
-              <ListingSubsection
-                title="Rent due date & late fees"
-                description="First month rent is always due on move-in. Recurring rent follows the schedule below."
-              >
-                <div className="grid gap-3 sm:grid-cols-2">
+              <ListingSubsection title="Rent due & late fees" description="Recurring rent schedule and automatic late fees.">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <GridField>
-                    <FieldLabel hint="When recurring rent and utilities are due each month.">Monthly due date</FieldLabel>
+                    <FieldLabel>Monthly due date</FieldLabel>
                     <Select
                       value={sub.rentDueDayMode ?? "first_of_month"}
                       onChange={(e) =>
@@ -3721,12 +3450,12 @@ export function ManagerAddListingForm({
                         }))
                       }
                     >
-                      <option value="first_of_month">1st of the month</option>
-                      <option value="last_of_month">Last day of the month</option>
+                      <option value="first_of_month">1st of month</option>
+                      <option value="last_of_month">Last day of month</option>
                     </Select>
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Days after the due date before a late fee is added automatically.">Late fee grace period (days)</FieldLabel>
+                    <FieldLabel>Late fee grace (days)</FieldLabel>
                     <Input
                       inputMode="numeric"
                       min={0}
@@ -3741,7 +3470,7 @@ export function ManagerAddListingForm({
                     />
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Flat fee added once per overdue charge after the grace period.">Late fee amount</FieldLabel>
+                    <FieldLabel>Late fee amount</FieldLabel>
                     <div className="relative">
                       <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                       <Input
@@ -3754,15 +3483,15 @@ export function ManagerAddListingForm({
                     </div>
                   </GridField>
                   <GridField>
-                    <FieldLabel>Automatic late fees</FieldLabel>
-                    <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+                    <FieldLabel>Auto late fees</FieldLabel>
+                    <label className="mt-2 flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm">
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-border"
                         checked={sub.lateFeeEnabled !== false}
                         onChange={(e) => setSub((s) => ({ ...s, lateFeeEnabled: e.target.checked }))}
                       />
-                      <span className="text-sm text-foreground">Create late fee charges & send messages</span>
+                      <span>Assess & notify</span>
                     </label>
                   </GridField>
                 </div>

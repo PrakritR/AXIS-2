@@ -1,5 +1,6 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
-import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
+import { isEntireHomeListing, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
+import { listingFeesForWizard, validateListingFeeRows } from "@/lib/listing-fees";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
@@ -101,22 +102,8 @@ export function validateListingWizardStep(
     }
     const allowedTerms = resolveAllowedLeaseTerms(sub);
     if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term.";
-    const feeFields: { key: keyof ManagerListingSubmissionV1; label: string }[] = [
-      // The application fee is no longer set per listing — it's configured once
-      // per manager in Applications → Application fee — so it is not required here.
-      { key: "securityDeposit", label: "Security deposit" },
-      { key: "moveInFee", label: "Move-in fee" },
-      { key: "parkingMonthly", label: "Parking (monthly)" },
-      { key: "hoaMonthly", label: "HOA / community" },
-      { key: "otherMonthlyFees", label: "Other monthly fees" },
-      { key: "monthToMonthSurcharge", label: "Month-to-month surcharge" },
-    ];
-    for (const { key, label } of feeFields) {
-      const raw = String(sub[key] ?? "");
-      if (!isListingFeeAmountFilled(raw)) {
-        errs[String(key)] = `${label} is required — enter 0 if there is no fee.`;
-      }
-    }
+    const feeRows = listingFeesForWizard(sub);
+    Object.assign(errs, validateListingFeeRows(feeRows, { shortTermRentalsAllowed: sub.shortTermRentalsAllowed }));
     if (sub.zellePaymentsEnabled && !sub.zelleContact?.trim()) {
       errs.zelleContact = "Enter a Zelle phone or email for resident payments.";
     }
