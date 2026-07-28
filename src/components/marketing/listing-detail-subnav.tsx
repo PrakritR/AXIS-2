@@ -123,6 +123,28 @@ export function ListingStickySubnav({
   const clickLockRef = useRef<{ id: string; until: number } | null>(null);
   const [pageScrolled, setPageScrolled] = useState(false);
   const [activeId, setActiveId] = useState<string>(nav[0].id);
+  const [fadeEnd, setFadeEnd] = useState(false);
+
+  const syncEdgeFade = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    setFadeEnd(list.scrollLeft < list.scrollWidth - list.clientWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    syncEdgeFade();
+    list.addEventListener("scroll", syncEdgeFade, { passive: true });
+    window.addEventListener("resize", syncEdgeFade, { passive: true });
+    const ro = new ResizeObserver(syncEdgeFade);
+    ro.observe(list);
+    return () => {
+      list.removeEventListener("scroll", syncEdgeFade);
+      window.removeEventListener("resize", syncEdgeFade);
+      ro.disconnect();
+    };
+  }, [syncEdgeFade]);
 
   const publishStackAndSpy = useCallback(() => {
     const subEl = rootRef.current;
@@ -291,9 +313,15 @@ export function ListingStickySubnav({
         ref={listRef}
         // On mobile the strip scrolls horizontally (flex-nowrap + overflow-x-auto);
         // a right-edge fade mask signals that more tabs exist beyond the viewport
-        // instead of the tabs looking truncated mid-word. Removed at sm+ where the
-        // strip wraps and centers (no horizontal scroll).
-        className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] [mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]"
+        // instead of the tabs looking truncated mid-word. Applied only while more
+        // tabs remain off-screen to the right (never fades the last tab at
+        // end-of-scroll), and removed at sm+ where the strip wraps and centers
+        // (no horizontal scroll).
+        className={`-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
+          fadeEnd
+            ? "[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none]"
+            : ""
+        } sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]`}
       >
         {nav.map((item) => {
           const active = activeId === item.id;
