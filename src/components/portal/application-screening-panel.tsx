@@ -247,6 +247,7 @@ export function ApplicationScreeningPanel({
         {canRunBackgroundCheck ? (
           <Button
             type="button"
+            variant="primary"
             data-attr="run-background-check"
             className={headerActionBtnClass}
             onClick={onOpenScreeningModal}
@@ -257,6 +258,7 @@ export function ApplicationScreeningPanel({
         {canOrder ? (
           <Button
             type="button"
+            variant="primary"
             className={headerActionBtnClass}
             disabled={busy}
             onClick={() => void runScreening()}

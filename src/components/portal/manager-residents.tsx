@@ -159,7 +159,7 @@ import {
 } from "@/lib/resident-welcome-email";
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
-import { ApplicationDocumentPreview, downloadApplicationPdf } from "@/components/portal/manager-applications";
+import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
@@ -317,8 +317,6 @@ export function ManagerResidents({
   const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
-  const [residentApplicationScreeningHeaderActions, setResidentApplicationScreeningHeaderActions] =
-    useState<ReactNode>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
 
   // Services tab replica (Requests / Work orders — mirrors resident-services-panel.tsx)
@@ -1750,19 +1748,26 @@ export function ManagerResidents({
                               headerAction={
                                 selectedApplicationRow ? (
                                   <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                                    {selectedApplicationRow.application ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_HEADER_ACTION_BTN}
-                                        data-attr="resident-application-edit"
-                                        onClick={() => setApplicationEditOpen(true)}
-                                      >
-                                        Edit
-                                      </Button>
-                                    ) : null}
                                     {selectedApplicationRow.bucket === "pending" ? (
                                       <>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_HEADER_ACTION_BTN}
+                                          data-attr="resident-application-reject"
+                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                        >
+                                          Reject
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                          data-attr="resident-application-delete"
+                                          onClick={() => void deleteSelectedResident()}
+                                        >
+                                          Delete
+                                        </Button>
                                         {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
                                           <Button
                                             type="button"
@@ -1774,48 +1779,29 @@ export function ManagerResidents({
                                             Approve
                                           </Button>
                                         )}
+                                      </>
+                                    ) : (
+                                      <>
                                         <Button
                                           type="button"
                                           variant="outline"
                                           className={PORTAL_HEADER_ACTION_BTN}
-                                          data-attr="resident-application-reject"
-                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                          data-attr="resident-application-move-pending"
+                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
                                         >
-                                          Reject
+                                          Move to pending
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                          data-attr="resident-application-delete"
+                                          onClick={() => void deleteSelectedResident()}
+                                        >
+                                          Delete
                                         </Button>
                                       </>
-                                    ) : (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_HEADER_ACTION_BTN}
-                                        data-attr="resident-application-move-pending"
-                                        onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
-                                      >
-                                        Move to pending
-                                      </Button>
                                     )}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      data-attr="resident-application-delete"
-                                      onClick={() => void deleteSelectedResident()}
-                                    >
-                                      Delete
-                                    </Button>
-                                    {selectedApplicationRow.application ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_HEADER_ACTION_BTN}
-                                        data-attr="resident-application-pdf-download"
-                                        onClick={() => downloadApplicationPdf(selectedApplicationRow)}
-                                      >
-                                        Download PDF
-                                      </Button>
-                                    ) : null}
-                                    {residentApplicationScreeningHeaderActions}
                                   </div>
                                 ) : undefined
                               }
@@ -1828,13 +1814,11 @@ export function ManagerResidents({
                                       currentRowId={selectedApplicationRow.id}
                                     />
                                   ) : null}
-                                  <ApplicationDocumentPreview row={selectedApplicationRow} showDownload={false} />
+                                  <ApplicationDocumentPreview row={selectedApplicationRow} />
                                   <ApplicationScreeningPanel
                                     row={selectedApplicationRow}
                                     onUpdated={handleScreeningUpdated}
                                     onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
-                                    headerActionsPlacement="parent"
-                                    onHeaderActionsChange={setResidentApplicationScreeningHeaderActions}
                                   />
                                 </div>
                               ) : (
