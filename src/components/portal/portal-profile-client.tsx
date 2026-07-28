@@ -201,7 +201,14 @@ export function PortalProfileClient({
       {variant === "manager" ? <AssistantDisplaySetting /> : null}
       <NotificationsToggle />
       <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-      <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      {/* Admin Feedback lives in its own sidebar section (/admin/bugs-feedback), so
+          admin Settings must NOT embed a second Feedback panel — that decision is
+          commit 0657b465 ("admin feedback sidebar"). Manager/resident/vendor keep
+          feedback embedded here. A shared-component refactor (adb5242b) had
+          collapsed the variant split and re-embedded it for admin. */}
+      {variant === "admin" ? null : (
+        <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      )}
       <PortalSettingsExtras currentKind={portalKind} />
     </PortalSettingsSections>
   );
