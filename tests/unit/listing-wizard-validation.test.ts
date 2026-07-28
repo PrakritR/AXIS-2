@@ -16,9 +16,10 @@ describe("validateListingWizardStep", () => {
     expect(errs.rooms).toBeUndefined();
   });
 
-  it("flags per-room rent on pricing step", () => {
+  it("flags per-room rent on pricing step when long-term leases are offered", () => {
     const sub = createDefaultListingSubmission();
     sub.listingPlaceCategoryId = "shared_home";
+    sub.allowedLeaseTerms = ["12-Month"];
     sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "Room A", monthlyRent: 0 }];
     const errs = validateListingWizardStep(4, sub, { entireHomeRent: 0 });
     expect(errs[listingRoomRentKey("r1")]).toBeUndefined();

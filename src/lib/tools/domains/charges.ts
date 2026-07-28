@@ -16,6 +16,7 @@ import { writeAuditLog, updateAuditResult } from "../audit";
 const CHARGE_KINDS = [
   "application_fee",
   "holding_deposit",
+  "stay_total",
   "first_month_rent",
   "prorated_rent",
   "prorated_last_month_rent",

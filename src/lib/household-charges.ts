@@ -24,6 +24,12 @@ import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/d
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
+import {
+  shortTermNightlyRate,
+  shortTermStayChargeTitle,
+  shortTermStayNightCount,
+  shortTermStayTotalAmount,
+} from "@/lib/short-term-stay-pricing";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
@@ -66,6 +72,7 @@ export const HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE = "__axis_demo_manager_scope__"
 export type HouseholdChargeKind =
   | "application_fee"
   | "holding_deposit"
+  | "stay_total"
   | "first_month_rent"
   | "prorated_rent"
   | "prorated_last_month_rent"
@@ -826,6 +833,8 @@ export function chargeDueLabel(charge: HouseholdCharge): string {
     case "security_deposit":
     case "move_in_fee":
       return "Before lease signing";
+    case "stay_total":
+      return "Before check-in";
     case "first_month_rent":
     case "prorated_rent":
     case "utilities":
@@ -845,6 +854,8 @@ function chargeTitle(kind: HouseholdChargeKind): string {
       return "Application fee";
     case "holding_deposit":
       return "Holding deposit";
+    case "stay_total":
+      return "Stay total";
     case "first_month_rent":
       return "First month's rent";
     case "prorated_rent":
@@ -882,6 +893,8 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
       return sub.applicationFee;
     case "holding_deposit":
       return normalizeHoldingDepositLabel(sub.holdingDeposit);
+    case "stay_total":
+      return "$0";
     case "first_month_rent":
     case "prorated_rent":
     case "prorated_last_month_rent":
@@ -2297,6 +2310,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const zelleSnap = sub?.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined;
   const venmoSnap = sub?.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined;
   const leaseStart = row.application?.leaseStart?.trim() || row.manualResidentDetails?.moveInDate?.trim() || undefined;
+  const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
   const moveInDue = dueLabelForLeaseStart(leaseStart);
   const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
     const value = raw?.trim();
@@ -2372,6 +2386,55 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
+  const isShortTermStay = row.application?.rentalType === "short_term";
+
+  if (isShortTermStay) {
+    const nightlyRate = shortTermNightlyRate(sub?.shortTermDailyCost);
+    const nights = shortTermStayNightCount(leaseStart, leaseEnd);
+    if (nightlyRate > 0 && nights) {
+      pushCharge(
+        "stay_total",
+        shortTermStayTotalAmount(nightlyRate, nights),
+        shortTermStayChargeTitle(nights, nightlyRate),
+        true,
+        "Before check-in",
+      );
+    }
+
+    const shortDeposit = savedAmount(
+      row.application?.managerSecurityDepositOverride,
+      row.manualResidentDetails?.securityDeposit != null
+        ? String(row.manualResidentDetails.securityDeposit)
+        : allowListingDefaults
+          ? sub?.shortTermDeposit
+          : undefined,
+    );
+    if (shortDeposit > 0) {
+      pushCharge("security_deposit", shortDeposit, chargeTitle("security_deposit"), true, "Before check-in");
+    }
+
+    const shortMoveIn = savedAmount(
+      row.application?.managerMoveInFeeOverride,
+      row.manualResidentDetails?.moveInFee != null
+        ? String(row.manualResidentDetails.moveInFee)
+        : allowListingDefaults
+          ? sub?.shortTermMoveInFee
+          : undefined,
+    );
+    pushCharge("move_in_fee", shortMoveIn, chargeTitle("move_in_fee"), false, "Before check-in");
+
+    const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+    if (otherCostAmount > 0) {
+      const otherCostTitle = row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost");
+      pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before check-in");
+    }
+
+    const next = dedupeCharges([...rows, ...created]);
+    const changed = chargesChanged(before, next);
+    if (changed) writeAll(next);
+    return changed;
+  }
+
   // Resolve room for proration — try both assignedRoomChoice and roomChoice1 for ID lookup,
   // then fall back to rent match or single-room. Uses the sub already resolved above to avoid
   // a second property lookup and to catch stale room IDs in assignedRoomChoice.
@@ -2406,7 +2469,6 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const dailyBasisRate =
     residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
 
-  const leaseEnd = row.application?.leaseEnd?.trim() || row.manualResidentDetails?.moveOutDate?.trim() || undefined;
   // A DAILY-priced lease that starts and ends in one calendar month is billed once, by the
   // first-period charges below; its last-month charges would re-bill the same days. Monthly
   // rooms are left on their legacy two-charge path so their billing is unchanged.

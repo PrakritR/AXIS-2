@@ -45,6 +45,7 @@ export const WORK_ORDER_CATEGORY_TO_EXPENSE: Record<WorkOrderCategory, string> =
  */
 const KIND_TO_CATEGORY: Record<HouseholdChargeKind, string> = {
   rent: "rent_income",
+  stay_total: "rent_income",
   first_month_rent: "rent_income",
   prorated_rent: "rent_income",
   prorated_last_month_rent: "rent_income",

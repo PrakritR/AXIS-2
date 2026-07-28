@@ -1,6 +1,8 @@
 import { isValidZipInput } from "@/lib/listing-form-inputs";
 import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1, type ManagerRoomSubmission } from "@/lib/manager-listing-submission";
 import { LISTING_STEP_FIELD_ORDER } from "@/lib/wizard-field-errors";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
+import { shortTermNightlyRate } from "@/lib/short-term-stay-pricing";
 
 export function listingRoomNameKey(roomId: string): string {
   return `room-${roomId}-name`;
@@ -82,38 +84,46 @@ export function validateListingWizardStep(
     if (!sub.listingPlaceCategoryId?.trim()) {
       errs.listingPlaceCategoryId = "Select how this property is rented (individual rooms or entire place).";
     }
-    if (isEntireHome && entireHomeRent <= 0) {
-      errs.monthlyRent = "Enter the monthly rent for the entire home.";
-    }
-    if (!isEntireHome) {
-      const anyRent = sub.rooms.some(listingRoomHasRent);
-      if (!anyRent && sub.rooms.length > 0) {
-        errs.monthlyRent = "Set a monthly or daily rent for at least one room (leave others at 0 if not offered).";
+    const allowedTerms = resolveAllowedLeaseTerms(sub);
+    const longTermTerms = allowedTerms.filter((t) => t !== SHORT_TERM_LEASE_TERM);
+    const hasLongTerm = longTermTerms.length > 0;
+    const hasShortTerm = Boolean(sub.shortTermRentalsAllowed);
+
+    if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term or enable short-term stays.";
+
+    if (hasLongTerm) {
+      if (isEntireHome && entireHomeRent <= 0) {
+        errs.monthlyRent = "Enter the monthly rent for the entire home.";
       }
-      // A room switched to daily pricing must carry a positive daily rate.
-      for (const room of sub.rooms) {
-        if (room.rentBasis === "daily" && !((room.dailyRentPrice ?? 0) > 0)) {
-          errs[listingRoomDailyRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
+      if (!isEntireHome) {
+        const anyRent = sub.rooms.some(listingRoomHasRent);
+        if (!anyRent && sub.rooms.length > 0) {
+          errs.monthlyRent = "Set a monthly or daily rent for at least one room (leave others at 0 if not offered).";
+        }
+        for (const room of sub.rooms) {
+          if (room.rentBasis === "daily" && !((room.dailyRentPrice ?? 0) > 0)) {
+            errs[listingRoomDailyRentKey(room.id)] = "Enter a daily rent rate, or turn off daily pricing.";
+          }
+        }
+      }
+      const feeFields: { key: keyof ManagerListingSubmissionV1; label: string }[] = [
+        { key: "securityDeposit", label: "Security deposit" },
+        { key: "moveInFee", label: "Move-in fee" },
+        { key: "parkingMonthly", label: "Parking (monthly)" },
+        { key: "hoaMonthly", label: "HOA / community" },
+        { key: "otherMonthlyFees", label: "Other monthly fees" },
+        { key: "monthToMonthSurcharge", label: "Month-to-month surcharge" },
+      ];
+      for (const { key, label } of feeFields) {
+        const raw = String(sub[key] ?? "");
+        if (!isListingFeeAmountFilled(raw)) {
+          errs[String(key)] = `${label} is required — enter 0 if there is no fee.`;
         }
       }
     }
-    const allowedTerms = resolveAllowedLeaseTerms(sub);
-    if (allowedTerms.length === 0) errs.allowedLeaseTerms = "Select at least one lease term.";
-    const feeFields: { key: keyof ManagerListingSubmissionV1; label: string }[] = [
-      // The application fee is no longer set per listing — it's configured once
-      // per manager in Applications → Application fee — so it is not required here.
-      { key: "securityDeposit", label: "Security deposit" },
-      { key: "moveInFee", label: "Move-in fee" },
-      { key: "parkingMonthly", label: "Parking (monthly)" },
-      { key: "hoaMonthly", label: "HOA / community" },
-      { key: "otherMonthlyFees", label: "Other monthly fees" },
-      { key: "monthToMonthSurcharge", label: "Month-to-month surcharge" },
-    ];
-    for (const { key, label } of feeFields) {
-      const raw = String(sub[key] ?? "");
-      if (!isListingFeeAmountFilled(raw)) {
-        errs[String(key)] = `${label} is required — enter 0 if there is no fee.`;
-      }
+
+    if (hasShortTerm && !(shortTermNightlyRate(sub.shortTermDailyCost) > 0)) {
+      errs.shortTermDailyCost = "Enter a nightly rate for short-term stays.";
     }
     // Resident payment methods (Stripe ACH / Zelle / Venmo) are configured once
     // in Payment setup and synced onto listings — not validated on the Pricing step.

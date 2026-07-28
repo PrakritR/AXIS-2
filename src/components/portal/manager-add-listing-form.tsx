@@ -149,6 +149,10 @@ import {
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
 import { CUSTOM_LEASE_TERM, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
+import {
+  shortTermNightlyRate,
+  shortTermStayTotalAmount,
+} from "@/lib/short-term-stay-pricing";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
@@ -1022,6 +1026,95 @@ function GridField({ children, className }: { children: React.ReactNode; classNa
   );
 }
 
+type PricingPathTab = "short_term" | "long_term";
+
+function PricingPathTabBar({
+  value,
+  onChange,
+}: {
+  value: PricingPathTab;
+  onChange: (tab: PricingPathTab) => void;
+}) {
+  const tabs: { id: PricingPathTab; label: string }[] = [
+    { id: "short_term", label: "Short-term stay" },
+    { id: "long_term", label: "Long-term lease" },
+  ];
+  return (
+    <div
+      className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+      role="tablist"
+      aria-label="Pricing path"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={value === tab.id}
+          className={cn(
+            "px-4 py-3 text-sm font-semibold transition-colors",
+            value === tab.id
+              ? "bg-primary/[0.08] text-primary"
+              : "bg-card text-muted hover:bg-accent/40 hover:text-foreground",
+          )}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function OptionalFeeToggleRow({
+  label,
+  hint,
+  enabled,
+  onEnabledChange,
+  amount,
+  onAmountChange,
+  placeholder = "0",
+}: {
+  label: string;
+  hint?: string;
+  enabled: boolean;
+  onEnabledChange: (on: boolean) => void;
+  amount: string;
+  onAmountChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <label className="flex cursor-pointer items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-foreground">{label}</span>
+          {hint ? <span className="mt-0.5 block text-xs text-muted">{hint}</span> : null}
+        </span>
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+        />
+      </label>
+      {enabled ? (
+        <div className="relative mt-3">
+          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
+            $
+          </span>
+          <Input
+            className="pl-8"
+            inputMode="decimal"
+            value={amount.replace(/^\$/, "").trim()}
+            onChange={(e) => onAmountChange(sanitizeMoneyInput(e.target.value))}
+            placeholder={placeholder}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ListingSubsection({
   id,
   title,
@@ -1158,6 +1251,20 @@ export function ManagerAddListingForm({
     return normalized.serviceRequestOptions ?? [];
   });
   const [expandedListingItems, setExpandedListingItems] = useState<Set<string>>(() => new Set());
+  const [pricingPathTab, setPricingPathTab] = useState<PricingPathTab>(() =>
+    initialSubmission && normalizeManagerListingSubmissionV1(initialSubmission).shortTermRentalsAllowed
+      ? "short_term"
+      : "long_term",
+  );
+  const [shortTermAppFeeOpen, setShortTermAppFeeOpen] = useState(() =>
+    Boolean((initialSubmission?.applicationFee ?? "").trim()),
+  );
+  const [shortTermDepositOpen, setShortTermDepositOpen] = useState(() =>
+    Boolean((initialSubmission?.shortTermDeposit ?? "").trim()),
+  );
+  const [shortTermCleaningFeeOpen, setShortTermCleaningFeeOpen] = useState(() =>
+    Boolean((initialSubmission?.shortTermMoveInFee ?? "").trim()),
+  );
 
   const toggleListingItem = (key: string) => {
     setExpandedListingItems((prev) => {
@@ -2915,6 +3022,139 @@ export function ManagerAddListingForm({
                 }}
               />
 
+              <PricingPathTabBar value={pricingPathTab} onChange={setPricingPathTab} />
+
+              {pricingPathTab === "short_term" ? (
+                <>
+                  <ListingSubsection
+                    title="Offer short-term stays"
+                    description={`Guests apply for "${SHORT_TERM_LEASE_TERM}" with check-in and check-out dates.`}
+                  >
+                    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+                      <span className="text-sm font-medium text-foreground">Enable short-term stays on this listing</span>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        checked={Boolean(sub.shortTermRentalsAllowed)}
+                        onChange={(e) => {
+                          clearListingFieldError("allowedLeaseTerms");
+                          const on = e.target.checked;
+                          setSub((s) => {
+                            const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                            const next = syncShortTermLeaseTermInAllowed(standard, on);
+                            return syncPropertyLeaseTemplatesFromListing({
+                              ...s,
+                              shortTermRentalsAllowed: on,
+                              allowedLeaseTerms: next,
+                              leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                            });
+                          });
+                        }}
+                      />
+                    </label>
+                  </ListingSubsection>
+
+                  <ListingSubsection
+                    title="Rate & payment"
+                    description="Residents pay one charge for the full stay — nightly rate × number of nights."
+                  >
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <GridField>
+                        <FieldLabel required={Boolean(sub.shortTermRentalsAllowed)} hint="Shown on the listing and application.">
+                          Nightly rate
+                        </FieldLabel>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                          <Input
+                            className="pl-8"
+                            inputMode="decimal"
+                            value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
+                            onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
+                            placeholder="85"
+                          />
+                        </div>
+                      </GridField>
+                      <GridField>
+                        <FieldLabel hint="How the stay total is collected.">Payment timing</FieldLabel>
+                        <Select className={selectInputCls} value="before_checkin" disabled aria-label="Payment timing">
+                          <option value="before_checkin">One payment before check-in</option>
+                        </Select>
+                      </GridField>
+                    </div>
+                    {(() => {
+                      const nightly = shortTermNightlyRate(sub.shortTermDailyCost);
+                      const exampleNights = 7;
+                      if (!(nightly > 0)) return null;
+                      const exampleTotal = shortTermStayTotalAmount(nightly, exampleNights);
+                      const rateLabel = nightly % 1 === 0 ? `$${nightly}` : `$${nightly.toFixed(2)}`;
+                      return (
+                        <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.08] p-4">
+                          <p className="text-xs font-medium text-muted">Example stay total</p>
+                          <p className="mt-1 text-2xl font-bold tabular-nums text-primary">${exampleTotal.toFixed(2)}</p>
+                          <p className="mt-1 text-xs text-muted">
+                            {exampleNights} nights × {rateLabel}/night · collected as one payment before check-in
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </ListingSubsection>
+
+                  <ListingSubsection
+                    title="Fees — all optional"
+                    description="Off by default. Turn on only what you charge short-term guests."
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <OptionalFeeToggleRow
+                        label="Application fee"
+                        hint="Default off"
+                        enabled={shortTermAppFeeOpen}
+                        onEnabledChange={(on) => {
+                          setShortTermAppFeeOpen(on);
+                          if (!on) setSub((s) => ({ ...s, applicationFee: "" }));
+                        }}
+                        amount={sub.applicationFee ?? ""}
+                        onAmountChange={(value) => setSub((s) => ({ ...s, applicationFee: value }))}
+                      />
+                      <OptionalFeeToggleRow
+                        label="Security deposit"
+                        hint="Default off"
+                        enabled={shortTermDepositOpen}
+                        onEnabledChange={(on) => {
+                          setShortTermDepositOpen(on);
+                          if (!on) setSub((s) => ({ ...s, shortTermDeposit: "" }));
+                        }}
+                        amount={sub.shortTermDeposit ?? ""}
+                        onAmountChange={(value) => setSub((s) => ({ ...s, shortTermDeposit: value }))}
+                      />
+                      <OptionalFeeToggleRow
+                        label="Cleaning / move-in fee"
+                        hint="Default off"
+                        enabled={shortTermCleaningFeeOpen}
+                        onEnabledChange={(on) => {
+                          setShortTermCleaningFeeOpen(on);
+                          if (!on) setSub((s) => ({ ...s, shortTermMoveInFee: "" }));
+                        }}
+                        amount={sub.shortTermMoveInFee ?? ""}
+                        onAmountChange={(value) => setSub((s) => ({ ...s, shortTermMoveInFee: value }))}
+                      />
+                    </div>
+                  </ListingSubsection>
+
+                  <ListingSubsection title="House rules" description="Included in the short-term agreement.">
+                    <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
+                      Requirements / house rules for short-term stays
+                    </FieldLabel>
+                    <Textarea
+                      value={sub.shortTermRequirements ?? ""}
+                      onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
+                      placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
+                    />
+                  </ListingSubsection>
+                </>
+              ) : null}
+
+              {pricingPathTab === "long_term" ? (
+              <>
               <ListingSubsection
                 title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
               >
@@ -3085,47 +3325,10 @@ export function ManagerAddListingForm({
                   <FieldLabel required>Lease lengths offered</FieldLabel>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {/*
-                      Display order: named terms, then Short-Term Stay, then
-                      Custom last (the escape hatch). Short-term is offered as one
-                      more lease option, not a separate walled-off section, and
-                      Custom follows it so it never wedges between real terms.
+                      Long-term tab: standard lease lengths only. Short-term is
+                      configured on the Short-term stay tab.
                     */}
-                    {[
-                      ...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM),
-                      SHORT_TERM_LEASE_TERM,
-                      CUSTOM_LEASE_TERM,
-                    ].map((term) => {
-                      if (term === SHORT_TERM_LEASE_TERM) {
-                        return (
-                          <label
-                            key={SHORT_TERM_LEASE_TERM}
-                            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
-                              sub.shortTermRentalsAllowed ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-border"
-                              checked={Boolean(sub.shortTermRentalsAllowed)}
-                              onChange={(e) => {
-                                clearListingFieldError("allowedLeaseTerms");
-                                const on = e.target.checked;
-                                setSub((s) => {
-                                  const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
-                                  const next = syncShortTermLeaseTermInAllowed(standard, on);
-                                  return syncPropertyLeaseTemplatesFromListing({
-                                    ...s,
-                                    shortTermRentalsAllowed: on,
-                                    allowedLeaseTerms: next,
-                                    leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                                  });
-                                });
-                              }}
-                            />
-                            <span className="font-medium text-foreground">{SHORT_TERM_LEASE_TERM}</span>
-                          </label>
-                        );
-                      }
+                    {[...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM), CUSTOM_LEASE_TERM].map((term) => {
                       const selected = resolveAllowedLeaseTerms(sub).includes(term);
                       return (
                         <label
@@ -3165,69 +3368,6 @@ export function ManagerAddListingForm({
                   </div>
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
                 </div>
-
-                {/* Short-term pricing only appears once short-term stays are offered above. */}
-                {sub.shortTermRentalsAllowed ? (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Short-term pricing</p>
-                      <p className="text-xs leading-relaxed text-muted">
-                        Nightly rates for “{SHORT_TERM_LEASE_TERM}” applicants.
-                      </p>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <GridField>
-                        <FieldLabel hint="Nightly rate shown on the listing and application.">Daily cost</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className="pl-8"
-                            inputMode="decimal"
-                            value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
-                            placeholder="40"
-                          />
-                        </div>
-                      </GridField>
-                      <GridField>
-                        <FieldLabel>Short-term deposit</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className="pl-8"
-                            inputMode="decimal"
-                            value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
-                            placeholder="100"
-                          />
-                        </div>
-                      </GridField>
-                      <GridField>
-                        <FieldLabel hint="Move-in fee for short-term stays, used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className="pl-8"
-                            inputMode="decimal"
-                            value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
-                            onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
-                            placeholder="50"
-                          />
-                        </div>
-                      </GridField>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
-                          Requirements / house rules for short-term stays
-                        </FieldLabel>
-                        <Textarea
-                          value={sub.shortTermRequirements ?? ""}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
-                          placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
               </ListingSubsection>
 
               <ListingSubsection
@@ -3694,6 +3834,8 @@ export function ManagerAddListingForm({
                   </GridField>
                 </div>
               </ListingSubsection>
+              </>
+              ) : null}
             </div>
           </FormSection>
           ) : null}
