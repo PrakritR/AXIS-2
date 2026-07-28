@@ -433,6 +433,7 @@ export function getBundlesForProperty(propertyId: string) {
   const selected = getPropertyById(propertyId);
   if (!selected?.listingSubmission || selected.listingSubmission.v !== 1) return [];
   const sub = normalizeManagerListingSubmissionV1(selected.listingSubmission);
+  if (isEntireHomeListing(sub)) return [];
   return sub.bundles.filter((b) => b.label.trim() || b.price.trim());
 }
 

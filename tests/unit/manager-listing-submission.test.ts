@@ -96,6 +96,34 @@ describe("manager-listing-submission", () => {
     expect(entireHomeMonthlyRentAmount(cleared)).toBe(0);
   });
 
+  it("clears lease bundles when switching to entire-home pricing", () => {
+    const base = createDefaultListingSubmission();
+    const withBundles = {
+      ...base,
+      listingPlaceCategoryId: "shared_home" as const,
+      bundles: [
+        {
+          id: "bundle-1",
+          label: "Whole house lease",
+          price: "$4500/mo",
+          strikethrough: "",
+          promo: "",
+          roomsLine: "",
+          includedRoomIds: [base.rooms[0]!.id],
+        },
+      ],
+    };
+    const entireHome = applyEntireHomeListingPricing(withBundles, { entireHomeMonthlyRent: 4500 });
+    expect(entireHome.bundles).toEqual([]);
+    expect(
+      normalizeManagerListingSubmissionV1({
+        ...withBundles,
+        listingPlaceCategoryId: "entire_home",
+        entireHomeMonthlyRent: 4500,
+      }).bundles,
+    ).toEqual([]);
+  });
+
   it("normalizes shared space kind from name when missing", () => {
     const sub = normalizeManagerListingSubmissionV1({
       ...createDefaultListingSubmission(),

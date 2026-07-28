@@ -764,6 +764,7 @@ export function applyEntireHomeListingPricing(
   return {
     ...merged,
     entireHomeMonthlyRent: rent,
+    bundles: [],
     rooms: syncEntireHomeRoomPricing(merged.rooms, {
       rent,
       utilitiesEstimate: merged.entireHomeUtilitiesEstimate ?? "",
@@ -1174,7 +1175,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     rooms: normalizedRooms,
     bathrooms,
     sharedSpaces,
-    bundles,
+    bundles: isEntireHomeListing({ listingPlaceCategoryId }) ? [] : bundles,
     quickFacts,
     customFees,
     serviceRequestOptions,
