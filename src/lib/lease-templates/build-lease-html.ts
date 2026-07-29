@@ -417,7 +417,6 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
   // ── Content blocks ────────────────────────────────────────────────────────
   const leaseTermsBody = escapeHtml(sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.");
-  const houseOverview = escapeHtml(sub?.houseOverview?.trim() || list?.tagline || "Shared co-living housing as described on the listing.");
   const sharedSpacesText = sharedSpacesLeaseParagraph(sub);
   const leaseUtilityLines = normalizeLeaseUtilities(subNorm?.leaseUtilities);
   const utilitiesBreakdown = utilitiesResponsibilityHtml(leaseUtilityLines);
@@ -610,7 +609,6 @@ ${jointPartiesNote ? `<p>${jointPartiesNote}</p>` : ""}
   <tr><th>Room / unit</th><td><strong>${roomLabel}</strong></td></tr>
   <tr><th>Full description</th><td>${fullPremises}</td></tr>
 </table>
-<p>${houseOverview}</p>
 ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplianceParagraph)}</p>` : ""}
 
 <h2>3. Lease Term</h2>
