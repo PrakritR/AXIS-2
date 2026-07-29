@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { ModalShell } from "@/components/ui/modal";
 import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import { buildFlyerHtml, type ManagerPromotionRow } from "@/lib/promotion-flyer";
 import { computeFlyerFit, type FlyerFit } from "@/lib/promotion-flyer-fit";
@@ -135,15 +135,6 @@ export function PromotionFlyerPreview({
   const html = useMemo(() => buildFlyerHtml(promotion), [promotion]);
   const fit = useFlyerFit(iframeRef, scrollRef, html);
 
-  useEffect(() => {
-    if (embedded || !onClose) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [embedded, onClose]);
-
   function handlePrint() {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
@@ -167,59 +158,56 @@ export function PromotionFlyerPreview({
     );
   }
 
-  if (typeof document === "undefined") return null;
+  if (!onClose) return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex flex-col bg-black/60 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Flyer preview"
-      onClick={onClose}
+  return (
+    <ModalShell
+      open
+      onClose={onClose}
+      presentation="dialog"
+      stackClassName="fixed inset-0 z-[200] flex flex-col"
+      overlayClassName="fixed inset-0 bg-black/60 backdrop-blur-sm"
+      centerClassName="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+      panelClassName="flex h-full w-full flex-col outline-none"
+      ariaLabel="Flyer preview"
     >
-      <div
-        className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-          <p className="min-w-0 truncate text-sm font-semibold text-white">{promotion.title || "Flyer preview"}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 text-xs"
-              onClick={() => void downloadPromotionFlyer(promotion)}
-              data-attr="promotion-flyer-download"
-            >
-              Download
-            </Button>
-            <Button
-              type="button"
-              className="h-9 text-xs"
-              onClick={handlePrint}
-              event="flyer_printed"
-              data-attr="promotion-flyer-print"
-            >
-              Print / Save PDF
-            </Button>
-            <Button type="button" variant="outline" className="h-9 text-xs" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        </div>
-        <div
-          ref={scrollRef}
-          className={`min-h-0 flex-1 rounded-xl bg-white shadow-2xl ${FLYER_SCROLLER_CLASS}`}
-        >
-          <FlyerFrame
-            iframeRef={iframeRef}
-            fit={fit}
-            title="Flyer preview"
-            sandbox="allow-same-origin allow-modals"
-          />
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
+        <p className="min-w-0 truncate text-sm font-semibold text-white">{promotion.title || "Flyer preview"}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 text-xs"
+            onClick={() => void downloadPromotionFlyer(promotion)}
+            data-attr="promotion-flyer-download"
+          >
+            Download
+          </Button>
+          <Button
+            type="button"
+            className="h-9 text-xs"
+            onClick={handlePrint}
+            event="flyer_printed"
+            data-attr="promotion-flyer-print"
+          >
+            Print / Save PDF
+          </Button>
+          <Button type="button" variant="outline" className="h-9 text-xs" onClick={onClose}>
+            Close
+          </Button>
         </div>
       </div>
-    </div>,
-    document.body,
+      <div
+        ref={scrollRef}
+        className={`min-h-0 flex-1 rounded-xl bg-white shadow-2xl ${FLYER_SCROLLER_CLASS}`}
+      >
+        <FlyerFrame
+          iframeRef={iframeRef}
+          fit={fit}
+          title="Flyer preview"
+          sandbox="allow-same-origin allow-modals"
+        />
+      </div>
+    </ModalShell>
   );
 }

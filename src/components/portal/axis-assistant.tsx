@@ -14,10 +14,10 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 
 import { track } from "@/lib/analytics/track-client";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
+import { ModalShell } from "@/components/ui/modal";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
   AssistantPendingActionCard,
@@ -27,7 +27,6 @@ import {
 } from "@/components/portal/assistant-shared";
 import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
 import { useAssistantDisplayMode } from "@/hooks/use-assistant-display-mode";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
@@ -43,7 +42,6 @@ import {
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
-import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
 
 const AxisAssistantPresenceContext = createContext(false);
@@ -155,7 +153,6 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const keyboardInset = useVisualViewportBottomInset(open && panelReady);
-  useFocusTrap(open && panelReady, panelRef);
 
   const firstName = managerName?.trim().split(/\s+/)[0] || null;
   const hasConversation = messages.length > 0;
@@ -189,20 +186,6 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     }
     document.documentElement.setAttribute("data-axis-assistant-open", "");
     return () => document.documentElement.removeAttribute("data-axis-assistant-open");
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeAxisAssistant();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    return lockPortalScroll();
   }, [open]);
 
   const closePanel = useCallback(() => {
@@ -252,26 +235,31 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
         }
       : undefined;
 
-  const panel =
-    open && panelReady ? (
-      <div className="axis-assistant-root fixed inset-0 z-[65]">
-        <button
-          type="button"
-          aria-label="Close PropLane Assistant"
-          className="axis-assistant-backdrop fixed inset-0"
-          onClick={closePanel}
-        />
-        <div
-          ref={panelRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="axis-assistant-title"
-          className={cn(
-            "axis-assistant-panel glass-card fixed z-[66] flex h-[min(38rem,calc(100dvh-7.5rem))] flex-col overflow-hidden border border-primary/15 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45),0_0_0_1px_rgba(47,107,255,0.08)] backdrop-blur-xl",
-            keyboardOpen && "axis-assistant-panel--keyboard",
-          )}
-          style={panelStyle}
+  const assistantPanelClassName = cn(
+    "axis-assistant-panel glass-card fixed z-[66] flex h-[min(38rem,calc(100dvh-7.5rem))] flex-col overflow-hidden border border-primary/15 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45),0_0_0_1px_rgba(47,107,255,0.08)] backdrop-blur-xl outline-none",
+    keyboardOpen && "axis-assistant-panel--keyboard",
+  );
+
+  return (
+    <>
+      <AxisAssistantFixedTrigger docked={dockable && mode === "docked"} />
+      {isClient && open ? (
+        <ModalShell
+          open={open}
+          onClose={closePanel}
+          presentation="dialog"
+          stackClassName="axis-assistant-root fixed inset-0 z-[65]"
+          overlayClassName="axis-assistant-backdrop fixed inset-0"
+          centerClassName="contents"
+          contentRef={panelRef}
+          panelStyle={panelReady ? panelStyle : undefined}
+          panelClassName={assistantPanelClassName}
+          ariaLabelledBy={panelReady ? "axis-assistant-title" : undefined}
+          ariaLabel={panelReady ? undefined : "Opening PropLane Assistant"}
+          ariaBusy={panelReady ? undefined : true}
         >
+          {panelReady ? (
+            <>
           <div className="relative shrink-0 overflow-hidden border-b border-border/70 px-4 py-3.5 [html[data-native]_&]:py-2.5">
             <div
               className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)]"
@@ -452,30 +440,10 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
               </button>
             </div>
           </form>
-        </div>
-      </div>
-    ) : open ? (
-      <div className="axis-assistant-root fixed inset-0 z-[65]">
-        <button
-          type="button"
-          aria-label="Close PropLane Assistant"
-          className="axis-assistant-backdrop fixed inset-0"
-          onClick={closePanel}
-        />
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-busy="true"
-          aria-label="Opening PropLane Assistant"
-          className="axis-assistant-panel glass-card fixed z-[66] flex h-[min(38rem,calc(100dvh-7.5rem))] flex-col overflow-hidden border border-primary/15 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45),0_0_0_1px_rgba(47,107,255,0.08)] backdrop-blur-xl"
-        />
-      </div>
-    ) : null;
-
-  return (
-    <>
-      <AxisAssistantFixedTrigger docked={dockable && mode === "docked"} />
-      {isClient && panel ? createPortal(panel, document.body) : null}
+            </>
+          ) : null}
+        </ModalShell>
+      ) : null}
     </>
   );
 }

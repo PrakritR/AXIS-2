@@ -1,6 +1,7 @@
 "use client";
 
 import type { AssistantChatThreadSummary } from "@/lib/axis-assistant/assistant-chat-threads";
+import { ModalShell } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
 function formatThreadWhen(updatedAt: number): string {
@@ -22,6 +23,7 @@ export function AssistantChatHistoryPanel({
   onNewChat,
   onClose,
   className,
+  portalContainer,
 }: {
   open: boolean;
   threads: AssistantChatThreadSummary[];
@@ -30,17 +32,21 @@ export function AssistantChatHistoryPanel({
   onNewChat: () => void;
   onClose: () => void;
   className?: string;
+  /** Portal target — keeps the overlay scoped inside the assistant dock panel. */
+  portalContainer?: HTMLElement | null;
 }) {
-  if (!open) return null;
-
   return (
-    <div
-      className={cn(
-        "absolute inset-0 z-10 flex flex-col bg-card/98 backdrop-blur-sm",
-        className,
-      )}
-      role="dialog"
-      aria-label="Past conversations"
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      presentation="dialog"
+      hideOverlay
+      lockScroll={false}
+      portalContainer={portalContainer}
+      stackClassName="absolute inset-0 z-10"
+      centerClassName="absolute inset-0 flex"
+      panelClassName={cn("flex h-full w-full flex-col bg-card/98 backdrop-blur-sm outline-none", className)}
+      ariaLabel="Past conversations"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 py-2.5">
         <p className="text-sm font-semibold text-foreground">Past conversations</p>
@@ -93,7 +99,7 @@ export function AssistantChatHistoryPanel({
           })
         )}
       </ul>
-    </div>
+    </ModalShell>
   );
 }
 

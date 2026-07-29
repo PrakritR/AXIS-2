@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronsRight } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import {
@@ -53,6 +53,7 @@ export function AssistantDockPanel({
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [historyPortal, setHistoryPortal] = useState<HTMLElement | null>(null);
 
   const firstName = managerName?.trim().split(/\s+/)[0] || null;
   const hasConversation = messages.length > 0;
@@ -154,7 +155,7 @@ export function AssistantDockPanel({
         </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={setHistoryPortal} className="relative flex min-h-0 flex-1 flex-col">
         {multiThread && !compact ? (
           <AssistantChatHistoryPanel
             open={historyOpen}
@@ -166,6 +167,7 @@ export function AssistantDockPanel({
               requestAnimationFrame(() => inputRef.current?.focus());
             }}
             onClose={closeHistory}
+            portalContainer={historyPortal}
           />
         ) : null}
       <div

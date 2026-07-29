@@ -13,6 +13,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/p
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { AdminInboxSchedulePanel } from "@/components/portal/admin-inbox-schedule-panel";
@@ -127,8 +128,6 @@ function ComposeModal({
       setSendAtLocal(defaultScheduleAtLocal());
     });
   }, [open, recipients.managers, initialSchedule]);
-
-  if (!open) return null;
 
   const toggleId = (id: string) => {
     setSelectedIds((prev) => {
@@ -294,25 +293,24 @@ function ComposeModal({
   };
 
   return (
-    <>
-      <button
-        type="button"
-        className="fixed inset-0 z-40 modal-overlay"
-        aria-label="Close compose"
-        onClick={onClose}
-      />
-      <div
-        className="modal-panel fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="admin-inbox-compose-title"
-      >
-        <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-foreground">
-          New message
-        </h2>
-        <p className="mt-1 text-sm text-muted">Broadcast to a group or choose specific managers or residents.</p>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      presentation="dialog"
+      stackClassName="fixed inset-0 z-40 overflow-y-auto overscroll-contain"
+      centerClassName="relative z-50 flex min-h-full items-center justify-center p-3"
+      panelClassName="modal-panel flex max-h-[min(100%-2rem,90vh)] w-[min(100%-1.5rem,28rem)] flex-col overflow-y-auto rounded-2xl border border-border p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+      ariaLabelledBy="admin-inbox-compose-title"
+      ariaDescribedBy="admin-inbox-compose-description"
+    >
+      <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-foreground">
+        New message
+      </h2>
+      <p id="admin-inbox-compose-description" className="mt-1 text-sm text-muted">
+        Broadcast to a group or choose specific managers or residents.
+      </p>
 
-        <div className="mt-4 space-y-3">
+      <div className="mt-4 space-y-3">
           <div>
             <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send to</label>
             <Select
@@ -421,16 +419,15 @@ function ComposeModal({
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-start gap-2">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
-            {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
-          </Button>
-        </div>
+      <div className="mt-5 flex flex-wrap justify-start gap-2">
+        <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
+          {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
+        </Button>
       </div>
-    </>
+    </ModalShell>
   );
 }
 

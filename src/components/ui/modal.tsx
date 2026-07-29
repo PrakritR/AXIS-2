@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, CSSProperties, ReactNode, Ref } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Drawer } from "vaul";
@@ -48,6 +48,139 @@ function useModalPresentation(): "drawer" | "dialog" {
   }, []);
 
   return presentation;
+}
+
+const DEFAULT_STACK_CLASS = "fixed inset-0 z-[70] overflow-y-auto overscroll-contain";
+const DEFAULT_CENTER_CLASS =
+  "relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]";
+
+export type ModalShellProps = {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  /** `auto` picks Vaul drawer below portal `lg`, Radix dialog at `lg+`. */
+  presentation?: "auto" | "drawer" | "dialog";
+  stackClassName?: string;
+  overlayClassName?: string;
+  panelClassName?: string;
+  panelStyle?: CSSProperties;
+  contentRef?: Ref<HTMLDivElement>;
+  centerClassName?: string;
+  lockScroll?: boolean;
+  portalContainer?: HTMLElement | null;
+  hideOverlay?: boolean;
+  showDrawerHandle?: boolean;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+  ariaBusy?: boolean;
+};
+
+/** Radix Dialog (desktop) + Vaul drawer (mobile) shell for custom modal layouts. */
+export function ModalShell({
+  open,
+  onClose,
+  children,
+  presentation = "auto",
+  stackClassName,
+  overlayClassName,
+  panelClassName,
+  panelStyle,
+  contentRef,
+  centerClassName,
+  lockScroll = true,
+  portalContainer: portalContainerProp,
+  hideOverlay = false,
+  showDrawerHandle = true,
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  ariaBusy,
+}: ModalShellProps) {
+  const isClient = useIsClient();
+  const autoPresentation = useModalPresentation();
+  const portalContainerContext = usePortalContainer();
+  const portalContainer = portalContainerProp ?? portalContainerContext;
+  const resolvedPresentation = presentation === "auto" ? autoPresentation : presentation;
+
+  useEffect(() => {
+    if (!open || !lockScroll) return;
+    return lockPortalScroll();
+  }, [open, lockScroll]);
+
+  if (!open || !isClient) return null;
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) onClose();
+  };
+
+  const stackClass = stackClassName ?? DEFAULT_STACK_CLASS;
+  const centerClass = centerClassName ?? DEFAULT_CENTER_CLASS;
+  const overlayClass = overlayClassName ?? MODAL_OVERLAY_BACKDROP_CLASS;
+
+  const contentA11y = {
+    "aria-label": ariaLabel,
+    "aria-labelledby": ariaLabelledBy,
+    "aria-describedby": ariaDescribedBy,
+    "aria-busy": ariaBusy,
+  };
+
+  if (resolvedPresentation === "drawer") {
+    return (
+      <Drawer.Root open={open} onOpenChange={handleOpenChange} shouldScaleBackground>
+        <Drawer.Portal container={portalContainer ?? undefined}>
+          {!hideOverlay ? (
+            <Drawer.Overlay
+              className={cn(
+                overlayClass,
+                "z-[70] motion-reduce:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              )}
+            />
+          ) : null}
+          <Drawer.Content
+            ref={contentRef}
+            data-slot="modal-vaul-drawer"
+            style={panelStyle}
+            className={panelClassName}
+            {...contentA11y}
+          >
+            {showDrawerHandle ? (
+              <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+            ) : null}
+            {children}
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+    );
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Portal container={portalContainer ?? undefined}>
+        <div className={stackClass}>
+          {!hideOverlay ? (
+            <Dialog.Overlay
+              className={cn(
+                overlayClass,
+                "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
+              )}
+            />
+          ) : null}
+          <div className={centerClass}>
+            <Dialog.Content
+              ref={contentRef}
+              data-slot="modal-radix-dialog"
+              style={panelStyle}
+              className={panelClassName}
+              {...contentA11y}
+            >
+              {children}
+            </Dialog.Content>
+          </div>
+        </div>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }
 
 type ModalTitlePrimitiveProps = {
@@ -202,15 +335,7 @@ export function Modal({
   assistantContext?: string;
   assistantStorageScopeKey?: string;
 }) {
-  const isClient = useIsClient();
   const presentation = useModalPresentation();
-  const portalContainer = usePortalContainer();
-
-  useEffect(() => {
-    if (!open) return;
-    return lockPortalScroll();
-  }, [open]);
-
   const portalAssistant = usePortalAssistantConfig();
   const showAssistantStrip = assistantStrip && portalAssistant != null;
   const assistantHint =
@@ -228,14 +353,6 @@ export function Modal({
     wasOpenRef.current = open;
   }, [open]);
 
-  if (!open || !isClient) return null;
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) onClose();
-  };
-
-  const stackShellClass = stackClassName ?? "fixed inset-0 z-[70] overflow-y-auto overscroll-contain";
-
   const panelInnerProps = {
     title,
     description,
@@ -251,66 +368,47 @@ export function Modal({
     onAssistantExpandedChange: setAssistantExpanded,
   };
 
+  if (!open) return null;
+
   if (presentation === "drawer") {
     return (
-      <Drawer.Root open={open} onOpenChange={handleOpenChange} shouldScaleBackground>
-        <Drawer.Portal container={portalContainer ?? undefined}>
-          <Drawer.Overlay
-            className={cn(
-              MODAL_OVERLAY_BACKDROP_CLASS,
-              "z-[70] motion-reduce:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-            )}
-          />
-          <Drawer.Content
-            data-slot="modal-vaul-drawer"
-            className={cn(
-              "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none",
-              "pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3",
-              "motion-reduce:transition-none",
-              dense ? "px-4" : "px-5",
-              panelClassName,
-            )}
-            aria-describedby={description ? "modal-description" : undefined}
-          >
-            <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
-            <ModalPanelInner
-              {...panelInnerProps}
-              TitlePrimitive={Drawer.Title}
-              DescriptionPrimitive={Drawer.Description}
-              ClosePrimitive={Drawer.Close}
-            />
-          </Drawer.Content>
-        </Drawer.Portal>
-      </Drawer.Root>
+      <ModalShell
+        open={open}
+        onClose={onClose}
+        presentation="drawer"
+        ariaDescribedBy={description ? "modal-description" : undefined}
+        panelClassName={cn(
+          "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none",
+          "pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3 motion-reduce:transition-none",
+          dense ? "px-4" : "px-5",
+          panelClassName,
+        )}
+      >
+        <ModalPanelInner
+          {...panelInnerProps}
+          TitlePrimitive={Drawer.Title}
+          DescriptionPrimitive={Drawer.Description}
+          ClosePrimitive={Drawer.Close}
+        />
+      </ModalShell>
     );
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal container={portalContainer ?? undefined}>
-        <div className={stackShellClass}>
-          <Dialog.Overlay
-            className={cn(
-              MODAL_OVERLAY_BACKDROP_CLASS,
-              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
-            )}
-          />
-          <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]">
-            <Dialog.Content
-              data-slot="modal-radix-dialog"
-              className={cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName)}
-              aria-describedby={description ? "modal-description" : undefined}
-            >
-              <ModalPanelInner
-                {...panelInnerProps}
-                TitlePrimitive={Dialog.Title}
-                DescriptionPrimitive={Dialog.Description}
-                ClosePrimitive={Dialog.Close}
-              />
-            </Dialog.Content>
-          </div>
-        </div>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      presentation="dialog"
+      stackClassName={stackClassName}
+      ariaDescribedBy={description ? "modal-description" : undefined}
+      panelClassName={cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName)}
+    >
+      <ModalPanelInner
+        {...panelInnerProps}
+        TitlePrimitive={Dialog.Title}
+        DescriptionPrimitive={Dialog.Description}
+        ClosePrimitive={Dialog.Close}
+      />
+    </ModalShell>
   );
 }
