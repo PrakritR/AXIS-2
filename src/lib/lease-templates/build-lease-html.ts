@@ -21,6 +21,7 @@ import {
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
+import { roomDailyRentPrice } from "@/lib/room-pricing";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
@@ -402,7 +403,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     .join("\n");
 
   const paySigningBase = sub ? paymentAtSigningPriceLabel(sub) : "—";
+  const paySigningFromCharges = ctx.leaseBilling && ctx.leaseBilling.dueAtSigning > 0 ? ctx.leaseBilling.dueAtSigning : null;
   const paySigningNum =
+    paySigningFromCharges ??
     (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0) + customFeesTotalNum;
   const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
 
@@ -448,8 +451,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   });
 
   if (a.rentalType === "short_term") {
-    const dailyCostRaw = subNorm?.shortTermDailyCost?.trim() || "—";
-    const shortDepositRaw = subNorm?.shortTermDeposit?.trim() || "—";
+    const roomDaily = specificRoom ? roomDailyRentPrice(specificRoom) : undefined;
+    const dailyCostRaw =
+      roomDaily != null
+        ? fmtUsd(roomDaily)
+        : subNorm?.shortTermDailyCost?.trim() || "—";
+    const shortDepositRaw =
+      specificRoom?.shortTermDeposit?.trim() || subNorm?.shortTermDeposit?.trim() || "—";
     const dailyCost = parseAmount(dailyCostRaw);
     const startDate = new Date(a.leaseStart ?? "");
     const endDate = new Date(a.leaseEnd ?? "");
@@ -487,7 +495,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     const checkOutTime = dash(a.shortTermCheckOutTime || "11:00 AM");
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
-<h1>SHORT-TERM ROOM STAY AGREEMENT</h1>
+${config.brandTitle ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" style="font-weight:700;margin-bottom:0.15rem">SHORT-TERM ROOM STAY AGREEMENT</p>` : `<h1>SHORT-TERM ROOM STAY AGREEMENT</h1>`}
 <p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Parties</h2>
@@ -544,10 +552,47 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </body></html>`;
   }
 
+  const lateFeeUsd = config.defaultLateFeeUsd ?? 50;
+  const billing = ctx.leaseBilling;
+  const leaseSummaryHtml =
+    config.brandTitle && billing
+      ? `<div style="border:1px solid #999;padding:12px 14px;margin:0 0 1.25rem;background:#fafafa">
+  <p style="margin:0 0 0.5rem;font-weight:700;text-align:center">Lease Summary</p>
+  <table>
+    <tr><th width="40%">Resident</th><td>${tenantName}</td></tr>
+    <tr><th>Premises</th><td>${roomLabel}, ${address}</td></tr>
+    <tr><th>Lease term</th><td>${leaseStart} – ${leaseEnd} (${leaseTerm})</td></tr>
+    <tr><th>Monthly rent</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
+    <tr><th>Monthly utilities</th><td><strong>${utilitiesStr}</strong></td></tr>
+    ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
+    ${
+      billing.proratedRent != null && billing.proratedRent > 0
+        ? `<tr><th>First partial month (rent)</th><td>${fmtUsd(billing.proratedRent)}</td></tr>`
+        : ""
+    }
+    ${
+      billing.proratedUtilities != null && billing.proratedUtilities > 0
+        ? `<tr><th>First partial month (utilities)</th><td>${fmtUsd(billing.proratedUtilities)}</td></tr>`
+        : ""
+    }
+    <tr><th>Security deposit</th><td>${secDep}</td></tr>
+    <tr><th>Move-in fee</th><td>${moveInFee}</td></tr>
+    <tr class="total-row"><th>Payment due at signing</th><td><strong>${paySigning}</strong></td></tr>
+  </table>
+</div>`
+      : "";
+
+  const longTermTitleHtml = config.brandTitle
+    ? `<h1>${escapeHtml(config.brandTitle)}</h1>
+<p class="sub" style="font-size:1.05rem;font-weight:700;margin-bottom:0.25rem">RESIDENTIAL LEASE AGREEMENT</p>
+<p class="sub">${escapeHtml(config.headerSubtitle)}</p>`
+    : `<h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
+<p class="sub">${escapeHtml(config.headerSubtitle)}</p>`;
+
   const body = `
-<h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
-<p class="sub">${config.headerSubtitle}</p>
+${longTermTitleHtml}
 <p class="generated">Generated ${generatedDate} via PropLane</p>
+${leaseSummaryHtml}
 
 <h2>1. Parties</h2>
 <table>
@@ -580,7 +625,7 @@ ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplia
   ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
 </table>
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
-<p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of $50.00 shall be assessed and is immediately due. Additional late fees of $10.00 per day may accrue after the 10th of the month, not to exceed amounts permitted under ${config.lateFeeStatuteRef}.</p>
+<p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of <strong>${fmtUsd(lateFeeUsd)}</strong> (non-refundable) may be assessed. Acceptance of late payment does not waive Landlord&apos;s right to enforce late fees or pursue other remedies under this Agreement or applicable law.</p>
 
 ${proratedSection || ""}
 

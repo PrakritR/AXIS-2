@@ -40,7 +40,7 @@ import {
   jointLeaseRowId,
   type BundleGroupRowInput,
 } from "@/lib/bundle-group/bundle-group-application";
-import { buildJointLeaseMembers, buildJointLeasePipelineRow } from "@/lib/bundle-group/joint-lease";
+import { applyLeaseBillingToContext } from "@/lib/lease-billing-snapshot";
 import type { JointLeaseMember, LeaseKind } from "@/lib/bundle-group/types";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
@@ -1470,7 +1470,7 @@ function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWi
   };
 }
 
-function leaseGenerationContextForRow(row: LeasePipelineRow) {
+function leaseGenerationContextForRow(row: LeasePipelineRow, managerUserId?: string | null) {
   const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) return null;
   let ctx = leaseContextFromApplication(app as RentalWizardFormState);
@@ -1494,11 +1494,11 @@ function leaseGenerationContextForRow(row: LeasePipelineRow) {
       };
     }
   }
-  return ctx;
+  return applyLeaseBillingToContext(ctx, row, managerUserId ?? row.managerUserId);
 }
 
 export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: true } | { ok: false; error: string } {
-  const ctx = leaseGenerationContextForRow(row);
+  const ctx = leaseGenerationContextForRow(row, row.managerUserId);
   if (!ctx) {
     return { ok: false, error: "No application data on file." };
   }
@@ -1544,7 +1544,7 @@ export function generateLeaseHtmlForRow(
   }
   const supported = leaseGenerationSupportedForRow(row);
   if (!supported.ok) return { ok: false, error: supported.error };
-  const ctx = leaseGenerationContextForRow(row);
+  const ctx = leaseGenerationContextForRow(row, managerUserId);
   if (!ctx) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
@@ -1572,6 +1572,32 @@ export function generateLeaseHtmlForRow(
     managerUserId,
   );
   return ok ? { ok: true, version } : { ok: false, error: "Could not save generated lease." };
+}
+
+/** Regenerate unsigned manager-review leases after resident or payment edits (never after sent to resident). */
+export function regenerateEditableLeasesForResident(
+  residentEmail: string,
+  managerUserId: string | null | undefined,
+  applicationPatch?: Partial<RentalWizardFormState>,
+): number {
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return 0;
+  let updated = 0;
+  for (const lr of readLeasePipeline(managerUserId)) {
+    if (lr.residentEmail.trim().toLowerCase() !== email) continue;
+    if (!leaseAllowsManagerDocumentEdits(lr)) continue;
+    if (!leaseGenerationSupportedForRow(lr).ok) continue;
+    if (applicationPatch) {
+      updateLeasePipelineRow(
+        lr.id,
+        { application: { ...(lr.application ?? {}), ...applicationPatch } },
+        managerUserId,
+      );
+    }
+    const res = generateLeaseHtmlForRow(lr.id, managerUserId);
+    if (res.ok) updated += 1;
+  }
+  return updated;
 }
 
 export function downloadLeaseFromRow(row: LeasePipelineRow): void {

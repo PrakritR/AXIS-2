@@ -109,6 +109,7 @@ import {
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,
+  regenerateEditableLeasesForResident,
   leaseGenerationSupportedForRow,
   managerSignLease,
   leaseAllowsManagerDocumentEdits,
@@ -1423,17 +1424,7 @@ export function ManagerResidents({
 
     // Auto-regenerate any unsigned leases so room/rent/rules changes are reflected immediately
     if (residentEmail && nextRow.application) {
-      const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
-        (lr) =>
-          lr.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-          leaseAllowsManagerDocumentEdits(lr),
-      );
-      for (const lr of leasesToRegen) {
-        updateLeasePipelineRow(lr.id, {
-          application: { ...(lr.application ?? {}), ...nextRow.application },
-        }, userId);
-        generateLeaseHtmlForRow(lr.id, userId);
-      }
+      regenerateEditableLeasesForResident(residentEmail, userId, nextRow.application);
     }
 
     setEditResidentOpen(false);
@@ -2411,6 +2402,9 @@ export function ManagerResidents({
         onSubmitted={() => {
           setAddResidentPaymentOpen(false);
           setHcTick((n) => n + 1);
+          if (selected?.email) {
+            regenerateEditableLeasesForResident(selected.email, userId);
+          }
         }}
       />
 
